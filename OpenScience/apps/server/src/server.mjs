@@ -73,7 +73,7 @@ import {
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
-import { ResearchMemoryStore } from "./researchMemory.mjs";
+import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
@@ -84,6 +84,7 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { createEngineModelTokenHandler, ENGINE_MODEL_TOKEN_PATH } from "./modelGatewayEngineTokens.mjs";
 import { ALERT_RECEIVER_PATH, createAlertReceiver } from "./alertReceiver.mjs";
 import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
@@ -572,6 +573,7 @@ function routePattern(pathname) {
     pathname === REVISION_GATEWAY_PATH ||
     pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH ||
     pathname === ENGINE_USAGE_PATH ||
+    pathname === ENGINE_MODEL_TOKEN_PATH ||
     pathname === KB_SEARCH_GATEWAY_PATH ||
     pathname === FRONTIER_GATEWAY_PATH
   ) return pathname;
@@ -1050,6 +1052,11 @@ export function createWebApiApp(overrides = {}) {
   const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
   const recordMethodUse = async ({ project, run, sessions }) => {
     if (!learningService || !config.learningEnabled) return;
+    // A conversation trying someone else's capsule (「试用一次」) reads that
+    // pack and teaches nothing (build spec §9.4-5): what the researcher's own
+    // methods did in it is not a use of them.
+    if (run.sessionId && (await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId)
+      .catch(() => ({ trial: false }))).trial) return;
     const projection = await agentRuns.runWorkflowProjection(project, run);
     if (!projection) return;
     // The whole library: a researcher's methods follow them across projects
@@ -3075,6 +3082,9 @@ export function createWebApiApp(overrides = {}) {
   // purpose `engine`): the runtime calls engines directly, so this is the one
   // place the control plane hears that a job finished.
   const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
+  // An engine job's credential for the model gateway, asked for by its
+  // adapter at admission (gap E4; OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED).
+  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named
@@ -3732,6 +3742,8 @@ export function createWebApiApp(overrides = {}) {
         ? connectorCredentialGatewayHandler
       : pathname === ENGINE_USAGE_PATH
         ? engineUsageHandler
+      : pathname === ENGINE_MODEL_TOKEN_PATH
+        ? engineModelTokenHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH
@@ -3778,7 +3790,11 @@ export function createWebApiApp(overrides = {}) {
         if (!maintenanceService) throw new HttpError(404, "not_found", "Route not found.");
         assertMaintenanceAccess(req, config);
         if (req.method === "GET") {
-          sendJson(res, 200, { data: await maintenanceService.status() });
+          // `?activity=1`: what is running, lease or not — read by the
+          // release switch before it moves `current` (host-release-switch.sh).
+          const withActivity = new URL(req.url ?? "/", "http://localhost").searchParams.get("activity") === "1";
+          const status = await maintenanceService.status();
+          sendJson(res, 200, { data: withActivity ? { ...status, activity: await maintenanceService.activity() } : status });
           return;
         }
         const body = assertObject(await readJson(req, config.maxJsonBytes), "maintenance request");

@@ -1,4 +1,10 @@
-"""Attest the pinned public MR audit only, from protected worker authority.
+"""Attest completed specialist jobs, from protected worker authority.
+
+Two producers share one proof schema, one key and one signature: ``produce``
+attests the pinned public MR audit (its fixture is part of the proof), and
+``produce_job_receipt`` attests a completed job of any other engine the shared
+adapter runs. Both sign only for a worker whose analysis ran as the separate
+analysis UID (``analysis_credentials``), so no engine can read the key.
 
 This module also supplies the clean-checkout verifier's source evidence. The
 adapter package and full auditable agent tree are hashed with the same rules;
@@ -140,12 +146,14 @@ def _load_manifest():
     return json.loads(_read_file(FIXTURE_MANIFEST.parent, FIXTURE_MANIFEST.name, 64 * 1024))
 
 
-def ready():
+def ready(fixture=True):
+    """Whether a completed job would be signed; the MR audit also needs its fixture."""
     if signing_key() is None:
         return False
     try:
         analysis_credentials()
-        _fixture_contract(_load_manifest())
+        if fixture:
+            _fixture_contract(_load_manifest())
         return True
     except (OSError, ValueError, TypeError, KeyError):
         return False
@@ -256,7 +264,6 @@ def produce(state, outcome, data_root):
     if key is None:
         return None
     try:
-        from cryptography.hazmat.primitives import serialization
         request, fixture, inputs, files = _fixture_contract(_load_manifest())
         if (state["status"] != "succeeded" or state["request"] != request
                 or outcome.get("analysisIsolated") is not True or outcome.get("cleanupError")):
@@ -284,15 +291,62 @@ def produce(state, outcome, data_root):
             "jobStatus": "succeeded", "scope": scope, "requestSha256": digest(canonical(request)),
             **state["sourceEvidence"], "inputs": _receipt_rows(outcome["inputReceipts"]),
             "artifacts": artifacts, "completedAt": state["finishedAt"], "fixture": fixture}
-        body = canonical(proof)
-        if len(body) > MAX_RECEIPT_BYTES:
-            return None
-        public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-        proof["attestation"] = {"algorithm": "Ed25519", "keyId": "ed25519-" + digest(public),
-                                "signature": base64.b64encode(key.sign(body)).decode("ascii")}
-        return proof
+        return _attest(proof, key)
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         # Optional audit eligibility is narrower than normal MR eligibility.
+        return None
+
+
+def _attest(proof, key):
+    """Sign the canonical proof in place; None when it would not fit a receipt."""
+    from cryptography.hazmat.primitives import serialization
+    body = canonical(proof)
+    if len(body) > MAX_RECEIPT_BYTES:
+        return None
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    proof["attestation"] = {"algorithm": "Ed25519", "keyId": "ed25519-" + digest(public),
+                            "signature": base64.b64encode(key.sign(body)).decode("ascii")}
+    return proof
+
+
+def job_scope(state, data_root):
+    """Account, project and active workspace of a job, from its admitted owner and its own location."""
+    owner = state["owner"]
+    parts = Path(state["workspace"]).relative_to(Path(data_root)).parts
+    if (len(parts) not in {5, 6} or parts[0] != "users" or parts[2] != "projects" or parts[4] != "workspace"
+            or parts[1] != owner["userId"] or parts[3] != owner["projectId"]):
+        raise AuditReceiptUnavailable("audit_scope_invalid")
+    return {"userId": parts[1], "projectId": parts[3], "activeWorkspace": parts[5] if len(parts) == 6 else ""}
+
+
+def produce_job_receipt(state, *, tool, output_prefix, inputs, artifacts, data_root):
+    """Sign a completed job of a shared-adapter engine, once, from its worker.
+
+    The MR audit's proof schema without its public fixture. ``inputs`` and
+    ``artifacts`` are the worker's own rows -- the bytes it handed the isolated
+    engine and the bytes it published from it -- never a re-read of files a
+    caller can write. ``requestSha256`` was fixed at admission over the request
+    as the caller sent it. Returns None, signing nothing, whenever the job or
+    its rows are not exactly what a receipt may attest.
+    """
+    key = signing_key()
+    if key is None:
+        return None
+    try:
+        if state["status"] != "succeeded" or state.get("analysisIsolated") is not True:
+            return None
+        rows = _receipt_rows(artifacts)
+        if ([row["path"] for row in rows] != sorted(row["path"] for row in state["artifacts"])
+                or any(not row["path"].startswith(output_prefix) for row in rows)):
+            return None
+        request_sha = state["requestSha256"]
+        if not isinstance(request_sha, str) or len(request_sha) != 64 or any(c not in "0123456789abcdef" for c in request_sha):
+            return None
+        proof = {"schemaVersion": 1, "tool": tool, "jobId": state["jobId"], "jobStatus": "succeeded",
+            "scope": job_scope(state, data_root), "requestSha256": request_sha, **state["sourceEvidence"],
+            "inputs": _receipt_rows(inputs) if inputs else [], "artifacts": rows, "completedAt": state["finishedAt"]}
+        return _attest(proof, key)
+    except (OSError, ValueError, TypeError, KeyError, ImportError):
         return None
 
 

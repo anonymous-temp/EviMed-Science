@@ -1,0 +1,753 @@
+{
+ "source": "ma-001 production run meta-20260928185649-1fc3ffd33a97 (TXA in total knee arthroplasty), 2026-09-28",
+ "search_query": "(\"Arthroplasty, Replacement, Knee\"[mh] OR \"total knee arthroplasty\"[tiab] OR \"total knee replacement\"[tiab] OR \"TKA\"[tiab] OR \"TKR\"[tiab] OR \"knee arthroplasty\"[tiab] OR \"knee replacement\"[tiab] OR \"primary total knee arthroplasty\"[tiab] OR \"primary total knee replacement\"[tiab] OR \"unilateral total knee arthroplasty\"[tiab] OR \"unilateral knee replacement\"[tiab] OR \"Arthroplasties, Replacement, Knee\"[tiab] OR \"Arthroplasty, Knee Replacement\"[tiab] OR \"Knee Replacement Arthroplasties\"[tiab] OR \"Knee Replacement Arthroplasty\"[tiab] OR \"Replacement Arthroplasties, Knee\"[tiab] OR \"Replacement Arthroplasty, Knee\"[tiab] OR \"Replacement, Total Knee\"[tiab]) AND (\"Tranexamic Acid\"[mh:noexp] OR \"tranexamic acid\"[tiab] OR \"TXA\"[tiab] OR \"cyklokapron\"[tiab] OR \"transamin\"[tiab] OR \"exacyl\"[tiab] OR \"intravenous tranexamic acid\"[tiab] OR \"topical tranexamic acid\"[tiab] OR \"intra-articular tranexamic acid\"[tiab] OR \"combined tranexamic acid\"[tiab] OR \"tranexamic acid injection\"[tiab] OR \"AMCA\"[tiab] OR \"AMCHA\"[tiab] OR \"t-AMCHA\"[tiab] OR \"trans-4-(Aminomethyl)cyclohexanecarboxylic Acid\"[tiab] OR \"Ugurol\"[tiab] OR \"KABI 2161\"[tiab] OR \"4-(Aminomethyl)cyclohexanecarboxylic acid\"[tiab] OR \"Cyclohexanecarboxylic acid, 4-(aminomethyl)-\"[tiab] OR \"4-(Aminomethyl)-Cyclohexanecarboxylic Acid\"[tiab] OR \"DTXSID50904827\"[tiab] OR \"RefChem:1070026\"[tiab] OR \"DTXCID1025350\"[tiab] OR \"Trans AMCHA\"[tiab] OR \"Cyclocapron\"[tiab])",
+ "search_source_counts": {
+  "internal_db": 150,
+  "pubmed": 200,
+  "OpenAlex": 50
+ },
+ "academic_supplement_manifest": {
+  "enabled": true,
+  "queries": [
+   {
+    "query": "trial",
+    "status": "ok",
+    "counts": {
+     "Semantic Scholar": 0,
+     "OpenAlex": 100
+    },
+    "n_records": 98
+   },
+   {
+    "query": "intra-articular tranexamic acid",
+    "status": "ok",
+    "counts": {
+     "OpenAlex": 100
+    },
+    "n_records": 100
+   },
+   {
+    "query": "Arthroplasty, Replacement, Knee total arthroplasty replacement TKA TKR primary unilateral Arthroplasties, Arthroplasties Tranexamic Acid TXA cyklokapron transamin exacyl intravenous topical intra-articular combined injection AMCA AMCHA t-AMCHA trans-4- Aminomethyl",
+    "status": "ok",
+    "counts": {
+     "OpenAlex": 0
+    },
+    "n_records": 0
+   }
+  ]
+ },
+ "prisma_flow": {
+  "identification": {
+   "records_identified": 400,
+   "records_after_dedup": 396,
+   "duplicates_removed": 4,
+   "records_not_screened": 196,
+   "automation_excluded": 196,
+   "records_not_screened_reasons": {
+    "relevance cap before screening": 196
+   },
+   "records_from_database": 400,
+   "records_from_user_upload": 0
+  },
+  "screening": {
+   "title_abstract_screened": 200,
+   "title_abstract_excluded": 141,
+   "exclusion_reasons": {
+    "Non-randomized study designs": 15,
+    "Ineligible comparator (no placebo/no-TXA arm; all arms receive intravenous TXA)": 1,
+    "Ineligible comparator (head-to-head IV vs IA TXA; no placebo/no-TXA arm)": 1
+   }
+  },
+  "eligibility": {
+   "full_text_assessed": 21,
+   "full_text_excluded": 16,
+   "exclusion_reasons": {
+    "Ineligible comparator: studies not evaluating tranexamic acid with a placebo/no-TXA comparator (all arms received TXA; comparison is timing of TXA administration only)": 1,
+    "Comparator: placebo or no tranexamic acid (and 'Studies not evaluating tranexamic acid in the specified population or with an ineligible comparator')": 1,
+    "Non-randomized study designs (retrospective observational cohort); no eligible comparator (all patients received IA-TXA)": 1
+   }
+  },
+  "included": {
+   "studies_included": 5
+  }
+ },
+ "search_records": [
+  {
+   "pmid": "27058218",
+   "doi": "10.1097/MBC.0000000000000457",
+   "title": "Low-volume formulation of intra-articular tranexamic acid, 25-ml tranexamic acid (2.5 g) plus 20-ml saline, is effective in decreasing blood transfusion rate in primary total knee replacement even without preoperative haemoglobin optimization.",
+   "abstract": "UNLABELLED: The efficacy of intra-articular tranexamic acid (TXA) to decrease blood loss after total knee replacement (TKR) has been confirmed in randomised clinical trials (RCTs) and meta-analysis. However, insufficient data are still available about the efficacy in clinical practice of intra-articular TXA administration in reducing the rate of postoperative blood transfusion. To prove the effica",
+   "year": 2016,
+   "journal": "Blood coagulation & fibrinolysis : an international journal in haemostasis and thrombosis",
+   "retrieval_sources": [
+    "pubmed"
+   ],
+   "_origin": "pubmed"
+  },
+  {
+   "pmid": "27227798",
+   "doi": "10.1111/hae.12942",
+   "title": "Multimodal blood loss prevention approach including intra-articular tranexamic acid in primary total knee arthroplasty for patients with severe haemophilia A.",
+   "year": 2016,
+   "journal": "Haemophilia : the official journal of the World Federation of Hemophilia",
+   "retrieval_sources": [
+    "pubmed"
+   ],
+   "_origin": "pubmed"
+  },
+  {
+   "pmid": "41528556",
+   "doi": "10.1007/s00590-025-04628-3",
+   "title": "A prospective, double-blind, randomised controlled trial comparing oral versus intravenous tranexamic acid for blood loss reduction in primary total knee arthroplasty.",
+   "abstract": "PURPOSE: Total knee arthroplasty (TKA) is associated with significant perioperative blood loss. While intravenous tranexamic acid (TXA) effectively reduces bleeding, oral TXA may offer comparable efficacy with economic and logistical advantages. We assessed whether oral TXA is non-inferior to intravenous TXA for reducing blood loss following primary total knee arthroplasty. METHODS: This prospecti",
+   "year": 2026,
+   "journal": "European journal of orthopaedic surgery & traumatology : orthopedie traumatologie",
+   "retrieval_sources": [
+    "pubmed"
+   ],
+   "_origin": "pubmed"
+  },
+  {
+   "pmid": "37978365",
+   "doi": "10.1186/s12891-023-07036-y",
+   "title": "Blood-conserving and therapeutic efficacy of intravenous tranexamic acid at different time points after primary total knee arthroplasty with tourniquet application: a randomised controlled trial.",
+   "abstract": "BACKGROUND: The use of a tourniquet in combination with tranexamic acid (TXA) not only ensures clear vision, reduces intraoperative blood loss and shortens operative time but also improves cement-bone inter-digitation in total knee arthroplasty (TKA). However, there is no proof whether the blood flow blocking effect of tourniquet affects the antifibrinolytic effect of TXA, and the optimal timing o",
+   "year": 2023,
+   "journal": "BMC musculoskeletal disorders",
+   "retrieval_sources": [
+    "pubmed"
+   ],
+   "_origin": "pubmed"
+  },
+  {
+   "pmid": "26048730",
+   "doi": "10.1016/j.ijsu.2015.05.045",
+   "title": "Safety and efficacy of intra-articular tranexamic acid injection without drainage on blood loss in total knee arthroplasty: A randomized clinical trial",
+   "abstract": "BACKGROUND: Major blood loss is unavoidable after primary total knee arthroplasty (TKA). The aim of this study was to determine if tranexamic acid (TXA) can reduce major blood loss following TKA. METHODS: In this double-blind, randomized, placebo-control trial, 60 patients treated with unilateral primary cement TKA between August 1st 2013 and September 30th 2013 were randomized into TXA 500 mg int",
+   "year": 2015,
+   "source": "openalex",
+   "source_type": "openalex",
+   "_origin": "openalex"
+  },
+  {
+   "pmid": "31638960",
+   "doi": "10.1186/s12891-019-2890-8",
+   "title": "Intra-articular tranexamic acid as an adjunct to intravenous tranexamic acid for simultaneous bilateral total knee arthroplasty: a randomized double-blind, placebo-controlled trial",
+   "abstract": "BACKGROUND: Intra-articular tranexamic acid (TXA) as an adjunct to intravenous TXA was reported to decrease perioperative blood loss during unilateral total knee arthroplasty (TKA). However, there have been no randomized controlled trials comparing intravenous versus combined intravenous and intra-articular TXA administration in patients undergoing simultaneous bilateral TKA. METHODS: We randomly ",
+   "year": 2019,
+   "source": "openalex",
+   "source_type": "openalex",
+   "_origin": "openalex"
+  },
+  {
+   "pmid": "0_89_69858a37f07b005405e93719",
+   "doi": "10.12307/2026.587",
+   "title": "Effectiveness and safety of tranexamic acid versus epsilon-aminocaproic acid in total hip and knee arthroplasties: A meta-analysis",
+   "abstract": "OBJECTIVE: Tranexamic acid and epsilon-aminocaproic acid have been extensively utilized for hemostasis in orthopedic surgery; however, comparative studies focusing on the hemostatic efficacy of the two drugs in total joint arthroplasty remain relatively scarce. The present article was conducted to systematically assess the effectiveness and safety of two drugs in total hip arthroplasty and total k",
+   "year": 2026,
+   "journal": "Chinese Journal of Tissue Engineering Research",
+   "_origin": "internal_db"
+  },
+  {
+   "pmid": "42049187",
+   "doi": "10.1111/os.70311",
+   "title": "Does Combined Intravenous and Topical Tranexamic Acid Offer Additional Benefit Compared With Intravenous or Topical Alone in Open Elbow Arthrolysis-A Pilot Randomized Controlled Trial.",
+   "abstract": "PURPOSES\nOpen elbow arthrolysis (OEA) is a common method for treating post-traumatic elbow stiffness, which may lead to severe bleeding when resecting heterotopic ossification (HO) and fibrous scar tissue. The purpose of this study is to compare the efficacy and safety among three different ways of using tranexamic acid (TXA) in reducing total blood loss and drainage volume in OEA.\nPATIENTS AND ME",
+   "year": 2026,
+   "journal": "Orthopaedic surgery",
+   "_origin": "internal_db"
+  }
+ ],
+ "pdf_download_results": [
+  {
+   "pmid": "37978365",
+   "doi": "10.1186/s12891-023-07036-y",
+   "title": "Blood-conserving and therapeutic efficacy of intravenous tranexamic acid at different time points after primary total kn",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/37978365.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "32819728",
+   "doi": "10.1016/j.bjan.2020.03.015",
+   "title": "[Comparison of two doses of intra-articular tranexamic acid on postoperative bleeding in total knee arthroplasty: a rand",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/32819728.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "28331851",
+   "doi": "10.1155/2017/2729487",
+   "title": "Predicting Factors for Allogeneic Blood Transfusion and Excessive Postoperative Blood Loss after Single Low-Dosage Intra",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/28331851.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "33094562",
+   "doi": "10.1111/os.12814",
+   "title": "Reduction of Blood Loss by Intra-articular Injection of Tranexamic Acid Combined with Knee and Hip Flexion at 45° During",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/33094562.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "29410968",
+   "doi": "10.1155/2017/9105645",
+   "title": "Topical Tranexamic Acid Reduces Blood Loss in Minimally Invasive Total Knee Arthroplasty Receiving Rivaroxaban.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/29410968.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "33313098",
+   "doi": "10.21037/atm-20-3064",
+   "title": "Ideal intraarticular application dose of tranexamic acid in primary total knee arthroplasty: a prospective, randomized a",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/33313098.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "23886406",
+   "doi": "10.1016/j.arth.2013.06.011",
+   "title": "Topical tranexamic acid reduces blood loss and transfusion rates in total hip and total knee arthroplasty.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "ncbi_pmc_html",
+   "fulltext_path": "papers/23886406.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "35109837",
+   "doi": "10.1186/s12891-022-05058-6",
+   "title": "The effect of local injection of tranexamic acid into peri-articular tissue versus drain clamping in total knee arthropl",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/35109837.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "31348286",
+   "doi": "10.1097/MD.0000000000016570",
+   "title": "Multi-route applications of tranexamic acid to reduce blood loss after total knee arthroplasty: a randomized controlled ",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/31348286.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "38138181",
+   "doi": "10.3390/medicina59122078",
+   "title": "Topical Fibrin Sealant (Tisseel@) Does Not Provide a Synergic Blood-Conservation Effect with Tranexamic Acid in Total Kn",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/38138181.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "39371743",
+   "doi": "10.7759/cureus.68593",
+   "title": "Comparison of Mean Postoperative Hemoglobin Concentrations in Patients Undergoing Total Knee Arthroplasty With Intraveno",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/39371743.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "37478271",
+   "doi": "10.1097/MD.0000000000034381",
+   "title": "Efficacy of perioperative cryotherapy combined with intra-articular injection of tranexamic acid in total knee arthropla",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/37478271.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "39673144",
+   "doi": "10.1111/os.14317",
+   "title": "Efficacy of Different Doses of Intra‐Articular Tranexamic Acid for Reducing Blood Loss and Lower Limb Swelling After Tot",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/39673144.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "27595071",
+   "doi": "10.5792/ksrr.2016.28.3.188",
+   "title": "Effect of Tranexamic Acid on Blood Loss and Blood Transfusion Reduction after Total Knee Arthroplasty.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/27595071.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "22923849",
+   "doi": "10.4103/0019-5049.98804",
+   "title": "Tranexamic acid in total knee replacement surgeries: Some concerns.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/22923849.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26550418",
+   "doi": "",
+   "title": "Efficacy and safety evaluation of intra-articular injection of tranexamic acid in total knee arthroplasty operation with",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "ncbi_pmc_html",
+   "fulltext_path": "papers/26550418.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26961597",
+   "doi": "10.12659/msm.895571",
+   "title": "Tranexamic Acid Reduces Hidden Blood Loss in Patients Undergoing Total Knee Arthroplasty: A Comparative Study and Meta-A",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/26961597.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "38045586",
+   "doi": "10.4055/cios22312",
+   "title": "A Decline in Overutilization of Transfusion after Total Knee Arthroplasty Using Pharmacological Agents for Patient Blood",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/38045586.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "37610463",
+   "doi": "10.1007/s00264-023-05946-z",
+   "title": "Outcomes of drain versus no drain in total knee arthroplasty: a retrospective cohort study.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/37610463.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "32613048",
+   "doi": "10.1016/j.artd.2020.04.010",
+   "title": "The Effect of Tranexamic Acid and Tourniquet Use on Tibial Cement Penetration in Primary Total Knee Arthroplasties.",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/32613048.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "42128454",
+   "doi": "10.1136/bmj-2026-089636",
+   "title": "Prophylactic tranexamic acid for the prevention of postpartum haemorrhage in women with placenta praevia: multicentre, d",
+   "text_availability": "full_text",
+   "fulltext_source": "europe_pmc_fulltext",
+   "fulltext_route": "europe_pmc_xml",
+   "fulltext_path": "papers/42128454.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "27227798",
+   "doi": "10.1111/hae.12942",
+   "title": "Multimodal blood loss prevention approach including intra-articular tranexamic acid in primary total knee arthroplasty f",
+   "text_availability": null,
+   "fulltext_source": null,
+   "fulltext_route": "none",
+   "fulltext_path": null,
+   "pdf_path": null
+  },
+  {
+   "pmid": "41528556",
+   "doi": "10.1007/s00590-025-04628-3",
+   "title": "A prospective, double-blind, randomised controlled trial comparing oral versus intravenous tranexamic acid for blood los",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/41528556.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "30755381",
+   "doi": "10.1016/j.arth.2019.01.030",
+   "title": "Intra-Articular Tranexamic Acid Mitigates Blood Loss and Morphine Use After Total Knee Arthroplasty. A Randomized Contro",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/30755381.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "32185573",
+   "doi": "10.1007/s00590-020-02656-9",
+   "title": "Topical tranexamic acid in cemented primary total knee arthroplasty without tourniquet: a prospective randomized study.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/32185573.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "24361156",
+   "doi": "10.1016/j.medcli.2013.10.015",
+   "title": "[Intravenous tranexamic acid in primary total knee arthroplasty].",
+   "text_availability": null,
+   "fulltext_source": null,
+   "fulltext_route": "none",
+   "fulltext_path": null,
+   "pdf_path": null
+  },
+  {
+   "pmid": "42617482",
+   "doi": "10.1016/j.knee.2026.104605",
+   "title": "High-dose intra-articular versus weight-based peri-articular tranexamic acid in primary total knee arthroplasty: a rando",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/42617482.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "23906869",
+   "doi": "10.1016/j.arth.2013.03.038",
+   "title": "A prospective double-blind placebo controlled trial of topical tranexamic acid in total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/23906869.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "30903342",
+   "doi": "10.1007/s00402-019-03173-z",
+   "title": "Multiple intravenous tranexamic acid doses in total knee arthroplasty without tourniquet: a randomized controlled study.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/30903342.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "28455182",
+   "doi": "10.1016/j.arth.2017.03.059",
+   "title": "Comparison of 3 Routes of Administration of Tranexamic Acid on Primary Unilateral Total Knee Arthroplasty: A Prospective",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/28455182.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "27108821",
+   "doi": "10.1016/j.bjane.2014.11.004",
+   "title": "Use of tranexamic acid in primary total knee replacement: effects on perioperative blood loss.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/27108821.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "24768543",
+   "doi": "10.1016/j.arth.2014.03.011",
+   "title": "Comparison of intravenous versus topical tranexamic acid in total knee arthroplasty: a prospective randomized study.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/24768543.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "30221330",
+   "doi": "10.1007/s00590-018-2307-7",
+   "title": "Similar thromboprophylaxis with rivaroxaban and low molecular weight heparin but fewer hemorrhagic complications with co",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/30221330.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "24034510",
+   "doi": "10.1016/j.arth.2013.06.037",
+   "title": "An evaluation of the use of topical tranexamic acid in total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/24034510.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "23541868",
+   "doi": "10.1016/j.arth.2012.11.016",
+   "title": "The effect of tranexamic acid on blood loss and transfusion rate in primary total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/23541868.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "29798605",
+   "doi": "10.7507/1002-1892.201610129",
+   "title": "[Effect on time of temporarily-closed wound drainage on blood loss of primary total knee arthroplasty after intravenous ",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/29798605.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26046086",
+   "doi": "10.3978/j.issn.2305-5839.2015.03.37",
+   "title": "Efficacy of combined use of intraarticular and intravenous tranexamic acid in total knee arthroplasty.",
+   "text_availability": null,
+   "fulltext_source": null,
+   "fulltext_route": "none",
+   "fulltext_path": null,
+   "pdf_path": null
+  },
+  {
+   "pmid": "26046063",
+   "doi": "10.3978/j.issn.2305-5839.2015.02.25",
+   "title": "Topical intra-articular and intravenous tranexamic acid to reduce blood loss in total knee arthroplasty.",
+   "text_availability": null,
+   "fulltext_source": null,
+   "fulltext_route": "none",
+   "fulltext_path": null,
+   "pdf_path": null
+  },
+  {
+   "pmid": "40845176",
+   "doi": "10.2106/JBJS.24.01236",
+   "title": "Efficacy and Safety of Tranexamic Acid Combined with Absorbable Hemostat in Reducing Perioperative Blood Loss in Total K",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/40845176.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "39862298",
+   "doi": "10.1007/s00590-025-04174-y",
+   "title": "The role of tranexamic acid and cryotherapy on acute postoperative pain and blood loss: a randomized controlled study fo",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/39862298.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "24238825",
+   "doi": "10.1016/j.arth.2013.10.005",
+   "title": "Topical administration of tranexamic acid in primary total hip and total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/24238825.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "9085968",
+   "doi": "10.1097/00000539-199704000-00026",
+   "title": "Tranexamic acid radically decreases blood loss and transfusions associated with total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/9085968.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "29496242",
+   "doi": "10.1016/j.medcli.2018.01.017",
+   "title": "Efficacy and safety of topical tranexamic acid in knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/29496242.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26790793",
+   "doi": "",
+   "title": "The effect of local and systemic application of tranexamic acid on the amount of blood loss and allogeneic blood transfu",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/26790793.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "22733948",
+   "doi": "10.1302/0301-620X.94B7.28386",
+   "title": "The blood-saving effect of tranexamic acid in minimally invasive total knee replacement: is an additional pre-operative ",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/22733948.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "31908182",
+   "doi": "10.1177/2309499019895816",
+   "title": "Daily blood loss transition after total knee arthroplasty with topical administration of tranexamic acid: Paradoxical bl",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/31908182.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26048730",
+   "doi": "10.1016/j.ijsu.2015.05.045",
+   "title": "Safety and efficacy of intra-articular tranexamic acid injection without drainage on blood loss in total knee arthroplas",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/26048730.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26169991",
+   "doi": "10.1007/s00590-015-1664-8",
+   "title": "Intra-articular injection of tranexamic acid reduce blood loss in cemented total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/26169991.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "25179896",
+   "doi": "10.1007/s00402-014-2081-x",
+   "title": "Intravenous use of tranexamic acid reduces postoperative blood loss in total knee arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/25179896.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "12697586",
+   "doi": "10.1093/bja/aeg111",
+   "title": "Tranexamic acid decreases external blood loss but not hidden blood loss in total knee replacement.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/12697586.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "10866922",
+   "doi": "10.1097/00000539-200007000-00047",
+   "title": "Is tranexamic acid indicated for total knee replacement surgery?",
+   "text_availability": null,
+   "fulltext_source": null,
+   "fulltext_route": "none",
+   "fulltext_path": null,
+   "pdf_path": null
+  },
+  {
+   "pmid": "23614539",
+   "doi": "10.1111/trf.12224",
+   "title": "Influence of tranexamic acid on postoperative autologous blood retransfusion in primary total hip and knee arthroplasty:",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/23614539.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "30902396",
+   "doi": "10.1016/j.redar.2019.01.011",
+   "title": "Clinical trial on the effect of tranexamic acid on bleeding and fibrinolysis in primary hip and knee replacement.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/30902396.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "35940560",
+   "doi": "10.1016/j.recot.2022.02.008",
+   "title": "[Translated article] Randomized, placebo-controlled, double-blind clinical trial to evaluate efficacy and safety of topi",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/35940560.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "31471180",
+   "doi": "10.1016/j.arth.2019.07.045",
+   "title": "Hemostatic and Anti-Inflammatory Effects of Carbazochrome Sodium Sulfonate in Patients Undergoing Total Knee Arthroplast",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/31471180.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "40339926",
+   "doi": "10.1016/j.arth.2025.04.066",
+   "title": "Rivaroxaban Utilization Without Perioperative Tranexamic Acid Is Associated With an Increased Risk of Bleeding Complicat",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/40339926.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "26878542",
+   "doi": "",
+   "title": "Early release of tourniquet in total knee arthroplasty: Is it worthwhile?",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/26878542.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "37967163",
+   "doi": "10.2106/JBJS.23.00254",
+   "title": "Tranexamic Acid Is Safe in Patients with a History of Venous Thromboembolism Undergoing Total Joint Arthroplasty.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/37967163.txt",
+   "pdf_path": null
+  },
+  {
+   "pmid": "29119286",
+   "doi": "10.1007/s00167-017-4746-9",
+   "title": "No effect of topical application of tranexamic acid on articular cartilage.",
+   "text_availability": "abstract_only",
+   "fulltext_source": "europe_pmc_abstract",
+   "fulltext_route": "europe_pmc_abstract",
+   "fulltext_path": "papers/29119286.txt",
+   "pdf_path": null
+  }
+ ]
+}

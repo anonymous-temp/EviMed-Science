@@ -11,6 +11,19 @@ from pydantic.json_schema import SkipJsonSchema
 #: What an arm of a comparison receives, judged against the review protocol.
 ARM_REVIEW_ROLES = ("review_intervention", "review_comparator", "other")
 
+#: The form of a closed subgroup variable id or value: a short snake_case
+#: token (core/subgroup_vocabulary.py derives them from the protocol).
+SUBGROUP_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+SUBGROUP_TOKEN_MAX_LENGTH = 48
+#: The value every subgroup variable reserves for "the source does not say".
+SUBGROUP_NOT_REPORTED = "not_reported"
+
+
+def _subgroup_token(value) -> str:
+    """The token's canonical form (case, and spaces or hyphens as underscores), or "" when malformed."""
+    text = re.sub(r"[\s\-]+", "_", value.strip().casefold()) if isinstance(value, str) else ""
+    return text if len(text) <= SUBGROUP_TOKEN_MAX_LENGTH and SUBGROUP_TOKEN.fullmatch(text) else ""
+
 
 def _is_p_value_inequality(value: str) -> bool:
     normalized = str(value).strip().lower().replace("ｐ", "p").replace("＜", "<").replace("＞", ">").replace("＝", "=")
@@ -635,6 +648,29 @@ class OutcomeData(BaseModel):
     manual_adjudication: bool | None = None
     # Subgroup info
     subgroup: str | None = None
+    # The extractor's closed value of each protocol subgroup variable for this
+    # contrast: variable id -> one value of core/subgroup_vocabulary.py's
+    # vocabulary. `subgroup` is open language ("Topical (intra-articular)
+    # route", "Topical (intra-articular) TXA"); grouping on it split one route
+    # into one-study labels on 2026-09-28 (ma-001). Only the form is handled
+    # here (a token's case and separators; anything but text is dropped): the
+    # vocabulary is the protocol's, so the extraction agent and the method
+    # executor refuse - and count - an id or value outside it.
+    # Left out of every dump while empty, so the fingerprints of rows
+    # extracted before this field (their verification proofs, ledger
+    # bindings, selection receipts) are unchanged.
+    subgroup_values: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
+
+    @field_validator("subgroup_values", mode="before")
+    @classmethod
+    def _canonical_subgroup_values(cls, value):
+        if not isinstance(value, dict):
+            return {}
+        return {
+            (_subgroup_token(key) or key.strip()): (_subgroup_token(item) or item.strip())
+            for key, item in value.items()
+            if isinstance(key, str) and isinstance(item, str) and key.strip() and item.strip()
+        }
     # Time-to-event (HR) fields
     hazard_ratio: float | None = None
     hr_ci_lower: float | None = None

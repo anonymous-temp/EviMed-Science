@@ -31,7 +31,7 @@ import { HttpError, randomId } from "./security.mjs";
  *   the step waits `queued`.
  * - **Every side effect is claimed first** in `evimed_geo.schedule_marks` by a
  *   key that names it (`run:insight`, `round:diagnosis:v2`, `weekly:2026-09-28`,
- *   `postpub:<article>:w4`, `notice:error:<id>`). The key is what makes a tick,
+ *   `postpub:<article>:w4`, `postpub:owned:<link>:w4`, `notice:error:<id>`). The key is what makes a tick,
  *   a restart and a second process idempotent: a round is enqueued once per
  *   key (its `ref.scheduleKey` names it, so a claim that died between the
  *   enqueue and the mark finds the round it made), and a run's dispatch id is
@@ -744,11 +744,19 @@ export class GeoOrchestrator {
 
   /** @param {any} project @param {any} mark @param {string} status */
   async #finishRun(project, mark, status) {
+    const detail = mark.detail ?? {};
+    // A content run's articles are the ones written since its mark last
+    // moved: counted before the move below restamps the mark, and against the
+    // mark's own column. Read into JavaScript the time keeps milliseconds of
+    // a microsecond column, and an article written in the same millisecond
+    // just before the dispatch counted as this run's.
+    const written = detail.purpose === "content" ? Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles
+      WHERE geo_project_id = $1 AND created_at >= (SELECT updated_at FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = $2)`,
+    [project.id, mark.key])).rows[0]?.n ?? 0) : 0;
     const moved = await this.#update(project.id, mark.key, { state: status === "succeeded" ? "done" : "failed", detail: { runStatus: status } },
       ["claimed", "running", "pending"]);
     if (!moved) return;
     this.counters.runsFinished += 1;
-    const detail = mark.detail ?? {};
     let current = (await this.#project(project.id)) ?? project;
     if (detail.purpose === "insight") {
       const [claims, journey, sets] = await Promise.all([
@@ -776,8 +784,6 @@ export class GeoOrchestrator {
         current = await this.#step(current, "sources", { status: "failed", runId: mark.run_id ?? null });
       }
     } else if (detail.purpose === "content") {
-      const written = Number((await this.store.query(`SELECT count(*)::integer AS n FROM evimed_geo.articles WHERE geo_project_id = $1 AND created_at >= $2`,
-        [project.id, mark.updated_at ?? mark.created_at])).rows[0]?.n ?? 0);
       await this.#update(project.id, mark.key, { detail: { articles: written } });
       if (written > 0) current = await this.#step(current, "content", { status: "done", runId: mark.run_id ?? null });
       else if (!FINISHED.has(current.steps.content?.status)) current = await this.#step(current, "content", { status: "failed", runId: mark.run_id ?? null });
@@ -1409,7 +1415,17 @@ export class GeoOrchestrator {
   /**
    * Published articles cited by an engine: each (order, engine) is told to
    * the market once (its outlet-by-engine learning), and the project's first
-   * is 「第一次被 AI 引用」. Only snapshots newer than the last scan are read.
+   * is 「第一次被 AI 引用」. Only snapshots after the last scan's position are
+   * read.
+   *
+   * The position is a `(created_at, id)` pair with the time carried as the
+   * database's own text. Read into JavaScript the time keeps milliseconds of
+   * a microsecond column, so a cursor made from it lands before the row it was
+   * taken from: every scan read the tail of the last one again, and two
+   * thousand answers stamped in one millisecond would have held the cursor
+   * there for good. The id orders answers stamped at the same instant, which
+   * `created_at` alone left to chance at the batch edge. A position written
+   * before the id was kept (`until` alone) reads its own instant once more.
    * @param {any} project
    */
   async #citations(project) {
@@ -1420,10 +1436,11 @@ export class GeoOrchestrator {
     if (!orders.length) return;
     const scan = await this.#mark(project.id, "scan:citations");
     const since = scan?.detail?.until ?? null;
-    const snapshots = (await this.store.query(`SELECT id, engine, asked_at, created_at, citations FROM evimed_geo.snapshots
+    const snapshots = (await this.store.query(`SELECT id, engine, asked_at, created_at, created_at::text AS position_at, citations
+      FROM evimed_geo.snapshots
       WHERE geo_project_id = $1 AND jsonb_typeof(citations) = 'array' AND jsonb_array_length(citations) > 0
-        AND ($2::timestamptz IS NULL OR created_at > $2::timestamptz)
-      ORDER BY created_at LIMIT 2000`, [project.id, since])).rows;
+        AND ($2::timestamptz IS NULL OR (created_at, id) > ($2::timestamptz, $3::text))
+      ORDER BY created_at, id LIMIT 2000`, [project.id, since, String(scan?.detail?.id ?? "")])).rows;
     if (!snapshots.length) return;
     const byUrl = new Map(orders.map((/** @type {any} */ order) => [canonicalGeoUrl(order.published_url), order]));
     /** @type {Array<{ order: any, engine: string, at: string }>} */
@@ -1432,7 +1449,9 @@ export class GeoOrchestrator {
       for (const citation of Array.isArray(snapshot.citations) ? snapshot.citations : []) {
         const order = byUrl.get(canonicalGeoUrl(citation?.url ?? ""));
         if (order && !hits.some((hit) => hit.order.id === order.id && hit.engine === snapshot.engine)) {
-          hits.push({ order, engine: String(snapshot.engine), at: String(snapshot.asked_at ?? snapshot.created_at) });
+          // ISO text, so the earliest sorts first: `String(date)` begins with
+          // the weekday, and a Tuesday's answer sorted after a Monday's a week later.
+          hits.push({ order, engine: String(snapshot.engine), at: new Date(snapshot.asked_at ?? snapshot.created_at).toISOString() });
         }
       }
     }
@@ -1446,9 +1465,10 @@ export class GeoOrchestrator {
       const first = [...hits].sort((left, right) => left.at.localeCompare(right.at))[0];
       await this.#notice(project, "notice:first-cited", () => this.notifier?.firstCited(project, { engine: first.engine, title: first.order.title ?? null }));
     }
-    const until = snapshots.at(-1).created_at;
-    const row = await this.#claim(project, "scan:citations", "notice", "done", { detail: { until } });
-    if (!row) await this.#update(project.id, "scan:citations", { detail: { until } });
+    const last = snapshots.at(-1);
+    const position = { until: String(last.position_at), id: String(last.id) };
+    const row = await this.#claim(project, "scan:citations", "notice", "done", { detail: position });
+    if (!row) await this.#update(project.id, "scan:citations", { detail: position });
   }
 
   // --- the loops --------------------------------------------------------------------------------------
@@ -1517,8 +1537,12 @@ export class GeoOrchestrator {
       const engine = String(row.engine);
       const key = `${sentinelKey}:retry:${engine}`;
       if (await this.#mark(project.id, key)) continue;
-      const back = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1 AND asked_at > $2
-        AND status IN ('valid', 'refusal') AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, round.finished_at])).rows.length > 0;
+      // Compared in SQL against the round's own column: read into JavaScript
+      // the time keeps milliseconds of a microsecond column, and an answer in
+      // the same millisecond read as "since".
+      const back = (await this.store.query(`SELECT 1 FROM evimed_geo.snapshots WHERE engine = $1
+        AND asked_at > (SELECT finished_at FROM evimed_geo.rounds WHERE id = $2)
+        AND status IN ('valid', 'refusal') AND coalesce(surface ->> 'mode', 'web') <> 'inclusion' LIMIT 1`, [engine, round.id])).rows.length > 0;
       if (!back) continue;
       const questionIds = (Array.isArray(row.questions) ? row.questions : []).map(String);
       if (!questionIds.length) continue;
@@ -1571,25 +1595,39 @@ export class GeoOrchestrator {
       }
       if (sentinel.due) counts.sentinel += await this.#sentinelMakeUp(project, sentinelKey, sentinel.day);
     }
-    // Every published article, whatever else the project asked for.
-    const published = (await this.store.query(`SELECT a.id AS article_id, a.group_id, min(e.at) AS published_at, min(o.id) AS order_id
-      FROM evimed_geo.orders o JOIN evimed_geo.articles a ON a.id = o.article_id
-        JOIN evimed_geo.order_events e ON e.order_id = o.id AND e.to_state = 'published'
-      WHERE o.geo_project_id = $1 AND o.state IN ('published', 'verified', 'settled', 'problem')
-      GROUP BY a.id, a.group_id`, [project.id])).rows;
+    // Every published article, whatever else the project asked for, and
+    // every live link the brand published itself (gap E6): the same
+    // checkpoints from the day it went live, asking its question group's
+    // questions — the one it names, or its article's.
+    const [articles, owned] = await Promise.all([
+      this.store.query(`SELECT a.id AS article_id, a.group_id, min(e.at) AS published_at, min(o.id) AS order_id
+        FROM evimed_geo.orders o JOIN evimed_geo.articles a ON a.id = o.article_id
+          JOIN evimed_geo.order_events e ON e.order_id = o.id AND e.to_state = 'published'
+        WHERE o.geo_project_id = $1 AND o.state IN ('published', 'verified', 'settled', 'problem')
+        GROUP BY a.id, a.group_id`, [project.id]),
+      this.store.query(`SELECT l.id, l.published_at, l.article_id, coalesce(l.group_id, a.group_id) AS group_id
+        FROM evimed_geo.owned_links l LEFT JOIN evimed_geo.articles a ON a.id = l.article_id AND a.geo_project_id = l.geo_project_id
+        WHERE l.geo_project_id = $1 AND l.status = 'active'`, [project.id]),
+    ]);
+    const published = [
+      ...articles.rows.map((/** @type {any} */ row) => ({ key: `postpub:${row.article_id}`, publishedAt: row.published_at, groupId: row.group_id,
+        ref: { articleId: String(row.article_id), orderId: String(row.order_id) } })),
+      ...owned.rows.map((/** @type {any} */ row) => ({ key: `postpub:owned:${row.id}`, publishedAt: row.published_at, groupId: row.group_id,
+        ref: { ownedLinkId: String(row.id), ...(row.article_id ? { articleId: String(row.article_id) } : {}) } })),
+    ];
     if (published.length) {
       const done = new Set((await this.#marksWith(project.id, "postpub:")).map((mark) => String(mark.key)));
-      for (const article of published) {
-        for (const checkpoint of postPublicationCheckpoints(new Date(article.published_at), now)) {
-          const key = `postpub:${article.article_id}:w${checkpoint.week}`;
+      for (const publication of published) {
+        for (const checkpoint of postPublicationCheckpoints(new Date(publication.publishedAt), now)) {
+          const key = `${publication.key}:w${checkpoint.week}`;
           if (!checkpoint.due || done.has(key)) continue;
           if (checkpoint.missed) { await this.#skip(project, key, "missed"); counts.skipped += 1; continue; }
-          const questionIds = article.group_id ? (await this.store.query(`SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1
-            AND group_id = $2 AND retired_at IS NULL ORDER BY is_measured DESC, position, id LIMIT 10`, [project.id, article.group_id])).rows
+          const questionIds = publication.groupId ? (await this.store.query(`SELECT id FROM evimed_geo.questions WHERE geo_project_id = $1
+            AND group_id = $2 AND retired_at IS NULL ORDER BY is_measured DESC, position, id LIMIT 10`, [project.id, publication.groupId])).rows
             .map((/** @type {any} */ row) => String(row.id)) : [];
           if (!questionIds.length) { await this.#skip(project, key, "no_questions"); counts.skipped += 1; continue; }
           if (await this.#enqueueOnce(project, key, { kind: "post_publication", questionIds, engines: project.engines,
-            ref: { articleId: String(article.article_id), orderId: String(article.order_id), week: checkpoint.week } })) {
+            ref: { ...publication.ref, week: checkpoint.week } })) {
             counts.postPublication += 1;
           }
         }

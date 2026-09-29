@@ -46,6 +46,17 @@ class ExtractedOutcomeData(OutcomeData):
             "review_intervention, review_comparator or other. Empty only when the result has no arms."
         ),
     )
+    subgroup_values: dict[str, str] = Field(
+        default_factory=dict,
+        exclude_if=lambda value: not value,
+        description=(
+            "One entry per closed subgroup variable listed in the prompt: the variable id mapped to "
+            "exactly one of that variable's listed values, judged for this row's own comparison "
+            "(what its treatment arm receives, and whom the comparison reports on) against the value "
+            "definitions; not_reported when the source does not say. Use only the listed ids and values. "
+            "Empty when the prompt lists no closed subgroup variables."
+        ),
+    )
     comparative_design: Literal[
         "", "unknown", "parallel_rct", "cluster_rct", "crossover_rct", "multi_arm_rct",
     ] = Field(

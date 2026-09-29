@@ -130,6 +130,116 @@ tryCatch({{
 }})
 """
 
+# --- Steiger directionality and MR-PRESSO, shared by every template ---
+
+# directionality_test() approximates each variant's r² from its p-value and
+# sample size, treating both traits as quantitative. An open GWAS Catalog file
+# with no per-variant sample size made it fail inside mr_steiger ("replacement
+# has length zero") and the report said nothing about direction; the input a
+# test lacks is now written as the reason it was not computed.
+#
+# MR-PRESSO's outlier-corrected estimate and distortion test were computed and
+# dropped: only the global p and an outlier count were kept, and the count
+# compared p-value strings ("<0.064") with 0.05 in the locale's collation. The
+# corrected estimate, the variants it removed, and why there is none are now
+# written; the count is the set MR-PRESSO itself removed. NbDistribution is
+# sized so the Bonferroni-corrected outlier test can reach its threshold: with
+# 1000 draws and 64 variants its resolution was 0.064 and MR-PRESSO warned
+# "Outlier test unstable". Its run time grows with variants² × draws, so the
+# draws stop where the cost reaches that of the old fixed 1000 draws at 150
+# variants (about seven minutes of a per-pair R budget of fifteen); past it the
+# resolution is written beside the outliers instead of silently exceeding 0.05.
+_DIRECTION_AND_OUTLIER_BLOCK = """
+steiger_fields <- c("pval.exposure", "samplesize.exposure", "pval.outcome", "samplesize.outcome")
+steiger_values <- as.data.frame(lapply(steiger_fields, function(field) {{
+    if (field %in% names(dat)) suppressWarnings(as.numeric(dat[[field]])) else rep(NA_real_, nrow(dat))
+}}))
+names(steiger_values) <- steiger_fields
+steiger_absent <- steiger_fields[vapply(steiger_values, function(column) all(is.na(column)), logical(1))]
+steiger_rows <- complete.cases(steiger_values)
+write_steiger <- function(status, reason, verdict=NA, pval=NA, r2_exposure=NA, r2_outcome=NA) {{
+    write.csv(data.frame(status=status, reason=reason, n_variants=sum(steiger_rows),
+        correct_causal_direction=verdict, steiger_pval=pval,
+        snp_r2.exposure=r2_exposure, snp_r2.outcome=r2_outcome),
+        file.path(output_dir, "steiger.csv"), row.names=FALSE)
+}}
+if (length(steiger_absent) > 0L) {{
+    steiger_reason <- sprintf("no instrument has %s", paste(steiger_absent, collapse=", "))
+    write_steiger("not_computable", steiger_reason)
+    note_skip("steiger", paste("not computable:", steiger_reason))
+}} else {{
+    tryCatch({{
+        steiger <- directionality_test(dat[steiger_rows, ])
+        write_steiger("computed",
+            if (all(steiger_rows)) "" else sprintf(
+                "%d of %d instruments lack a p-value or sample size and are left out",
+                sum(!steiger_rows), nrow(dat)),
+            steiger$correct_causal_direction, steiger$steiger_pval,
+            steiger$snp_r2.exposure, steiger$snp_r2.outcome)
+        cat(sprintf("Steiger: correct_causal_direction=%s, p=%.4e\\n",
+            steiger$correct_causal_direction, steiger$steiger_pval))
+    }}, error = function(e) {{
+        write_steiger("failed", e$message)
+        note_skip("steiger", e$message)
+    }})
+}}
+
+tryCatch({{
+    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
+        note_skip("mr_presso", "MRPRESSO package not installed")
+    }} else {{
+        presso_columns <- c("beta.outcome", "beta.exposure", "se.outcome", "se.exposure")
+        presso_dat <- as.data.frame(dat)
+        presso_dat <- presso_dat[complete.cases(presso_dat[, presso_columns]), ]
+        presso_threshold <- 0.05
+        presso_draws <- max(1000L, min(as.integer(ceiling(nrow(presso_dat) / presso_threshold)),
+            as.integer(floor(150^2 * 1000 / nrow(presso_dat)^2))))
+        presso <- MRPRESSO::mr_presso(
+            BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
+            SdOutcome = "se.outcome", SdExposure = "se.exposure",
+            OUTLIERtest = TRUE, DISTORTIONtest = TRUE,
+            data = presso_dat, NbDistribution = presso_draws,
+            SignifThreshold = presso_threshold)
+        presso_tests <- presso$`MR-PRESSO results`
+        presso_main <- presso$`Main MR results`
+        presso_raw <- presso_main[presso_main$`MR Analysis` == "Raw", ]
+        presso_fixed <- presso_main[presso_main$`MR Analysis` == "Outlier-corrected", ]
+        presso_flagged <- presso_tests$`Distortion Test`$`Outliers Indices`
+        outlier_snps <- if (is.numeric(presso_flagged)) presso_dat$SNP[presso_flagged] else character(0)
+        presso_reason <- if (is.null(presso_tests$`Outlier Test`)) {{
+            sprintf("the global test (p = %s) is not below %s, and MR-PRESSO tests single variants only after a significant global test",
+                presso_tests$`Global Test`$Pvalue, presso_threshold)
+        }} else if (identical(presso_flagged, "No significant outliers")) {{
+            sprintf("no variant reached the Bonferroni-corrected outlier threshold of %s", presso_threshold)
+        }} else if (identical(presso_flagged, "All SNPs considered as outliers")) {{
+            "the outlier test flagged every variant, so no estimate remains"
+        }} else ""
+        corrected <- length(outlier_snps) > 0L
+        write.csv(data.frame(
+            global_p = presso_tests$`Global Test`$Pvalue,
+            n_outliers = length(outlier_snps),
+            outlier_snps = paste(outlier_snps, collapse = ";"),
+            n_distributions = presso_draws,
+            outlier_resolution = nrow(presso_dat) / presso_draws,
+            raw_beta = presso_raw$`Causal Estimate`, raw_se = presso_raw$Sd,
+            raw_p = presso_raw$`P-value`,
+            corrected_beta = if (corrected) presso_fixed$`Causal Estimate` else NA,
+            corrected_se = if (corrected) presso_fixed$Sd else NA,
+            corrected_p = if (corrected) presso_fixed$`P-value` else NA,
+            # On the ratio scale, as mr_results.csv states its estimates.
+            corrected_or = if (corrected) exp(presso_fixed$`Causal Estimate`) else NA,
+            corrected_ci_lower = if (corrected) exp(presso_fixed$`Causal Estimate` - 1.96 * presso_fixed$Sd) else NA,
+            corrected_ci_upper = if (corrected) exp(presso_fixed$`Causal Estimate` + 1.96 * presso_fixed$Sd) else NA,
+            distortion_coefficient = if (corrected) unname(presso_tests$`Distortion Test`$`Distortion Coefficient`) else NA,
+            distortion_p = if (corrected) presso_tests$`Distortion Test`$Pvalue else NA,
+            corrected_reason = presso_reason),
+            file.path(output_dir, "mrpresso.csv"), row.names=FALSE)
+    }}
+}}, error = function(e) {{
+    note_skip("mr_presso", e$message)
+}})
+"""
+
 # --- Shared plot generation block (PDF + PNG) ---
 
 _PLOT_BLOCK = """
@@ -273,44 +383,7 @@ write.csv(het, file.path(output_dir, "heterogeneity.csv"), row.names=FALSE)
 plt <- mr_pleiotropy_test(dat)
 write.csv(plt, file.path(output_dir, "pleiotropy.csv"), row.names=FALSE)
 
-""" + _SKIP_TRACKING_BLOCK + """
-# --- Steiger directionality test ---
-tryCatch({{
-    steiger <- directionality_test(dat)
-    write.csv(steiger, file.path(output_dir, "steiger.csv"), row.names=FALSE)
-    cat(sprintf("Steiger: correct_causal_direction=%s, p=%.4e\\n",
-        steiger$correct_causal_direction, steiger$steiger_pval))
-}}, error = function(e) {{
-    note_skip("steiger", e$message)
-}})
-
-# --- MR-PRESSO outlier detection ---
-tryCatch({{
-    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
-        note_skip("mr_presso", "MRPRESSO package not installed")
-    }} else {{
-        presso <- MRPRESSO::mr_presso(
-            BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
-            SdOutcome = "se.outcome", SdExposure = "se.exposure",
-            OUTLIERtest = TRUE, DISTORTIONtest = TRUE,
-            data = as.data.frame(dat), NbDistribution = 1000,
-            SignifThreshold = 0.05)
-        presso_main <- data.frame(
-            exposure = "{exposure_id}", outcome = "{outcome_id}",
-            global_p = presso$`MR-PRESSO results`$`Global Test`$Pvalue,
-            n_outliers = sum(presso$`MR-PRESSO results`$`Outlier Test`$Pvalue < 0.05,
-                na.rm = TRUE))
-        write.csv(presso_main, file.path(output_dir, "mrpresso.csv"), row.names=FALSE)
-
-        if (!is.null(presso$`MR-PRESSO results`$`Distortion Test`)) {{
-            cat(sprintf("MR-PRESSO distortion p=%.4e\\n",
-                presso$`MR-PRESSO results`$`Distortion Test`$Pvalue))
-        }}
-    }}
-}}, error = function(e) {{
-    note_skip("mr_presso", e$message)
-}})
-""" + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
+""" + _SKIP_TRACKING_BLOCK + _DIRECTION_AND_OUTLIER_BLOCK + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
 summary <- list(exposure_id="{exposure_id}", outcome_id="{outcome_id}",
     n_instruments=nrow(dat), mean_f_statistic=mean(exposure_dat$F_stat),
     pval_threshold=thresh, status="success",
@@ -369,39 +442,7 @@ write.csv(het, file.path(output_dir, "heterogeneity.csv"), row.names=FALSE)
 plt <- mr_pleiotropy_test(dat)
 write.csv(plt, file.path(output_dir, "pleiotropy.csv"), row.names=FALSE)
 
-""" + _SKIP_TRACKING_BLOCK + """
-tryCatch({{
-    steiger <- directionality_test(dat)
-    write.csv(steiger, file.path(output_dir, "steiger.csv"), row.names=FALSE)
-    cat(sprintf("Steiger: correct_causal_direction=%s, p=%.4e\\n",
-        steiger$correct_causal_direction, steiger$steiger_pval))
-}}, error = function(e) {{
-    note_skip("steiger", e$message)
-}})
-
-tryCatch({{
-    if (!requireNamespace("MRPRESSO", quietly = TRUE)) {{
-        note_skip("mr_presso", "MRPRESSO package not installed")
-    }} else {{
-        presso <- MRPRESSO::mr_presso(
-            BetaOutcome = "beta.outcome", BetaExposure = "beta.exposure",
-            SdOutcome = "se.outcome", SdExposure = "se.exposure",
-            OUTLIERtest = TRUE, DISTORTIONtest = TRUE,
-            data = as.data.frame(dat), NbDistribution = 1000,
-            SignifThreshold = 0.05)
-        presso_main <- data.frame(
-            exposure = "{exposure_label}", outcome = "{outcome_label}",
-            global_p = presso$`MR-PRESSO results`$`Global Test`$Pvalue,
-            n_outliers = sum(
-                presso$`MR-PRESSO results`$`Outlier Test`$Pvalue < 0.05,
-                na.rm = TRUE))
-        write.csv(presso_main, file.path(output_dir, "mrpresso.csv"),
-            row.names=FALSE)
-    }}
-}}, error = function(e) {{
-    note_skip("mr_presso", e$message)
-}})
-""" + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
+""" + _SKIP_TRACKING_BLOCK + _DIRECTION_AND_OUTLIER_BLOCK + _SENSITIVITY_BLOCK + _PLOT_BLOCK + """
 summary <- list(
     exposure_id="{exposure_label}", outcome_id="{outcome_label}",
     n_instruments=nrow(dat),

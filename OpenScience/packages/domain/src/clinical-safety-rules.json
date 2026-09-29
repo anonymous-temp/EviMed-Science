@@ -153,6 +153,27 @@
     "Albuterol"
   ],
   "highRiskEntitiesNote": "A closed, pharmacist-maintained vocabulary of high-alert medicines. Naming one of these in a deliverable that is NOT under a clinical contract raises an advisory notice (check clinical-high-risk-entity), never a rejection: a bibliometric study of metformin literature is legitimately about metformin and must not be withheld for saying so. routingEntities above is the blocking half of the same idea and stays deliberately small - every name there also blocks in packages/socket's completion check, over every file in the workspace. Promoting a name from this list to routingEntities is therefore a decision to spend part of the blocking budget, and needs the observed notice distribution first (development principle 4).",
+  "highRiskEntityPhysiologyTerms": [
+    "胰岛素抵抗",
+    "胰岛素敏感性",
+    "胰岛素分泌",
+    "胰岛素受体",
+    "胰岛素信号",
+    "胰岛素样生长因子",
+    "肾上腺素能",
+    "肾上腺素受体",
+    "多巴胺能",
+    "多巴胺受体",
+    "硫酸乙酰肝素",
+    "insulin resistance",
+    "insulin sensitivity",
+    "insulin secretion",
+    "insulin receptor",
+    "insulin signaling",
+    "insulin signalling",
+    "dopamine receptor"
+  ],
+  "highRiskEntityPhysiologyTermsNote": "Whole terms in which a high-alert medicine's name names physiology — a receptor, a pathway, the body's own hormone at work — not the medicine. Each is blanked from a text before highRiskEntities are looked for, so 胰岛素抵抗 in a mechanism paragraph is not a mention of insulin (2026-09-28 Mendelian randomization report: 「胰岛素分泌与作用」 and 「胰岛素抵抗」 as pathway names drew the high-alert notice, and the run defended the words in its notes). Compared whole, never as patterns; add a term, not a pattern. A term here never hides a dose, a regimen or an instruction: 胰岛素 on its own is still the medicine.",
   "rules": [
     {
       "id": "medication-response-not-diagnostic",

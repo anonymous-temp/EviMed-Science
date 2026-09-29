@@ -359,6 +359,28 @@ describe("投放", () => {
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "撤单" }));
     await waitFor(() => expect(client.cancelGeoOrder).toHaveBeenCalledWith("geo_1", "ord_3"));
   });
+
+  it("lists the pages the brand published itself beside the orders: platform, which engines cite it, and a retired one as 已下线", async () => {
+    client.getGeoDistribution.mockResolvedValue(distributionFilled);
+    renderTab(<DistributionTab {...props()} />);
+    await screen.findByRole("heading", { name: "自有发布" });
+    const live = document.querySelector("[data-geo-owned-link='gol_1']") as HTMLElement;
+    const retired = document.querySelector("[data-geo-owned-link='gol_2']") as HTMLElement;
+    expect(within(live).getByRole("rowheader")).toHaveTextContent("百家号");
+    expect(live).toHaveTextContent("DeepSeek、Kimi");
+    expect(within(live).getByRole("link", { name: /查看/ })).toHaveAttribute("href", "https://baijiahao.baidu.com/s?id=1");
+    expect(within(live).queryByText("已下线")).not.toBeInTheDocument();
+    expect(within(retired).getByRole("rowheader")).toHaveTextContent("微信公众号");
+    expect(within(retired).getByText("已下线")).toBeInTheDocument();
+    expect(screen.queryByText("wechat_mp")).not.toBeInTheDocument();
+  });
+
+  it("shows the brand's own pages even with no order and no market", async () => {
+    client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, budget: null, orders: [], market: { configured: false } });
+    renderTab(<DistributionTab {...props()} />);
+    expect(await screen.findByText("减重针常见问题 10 问")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "订单" })).not.toBeInTheDocument();
+  });
 });
 
 describe("准确与安全", () => {

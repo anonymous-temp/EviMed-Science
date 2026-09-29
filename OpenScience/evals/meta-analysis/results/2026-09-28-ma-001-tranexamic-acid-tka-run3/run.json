@@ -1,0 +1,37 @@
+{
+  "capability": "meta-analysis",
+  "brief": "ma-001-tranexamic-acid-tka",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-meta-0928d",
+  "session": "acc-meta-analysis-mullguvy",
+  "runId": "run_4fc2bfcccd9ad24e00314aeb7e7bc899",
+  "agentVersion": "1.1.3",
+  "dispatchedAt": "2026-09-28T20:31:39Z",
+  "prompt": "topic: 氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析\npopulation: 接受初次单侧全膝关节置换术的成年患者\nintervention: 氨甲环酸（静脉、局部或联合给药）\ncomparator: 安慰剂或不使用氨甲环酸\noutcomes: [\"总失血量\",\"输血率\",\"症状性静脉血栓栓塞事件\"]\nstudyDesign: 随机对照试验\nanalysisType: pairwise",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/txa-tka-meta/meta-analysis-report.md",
+      "deliverables/txa-tka-meta/meta-analysis-run.json",
+      "deliverables/txa-tka-meta/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "review_summary",
+        "severity": "advice",
+        "title": "另有技术提示",
+        "detail": "独立审查：交付物「txa-tka-meta」有 8 条审查发现（已修 6，不改并说明 2，未回应 0）。",
+        "text": "独立审查：交付物「txa-tka-meta」有 8 条审查发现（已修 6，不改并说明 2，未回应 0）。"
+      }
+    ],
+    "effectiveAgentId": "meta-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 6552825,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

@@ -212,6 +212,14 @@ test("the high-alert vocabulary is data, wide, and notice-only", () => {
   assert.deepEqual(matchedHighRiskEntities("The patient received insulin."), ["Insulin"]);
   // The blocking trigger's own entity is never reported twice.
   assert.deepEqual(matchedHighRiskEntities("速效救心丸的用法"), []);
+  // A medicine's name inside the name of a pathway or a receptor is physiology,
+  // not the medicine (highRiskEntityPhysiologyTerms, data): the 2026-09-28
+  // Mendelian randomization report drew the notice for 「胰岛素分泌与作用」 and
+  // 「胰岛素抵抗」 as pathway names. The medicine itself is still named.
+  assert.deepEqual(matchedHighRiskEntities("既往通路分析列出胰岛素分泌与作用、胰岛素抵抗等通路"), []);
+  assert.deepEqual(matchedHighRiskEntities("Insulin resistance and insulin receptor signalling"), []);
+  assert.deepEqual(matchedHighRiskEntities("胰岛素抵抗患者起始胰岛素治疗"), ["胰岛素"]);
+  assert.deepEqual(matchedHighRiskEntities("β2 肾上腺素受体激动剂与肾上腺素 0.5 mg"), ["肾上腺素"]);
 
   const study = gate("bibliometric-analysis-report", { "report.md": "本文分析 warfarin 与二甲双胍联合用药的文献产出。\n" });
   assert.equal(study.ok, true, "a bibliometric study of a medicine's literature must not be withheld for naming the medicine");

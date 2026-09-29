@@ -40,8 +40,11 @@ function placeholder(value) {
 // repository as illustrations — in a skill file copied into every runtime
 // container, and in a test fixture — because they were written in comments and
 // prose, which the credential rules below deliberately skip. Examples must use
-// the reserved synthetic range (a leading 9), so a real number stands out.
-const SUBJECT_LABEL = /\bP\d{6,}\b/g;
+// the reserved synthetic range (a leading 9), so a real number stands out. A
+// P-number that is a path segment or a query value is a document id, not a
+// subject: Chinese government sites name their attachments `P0202…`, and the
+// workspace `docs/` tree cites them.
+const SUBJECT_LABEL = /(?<![/=?&#])\bP\d{6,}\b/g;
 const SYNTHETIC_SUBJECT = /^P9\d{5,}$/;
 
 export function suspiciousLines(content, file = "fixture.yml") {
@@ -97,10 +100,13 @@ async function collect(directory, output) {
   }
 }
 
+// `docs/` is pushed to the public repository with everything else, so it is
+// scanned like code; it went unscanned until 2026-09-29.
 export async function auditSourceSecrets(roots = [
   repoRoot,
   path.resolve(repoRoot, "../项目代码"),
   path.resolve(repoRoot, "../接口文档"),
+  path.resolve(repoRoot, "../docs"),
 ]) {
   const findings = [];
   for (const root of roots) await collect(root, findings);

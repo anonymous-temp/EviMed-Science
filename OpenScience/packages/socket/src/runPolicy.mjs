@@ -348,7 +348,7 @@ export function planToolParameters() {
           capability: { type: 'string' },
           title: { type: 'string' },
           dependsOn: { type: 'array', items: { type: 'string' } },
-          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：交付文件里能核对到的具体内容。' },
+          acceptance: { type: 'array', items: { type: 'string' }, description: '5–10 条验收项：读者在报告正文里能核对到的具体内容（结论、数值、范围、局限）。不写关于文件清单、字段、哈希或检查过程的项——那些是平台自己的记录。' },
           studyType: {
             type: 'string',
             enum: [...STUDY_TYPES],
@@ -1170,10 +1170,15 @@ export function sourceArtifactPaths(records, runId) {
     // unscoped diagnostic caller; it can never satisfy a named run's citation
     // gate, because two concurrent roots could otherwise both claim it.
     if (runId && record?.runId !== runId) continue
-    const artifactPath = String(record?.artifactPath ?? '')
-    if (!artifactPath || seen.has(artifactPath)) continue
-    seen.add(artifactPath)
-    paths.push(artifactPath)
+    // A source's own file, then any further file it preserved (a label's
+    // sections, `evidenceFromOutcome`).
+    const named = [record?.artifactPath, ...(Array.isArray(record?.artifactPaths) ? record.artifactPaths : [])]
+    for (const value of named) {
+      const artifactPath = String(value ?? '')
+      if (!artifactPath || seen.has(artifactPath)) continue
+      seen.add(artifactPath)
+      paths.push(artifactPath)
+    }
   }
   return paths
 }

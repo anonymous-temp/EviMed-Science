@@ -338,7 +338,7 @@ def test_async_job_flow_end_to_end(client):
     assert report.status_code == 200
     assert report.headers["content-type"].startswith("text/markdown")
     assert "atorvastatin — FAERS 药物安全性分析报告" in report.text
-    assert "10.444" in report.text  # T1 ROR rendered to 3 decimals
+    assert "10.44 [" in report.text  # T1 ROR as its display string (two decimals)
 
     docx = client.get(f"/api/v1/adr/jobs/{job_id}/report.docx")
     assert docx.status_code == 200

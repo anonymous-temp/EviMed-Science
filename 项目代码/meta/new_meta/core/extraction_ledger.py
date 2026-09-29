@@ -188,6 +188,23 @@ def migrate_extractions_to_ledger(
                     "outcome": canonical_name or outcome.outcome_name or "",
                 })
                 continue
+            except ValueError as invalid:
+                # Numbers that contradict each other (more events than
+                # participants) cannot form a result; that result is left out
+                # and named. On 2026-09-29 one such row of 29 studies in a local
+                # ma-001 run raised here and stopped the whole extraction step.
+                errors = invalid.errors(include_input=False) if hasattr(invalid, "errors") else []
+                detail = "; ".join(str(item.get("msg") or "") for item in errors) or type(invalid).__name__
+                report.warnings.append(
+                    "%s was dropped: its extracted numbers are internally inconsistent (%s)." % (result_id, detail))
+                report.skipped_results.append({
+                    "resultId": result_id,
+                    "studyId": study_id,
+                    "reason": "extracted_numbers_inconsistent",
+                    "detail": detail,
+                    "outcome": canonical_name or outcome.outcome_name or "",
+                })
+                continue
             state = _result_state(outcome)
             result_arm_ids = [intervention_arm_id, control_arm_id]
             if outcome.treatment_arm and outcome.reference_arm:
@@ -266,6 +283,12 @@ def migrate_extractions_to_ledger(
                     "override_revision": outcome.override_revision,
                 },
             )
+            if outcome.subgroup_values:
+                # The row's closed subgroup values travel with the result as
+                # derivation, and only when present: a result without them keeps
+                # the exact payload (and hash chain) of a ledger written before
+                # them. The extraction binding's row digest covers them.
+                result_entity.derivation["subgroup_values"] = dict(sorted(outcome.subgroup_values.items()))
             result_entity.derivation["extraction_binding"] = extraction_result_binding(
                 study, outcome_index, protocol, result_entity)
             _upsert(ledger, result_entity, actor, report, change_reason=change_reason)

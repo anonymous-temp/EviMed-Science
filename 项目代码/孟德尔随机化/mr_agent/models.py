@@ -10,7 +10,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
+
+from mr_agent import number_display as shown
 
 
 # --- Enums ---
@@ -148,6 +150,12 @@ class GWASEntry(BaseModel):
     population: str | None = None
 
 
+# Every result that carries numbers carries `display` beside them: the strings
+# a report states, rendered once by mr_agent.number_display. The raw values
+# stay for machines. MR is a genetics study, so its p values below 0.001 are
+# written in scientific notation.
+
+
 class MRResult(BaseModel):
     method: str
     nsnp: int
@@ -157,6 +165,21 @@ class MRResult(BaseModel):
     or_value: float | None = None
     ci_lower: float | None = None
     ci_upper: float | None = None
+
+    @computed_field
+    @property
+    def display(self) -> dict[str, str | None]:
+        odds = shown.interval(self.or_value, self.ci_lower, self.ci_upper, kind="ratio")
+        return {
+            "nsnp": shown.count(self.nsnp),
+            "beta": shown.estimate(self.beta),
+            "se": shown.estimate(self.se),
+            "pval": shown.p_value(self.pval, genetic=True),
+            "or_value": odds["estimate"],
+            "ci_lower": odds["lower"],
+            "ci_upper": odds["upper"],
+            "or_ci": odds["interval"],
+        }
 
 
 def find_ivw(mr_results: list[MRResult]) -> MRResult | None:
@@ -174,11 +197,54 @@ class HeterogeneityResult(BaseModel):
     q_df: int
     q_pval: float
 
+    @computed_field
+    @property
+    def display(self) -> dict[str, str | None]:
+        return {
+            "q": shown.estimate(self.q),
+            "q_df": shown.count(self.q_df),
+            "q_pval": shown.p_value(self.q_pval, genetic=True),
+        }
+
 
 class PleiotopyResult(BaseModel):
     egger_intercept: float
     se: float
     pval: float
+
+    @computed_field
+    @property
+    def display(self) -> dict[str, str | None]:
+        return {
+            "egger_intercept": shown.estimate(self.egger_intercept),
+            "se": shown.estimate(self.se),
+            "pval": shown.p_value(self.pval, genetic=True),
+        }
+
+
+class MRPressoCorrection(BaseModel):
+    """MR-PRESSO's outlier-corrected estimate, or the reason there is none.
+
+    MR-PRESSO tests single variants only after a significant global test, and
+    re-estimates without the variants its outlier test flags. `reason` is empty
+    exactly when the corrected estimate exists.
+    """
+
+    n_distributions: int | None = None
+    #: The smallest Bonferroni-corrected outlier p the draws can show
+    #: (variants / draws); above the 0.05 threshold the outlier set is unstable.
+    outlier_resolution: float | None = None
+    outlier_snps: list[str] = Field(default_factory=list)
+    beta: float | None = None
+    se: float | None = None
+    pval: float | None = None
+    or_value: float | None = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    distortion_coefficient: float | None = None
+    distortion_pval: float | None = Field(default=None, ge=0, le=1)
+    distortion_pval_relation: Literal["=", "<"] = "="
+    reason: str = ""
 
 
 class LLMCallObservation(BaseModel):
@@ -232,12 +298,26 @@ class MRAnalysisResult(BaseModel):
     interpretation_failure: InterpretationFailure | None = None
     steiger_correct: bool | None = None
     steiger_pval: float | None = None
+    # "not_computable" names the input the test lacks, never an empty result.
+    steiger_status: Literal["not_run", "computed", "not_computable", "failed"] = "not_run"
+    steiger_reason: str = ""
+    steiger_r2_exposure: float | None = None
+    steiger_r2_outcome: float | None = None
     presso_global_pval: float | None = Field(default=None, ge=0, le=1)
     # Permutation tests can report a strict upper bound, not an exact estimate.
     presso_global_pval_relation: Literal["=", "<"] = "="
     presso_n_outliers: int | None = None
+    presso_correction: MRPressoCorrection | None = None
     radial_pval: float | None = None
+    radial_n_outliers: int | None = None
     conmix_pval: float | None = None
+    conmix_estimate: float | None = None
+    conmix_ci_lower: float | None = None
+    conmix_ci_upper: float | None = None
+    conmix_n_intervals: int | None = None
+    # Per-instrument F statistics (f_statistics.csv), summarised once here so a
+    # report states them rather than recomputing them from the file.
+    instrument_strength: dict[str, Any] = Field(default_factory=dict)
     # Optional analyses that did not run, each as "name: reason". An empty list
     # means every optional analysis ran; it is not the same as a list that was
     # never populated, which is why the R side always writes this field.
@@ -251,6 +331,78 @@ class MRAnalysisResult(BaseModel):
     exposure_metadata: dict[str, Any] = Field(default_factory=dict)
     outcome_metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=datetime.now)
+
+    @model_validator(mode="after")
+    def _a_verdict_was_computed(self) -> "MRAnalysisResult":
+        if self.steiger_correct is not None and self.steiger_status == "not_run":
+            self.steiger_status = "computed"
+        return self
+
+    @computed_field
+    @property
+    def display(self) -> dict[str, Any]:
+        """The strings a report states for this result's scalar findings.
+
+        Estimates, heterogeneity and pleiotropy carry their own `display`.
+        """
+        genetic = {"genetic": True}
+        strength = self.instrument_strength or {}
+        correction = self.presso_correction
+        corrected = shown.interval(
+            *((correction.or_value, correction.ci_lower, correction.ci_upper) if correction else (None,) * 3),
+            kind="ratio",
+        )
+        conmix = shown.interval(self.conmix_estimate, self.conmix_ci_lower, self.conmix_ci_upper, kind="estimate")
+        global_p = shown.bounded_p_value(
+            f"<{self.presso_global_pval!r}" if self.presso_global_pval_relation == "<" else self.presso_global_pval,
+            **genetic,
+        )
+        return {
+            "convention": shown.CONVENTION,
+            "n_instruments": shown.count(self.n_instruments),
+            "sample_size_exposure": shown.count(self.sample_size_exposure),
+            "sample_size_outcome": shown.count(self.sample_size_outcome),
+            "f_statistic_mean": shown.estimate(self.f_statistic_mean),
+            "instrument_strength": {
+                key: (shown.count(value) if key in {"n", "below_10"} else shown.estimate(value))
+                for key, value in strength.items() if not key.endswith("_snp")
+            } | {key: value for key, value in strength.items() if key.endswith("_snp")},
+            "steiger": {
+                "status": self.steiger_status,
+                "reason": self.steiger_reason,
+                "correct_causal_direction": self.steiger_correct,
+                "pval": shown.p_value(self.steiger_pval, **genetic),
+                "r2_exposure": shown.estimate(self.steiger_r2_exposure),
+                "r2_outcome": shown.estimate(self.steiger_r2_outcome),
+            },
+            "mr_presso": {
+                "global_pval": global_p,
+                "n_outliers": shown.count(self.presso_n_outliers),
+                "outlier_snps": list(correction.outlier_snps) if correction else [],
+                "outlier_resolution": shown.estimate(correction.outlier_resolution) if correction else None,
+                "corrected_beta": shown.estimate(correction.beta) if correction else None,
+                "corrected_se": shown.estimate(correction.se) if correction else None,
+                "corrected_pval": shown.p_value(correction.pval, **genetic) if correction else None,
+                "corrected_or": corrected["estimate"],
+                "corrected_or_ci": corrected["interval"],
+                "distortion_pval": None if correction is None else shown.bounded_p_value(
+                    f"<{correction.distortion_pval!r}" if correction.distortion_pval_relation == "<"
+                    else correction.distortion_pval,
+                    **genetic,
+                ),
+                "reason": correction.reason if correction else "",
+            },
+            "radial": {
+                "global_q_pval": shown.p_value(self.radial_pval, **genetic),
+                "n_outliers": shown.count(self.radial_n_outliers),
+            },
+            "conmix": {
+                "estimate": conmix["estimate"],
+                "ci": conmix["interval"],
+                "pval": shown.p_value(self.conmix_pval, **genetic),
+                "n_intervals": shown.count(self.conmix_n_intervals),
+            },
+        }
 
 
 class PaperReference(BaseModel):

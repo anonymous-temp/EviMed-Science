@@ -83,8 +83,12 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         ? await Promise.all(running.map((run) => sessions.state(currentUser.id, identity.projectId, run.sessionId)
           .catch(() => ({ trialCapsuleId: null }))))
         : [];
-      // A trial of someone else's capsule reads memory but writes none.
+      // A trial of someone else's capsule writes none of this researcher's
+      // memory and reads none of it: the pack reaches the conversation as its
+      // first-step context (`memorySessions.mjs`), and that is all it reads
+      // (build spec §9.4-5; the recall half landed on 2026-09-29).
       const writesNothing = states.some((state) => Boolean(state.trialCapsuleId));
+      const trialConversation = running.length === 1 && Boolean(states[0]?.trialCapsuleId);
       if (action === "recall") {
         if (body.factKinds !== undefined && (!Array.isArray(body.factKinds) || body.factKinds.length > CAPSULE_FACT_KINDS.length || body.factKinds.some((kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
@@ -94,6 +98,11 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         }
         if (body.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(body.scope)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory scope.");
+        }
+        if (trialConversation) {
+          sendJson(res, 200, { items: [], mode: "trial", contextOnly: true, sources: { memory: 0, capsule: 0 },
+            notice: "这是一段试用别人胶囊的对话：只读这个胶囊，不读用户自己的记忆。" });
+          return;
         }
         const recalled = await recallAcrossMemory({ capsules: service, memorySubstrate }, currentUser, {
           ...body, projectId: identity.projectId,

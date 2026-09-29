@@ -164,14 +164,19 @@ def subgroup_analysis(
 ) -> list[PooledEffect]:
     """Subgroup analysis: pool within each subgroup, plus Q-between test.
 
-    Returns list of PooledEffect. The last element (if there are >=2 subgroups)
-    is a synthetic PooledEffect representing the Q-between test result, with
-    outcome_name = "Subgroup difference test" and q_statistic = Q_between.
+    Groups are the caller's ``StudyEffect.subgroup`` values, compared exactly:
+    the caller passes closed protocol subgroup values (main.py,
+    core/subgroup_vocabulary.py), because grouping free-text labels split one
+    route into one-study groups (ma-001, 2026-09-28). A study without a value
+    is left out rather than lumped into an "Overall" group, which is no value
+    of the variable and would be tested against the others. Each subgroup with
+    at least two studies is pooled; with two or more pooled subgroups every
+    result carries the Q-between test in subgroup_q_between(_p).
     """
     groups: dict[str, list[StudyEffect]] = {}
     for s in studies:
-        key = s.subgroup or "Overall"
-        groups.setdefault(key, []).append(s)
+        if s.subgroup:
+            groups.setdefault(s.subgroup, []).append(s)
 
     meta_fn = random_effects_dl if model == "random" else fixed_effect
     results = []

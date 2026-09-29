@@ -80,6 +80,7 @@ if (command === "exec") {
   if (rest[0] === "printenv") { out(state.runtimeImage + "\n"); process.exit(0); }
   const script = rest.join(" ");
   if (script.includes("/api/ready")) { out((state.ready ?? "ok 27 - backup=ok") + "\n"); process.exit(0); }
+  if (script.includes("/api/ops/maintenance?activity=1")) { out((state.activity ?? "0 0 0") + "\n"); process.exit(0); }
   if (script.includes("/api/health")) process.exit(0);
   process.exit(1);
 }
@@ -318,6 +319,44 @@ test("the live pages are walked after the switch, and a failed walk says the rel
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  }
+});
+
+test("runs in flight stop the switch before anything moves, unless it is told to reap them", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const stateFile = path.join(root, "docker-state.json");
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    await writeFile(stateFile, JSON.stringify({ ...state, activity: "2 0 1" }));
+    const refused = await runSwitch(root, ["--no-prune"]);
+    assert.equal(refused.code, 3, refused.stdout + refused.stderr);
+    assert.match(refused.stdout, /REFUSED: 2 agent run\(s\), 0 product job\(s\), 1 busy runtime\(s\) in flight/);
+    assert.doesNotMatch(refused.stdout, /=== current -> /, "current did not move");
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    assert.equal(calls.some((line) => line.includes(" up -d ")), false, "nothing was recreated");
+    const forced = await runSwitch(root, ["--no-prune", "--allow-active"]);
+    assert.equal(forced.code, 0, forced.stdout + forced.stderr);
+    assert.match(forced.stdout, /--allow-active: switching anyway/);
+    assert.match(forced.stdout, /=== current -> /);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an idle release switches, and an unreadable one warns rather than stops", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const idle = await runSwitch(root, ["--no-prune"]);
+    assert.equal(idle.code, 0, idle.stdout + idle.stderr);
+    assert.match(idle.stdout, /nothing in flight/);
+    const stateFile = path.join(root, "docker-state.json");
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    await writeFile(stateFile, JSON.stringify({ ...state, activity: "unknown HTTP 404" }));
+    const unknown = await runSwitch(root, ["--no-prune"]);
+    assert.equal(unknown.code, 0, unknown.stdout + unknown.stderr);
+    assert.match(unknown.stdout, /WARNING: could not read the live release's activity \(HTTP 404\)/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

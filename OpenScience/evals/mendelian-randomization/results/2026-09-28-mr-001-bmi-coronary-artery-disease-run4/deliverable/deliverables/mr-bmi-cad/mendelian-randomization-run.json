@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "capability": "mendelian-randomization",
+  "jobId": "mr-20260928184434-c49d6343441f",
+  "status": "succeeded",
+  "artifacts": [
+    "mendelian-randomization-report.md",
+    "mendelian-randomization-run.json",
+    "analysis-data/1-GCST002783-GCST003116/conmix.csv",
+    "analysis-data/1-GCST002783-GCST003116/diagnostic-plots.json",
+    "analysis-data/1-GCST002783-GCST003116/environment.json",
+    "analysis-data/1-GCST002783-GCST003116/f_statistics.csv",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/harmonisation.json",
+    "analysis-data/1-GCST002783-GCST003116/heterogeneity.csv",
+    "analysis-data/1-GCST002783-GCST003116/instrument-selection.json",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/mr_results.csv",
+    "analysis-data/1-GCST002783-GCST003116/mr_summary.json",
+    "analysis-data/1-GCST002783-GCST003116/mrpresso.csv",
+    "analysis-data/1-GCST002783-GCST003116/pleiotropy.csv",
+    "analysis-data/1-GCST002783-GCST003116/radial.csv",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/replay/run.R",
+    "analysis-data/1-GCST002783-GCST003116/replay/analysis.R",
+    "analysis-data/1-GCST002783-GCST003116/replay/options.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/exposure.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/outcome.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/observed-environment.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/manifest.json",
+    "mendelian-randomization-inputs.json",
+    "inputs/open-exposure.csv",
+    "inputs/open-outcome.csv"
+  ],
+  "job": {
+    "status": "succeeded",
+    "exposure": "Body mass index (BMI)",
+    "outcome": "Coronary artery disease (CAD)",
+    "analysisPairs": 1,
+    "instrumentsAnalysed": 64,
+    "degraded": true,
+    "modules": {
+      "instrumentSelection": {
+        "status": "ok"
+      },
+      "primaryEstimate": {
+        "status": "ok"
+      },
+      "interpretation": {
+        "status": "ok"
+      },
+      "diagnosticPlots": {
+        "status": "ok",
+        "checks": [
+          {
+            "scatter_plot": {
+              "status": "ok",
+              "pages": 1,
+              "images": 1
+            },
+            "forest_plot": {
+              "status": "ok",
+              "pages": 1,
+              "images": 1
+            },
+            "funnel_plot": {
+              "status": "ok",
+              "pages": 1,
+              "images": 1
+            },
+            "loo_plot": {
+              "status": "ok",
+              "pages": 1,
+              "images": 1
+            }
+          }
+        ]
+      },
+      "sensitivityAnalyses": {
+        "status": "degraded",
+        "reason": "steiger: replacement has length zero"
+      },
+      "steigerDirection": {
+        "status": "degraded",
+        "reason": "the Steiger directionality test produced no verdict"
+      },
+      "reverseMR": {
+        "status": "skipped",
+        "reason": "bidirectional analysis was not requested"
+      }
+    },
+    "usage": {
+      "requests": 44,
+      "cacheHitTokens": 62336,
+      "cacheMissTokens": 67828,
+      "outputTokens": 253536,
+      "model": "deepseek-flash"
+    }
+  },
+  "engineArtefacts": [
+    "mendelian-randomization-report.md",
+    "mendelian-randomization-run.json",
+    "mendelian-randomization-report.docx",
+    "mendelian-randomization-report.pdf",
+    "mendelian-randomization-report.txt",
+    "analysis-data/1-GCST002783-GCST003116/conmix.csv",
+    "analysis-data/1-GCST002783-GCST003116/diagnostic-plots.json",
+    "analysis-data/1-GCST002783-GCST003116/environment.json",
+    "analysis-data/1-GCST002783-GCST003116/f_statistics.csv",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/harmonisation.json",
+    "analysis-data/1-GCST002783-GCST003116/heterogeneity.csv",
+    "analysis-data/1-GCST002783-GCST003116/instrument-selection.json",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/mr_results.csv",
+    "analysis-data/1-GCST002783-GCST003116/mr_summary.json",
+    "analysis-data/1-GCST002783-GCST003116/mrpresso.csv",
+    "analysis-data/1-GCST002783-GCST003116/pleiotropy.csv",
+    "analysis-data/1-GCST002783-GCST003116/radial.csv",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/replay/run.R",
+    "analysis-data/1-GCST002783-GCST003116/replay/analysis.R",
+    "analysis-data/1-GCST002783-GCST003116/replay/options.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/exposure.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/outcome.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/observed-environment.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/manifest.json",
+    "mendelian-randomization-inputs.json",
+    "mendelian-randomization-open-sources.json",
+    "inputs/open-exposure.csv",
+    "inputs/open-outcome.csv"
+  ],
+  "engineArtefactsNotDelivered": {
+    "files": [
+      "mendelian-randomization-report.docx",
+      "mendelian-randomization-report.pdf",
+      "mendelian-randomization-report.txt"
+    ],
+    "reason": "The engine-generated narrative report and its document renders were replaced by the reviewed report written from the returned artefacts; they remain in the analysis run output directory and are not part of this delivery."
+  },
+  "engineResults": [
+    {
+      "exposure_id": "GCST002783",
+      "outcome_id": "GCST003116",
+      "exposure_name": "Body mass index (BMI)",
+      "outcome_name": "Coronary artery disease (CAD)",
+      "exposure_source_type": "gwas_catalog",
+      "outcome_source_type": "gwas_catalog",
+      "mr_results": [
+        {
+          "method": "MR Egger",
+          "nsnp": 64,
+          "beta": 0.52378468862374,
+          "se": 0.152611048024247,
+          "pval": 0.0010716572349065,
+          "or_value": 1.68840566239241,
+          "ci_lower": 1.25190580534009,
+          "ci_upper": 2.27709917841969
+        },
+        {
+          "method": "Weighted median",
+          "nsnp": 64,
+          "beta": 0.383732779222529,
+          "se": 0.0782975023434151,
+          "pval": 9.53703914586326e-07,
+          "or_value": 1.46775317512884,
+          "ci_lower": 1.25893946819035,
+          "ci_upper": 1.71120171980745
+        },
+        {
+          "method": "Inverse variance weighted",
+          "nsnp": 64,
+          "beta": 0.427300414298957,
+          "se": 0.0645269559752301,
+          "pval": 3.54262863158619e-11,
+          "or_value": 1.53311316166586,
+          "ci_lower": 1.35097638690072,
+          "ci_upper": 1.73980536541073
+        },
+        {
+          "method": "Simple mode",
+          "nsnp": 64,
+          "beta": 0.330292885855024,
+          "se": 0.150558453017051,
+          "pval": 0.031947920769039,
+          "or_value": 1.39137558301932,
+          "ci_lower": 1.03582511113537,
+          "ci_upper": 1.86896995661786
+        },
+        {
+          "method": "Weighted mode",
+          "nsnp": 64,
+          "beta": 0.378953082589713,
+          "se": 0.0986692162471091,
+          "pval": 0.0002874538901087,
+          "or_value": 1.4607544993175,
+          "ci_lower": 1.20389413917208,
+          "ci_upper": 1.77241805391937
+        }
+      ],
+      "heterogeneity": [
+        {
+          "method": "MR Egger",
+          "q": 121.780783921605,
+          "q_df": 62,
+          "q_pval": 8.93502701793289e-06
+        },
+        {
+          "method": "Inverse variance weighted",
+          "q": 122.738513258264,
+          "q_df": 63,
+          "q_pval": 9.97081339452979e-06
+        }
+      ],
+      "pleiotropy": {
+        "egger_intercept": -0.003090204214076,
+        "se": 0.0044254692048616,
+        "pval": 0.487614712674696
+      },
+      "n_instruments": 64,
+      "f_statistic_mean": 70.6173,
+      "pval_threshold": 5e-08,
+      "plots": {
+        "scatter_plot_pdf": "analysis-data/1-GCST002783-GCST003116/scatter_plot.pdf",
+        "scatter_plot_png": "analysis-data/1-GCST002783-GCST003116/scatter_plot.png",
+        "forest_plot_pdf": "analysis-data/1-GCST002783-GCST003116/forest_plot.pdf",
+        "forest_plot_png": "analysis-data/1-GCST002783-GCST003116/forest_plot.png",
+        "funnel_plot_pdf": "analysis-data/1-GCST002783-GCST003116/funnel_plot.pdf",
+        "funnel_plot_png": "analysis-data/1-GCST002783-GCST003116/funnel_plot.png",
+        "loo_plot_pdf": "analysis-data/1-GCST002783-GCST003116/loo_plot.pdf",
+        "loo_plot_png": "analysis-data/1-GCST002783-GCST003116/loo_plot.png"
+      },
+      "raw_data_path": "analysis-data/1-GCST002783-GCST003116",
+      "interpretation": "### 1. 主要因果效应估计\n\n本研究以64个单核苷酸多态性（single nucleotide polymorphism，SNP）作为工具变量，采用逆方差加权（inverse variance weighted，IVW）法评估体重指数（body mass index，BMI）与冠状动脉粥样硬化性心脏病（coronary artery disease，CAD）之间的因果关系。IVW 分析结果显示，暴露每增加1个单位（或1个标准差，取决于暴露 GWAS 的量纲标准化方式），CAD 的 OR 为1.533（95% CI：1.351–1.740），beta=0.4273（SE=0.0645），p=3.54e-11，提示 BMI 升高与 CAD 风险增加之间存在具有统计学意义的因果关联。方向性上，beta 为正且置信区间不跨越无效值，与观察性流行病学中肥胖与冠心病风险正相关的累积证据一致。然而，IVW 估计的无偏性依赖于全部工具变量均满足无效性假设，因此该结果仍需借助其他方法进行稳健性验证（Burgess, 2013）。\n\n### 2. 不同方法的稳健性分析\n\n为评估主要估计的稳健性，本研究进一步采用 MR-Egger、加权中位数、简单模式与加权模式四种方法进行平行分析，结果汇总于表1。\n\n| 方法 | beta | SE | OR（95% CI） | p值 |\n| MR Egger | 0.5238 | 0.1526 | 1.688（1.252–2.277） | 1.07e-03 |\n| 加权中位数 | 0.3837 | 0.0783 | 1.468（1.259–1.711） | 9.54e-07 |\n| 逆方差加权 | 0.4273 | 0.0645 | 1.533（1.351–1.740） | 3.54e-11 |\n| 简单模式 | 0.3303 | 0.1506 | 1.391（1.036–1.869） | 3.19e-02 |\n| 加权模式 | 0.3790 | 0.0987 | 1.461（1.204–1.772） | 2.87e-04 |\n\n与 IVW 结果一致，加权中位数法（OR=1.468，95% CI：1.259–1.711，p=9.54e-07）与加权模式法（OR=1.461，95% CI：1.204–1.772，p=2.87e-04）均显示正向且显著的关联。值得注意的是，MR-Egger 的点估计（OR=1.688，95% CI：1.252–2.277，p=1.07e-03）在数值上高于 IVW 估计，但其标准误明显更大（SE=0.1526 对 SE=0.0645），置信区间亦更宽，这与其在存在方向性多效性时才具一致性的统计特性相符，也反映该方法在检验效能上的固有损失（Bowden, 2015）。相比之下，简单模式法的估计值最小（OR=1.391，95% CI：1.036–1.869，p=3.19e-02），其置信区间下限接近1，提示该方法对个别工具变量的取值较为敏感。总体而言，五种方法的效应方向完全一致，效应量介于1.391至1.688之间，各置信区间彼此重叠，提示结果在不同建模假设下具有可重复性；然而，方法间点估计的离散程度亦提示单一估计值不宜作过度精确的解读（Bowden, 2016）。\n\n### 3. 异质性检验\n\nCochran's Q 检验显示，MR Egger 模型（Q=121.78，df=62，p<0.001）与 IVW 模型（Q=122.74，df=63，p<0.001）中均存在显著异质性。这一结果表明，各 SNP 的 Wald 比值估计并非来自同一效应量的抽样分布，可能与工具变量在效应异质性、连锁不平衡或组织特异性表达等方面的差异有关（Greco, 2015）。然而，在纳入64个工具变量的大样本工具集分析中，一定程度的异质性较为常见，且其本身并不必然意味着因果估计失效。值得注意的是，鉴于异质性显著，以随机效应模型报告的 IVW 结果或采用 MR-PRESSO 等异质性稳健方法进行校正，可进一步提高结论的可靠程度（Verbanck, 2018）。与此一致，本研究的主要结论建立在多种方法方向一致的基础上，而非单一模型的一次性估计。\n\n### 4. 水平多效性检验\n\nMR-Egger 截距项为-0.0031（SE=0.0044，p=0.4876），未发现方向性水平多效性存在的证据。截距接近于零且不具统计学意义，提示工具变量对 CAD 的效应并非主要通过独立于 BMI 的路径产生，因而 IVW 估计的因果解释力未受到明显的方向性偏倚威胁（Bowden, 2015）。然而，MR-Egger 截距检验的统计效能有限，其\"阴性\"结果不能等同于完全排除多效性，尤其在工具变量数量较多且异质性显著的情形下，平衡性多效性仍可能残留。相比之下，加权中位数法在假定至少半数工具变量有效时即能提供一致估计，其结果与 IVW 高度吻合，从另一角度增强了对多效性稳健性的信心（Bowden, 2016）。值得注意的是，本分析未报告 MR-PRESSO 全局检验与离群值校正结果，建议在后续分析中补充，以更全面地评估多效性风险。\n\n### 5. 工具变量强度评估\n\n纳入分析的64个工具变量的平均 F 统计量为70.62，远高于传统判定的弱工具变量阈值10，提示工具变量与暴露之间的关联强度充足，弱工具变量偏倚导致估计向混杂方向偏移的可能性较低（Burgess & Thompson, 2011）。然而，F 统计量反映的是工具集整体的平均强度，无法排除个别 SNP 强度不足的情形；与此一致，建议同时报告各工具变量的 F 统计量分布或采用条件 F 统计量加以佐证。值得注意的是，工具变量数量较多亦可能放大异质性与多效性的累积影响，因此工具强度与工具质量应被同时纳入评价。\n\n### 6. 综合结论与解释限度\n\n综合上述结果，本研究提供了证据表明遗传预测的 BMI 水平升高与 CAD 风险增加之间存在方向一致且统计学显著的因果关联，IVW 估计的 OR 为1.533（95% CI：1.351–1.740，p=3.54e-11），且该关联在加权中位数、加权模式、MR-Egger 与简单模式等方法的平行分析中保持一致，MR-Egger 截距检验未提示方向性水平多效性，工具变量强度亦较为充分。然而，显著的异质性提示因果估计应被审慎解读，其结果支持 BMI 作为 CAD 潜在可干预危险因素的判断，但不能替代随机对照试验所提供的干预证据（Davey Smith & Ebrahim, 2003）。值得注意的是，本研究结论的推广仍受限于暴露与结局 GWAS 人群的遗传背景差异、线性效应假设以及未纳入的非线性与性别特异性分析，未来研究可结合更高分辨率的暴露表型与多组学数据进一步验证该关联的机制基础。",
+      "interpretation_status": "succeeded",
+      "interpretation_error_code": "",
+      "interpretation_failure": null,
+      "steiger_correct": null,
+      "steiger_pval": null,
+      "presso_global_pval": 0.001,
+      "presso_global_pval_relation": "<",
+      "presso_n_outliers": 2,
+      "radial_pval": 1.7358135428753e-05,
+      "conmix_pval": 3.0319965521660403e-10,
+      "skipped_analyses": [
+        "steiger: replacement has length zero"
+      ],
+      "instrument_selection": {
+        "afterClumping": 67,
+        "genomeWideSignificantVariants": 2042,
+        "ldChecked": false,
+        "ld_rechecked": false,
+        "method": "distance_pruning",
+        "mode": "gwas_catalog",
+        "pThreshold": 5e-08,
+        "provenance": "GWAS Catalog GCST002783 (PMID 25673413), harmonised file https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST002001-GCST003000/GCST002783/harmonised/25673413-GCST002783-EFO_0004340.h.tsv.gz; variants at p<5e-08 (2042) selected by distance pruning, one variant per 10000 kb window, no LD reference (67 kept); read 2026-09-28T18:50:28.019631Z.",
+        "source": "GCST002783",
+        "windowKb": 10000
+      },
+      "harmonisation": {
+        "exposure_instruments": 67,
+        "unavailable_in_outcome": 1,
+        "harmonised_pairs": 66,
+        "palindromic": 2,
+        "dropped_palindromic_ambiguous": 2,
+        "dropped_other": 0,
+        "retained": 64
+      },
+      "sample_overlap_warning": false,
+      "sample_size_exposure": null,
+      "sample_size_outcome": null,
+      "exposure_metadata": {
+        "gwas_id": "GCST002783",
+        "trait": "Body mass index",
+        "requested_trait": "Body mass index (BMI)",
+        "sample_size": "up to 104,666 European ancestry male individuals, up to 132,115 European ancestry female individuals, 370 African American male individuals, 517 African American female individuals, 512 Hispanic male individuals, 764 Hispanic female individuals",
+        "population": "887 African American or Afro-Caribbean (U.S.); 1276 Hispanic or Latin American (NR); 236781 European (NR)",
+        "pubmed_id": "25673413",
+        "repository": "NHGRI-EBI GWAS Catalog",
+        "study_url": "https://www.ebi.ac.uk/gwas/studies/GCST002783",
+        "harmonised_file": "https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST002001-GCST003000/GCST002783/harmonised/25673413-GCST002783-EFO_0004340.h.tsv.gz",
+        "licence": "https://www.ebi.ac.uk/about/terms-of-use/",
+        "metadata_source": "gwas_catalog",
+        "verification_status": "read_from_repository"
+      },
+      "outcome_metadata": {
+        "gwas_id": "GCST003116",
+        "trait": "Coronary artery disease",
+        "requested_trait": "Coronary artery disease (CAD)",
+        "sample_size": "42,096 European ancestry cases, 361 African American cases, 758 Hispanic American cases, 12,658 South Asian ancestry cases, 1,802 Lebanese ancestry cases, 3,614 East Asian ancestry cases, 99,121 European ancestry controls, 2,778 African American controls, 3,337 Hispanic American controls, 12,899 South Asian ancestry controls, 466 Lebanese ancestry controls, 7,709 East Asian ancestry controls",
+        "population": "4095 Hispanic or Latin American (U.S.); 11323 East Asian (China, Republic of Korea); 25557 South Asian (India, Pakistan, U.K.); 3139 African American or Afro-Caribbean (U.S.); 2268 Greater Middle Eastern (Middle Eastern, North African or Persian) (NR); 141217 European (Estonia, Finland, Germany, Greece, Iceland, Italy, NR, Netherlands, Republic of Ireland, Spain, Sweden, U.K., U.S.)",
+        "pubmed_id": "26343387",
+        "repository": "NHGRI-EBI GWAS Catalog",
+        "study_url": "https://www.ebi.ac.uk/gwas/studies/GCST003116",
+        "harmonised_file": "https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST003001-GCST004000/GCST003116/harmonised/26343387-GCST003116-EFO_0000378.h.tsv.gz",
+        "licence": "https://www.ebi.ac.uk/about/terms-of-use/",
+        "metadata_source": "gwas_catalog",
+        "verification_status": "read_from_repository"
+      },
+      "timestamp": "2026-09-28T18:52:31.514809"
+    }
+  ],
+  "deliveredArtefacts": [
+    {"path": "analysis-data/1-GCST002783-GCST003116/conmix.csv", "bytes": 131, "sha256": "f4a3f823e987936ad4232683e6c9967a556e54a7842c376e4ed2b0d755979c2a"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/diagnostic-plots.json", "bytes": 240, "sha256": "a21895126785b11cfac252efd289718292399a1945061c825d1c70537e9de39f"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/environment.json", "bytes": 2461, "sha256": "c96a41ba3de0be0c891b609fc48b179e9fc02a77eb06e3a351e57b6c7e6007a5"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/f_statistics.csv", "bytes": 3564, "sha256": "ca5d35f60f6cdc9589ac2e8d28c19f35802f1acb5db9298176ea47d9e7cf9a13"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/forest_plot.pdf", "bytes": 11529, "sha256": "193ec2ef767d2fa49dda08e1bb3001faf15a61791a3518fc5f264fd70e94bf8d"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/forest_plot.png", "bytes": 320447, "sha256": "66027395dc61a97c9094de0a828e885f75d55c0037135174cffb26f12e767f44"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/funnel_plot.pdf", "bytes": 8919, "sha256": "bdddffff5b5f4482b00d3e9a5f9540c00340331bddbe14adf8443cf9a46f6276"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/funnel_plot.png", "bytes": 74259, "sha256": "05da0219645796d73062be7ef53f0e0afbf14ec5a89c5235fceddb2ca76e8f98"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/harmonisation.json", "bytes": 159, "sha256": "92f86a489b67aaf5d71819456ac2e0f48caf885232c3af46d9e0df39d011abc0"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/heterogeneity.csv", "bytes": 276, "sha256": "90de9fb255d234756ff88e3a29949568e9ce3dec0a9e9e9639c1fd1a2d94f211"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/instrument-selection.json", "bytes": 574, "sha256": "bbe29d8dd904f3d41814b5a201190af1243407dc1d0fdde09401a3c1c011ed0f"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/loo_plot.pdf", "bytes": 11318, "sha256": "792d80fe8a1466408d8d43e6a0cb14f2f780f2725634a8e77dc2cae4d71f737e"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/loo_plot.png", "bytes": 316835, "sha256": "244df645acf3e84f7b7b4c530c5b13f5fba31dc79b2c5794cb6b1e95914e3323"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/mr_results.csv", "bytes": 941, "sha256": "2aa3485de681fc82554650f0431c55ea5c9317d833e18e02c9c8b03d0d342da2"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/mr_summary.json", "bytes": 206, "sha256": "6b4c19ecd07875828dc84bc774867a74aae9191a9b94251efd25a807a536a127"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/mrpresso.csv", "bytes": 85, "sha256": "b7565226ed8507ee2b75364427249ffa1f6f5985b2f938ebcaa22ec2902f3ee7"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/pleiotropy.csv", "bytes": 175, "sha256": "db81248fb976a9d445ea839c7a846d092657a42a0bbda43ccc5a372f81e58f5b"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/radial.csv", "bytes": 51, "sha256": "2e8f4f5f5d6e413294cf2248e5f7b2889f533fc43a13e3fda697dedcaa72301e"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/analysis.R", "bytes": 12820, "sha256": "de068cf2b5063c6ac9b436d77ecafbbac29f3117f75b1a0ecb596670baf93d89"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/inputs/exposure.csv", "bytes": 4218, "sha256": "c40d26194c899b2f2959e07dd6d8a08460e6ced7dcc3e65ea1c5b33ea3145ddc"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/inputs/outcome.csv", "bytes": 4802, "sha256": "a6f8b0b13791c0310f2bf14af648473a101180df7c3ceaa15c127a4ba6190646"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/manifest.json", "bytes": 5094, "sha256": "78063a8643b45005a3e60d793da39dc7148d60561d8375b995c2b9dfe0db64dc"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/observed-environment.json", "bytes": 2461, "sha256": "c96a41ba3de0be0c891b609fc48b179e9fc02a77eb06e3a351e57b6c7e6007a5"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/options.json", "bytes": 1723, "sha256": "cdad1e30d2eccd0badcf4dc844cc5017ec96d6d95443df10963092f5aabae558"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/replay/run.R", "bytes": 2408, "sha256": "d7920c85b17dc232e2b6f52993be2fb5ac1c126ac92a1b8f681a1c514a1dc824"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/scatter_plot.pdf", "bytes": 11380, "sha256": "96e785177b9f686ccb9435ce6768cf8e0cddd9c15bd9d2bc3a54e4499e0a2f1d"},
+    {"path": "analysis-data/1-GCST002783-GCST003116/scatter_plot.png", "bytes": 160975, "sha256": "078604df4e972e1a49e78b977c2a372b77dbf65e03b27e112d7df42ed5e33614"},
+    {"path": "inputs/open-exposure.csv", "bytes": 4218, "sha256": "c40d26194c899b2f2959e07dd6d8a08460e6ced7dcc3e65ea1c5b33ea3145ddc"},
+    {"path": "inputs/open-outcome.csv", "bytes": 4802, "sha256": "a6f8b0b13791c0310f2bf14af648473a101180df7c3ceaa15c127a4ba6190646"},
+    {"path": "mendelian-randomization-inputs.json", "bytes": 210, "sha256": "c50dbd15e69613a288d303ba25141f95173a55de603118057f2ec7454a9746be"},
+    {"path": "mendelian-randomization-open-sources.json", "bytes": 7093, "sha256": "b6ccd52b5eda14350287e5c9b1dc9be526683779a46a865c75ee9679b98c6884"},
+    {"path": "mendelian-randomization-report.md", "bytes": 33879, "sha256": "7b6bc5ce75bb44a60a65cfaae98478fea643b16c4bb7227dff21d534125b791c"},
+    {"path": "request.json", "bytes": 272, "sha256": "a8dbf8bdf539b5d2df8ed609e779c041236a56f1acc06cb6ea6a37c08993c8b9"},
+    {"path": "result.json", "bytes": 3564, "sha256": "97e6fcfc4be59c4caf809e43c45e43b6a2b40550968ad4745a04306371332e24"},
+    {"path": "reporting-checklist.md", "bytes": 17936, "sha256": "e23bfcf2559137402fa7538b3b49f5668f119fcfcff9987bfc9f06da3b5ead0a"},
+    {"path": "revision-notes.md", "bytes": 14720, "sha256": "8a294dda30fdd4c391c6f839483af3ca3c62c292838b3469b6c2dbb1ab162e4f"}
+  ],
+  "notes": [
+    "deliveredArtefacts lists every file in this delivery directory except this manifest itself; bytes and sha256 were computed from the delivered bytes. The manifest's own bytes and digest are not listed because they change whenever this file is edited; its digest is recorded in revision-notes.md at the moment of finalisation.",
+    "jobId and status are the terminal state of the engine job that produced this delivery. artifacts lists the engine-returned artifacts carried in this delivery, in the order the engine returned them; engineArtefacts is that returned list verbatim, engineArtefactsNotDelivered names the returned artifacts not carried here, the job object carries the run's full module-level state, and deliveredArtefacts is the complete file inventory of this delivery directory.",
+    "engineResults preserves the engine-returned results array verbatim, including its own rounding of p-values (for example mr_results.pval 0.0010716572349065 and 0.0002874538901087). The unrounded values are in analysis-data/1-GCST002783-GCST003116/mr_results.csv and are the values quoted in the report.",
+    "instrument-selection.json records method distance_pruning, windowKb 10000, ldChecked false; no linkage-disequilibrium reference panel was used, so the report does not describe the instruments as LD-pruned.",
+    "No outlier-corrected causal estimate (MR-PRESSO or RadialMR) is present in the returned artefacts; the report states this gap explicitly.",
+    "Steiger directionality produced no verdict; reverse/bidirectional MR was not requested."
+  ]
+}

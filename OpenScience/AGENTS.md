@@ -39,8 +39,8 @@ per-project workspace + JSONL provenance.
   `Skeletons` in `components/cards/`), `src/lib/` (api client, project store, run stream).
   There is no desktop packaging: the Tauri shell, its Rust command layer,
   `packages/sdk` and the browser-side kernel store were deleted on 2026-09-04.
-- `packages/` — `ui` (placeholder README only — real primitives live in
-  `apps/web/src/components/ui/`), `shared`, `domain` (`@evimed/domain` — the
+- `packages/` — `shared`, `design-tokens` (`@evimed/design-tokens`, see
+  below), `domain` (`@evimed/domain` — the
   vocabulary every other package derives from: tool names, contract kinds, the
   workspace layout, the four state vocabularies, the error-code registry and the
   delivery-gate rules), `harness-port` (the only package that may import
@@ -92,7 +92,7 @@ per-project workspace + JSONL provenance.
   is not a weaker credential — it is one the kernel never looks for. `dshMux.mjs`
   is where that lives; the frame vocabulary there was transcribed from a running
   0.1.2-alpha.3 binary, not inferred (the pin has since moved to
-  0.1.5-rc.2; every frame type, event and session-event name that vocabulary
+  0.1.7-rc.2; every frame type, event and session-event name that vocabulary
   uses still appears in the shipped code, which `pnpm verify:seams` checks, and
   the golden fixture re-recorded at each pin move is what checks the frames
   themselves).

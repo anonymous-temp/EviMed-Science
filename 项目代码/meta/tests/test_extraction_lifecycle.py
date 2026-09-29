@@ -54,7 +54,11 @@ def test_provider_failure_preserves_partial_extraction_and_stops_pipeline(tmp_pa
     assert phase.status.value == "failed" and phase.retryable
     assert phase.metrics["completed_studies"] == int(partial)
     assert phase.data["failures"][0]["schema"] == "OutcomeList"
-    assert [row["status_code"] for row in phase.data["failures"][0]["attempts"]] == [502, 502, 502]
+    # A transport error is retried by the client itself; the stage's bounded
+    # retry (core/llm_retry.py) re-asks only an unusable output, and there is
+    # no looser fallback prompt after it.
+    assert [row["status_code"] for row in phase.data["failures"][0]["attempts"]] == [502]
+    assert phase.data["failures"][0]["reason"] == "model_call_failed"
     assert "private provider body" not in phase.model_dump_json()
     assert "private provider body" not in caplog.text
     assert len(project.load_json("all_extractions.json", subdir="extraction")) == int(partial)

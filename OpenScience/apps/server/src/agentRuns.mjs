@@ -88,6 +88,7 @@ import {
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
+  citationUrlDefectsByLine,
   unrecordedCitationMessage,
   unretrievedCitationMessage,
 } from "@evimed/domain";
@@ -2395,21 +2396,34 @@ async function specialistCompletionOutcome(
     if (!file && skillGap && artifacts.length === 0) {
       return { artifacts: [], errorCode: "specialist_required_skill_missing", qualityIssues: [skillGap] };
     }
-    if (!file) {
-      if (outsideNativeTurn) return { artifacts, errorCode: "specialist_required_output_stale", qualityIssues: [
-        `${relative} exists outside this native turn's log interval, so it cannot be delivered as this turn's output.`,
-      ] };
-      // The rest of the package, as the run wrote it. A missing file is a
-      // finding about a package that exists, not a reason to withhold it
-      // (2026-09-17): only a run that wrote none of its required outputs has
-      // nothing to hand over. This returned `failed` whenever the first
-      // required file was the absent one, whatever else was on disk. Notes
-      // alone (an optional file) are not a package.
+    // The rest of the package, as the run wrote it: what this run has on disk
+    // among its required outputs, the ones before this file and the ones after.
+    // A missing or stale file is a finding about a package that exists, not a
+    // reason to withhold it (2026-09-17): only a run that wrote none of its
+    // required outputs has nothing to hand over. This returned `failed` whenever
+    // the first required file was the absent one, whatever else was on disk,
+    // and the stale branches below did the same until 2026-09-29 (a GEO
+    // insight run into a project that already held the previous run's
+    // question-map.json wrote four files and was failed for the fifth). Notes
+    // alone (an optional file) are not a package.
+    const writtenSoFar = async () => {
       const written = [...artifacts];
       for (const later of declared.slice(index + 1).filter((output) => !optional.has(output))) {
         const found = await locate(later);
         if (found.file && found.file.stat.mtimeMs + 1_000 >= Date.parse(run.startedAt)) written.push(found.artifactPath);
       }
+      return written;
+    };
+    if (!file) {
+      if (outsideNativeTurn) {
+        const written = await writtenSoFar();
+        return { artifacts: written, errorCode: "specialist_required_output_stale",
+          ...(written.length > 0 ? { qualityStructural: true, qualityDegradable: true, qualityUnverified: true } : {}),
+          qualityIssues: [
+            `${relative} exists outside this native turn's log interval, so it cannot be delivered as this turn's output.`,
+          ] };
+      }
+      const written = await writtenSoFar();
       return {
         artifacts: written,
         errorCode: "specialist_required_output_missing",
@@ -2426,9 +2440,13 @@ async function specialistCompletionOutcome(
       };
     }
     if (file.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
+      const written = await writtenSoFar();
       return {
-        artifacts,
+        artifacts: written,
         errorCode: "specialist_required_output_stale",
+        // The package this run wrote is delivered and marked; the reader is
+        // told which file is the previous run's. Nothing fresh on disk stays a failure.
+        ...(written.length > 0 ? { qualityStructural: true, qualityDegradable: true, qualityUnverified: true } : {}),
         qualityIssues: [
           `${relative} predates this run, so it is a previous run's file rather than this one's output. Regenerate it from this run's own work.`,
         ],
@@ -2441,9 +2459,16 @@ async function specialistCompletionOutcome(
     return { artifacts, errorCode: "specialist_required_skill_missing", qualityDegradable: true, qualityUnverified: true, qualityIssues: [skillGap] };
   }
   if (agent.completionChecks.includes("citationsResolvable")) {
-    const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
-    const defects = markdown.map((text) => citationUrlDefects(text));
-    advisories.push(...defects.flatMap((defect) => defect.advisory).map((text) => runNotice("citation_plain_http", text)));
+    const markdown = [...files].filter(([relative]) => relative.endsWith(".md"));
+    const defects = markdown.map(([, text]) => citationUrlDefects(text));
+    // Advice by file and line, in the run-side gate's own words: worded
+    // alike, the receipt's copy of the same link is recognised as the notice
+    // already admitted instead of arriving as a second one.
+    for (const [relative, text] of markdown) {
+      for (const { line, message } of citationUrlDefectsByLine(relative, text).advisory) {
+        advisories.push(runNotice("citation_plain_http", message, { file: relative, line }));
+      }
+    }
     const blocking = defects.flatMap((defect) => defect.blocking);
     if (blocking.length > 0) {
       // Naming the URL, as every other gate message here does. This returned a

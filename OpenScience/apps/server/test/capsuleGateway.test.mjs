@@ -197,14 +197,15 @@ test("with several conversations running the gateway answers without naming one,
   assert.deepEqual((await (await h.request("recall", { query: "x" })).json()).items.map((item) => item.id), ["fact_c"]);
 });
 
-test("a conversation trying someone else's capsule still reads memory but notes nothing", async (t) => {
+test("a conversation trying someone else's capsule reads none of the researcher's memory and notes nothing", async (t) => {
   const recalledFrom = [];
   const memorySubstrate = { async recall(_userId, _query, scope) { recalledFrom.push(scope.sessionId); return []; } };
   const sessions = sessionsDouble([{ id: "run_1", sessionId: "ses_trial" }], { ses_trial: { trialCapsuleId: "pack-1" } });
   const f = await fixture(t, { memorySubstrate, sessions, recallItems: [{ id: "fact_1", content: "x" }] });
   const recall = await (await f.request("recall", { query: "x" })).json();
-  assert.deepEqual(recall.items.map((item) => item.id), ["fact_1"]);
-  assert.deepEqual(recalledFrom, ["ses_trial"]);
+  assert.deepEqual(recall.items, [], "the pack is the trial's whole memory (build spec §9.4-5)");
+  assert.equal(recall.mode, "trial");
+  assert.deepEqual(recalledFrom, [], "the researcher's own memory is not even asked");
   const note = await (await f.request("note", { factKind: "preference", content: "记住我喜欢表格" })).json();
   assert.equal(note.entry, null);
   assert.equal(note.incognito, undefined, "无痕 is gone, and the answer no longer carries its flag");

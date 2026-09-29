@@ -884,6 +884,8 @@ class SemanticReviewMixin:
             "absolute_effects": facts.get("absolute_effects") or {},
             "secondary_effects": facts.get("secondary_effects", []),
             "subgroup_effects": facts.get("subgroup_effects", []),
+            # Per prespecified variable: which values pooled, and why a test did not run.
+            "subgroup_analyses": facts.get("subgroup_analyses", []),
             "grade": {
                 "certainty": grade.get("certainty"),
                 "domains": grade.get("domains"),
@@ -1900,6 +1902,8 @@ class SemanticReviewMixin:
             "primary_effect": primary,
             "secondary_effects": facts.get("secondary_effects", []),
             "subgroup_effects": facts.get("subgroup_effects", []),
+            # Per prespecified variable: which values pooled, and why a test did not run.
+            "subgroup_analyses": facts.get("subgroup_analyses", []),
             "source_provenance": facts.get("source_provenance"),
             "grade": {
                 "certainty": grade.get("certainty"),

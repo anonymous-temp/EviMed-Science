@@ -56,11 +56,26 @@ export const FRONTIER_PROJECT_NAME = "EviMed 前沿动态";
  */
 const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
 
+/**
+ * The capability acceptance battery (`scripts/ops/capability-acceptance.mjs`,
+ * `acceptance-<capability>[-<suffix>]`) and the standing integration audit
+ * (`audit-*`) are the platform measuring itself too. They ran as ordinary
+ * projects until 2026-09-29, in the account the owner signs in with: they sat
+ * in the owner's sidebar after the owner had asked for one demonstration
+ * project only (2026-09-23), they filled the account's project ceiling, and
+ * every accepted run was read as the researcher's own work — the learning loop
+ * distilled methods from them (two of which then taught every later run to
+ * write package bookkeeping into its report) and 「与你相关」 read their topics
+ * as the researcher's interests.
+ */
+const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
   return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID
-    || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id);
+    || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id)
+    || SELF_MEASUREMENT_PROJECT.test(id);
 }
 
 /**

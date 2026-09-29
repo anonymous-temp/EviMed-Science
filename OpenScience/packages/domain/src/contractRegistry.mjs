@@ -20,7 +20,7 @@ import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFi
 import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrMatchingFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
-import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefects, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
+import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefectsByLine, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
 import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
@@ -75,6 +75,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   // into it would cost.
   'clinical-content-trigger',
   'clinical-high-risk-entity',
+  // A report writing its own package's JSON keys and values as prose: advice,
+  // measured before anything is asked of it (principle 4).
+  'package-vocabulary-in-prose',
   // The pharmacist-authored cautions (`cautionRules`): advisory by owner
   // decision 5 (2026-09-18) — a suggestion to the run, a notice to the reader.
   'clinical-safety-cautions',
@@ -240,6 +243,8 @@ function requiredOutputIssues(input) {
 function proseHygieneIssues(input, proseFiles) {
   /** @type {GateIssue[]} */
   const issues = []
+  /** Read once, and only when there is prose to read it against. @type {Set<string> | undefined} */
+  let vocabulary
   for (const path of proseFiles) {
     const body = text(input, path)
     if (!body) continue
@@ -251,6 +256,14 @@ function proseHygieneIssues(input, proseFiles) {
     }
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
+    }
+    const named = packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
+    if (named) {
+      issues.push(issue(
+        'report_package_vocabulary',
+        `${path} line ${named.line} writes ${named.tokens.slice(0, 6).map((token) => `\`${token}\``).join(', ')}${named.count > 1 ? ` (and ${named.count - 1} more line(s))` : ''} — names from this package's own JSON. Say what each means for the reader; the names stay in the JSON.`,
+        { path, line: named.line, severity: 'advisory', check: 'package-vocabulary-in-prose' },
+      ))
     }
     if (!isClinicalContractKind(input.contractKind)) {
       const triggers = matchedClinicalTriggers(body)
@@ -279,6 +292,67 @@ function proseHygieneIssues(input, proseFiles) {
     }
   }
   return issues
+}
+
+/** A machine identifier's shape: snake_case with one underscore at least, or camelCase with a lower-case hump. */
+const MACHINE_IDENTIFIER = /(?<![A-Za-z0-9_])(?:[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+|[a-z]+(?:[A-Z][a-z0-9]+)+)(?![A-Za-z0-9_])/g
+/** Words the vocabulary may hold at most; a bound, not an expectation. */
+const PACKAGE_VOCABULARY_LIMIT = 20_000
+
+/**
+ * The package's own machine vocabulary: every key and every short string
+ * value of its JSON files, at any depth. Closed and derived from the package
+ * itself (principle 5) — what `ranking`, `withheld`, `openfda_live` and
+ * `selectionDomains` are is whatever the package's own files say they are.
+ * @param {GateInput} input @returns {Set<string>}
+ */
+function packageVocabulary(input) {
+  /** @type {Set<string>} */
+  const words = new Set()
+  /** @param {unknown} value @param {number} depth */
+  const walk = (value, depth) => {
+    if (depth > 12 || words.size >= PACKAGE_VOCABULARY_LIMIT) return
+    if (typeof value === 'string') {
+      if (value.length >= 2 && value.length <= 64 && !/\s/.test(value)) words.add(value)
+    } else if (Array.isArray(value)) {
+      for (const item of value) walk(item, depth + 1)
+    } else if (value && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        if (key.length >= 2 && key.length <= 64) words.add(key)
+        walk(item, depth + 1)
+      }
+    }
+  }
+  for (const path of input.files.keys()) {
+    if (path.endsWith('.json')) walk(json(input, path), 0)
+  }
+  return words
+}
+
+/**
+ * Where a prose file writes the package's machine vocabulary: a code span
+ * whose whole content is one of its words, or a snake_case or camelCase token
+ * that is. Advice: the reader of a report is a clinician or pharmacist, and
+ * `ranking` 记为 `withheld` tells them nothing 「未排序（未提供评分细则）」 would
+ * not (quality classes 2026-09-29, C2: eleven of nineteen capabilities).
+ * Links are left out.
+ * @param {string} body @param {Set<string>} vocabulary
+ * @returns {{ line: number, tokens: string[], count: number } | null}
+ */
+function packageVocabularyInProse(body, vocabulary) {
+  if (!vocabulary.size) return null
+  /** @type {{ line: number, tokens: string[], count: number } | null} */
+  let first = null
+  for (const [index, raw] of body.split('\n').entries()) {
+    const line = raw.replace(/https?:\/\/\S+/g, ' ')
+    const spans = [...line.matchAll(/`([^`\n]+)`/g)].map((match) => match[1].trim())
+    const bare = [...line.replace(/`[^`\n]+`/g, ' ').matchAll(MACHINE_IDENTIFIER)].map((match) => match[0])
+    const tokens = [...new Set([...spans, ...bare].filter((token) => vocabulary.has(token)))]
+    if (!tokens.length) continue
+    if (first) first.count += 1
+    else first = { line: index + 1, tokens, count: 1 }
+  }
+  return first
 }
 
 /**
@@ -832,12 +906,9 @@ function citationAddressIssues(input) {
   /** @type {GateIssue[]} */
   const issues = []
   for (const path of proseFilesOf(input)) {
-    const lines = text(input, path).split('\n')
-    for (let index = 0; index < lines.length; index += 1) {
-      const { blocking, advisory } = citationUrlDefects(lines[index])
-      for (const message of blocking) issues.push(issue('specialist_citation_invalid', `${path} line ${index + 1}: ${message}`, { path, line: index + 1, check: 'citations-resolvable' }))
-      for (const message of advisory) issues.push(issue('citation_plain_http', `${path} line ${index + 1}: ${message}`, { severity: 'advisory', path, line: index + 1, check: 'citations-resolvable' }))
-    }
+    const { blocking, advisory } = citationUrlDefectsByLine(path, text(input, path))
+    for (const { line, message } of blocking) issues.push(issue('specialist_citation_invalid', message, { path, line, check: 'citations-resolvable' }))
+    for (const { line, message } of advisory) issues.push(issue('citation_plain_http', message, { severity: 'advisory', path, line, check: 'citations-resolvable' }))
   }
   return issues
 }

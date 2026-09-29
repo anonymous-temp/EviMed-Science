@@ -1,0 +1,235 @@
+{
+  "title": "运行记录：体重指数 → 冠状动脉疾病 孟德尔随机化（forward，欧洲人群）",
+  "jobId": "mr-20260928172951-be648ce5e994",
+  "jobIds": [
+    "mr-20260928172534-0192e4b8ef15",
+    "mr-20260928172547-3c05f2b2575a",
+    "mr-20260928172816-cebd89ca7894",
+    "mr-20260928172938-1c7e18ab2a80",
+    "mr-20260928172951-be648ce5e994",
+    "mr-20260928174429-43846ceb1fa8",
+    "mr-20260928175835-37807442fe6f",
+    "mr-20260928181308-8395013640d3"
+  ],
+  "status": "failed",
+  "terminalStatus": "failed",
+  "statusDetail": "No job reached a successful terminal state; no engine output files were produced.",
+  "runDate": "2026-09-28",
+  "runDateNote": "UTC",
+  "request": {
+    "analysisDirection": "forward",
+    "exposure": "body mass index",
+    "outcome": "coronary artery disease",
+    "population": "European ancestry",
+    "outputLanguage": "zh"
+  },
+  "terminalOutcome": {
+    "status": "no_statistical_result",
+    "summary": "8 jobs were started; none reached a successful terminal state; no engine output files were produced.",
+    "failureClasses": [
+      {
+        "class": "A",
+        "name": "source_readability",
+        "deterministic": true,
+        "networkRelated": false,
+        "count": 4,
+        "detail": "The requested GWAS Catalog study has no harmonised (GRCh38, allele-aligned) summary-statistics file at EBI; the engine refuses to run such a study."
+      },
+      {
+        "class": "B",
+        "name": "egress_network",
+        "deterministic": true,
+        "networkRelated": true,
+        "count": 3,
+        "detail": "The engine could not reach www.ebi.ac.uk while downloading summary statistics: TimeoutError, direct."
+      },
+      {
+        "class": "C",
+        "name": "source_resolution",
+        "deterministic": true,
+        "networkRelated": false,
+        "count": 2,
+        "detail": "The submitted PubMed identifier did not map uniquely to one study with full summary statistics."
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "jobId": "mr-20260928172534-0192e4b8ef15",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "30124842"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "precondition_failed",
+      "errorCode": "mr_open_source_ambiguous",
+      "engineMessageObserved": "PubMed 30124842 resolves to two studies with full summary statistics: GCST006900 (Body mass index; 456,426 European ancestry individuals, 224,849 individuals) and GCST006901 (Height; 456,426 European ancestry individuals, 237,103 individuals)",
+      "failureClass": "C",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928172547-3c05f2b2575a",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST006900"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "precondition_failed",
+      "errorCode": "mr_open_source_unharmonised",
+      "engineMessageObserved": "GCST006900 has no harmonised summary-statistics directory at EBI (HTTP 404); only a study with exactly one harmonised (GRCh38, allele-aligned) file is read.",
+      "failureClass": "A",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928172816-cebd89ca7894",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "30224652"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "precondition_failed",
+      "errorCode": "mr_open_source_not_found",
+      "engineMessageObserved": "The GWAS Catalog has no study with full summary statistics for PubMed 30224652.",
+      "failureClass": "C",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928172938-1c7e18ab2a80",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST90435413"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "precondition_failed",
+      "errorCode": "mr_open_source_unharmonised",
+      "engineMessageObserved": "GCST90435413 has no harmonised summary-statistics directory at EBI (HTTP 404).",
+      "failureClass": "A",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928172951-be648ce5e994",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST90446645"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "failed",
+      "errorCode": "mr_open_source_unavailable",
+      "engineMessageObserved": "www.ebi.ac.uk could not be reached (TimeoutError, direct).",
+      "failureClass": "B",
+      "observedProgress": "reached running state; elapsedSeconds 46, 93, 143, 190, 237, 408; heartbeatSeconds 30; terminated with the timeout error",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928174429-43846ceb1fa8",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST90446645"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST003116"
+      },
+      "terminalState": "failed",
+      "errorCode": "mr_open_source_unavailable",
+      "engineMessageObserved": "www.ebi.ac.uk could not be reached (TimeoutError, direct).",
+      "failureClass": "B",
+      "observedProgress": "reached running state; elapsedSeconds 227, 545; terminated with the timeout error",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928175835-37807442fe6f",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST90446645"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST003116"
+      },
+      "terminalState": "failed",
+      "errorCode": "mr_open_source_unavailable",
+      "engineMessageObserved": "www.ebi.ac.uk could not be reached (TimeoutError, direct).",
+      "failureClass": "B",
+      "observedProgress": "reached running state; elapsedSeconds 269, 557; terminated with the timeout error",
+      "outputFiles": []
+    },
+    {
+      "jobId": "mr-20260928181308-8395013640d3",
+      "requestedExposureSource": {
+        "type": "gwas_catalog",
+        "accession": "GCST006900"
+      },
+      "requestedOutcomeSource": {
+        "type": "gwas_catalog",
+        "pubmedId": "26343387"
+      },
+      "terminalState": "precondition_failed",
+      "errorCode": "mr_open_source_unharmonised",
+      "engineMessageObserved": "GCST006900 has no harmonised summary-statistics directory at EBI (HTTP 404). Reproduced after the network failures, to separate the two failure modes.",
+      "failureClass": "A",
+      "outputFiles": []
+    }
+  ],
+  "artifacts": [],
+  "artifactDetails": {
+    "produced": [],
+    "expectedButAbsentByContract": [
+      "mendelian-randomization-open-sources.json",
+      "instrument-selection.json",
+      "harmonisation.json",
+      "primary and sensitivity analysis results (IVW, MR-Egger, weighted median, weighted mode)",
+      "heterogeneity results (Cochran Q)",
+      "pleiotropy results (MR-Egger intercept, MR-PRESSO)",
+      "Steiger directionality results",
+      "leave-one-out results",
+      "figures"
+    ],
+    "perJobOutputDirectoryState": "empty; each run directory is 8 KB and contains only an empty output/ directory"
+  },
+  "sources": {
+    "exposure": {
+      "requestedDescription": "GIANT consortium European-ancestry BMI GWAS",
+      "resolvedPubMedId": "30124842",
+      "resolvedCitation": "Yengo L, Sidorenko J, Kemper KE, et al. Meta-analysis of genome-wide association studies for height and body mass index in ~700000 individuals of European ancestry. Hum Mol Genet. 2018;27(20):3641-3649. DOI 10.1093/hmg/ddy271",
+      "resolvedAccession": "GCST006900",
+      "resolvedAccessionFieldsObserved": "Body mass index; 456,426 European ancestry individuals, 224,849 individuals",
+      "harmonisedFileAvailable": false,
+      "resolutionPath": "engine-side resolution of the PubMed identifier; the accession and its sample-size fields were returned in the engine's ambiguity message"
+    },
+    "outcome": {
+      "requestedDescription": "CARDIoGRAMplusC4D European-ancestry coronary artery disease GWAS",
+      "submittedPubMedId": "26343387",
+      "submittedCitation": "Nikpay M, Goel A, Won HH, et al. A comprehensive 1,000 Genomes-based genome-wide association meta-analysis of coronary artery disease. Nat Genet. 2015;47(10):1121-1130. DOI 10.1038/ng.3396",
+      "acceptedByEngine": true,
+      "resolvedAccession": null,
+      "resolvedAccessionNote": "No GWAS Catalog accession for this publication appeared in any tool result during this run; no accession is asserted here.",
+      "harmonisedFileAvailable": "not reached; the run failed during downloads before this could be established"
+    },
+    "sampleOverlap": {
+      "determinable": false,
+      "reason": "Participant overlap between the two summary-statistic sets cannot be determined from catalogue metadata; the two publications' reported cohort compositions are recorded in the report and no independence is claimed."
+    }
+  },
+  "unblocking": [
+    "Restore the execution environment's egress access to the EBI summary-statistics host and rerun with the identical parameters of job mr-20260928172951-be648ce5e994 or mr-20260928174429-43846ceb1fa8.",
+    "Or configure OpenGWAS credentials (this runtime reports opengwas_token_missing) and switch to OpenGWAS dataset identifiers; this changes the source identifiers and requires user confirmation.",
+    "Or configure the isolated hosted MR adapter and switch to local summary-statistics files downloaded from the two consortia's official release pages, with the exposure instruments pre-clumped and accompanied by a provenance statement.",
+    "Note: restoring network access alone is not sufficient for the source as specified, because GCST006900 itself has no harmonised file; that accession path must be replaced by a study of the same trait that has a harmonised file, or replaced by the local-file route above."
+  ]
+}

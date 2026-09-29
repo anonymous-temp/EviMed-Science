@@ -1,10 +1,12 @@
 """
 数据模型定义 - V5.0（支持分阶段动态分析架构）
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing import List, Dict, Optional, Any, Union, Tuple
 from datetime import datetime
 from enum import Enum
+
+from utils import number_display as shown
 
 
 # ==================== 枚举定义 ====================
@@ -178,6 +180,17 @@ class EvidenceStats(BaseModel):
     year_counts: Dict[int, int] = Field(default_factory=dict)  # 年度发文量
     author_counts: Dict[str, int] = Field(default_factory=dict)  # 作者发文量
     journal_counts: Dict[str, int] = Field(default_factory=dict)  # 期刊发文量
+
+    @computed_field
+    @property
+    def display(self) -> Dict[str, Optional[str]]:
+        """What a report states for these figures (utils.number_display); the raw values stay for machines."""
+        return {
+            "evidence_count": shown.count(self.evidence_count),
+            "clinical_ratio": shown.percent(self.clinical_ratio * 100),
+            "year_span": shown.count(self.year_span),
+            "keyword_diversity": shown.estimate(self.keyword_diversity),
+        }
 
 
 # ==================== 任务规划相关模型 ====================

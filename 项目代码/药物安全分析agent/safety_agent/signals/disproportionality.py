@@ -55,6 +55,36 @@ from .tables import ContingencyTable2x2
 Z_95 = 1.96
 _LN2_SQ = float(np.log(2.0) ** 2)
 
+#: How every derived column of the signal table is computed, published with
+#: the results (signal-provenance.json) so a report states the method instead
+#: of reconstructing one. A delivered report once called the expected count's
+#: formula unknown and rebuilt it wrongly with (c+d); it is (a+b)(a+c)/N.
+#: Each entry restates the code in this module: test_report holds the expected
+#: count to it, test_signals_known_answers every statistic to hand-computed panels.
+FORMULAS: dict[str, str] = {
+    "cells": "a = reports with the drug and the reaction; b = the drug, other reactions; "
+             "c = other drugs, the reaction; d = N - a - b - c; N = all reports in the background",
+    "zero_cell_correction": "when any cell is 0, 0.5 is added to every cell (Haldane-Anscombe) for ROR, PRR, "
+                            "chi2 and IC; the CSV's a-d stay uncorrected and haldane_anscombe_applied says so; "
+                            "EBGM and the expected count use the uncorrected cells",
+    "expected_count": "E = (a+b)(a+c)/N, on the uncorrected cells",
+    "ROR": "(a*d)/(b*c); 95% CI = exp(ln ROR ± 1.96*SE), SE = sqrt(1/a + 1/b + 1/c + 1/d)",
+    "PRR": "(a/(a+b))/(c/(c+d)); 95% CI = exp(ln PRR ± 1.96*SE), "
+           "SE = sqrt(1/a - 1/(a+b) + 1/c - 1/(c+d)) (Evans et al. 2001)",
+    "chi2": "N*(a*d - b*c)^2/((a+b)(c+d)(a+c)(b+d)), without Yates' correction, 1 degree of freedom",
+    "IC": "crude IC = log2(a*N/((a+b)(a+c)))",
+    "IC025": "E[IC] - 1.96*sqrt(var(IC)) under the BCPNN Jeffreys prior (Bate et al. 1998): "
+             "E[IC] = log2((a+1)(N+4)/((a+b+2)(a+c+2))); "
+             "var(IC) = (1/ln 2)^2 * [(N+4-a-1)/((a+1)(N+5)) + (N+4-(a+b)-2)/((a+b+2)(N+5)) "
+             "+ (N+4-(a+c)-2)/((a+c+2)(N+5))]",
+    "EBGM": "exp(E[ln lambda | a]) under the two-gamma mixture prior "
+            "w*Gamma(alpha1, beta1) + (1-w)*Gamma(alpha2, beta2) (DuMouchel 1999, GPS); posterior component i "
+            "is Gamma(alpha_i + a, beta_i + E), weighted by the negative-binomial predictive probability of a",
+    "EB05": "the 5th percentile of the same posterior mixture, found by bisection",
+    "gps_prior": "default starting values alpha1=0.2, beta1=0.1, alpha2=2.0, beta2=4.0, w=1/3 unless a fitted "
+                 "prior is named (gps_prior_fitted, gps_prior_id)",
+}
+
 
 @dataclass(frozen=True)
 class RatioMetric:

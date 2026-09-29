@@ -91,6 +91,7 @@ function queryOf(args) {
  * @property {string} [title]
  * @property {string} [url]
  * @property {string} [artifactPath]
+ * @property {string[]} [artifactPaths]  further preserved text files of the same source
  * @property {string} [sourceType]
  * @property {string} digest
  * @property {string} status
@@ -139,6 +140,14 @@ export function evidenceFromOutcome(call, outcome, context) {
           ?? '',
       ).trim()
     : ''
+  // Every preserved text file a single-source result names, beyond the one
+  // above. A label read preserves the whole label, one file per section
+  // (`drug-labels/<digest>/<version>/<section>.md`), and names them in
+  // `artifacts` and `data.artifactSha256s` — never on its one source. Recorded
+  // with no path, the label reached no quote check: 33 of 55 claims of the
+  // 2026-09-28 clopidogrel insight pack were 「could not be checked」, each
+  // quoting a section file the run had read.
+  const preservedTexts = sources.length === 1 ? preservedTextPaths(structured) : []
   /** @type {EvidenceRecord[]} */
   const records = []
   for (const source of sources) {
@@ -153,6 +162,7 @@ export function evidenceFromOutcome(call, outcome, context) {
     const url = typeof source.url === 'string' && /^https?:\/\//i.test(source.url.trim()) ? source.url.trim() : ''
     const pmid = /^\d{1,9}$/.test(String(source.pmid ?? '').trim()) ? String(source.pmid).trim() : ''
     const title = typeof source.title === 'string' ? source.title.trim().slice(0, TITLE_LIMIT) : ''
+    const artifactPaths = preservedTexts.filter((path) => path !== artifactPath)
     records.push({
       evidenceId: context.digest(`${context.runId}:${base}:${sourceId}`),
       runId: context.runId,
@@ -164,6 +174,7 @@ export function evidenceFromOutcome(call, outcome, context) {
       ...(title ? { title } : {}),
       ...(url ? { url } : {}),
       ...(artifactPath ? { artifactPath } : {}),
+      ...(artifactPaths.length ? { artifactPaths } : {}),
       // The evidence badge (C8): the research server stamps it; a record from
       // anywhere else is typed from the same table here.
       sourceType: evidenceSourceTypeOf({ ...source, tool: base }),
@@ -175,6 +186,27 @@ export function evidenceFromOutcome(call, outcome, context) {
     })
   }
   return records
+}
+
+/** Preserved files a result may name before the rest are ignored; a label has about twenty sections. */
+const PRESERVED_TEXT_LIMIT = 64
+
+/**
+ * The preserved text files a result names: the `.md` files under
+ * `.evimed-sources/` in its `artifacts` list and its `data.artifactSha256s`,
+ * each once, in the order named.
+ * @param {Record<string, any>} structured @returns {string[]}
+ */
+function preservedTextPaths(structured) {
+  const named = [
+    ...(Array.isArray(structured?.artifacts) ? structured.artifacts : []),
+    ...(structured?.data?.artifactSha256s && typeof structured.data.artifactSha256s === 'object' ? Object.keys(structured.data.artifactSha256s) : []),
+  ]
+  const paths = named
+    .filter((path) => typeof path === 'string')
+    .map((path) => path.trim())
+    .filter((path) => path.startsWith('.evimed-sources/') && path.endsWith('.md') && !path.split('/').includes('..'))
+  return [...new Set(paths)].slice(0, PRESERVED_TEXT_LIMIT)
 }
 
 /**

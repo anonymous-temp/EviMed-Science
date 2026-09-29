@@ -685,11 +685,14 @@ test("the open-vocabulary prose patterns are frozen at their current count", asy
   const prose = literals.filter((literal) => /[\u4e00-\u9fff]/.test(literal));
   // 117 until 2026-09-17, when the question ledger, the screening-flow reader
   // and the comparative-structure check were deleted with the files they read:
-  // 36 patterns went with them, none moved anywhere.
+  // 36 patterns went with them, none moved anywhere. 82 since 2026-09-29: the
+  // one added is `CJK_INTERVAL`, 「至」 between two numerals — the interval
+  // every Chinese report writes, which the numeric checks split into two
+  // endpoints no quote offers. A number format, not a judgment about prose.
   assert.equal(
     prose.length,
-    81,
-    `open-vocabulary prose patterns moved from 81 to ${prose.length}. `
+    82,
+    `open-vocabulary prose patterns moved from 82 to ${prose.length}. `
       + "Adding one is frozen (principle #5): put medicine/scenario rules in clinical-safety-rules.json, "
       + "write an eval case, or hand the judgement to the reviewer. "
       + "Removing them is the direction of travel — lower this number and say which rule moved where.",

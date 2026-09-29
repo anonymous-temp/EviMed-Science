@@ -1,8 +1,9 @@
 """Two-level TTL cache: in-memory dict in front of JSON files on disk.
 
 Used by the openFDA client so repeated count queries within the TTL
-(default 24 h) never hit the network twice. All failures of the disk
-layer degrade to "cache miss" — a broken cache must never break a
+never hit the network twice. An entry may carry its own TTL (the client keeps
+FAERS event answers for a release cycle, labels for the default). All failures
+of the disk layer degrade to "cache miss" — a broken cache must never break a
 request, but every degradation is logged (no silent swallowing).
 """
 
@@ -62,18 +63,30 @@ class TwoLevelCache:
                 self._memory.move_to_end(key)
                 return payload
             del self._memory[key]
-        payload = self._read_disk(key, now)
-        if payload is not None:
-            self._remember(key, now + self._ttl, payload)
+        record = self._read_disk(key, now)
+        if record is None:
+            return None
+        expires_at, payload = record
+        self._remember(key, expires_at, payload)
         return payload
 
-    def set(self, key: str, payload: Any) -> None:
-        """Store a JSON-serializable payload in both levels."""
+    def set(self, key: str, payload: Any, *, ttl_seconds: float | None = None) -> None:
+        """Store a JSON-serializable payload in both levels, for its own TTL if given."""
         if not self.enabled:
             return
-        expires_at = time.time() + self._ttl
+        expires_at = time.time() + (self._ttl if ttl_seconds is None else ttl_seconds)
         self._remember(key, expires_at, payload)
         self._write_disk(key, expires_at, payload)
+
+    def discard(self, key: str) -> None:
+        """Forget one entry in both levels (a superseded data release)."""
+        self._memory.pop(key, None)
+        path = self._path(key)
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("could not remove cache file %s: %s", path, exc)
 
     def _remember(self, key: str, expires_at: float, payload: Any) -> None:
         self._memory[key] = (expires_at, payload)
@@ -88,7 +101,7 @@ class TwoLevelCache:
             return None
         return self._dir / f"{key}.json"
 
-    def _read_disk(self, key: str, now: float) -> Any | None:
+    def _read_disk(self, key: str, now: float) -> tuple[float, Any] | None:
         path = self._path(key)
         if path is None or not path.is_file():
             return None
@@ -98,7 +111,7 @@ class TwoLevelCache:
             if expires_at <= now:
                 path.unlink(missing_ok=True)
                 return None
-            return record["payload"]
+            return expires_at, record["payload"]
         except (OSError, ValueError, KeyError, TypeError) as exc:
             # Corrupt cache files are treated as a miss and removed; the
             # warning keeps the degradation visible instead of silent.

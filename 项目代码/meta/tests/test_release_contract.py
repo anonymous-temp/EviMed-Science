@@ -23,9 +23,11 @@ def test_release_contract_blocks_missing_or_failed_submission_review(tmp_path: P
         {
             "status": "blocked",
             "passed": False,
+            # Only a gate named in core.release_tiers can block (2026-09-29);
+            # this used the unnamed id "calculation", which is now advisory.
             "gates": [
-                {"id": "calculation", "status": "fail", "detail": "source mismatch"},
-                {"id": "citation", "status": "pass", "detail": "ok"},
+                {"id": "calculation_audit", "status": "fail", "detail": "source mismatch"},
+                {"id": "citation_coverage", "status": "pass", "detail": "ok"},
             ],
         },
         package_path=tmp_path / "review.zip",
@@ -33,9 +35,11 @@ def test_release_contract_blocks_missing_or_failed_submission_review(tmp_path: P
 
     assert missing["status"] == ReleaseStatus.BLOCKED.value
     assert "missing_submission_readiness_review" in missing["blocker_codes"]
+    assert missing["deliverable"] is False
     assert failed["status"] == ReleaseStatus.BLOCKED.value
     assert failed["ready_for_submission"] is False
-    assert failed["blocker_codes"] == ["calculation"]
+    assert failed["deliverable"] is True
+    assert failed["blocker_codes"] == ["calculation_audit"]
     assert failed["next_actions"]
 
 
@@ -91,7 +95,9 @@ def test_persisted_blocked_release_is_terminal(tmp_path: Path) -> None:
         {
             "status": "blocked",
             "passed": False,
-            "gates": [{"id": "rob", "status": "fail", "detail": "missing RoB"}],
+            # Risk-of-bias completeness is advisory now; a blocking id keeps
+            # this test about persistence (2026-09-29).
+            "gates": [{"id": "primary_result", "status": "fail", "detail": "pooled value missing"}],
         },
         package_path=project.get_path("metaagent_export.zip", subdir="package"),
     )
@@ -100,7 +106,7 @@ def test_persisted_blocked_release_is_terminal(tmp_path: Path) -> None:
     assert load_release_decision(project) == decision
     with pytest.raises(ReleaseBlockedError) as exc:
         require_releasable(project)
-    assert exc.value.decision["blocker_codes"] == ["rob"]
+    assert exc.value.decision["blocker_codes"] == ["primary_result"]
 
 
 def test_artifact_package_persists_and_embeds_release_decision(
@@ -111,7 +117,7 @@ def test_artifact_package_persists_and_embeds_release_decision(
     submission = {
         "status": "blocked",
         "passed": False,
-        "gates": [{"id": "calculation", "status": "fail", "detail": "mismatch"}],
+        "gates": [{"id": "calculation_audit", "status": "fail", "detail": "mismatch"}],
     }
     monkeypatch.setattr(artifact_package_module, "export_manuscript_docx", lambda project: None)
     monkeypatch.setattr(artifact_package_module, "export_manuscript_pdf", lambda project: None)
@@ -132,7 +138,7 @@ def test_artifact_package_persists_and_embeds_release_decision(
         embedded_manifest = json.loads(zf.read("package_manifest.json"))
 
     assert decision["status"] == "blocked"
-    assert decision["blocker_codes"] == ["calculation"]
+    assert decision["blocker_codes"] == ["calculation_audit"]
     assert embedded_decision == decision
     assert embedded_manifest["release"] == decision
     assert persisted_manifest["release"] == decision

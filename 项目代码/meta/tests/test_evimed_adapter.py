@@ -133,7 +133,10 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
             json.dumps({"status": "ready", "next_actions": []}),
             encoding="utf-8",
         )
-        (project / "analysis" / "meta_analysis.json").write_text("{}", encoding="utf-8")
+        # The compiled route's pooled result; "meta_analysis.json" was listed
+        # by the adapter but never written by any route.
+        (project / "analysis" / "synthesis_result.json").write_text("{}", encoding="utf-8")
+        (project / "prisma_flow.json").write_text("{}", encoding="utf-8")
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(evimed_adapter.subprocess, "run", fake_run)
@@ -150,6 +153,8 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
     assert body["data"]["releaseStatus"] == "ready"
     assert body["artifacts"]
     assert all(not Path(item["path"]).is_absolute() for item in body["artifacts"])
+    assert {item["path"].rsplit("/", 1)[-1] for item in body["artifacts"] if item["kind"] in {"analysis", "prisma_flow"}} == {
+        "synthesis_result.json", "prisma_flow.json"}
 
 
 def test_release_blocked_exit_preserves_evidence_gap_artifacts(tmp_path, monkeypatch) -> None:
@@ -468,11 +473,14 @@ def test_a_finished_request_returns_its_job_instead_of_running_again(tmp_path, m
     assert len(launched) == 2
 
 
-def test_a_request_blocked_part_way_resumes_but_a_blocked_review_is_returned(tmp_path, monkeypatch) -> None:
-    """MetaAgent exits 2 both for a refusal part-way (ma-001, 2026-09-28: a
-    method-admission refusal after extraction) and for a finished review its
-    release gate blocks; both read succeeded/blocked. Only the first stopped
-    short of its manuscript, and the same request resumes it."""
+def test_a_blocked_job_is_the_answer_and_is_never_run_again(tmp_path, monkeypatch) -> None:
+    """A terminal decision is the answer to its request (2026-09-29).
+
+    Until then a job refused part-way (checkpoint short of the manuscript) was
+    resumed by the identical request; production 0928b resumed one and was
+    refused again at the same step. Blocked before or after its manuscript,
+    the identical request now returns the job and launches nothing.
+    """
     client, workspace = _fixture(tmp_path, monkeypatch)
     launched = _launches(monkeypatch)
     request = {"action": "start", "topic": "Blocked part-way"}
@@ -481,26 +489,18 @@ def test_a_request_blocked_part_way_resumes_but_a_blocked_review_is_returned(tmp
     project = workspace / "meta-analysis-runs" / job_id / "output" / "project"
     project.mkdir(parents=True)
     checkpoint = project / ".checkpoint"
-    checkpoint.write_text(json.dumps({"schema_version": 2, "completed": ["protocol", "search", "ft_screening"]}),
-                          encoding="utf-8")
-    _mark(state_file, status="succeeded", releaseStatus="blocked", returnCode=2,
-          blockingReasons=["protocol_method_input_required"], modules={"screening": {"status": "degraded"}})
-    evimed_adapter._WORKERS.clear()
-
-    resumed = _post(client, request).json()
-    assert resumed["data"]["jobId"] == job_id and resumed["data"]["resumed"] is True
-    assert len(launched) == 2
-    requeued = json.loads(state_file.read_text(encoding="utf-8"))
-    assert requeued["status"] == "queued"
-    assert "releaseStatus" not in requeued and "modules" not in requeued
-    assert requeued["previousError"] == "blocked: protocol_method_input_required"
-
-    # A review that was written and then blocked is the answer, not a resume.
-    checkpoint.write_text(json.dumps({"schema_version": 2, "completed": ["protocol", "figures", "manuscript"]}),
-                          encoding="utf-8")
-    _mark(state_file, status="succeeded", releaseStatus="blocked", returnCode=2)
-    evimed_adapter._WORKERS.clear()
-    again = _post(client, request).json()
-    assert again["data"]["reused"] is True and again["data"]["jobStatus"] == "succeeded"
-    assert len(launched) == 2
+    for completed, return_code in (
+        (["protocol", "search", "ft_screening"], 2),        # refused before its manuscript
+        (["protocol", "figures", "manuscript"], 0),         # a written, blocked package
+    ):
+        checkpoint.write_text(json.dumps({"schema_version": 2, "completed": completed}), encoding="utf-8")
+        _mark(state_file, status="succeeded", releaseStatus="blocked", returnCode=return_code,
+              blockingReasons=["protocol_method_input_required"])
+        evimed_adapter._WORKERS.clear()
+        again = _post(client, request).json()
+        assert again["data"]["jobId"] == job_id
+        assert again["data"]["reused"] is True and again["data"]["jobStatus"] == "succeeded"
+        assert "resumed" not in again["data"]
+        assert len(launched) == 1
+        assert json.loads(state_file.read_text(encoding="utf-8"))["releaseStatus"] == "blocked"
 

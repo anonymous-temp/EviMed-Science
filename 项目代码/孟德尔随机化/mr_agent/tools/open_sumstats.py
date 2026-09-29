@@ -67,11 +67,13 @@ import urllib.parse
 import urllib.request
 import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from http import client as http_client
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
+
+import yaml
 
 try:
     import fcntl
@@ -769,6 +771,8 @@ class CatalogStudy:
     harmonised_url: str = ""
     index_url: str = ""
     harmonised_bytes: int | None = None
+    metadata_url: str = ""
+    samples: dict[str, Any] = field(default_factory=dict)
 
     def record(self) -> dict[str, Any]:
         return {
@@ -785,6 +789,7 @@ class CatalogStudy:
             "harmonisedFile": self.harmonised_url,
             "harmonisedBytes": self.harmonised_bytes,
             "tabixIndex": self.index_url or None,
+            "sampleMetadata": self.samples or None,
         }
 
 
@@ -873,7 +878,7 @@ def locate_harmonised_file(study: CatalogStudy, http: _Http) -> CatalogStudy:
             f"({directory}/harmonised/ answered HTTP 404); only a study with exactly one harmonised "
             "(GRCh38, allele-aligned) file is read. Choose another study of the same trait.",
         ) from None
-    names = sorted(set(re.findall(r'href="([^"?/]+\.h\.tsv\.gz(?:\.tbi)?)"', listing)))
+    names = sorted(set(re.findall(r'href="([^"?/]+\.h\.tsv\.gz(?:\.tbi|-meta\.yaml)?)"', listing)))
     data = [name for name in names if name.endswith(".h.tsv.gz")]
     if len(data) != 1:
         raise OpenSourceError(
@@ -884,6 +889,8 @@ def locate_harmonised_file(study: CatalogStudy, http: _Http) -> CatalogStudy:
     study.harmonised_url = f"{directory}/harmonised/{data[0]}"
     if f"{data[0]}.tbi" in names:
         study.index_url = f"{study.harmonised_url}.tbi"
+    if f"{data[0]}-meta.yaml" in names:
+        study.metadata_url = f"{study.harmonised_url}-meta.yaml"
     try:
         with http.open(study.harmonised_url, headers={"Range": "bytes=0-0"}) as response:
             total = response.headers.get("Content-Range", "").rsplit("/", 1)[-1]
@@ -891,6 +898,67 @@ def locate_harmonised_file(study: CatalogStudy, http: _Http) -> CatalogStudy:
     except OpenSourceError:
         study.harmonised_bytes = None
     return study
+
+
+def _sample_total(samples: list[Any], key: str) -> int | None:
+    values = [sample.get(key) if isinstance(sample, dict) else None for sample in samples]
+    if not values or not all(type(value) is int and value >= 0 for value in values):
+        return None
+    return sum(values)
+
+
+def read_sample_metadata(study: CatalogStudy, http: _Http) -> dict[str, Any]:
+    """The study's sample size and design, from the metadata beside its harmonised file.
+
+    The catalogue's study record states sample size only as prose ("42,096
+    European ancestry cases, ..."); the GWAS-SSF metadata file published with
+    the harmonised summary statistics states it as numbers (`samples[]`:
+    `sample_size`, `case_control_study`, `case_count`, `control_count`). A
+    total is stated only when every sample gives it.
+    """
+    if not study.metadata_url:
+        return {"source": None, "reason": "the catalogue publishes no metadata file beside the harmonised file"}
+    try:
+        payload = yaml.safe_load(http.read(study.metadata_url, limit=1024 * 1024))
+    except OpenSourceError as error:
+        return {"source": study.metadata_url, "reason": f"the metadata file could not be read ({error.code})"}
+    except (yaml.YAMLError, UnicodeDecodeError):
+        return {"source": study.metadata_url, "reason": "the metadata file is not readable YAML"}
+    samples = payload.get("samples") if isinstance(payload, dict) else None
+    if not isinstance(samples, list) or not samples:
+        return {"source": study.metadata_url, "reason": "the metadata file lists no samples"}
+    designs = {sample.get("case_control_study") if isinstance(sample, dict) else None for sample in samples}
+    record = {
+        "source": study.metadata_url,
+        "samples": len(samples),
+        "sampleSize": _sample_total(samples, "sample_size"),
+        "caseControlStudy": designs.pop() if len(designs) == 1 and designs <= {True, False} else None,
+        "caseCount": _sample_total(samples, "case_count"),
+        "controlCount": _sample_total(samples, "control_count"),
+    }
+    if record["sampleSize"] is None:
+        record["reason"] = "not every sample in the metadata file states its sample_size"
+    return record
+
+
+def with_study_sample_size(rows: list["Variant"], samples: dict[str, Any]) -> tuple[list["Variant"], dict[str, Any]]:
+    """Rows without their own n take the study's total sample size.
+
+    The per-variant sample size is what the Steiger test reads; a file without
+    an n column left it empty, and the test failed. Filling a study-level value
+    into each row is what TwoSampleMR's add_metadata() does for OpenGWAS.
+    """
+    total = samples.get("sampleSize")
+    own = sum(1 for row in rows if row.n is not None)
+    filled = [
+        row if row.n is not None or total is None else replace(row, n=float(total))
+        for row in rows
+    ]
+    return filled, {
+        "rowsWithOwnSampleSize": own,
+        "rowsGivenStudySampleSize": 0 if total is None else len(rows) - own,
+        "studySampleSize": total,
+    }
 
 
 # --- Rows ---------------------------------------------------------------------
@@ -1537,6 +1605,7 @@ class RemoteTabix:
         self.header: list[str] | None = None
         self.columns: _Columns | None = None
         self.ranges = 0
+        self._count = threading.Lock()
 
     def _read_header(self) -> None:
         data = self.http.read(self.url, headers={"Range": f"bytes=0-{_BGZF_MAX_BLOCK * 2}"}, limit=_BGZF_MAX_BLOCK * 3)
@@ -1557,7 +1626,8 @@ class RemoteTabix:
                 headers={"Range": f"bytes={first}-{last + _BGZF_MAX_BLOCK}"},
                 limit=last - first + 2 * _BGZF_MAX_BLOCK,
             )
-            self.ranges += 1
+            with self._count:
+                self.ranges += 1
             pieces = []
             for offset, block in _bgzf_blocks(data):
                 absolute = first + offset
@@ -1700,12 +1770,39 @@ def _scan_significant(
 
 
 def _fetch_many(reader: RemoteTabix, wanted: Iterable[tuple[str, str, int]]) -> dict[str, Variant]:
-    found: dict[str, Variant] = {}
-    for rsid, chrom, pos in wanted:
+    """Each wanted position read from the tabix file, several at a time.
+
+    One position is one ~70 KB Range request, and on the Beijing-Tokyo link a
+    request took about 20 s (2026-09-28, production): read one after another,
+    a study with a few hundred lead variants took hours while the connection
+    sat idle between answers. The reads are independent, so they run on the
+    same worker bound as a whole-file fetch; each worker keeps its own tunnel
+    (`_Egress` pools idle tunnels per thread). The answer does not depend on
+    the order the reads finish in: results are collected in the order asked.
+    """
+    items = list(wanted)
+    if not items:
+        return {}
+    if reader.columns is None:
+        reader._read_header()  # once, before the workers share the reader
+
+    def one(item: tuple[str, str, int]) -> tuple[str, Variant | None]:
+        rsid, chrom, pos = item
         for variant in reader.fetch(chrom, pos):
             if variant.snp == rsid:
-                found[rsid] = variant
-                break
+                return rsid, variant
+        return rsid, None
+
+    workers = min(_fetch_workers(), len(items))
+    if workers <= 1:
+        results = [one(item) for item in items]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="evimed-mr-tabix") as pool:
+            results = list(pool.map(one, items))
+    found: dict[str, Variant] = {}
+    for rsid, variant in results:
+        if variant is not None and rsid not in found:
+            found[rsid] = variant
     return found
 
 
@@ -1793,13 +1890,17 @@ def _build_pair(
             matches.setdefault(variant.snp, variant)
     outcome_rows = [matches[variant.snp] for variant in instruments if variant.snp in matches]
     missing = [variant.snp for variant in instruments if variant.snp not in matches]
+    exposure.samples = read_sample_metadata(exposure, http)
+    outcome.samples = read_sample_metadata(outcome, http)
+    instruments, exposure_sizes = with_study_sample_size(instruments, exposure.samples)
+    outcome_rows, outcome_sizes = with_study_sample_size(outcome_rows, outcome.samples)
 
     record = {
         "schemaVersion": 1,
         "dataSource": "gwas_catalog",
         "retrievedAt": _now(),
-        "exposure": {**exposure.record(), "read": exposure_read},
-        "outcome": {**outcome.record(), "read": outcome_read},
+        "exposure": {**exposure.record(), "read": exposure_read, "sampleSize": exposure_sizes},
+        "outcome": {**outcome.record(), "read": outcome_read, "sampleSize": outcome_sizes},
         "instrumentSelection": {
             "pThreshold": p_threshold,
             "genomeWideSignificantVariants": len(candidates),

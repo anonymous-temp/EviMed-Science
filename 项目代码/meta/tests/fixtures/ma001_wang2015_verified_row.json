@@ -1,0 +1,303 @@
+{
+ "source": "local replay of production ma-001 (meta-20260928185649) from extraction, 2026-09-29: Wang 2015 total blood loss row, verified match, trial unit role uncertain",
+ "study": {
+  "characteristics": {
+   "study_id": "26550418",
+   "title": "Efficacy and safety evaluation of intra-articular injection of tranexamic acid in total knee arthroplasty operation with temporarily drainage close.",
+   "authors": [
+    "Wang Guowei",
+    "Wang Dong",
+    "Wang Bingchen",
+    "Lin Yongjie",
+    "Sun Shui"
+   ],
+   "year": 2015,
+   "journal": "International journal of clinical and experimental medicine",
+   "doi": "",
+   "pmid": "26550418",
+   "study_design": "Prospective randomized controlled study (parallel RCT); patients were randomly divided equally into experimental group (TXA group) and control group (placebo group)",
+   "country": "China (Shandong Provincial Hospital Affiliated to Shandong University, Jinan; Shandong Jiaotong Hospital, Jinan)",
+   "sample_size_intervention": 50,
+   "sample_size_control": 50,
+   "total_sample_size": 100,
+   "population_description": "100 patients admitted to hospital who underwent primary unilateral total knee arthroplasty (TKA) from January 2012 to December 2014. Preoperative TXA group age 52.6 ± 12.4, control group age 53.2 ± 10.2; gender (male/female) 25/25 in TXA group and 22/28 in control group; BMI 26.23 ± 2.17 vs 25.62 ± 3.03; preoperative Hb 126.30 ± 10.65 vs 131.25 ± 12.29 g/L. Exclusion criteria: preoperative anemia or coagulopathy; infectious active diseases; TXA contraindications; history of venous thromboembolic disease; clotting problems (liver tumor/cirrhosis); intent to participate in autologous blood transfusion; incompatibility.",
+   "intervention_description": "For the TXA group, 1 g TXA was dissolved in 50 ml 0.9% sodium chloride solution and injected intra-articularly after prosthesis implantation but before cavity close. Conventional drainage clamping was carried out for 4 h and the drainage tube was removed 48 h postoperative. Anticoagulant therapy of 5000 iu low molecular weight heparin applied to both groups 8 h after operation.",
+   "control_description": "For the control group, similar measures were taken except that no TXA was dissolved in 50 ml 0.9% sodium chloride solution (placebo group).",
+   "follow_up_duration": "Lower extremity venous color Doppler ultrasound screening at 1 week after surgery to detect DVT; patients followed up regularly with INR monitoring. No specific end-of-follow-up time reported.",
+   "funding": "National Natural Science Foundation of China (No. 81271966)",
+   "source_type": "database",
+   "pdf_path": "/tmp/w29/replay/ext/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/papers/26550418.fulltext.txt",
+   "metadata_source": "bibliographic_metadata"
+  },
+  "outcomes": [
+   {
+    "primary_analysis_alignment": {
+     "schema_version": 1,
+     "assessment": {
+      "outcome_index": 0,
+      "outcome": {
+       "status": "match",
+       "rationale": "Source Table 2 reports 'Total blood loss (ML)' with group means, the same continuous outcome in millilitres defined by the protocol as primary.",
+       "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+       "source_location": "Page 1; characters 14740:14811"
+      },
+      "population": {
+       "status": "match",
+       "rationale": "Participants were 100 adults undergoing primary unilateral TKA, exactly the protocol population, with exclusions unrelated to eligibility for this review.",
+       "quote": "A total of 100 cases of patients admitted to our hospital and underwent primary unilateral TKA from January 2012 to December 2014 were enrolled in this study. They were randomly divided equally into experimental group (TXA group) and control group (placebo group).",
+       "source_location": "Page 1; characters 7505:7663 through characters 7769"
+      },
+      "contrast": {
+       "status": "match",
+       "rationale": "Randomized comparison of intra-articular (topical) tranexamic acid 1 g versus the same procedure without TXA, a placebo/no-TXA comparator permitted by the protocol.",
+       "quote": "For TXA group, 1 g TXA was dissolved in 50 ml 0.9% sodium chloride solution and injected after prosthesis implantation and before cavity close. Conventional pipe clamping was carried for 4 h and the drainage tube was removed 48 h postoperative. For the control group, similar measures were taken except for that no TXA was dissolved in 50 ml 0.9% sodium chloride solution.",
+       "source_location": "Page 1; characters 8798:8941 through characters 9170"
+      },
+      "verification": {
+       "numeric_status": "verified",
+       "numeric_findings": [
+        {
+         "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+         "source_location": "Page 1; characters 14740:14811",
+         "field": "mean_intervention",
+         "status": "match",
+         "reported_value": 678.45,
+         "rationale": "Table 2 total blood loss row gives 678.45 for the TXA group, matching the extracted mean."
+        },
+        {
+         "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+         "source_location": "Page 1; characters 14740:14811",
+         "field": "sd_intervention",
+         "status": "match",
+         "reported_value": 112.77,
+         "rationale": "Table 2 reports '678.45 ± 112.77' for the TXA group, matching the extracted SD."
+        },
+        {
+         "quote": "Blood transfusion rate 4% (2/50) 18% (9/50) 5.0051 b < 0.05",
+         "source_location": "Page 1; characters 15074:15133",
+         "field": "n_intervention",
+         "status": "match",
+         "reported_value": 50.0,
+         "rationale": "Table 2 gives rate denominators of 50 per arm ((2/50) and (9/50)), consistent with 100 patients randomized equally into two groups."
+        },
+        {
+         "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+         "source_location": "Page 1; characters 14740:14811",
+         "field": "mean_control",
+         "status": "match",
+         "reported_value": 1136.3,
+         "rationale": "Table 2 total blood loss row gives 1136.3 for the control group, matching the extracted mean."
+        },
+        {
+         "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+         "source_location": "Page 1; characters 14740:14811",
+         "field": "sd_control",
+         "status": "match",
+         "reported_value": 224.52,
+         "rationale": "Table 2 reports '1136.3 ± 224.52' for the control group, matching the extracted SD."
+        },
+        {
+         "quote": "Blood transfusion rate 4% (2/50) 18% (9/50) 5.0051 b < 0.05",
+         "source_location": "Page 1; characters 15074:15133",
+         "field": "n_control",
+         "status": "match",
+         "reported_value": 50.0,
+         "rationale": "Table 2 gives rate denominators of 50 per arm ((2/50) and (9/50)), consistent with equal randomization of 100 patients."
+        }
+       ],
+       "endpoint_relation": "equivalent",
+       "source_endpoint_definition": {
+        "quote": "Total blood loss volume (ml) = preoperative blood volume (preoperative Hct-postoperative Hct); preoperative blood volume = K 1 × height 3 (m) + K 2 × weight (kg) + K 3 ; total blood loss volume of peri operation period = Total blood loss volume + allogeneic blood transfusion volume (for male, K1 = 0.3669, K2 = 0.03219, K3 = 0.6041; for female, K1 = 0.3561 K2 = 0.03308, K3 = 0.1833) Preoperative and 24 h.",
+        "source_location": "Page 1; characters 10793:11200"
+       },
+       "components": [
+        {
+         "source_component": "Total blood loss volume (ml) = preoperative blood volume (preoperative Hct-postoperative Hct); preoperative blood volume = K 1 × height 3 (m) + K 2 × weight (kg) + K 3 ; total blood loss volume of peri operation period = Total blood loss volume + allogeneic blood transfusion volume (for male, K1 = 0.3669, K2 = 0.03219, K3 = 0.6041; for female, K1 = 0.3561 K2 = 0.03308, K3 = 0.1833) Preoperative and 24 h.",
+         "protocol_component": "Total blood loss (mL)",
+         "relation": "match"
+        }
+       ],
+       "estimand_relation": "match",
+       "randomized_comparison": true,
+       "postrandomization_conditioning": false,
+       "selection_timing": "baseline",
+       "conditioning_variables": [],
+       "estimand_support": {
+        "quote": "A total of 100 cases of patients admitted to our hospital and underwent primary unilateral TKA from January 2012 to December 2014 were enrolled in this study. They were randomly divided equally into experimental group (TXA group) and control group (placebo group).",
+        "source_location": "Page 1; characters 7505:7663 through characters 7769"
+       },
+       "trial_coverage": "uncertain",
+       "trial_units": [
+        {
+         "quote": "A total of 100 cases of patients admitted to our hospital and underwent primary unilateral TKA from January 2012 to December 2014 were enrolled in this study. They were randomly divided equally into experimental group (TXA group) and control group (placebo group).",
+         "source_location": "Page 1; characters 7505:7663 through characters 7769",
+         "registry_id": "",
+         "trial_name": "",
+         "role": "uncertain"
+        }
+       ],
+       "schema_version": 3,
+       "selected_endpoint_result": {
+        "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+        "source_location": "Page 1; characters 14740:14811",
+        "source_range": {
+         "catalogue_sha256": "a1f25c4824e6885c7dcf78ae3396317a311a6ad53fa65b5bbaadef44d015c19e",
+         "checked_source_sha256": "1f4467ab824b2cfbe3573439b63194aeef983ae50f11bfc7add5d37898cad6a2",
+         "source_id": "s2f9dc997e760c0f29af3_d0",
+         "end_source_id": "s2f9dc997e760c0f29af3_d0",
+         "start": 14740,
+         "end": 14811,
+         "start_byte": 14779,
+         "end_byte": 14852,
+         "text_sha256": "957bcbcbdf377829e6a6e36f407579db8f8accf4b234bd4911ae37e7518c11b3"
+        }
+       },
+       "definition_scope": "selected_endpoint",
+       "component_bindings": [
+        {
+         "component_index": 0,
+         "source_membership": "included_in_selected_endpoint",
+         "target_result": {
+          "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+          "source_location": "Page 1; characters 14740:14811",
+          "source_range": {
+           "catalogue_sha256": "a1f25c4824e6885c7dcf78ae3396317a311a6ad53fa65b5bbaadef44d015c19e",
+           "checked_source_sha256": "1f4467ab824b2cfbe3573439b63194aeef983ae50f11bfc7add5d37898cad6a2",
+           "source_id": "s2f9dc997e760c0f29af3_d0",
+           "end_source_id": "s2f9dc997e760c0f29af3_d0",
+           "start": 14740,
+           "end": 14811,
+           "start_byte": 14779,
+           "end_byte": 14852,
+           "text_sha256": "957bcbcbdf377829e6a6e36f407579db8f8accf4b234bd4911ae37e7518c11b3"
+          }
+         },
+         "support": {
+          "quote": "Total blood loss volume (ml) = preoperative blood volume (preoperative Hct-postoperative Hct); preoperative blood volume = K 1 × height 3 (m) + K 2 × weight (kg) + K 3 ; total blood loss volume of peri operation period = Total blood loss volume + allogeneic blood transfusion volume (for male, K1 = 0.3669, K2 = 0.03219, K3 = 0.6041; for female, K1 = 0.3561 K2 = 0.03308, K3 = 0.1833) Preoperative and 24 h.",
+          "source_location": "Page 1; characters 10793:11200"
+         },
+         "rationale": "The reported total blood loss (mL) is computed by the stated Nadler-based formula, confirming a single scalar total-blood-loss component for this result row."
+        }
+       ]
+      }
+     },
+     "assessor": "extraction-check-sources-v3",
+     "assessor_id": "deepseek-flash",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "row_sha256": "52a58fc1b87e42aef4aa098dc456629e07e13613791efcf07af5022bb2d91a41",
+     "source_path": "papers/26550418.fulltext.txt",
+     "source_sha256": "c3f2f6ee877e7b2de927171328b5a7efb3526f5a8133822733c365eaf57586e4",
+     "checked_source_path": "extraction/primary_alignment/1f4467ab824b2cfbe3573439b63194aeef983ae50f11bfc7add5d37898cad6a2.txt",
+     "checked_source_sha256": "1f4467ab824b2cfbe3573439b63194aeef983ae50f11bfc7add5d37898cad6a2",
+     "unresolved_data_issues": [],
+     "issue_history_complete": true,
+     "current_checkpoint_path": "extraction/26550418.json",
+     "proof_id": "e5f25087e52c2a9f7045e80094842c8e921881b365095ebc271874ddc5bf22b8",
+     "source_reference": {
+      "path": "extraction/verification/resolved/42dd97e2ac1ee1f9fb915c655a14215b8683462719f7ef94fcc2ce04ea7f21e1.json",
+      "sha256": "42dd97e2ac1ee1f9fb915c655a14215b8683462719f7ef94fcc2ce04ea7f21e1"
+     }
+    },
+    "outcome_name": "Total blood loss (mL)",
+    "outcome_type": "continuous",
+    "protocol_outcome_role": "primary",
+    "mean_intervention": 678.45,
+    "sd_intervention": 112.77,
+    "n_intervention": 50,
+    "mean_control": 1136.3,
+    "sd_control": 224.52,
+    "n_control": 50,
+    "median_intervention": null,
+    "q1_intervention": null,
+    "q3_intervention": null,
+    "min_intervention": null,
+    "max_intervention": null,
+    "median_control": null,
+    "q1_control": null,
+    "q3_control": null,
+    "min_control": null,
+    "max_control": null,
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "effect_size": null,
+    "ci_lower": null,
+    "ci_upper": null,
+    "p_value": null,
+    "p_value_inequality": "p<0.05",
+    "reported_effect_measure": "",
+    "reported_effect_standard_error": null,
+    "reported_effect_scale": "original",
+    "reported_effect_adjusted": false,
+    "adjustment_covariates": [],
+    "source_location": "Table 2, row 'Total blood loss (ML)'",
+    "source_quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "source_page": 1,
+    "source_section": "Results - Postoperative data comparison (Table 2)",
+    "source_quote_verified": true,
+    "source_quote_match": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "extraction_confidence": "high",
+    "conflicts": [],
+    "user_override_applied": false,
+    "override_revision": null,
+    "timepoint": null,
+    "accepted_timepoint": null,
+    "timepoint_adjudication": null,
+    "timepoint_adjudication_note": null,
+    "manual_adjudication": null,
+    "subgroup": null,
+    "subgroup_values": {
+     "route_of_tranexamic_acid_administration": "topical"
+    },
+    "hazard_ratio": null,
+    "hr_ci_lower": null,
+    "hr_ci_upper": null,
+    "hr_se": null,
+    "events": null,
+    "total_n": null,
+    "correlation_r": null,
+    "correlation_n": null,
+    "pyears_intervention": null,
+    "pyears_control": null,
+    "person_time": null,
+    "person_time_unit": "person_years",
+    "true_positive": null,
+    "false_negative": null,
+    "false_positive": null,
+    "true_negative": null,
+    "diagnostic_threshold": "",
+    "prediction_model_id": "",
+    "prediction_model_version": "",
+    "prediction_validation_type": "",
+    "prediction_performance_measure": "",
+    "prediction_performance_estimate": null,
+    "prediction_performance_se": null,
+    "prediction_performance_ci_lower": null,
+    "prediction_performance_ci_upper": null,
+    "prediction_sample_size": null,
+    "prediction_events": null,
+    "prediction_expected_events": null,
+    "treatment_arm": "TXA group (tranexamic acid, intra-articular)",
+    "reference_arm": "Control group (placebo)",
+    "treatment_arm_role": "review_intervention",
+    "reference_arm_role": "review_comparator",
+    "comparative_design": "parallel_rct",
+    "contrast_id": "26550418:txa-group-tranexamic-acid-intra-articular-vs-control-group-placebo:0",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {},
+    "covariance_basis": {},
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null,
+    "dose_response_design": "",
+    "dose_value": null,
+    "reference_dose_value": null,
+    "dose_unit": "",
+    "denominator_source": ""
+   }
+  ],
+  "quality_notes": "Single-center prospective randomized controlled trial (100 patients, 50 per arm) of primary unilateral TKA. The intervention arm received 1 g tranexamic acid dissolved in 50 mL 0.9% saline injected intra-articularly (topically) after prosthesis implantation and before cavity closure, with drainage clamping for 4 h; the control arm received the same measures without TXA (placebo/saline). This is a topical (intra-articular) route only, so route_of_tranexamic_acid_administration = topical for all rows; no intravenous or combined-route arms are present. Total blood loss was calculated from preoperative and postoperative Hct/hemoglobin (Nadler formula); the exact postoperative sampling time used for the reported total is not fully specified in Table 2. P values in Table 2 are only reported as inequalities (p<0.05 / p>0.05) and are retained as inequalities, not exact values. The secondary VTE endpoint mismatch (asymptomatic screened DVT at 1 week vs protocol's symptomatic DVT/PE within 30 days) is flagged in the conflicts note of the DVT row; no pulmonary embolism events were reported in either arm."
+ }
+}

@@ -349,23 +349,6 @@ class ClaimMapMixin:
             + "\n".join(f"- {line}" for line in lines)
         )
 
-    @staticmethod
-    def _needs_fact_locked_rewrite(validation: dict) -> bool:
-        """Use deterministic prose when the LLM draft needed substantive fact repair."""
-        substantive_kinds = {
-            "primary_count_mismatch",
-            "patient_total_mismatch",
-            "primary_ci_mismatch",
-            "primary_effect_not_found",
-            "publication_length_too_short",
-            "non_primary_study_claim_repaired",
-        }
-        return any(
-            issue.get("kind") in substantive_kinds
-            and issue.get("severity") in {"fixed", "warning", "error"}
-            for issue in validation.get("issues", [])
-        )
-
     def _resolve_manuscript_mode(self, protocol: ResearchProtocol, facts: dict) -> str:
         """Choose the writing contract before rendering prose."""
         report_type = str((facts or {}).get("report_type") or "meta").strip().lower()
@@ -1822,17 +1805,8 @@ class ClaimMapMixin:
             level = "warning" if issue.get("severity") != "error" else "error"
             self.log(f"FACT-LOCKED MANUSCRIPT CHECK: {issue.get('message')}", level=level)
         if not fact_validation.get("passed", False):
-            if project:
-                project.save_text("draft.rejected.md", manuscript, subdir="manuscript")
-            manuscript = self._write_validation_blocked_report(
-                protocol=protocol,
-                facts=facts,
-                validation=fact_validation,
-            )
-            self.log(
-                "Fact-locked manuscript failed hard validation; saved validation-blocked report.",
-                level="error",
-            )
+            self._keep_draft_not_ready(validation=fact_validation, project=project,
+                                       stage="fact-locked manuscript validation")
         if project:
             manuscript = self._normalize_structured_abstract_spacing(manuscript)
             fact_validation, _, _ = self._quality_checked_validation(
@@ -2584,8 +2558,28 @@ class ClaimMapMixin:
 
     @staticmethod
     def _replace_source_id_citation_markers(text: str, source_id_map: dict[str, object]) -> str:
+        """Turn source-id markers into reference numbers; leave reference numbers alone.
+
+        Two guards, both from production ma-001 (2026-09-28): a claim whose
+        source location read "参考文献 [8]：高危患者选择偏倚" gave the marker key
+        "8", mapped to reference 2, and every "［8］" became "［2］" - including
+        the label of reference 8 in the reference list. Validation then found
+        reference 8 missing and 2 duplicated, blocked the manuscript, and the
+        delivered draft carried no references at all. An ordinary citation
+        number (1-999) is a reference, never a source marker, and the
+        reference list itself is not body text.
+        """
         if not source_id_map:
             return text
+        raw = str(text or "")
+        heading = CitationRepairMixin._reference_heading_match(raw)
+        if heading is not None:
+            remainder = raw[heading.end():]
+            following = re.search(r"^#{1,6}\s+", remainder, flags=re.M)
+            end = heading.end() + (following.start() if following else len(remainder))
+            return (ClaimMapMixin._replace_source_id_citation_markers(raw[:heading.start()], source_id_map)
+                    + raw[heading.start():end]
+                    + ClaimMapMixin._replace_source_id_citation_markers(raw[end:], source_id_map))
 
         def repl(match: re.Match[str]) -> str:
             opener = match.group(1)
@@ -2599,6 +2593,9 @@ class ClaimMapMixin:
             for part in parts:
                 if re.search(r"[-–—至]", part):
                     return match.group(0)
+                if part.isdigit() and 0 < int(part) < 1000:
+                    numbers.append(int(part))
+                    continue
                 compact = re.sub(r"\D", "", part)
                 marker_key = ClaimMapMixin._claim_source_marker_key(part)
                 mapped = None
@@ -2641,7 +2638,7 @@ class ClaimMapMixin:
                 return cluster.replace("[", "［").replace("]", "］").replace(",", "，")
             return cluster
 
-        return re.sub(r"(\[|［)([0-9A-Za-z_.\s,，、;；:\-–—]+)(\]|］)", repl, str(text or ""))
+        return re.sub(r"(\[|［)([0-9A-Za-z_.\s,，、;；:\-–—]+)(\]|］)", repl, raw)
 
     @staticmethod
     def _claim_source_marker_key(value: str) -> str:
@@ -2697,7 +2694,9 @@ class ClaimMapMixin:
                 marker_values.extend(part.strip() for part in re.split(r"\s*(?:,|，|;|；)\s*", raw) if part.strip())
             for marker in marker_values:
                 marker_key = self._claim_source_marker_key(marker)
-                if marker_key:
+                # A key that is only a small number ("参考文献 [8]：..." keeps just
+                # "8") cannot be told from a citation number; never map it.
+                if marker_key and not (marker_key.isdigit() and int(marker_key) < 1000):
                     background_numbers = self._reference_numbers_for_background_marker(entries, facts, marker)
                     mapping.setdefault(marker_key, (background_numbers or numbers)[:3])
         return mapping

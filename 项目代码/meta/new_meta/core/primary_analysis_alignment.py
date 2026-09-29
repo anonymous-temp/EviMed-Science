@@ -28,7 +28,14 @@ _NUMBER_ATOM = (
     r"(?:\d+(?:[.,]\d+)*|[.,]\d+)(?:e[+\-−]?\d+)?"
     r"(?:\s*(?:\^|\*\*)\s*(?:[+\-−]\s*)?\d+)?(?:\s*(?:[%‰]|[′″‴⁗]+))?"
 )
-_NUMERIC_TOKEN = re.compile(_NUMBER_ATOM + r"(?:\s*(?:\+/-|[/⁄∕±×·*–—−-])\s*" + _NUMBER_ATOM + r")*")
+#: What joins two numbers into one compound token ("12/50", "3.1 ± 0.4",
+#: "10-20", "10 - 20"). A dash after a space but before a digit is not a
+#: joiner: it signs the next number. Table rows put columns side by side, and
+#: on 2026-09-28 (ma-001) "1136.3 ± 224.52 -12.8856" - control mean ± SD, then
+#: the t statistic - read as one interval, so a verifier's correct mean and SD
+#: were refused as absent from the very row it quoted, three rounds running.
+_NUMBER_JOINER = r"(?:\s*(?:\+/-|[/⁄∕±×·*])\s*|[–—−-]\s*|\s+[–—−-]\s+)"
+_NUMERIC_TOKEN = re.compile(_NUMBER_ATOM + r"(?:" + _NUMBER_JOINER + _NUMBER_ATOM + r")*")
 _WORD_JOINERS = frozenset("-'’")
 _ROW_METADATA = {
     "primary_analysis_alignment", "source_quote_verified", "source_quote_match",
@@ -48,18 +55,40 @@ def protocol_fingerprint(protocol) -> str:
     return digest(ResearchProtocol.model_validate(protocol.model_dump()).model_dump(mode="json"))
 
 
+def _unset_additions(outcome) -> set[str]:
+    """Row fields added after rows were first fingerprinted, left out while empty.
+
+    subgroup_values (closed protocol subgroup values, 2026-09-29) is absent
+    from every row extracted before it; excluding it while empty keeps those
+    rows' digests - their verification proofs and selection receipts - as
+    they were. (The schema also omits it from dumps while empty; this does
+    not depend on that.)
+    """
+    return set() if getattr(outcome, "subgroup_values", None) else {"subgroup_values"}
+
+
 def row_fingerprint(study, index: int) -> str:
+    outcome = study.outcomes[index]
     return digest({
         "study": study.characteristics.model_dump(mode="json"),
-        "outcome": study.outcomes[index].model_dump(mode="json", exclude=_ROW_METADATA - {"conflicts"}),
+        "outcome": outcome.model_dump(mode="json", exclude=(_ROW_METADATA - {"conflicts"}) | _unset_additions(outcome)),
         "outcome_index": index,
     })
+
+
+#: Characters that are the ASCII hyphen-minus in another code point: the
+#: typographic hyphen and non-breaking hyphen, and the minus sign. NFKC keeps
+#: them apart. On 2026-09-28 (ma-001) a Wiley full text wrote the registry
+#: number "ChiCTR‐INR‐16010287" with U+2010 and the verifier typed ASCII
+#: hyphens, so the trial's identity was refused as not in its own quote. En
+#: and em dashes stay distinct: they are ranges and punctuation, not hyphens.
+_HYPHEN_ASCII = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2212": "-"})
 
 
 def _normalized_quote(text: str) -> str:
     # Compatibility normalization must not concatenate a base and its exponent.
     text = _SUPERSCRIPT_RUN.sub(lambda match: "^" + match.group().translate(_SUPERSCRIPT_ASCII), text)
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+    return " ".join(unicodedata.normalize("NFKC", text).translate(_HYPHEN_ASCII).casefold().split())
 
 
 def _word_character(character: str) -> bool:
@@ -367,6 +396,9 @@ def _record_proof(project, protocol, study, index, assessment, *, source_text, s
 #: Left-out reason of a row whose verifier never produced a usable response in
 #: its bounded attempts: verification could not complete - not "did not match".
 VERIFICATION_COULD_NOT_COMPLETE = "verification_could_not_complete"
+#: Left-out reason of a verified row whose own trial cannot be identified
+#: (no registration or name, and the verifier unsure which cohort contributes).
+TRIAL_IDENTITY_UNRESOLVED = "trial_identity_unresolved"
 _PENDING_PREFIX = "Independent verification incomplete: "
 
 
@@ -608,8 +640,10 @@ def needs_input_phase(project, rows, *, reason="primary_analysis_alignment_requi
 
 
 def selection_input_fingerprint(study, index):
+    outcome = study.outcomes[index]
     return digest({"study": study.characteristics.model_dump(mode="json"),
-                   "outcome": study.outcomes[index].model_dump(mode="json", exclude={"primary_analysis_alignment"}),
+                   "outcome": outcome.model_dump(mode="json",
+                                                 exclude={"primary_analysis_alignment"} | _unset_additions(outcome)),
                    "outcome_index": index})
 
 
@@ -788,6 +822,10 @@ def unattended_unverified_results(project, protocol, result_ids) -> dict[str, st
                project.load_json("all_extractions.json", subdir="extraction") or []]
     rows = {result_entity_id(study, index): (study, index)
             for study in studies for index in range(len(study.outcomes))}
+    from new_meta.core.method_planning import infer_review_family
+    from new_meta.core.verification_outcome import left_out_reason
+    from new_meta.schemas.method_policy import ReviewFamily
+    rct = infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT
     left_out = {}
     for result_id in result_ids:
         row = rows.get(result_id)
@@ -796,12 +834,56 @@ def unattended_unverified_results(project, protocol, result_ids) -> dict[str, st
             continue
         verdict = alignment_status(project, protocol, *row)
         if verdict["status"] != "match":
-            left_out[result_id] = verdict.get("reason") or f"primary_alignment_{verdict['status']}"
+            # The classified cause (core/verification_outcome.py), not the
+            # gate's bookkeeping state: on 2026-09-28 a correct comparator
+            # mismatch was reported as "verification_issue_history_required".
+            left_out[result_id] = left_out_reason(project, protocol, *row, verdict)["reason"]
+        elif rct and project_trial_unit_issues(project, [(
+                f"{row[0].characteristics.pmid or row[0].characteristics.study_id}:{row[1]}",
+                row[0].outcomes[row[1]].primary_analysis_alignment.assessment)]):
+            # A verified row whose own trial identity is unresolved would stop
+            # the whole synthesis for a person to adjudicate (a local replay of
+            # ma-001 on 2026-09-29, once Wang 2015 verified). Unattended it is
+            # left out and named; overlap between trials still blocks.
+            left_out[result_id] = TRIAL_IDENTITY_UNRESOLVED
     return left_out
 
 
+def _left_out_details(project, result_ids) -> dict[str, dict]:
+    """Each left-out result's classified reason with the verifier's evidence, for the report."""
+    from new_meta.core.extraction_ledger import result_entity_id
+    from new_meta.core.verification_outcome import left_out_reason
+    from new_meta.schemas.protocol import ResearchProtocol
+    from new_meta.schemas.study import ExtractedStudy
+    try:
+        protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
+        studies = [ExtractedStudy.model_validate(item) for item in
+                   project.load_json("all_extractions.json", subdir="extraction") or []]
+    except (OSError, ValueError, TypeError):
+        return {}
+    rows = {result_entity_id(study, index): (study, index)
+            for study in studies for index in range(len(study.outcomes))}
+    details = {}
+    for result_id in result_ids:
+        if result_id in rows:
+            study, index = rows[result_id]
+            classified = left_out_reason(project, protocol, study, index,
+                                         alignment_status(project, protocol, study, index))
+            details[result_id] = {"study_id": study.characteristics.pmid or study.characteristics.study_id,
+                                  "outcome_index": index, "outcome": study.outcomes[index].outcome_name,
+                                  "treatment_arm": study.outcomes[index].treatment_arm or "",
+                                  **classified}
+    return details
+
+
 def report_unverified_results_left_out(project, left_out: dict[str, str]) -> None:
-    """One current warning naming what an unattended synthesis left out, and why."""
+    """One current warning naming what an unattended synthesis left out, and why.
+
+    Every result carries its classified reason and the verifier's evidence
+    (``context.details``), so a reader can tell a comparator the verifier
+    judged ineligible from a number the checker could not find.
+    """
+    from new_meta.core.verification_outcome import LEFT_OUT_REASONS
     project.clear_warnings(code="unverified_results_left_out")
     if not left_out:
         return
@@ -810,17 +892,17 @@ def report_unverified_results_left_out(project, left_out: dict[str, str]) -> Non
     if incomplete == len(left_out):
         why = ("their independent source verification could not complete: the verifier gave no usable "
                "response in its bounded attempts")
-    elif incomplete:
-        why = (f"their independent source verification could not complete ({incomplete}) or did not complete "
-               "or did not match (the rest)")
     else:
-        why = "their independent source verification did not complete or did not match"
+        counts = Counter(left_out.values())
+        why = "; ".join(f"{LEFT_OUT_REASONS.get(reason, reason.replace('_', ' '))} ({count})"
+                        for reason, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+        why = f"their independent source verification did not confirm them: {why}"
     project.add_warning(
         "synthesis",
         f"{len(left_out)} extracted result(s) from {len(studies)} stud{'y were' if len(studies) == 1 else 'ies were'} "
         f"left out of the synthesis because {why}.",
         code="unverified_results_left_out",
-        context={"results": left_out},
+        context={"results": left_out, "details": _left_out_details(project, list(left_out))},
     )
 
 
@@ -971,7 +1053,7 @@ def primary_choice_fingerprint(protocol, study):
 
 def primary_effect_identity(outcome, effect):
     """Only exact numerical and clinical duplicates may bypass a primary choice."""
-    clinical = outcome.model_dump(mode="json", exclude=_ROW_METADATA | {
+    clinical = outcome.model_dump(mode="json", exclude=_ROW_METADATA | _unset_additions(outcome) | {
         "source_quote", "source_location", "source_section", "source_page", "contrast_id", "estimand_id",
     })
     proof = getattr(outcome, "primary_analysis_alignment", None)

@@ -1,8 +1,8 @@
 /**
  * 「循证 GEO」's content side (build spec 2026-09-25 §1, §2): the queries and
  * row mappers for projects, claims, the question map (sets, groups,
- * questions), the journey, strategy, targets, placement plans, sources and
- * articles. The measurement tables (`geoMeasureStore.mjs`) and the market
+ * questions), the journey, strategy, targets, placement plans, sources,
+ * articles and the links the brand published itself. The measurement tables (`geoMeasureStore.mjs`) and the market
  * tables (`geoMarketStore.mjs`) have their own stores; all three code against
  * `geoPersistence.mjs`.
  *
@@ -207,12 +207,66 @@ export function geoArticleFromRow(row) {
   };
 }
 
+/**
+ * A link the brand published itself, as the page and `geo_read` show it.
+ * @param {any} row
+ */
+export function geoOwnedLinkFromRow(row) {
+  return {
+    id: String(row.id),
+    url: String(row.url),
+    platform: String(row.platform),
+    title: String(row.title),
+    publishedAt: iso(row.published_at),
+    articleId: text(row.article_id),
+    groupId: text(row.group_id),
+    status: String(row.status),
+    retiredAt: iso(row.retired_at),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+/** The most owned links one project lists (and may hold active). */
+export const GEO_OWNED_LINKS_MAX = 500;
+
+/**
+ * Hosts on the owned-link platforms whose page is named by its query string,
+ * with the parameters that name it. `canonicalGeoUrl` — the owner's key for
+ * an outlet's page — drops the query, and on these hosts that makes every
+ * page one address: every 百家号 post is `baijiahao.baidu.com/s`.
+ */
+const QUERY_NAMED_HOSTS = Object.freeze({
+  "baijiahao.baidu.com": Object.freeze(["id"]),
+  "mp.weixin.qq.com": Object.freeze(["__biz", "mid", "idx", "sn"]),
+});
+
+/**
+ * The key an owned link is stored and matched by: `canonicalGeoUrl`, plus
+ * the parameters that name the page on a host that names pages by query
+ * (in a fixed order, other parameters — Baidu's `wfr=spider&for=pc` — left
+ * out). Everywhere else it is exactly `canonicalGeoUrl`. `generic` is an
+ * address on such a host without what names the page: it would stand for
+ * every page there, and is refused.
+ * @param {string} url @returns {{ key: string, generic: boolean, named: boolean }}
+ */
+export function geoOwnedLinkKey(url) {
+  const base = canonicalGeoUrl(url);
+  let parsed;
+  try { parsed = new URL(url); } catch { return { key: base, generic: false, named: false }; }
+  const names = /** @type {Record<string, readonly string[]>} */ (QUERY_NAMED_HOSTS)[parsed.hostname.toLowerCase().replace(/^www\./, "")];
+  if (!names) return { key: base, generic: false, named: false };
+  const identity = names.filter((name) => parsed.searchParams.get(name)).map((name) => `${name}=${parsed.searchParams.get(name)}`);
+  if (identity.length) return { key: `${base}?${identity.join("&")}`, generic: false, named: true };
+  return { key: base, generic: /^\/s\/?$/.test(parsed.pathname), named: false };
+}
+
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
   created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles"]);
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
 async function geoSchemaExists(client) {
@@ -427,11 +481,17 @@ export class GeoStore {
 
   // --- claims -------------------------------------------------------------------
 
-  /** The latest version of every claim. @param {string} geoId */
+  /**
+   * The latest version of every claim, oldest first. Ordered in SQL: the
+   * column keeps microseconds and a JavaScript time milliseconds, so claims
+   * one write stamped within a millisecond sorted by key instead of by when
+   * they were written.
+   * @param {string} geoId
+   */
   async listClaims(geoId) {
-    const result = await this.query(`SELECT DISTINCT ON (claim_key) * FROM evimed_geo.claims
-      WHERE geo_project_id = $1 ORDER BY claim_key, version DESC`, [geoId]);
-    return result.rows.map(claimFromRow).sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.claimKey.localeCompare(right.claimKey));
+    const result = await this.query(`SELECT * FROM (SELECT DISTINCT ON (claim_key) * FROM evimed_geo.claims
+      WHERE geo_project_id = $1 ORDER BY claim_key, version DESC) latest ORDER BY created_at, claim_key`, [geoId]);
+    return result.rows.map(claimFromRow);
   }
 
   /** Every claim id of the project, any version. @param {string} geoId */
@@ -841,44 +901,162 @@ export class GeoStore {
   }
 
   /**
+   * Every citation in the project's answers on one of `hosts`, prefiltered by
+   * host in SQL; the caller compares each by its own key.
+   * @param {string} geoId @param {Iterable<string>} hosts
+   * @returns {Promise<Array<{ url: string, engine: string | null, askedAt: string | null }>>}
+   */
+  async #citationsOn(geoId, hosts) {
+    const wanted = [...new Set([...hosts].filter(Boolean))];
+    if (!wanted.length) return [];
+    const rows = (await this.query(`SELECT s.engine, s.asked_at, c.value ->> 'url' AS url
+      FROM evimed_geo.snapshots s
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
+      WHERE s.geo_project_id = $1 AND lower(c.value ->> 'url') LIKE ANY($2::text[])`,
+    [geoId, wanted.map((host) => `%${host.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)])).rows;
+    return rows.map((/** @type {any} */ row) => ({ url: String(row.url ?? ""), engine: text(row.engine), askedAt: iso(row.asked_at) }));
+  }
+
+  /**
    * The articles whose published address an engine has cited, first seen per
-   * engine — matched by the owner's URL key (`canonicalGeoUrl`: no scheme, no
-   * `www.`, no query, no trailing slash), because an engine cites
-   * `http://www.x.com/a/` for the `https://x.com/a` the outlet returned.
-   * Citations are prefiltered by host in SQL and compared exactly here.
+   * engine — the address an order published it at, matched by the owner's URL
+   * key (`canonicalGeoUrl`: no scheme, no `www.`, no query, no trailing slash,
+   * because an engine cites `http://www.x.com/a/` for the `https://x.com/a`
+   * the outlet returned), or a link the brand published it at itself
+   * (`owned_links` naming the article), matched by the link's own key.
    * @param {string} geoId
    * @returns {Promise<Array<{ articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>>}
    */
   async citedArticles(geoId) {
-    const published = (await this.query(`SELECT DISTINCT o.article_id, o.published_url, a.title FROM evimed_geo.orders o
-      LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
-      WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL AND o.article_id IS NOT NULL`, [geoId])).rows;
+    const [published, owned] = await Promise.all([
+      this.query(`SELECT DISTINCT o.article_id, o.published_url, a.title FROM evimed_geo.orders o
+        LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
+        WHERE o.geo_project_id = $1 AND o.published_url IS NOT NULL AND o.article_id IS NOT NULL`, [geoId]),
+      this.query(`SELECT l.article_id, l.url_key, a.title FROM evimed_geo.owned_links l
+          JOIN evimed_geo.articles a ON a.id = l.article_id AND a.geo_project_id = l.geo_project_id
+        WHERE l.geo_project_id = $1`, [geoId]),
+    ]);
+    /** @param {Map<string, { articleId: string, title: string | null }[]>} map @param {string} key @param {any} row */
+    const add = (map, key, row) => {
+      if (!key) return;
+      const entries = map.get(key) ?? [];
+      if (!entries.some((entry) => entry.articleId === String(row.article_id))) entries.push({ articleId: String(row.article_id), title: text(row.title) });
+      map.set(key, entries);
+    };
     /** @type {Map<string, { articleId: string, title: string | null }[]>} */
     const byKey = new Map();
-    for (const row of published) {
-      const key = canonicalGeoUrl(row.published_url);
-      if (!key) continue;
-      byKey.set(key, [...(byKey.get(key) ?? []), { articleId: String(row.article_id), title: text(row.title) }]);
-    }
-    if (!byKey.size) return [];
-    const hosts = [...new Set([...byKey.keys()].map((key) => key.split("/")[0]).filter(Boolean))];
-    const citations = (await this.query(`SELECT s.engine, s.asked_at, c.value ->> 'url' AS url
-      FROM evimed_geo.snapshots s
-        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.citations) = 'array' THEN s.citations ELSE '[]'::jsonb END) AS c(value)
-      WHERE s.geo_project_id = $1 AND lower(c.value ->> 'url') LIKE ANY($2::text[])`,
-    [geoId, hosts.map((host) => `%${host.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)])).rows;
+    for (const row of published.rows) add(byKey, canonicalGeoUrl(row.published_url), row);
+    /** @type {Map<string, { articleId: string, title: string | null }[]>} */
+    const byOwnedKey = new Map();
+    for (const row of owned.rows) add(byOwnedKey, String(row.url_key), row);
+    const hosts = [...byKey.keys(), ...byOwnedKey.keys()].map((key) => key.split("/")[0]);
     /** @type {Map<string, { articleId: string, title: string | null, engine: string | null, firstSeen: string | null }>} */
     const first = new Map();
-    for (const citation of citations) {
-      for (const article of byKey.get(canonicalGeoUrl(citation.url)) ?? []) {
-        const engine = text(citation.engine);
-        const at = iso(citation.asked_at);
-        const id = `${article.articleId}\u0000${engine ?? ""}`;
+    for (const citation of await this.#citationsOn(geoId, hosts)) {
+      const articles = [...(byKey.get(canonicalGeoUrl(citation.url)) ?? []), ...(byOwnedKey.get(geoOwnedLinkKey(citation.url).key) ?? [])];
+      for (const article of articles) {
+        const at = citation.askedAt;
+        const id = `${article.articleId}\u0000${citation.engine ?? ""}`;
         const seen = first.get(id);
-        if (!seen || (at && (!seen.firstSeen || at < seen.firstSeen))) first.set(id, { ...article, engine, firstSeen: at });
+        if (!seen || (at && (!seen.firstSeen || at < seen.firstSeen))) first.set(id, { ...article, engine: citation.engine, firstSeen: at });
       }
     }
     return [...first.values()].sort((left, right) => String(left.firstSeen).localeCompare(String(right.firstSeen)));
+  }
+
+  /**
+   * The links the brand published itself, live ones first, newest
+   * publication first, each with the engines that cited it and when first.
+   * @param {string} geoId
+   * @returns {Promise<Array<ReturnType<typeof geoOwnedLinkFromRow> & { citedBy: Array<{ engine: string, firstSeen: string | null }> }>>}
+   */
+  async ownedLinks(geoId) {
+    const rows = (await this.query(`SELECT * FROM evimed_geo.owned_links WHERE geo_project_id = $1
+      ORDER BY (status = 'retired'), published_at DESC, id LIMIT $2`, [geoId, GEO_OWNED_LINKS_MAX])).rows;
+    const keys = new Set(rows.map((/** @type {any} */ row) => String(row.url_key)));
+    /** @type {Map<string, Map<string, string | null>>} */
+    const cited = new Map();
+    for (const citation of await this.#citationsOn(geoId, [...keys].map((key) => key.split("/")[0]))) {
+      const key = geoOwnedLinkKey(citation.url).key;
+      if (!citation.engine || !keys.has(key)) continue;
+      const engines = cited.get(key) ?? new Map();
+      const seen = engines.get(citation.engine);
+      if (seen === undefined || (citation.askedAt && (!seen || citation.askedAt < seen))) engines.set(citation.engine, citation.askedAt);
+      cited.set(key, engines);
+    }
+    return rows.map((/** @type {any} */ row) => ({
+      ...geoOwnedLinkFromRow(row),
+      citedBy: [...(cited.get(String(row.url_key)) ?? new Map()).entries()]
+        .map(([engine, firstSeen]) => ({ engine, firstSeen }))
+        .sort((left, right) => String(left.firstSeen).localeCompare(String(right.firstSeen))),
+    }));
+  }
+
+  /**
+   * Register links the brand published itself. One row per project and URL
+   * key: registering the same page again updates it and makes it live again.
+   * @param {string} userId @param {string} geoId
+   * @param {Array<{ url: string, urlKey: string, platform: string, title: string, publishedAt: string, articleId: string | null,
+   *   groupId: string | null, runId?: string | null }>} links
+   * @returns {Promise<string[]>} the ids, in the order given
+   */
+  async upsertOwnedLinks(userId, geoId, links) {
+    return this.transaction(async (client) => {
+      /** @type {string[]} */
+      const ids = [];
+      for (const link of links) {
+        const result = await client.query(`INSERT INTO evimed_geo.owned_links (id, user_id, geo_project_id, url, url_key, platform, title, published_at,
+            article_id, group_id, run_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (geo_project_id, url_key) DO UPDATE SET url = EXCLUDED.url, platform = EXCLUDED.platform, title = EXCLUDED.title,
+            published_at = EXCLUDED.published_at, article_id = EXCLUDED.article_id, group_id = EXCLUDED.group_id,
+            run_id = coalesce(EXCLUDED.run_id, owned_links.run_id), status = 'active', retired_at = NULL, updated_at = now()
+          RETURNING id`,
+        [randomId("gol_"), userId, geoId, link.url, link.urlKey, link.platform, link.title, link.publishedAt, link.articleId, link.groupId,
+          link.runId ?? null]);
+        ids.push(String(result.rows[0].id));
+      }
+      return ids;
+    });
+  }
+
+  /**
+   * Retire links of this project, each named by its id (or, without one, its
+   * URL key); a link already retired keeps the day it was. What names no link of this
+   * project is `null` in the answer.
+   * @param {string} geoId @param {Array<{ id: string | null, urlKey: string | null }>} refs
+   * @returns {Promise<Array<string | null>>}
+   */
+  async retireOwnedLinks(geoId, refs) {
+    return this.transaction(async (client) => {
+      /** @type {Array<string | null>} */
+      const ids = [];
+      for (const ref of refs) {
+        const result = await client.query(`UPDATE evimed_geo.owned_links SET status = 'retired', retired_at = coalesce(retired_at, now()),
+            updated_at = CASE WHEN status = 'retired' THEN updated_at ELSE now() END
+          WHERE geo_project_id = $1 AND CASE WHEN $2::text IS NOT NULL THEN id = $2 ELSE url_key = $3 END RETURNING id`, [geoId, ref.id, ref.urlKey]);
+        ids.push(result.rows[0] ? String(result.rows[0].id) : null);
+      }
+      return ids;
+    });
+  }
+
+  /**
+   * What a registration is checked against: the project's articles with
+   * their question group, its groups, and the URL keys it holds live.
+   * @param {string} geoId
+   */
+  async ownedLinkContext(geoId) {
+    const [articles, groups, live] = await Promise.all([
+      this.query(`SELECT id, group_id FROM evimed_geo.articles WHERE geo_project_id = $1`, [geoId]),
+      this.query(`SELECT id FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [geoId]),
+      this.query(`SELECT url_key FROM evimed_geo.owned_links WHERE geo_project_id = $1 AND status = 'active'`, [geoId]),
+    ]);
+    return {
+      articles: new Map(articles.rows.map((/** @type {any} */ row) => [String(row.id), text(row.group_id)])),
+      groupIds: new Set(groups.rows.map((/** @type {any} */ row) => String(row.id))),
+      liveKeys: new Set(live.rows.map((/** @type {any} */ row) => String(row.url_key))),
+    };
   }
 
   /**

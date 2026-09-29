@@ -349,3 +349,25 @@ export function citationUrlDefects(text) {
   }
   return { blocking, advisory }
 }
+
+/**
+ * `citationUrlDefects` of one file, line by line, each message opening with
+ * where it is: the one wording the run-side gate and the control plane both
+ * use. They used to word the same plain-HTTP link differently — only one said
+ * where it was — so a delivered run carried it twice (2026-09-28
+ * dapagliflozin).
+ * @param {string} path the file's name in the deliverable @param {unknown} text
+ * @returns {{ blocking: { line: number, message: string }[], advisory: { line: number, message: string }[] }}
+ */
+export function citationUrlDefectsByLine(path, text) {
+  /** @type {{ line: number, message: string }[]} */
+  const blocking = []
+  /** @type {{ line: number, message: string }[]} */
+  const advisory = []
+  for (const [index, line] of String(text ?? "").split("\n").entries()) {
+    const found = citationUrlDefects(line)
+    for (const message of found.blocking) blocking.push({ line: index + 1, message: `${path} line ${index + 1}: ${message}` })
+    for (const message of found.advisory) advisory.push({ line: index + 1, message: `${path} line ${index + 1}: ${message}` })
+  }
+  return { blocking, advisory }
+}

@@ -5124,22 +5124,6 @@ def test_validate_manuscript_length_gate_skips_evidence_gap_reports() -> None:
     assert not any(item["kind"] == "publication_length_too_short" for item in report["issues"])
 
 
-def test_writing_agent_retries_with_fact_locked_template_when_publication_draft_is_too_short() -> None:
-    validation = {
-        "passed": False,
-        "issues": [
-            {
-                "kind": "publication_length_too_short",
-                "severity": "warning",
-                "main_word_count": 400,
-                "minimum_main_words": 3000,
-            }
-        ],
-    }
-
-    assert WritingAgent._needs_fact_locked_rewrite(validation) is True
-
-
 def test_section_fact_contract_includes_claim_map_and_study_cards() -> None:
     writer = WritingAgent()
     writer._manuscript_claim_map = [
@@ -6642,42 +6626,24 @@ def test_table_abbreviation_detection_is_case_sensitive_for_or() -> None:
     assert "HR=hazard ratio" in WritingAgent._table_abbreviation_definitions("| Effect | HR |\n|---|---|\n")
 
 
-def test_writing_agent_validation_blocked_report_is_not_publication_style() -> None:
+def test_a_draft_that_fails_validation_stays_the_delivered_draft(tmp_path: Path) -> None:
+    """2026-09-29: a failed check no longer swaps the draft for a stub; the
+    validation record carries the release hold and its blocking reasons."""
+    project = Project("keep-draft", output_dir=tmp_path)
     writer = WritingAgent()
-    manuscript = writer._write_validation_blocked_report(
-        protocol=_protocol(),
-        facts={
-            "report_type": "meta",
-            "primary_effect": {
-                "outcome_name": "28-day all-cause mortality",
-                "effect_measure": "RR",
-                "n_studies": 3,
-                "pooled_effect": 0.86,
-                "ci_lower": 0.75,
-                "ci_upper": 1.00,
-            },
-            "primary_population": {"selected_total_participants": 1535},
-            "evidence_readiness": {"warnings": []},
-        },
-        validation={
-            "passed": False,
-            "issues": [
-                {
-                    "kind": "patient_total_mismatch",
-                    "severity": "error",
-                    "message": "Manuscript claims 1703 participants, but selected rows sum to 1535.",
-                }
-            ],
-        },
-    )
-
-    assert "Manuscript Validation Blocked" in manuscript
-    assert "patient_total_mismatch" in manuscript
-    assert "RR 0.86" in manuscript
-    assert "1535" in manuscript
-    assert "## Abstract" not in manuscript
-    assert "## Methods" not in manuscript
-    assert "## Results" not in manuscript
+    validation = {
+        "passed": False,
+        "issues": [
+            {"kind": "patient_total_mismatch", "severity": "error",
+             "message": "Manuscript claims 1703 participants, but selected rows sum to 1535."},
+            {"kind": "style_audit_issue", "severity": "warning", "message": "Long paragraph."},
+        ],
+    }
+    writer._keep_draft_not_ready(validation=validation, project=project, stage="manuscript validation")
+    saved = project.load_json("manuscript_validation.json", subdir="manuscript")
+    assert saved["release_hold"]["ready_for_submission"] is False
+    assert [item["kind"] for item in saved["release_hold"]["blocking_issues"]] == ["patient_total_mismatch"]
+    assert not hasattr(writer, "_write_validation_blocked_report")
 
 
 def test_writing_agent_honors_legacy_report_state_evidence_gap(tmp_path: Path) -> None:

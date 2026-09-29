@@ -68,7 +68,7 @@ const q = async (sql, values = []) => (await database.query(sql, values)).rows;
  * refuses, once per queued failure), rounds are inserted as the measurement
  * would, notices and citations are recorded.
  */
-function harness({ at = null } = /** @type {{ at?: string | null }} */ ({})) {
+function harness({ at = null, geoStore = store } = /** @type {{ at?: string | null, geoStore?: GeoStore }} */ ({})) {
   /** @type {any[]} */ const dispatched = [];
   /** @type {any[]} */ const enqueued = [];
   /** @type {any[]} */ const notices = [];
@@ -76,7 +76,7 @@ function harness({ at = null } = /** @type {{ at?: string | null }} */ ({})) {
   /** @type {Error[]} */ const failures = [];
   let clock = at ? Date.parse(at) : null;
   const orchestrator = new GeoOrchestrator({
-    store, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: ["ops"] },
+    store: geoStore, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: ["ops"] },
     notifier: createGeoNotifier({ store, config: { operatorUsers: ["ops"] }, notifications: { async create(/** @type {string} */ userId, /** @type {any} */ input) {
       notices.push({ userId, ...input });
       return { id: `n${notices.length}` };
@@ -147,9 +147,14 @@ async function finishRound(roundId, { finishedAt, answers = 2, metrics = true } 
   const round = (await q(`SELECT * FROM evimed_geo.rounds WHERE id = $1`, [roundId]))[0];
   await q(`UPDATE evimed_geo.rounds SET status = 'done', done = $3, sample_date = current_date, finished_at = coalesce($2::timestamptz, now()) WHERE id = $1`,
     [roundId, finishedAt ?? null, answers]);
+  // The answers were asked when the round finished, on the test's clock. With
+  // the database's now() they were asked "later" than any scenario dated
+  // before the wall clock: from 2026-09-29T00:30Z the sentinel make-up test
+  // found the baseline's answers newer than its skipped round and failed.
   for (let index = 0; index < answers; index += 1) {
     await q(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, answer_text)
-      VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid', '回答')`, [`s-${roundId}-${index}`, round.user_id, roundId, round.geo_project_id]);
+      VALUES ($1, $2, $3, $4, 'deepseek', coalesce($5::timestamptz, now()), 'valid', '回答')`,
+    [`s-${roundId}-${index}`, round.user_id, roundId, round.geo_project_id, finishedAt ?? null]);
   }
   if (metrics) await measured(roundId);
 }
@@ -255,8 +260,11 @@ test("the full program, from nothing to monitoring: runs, rounds, schedules and 
   assert.equal((await statuses(project.id)).distribution, "done");
 
   // 第一次被 AI 引用: an answer cites the published article.
+  // Asked the day after the 09-26 publication, on a fixed date: "has this
+  // engine answered since" is asked across projects, so an answer stamped
+  // with the wall clock was newer than the sentinel test's 2026-09-29 rounds.
   await q(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, engine, asked_at, status, citations)
-    VALUES ($1, $2, $3, $4, 'deepseek', now(), 'valid', $5::jsonb)`, [`s-cite-${project.id}`, userId, world.enqueued[0].id, project.id,
+    VALUES ($1, $2, $3, $4, 'deepseek', '2026-09-27T01:00:00Z', 'valid', $5::jsonb)`, [`s-cite-${project.id}`, userId, world.enqueued[0].id, project.id,
     JSON.stringify([{ url: "https://news.example.com/a/1.html#top", domain: "news.example.com", title: "t", inBody: true }])]);
   await world.orchestrator.advance(project.id);
   assert.deepEqual(world.citations, [{ orderId: `o-${project.id}`, engine: "deepseek" }], "the market learns which engine cited which outlet");
@@ -575,8 +583,18 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   assert.ok(sentinel);
   const [engine] = sentinel.engines;
   const [question] = (await store.questionMap(project.id, 1))[0].questions;
-  // The probe closed it with that engine paused: its asks skipped.
-  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1, finished_at = '2026-09-29T00:30:00Z' WHERE id = $1`, [sentinel.id]);
+  // The probe closed it with that engine paused: its asks skipped. "Has the
+  // engine answered since" is asked across projects, and other tests in this
+  // run leave answers stamped with the wall clock, so the round closes after
+  // every answer already on file (a fixed 00:30 made this test fail from
+  // 2026-09-29T00:30Z on, whenever it ran).
+  // Computed in SQL: a JavaScript Date keeps milliseconds, the column keeps
+  // microseconds, and a round-tripped time lands just before the answer it
+  // was taken from.
+  await q(`UPDATE evimed_geo.rounds SET status = 'partial', done = 0, failed = 1,
+      finished_at = (SELECT greatest('2026-09-29T00:30:00Z'::timestamptz, coalesce(max(asked_at), 'epoch'::timestamptz))
+        FROM evimed_geo.snapshots WHERE engine = $2)
+    WHERE id = $1`, [sentinel.id, engine]);
   await q(`INSERT INTO evimed_geo.probe_jobs (id, user_id, round_id, geo_project_id, question_id, engine, status, error_code)
     VALUES ($1, $2, $3, $4, $5, $6, 'skipped', 'engine_paused')`, [`job-${sentinel.id}`, project.userId, sentinel.id, project.id, question.id, engine]);
   const makeUps = () => world.enqueued.filter((entry) => entry.kind === "sentinel" && entry.geoProjectId === project.id && entry.ref?.retryOf);
@@ -584,8 +602,9 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   await world.orchestrator.tickSchedules();
   assert.equal(makeUps().length, 0, "not back yet: nothing is asked again");
 
-  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4, '2026-09-29T01:05:00Z',
-    'valid', '{"mode":"web"}'::jsonb)`, [`back-${project.id}`, project.userId, project.id, engine]);
+  await q(`INSERT INTO evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, surface) VALUES ($1, $2, $3, $4,
+    (SELECT finished_at + interval '5 minutes' FROM evimed_geo.rounds WHERE id = $5), 'valid', '{"mode":"web"}'::jsonb)`,
+  [`back-${project.id}`, project.userId, project.id, engine, sentinel.id]);
   world.setClock("2026-09-29T01:10:00Z");
   await world.orchestrator.tickSchedules();
   const [makeUp] = makeUps();
@@ -594,4 +613,114 @@ test("a sentinel that skipped a paused engine is asked again on that engine the 
   assert.deepEqual({ ...first }, { status: "partial", done: 0, failed: 1 }, "the skipped round keeps its counts");
   await world.orchestrator.tickSchedules();
   assert.equal(makeUps().length, 1, "made once");
+});
+
+/** A published article of a project: its order, its publication, the URL an engine may cite. @param {{ project: any, userId: string }} made */
+async function publishedArticle({ project, userId }) {
+  await q(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, title, safety, status) VALUES ($1, $2, $3, '稿件 微秒', 'clear', 'published')`,
+    [`a-${project.id}`, userId, project.id]);
+  await q(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, article_id, media_type, resource_id, state, reserve_cny, price_cny, published_url)
+    VALUES ($1, $2, $3, $4, 'website', 'r-ms', 'verified', 110, 100, $5)`, [`o-${project.id}`, userId, project.id, `a-${project.id}`,
+    `https://news.example.com/${project.id}.html`]);
+  await q(`INSERT INTO evimed_geo.order_events (id, order_id, at, from_state, to_state, detail) VALUES ($1, $2, '2026-09-26T01:00:00Z', 'accepted', 'published', '{}'::jsonb)`,
+    [`e-${project.id}`, `o-${project.id}`]);
+  return `https://news.example.com/${project.id}.html`;
+}
+
+test("the citation scan reads each answer once, to the microsecond, and the first citation is the one asked first", options, async () => {
+  /** @type {string[][]} */
+  const scans = [];
+  // The store as the orchestrator sees it, with the citation scan's reads recorded.
+  const spied = /** @type {GeoStore} */ (new Proxy(store, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== "query") return typeof value === "function" ? value.bind(target) : value;
+      return async (/** @type {string} */ sql, /** @type {unknown[]} */ values) => {
+        const result = await target.query(sql, values);
+        if (/FROM evimed_geo\.snapshots/.test(sql) && /jsonb_array_length\(citations\)/.test(sql)) scans.push(result.rows.map((/** @type {any} */ row) => String(row.id)));
+        return result;
+      };
+    },
+  }));
+  const world = harness({ geoStore: spied });
+  const made = await newProject();
+  const url = await publishedArticle(made);
+  // Three answers citing it, stored within one millisecond, microseconds
+  // apart. Read into JavaScript the last one's time is .123, before its own
+  // .123700, so the next scan read all three again. And Kimi's answer was
+  // asked on a Tuesday, DeepSeek's on the Monday after: sorted by
+  // `String(date)`, "Mon" came before "Tue" and the later answer was 「第一次」.
+  const answer = (/** @type {string} */ id, /** @type {string} */ engine, /** @type {string} */ askedAt, /** @type {string} */ createdAt) => q(`INSERT INTO
+    evimed_geo.snapshots (id, user_id, geo_project_id, engine, asked_at, status, citations, created_at) VALUES ($1, $2, $3, $4, $5, 'valid', $6::jsonb, $7)`,
+  [id, made.userId, made.project.id, engine, askedAt, JSON.stringify([{ url, domain: "news.example.com", title: "t", inBody: true }]), createdAt]);
+  await answer(`ms-a-${made.project.id}`, "deepseek", "2026-10-05T02:00:00Z", "2026-10-05T03:00:00.123100Z");
+  await answer(`ms-b-${made.project.id}`, "kimi", "2026-09-29T02:00:00Z", "2026-10-05T03:00:00.123400Z");
+  await answer(`ms-c-${made.project.id}`, "doubao", "2026-10-01T02:00:00Z", "2026-10-05T03:00:00.123700Z");
+  await world.orchestrator.advance(made.project.id);
+  assert.deepEqual(scans.at(-1), [`ms-a-${made.project.id}`, `ms-b-${made.project.id}`, `ms-c-${made.project.id}`]);
+  assert.deepEqual(world.citations.map((citation) => citation.engine).sort(), ["deepseek", "doubao", "kimi"]);
+  const cited = world.notices.filter((notice) => /第一次引用了/.test(notice.title));
+  assert.deepEqual(cited.map((notice) => notice.title), ["Kimi 第一次引用了《稿件 微秒》"], "the answer asked first, not the first weekday in the alphabet");
+
+  await world.orchestrator.advance(made.project.id);
+  assert.deepEqual(scans.at(-1), [], "the next scan reads nothing the last one read");
+  // One more answer stored at the very instant of the last one read: after it by id, so read.
+  await answer(`ms-d-${made.project.id}`, "qianwen", "2026-10-05T02:30:00Z", "2026-10-05T03:00:00.123700Z");
+  await world.orchestrator.advance(made.project.id);
+  assert.deepEqual(scans.at(-1), [`ms-d-${made.project.id}`]);
+  assert.equal(world.citations.length, 4);
+});
+
+test("a content run counts the articles written after its dispatch, not one written in the same millisecond before it", options, async () => {
+  const world = harness();
+  const made = await newProject();
+  const { project, userId, control } = made;
+  // The run's mark moved at .123456; an article from before, at .123100.
+  // Read into JavaScript the mark's time is .123, and the older article
+  // counted as this run's: the step read done for a run that wrote nothing.
+  await q(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, title, safety, status, created_at, updated_at)
+    VALUES ($1, $2, $3, '旧稿', 'clear', 'draft', '2026-09-29T00:00:00.123100Z', '2026-09-29T00:00:00.123100Z')`, [`old-${project.id}`, userId, project.id]);
+  await q(`INSERT INTO evimed_geo.schedule_marks (geo_project_id, key, user_id, kind, state, run_id, dispatch_id, detail, created_at, updated_at)
+    VALUES ($1, 'run:content:1', $2, 'run', 'running', 'run-ms', 'geo-content-ms', '{"purpose":"content"}'::jsonb,
+      '2026-09-29T00:00:00.100000Z', '2026-09-29T00:00:00.123456Z')`, [project.id, userId]);
+  assert.equal(await world.orchestrator.onRunFinished(control, { id: "run-ms", dispatchId: "geo-content-ms", status: "succeeded" }), true);
+  assert.equal((await statuses(project.id)).content, "failed", "the run wrote no article");
+  const [mark] = await q(`SELECT state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:content:1'`, [project.id]);
+  assert.deepEqual([mark.state, mark.detail.articles], ["done", 0]);
+});
+
+test("a page the brand published itself gets the post-publication rounds a placement gets, on its group's questions; a retired one gets none", options, async () => {
+  const world = harness();
+  const made = await newProject();
+  const { project } = made;
+  await insightRunWrites(project);
+  const [first, second] = await store.questionMap(project.id, 1);
+  const current = await store.getProject(made.userId, project.id);
+  const written = await geoRuntimeWrite({ store, project: current, what: "owned_links", body: { items: [
+    { url: `https://www.zhihu.com/question/${project.id}/answer/1`, platform: "zhihu", title: "知乎回答", publishedAt: "2026-09-20T00:00:00Z", groupId: first.id },
+    { url: `https://brand.example.com/${project.id}/news`, platform: "brand_site", title: "官网", publishedAt: "2026-09-20T00:00:00Z", groupId: second.id },
+  ] } });
+  const [live, retired] = written.registered;
+  await geoRuntimeWrite({ store, project: current, what: "owned_links", body: { items: [{ id: retired, status: "retired" }] } });
+  const mine = () => world.enqueued.filter((entry) => entry.geoProjectId === project.id && entry.kind === "post_publication");
+
+  world.setClock("2026-09-26T12:00:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length, 0, "a week has not passed");
+  world.setClock("2026-09-27T01:00:00Z");
+  await world.orchestrator.tickSchedules();
+  const [week1] = mine();
+  assert.deepEqual([week1?.ref?.ownedLinkId, week1?.ref?.week, week1?.engines], [live, 1, ENGINES]);
+  const groupQuestions = first.questions.map((/** @type {any} */ question) => question.id).sort();
+  assert.deepEqual([...week1.questionIds].sort(), groupQuestions.slice(0, 10), "its group's questions");
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length, 1, "once per checkpoint");
+  const marks = await q(`SELECT key FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND starts_with(key, 'postpub:') ORDER BY key`, [project.id]);
+  assert.deepEqual(marks.map((row) => row.key), [`postpub:owned:${live}:w1`], "the retired link has no checkpoint at all");
+
+  // Retired after its first round: nothing more is asked about it.
+  await geoRuntimeWrite({ store, project: current, what: "owned_links", body: { items: [{ id: live, status: "retired" }] } });
+  world.setClock("2026-10-04T01:00:00Z");
+  await world.orchestrator.tickSchedules();
+  assert.equal(mine().length, 1);
 });

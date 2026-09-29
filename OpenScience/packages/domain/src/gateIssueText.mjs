@@ -110,6 +110,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'structured-output': '结构化产物格式有误',
   'clinical-content-trigger': '非临床交付物含临床内容',
   'clinical-high-risk-entity': '提及高警示药品，请核对',
+  'package-vocabulary-in-prose': '正文写了数据字段名',
   // What a caution is called when its rule's own title is not at hand (see
   // `GATE_CHECKS_TITLED_BY_RULE`).
   'clinical-safety-cautions': '报告缺少一条安全提示',
@@ -183,6 +184,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   citation_integrity: '引用编号或文献条目有误',
   clinical_content_without_clinical_contract: '非临床交付物含临床内容',
   clinical_high_risk_entity_notice: '提及高警示药品，请核对',
+  report_package_vocabulary: '正文写了数据字段名',
   clinical_safety_rule_notice: '命中临床安全规则，请核对',
   clinical_safety_rule: '命中临床安全规则，请核对',
   clinical_safety_caution: '报告缺少一条安全提示',

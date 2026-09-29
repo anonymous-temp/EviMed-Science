@@ -196,19 +196,35 @@ export const GEO_SOCIAL_STATUSES = frozen(['collected', 'partial_collected', 'no
 /** UGC minimisation: the longest excerpt kept of a title, a body or a comment. */
 export const GEO_SOCIAL_EXCERPT_MAX_CHARS = 200
 
+/**
+ * Links the brand published itself (百家号, 公众号, 知乎, its own site …): no
+ * order, no money, but the same post-publication checks and citation
+ * matching a placement gets. `other` is a platform outside the list, named
+ * in the title rather than invented as a word here.
+ */
+export const GEO_OWNED_LINK_PLATFORMS = frozen(['baijiahao', 'wechat_mp', 'zhihu', 'brand_site', 'toutiao', 'xiaohongshu', 'weibo', 'douyin',
+  'bilibili', 'sohu', 'netease', 'other'])
+export const GEO_OWNED_LINK_PLATFORM_LABELS_ZH = Object.freeze({
+  baijiahao: '百家号', wechat_mp: '微信公众号', zhihu: '知乎', brand_site: '品牌官网', toutiao: '头条号', xiaohongshu: '小红书', weibo: '微博',
+  douyin: '抖音', bilibili: '哔哩哔哩', sohu: '搜狐号', netease: '网易号', other: '其他平台',
+})
+/** `retired`: taken down or no longer the brand's; kept for its history, no longer checked. */
+export const GEO_OWNED_LINK_STATUSES = frozen(['active', 'retired'])
+
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
 export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
-  'strategy', 'targets', 'articles', 'orders', 'monitoring'])
+  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
-  'articles', 'placement_plan', 'step'])
+  'articles', 'placement_plan', 'owned_links', 'step'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
   project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
-  errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', monitoring: '监测',
+  errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
+  monitoring: '监测',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',
-  sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', step: '进度',
+  sources: '信源表', targets: '三档目标', articles: '稿件', placement_plan: '投放偏好', owned_links: '自有发布', step: '进度',
 })
 /** The export runs 「⋯」 offers. */
 export const GEO_EXPORT_KINDS = frozen(['weekly', 'proposal'])
@@ -274,6 +290,8 @@ export const GEO_VOCABULARIES = Object.freeze({
   ledgerKind: GEO_LEDGER_KINDS,
   topupStatus: GEO_TOPUP_STATUSES,
   reconciliationStatus: GEO_RECONCILIATION_STATUSES,
+  ownedLinkPlatform: GEO_OWNED_LINK_PLATFORMS,
+  ownedLinkStatus: GEO_OWNED_LINK_STATUSES,
   socialPlatform: GEO_SOCIAL_PLATFORMS,
   socialSort: GEO_SOCIAL_SORTS,
   socialStatus: GEO_SOCIAL_STATUSES,

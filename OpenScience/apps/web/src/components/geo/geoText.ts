@@ -7,7 +7,7 @@
  * rather than printed (a code on screen is a code the reader has to learn),
  * except an engine, whose id is the only name there is.
  */
-import { GEO_SOCIAL_PLATFORM_LABELS_ZH } from "@evimed/domain";
+import { GEO_OWNED_LINK_PLATFORM_LABELS_ZH, GEO_SOCIAL_PLATFORM_LABELS_ZH } from "@evimed/domain";
 import type {
   GeoAbsentReason,
   GeoArticleLayer,
@@ -146,6 +146,11 @@ export function platformName(platform: string | null | undefined): string | null
   if (!value) return null;
   if (HAN.test(value)) return value;
   return PLATFORM_NAMES[value.toLowerCase()] ?? null;
+}
+
+/** Where the brand published a page itself (百家号, 公众号 …); an unknown code is not printed. */
+export function ownedPlatformName(platform: string | null | undefined): string {
+  return (GEO_OWNED_LINK_PLATFORM_LABELS_ZH as Readonly<Record<string, string>>)[(platform ?? "").trim()] ?? "—";
 }
 
 /* -------------------------------------------------------------- steps, tabs */

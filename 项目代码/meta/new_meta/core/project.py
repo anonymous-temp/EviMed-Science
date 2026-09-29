@@ -421,19 +421,68 @@ class Project:
         return self.base_dir / subdir / filename if subdir else self.base_dir / filename
 
 
+# Reason labels (keys of the PRISMA reasons dicts) meaning a ranking removed
+# the record: PRISMA 2020 "records marked as ineligible by automation tools".
+# Mirrors record_drops.LABEL_RELEVANCE_CAP / LABEL_SUPPLEMENT_RELEVANCE_CAP;
+# files written before 2026-09-29 only ever used the first.
+_AUTOMATION_REASON_LABELS = frozenset({
+    "relevance cap before screening",
+    "supplementary-source relevance cap",
+})
+
+
+def _count_dict(value) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for key, count in value.items():
+        try:
+            number = int(count or 0)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            counts[str(key)] = number
+    return counts
+
+
 class PRISMAFlow:
-    """Track PRISMA 2020 flow diagram counts."""
+    """Track PRISMA 2020 flow diagram counts.
+
+    Identification arithmetic (Page et al., BMJ 2021;372:n71, flow template):
+        records_identified - duplicates_removed = records_after_dedup
+        records_after_dedup - automation_excluded - records_removed_other
+            - records_from_user_upload = title_abstract_screened
+    (uploaded full texts that matched no screened record join at full text).
+        full_text_sought - not_retrieved = full_text_assessed
+    Every record behind these counts is listed in screening/records_removed.json
+    (core/record_drops.py).
+    """
 
     def __init__(self):
         self.records_identified = 0
         self.records_after_dedup = 0
-        # Relevance caps and date filters remove records before anyone screens
-        # them. PRISMA 2020 keeps that separate from duplicate removal.
-        self.records_not_screened = 0
-        self.records_not_screened_reasons: dict[str, int] = {}
+        # Records removed after identification and before anyone screened them,
+        # on the PRISMA 2020 lines other than duplicates: a ranking (automation
+        # tools) and everything else (date filter, source retrieval limit,
+        # missing source metadata), each with its reasons. Until 2026-09-29 one
+        # counter held both and was also reported as automation_excluded.
+        self.automation_excluded = 0
+        self.automation_excluded_reasons: dict[str, int] = {}
+        self.records_removed_other = 0
+        self.records_removed_other_reasons: dict[str, int] = {}
+        # Records identified per source, and per database the hits it reported
+        # against what was retrieved ({source: {hits, retrieved, not_retrieved}}).
+        self.identified_by_source: dict[str, int] = {}
+        self.database_hits: dict[str, dict] = {}
+        # The relevance-cap rule with its inputs, when the search applied it.
+        self.screening_cap: dict = {}
         self.title_abstract_screened = 0
         self.title_abstract_excluded = 0
         self.title_abstract_exclusion_reasons: dict[str, int] = {}
+        # Reports sought for retrieval and why some were not retrieved; None
+        # until full-text handling ran (older files never recorded them).
+        self.full_text_sought: int | None = None
+        self.full_text_not_retrieved_reasons: dict[str, int] = {}
         self.full_text_assessed = 0
         self.full_text_excluded = 0
         self.full_text_exclusion_reasons: dict[str, int] = {}
@@ -442,39 +491,110 @@ class PRISMAFlow:
         self.records_from_database: int = 0
         self.records_from_user_upload: int = 0
 
+    @property
+    def records_not_screened(self) -> int:
+        """Records removed before screening other than duplicates (automation + other)."""
+        return self.automation_excluded + self.records_removed_other
+
+    @property
+    def records_not_screened_reasons(self) -> dict[str, int]:
+        merged = dict(self.automation_excluded_reasons)
+        for reason, count in self.records_removed_other_reasons.items():
+            merged[reason] = merged.get(reason, 0) + count
+        return merged
+
+    @property
+    def full_text_not_retrieved(self) -> int | None:
+        if self.full_text_sought is None:
+            return None
+        return sum(self.full_text_not_retrieved_reasons.values())
+
     def set_records_not_screened(self, count: int, reason: str) -> None:
-        """Record records dropped after deduplication but before screening."""
+        """Add records dropped after deduplication but before screening."""
         count = max(0, int(count))
         if not count:
             return
-        self.records_not_screened += count
-        self.records_not_screened_reasons[reason] = (
-            self.records_not_screened_reasons.get(reason, 0) + count
-        )
+        if reason in _AUTOMATION_REASON_LABELS:
+            self.automation_excluded += count
+            self.automation_excluded_reasons[reason] = self.automation_excluded_reasons.get(reason, 0) + count
+        else:
+            self.records_removed_other += count
+            self.records_removed_other_reasons[reason] = self.records_removed_other_reasons.get(reason, 0) + count
+
+    def set_search_counts(
+        self,
+        *,
+        identified_by_source: dict[str, int],
+        duplicates_removed: int,
+        automation_reasons: dict[str, int],
+        other_reasons: dict[str, int],
+        database_hits: dict[str, dict] | None = None,
+        screening_cap: dict | None = None,
+    ) -> None:
+        """Replace the identification counts with those of one search run.
+
+        A search starts identification afresh: uploads and full-text counts of
+        an earlier run belong to steps the search invalidates.
+        """
+        self.identified_by_source = {str(k): max(0, int(v or 0)) for k, v in identified_by_source.items()}
+        identified = sum(self.identified_by_source.values())
+        self.records_identified = identified
+        self.records_from_database = identified
+        self.records_from_user_upload = 0
+        self.records_after_dedup = max(0, identified - max(0, int(duplicates_removed or 0)))
+        self.automation_excluded_reasons = _count_dict(automation_reasons)
+        self.automation_excluded = sum(self.automation_excluded_reasons.values())
+        self.records_removed_other_reasons = _count_dict(other_reasons)
+        self.records_removed_other = sum(self.records_removed_other_reasons.values())
+        self.database_hits = {str(k): dict(v) for k, v in (database_hits or {}).items()}
+        self.screening_cap = dict(screening_cap or {})
+        self.full_text_sought = None
+        self.full_text_not_retrieved_reasons = {}
+
+    def set_full_text_retrieval(self, *, sought: int, not_retrieved_reasons: dict[str, int]) -> None:
+        """Reports sought for retrieval, and the reasons some were not retrieved (replaces)."""
+        self.full_text_sought = max(0, int(sought or 0))
+        self.full_text_not_retrieved_reasons = _count_dict(not_retrieved_reasons)
 
     def to_dict(self) -> dict:
         dup_removed = max(0, self.records_identified - self.records_after_dedup)
+        identification = {
+            "records_identified": self.records_identified,
+            "records_after_dedup": self.records_after_dedup,
+            "duplicates_removed": dup_removed,
+            "records_not_screened": self.records_not_screened,
+            "automation_excluded": self.automation_excluded,
+            "records_not_screened_reasons": self.records_not_screened_reasons,
+            "automation_excluded_reasons": dict(self.automation_excluded_reasons),
+            "records_removed_other": self.records_removed_other,
+            "records_removed_other_reasons": dict(self.records_removed_other_reasons),
+            "records_from_database": self.records_from_database,
+            "records_from_user_upload": self.records_from_user_upload,
+        }
+        if self.identified_by_source:
+            identification["identified_by_source"] = dict(self.identified_by_source)
+        if self.database_hits:
+            identification["database_hits"] = {k: dict(v) for k, v in self.database_hits.items()}
+        if self.screening_cap:
+            identification["screening_cap"] = dict(self.screening_cap)
+        eligibility: dict = {}
+        if self.full_text_sought is not None:
+            eligibility["full_text_sought"] = self.full_text_sought
+            eligibility["not_retrieved"] = self.full_text_not_retrieved
+            eligibility["not_retrieved_reasons"] = dict(self.full_text_not_retrieved_reasons)
+        eligibility.update({
+            "full_text_assessed": self.full_text_assessed,
+            "full_text_excluded": self.full_text_excluded,
+            "exclusion_reasons": self.full_text_exclusion_reasons,
+        })
         return {
-            "identification": {
-                "records_identified": self.records_identified,
-                "records_after_dedup": self.records_after_dedup,
-                "duplicates_removed": dup_removed,
-                "records_not_screened": self.records_not_screened,
-                "automation_excluded": self.records_not_screened,
-                "records_not_screened_reasons": self.records_not_screened_reasons,
-                "records_from_database": self.records_from_database,
-                "records_from_user_upload": self.records_from_user_upload,
-            },
+            "identification": identification,
             "screening": {
                 "title_abstract_screened": self.title_abstract_screened,
                 "title_abstract_excluded": self.title_abstract_excluded,
                 "exclusion_reasons": self.title_abstract_exclusion_reasons,
             },
-            "eligibility": {
-                "full_text_assessed": self.full_text_assessed,
-                "full_text_excluded": self.full_text_excluded,
-                "exclusion_reasons": self.full_text_exclusion_reasons,
-            },
+            "eligibility": eligibility,
             "included": {
                 "studies_included": self.studies_included,
             },
@@ -482,23 +602,46 @@ class PRISMAFlow:
 
     @classmethod
     def from_dict(cls, data: dict) -> PRISMAFlow:
-        """Restore PRISMAFlow from a saved dict."""
+        """Restore PRISMAFlow from a saved dict (current or pre-2026-09-29 layout)."""
         pf = cls()
-        ident = data.get("identification", {})
+        ident = data.get("identification", {}) or {}
         pf.records_identified = ident.get("records_identified", 0)
         pf.records_after_dedup = ident.get("records_after_dedup", 0)
-        pf.records_not_screened = ident.get("records_not_screened", 0)
-        pf.records_not_screened_reasons = ident.get("records_not_screened_reasons", {})
+        if "records_removed_other" in ident or "automation_excluded_reasons" in ident:
+            pf.automation_excluded = int(ident.get("automation_excluded") or 0)
+            pf.automation_excluded_reasons = _count_dict(ident.get("automation_excluded_reasons"))
+            pf.records_removed_other = int(ident.get("records_removed_other") or 0)
+            pf.records_removed_other_reasons = _count_dict(ident.get("records_removed_other_reasons"))
+        else:
+            # Older files kept one counter, mirrored into automation_excluded;
+            # the only reason ever written was the relevance cap.
+            for reason, count in _count_dict(ident.get("records_not_screened_reasons")).items():
+                pf.set_records_not_screened(count, reason)
+            remainder = int(ident.get("records_not_screened") or 0) - pf.records_not_screened
+            if remainder > 0:
+                pf.automation_excluded += remainder
+        pf.identified_by_source = _count_dict(ident.get("identified_by_source"))
+        hits = ident.get("database_hits")
+        pf.database_hits = {str(k): dict(v) for k, v in hits.items() if isinstance(v, dict)} if isinstance(hits, dict) else {}
+        cap = ident.get("screening_cap")
+        pf.screening_cap = dict(cap) if isinstance(cap, dict) else {}
         pf.records_from_database = ident.get("records_from_database", 0)
         pf.records_from_user_upload = ident.get("records_from_user_upload", 0)
-        screen = data.get("screening", {})
+        screen = data.get("screening", {}) or {}
         pf.title_abstract_screened = screen.get("title_abstract_screened", 0)
         pf.title_abstract_excluded = screen.get("title_abstract_excluded", 0)
         pf.title_abstract_exclusion_reasons = screen.get("exclusion_reasons", {})
-        elig = data.get("eligibility", {})
+        elig = data.get("eligibility", {}) or {}
+        if elig.get("full_text_sought") is not None:
+            pf.full_text_sought = int(elig.get("full_text_sought") or 0)
+            pf.full_text_not_retrieved_reasons = _count_dict(elig.get("not_retrieved_reasons"))
+            not_retrieved = int(elig.get("not_retrieved") or 0)
+            unexplained = not_retrieved - sum(pf.full_text_not_retrieved_reasons.values())
+            if unexplained > 0:
+                pf.full_text_not_retrieved_reasons["not retrieved"] = unexplained
         pf.full_text_assessed = elig.get("full_text_assessed", 0)
         pf.full_text_excluded = elig.get("full_text_excluded", 0)
         pf.full_text_exclusion_reasons = elig.get("exclusion_reasons", {})
-        incl = data.get("included", {})
+        incl = data.get("included", {}) or {}
         pf.studies_included = incl.get("studies_included", 0)
         return pf

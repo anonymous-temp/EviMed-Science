@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-28-review-001-low-albuminuria-mistranslated",
+  "genre": "mistranslation",
+  "observedIn": "evals/clinical-review-quality/results/2026-09-28-review-001-empa-kidney-report-family/deliverable/deliverables/empa-kidney-durability/clinical-evidence-report.md",
+  "line": 24,
+  "verbatim": "因此把既往试验很少纳入的低碳水化合物白蛋白尿、低 eGFR 与非糖尿病人群纳入了同一项随机比较",
+  "whyItIsWrong": "The source's population is people with low (or no) albuminuria; 「低碳水化合物白蛋白尿」 (low-carbohydrate albuminuria) is a mistranslation that names no clinical entity.",
+  "caughtBy": "nobody",
+  "note": "Delivered in the background section. No pattern may look for it (principle 5); a reviewer reading the sentence against its source would."
+}

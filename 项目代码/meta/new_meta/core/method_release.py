@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from new_meta.core.artifact_package_language import is_zh_review_language
 from new_meta.core.evidence_ledger import EvidenceLedger
 from new_meta.core.method_certainty import (
     current_result_risk_of_bias_fingerprint,
     synthesis_result_fingerprint,
 )
+from new_meta.core.release_tiers import apply_release_tiers
 from new_meta.core.result_rob import load_effective_rob_assessments
 
 
@@ -231,12 +233,22 @@ def build_method_release_review(project) -> dict[str, Any] | None:
 
 
 def attach_method_release_gate(readiness: dict | None, method_review: dict | None) -> dict | None:
+    """Add the compiled-method checks as one gate; its tier comes from the table.
+
+    Its integrity part (source-verified, converged inputs that are the pooled
+    rows) is ``calculation_audit`` and its numeric part is ``primary_result``,
+    both blocking; the rest is the method's own bookkeeping (ledger, analysis
+    set and certainty revisions, result-level risk of bias), so this gate is
+    advisory (``core.release_tiers``).
+    """
     if readiness is None or method_review is None:
         return readiness
     gates = readiness.setdefault("gates", [])
-    gates.append({
+    zh = is_zh_review_language(str(readiness.get("language") or ""))
+    gate = {
         "id": "compiled_method_release",
         "name": "Compiled method release",
+        "label": "Compiled method release",
         "passed": method_review.get("passed") is True,
         "status": "pass" if method_review.get("passed") is True else "fail",
         "warning": False,
@@ -244,18 +256,18 @@ def attach_method_release_gate(readiness: dict | None, method_review: dict | Non
             f"capability={method_review.get('capability_id')}; "
             f"failed_checks={', '.join(method_review.get('blocker_codes') or []) or 'none'}"
         ),
-    })
-    failed = sum(1 for gate in gates if gate.get("status") == "fail")
-    warnings = sum(1 for gate in gates if gate.get("status") == "warn")
-    readiness["passed"] = failed == 0
-    readiness["status"] = "blocked" if failed else "ready_with_warnings" if warnings else "ready"
-    readiness["summary"] = {
-        "total_gates": len(gates),
-        "passed_gates": sum(1 for gate in gates if gate.get("status") == "pass"),
-        "warning_gates": warnings,
-        "failed_gates": failed,
     }
-    return readiness
+    if zh:
+        gate["label_localized"] = "编译方法发布检查"
+    failed_checks = [
+        {"code": check.get("blocker_code"), "name": check.get("id"), "message": str(check.get("detail") or "")[:240]}
+        for check in method_review.get("checks") or []
+        if isinstance(check, dict) and check.get("passed") is not True
+    ]
+    if failed_checks:
+        gate["locations"] = failed_checks[:8]
+    gates.append(gate)
+    return apply_release_tiers(readiness)
 
 
 def _add_check(

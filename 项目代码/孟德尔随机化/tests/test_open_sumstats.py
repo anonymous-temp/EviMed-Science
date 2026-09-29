@@ -294,3 +294,74 @@ def test_a_binary_trait_in_the_legacy_layout_reads_log_odds_and_its_standard_err
     assert variant is not None
     assert variant.beta == pytest.approx(0.18232, rel=1e-4)
     assert variant.se == pytest.approx((0.27003 - 0.09531) / 3.919928, rel=1e-3)
+
+
+# --- sample size as numbers (GWAS-SSF metadata beside the harmonised file) ---
+
+_CASE_CONTROL_META = b"""# Study meta-data
+gwas_id: GCST000001
+samples:
+  - sample_ancestry_category:
+      - European
+    sample_size: 141217
+    case_control_study: true
+  - sample_ancestry_category:
+      - South Asian
+    sample_size: 25557
+    case_control_study: true
+"""
+
+
+def test_rows_without_their_own_n_take_the_study_sample_size_from_the_metadata_file(catalogue):
+    """mr-001: the CAD file has no per-variant n, so Steiger had no outcome
+    sample size and failed ("replacement has length zero"); the catalogue's
+    metadata file states the study's sample size as numbers."""
+    listing = "https://ftp.example/pub/GCST000001/harmonised/"
+    data = f"{listing}111-GCST000001-EFO_1.h.tsv.gz"
+    # This exposure file, like the CAD file in mr-001, states no per-variant n.
+    catalogue.files[data] = gzip.compress(gzip.decompress(catalogue.files[data]).replace(b"\t300000\n", b"\tNA\n"))
+    catalogue.files[listing] += b' <a href="111-GCST000001-EFO_1.h.tsv.gz-meta.yaml">m</a>'
+    catalogue.files[f"{listing}111-GCST000001-EFO_1.h.tsv.gz-meta.yaml"] = _CASE_CONTROL_META
+    pair = osm.build_pair(
+        {"type": "gwas_catalog", "accession": "GCST000001"},
+        {"type": "gwas_catalog", "pubmedId": "222"},
+        http=osm._Http(opener=catalogue),
+    )
+    exposure = pair.record["exposure"]
+    assert exposure["sampleMetadata"] == {
+        "source": f"{listing}111-GCST000001-EFO_1.h.tsv.gz-meta.yaml", "samples": 2,
+        "sampleSize": 166774, "caseControlStudy": True, "caseCount": None, "controlCount": None,
+    }
+    assert exposure["sampleSize"] == {
+        "rowsWithOwnSampleSize": 0, "rowsGivenStudySampleSize": 4, "studySampleSize": 166774,
+    }
+    assert [row.n for row in pair.exposure_rows] == [166774.0] * 4
+    assert b",166774.0," in osm.csv_bytes(pair.exposure_rows)
+    # The outcome publishes no metadata file: its rows keep their own n and the record says why.
+    outcome = pair.record["outcome"]
+    assert outcome["sampleMetadata"]["reason"] == "the catalogue publishes no metadata file beside the harmonised file"
+    assert outcome["sampleSize"]["rowsGivenStudySampleSize"] == 0
+    assert [row.n for row in pair.outcome_rows] == [1165570.0] * len(pair.outcome_rows)
+
+
+@pytest.mark.parametrize("body, reason", [
+    (b"samples: []\n", "the metadata file lists no samples"),
+    (b"samples:\n  - sample_size: 10\n  - sample_ancestry: [x]\n",
+     "not every sample in the metadata file states its sample_size"),
+    (b"samples: [unclosed\n", "the metadata file is not readable YAML"),
+])
+def test_an_unusable_metadata_file_gives_no_total_and_says_why(body, reason):
+    class _Fixed:
+        def read(self, url, limit=0):
+            return body
+
+    study = osm.CatalogStudy(
+        accession="GCST000009", trait="", pubmed_id="", ancestry=[], initial_sample_size="",
+        efo_traits=[], summary_stats_url="", licence="", metadata_url="https://ftp.example/m.yaml",
+    )
+    record = osm.read_sample_metadata(study, _Fixed())
+    assert record.get("sampleSize") is None
+    assert record["reason"] == reason
+    rows = [osm.Variant("rs1", "1", 1, "A", "G", 0.1, 0.01, 1e-9, 0.2, None)]
+    filled, sizes = osm.with_study_sample_size(rows, record)
+    assert filled[0].n is None and sizes["rowsGivenStudySampleSize"] == 0

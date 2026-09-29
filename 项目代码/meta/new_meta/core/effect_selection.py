@@ -226,6 +226,16 @@ def rob_for_study(
         outcome_name = _normalise_reference_token(getattr(outcome, "outcome_name", ""))
         timepoint = _normalise_reference_token(getattr(outcome, "accepted_timepoint", "") or getattr(outcome, "timepoint", ""))
         subgroup = _normalise_reference_token(getattr(outcome, "subgroup", ""))
+        # A row's own assessment is the one made for its result id (its study
+        # and position), not the one whose wording matches best: two contrasts
+        # of one multi-arm trial share outcome name, timepoint and often their
+        # subgroup label (ma-001, 39673144: the 1 g and 3 g arms, both
+        # "Topical (intra-articular) TXA"), and the text score ties. The name
+        # must still agree, so an assessment of a row that has since moved is
+        # not taken; without such a match the text score decides, as before.
+        own = _own_result_rob(study, outcome, result_specific, outcome_name)
+        if own is not None:
+            return own
 
         def score(item: ResultRoBAssessment) -> tuple[int, int, int]:
             item_name = _normalise_reference_token(item.outcome_name)
@@ -246,6 +256,20 @@ def rob_for_study(
     if len(result_specific) == 1 and outcome is None:
         return result_specific[0]
     return None
+
+
+def _own_result_rob(study, outcome, assessments: list[ResultRoBAssessment], outcome_name: str):
+    index = next((position for position, item in enumerate(getattr(study, "outcomes", None) or [])
+                  if item is outcome), None)
+    if index is None or not outcome_name:
+        return None
+    try:
+        from new_meta.core.extraction_ledger import result_entity_id
+        result_id = result_entity_id(study, index)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return next((item for item in assessments
+                 if item.result_id == result_id and _normalise_reference_token(item.outcome_name) == outcome_name), None)
 
 
 def primary_candidate_block_reason(

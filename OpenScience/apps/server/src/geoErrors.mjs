@@ -418,7 +418,7 @@ export async function tickErrors(deps) {
 
   for (const error of await store.errorsToClose(20)) {
     if (!error.questionId || !error.updatedAt) continue;
-    const later = await store.laterJudgedAnswers(error.geoProjectId, error.questionId, error.engine, new Date(error.updatedAt));
+    const later = await store.laterJudgedAnswers(error.id);
     const latest = later.find((answer) => answer.status === "valid");
     if (!latest || repeatsError(latest.statements, error.fingerprint)) continue;
     await store.updateError(error.id, { status: "closed", closed_snapshot_id: latest.id, updated_at: now });

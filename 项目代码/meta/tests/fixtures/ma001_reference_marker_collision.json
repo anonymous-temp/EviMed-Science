@@ -1,0 +1,298 @@
+{
+ "source": "production ma-001 meta-20260928185649 manuscript_facts.json + draft.rejected.md (reference 8 label restored)",
+ "facts": {
+  "claim_map": [
+   {
+    "id": "intro-clinical-problem",
+    "claim": "关节置换手术伴随显著的围术期失血负担，氨甲环酸（TXA）是一种抗纤溶药物，用于对抗手术相关失血。",
+    "support_source": "background_evidence 参考文献 [8]（evimed:paper:3_319_64d2184b127fa481ab8f5665）",
+    "source_location": "Effectiveness of administering tranexamic acid to high-risk hip and knee arthroplasty patients: a systematic review protocol. JBI evidence synthesis, 2020.",
+    "source_study_id": "evimed:paper:3_319_64d2184b127fa481ab8f5665",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Introduction"
+   },
+   {
+    "id": "intro-evidence-context-tha",
+    "claim": "在髋关节置换术人群中，已有关节置换背景的系统评价与Meta分析（纳入25项随机对照试验）对TXA减少手术失血的效应进行了合并；本评价聚焦初次单侧TKA人群，其证据需单独评估。",
+    "support_source": "background_evidence 参考文献 [6]（evimed:paper:2_219_64d22d059112c86e369c869b）",
+    "source_location": "Efficacy and safety of tranexamic acid in total hip replacement: A PRISMA-compliant meta-analysis of 25 randomized controlled trials. Medicine, 2017.",
+    "source_study_id": "evimed:paper:2_219_64d22d059112c86e369c869b",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Introduction"
+   },
+   {
+    "id": "intro-route-evidence-gap",
+    "claim": "口服氨甲环酸的疗效与安全性仍存争议，原因之一是相关临床研究数量较少。",
+    "support_source": "background_evidence 参考文献 [10]（evimed:paper:2_219_64d233e5f793ac9106a2c69b）",
+    "source_location": "Comparison of oral versus intravenous tranexamic acid in total knee and hip arthroplasty: A GRADE analysis and meta-analysis. Medicine, 2020.",
+    "source_study_id": "evimed:paper:2_219_64d233e5f793ac9106a2c69b",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Introduction"
+   },
+   {
+    "id": "intro-highrisk-evidence-gap",
+    "claim": "既往多数研究将高危患者排除在外，由此产生选择偏倚，使TXA在高危关节置换人群中的安全性缺乏明确证据。",
+    "support_source": "background_evidence 参考文献 [8]（evimed:paper:3_319_64d2184b127fa481ab8f5665）",
+    "source_location": "Effectiveness of administering tranexamic acid to high-risk hip and knee arthroplasty patients: a systematic review protocol. JBI evidence synthesis, 2020.",
+    "source_study_id": "evimed:paper:3_319_64d2184b127fa481ab8f5665",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Introduction"
+   },
+   {
+    "id": "intro-objective",
+    "claim": "本系统评价与Meta分析旨在成人初次单侧全膝关节置换术人群中，评估经静脉、局部（关节腔内）或联合途径给予TXA相较于安慰剂或未使用TXA，对围术期总失血量（以mL计，主要结局）、异体输血率以及30天内症状性静脉血栓栓塞事件（次要结局）的影响，并按给药途径进行预设亚组分析。",
+    "support_source": "研究方案PICO与结局定义（research_question、pico、primary_effect.outcome_name）",
+    "source_location": "研究方案：PICO与主要结局设定",
+    "source_study_id": "",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Introduction"
+   },
+   {
+    "id": "disc-primary-effect",
+    "claim": "在2项随机对照试验（共318例受试者，3条可分析对比）中，TXA可能降低成人初次单侧TKA的围术期总失血量，合并均数差为-251.06 mL（95% CI -345.34至-156.77 mL），研究间统计异质性为0%（I²=0%）。由于证据确定性极低，该结果提示的是一种可能的失血量下降，而非确证性效应。",
+    "support_source": "primary_effect（MD -251.055，95% CI -345.343至-156.768，n_studies=2，I²=0.0%，design-aware REML-HKSJ模型）；primary_population（受试者318例）",
+    "source_location": "主要结局合并分析结果：Total blood loss (mL), MD",
+    "source_study_id": "study:29410968; study:39673144",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-clinical-significance",
+    "claim": "围术期总失血量（以mL计）是本评价唯一的预设主要结局，而关节置换手术本身伴随显著的围术期失血负担，TXA作为一种抗纤溶药物用于对抗手术失血；本评价预设的次要结局为异体输血率与30天内症状性静脉血栓栓塞事件。由于本评价未提供绝对效应值（如每1000人事件数、绝对风险降低或需治疗人数），也不能提供预设的最小重要效应或决策阈值，故不能据此量化绝对临床获益幅度，次要结局的方向与幅度亦尚未定量确定。",
+    "support_source": "background_evidence 参考文献 [8]；研究方案PICO与预设主要/次要结局；absolute_effects 未提供（空）",
+    "source_location": "参考文献 [8] 引言段；研究方案：主要结局（Total blood loss, mL）与次要结局（异体输血率、30天内症状性VTE）；absolute_effects 字段",
+    "source_study_id": "evimed:paper:3_319_64d2184b127fa481ab8f5665",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-route-subgroup-limit",
+    "claim": "纳入的可分析对比涉及静脉途径与关节腔内（局部）途径，但由于仅2项试验、3条对比，预设的给药途径亚组分析不足以支持途径间差异或类别效应的推断。",
+    "support_source": "primary_effect各行干预描述（IV TXA 1 g；Topical TXA 3 g；1 g intra-articular TXA）；grade.indirectness（serious）",
+    "source_location": "主要分析纳入对比的干预描述与GRADE间接性判定",
+    "source_study_id": "study:29410968; study:39673144",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-secondary-outcomes-limitation",
+    "claim": "异体输血率与30天内症状性静脉血栓栓塞事件为本评价的预设次要结局，但本次分析未提取到可合并的结构化事件数据，故未对其进行定量合并，TXA对这两个结局的影响方向与幅度仍不确定。",
+    "support_source": "primary_population（selected_events_intervention=0、selected_events_control=0、selected_total_intervention=0、selected_total_control=0）；未提供次要结局合并结果",
+    "source_location": "结构化提取的二分类事件数据与次要结局分析状态",
+    "source_study_id": "",
+    "can_write_main_text": false,
+    "manuscript_use": "exclude",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-transfusion-endpoint-definition",
+    "claim": "作为次要结局的输血率在定义上存在需要说明之处：在所提供的证据材料中，输血的异体性质为推断而非明示，原文说明两组均未实施自体输血并计算了输血率，且入组时排除了计划行自体输血者；同时输血由血红蛋白阈值驱动（Hb<70 g/L 必须输血、70–90 g/L 视全身情况决定、Hb>90 g/L 不输血），因此该结局为阈值依赖性结局，其解释受输血策略影响。",
+    "support_source": "domain_controversy_candidates（trial_design_or_endpoint_tension，support_source 26550418，输血结局的异体性质与阈值驱动）",
+    "source_location": "研究卡片：输血结局定义与输血阈值",
+    "source_study_id": "26550418",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-endpoint-controversy-vte",
+    "claim": "血栓相关结局的定义与预设结局并不一致：所报告的是术后1周经下肢静脉彩色多普勒超声常规筛查发现的深静脉血栓（可能包含无症状血栓），而非预设的30天内症状性静脉血栓栓塞复合结局，且未报告30天随访窗；肺栓塞仅以两组均未发生的叙述性描述呈现，没有事件计数与结构化结局行。",
+    "support_source": "domain_controversy_candidates（trial_design_or_endpoint_tension，support_source 26550418）",
+    "source_location": "研究卡片：血栓结局定义与随访窗口",
+    "source_study_id": "26550418",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-cointervention-tension",
+    "claim": "在部分研究中，引流管夹闭4小时与术后8小时低分子肝素5000 IU等共同干预同时施加于干预组与对照组，且输血由血红蛋白阈值驱动（Hb<70 g/L 必须输血、70–90 g/L 视全身情况决定、Hb>90 g/L 不输血）；因此TXA的独立效应难以与这些共享的围术期措施完全分离，输血率结局亦可能不完全盲法评估。",
+    "support_source": "domain_controversy_candidates（trial_design_or_endpoint_tension，support_source 26550418）",
+    "source_location": "研究卡片：共同干预与输血阈值",
+    "source_study_id": "26550418",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-dichotomous-reporting-limit",
+    "claim": "在所提供的证据材料中，部分研究的两分类结局仅以百分比与原始计数及卡方统计量报告，p值仅以不等式（P<0.05、P>0.05）呈现，无法提取精确p值；该研究亦未报告样本量计算、试验注册与预设分析计划。这些报告特征与二分类次要结局缺乏可合并的结构化事件数据相一致，使其可合并性与精确度评估受到限制。",
+    "support_source": "domain_controversy_candidates（trial_design_or_endpoint_tension，support_source 26550418，二分类结局报告形式与报告完整性）",
+    "source_location": "研究卡片：二分类结局报告形式与试验报告完整性",
+    "source_study_id": "26550418",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-applicability-boundary",
+    "claim": "本评价结果最直接适用于成人初次单侧TKA人群中相对年轻、未合并高危因素者：有研究报告的平均年龄约53岁，明显低于典型初次TKA人群；而多数既往研究排除了高危患者，TXA在高危人群中的获益与风险平衡尚缺乏明确证据，故结果不宜直接外推至高龄或高危患者。",
+    "support_source": "domain_controversy_candidates（support_source 26550418，平均年龄偏轻）＋background_evidence 参考文献 [8]（高危患者被排除）",
+    "source_location": "研究卡片：人群平均年龄；参考文献 [8]：高危患者选择偏倚",
+    "source_study_id": "26550418; evimed:paper:3_319_64d2184b127fa481ab8f5665",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-certainty-limitation",
+    "claim": "入池比较共318名参与者；样本量达到预设信息量要求，置信区间未跨越无效值，因此未因不精确性降级。",
+    "support_source": "grade（certainty=very low；domains：risk_of_bias=serious，inconsistency=no concern，indirectness=serious，imprecision=serious，publication_bias=serious）",
+    "source_location": "GRADE总体判定与各域评估",
+    "source_study_id": "",
+    "can_write_main_text": false,
+    "manuscript_use": "exclude",
+    "section": "Discussion"
+   },
+   {
+    "id": "disc-future-research",
+    "claim": "纳入主要分析的受试者共318例；虽然合并效应的置信区间未跨越无效值，但由于缺乏预设的最小重要效应或决策阈值，GRADE不精确性域仍被评为严重顾虑，证据确定性为极低。",
+    "support_source": "primary_effect（结局为总失血量mL）、grade（indirectness与imprecision严重顾虑）、domain_controversy_candidates（总失血量计算公式与随访窗口问题）、background_evidence [8]（高危人群安全性缺口）、safety_notes_by_study（33094562的30天随访未确认）",
+    "source_location": "研究卡片：总失血量计算与随访；安全性记录：30天随访确认不足；参考文献 [8]：高危人群安全性证据缺口",
+    "source_study_id": "26550418; 33094562; evimed:paper:3_319_64d2184b127fa481ab8f5665",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   },
+   {
+    "id": "conc_primary_effect",
+    "claim": "本评价提示，在成人初次单侧全膝关节置换术人群中，经静脉、局部（关节腔内）或联合途径给予氨甲环酸相较于安慰剂或未使用氨甲环酸，围术期总失血量（以mL计）可能降低，合并均数差为-251.06 mL（95% CI -345.34至-156.77 mL）；该结论应结合极低的证据确定性以及输血率与血栓相关终点的定义差异谨慎解释。",
+    "support_source": "primary_effect + grade + pico",
+    "source_location": "analysis.meta_results.primary_outcome",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Conclusion"
+   },
+   {
+    "id": "safety_scope",
+    "claim": "研究卡片中已有安全性信息，可用于叙述性获益-风险解释；但本次主要疗效合成未对安全性结局进行定量合并。",
+    "support_source": "manuscript_facts.study_cards.safety_notes",
+    "source_location": "study_cards.safety_notes",
+    "source_study_id": "26550418, 33094562, 29410968, 39673144, 31348286",
+    "can_write_main_text": true,
+    "manuscript_use": "main",
+    "section": "Discussion"
+   }
+  ],
+  "evidence_readiness": {
+   "selected_primary_rows": [
+    {
+     "row_id": "result:29410968:0",
+     "study_id": "study:29410968",
+     "pmid": null,
+     "study_label": "Shih-Hsiang 2017",
+     "title": null
+    },
+    {
+     "row_id": "result:29410968:1",
+     "study_id": "study:29410968",
+     "pmid": null,
+     "study_label": "Shih-Hsiang 2017",
+     "title": null
+    },
+    {
+     "row_id": "result:39673144:0",
+     "study_id": "study:39673144",
+     "pmid": null,
+     "study_label": "Ye 2024",
+     "title": null
+    }
+   ]
+  },
+  "background_evidence": {
+   "status": "ok",
+   "query": "Tranexamic acid administered Adults undergoing primary unilateral total knee arthroplasty. Total blood loss, measured in millilitres . guideline systematic review meta-analysis",
+   "reference_count": 5,
+   "references": [
+    {
+     "study_id": "evimed:paper:2_219_64d22d059112c86e369c869b",
+     "source_type": "paper",
+     "citation": "[6]",
+     "title": "Efficacy and safety of tranexamic acid in total hip replacement: A PRISMA-compliant meta-analysis of 25 randomized controlled trials.",
+     "year": 2017,
+     "journal": "Medicine",
+     "pmid": "29384974",
+     "doi": "10.1097/MD.0000000000009552",
+     "pub_types": [
+      "系统综述/Meta分析"
+     ],
+     "summary": "BACKGROUND Hip osteoarthritis is one of the most prevalent musculoskeletal degenerative diseases in elderly. Total hip arthroplasty (THA) is the most effective surgical treatment for end stage hip osteoarthritis. Tranexamic acid (TA) is a potent drug to reduce surgical blood loss in surgery, therefore, as a potential drug for application in THA. OBJECTIVES To identify the combined efficacy of TA administration in THA. A meta-analysis including 25 randomized controlled trials was conducted for generating synthesized effects. METHODS This meta-analysis followed the Preferred Reporting Items for Systematic reviews and Meta-Analysis (PRISMA) guidelines for reporting systematic reviews and meta-…",
+     "source_location": "Efficacy and safety of tranexamic acid in total hip replacement: A PRISMA-compliant meta-analysis of 25 randomized controlled trials.",
+     "source_quote": "BACKGROUND Hip osteoarthritis is one of the most prevalent musculoskeletal degenerative diseases in elderly. Total hip arthroplasty (THA) is the most effective surgical treatment for end stage hip osteoarthritis. Tranexamic acid (TA) is a potent drug to reduce surgical blood loss in surgery, therefore, as a potential drug for application in THA. OBJECTIVES To identify the combined efficacy of TA administration in THA. A meta-analysis including 25 randomized controlled trials was conducted for generating synthesized effects. METHODS This meta-analysis followed the Preferred Reporting Items for Systematic reviews and Meta-Analysis (PRISMA) guidelines for reporting systematic reviews and meta-…"
+    },
+    {
+     "study_id": "evimed:guide:66ea8f1e56e0c5a2f3471396",
+     "source_type": "guide",
+     "citation": "[7]",
+     "title": "Patient blood management guideline for adults with critical bleeding.",
+     "year": 2024,
+     "journal": "Guideline",
+     "pmid": "",
+     "doi": "",
+     "pub_types": [],
+     "summary": "This guideline provides comprehensive recommendations and good practice statements for managing critical bleeding in adults, focusing on patient blood management strategies. It defines critical bleeding as a life-threatening major hemorrhage likely to require massive transfusion, emphasizing the importance of a multidisciplinary major hemorrhage protocol (MHP) that addresses coagulopathy and physiological derangements. Key recommendations include monitoring specific parameters, using appropriate transfusion ratios, and administering blood components based on clinical need. The guideline also advises against routine use of recombinant activated factor VII and highlights the potential role of…",
+     "source_location": "Patient blood management guideline for adults with critical bleeding.",
+     "source_quote": "This guideline provides comprehensive recommendations and good practice statements for managing critical bleeding in adults, focusing on patient blood management strategies. It defines critical bleeding as a life-threatening major hemorrhage likely to require massive transfusion, emphasizing the importance of a multidisciplinary major hemorrhage protocol (MHP) that addresses coagulopathy and physiological derangements. Key recommendations include monitoring specific parameters, using appropriate transfusion ratios, and administering blood components based on clinical need. The guideline also advises against routine use of recombinant activated factor VII and highlights the potential role of…"
+    },
+    {
+     "study_id": "evimed:paper:3_319_64d2184b127fa481ab8f5665",
+     "source_type": "paper",
+     "citation": "[8]",
+     "title": "Effectiveness of administering tranexamic acid to high-risk hip and knee arthroplasty patients: a systematic review protocol.",
+     "year": 2020,
+     "journal": "JBI evidence synthesis",
+     "pmid": "32898374",
+     "doi": "10.11124/JBISRIR-D-19-00145",
+     "pub_types": [
+      "系统综述/Meta分析"
+     ],
+     "summary": "OBJECTIVE The objective of this review is to assess the safety and effectiveness in administering tranexamic acid in high-risk hip and knee arthroplasty patients. INTRODUCTION Arthroplasty surgery is associated with a significant amount of perioperative blood loss. Tranexamic acid is an antifibrinolytic used to counteract blood loss. Although various studies have demonstrated the effectiveness of tranexamic acid without significant adverse effects, a majority of these studies have excluded high-risk patients. Due to this selection bias there is a lack of clear evidence of the safety of administering tranexamic acid in high-risk patients. INCLUSION CRITERIA This review will consider studies…",
+     "source_location": "Effectiveness of administering tranexamic acid to high-risk hip and knee arthroplasty patients: a systematic review protocol.",
+     "source_quote": "OBJECTIVE The objective of this review is to assess the safety and effectiveness in administering tranexamic acid in high-risk hip and knee arthroplasty patients. INTRODUCTION Arthroplasty surgery is associated with a significant amount of perioperative blood loss. Tranexamic acid is an antifibrinolytic used to counteract blood loss. Although various studies have demonstrated the effectiveness of tranexamic acid without significant adverse effects, a majority of these studies have excluded high-risk patients. Due to this selection bias there is a lack of clear evidence of the safety of administering tranexamic acid in high-risk patients. INCLUSION CRITERIA This review will consider studies…"
+    },
+    {
+     "study_id": "evimed:paper:0_70_65f7c8424cd51f76566620e7",
+     "source_type": "paper",
+     "citation": "[9]",
+     "title": "The Critical Blood-Sparing Effect of Tranexamic Acid (TXA) in Liposuction: A Systematic Review and Meta-Analysis.",
+     "year": 2023,
+     "journal": "JPRAS open",
+     "pmid": "38425698",
+     "doi": "10.1016/j.jpra.2023.01.002",
+     "pub_types": [
+      "系统综述/Meta分析"
+     ],
+     "summary": "Introduction Tranexamic acid (TXA) has been used to improve bleeding outcomes in many surgical procedures. However, its blood-sparing effect in liposuction is not well established. Methods A systematic literature search was performed using PubMed, Embase, Cumulated Index to Nursing and Allied Health Literature (CINAHL), Cochrane Central, ClinicalTrials.gov, and WorldWideScience.org databases from their inception to October 8, 2021, according to Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) guidelines. The authors focused on 3 main topics: 1) TXA, 2) liposuction, and 3) complications. We included articles evaluating the potential blood-sparing effects of TXA in…",
+     "source_location": "The Critical Blood-Sparing Effect of Tranexamic Acid (TXA) in Liposuction: A Systematic Review and Meta-Analysis.",
+     "source_quote": "Introduction Tranexamic acid (TXA) has been used to improve bleeding outcomes in many surgical procedures. However, its blood-sparing effect in liposuction is not well established. Methods A systematic literature search was performed using PubMed, Embase, Cumulated Index to Nursing and Allied Health Literature (CINAHL), Cochrane Central, ClinicalTrials.gov, and WorldWideScience.org databases from their inception to October 8, 2021, according to Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA) guidelines. The authors focused on 3 main topics: 1) TXA, 2) liposuction, and 3) complications. We included articles evaluating the potential blood-sparing effects of TXA in…"
+    },
+    {
+     "study_id": "evimed:paper:2_219_64d233e5f793ac9106a2c69b",
+     "source_type": "paper",
+     "citation": "[10]",
+     "title": "Comparison of oral versus intravenous tranexamic acid in total knee and hip arthroplasty: A GRADE analysis and meta-analysis.",
+     "year": 2020,
+     "journal": "Medicine",
+     "pmid": "33126380",
+     "doi": "10.1097/MD.0000000000022999",
+     "pub_types": [
+      "系统综述/Meta分析"
+     ],
+     "summary": "BACKGROUND The efficacy and safety of oral tranexamic acid (TXA) remain controversial because of the small number of clinical studies. The aim of the present study was to compare the efficacy and safety of oral TXA with intravenous TXA in patients undergoing total hip arthroplasty and total knee arthroplasty in a systematic review and meta-analysis. METHODS We conducted a meta-analysis to identify randomized controlled trials (RCTs) involving oral and intravenous TXA in total hip arthroplasty and total knee arthroplasty up to December 2019 by searching databases including PubMed, Web of Science, Embase, the Cochrane Controlled Trials Register, the Cochrane Library China Biology Medicine, Ch…",
+     "source_location": "Comparison of oral versus intravenous tranexamic acid in total knee and hip arthroplasty: A GRADE analysis and meta-analysis.",
+     "source_quote": "BACKGROUND The efficacy and safety of oral tranexamic acid (TXA) remain controversial because of the small number of clinical studies. The aim of the present study was to compare the efficacy and safety of oral TXA with intravenous TXA in patients undergoing total hip arthroplasty and total knee arthroplasty in a systematic review and meta-analysis. METHODS We conducted a meta-analysis to identify randomized controlled trials (RCTs) involving oral and intravenous TXA in total hip arthroplasty and total knee arthroplasty up to December 2019 by searching databases including PubMed, Web of Science, Embase, the Cochrane Controlled Trials Register, the Cochrane Library China Biology Medicine, Ch…"
+    }
+   ],
+   "audit_notes": []
+  }
+ },
+ "references_section": "## 参考文献\n［1］ Yang Jian-Qi, Yang Lin, Tan Jian-Shao, Huo Kun-Ping, Zhao Liang, Cai Dao-Zhang. Reduction of Blood Loss by Intra-articular Injection of Tranexamic Acid Combined with Knee and Hip Flexion at 45° During Primary Total Knee Arthroplasty: A Randomized Controlled Trial.. *Orthopaedic surgery*. 2020. doi: 10.1111/os.12814\n\n［2］ Yen Shih-Hsiang, Lin Po-Chun, Chen Bradley, Huang Chung-Chen, Wang Jun-Wen. Topical Tranexamic Acid Reduces Blood Loss in Minimally Invasive Total Knee Arthroplasty Receiving Rivaroxaban.. *BioMed research international*. 2017. doi: 10.1155/2017/9105645\n\n［3］ Zhang Shenqi, Wang Chengbin, Shi Lei, Xue Qingyun. Multi-route applications of tranexamic acid to reduce blood loss after total knee arthroplasty: a randomized controlled trial.. *Medicine*. 2019. doi: 10.1097/MD.0000000000016570\n\n［4］ Shuwei Ye, Yue Luo, Qianhao Li, Lijun Cai, Pengde Kang. Efficacy of Different Doses of Intra‐Articular Tranexamic Acid for Reducing Blood Loss and Lower Limb Swelling After Total Knee Arthroplasty: A Prospective, Randomized, Controlled Trial. *Orthopaedic Surgery*. 2024. doi: 10.1111/os.14317 https://onlinelibrary.wiley.com/doi/pdfdirect/10.1111/os.14317\n\n［5］ Wang Guowei, Wang Dong, Wang Bingchen, Lin Yongjie, Sun Shui. Efficacy and safety evaluation of intra-articular injection of tranexamic acid in total knee arthroplasty operation with temporarily drainage close.. *International journal of clinical and experimental medicine*. 2015.\n\n［6］ Zhu J, Zhu Y, Lei P, Zeng M, Su W, Hu Y. Efficacy and safety of tranexamic acid in total hip replacement: A PRISMA-compliant meta-analysis of 25 randomized controlled trials.. *Medicine*. 2017. doi: 10.1097/MD.0000000000009552 https://pubmed.ncbi.nlm.nih.gov/29384974/\n\n［7］ National Blood Authority. Patient blood management guideline for adults with critical bleeding.. *Guideline*. 2024. https://www.evimed.com/guide-details?id=66ea8f1e56e0c5a2f3471396\n\n［8］ Yapa S, Lockwood C, Kuster M. Effectiveness of administering tranexamic acid to high-risk hip and knee arthroplasty patients: a systematic review protocol.. *JBI evidence synthesis*. 2020. doi: 10.11124/JBISRIR-D-19-00145 https://pubmed.ncbi.nlm.nih.gov/32898374/\n\n［9］ Reinhardt ME, Mutyala S, Gerald M, et al. The Critical Blood-Sparing Effect of Tranexamic Acid (TXA) in Liposuction: A Systematic Review and Meta-Analysis.. *JPRAS open*. 2023. doi: 10.1016/j.jpra.2023.01.002 https://pubmed.ncbi.nlm.nih.gov/38425698/\n\n［10］ Sun C, Zhang X, Chen L, et al. Comparison of oral versus intravenous tranexamic acid in total knee and hip arthroplasty: A GRADE analysis and meta-analysis.. *Medicine*. 2020. doi: 10.1097/MD.0000000000022999 https://pubmed.ncbi.nlm.nih.gov/33126380/\n\n［11］ Page MJ, McKenzie JE, Bossuyt PM, Boutron I, Hoffmann TC, Mulrow CD. The PRISMA 2020 statement: an updated guideline for reporting systematic reviews. *BMJ*. 2021. doi: 10.1136/bmj.n71\n\n［12］ Rethlefsen ML, Kirtley S, Waffenschmidt S, Ayala AP, Moher D, Page MJ. PRISMA-S: an extension to the PRISMA Statement for Reporting Literature Searches in Systematic Reviews. *Systematic Reviews*. 2021. doi: 10.1186/s13643-020-01542-z\n\n［13］ Higgins JPT, Thomas J, Chandler J, Cumpston M, Li T, Page MJ. Cochrane Handbook for Systematic Reviews of Interventions. *Cochrane*. 2023. https://training.cochrane.org/handbook\n\n［14］ Sterne JAC, Savovic J, Page MJ, Elbers RG, Blencowe NS, Boutron I. RoB 2: A revised Cochrane risk-of-bias tool for randomized trials. *BMJ*. 2019. doi: 10.1136/bmj.l4898\n\n［15］ Guyatt GH, Oxman AD, Vist GE, Kunz R, Falck-Ytter Y, Alonso-Coello P. GRADE guidelines: a new series of articles in the Journal of Clinical Epidemiology. *Journal of Clinical Epidemiology*. 2011. doi: 10.1016/j.jclinepi.2010.09.011\n\n［16］ DerSimonian R, Laird N. Meta-analysis in clinical trials. *Controlled Clinical Trials*. 1986. doi: 10.1016/0197-2456(86)90046-2\n\n［17］ Higgins JPT, Thompson SG, Deeks JJ, Altman DG. Measuring inconsistency in meta-analyses. *BMJ*. 2003. doi: 10.1136/bmj.327.7414.557\n"
+}

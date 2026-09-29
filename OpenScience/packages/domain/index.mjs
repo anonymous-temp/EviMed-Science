@@ -342,7 +342,7 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 14 exports
+// citedSources — 15 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
   EVIDENCE_SNAPSHOT_FILE,
@@ -352,6 +352,7 @@ export {
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
+  citationUrlDefectsByLine,
   citedHttpUrls,
   normalizedUrl,
   unrecordedCitationMessage,
@@ -841,7 +842,7 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 78 exports: 「循证 GEO」's closed vocabularies (pools, engines,
+// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
 // labels, the metric ids the platform's own views read, and the one
@@ -886,6 +887,9 @@ export {
   GEO_ORDER_OPEN_STATES,
   GEO_ORDER_STATES,
   GEO_OVERVIEW_METRICS,
+  GEO_OWNED_LINK_PLATFORMS,
+  GEO_OWNED_LINK_PLATFORM_LABELS_ZH,
+  GEO_OWNED_LINK_STATUSES,
   GEO_POOLS,
   GEO_POOL_LABELS_ZH,
   GEO_PROBE_JOB_STATUSES,

@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-28-review-001-share-that-entered-read-as-share-that-benefited",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/clinical-review-quality/results/2026-09-28-review-001-empa-kidney-report-family/deliverable/deliverables/empa-kidney-durability/clinical-evidence-report.md",
+  "line": 165,
+  "verbatim": "停药后期间部分（74%）人群仍有额外获益",
+  "whyItIsWrong": "74% is the share of the randomized population that entered post-trial follow-up (the report's own line 76, CLM-068), not the share that went on benefiting; the practice point turns an enrolment fraction into an efficacy claim.",
+  "caughtBy": "gate",
+  "note": "Delivered. The numeric check named 74 as absent from the claims cited on the line (it is CLM-068's number), which is the checkable half; that the sentence misreads what 74% counts is language, for the reviewer. The reviewer missed it."
+}

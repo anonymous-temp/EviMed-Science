@@ -20,6 +20,7 @@ from models.schemas import (
     ChartInfo, SupportingEvidence, LOW_RECALL_BELOW, SearchDiagnostics
 )
 from services.llm_service import llm_service
+from utils import number_display as shown
 from utils import safe_parse_json
 from core.research_context import render_research_context
 
@@ -403,7 +404,7 @@ class ReportGenerator:
 ## 已有分析素材
 - 文献总量: {stats['total_papers']}篇
 - 时间跨度: 2022-2026
-- 临床研究占比: {stats['clinical_ratio']:.1%}
+- 临床研究占比: {shown.percent(stats['clinical_ratio'] * 100)}
 - 已完成的分析模块: {', '.join(modules_available)}
 
 ## 关键发现摘要
@@ -905,7 +906,7 @@ class ReportGenerator:
 
 ## 证据基础
 - 系统检索并分析了{stats['total_papers']}篇相关文献（{datetime.now().year - 4}-{datetime.now().year}）
-- 临床研究占比: {stats['clinical_ratio']:.1%}
+- 临床研究占比: {shown.percent(stats['clinical_ratio'] * 100)}
 - 研究设计分布: {json.dumps(stats['design_distribution'], ensure_ascii=False)}
 
 ## 各模块核心发现
@@ -960,7 +961,7 @@ class ReportGenerator:
         )
         p2 = (
             f"样本中的研究设计分布为：{design_text}；系统计算的临床研究占比为"
-            f"{stats['clinical_ratio']:.1%}。所有比例只描述本次筛选样本，不外推为领域总体发文结构。"
+            f"{shown.percent(stats['clinical_ratio'] * 100)}。所有比例只描述本次筛选样本，不外推为领域总体发文结构。"
         )
         contradictions = module_data.get("M4_SCIENTIFIC_CONTRADICTION", {}).get("key_insights", [])
         p3 = (
@@ -1095,7 +1096,7 @@ class ReportGenerator:
         conclusion = (
             f"本次围绕「{query_context}」筛选{stats['total_papers']}条证据记录，"
             f"时间范围为{stats['earliest_year']}—{stats['latest_year']}年，"
-            f"系统分类的临床研究占比为{stats['clinical_ratio']:.1%}。"
+            f"系统分类的临床研究占比为{shown.percent(stats['clinical_ratio'] * 100)}。"
             "这些统计仅描述本次检索和相关性门禁后的样本，不代表领域全部发文或完成了系统综述。"
             f"待复核证据冲突为：{contradiction_text}。\n\n"
             f"通过真实PMID绑定保留的研究机会为：{opportunity_text}。"

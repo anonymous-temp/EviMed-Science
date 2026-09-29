@@ -2404,6 +2404,312 @@ test("a screening ledger path aimed at a protected file is refused, not written"
   assert.ok(written.some((target) => target.endsWith("screening-ledger.csv")));
 });
 
+// Every child this socket starts is released, the way the kernel's own
+// `subagent` tool releases its children (dsh-tool-subagent at the pinned kernel,
+// `settleForegroundRun`; `settleRun` for background ones): `ctx.subagents.start`
+// hands back a one-shot run whose holder awaits the result and then always
+// calls `dispose()`, and nothing else frees the child's agent, session and
+// scope in the kernel. Until 2026-09-29 neither plugin that starts children
+// disposed one, so every finished delegation and every screening batch stayed
+// resident until its parent agent was torn down. Released after the result and
+// never before it: the kernel's in-process driver cancels a child that is
+// disposed while it still works.
+
+/**
+ * A child run shaped as the kernel's in-process driver returns it: a result
+ * the test settles, a start signal whose abort cancels the child (its result
+ * then settles `aborted`), and a `dispose()` that notes whether the result had
+ * settled when it was called.
+ * @param {string} id @param {AbortSignal} [signal]
+ */
+function childRun(id, signal) {
+  let settled = false;
+  /** @type {(value: any) => void} */
+  let resolveResult = () => {};
+  /** @type {(error: any) => void} */
+  let rejectResult = () => {};
+  /** @type {Promise<any>} */
+  const result = new Promise((resolve, reject) => { resolveResult = resolve; rejectResult = reject; });
+  /** @type {{ afterResult: boolean }[]} */
+  const disposals = [];
+  const run = {
+    id,
+    result,
+    signal,
+    disposals,
+    /** @param {any} value */
+    settle(value) { if (!settled) { settled = true; resolveResult(value); } },
+    /** @param {any} error */
+    fail(error) { if (!settled) { settled = true; rejectResult(error); } },
+    /** @type {() => Promise<void>} */
+    async dispose() { disposals.push({ afterResult: settled }); },
+  };
+  signal?.addEventListener("abort", () => run.settle({ stopReason: "aborted", output: [] }), { once: true });
+  return run;
+}
+
+/**
+ * The kernel refuses to start a child whose signal is already aborted
+ * (`startInProcessRun`: "subagent request was aborted before child
+ * publication"), so no child exists to hold or release.
+ * @param {any} options
+ */
+function refuseAbortedStart(options) {
+  if (options?.signal?.aborted) throw new Error("subagent request was aborted before child publication");
+}
+
+/** Let settlements and their follow-ups run. */
+async function drain(ticks = 30) {
+  for (let tick = 0; tick < ticks; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** @param {ReturnType<typeof childRun>} child @param {string} label */
+function assertReleasedOnceAfterResult(child, label) {
+  assert.equal(child.disposals.length, 1, `${label}: released exactly once, was ${child.disposals.length}`);
+  assert.equal(child.disposals[0].afterResult, true, `${label}: released only after its result settled`);
+}
+
+/** A run-policy fixture whose every child start is a `childRun`, planned with one deliverable. */
+async function delegationFixture() {
+  /** @type {ReturnType<typeof childRun>[]} */
+  const children = [];
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: (/** @type {string} */ _seam, /** @type {any} */ options) => {
+      refuseAbortedStart(options);
+      const child = childRun(`child-${children.length + 1}`, options.signal);
+      children.push(child);
+      return child;
+    },
+  });
+  /** @type {string[]} */
+  const degraded = [];
+  f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line), notice() {} });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  return { ...f, children, degraded };
+}
+
+test("a delegated child is released once its result is in, and not while it works", async () => {
+  const f = await delegationFixture();
+  const started = await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  assert.equal(started.value.ok, true);
+  await drain();
+  assert.equal(f.children.length, 1);
+  assert.equal(f.children[0].disposals.length, 0, "a child that is still working is not released");
+
+  f.children[0].settle({ stopReason: "completed", output: [{ type: "text", text: "done" }] });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed");
+  assertReleasedOnceAfterResult(f.children[0], "completed child");
+  assert.deepEqual(f.degraded.filter((line) => /not released/.test(line)), []);
+});
+
+test("a delegated child whose result rejects is released once, and the delegation still fails with the fault", async () => {
+  const f = await delegationFixture();
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await drain();
+  f.children[0].fail(new Error("transport lost"));
+  const collected = await f.execute("evimed_await", {});
+  const result = collected.value.data.results[0];
+  assert.equal(result.status, "failed");
+  assert.match(result.summary, /子代理的结算没有完成：transport lost/, "the fault, not the release, is what the delegation reports");
+  assertReleasedOnceAfterResult(f.children[0], "faulted child");
+  assert.equal(f.children.length, 1, "an infrastructure fault is not retried");
+});
+
+test("a delegated child cancelled through the delegation call's signal is released once, after it settles aborted", async () => {
+  const f = await delegationFixture();
+  const controller = new AbortController();
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} }, { signal: controller.signal });
+  await drain();
+  assert.equal(f.children[0].disposals.length, 0);
+  controller.abort(new Error("researcher pressed stop"));
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "failed");
+  assertReleasedOnceAfterResult(f.children[0], "cancelled child");
+  assert.equal(f.children.length, 1, "a cancelled child is not retried");
+});
+
+test("a retried delegation releases the child that broke and then its retry, each once and each after its own result", async () => {
+  const f = await delegationFixture();
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await drain();
+  f.children[0].settle({ stopReason: "error", output: [], diagnostic: "temporary failure" });
+  await drain();
+  assert.equal(f.children.length, 2, "the child that broke is retried once");
+  assertReleasedOnceAfterResult(f.children[0], "first child");
+  assert.equal(f.children[1].disposals.length, 0, "the retry is still working");
+
+  f.children[1].settle({ stopReason: "completed", output: [] });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed");
+  assertReleasedOnceAfterResult(f.children[0], "first child");
+  assertReleasedOnceAfterResult(f.children[1], "retry");
+});
+
+test("a child whose start succeeded but whose bookkeeping threw is stopped and released, and the call still fails", async () => {
+  const f = await delegationFixture();
+  const set = f.childRows.set.bind(f.childRows);
+  let refused = false;
+  f.childRows.set = (/** @type {string} */ key, /** @type {any} */ value) => {
+    if (!refused) {
+      refused = true;
+      throw new Error("subagent medium unavailable");
+    }
+    return set(key, value);
+  };
+  await assert.rejects(f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} }), /subagent medium unavailable/);
+  await drain();
+  assert.equal(f.children.length, 1);
+  assert.equal(f.children[0].signal?.aborted, true, "a child nobody will follow is cancelled through its signal");
+  assertReleasedOnceAfterResult(f.children[0], "unfollowed child");
+});
+
+test("a retry whose bookkeeping threw is stopped and released, and the delegation fails", async () => {
+  const f = await delegationFixture();
+  const set = f.childRows.set.bind(f.childRows);
+  f.childRows.set = (/** @type {string} */ key, /** @type {any} */ value) => {
+    if (value?.retried && value.status === "running") throw new Error("subagent medium unavailable");
+    return set(key, value);
+  };
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await drain();
+  f.children[0].settle({ stopReason: "error", output: [], diagnostic: "temporary failure" });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "failed");
+  assert.equal(f.children.length, 2);
+  assert.equal(f.children[1].signal?.aborted, true, "the unfollowed retry is cancelled");
+  await drain();
+  assertReleasedOnceAfterResult(f.children[0], "first child");
+  assertReleasedOnceAfterResult(f.children[1], "unfollowed retry");
+});
+
+test("a delegated child whose release fails keeps its outcome, and the failure is recorded", async () => {
+  const f = await delegationFixture();
+  await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await drain();
+  const child = f.children[0];
+  child.dispose = async () => {
+    child.disposals.push({ afterResult: true });
+    throw new Error("child loop did not stop");
+  };
+  child.settle({ stopReason: "completed", output: [] });
+  const collected = await f.execute("evimed_await", {});
+  assert.equal(collected.value.data.results[0].status, "completed", "a failed release does not undo the child's work");
+  assert.equal(child.disposals.length, 1);
+  assert.ok(f.degraded.some((line) => /child session child-1 not released: child loop did not stop/.test(line)), JSON.stringify(f.degraded));
+});
+
+/**
+ * The screening tool mounted on the consistency harness, with a scripted
+ * `ctx.subagents.start`.
+ * @param {(index: number, options: any) => any} start @param {number} maxConcurrentChildren
+ */
+async function screeningFixture(start, maxConcurrentChildren) {
+  const { apply: applyScreening } = await import("../plugins/screening.mjs");
+  const ctx = harness();
+  /** @type {string[]} */
+  const written = [];
+  /** @type {string[]} */
+  const degraded = [];
+  ctx.provide("fs", {
+    resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`,
+    writeText: async (/** @type {any} */ target) => { written.push(target); },
+  });
+  ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => degraded.push(line) });
+  let starts = 0;
+  /** @type {Record<string, any>} */ (ctx).subagents = {
+    start: (/** @type {string} */ _seam, /** @type {any} */ options) => {
+      const index = starts++;
+      refuseAbortedStart(options);
+      return start(index, options);
+    },
+  };
+  await applyScreening(ctx, { batchSize: 1, maxConcurrentChildren });
+  /** @param {number} count @param {AbortSignal} [signal] */
+  const screen = (count, signal = AbortSignal.timeout(2000)) => ctx.tools.execute({
+    callId: "screen",
+    name: "evimed_screen_batch",
+    arguments: { criteria: "adults only", records: Array.from({ length: count }, (_, index) => ({ id: `r${index + 1}`, title: "t" })) },
+    cwd: "/workspace",
+    signal,
+  });
+  return { screen, written, degraded, starts: () => starts };
+}
+
+/** @param {string} id */
+const verdictOf = (id) => ({ stopReason: "completed", output: [], structured: { verdicts: [{ id, decision: "include", reason: "adults" }] } });
+
+test("every screening child that started is released once its result is in, whichever way the rest of its wave went", async () => {
+  /** @type {ReturnType<typeof childRun>[]} */
+  const children = [];
+  const f = await screeningFixture((index, options) => {
+    // The middle start is refused synchronously, the hardest shape: it used
+    // to reject the wave and strand the children already started.
+    if (index === 1) throw new Error("tool filter refused");
+    const child = childRun(`screen-${index + 1}`, options.signal);
+    children.push(child);
+    return child;
+  }, 3);
+  const pending = f.screen(3);
+  await drain();
+  assert.equal(children.length, 2, "both starts that were accepted produced a child");
+  assert.deepEqual(children.map((child) => child.disposals.length), [0, 0], "no child is released while it works");
+
+  children[0].settle(verdictOf("r1"));
+  await drain();
+  assertReleasedOnceAfterResult(children[0], "completed batch");
+  assert.equal(children[1].disposals.length, 0, "a sibling still working is not released with it");
+
+  children[1].fail(new Error("transport lost"));
+  const outcome = await pending;
+  assertReleasedOnceAfterResult(children[0], "completed batch");
+  assertReleasedOnceAfterResult(children[1], "faulted batch");
+  assert.equal(outcome.value.ok, true);
+  assert.equal(outcome.value.data.screened, 1, "the batch that finished is kept");
+  assert.equal(outcome.value.data.failures.length, 2, JSON.stringify(outcome.value.data.failures));
+  assert.ok(outcome.value.data.failures.some((/** @type {string} */ line) => /subagent start failed: tool filter refused/.test(line)));
+  assert.ok(outcome.value.data.failures.some((/** @type {string} */ line) => /transport lost/.test(line)));
+});
+
+test("a cancelled screening releases the child it started and starts no further wave", async () => {
+  /** @type {ReturnType<typeof childRun>[]} */
+  const children = [];
+  const f = await screeningFixture((index, options) => {
+    const child = childRun(`screen-${index + 1}`, options.signal);
+    children.push(child);
+    return child;
+  }, 1);
+  const controller = new AbortController();
+  const pending = f.screen(2, controller.signal);
+  await drain();
+  assert.equal(children.length, 1, "one wave of one");
+  controller.abort(new Error("researcher pressed stop"));
+  await assert.rejects(pending, /researcher pressed stop/);
+  assertReleasedOnceAfterResult(children[0], "cancelled batch");
+  assert.equal(f.starts(), 1, "no child is started after the call was cancelled");
+  assert.deepEqual(f.written, [], "a cancelled screening writes no ledger");
+});
+
+test("a screening child whose release fails keeps its verdicts, and the failure is recorded", async () => {
+  const f = await screeningFixture((index, options) => {
+    const child = childRun(`screen-${index + 1}`, options.signal);
+    child.dispose = async () => { throw new Error("child loop did not stop"); };
+    child.settle(verdictOf(`r${index + 1}`));
+    return child;
+  }, 2);
+  const outcome = await f.screen(2);
+  assert.equal(outcome.value.ok, true);
+  assert.equal(outcome.value.data.screened, 2, "a failed release does not undo the verdicts");
+  assert.deepEqual(outcome.value.data.failures, []);
+  assert.equal(f.degraded.filter((line) => /screening child not released: child loop did not stop/.test(line)).length, 2);
+});
+
 // §7.2 scenario: the run mirror reaches the workspace.
 //
 // The projection is what the control plane reads to see a run's evidence,

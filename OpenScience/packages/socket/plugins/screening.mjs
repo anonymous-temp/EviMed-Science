@@ -18,6 +18,8 @@
 import { configSchema, defineTool, registerTool, startSubagent, toSubagentOutcome, writeFileAt } from '@evimed/harness-port'
 import { isProtectedWritePath, normalizeWorkspacePath } from '@evimed/domain'
 import { chunk, renderScreeningLedger, screeningPrompt, SCREEN_VERDICT_SCHEMA } from '../src/screening.mjs'
+import { collectSubagentRun } from '../src/subagentRun.mjs'
+import { errorMessage } from '../src/runPolicy.mjs'
 
 const Schema = await configSchema()
 
@@ -89,6 +91,7 @@ export async function apply(ctx, config) {
       }
       const batches = chunk(records, config.batchSize)
       const parent = ctx.get('agents')?.get?.(call.agentId)
+      const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(call.sessionId) ?? ctx.get('evimedDiagnostics')
       /** @type {Record<string, any>[]} */
       const verdicts = []
       /** @type {string[]} */
@@ -100,7 +103,20 @@ export async function apply(ctx, config) {
       // 0 is "no ceiling" here as it is for delegation: one wave of every batch.
       const waveSize = Number(config.maxConcurrentChildren) > 0 ? Number(config.maxConcurrentChildren) : Math.max(1, batches.length)
       for (const wave of chunk(batches, waveSize)) {
-        const runs = await Promise.all(wave.map((batch, index) => startSubagent(ctx, {
+        // A cancelled call starts no further wave — it used to stop here by the
+        // next wave's starts rejecting, which `allSettled` below now reports
+        // instead. The children already out were cancelled through the signal
+        // they hold, and have been collected and released.
+        call.signal?.throwIfAborted?.()
+        // `allSettled`, not `Promise.all`: every child that did start is one
+        // this call owns and must release, and a sibling whose start was
+        // refused used to reject the whole wave and leave the ones that had
+        // started running with nobody holding them. A refused start is a batch
+        // that failed, reported like any other — the way the kernel's own
+        // background delegation reports one. `async` so a start that throws
+        // before it returns a promise is a rejection here too, not a throw out
+        // of `map` past the siblings it already started.
+        const starts = await Promise.allSettled(wave.map(async (batch, index) => startSubagent(ctx, {
           capability: 'evimed-screening',
           label: `筛选 ${index + 1}/${batches.length}`,
           prompt: screeningPrompt(String(args.criteria), batch),
@@ -111,15 +127,31 @@ export async function apply(ctx, config) {
           outputSchema: SCREEN_VERDICT_SCHEMA,
           maxDepth: 1,
         }, parent, call.signal)))
-        for (const run of runs) {
-          const outcome = toSubagentOutcome(run, await run.result)
+        // Each child is released as soon as its own result is in, not after
+        // the slowest sibling's; `collectSubagentRun` never rejects, so one
+        // child's fault cannot strand the others.
+        const collected = await Promise.all(starts.map((start) => (start.status === 'fulfilled' ? collectSubagentRun(start.value) : null)))
+        starts.forEach((start, index) => {
+          if (start.status === 'rejected') {
+            failures.push(`subagent start failed: ${errorMessage(start.reason)}`)
+            return
+          }
+          const collection = /** @type {import('../src/subagentRun.mjs').SubagentCollection} */ (collected[index])
+          // Recorded, not failed: the batch's verdicts stand, and what is left
+          // is a child the kernel may still hold.
+          if (collection.releaseError) diagnostics?.degrade?.(`screening child not released: ${collection.releaseError}`)
+          if (!collection.ok) {
+            failures.push(errorMessage(collection.error))
+            return
+          }
+          const outcome = toSubagentOutcome(start.value, collection.settled)
           if (outcome.stopReason !== 'completed') {
             failures.push(outcome.diagnostic || outcome.stopReason)
-            continue
+            return
           }
           const structured = /** @type {Record<string, any>} */ (outcome.structured ?? {})
           for (const verdict of Array.isArray(structured.verdicts) ? structured.verdicts : []) verdicts.push(verdict)
-        }
+        })
       }
 
       // `ledgerPath` is model-supplied, and every other write target in this

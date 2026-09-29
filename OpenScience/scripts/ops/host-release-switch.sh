@@ -67,10 +67,20 @@
 #      check: the switch finishes each step, prints BACKUP IS UNHEALTHY at once
 #      and again as its last line, and exits non-zero — the readiness check and
 #      its alert keep saying so until the backup is fixed.
+#  11. A switch does not reap work in flight unless told to (2026-09-29). The
+#      recreate step stops the runtimes, and a run in one of them dies: a GEO
+#      run was lost mid-step on 2026-09-25, and the acceptance battery lost one
+#      on 2026-09-28. Before `current` moves, the live release is asked what is
+#      running (`/api/ops/maintenance?activity=1`, loopback and the operator
+#      token, from inside its own container); agent runs, product jobs or busy
+#      runtimes stop the switch with their counts. `--allow-active` switches
+#      anyway. An unanswered question is a warning, not a stop: a release must
+#      still be possible when the old one is the thing that is broken.
 set -euo pipefail
-NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan]}"
+NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan | --allow-active]}"
 PRUNE=1; [ "${2:-}" = "--no-prune" ] && PRUNE=0
 PLAN=0; [ "${2:-}" = "--plan" ] && PLAN=1
+ALLOW_ACTIVE=0; for arg in "$@"; do [ "$arg" = "--allow-active" ] && ALLOW_ACTIVE=1; done
 ROOT="${EVIMED_ROOT:-/srv/evimed-science}"
 PROJECT="${EVIMED_COMPOSE_PROJECT:-web}"
 REL="${ROOT}/releases/${NEW}"
@@ -108,6 +118,30 @@ echo "  ${ALERT_RECEIVER_RESULT}"
 alert_config_changed=0
 if printf '%s' "$ALERT_RECEIVER_RESULT" | grep -q '"changed":\[".*alertmanager\.json'; then alert_config_changed=1; fi
 
+echo "=== work in flight (item 11) ==="
+ACTIVITY=$(docker exec "$WEB_CONTAINER" node -e '
+  const fs = require("node:fs");
+  const file = process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE;
+  const token = (file ? fs.readFileSync(file, "utf8") : process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN || "").trim();
+  fetch("http://127.0.0.1:8787/api/ops/maintenance?activity=1", { headers: { authorization: "Bearer " + token } })
+    .then((r) => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+    .then((body) => { const a = body.data.activity; console.log([a.runningAgentRuns, a.runningProductJobs, a.busyRuntimes].join(" ")); })
+    .catch((error) => { console.log("unknown " + error.message); });' 2>/dev/null || echo "unknown no-web-container")
+if ! [[ "$ACTIVITY" =~ ^[0-9]+\ [0-9]+\ [0-9]+$ || "$ACTIVITY" == unknown\ * ]]; then ACTIVITY="unknown ${ACTIVITY:-no answer}"; fi
+case "$ACTIVITY" in
+  unknown*) echo "  WARNING: could not read the live release's activity (${ACTIVITY#unknown }); switching without the check" ;;
+  "0 0 0") echo "  nothing in flight" ;;
+  *)
+    read -r active_runs active_jobs busy_runtimes <<<"$ACTIVITY"
+    if [ "$ALLOW_ACTIVE" = 1 ]; then
+      echo "  ${active_runs} agent run(s), ${active_jobs} product job(s), ${busy_runtimes} busy runtime(s) in flight; --allow-active: switching anyway"
+    else
+      echo "  REFUSED: ${active_runs} agent run(s), ${active_jobs} product job(s), ${busy_runtimes} busy runtime(s) in flight would be reaped."
+      echo "  Wait for them, or pass --allow-active. Nothing has moved; ${NEW} is still staged."
+      exit 3
+    fi
+    ;;
+esac
 echo "=== current -> ${NEW} ==="
 ln -sfn "$REL" "${ROOT}/current.next" && mv -T "${ROOT}/current.next" "${ROOT}/current"
 readlink -f "${ROOT}/current"

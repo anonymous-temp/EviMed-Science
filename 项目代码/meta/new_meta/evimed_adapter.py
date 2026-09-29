@@ -652,8 +652,10 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
     previous = next(((path, state) for path, state in jobs if state.get("requestDigest") == digest), None)
     if previous is not None:
         path, state = previous
-        if state.get("status") == "succeeded" and _stopped_before_manuscript(state):
-            return _resume_job(path, state)
+        # A terminal decision is the answer to its request, blocked or not,
+        # with or without a manuscript: resuming it replays the same inputs
+        # (production 0928b: resumed, refused again at the same step). Only a
+        # job that failed - crashed, killed, timed out - resumes.
         if state.get("status") == "succeeded":
             return _existing_job(path, state, "reused-succeeded")
         if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
@@ -751,30 +753,8 @@ def _existing_job(state_path: Path, state: dict[str, Any], outcome: str) -> dict
     }
 
 
-def _stopped_before_manuscript(state: dict[str, Any]) -> bool:
-    """A "blocked" job whose pipeline stopped before writing its manuscript.
-
-    MetaAgent exits 2 both for a finished review its release gate blocks and
-    for a refusal that stops the pipeline part-way (a method-admission refusal,
-    a synthesis that needs input); the job reads "succeeded" with release
-    status "blocked" either way. Only the second is resumable: its checkpoint
-    stops short of the manuscript, and the refusal cleared the steps it named.
-    """
-    if state.get("releaseStatus") != "blocked":
-        return False
-    project = _resumable_project(Path(str(state.get("outputRoot") or "")))
-    if project is None:
-        return False
-    try:
-        recorded = json.loads((project / ".checkpoint").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    completed = recorded.get("completed") if isinstance(recorded, dict) else recorded
-    return isinstance(completed, list) and "manuscript" not in completed
-
-
 def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
-    """Run a failed or part-way blocked job again from its own checkpoint, within the attempt limit."""
+    """Run a failed job again from its own checkpoint, within the attempt limit."""
     job_id = str(state.get("jobId"))
     limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
     runs = 1 + int(state.get("attempts") or 0)
@@ -792,10 +772,10 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
             artifacts=state.get("artifacts") or None,
             stop_reason="Stop retrying this request; its partial results are preserved.",
         )
-    previous_error = state.get("error") or (
-        "blocked: " + ", ".join(state.get("blockingReasons") or []) if state.get("releaseStatus") == "blocked" else None)
+    previous_error = state.get("error")
     for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid",
-                "releaseStatus", "blockingReasons", "nextActions", "modules"):
+                "releaseStatus", "blockingReasons", "warningReasons", "releaseSummary",
+                "deliverable", "nextActions", "modules"):
         state.pop(key, None)
     state.update({
         "status": "queued",
@@ -811,7 +791,7 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "warning",
         "summary": (
-            f"MetaAgent job {job_id} stopped earlier without a review and is resuming from its last "
+            f"MetaAgent job {job_id} failed earlier and is resuming from its last "
             f"completed step (run {runs + 1} of at most {limit})."
         ),
         "data": {
@@ -961,7 +941,12 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             # The engine's own vocabulary, so a consumer can check its
             # expectations against the set the engine can actually produce.
             "releaseStatusVocabulary": list(RELEASE_STATUSES),
+            # A written manuscript is delivered whatever its release status;
+            # False only when the job stopped before writing one.
+            "deliverable": bool(state.get("deliverable", release_status != "blocked")),
+            "releaseSummary": state.get("releaseSummary") or "",
             "blockingReasons": state.get("blockingReasons") or [],
+            "warningReasons": state.get("warningReasons") or [],
             "modules": state.get("modules") or {},
             "degraded": any(
                 entry.get("status") in {"degraded", "failed"}
@@ -973,8 +958,13 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         "artifacts": state.get("artifacts") or [],
     }
     if result["status"] == "warning":
-        result["warnings"] = ["Release warnings or blockers must be preserved in every summary."]
-        result["next_actions"] = state.get("nextActions") or ["Review release_decision.json before publication."]
+        result["warnings"] = [
+            "This terminal result is the answer to the request: deliver it and state each release finding "
+            "in plain words; do not start the job again to clear a finding."
+        ]
+        result["next_actions"] = state.get("nextActions") or [
+            "Read package/release_decision.json and state its findings in plain words when delivering."
+        ]
     return result
 
 
@@ -1028,6 +1018,15 @@ def _module_ledger(project: Path) -> dict[str, dict[str, Any]]:
     return modules
 
 
+def _evidence_accounting(project: Path) -> dict[str, Any]:
+    """The engine's own counts (package/evidence_accounting.json) for the run to quote, not to add up."""
+    try:
+        loaded = json.loads((project / "package" / "evidence_accounting.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
     candidates = [
         ("manuscript", project / "manuscript" / "draft.md"),
@@ -1035,7 +1034,15 @@ def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
         ("manuscript_docx", project / "manuscript" / "draft.docx"),
         ("release_decision", project / "package" / "release_decision.json"),
         ("review_package", project / "package" / "metaagent_export.zip"),
-        ("analysis", project / "analysis" / "meta_analysis.json"),
+        # The pooled result under the name each route writes: meta_results.json
+        # (pairwise) or synthesis_result.json (compiled). "meta_analysis.json"
+        # was listed here and never written, so no analysis was ever reported.
+        ("analysis", project / "analysis" / "meta_results.json"),
+        ("analysis", project / "analysis" / "synthesis_result.json"),
+        # The counts a report quotes (records, exclusions, studies) come from
+        # here, never from a sum the run makes.
+        ("prisma_flow", project / "prisma_flow.json"),
+        ("evidence_accounting", project / "package" / "evidence_accounting.json"),
     ]
     return [
         {"kind": kind, "path": candidate.relative_to(workspace).as_posix()}
@@ -1236,12 +1243,18 @@ def run_job(state_file: str) -> int:
         "returnCode": completed.returncode,
         "projectRelativePath": project.relative_to(workspace).as_posix(),
         "releaseStatus": str(release.get("status") or "unknown"),
+        # A package decision says whether a manuscript was written; a refusal
+        # before one (exit 2, no package) carries no such field.
+        "deliverable": release.get("deliverable") is True,
+        "releaseSummary": str(release.get("summary") or "")[:1000],
         "blockingReasons": [
             str(item)
             for item in (release.get("blocker_codes") or release.get("blocking_reasons") or [])
             if str(item).strip()
         ][:20],
+        "warningReasons": [str(item) for item in release.get("warning_codes") or [] if str(item).strip()][:40],
         "modules": _module_ledger(project),
+        "evidenceAccounting": _evidence_accounting(project),
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
         "artifacts": _artifact_list(workspace, project),
     })

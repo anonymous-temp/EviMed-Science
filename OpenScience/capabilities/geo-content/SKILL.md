@@ -59,6 +59,13 @@ A lower layer carries no claim the upper layer does not; public layers stay
 inside the label and carry no purchase link; a prescription medicine's product
 content goes to professional channels only.
 
+A correction corrects only what a source you read states differently. A figure
+you cannot find in the source you could read — often only the abstract — is
+「本项目可核验来源查不到」, not wrong: call an engine's statement wrong only when
+the source states a different value for the same estimand, time point, dose and
+population, and name the estimand (treatment-policy or efficacy) whenever a
+trial reports both. A correction never says 「不是 X」 on abstract-level evidence.
+
 GEO structure (the method pack's mechanics): the title is the question; the
 conclusion sits in the first 80–150 characters; paragraphs stand alone; every
 article carries statistics, a verbatim quotation and a clickable source; one

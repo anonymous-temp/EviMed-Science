@@ -8,6 +8,10 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.llm_retry import bounded_output_call, strict_suffix
+
+#: One ordinary assessment and one corrective re-ask carrying the broken contract.
+FULL_TEXT_SCREENING_ATTEMPTS = 2
 from new_meta.core.known_source_recovery import TRIAL_PUBLICATION_IDS, known_source_protocol_preferences
 from new_meta.core.project import Project
 from new_meta.core.extraction_status import IncompletePhaseError, persist_incomplete_phase
@@ -124,6 +128,20 @@ class ScreeningAgent(BaseAgent):
         else:
             ta_results = self._screen_title_abstract(papers, protocol)
         ta_results = self._retain_known_source_primary_records(ta_results, protocol)
+
+        # A record the model gave no usable judgment for is forwarded to
+        # full text (never excluded unread) and named with its reason.
+        from new_meta.core.llm_retry import clear_stage_failure, record_stage_failure
+        for row in ta_results:
+            identity = paper_identity(row["paper"])
+            failure = row.get("screening_failure")
+            if failure:
+                record_stage_failure(project, stage="title_abstract_screening", entity_id=identity,
+                                     reason=failure["reason"], error_type=failure["error_type"],
+                                     attempts=failure["attempts"],
+                                     consequence="the record is forwarded to full-text screening unjudged")
+            else:
+                clear_stage_failure(project, "title_abstract_screening", identity)
 
         included_ta = [r for r in ta_results if r["decision"] == "include"]
         excluded_ta = [r for r in ta_results if r["decision"] == "exclude"]
@@ -331,15 +349,31 @@ class ScreeningAgent(BaseAgent):
         }
 
     @classmethod
-    def _ta_forward_to_full_text(cls, paper: dict, attempts: list[dict], problem: str) -> dict:
-        """Keep incomplete triage visible without treating it as clinical exclusion."""
-        return {
+    def _ta_forward_to_full_text(cls, paper: dict, attempts: list[dict], problem: str,
+                                 failure: dict | None = None) -> dict:
+        """Keep incomplete triage visible without treating it as clinical exclusion.
+
+        ``failure`` marks a record the model gave no usable judgment for
+        (``{"reason", "error_type", "attempts"}``); screen_title_abstract records
+        it in quality/model_stage_failures.json.
+        """
+        row = {
             "paper": paper, "decision": "include", "priority_tier": "uncertain",
             "reason_code": "uncertain", "reason": f"Full-text review required: {problem}",
             "exclusion_criterion": None, "confidence": "low",
             "source_identity": cls._screening_source_identity(paper),
             "full_text_review_required": True, "screening_attempts": attempts,
         }
+        if failure:
+            row["screening_failure"] = failure
+        return row
+
+    @staticmethod
+    def _screening_failure(exc: BaseException) -> dict:
+        from new_meta.core.llm_retry import StageOutputUnusable
+        if isinstance(exc, StageOutputUnusable):
+            return {"reason": exc.reason, "error_type": exc.error_type, "attempts": exc.attempts}
+        return {"reason": "model_call_failed", "error_type": type(exc).__name__, "attempts": 1}
 
     @classmethod
     def _title_abstract_result(cls, raw: dict, paper: dict, protocol: ResearchProtocol) -> dict:
@@ -382,19 +416,25 @@ class ScreeningAgent(BaseAgent):
                     source_identity=json.dumps(self._screening_source_identity(paper), ensure_ascii=False),
                     title=paper.get("title", ""), abstract=paper.get("abstract", ""),
                 )
-                if temperature is None:
-                    decision = self.call_llm_structured(prompt, TitleAbstractScreeningDecision)
-                else:
+
+                def ask(attempt):
+                    text = prompt + strict_suffix(attempt)
+                    if temperature is None:
+                        return self.call_llm_structured(text, TitleAbstractScreeningDecision)
                     messages = [{"role": "system", "content": self.system_prompt},
-                                {"role": "user", "content": prompt}]
-                    decision = self.llm.structured_output(
+                                {"role": "user", "content": text}]
+                    return self.llm.structured_output(
                         messages, TitleAbstractScreeningDecision, temperature=temperature,
                     )
+
+                decision = bounded_output_call(ask, stage="title_abstract_screening", entity_id=paper_identity(paper),
+                                               log=lambda message: self.log(message, level="warning"))
                 return self._title_abstract_result(decision.model_dump(), paper, protocol)
             except Exception as exc:
                 problem = f"Title/abstract assessment unavailable ({type(exc).__name__})"
                 self.log(problem, level="warning")
-                return self._ta_forward_to_full_text(paper, [{"error": problem}], problem)
+                return self._ta_forward_to_full_text(paper, [{"error": problem}], problem,
+                                                     failure=self._screening_failure(exc))
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             return list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="T/A Screening", leave=False))
@@ -419,7 +459,12 @@ class ScreeningAgent(BaseAgent):
                 prompt = screening_prompts.BATCH_TITLE_ABSTRACT_SCREENING_PROMPT.format(
                     **self._ta_prompt_values(protocol), papers_block="\n".join(blocks),
                 )
-                batch_result = self.call_llm_structured(prompt, BatchScreeningResult, max_tokens=8192)
+                batch_result = bounded_output_call(
+                    lambda attempt: self.call_llm_structured(prompt + strict_suffix(attempt), BatchScreeningResult,
+                                                             max_tokens=8192),
+                    stage="title_abstract_screening_batch",
+                    entity_id=",".join(paper_identity(paper) for paper in batch),
+                    log=lambda message: self.log(message, level="warning"))
                 decisions = batch_result.decisions
                 grouped: dict[str, list[dict]] = {}
                 for raw in decisions:
@@ -428,9 +473,15 @@ class ScreeningAgent(BaseAgent):
                     if isinstance(record_id, str):
                         grouped.setdefault(record_id, []).append(raw)
             except Exception as exc:
+                # The batch's own output failed in every bounded attempt: each
+                # record is assessed on its own, as a missing ID already is,
+                # rather than forwarded unjudged.
                 problem = f"Batch title/abstract assessment unavailable ({type(exc).__name__})"
                 self.log(problem, level="warning")
-                return [self._ta_forward_to_full_text(p, [{"error": problem}], problem) for p in batch]
+                rows = self._screen_title_abstract(batch, protocol)
+                for row in rows:
+                    row.setdefault("batch_screening_failure", self._screening_failure(exc))
+                return rows
 
             results = []
             for paper in batch:
@@ -515,8 +566,13 @@ class ScreeningAgent(BaseAgent):
                 full_text=full_text,
             )
             attempts = []
-            current_prompt = prompt
-            for _ in range(2):
+
+            def assess(attempt):
+                # The shared bounded retry: from the second attempt the prompt
+                # carries the previous response and why it could not be used.
+                current_prompt = prompt if attempt == 1 else prompt + screening_prompts.FULL_TEXT_CORRECTION_PROMPT.format(
+                    previous_attempt=json.dumps(attempts[-1], ensure_ascii=False),
+                )
                 response = None
                 try:
                     raw = self.call_llm_structured(current_prompt, FullTextScreeningDecision)
@@ -525,20 +581,30 @@ class ScreeningAgent(BaseAgent):
                     checks = self._validate_full_text_decision(
                         decision, paper, protocol, full_text_available=full_text_available,
                     )
-                    attempts.append({"response": response, "validation_error": None})
-                    result = {"paper": paper, **decision.model_dump(),
-                              "identity_check_results": checks, "screening_attempts": attempts}
-                    return self._apply_full_text_role_policy(result, paper, parsed, protocol=protocol)
                 except Exception as exc:
                     attempts.append({"response": response, "validation_error": str(exc)})
-                    current_prompt = prompt + screening_prompts.FULL_TEXT_CORRECTION_PROMPT.format(
-                        previous_attempt=json.dumps(attempts[-1], ensure_ascii=False),
-                    )
-            return {"paper": paper, "decision": "review_required", "reason_code": "uncertain",
-                    "reason": "Full-text screening requires review after one corrective assessment: "
-                              + attempts[-1]["validation_error"],
-                    "confidence": "low", "source_identity": self._screening_source_identity(paper),
-                    "screening_attempts": attempts}
+                    raise
+                attempts.append({"response": response, "validation_error": None})
+                return decision, checks
+
+            try:
+                # Full-text screening keeps its one corrective re-ask (the second
+                # prompt names the contract the first answer broke) and, as
+                # before, re-asks after any failure of the first call.
+                decision, checks = bounded_output_call(assess, stage="full_text_screening", entity_id=paper_id,
+                                                       attempts=FULL_TEXT_SCREENING_ATTEMPTS,
+                                                       retry_if=lambda exc: True,
+                                                       log=lambda message: self.log(message, level="warning"))
+            except Exception as exc:
+                failure = self._screening_failure(exc)
+                return {"paper": paper, "decision": "review_required", "reason_code": "uncertain",
+                        "reason": f"Full-text screening requires review after {len(attempts)} assessment attempt(s): "
+                                  + (attempts[-1]["validation_error"] if attempts else type(exc).__name__),
+                        "confidence": "low", "source_identity": self._screening_source_identity(paper),
+                        "screening_attempts": attempts, "screening_failure": failure}
+            result = {"paper": paper, **decision.model_dump(),
+                      "identity_check_results": checks, "screening_attempts": attempts}
+            return self._apply_full_text_role_policy(result, paper, parsed, protocol=protocol)
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             results = list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="Full-text Screening", leave=False))
@@ -690,9 +756,13 @@ class ScreeningAgent(BaseAgent):
         # Reviewer 2 (with slight temperature variation for different perspective)
         results_r2 = self._screen_ta_with_temp(papers, protocol, temperature=0.3)
 
-        # Compute inter-rater agreement
-        decisions_r1 = [r["decision"] for r in results_r1]
-        decisions_r2 = [r["decision"] for r in results_r2]
+        # Compute inter-rater agreement over the records both reviewers judged:
+        # a call that returned no usable output is forwarded as "include", and
+        # counting it would read as agreement that never happened.
+        judged = [(r1, r2) for r1, r2 in zip(results_r1, results_r2)
+                  if not r1.get("screening_failure") and not r2.get("screening_failure")]
+        decisions_r1 = [r1["decision"] for r1, _ in judged]
+        decisions_r2 = [r2["decision"] for _, r2 in judged]
         kappa = self._cohens_kappa(decisions_r1, decisions_r2)
         self.log(f"Inter-rater agreement (Cohen's kappa): {kappa:.3f}")
 
@@ -700,7 +770,9 @@ class ScreeningAgent(BaseAgent):
         merged = []
         conflicts = 0
         for r1, r2 in zip(results_r1, results_r2):
-            if r1["decision"] == r2["decision"]:
+            if r1.get("screening_failure") and not r2.get("screening_failure"):
+                r1, r2 = r2, r1  # the reviewer that judged the record speaks for it
+            if r1["decision"] == r2["decision"] or r2.get("screening_failure"):
                 merged.append({**r1, "reviewer_decisions": [
                     {k: v for k, v in row.items() if k != "paper"} for row in (r1, r2)
                 ]})

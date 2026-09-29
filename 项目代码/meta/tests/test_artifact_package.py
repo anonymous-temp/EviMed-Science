@@ -2136,7 +2136,7 @@ def test_artifact_package_includes_submission_readiness_review(tmp_path: Path) -
     assert "mini_ready" in readiness_html
 
 
-def test_submission_readiness_blocks_missing_project_submission_gate(tmp_path: Path) -> None:
+def test_submission_readiness_flags_missing_project_submission_gate(tmp_path: Path) -> None:
     project = Project("missing project submission gate", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -2173,9 +2173,9 @@ def test_submission_readiness_blocks_missing_project_submission_gate(tmp_path: P
     )
 
     gate = next(item for item in readiness["gates"] if item["id"] == "project_submission_quality_gate")
-    assert readiness["status"] == "blocked"
-    assert readiness["passed"] is False
-    assert gate["status"] == "fail"
+    assert readiness["status"] == "ready_with_warnings"  # advisory since 2026-09-29: core.release_tiers
+    assert readiness["passed"] is True  # advisory since 2026-09-29: core.release_tiers
+    assert gate["check_status"] == "fail" and gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "project_submission_quality_gate" in gate["detail"]
 
 
@@ -2621,7 +2621,7 @@ def test_publication_similarity_review_flags_draft_below_85_percent(tmp_path: Pa
     assert review["next_actions"]
 
 
-def test_submission_readiness_blocks_requested_chinese_manuscript_written_in_english(tmp_path: Path) -> None:
+def test_submission_readiness_flags_requested_chinese_manuscript_written_in_english(tmp_path: Path) -> None:
     project = Project("language mismatch package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -2702,13 +2702,15 @@ def test_submission_readiness_blocks_requested_chinese_manuscript_written_in_eng
     )
 
     language_gate = next(gate for gate in readiness["gates"] if gate["id"] == "manuscript_language")
-    assert language_gate["status"] == "fail"
+    assert language_gate["check_status"] == "fail" and language_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "expected=zh" in language_gate["detail"]
     assert "detected=en" in language_gate["detail"]
-    assert readiness["passed"] is False
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert language_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
 
 
-def test_submission_readiness_blocks_heading_only_language_translation(tmp_path: Path) -> None:
+def test_submission_readiness_flags_heading_only_language_translation(tmp_path: Path) -> None:
     project = Project("mixed language package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -2789,10 +2791,12 @@ def test_submission_readiness_blocks_heading_only_language_translation(tmp_path:
     )
 
     language_gate = next(gate for gate in readiness["gates"] if gate["id"] == "manuscript_language")
-    assert language_gate["status"] == "fail"
+    assert language_gate["check_status"] == "fail" and language_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "expected=zh" in language_gate["detail"]
     assert "detected=mixed" in language_gate["detail"]
-    assert readiness["passed"] is False
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert language_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
 
 
 def test_review_language_accepts_chinese_medical_abbreviations_and_search_code_blocks() -> None:
@@ -3015,7 +3019,7 @@ def test_submission_readiness_passes_when_retryable_llm_issue_recovered_without_
     assert gate["status"] == "pass"
 
 
-def test_submission_readiness_blocks_primary_meta_with_missing_formal_rob(tmp_path: Path) -> None:
+def test_submission_readiness_flags_primary_meta_with_missing_formal_rob(tmp_path: Path) -> None:
     project = Project("rob completeness package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -3094,12 +3098,12 @@ def test_submission_readiness_blocks_primary_meta_with_missing_formal_rob(tmp_pa
     assert rob_audit["summary"]["missing_formal_rob"] == 1
     assert rob_audit["summary"]["synthetic_rob"] == 0
     assert rob_audit["issues"][0]["study_id"] == "S2"
-    assert gate["status"] == "fail"
+    assert gate["check_status"] == "fail" and gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "formal risk-of-bias assessment" in gate["detail"]
     assert "Jones 2024" in rob_audit_html
 
 
-def test_submission_readiness_blocks_primary_meta_with_synthetic_rob(tmp_path: Path) -> None:
+def test_submission_readiness_flags_primary_meta_with_synthetic_rob(tmp_path: Path) -> None:
     project = Project("synthetic rob package", output_dir=tmp_path / uuid4().hex)
     project.save_text("draft.md", "# Synthetic RoB manuscript", subdir="manuscript")
     project.save_json(
@@ -3144,7 +3148,7 @@ def test_submission_readiness_blocks_primary_meta_with_synthetic_rob(tmp_path: P
     assert rob_audit["summary"]["missing_formal_rob"] == 0
     assert rob_audit["summary"]["synthetic_rob"] == 1
     assert rob_audit["issues"][0]["code"] == "primary_study_synthetic_rob"
-    assert gate["status"] == "fail"
+    assert gate["check_status"] == "fail" and gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
 
 
 def test_artifact_package_includes_human_readable_calculation_audit(tmp_path: Path) -> None:
@@ -3450,7 +3454,7 @@ def test_primary_source_trace_review_localizes_chinese_handoff_surface(tmp_path:
     assert "Missing quote" not in trace_html
 
 
-def test_submission_readiness_blocks_primary_source_trace_gaps(tmp_path: Path) -> None:
+def test_submission_readiness_flags_primary_source_trace_gaps(tmp_path: Path) -> None:
     project = Project("primary source trace gap package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     long_text = " ".join(["auditability"] * 6200)
@@ -3583,9 +3587,9 @@ def test_submission_readiness_blocks_primary_source_trace_gaps(tmp_path: Path) -
     assert trace["summary"]["missing_source_quote_rows"] == 1
     assert trace["summary"]["missing_source_location_rows"] == 1
     assert trace["issues"][0]["code"] == "primary_source_quote_missing"
-    assert source_trace_gate["status"] == "fail"
+    assert source_trace_gate["check_status"] == "fail" and source_trace_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "traceable=1/2" in source_trace_gate["detail"]
-    assert readiness["status"] == "blocked"
+    assert readiness["status"] == "ready_with_warnings"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["primary_source_trace_failed_issues"] == 2
     assert "Missing source quote" in trace_html
 
@@ -4235,7 +4239,7 @@ def test_artifact_package_benchmark_alignment_surfaces_equivalent_zero_tau_model
     assert "Random-effects model is numerically equivalent to the fixed-effect anchor because tau-squared is 0" in html
 
 
-def test_submission_readiness_blocks_reference_list_bibtex_mismatch(tmp_path: Path) -> None:
+def test_submission_readiness_flags_reference_list_bibtex_mismatch(tmp_path: Path) -> None:
     project = Project("reference audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -4376,8 +4380,10 @@ def test_submission_readiness_blocks_reference_list_bibtex_mismatch(tmp_path: Pa
     assert reference_audit["summary"]["count_mismatch"] is True
     assert reference_audit["issues"][0]["code"] == "reference_count_mismatch"
     reference_gate = next(gate for gate in readiness["gates"] if gate["id"] == "references")
-    assert reference_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert reference_gate["check_status"] == "fail" and reference_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert reference_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["reference_audit_count_mismatch"] is True
     assert "Reference Count Mismatch" in reference_html
 
@@ -4466,7 +4472,7 @@ def test_reference_audit_omits_chinese_count_mismatch_banner_when_counts_match(t
     assert "稿件编号参考文献清单与 references.bib 的条目数不同" not in reference_html
 
 
-def test_submission_readiness_blocks_journal_references_missing_journal_title(tmp_path: Path) -> None:
+def test_submission_readiness_flags_journal_references_missing_journal_title(tmp_path: Path) -> None:
     project = Project("reference completeness package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -4510,7 +4516,7 @@ def test_submission_readiness_blocks_journal_references_missing_journal_title(tm
     reference_gate = next(gate for gate in readiness["gates"] if gate["id"] == "references")
     assert reference_audit["summary"]["entries_missing_journal"] == 1
     assert reference_audit["issues"][0]["code"] == "reference_missing_journal"
-    assert reference_gate["status"] == "fail"
+    assert reference_gate["check_status"] == "fail" and reference_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["reference_audit_missing_journal"] == 1
 
 
@@ -4581,7 +4587,7 @@ def test_reference_audit_does_not_require_volume_pages_for_handbook_urls(tmp_pat
     assert not any(issue["code"] == "reference_missing_volume_or_pages" for issue in reference_audit["issues"])
 
 
-def test_submission_readiness_blocks_full_length_meta_without_main_text_citations(tmp_path: Path) -> None:
+def test_submission_readiness_flags_full_length_meta_without_main_text_citations(tmp_path: Path) -> None:
     project = Project("citation audit package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     long_text = " ".join(["citationaudit"] * 6200)
@@ -4653,9 +4659,11 @@ def test_submission_readiness_blocks_full_length_meta_without_main_text_citation
     assert citation_audit["summary"]["reference_entries"] == 2
     assert citation_audit["summary"]["main_text_inline_citations"] == 0
     assert citation_audit["issues"][0]["code"] == "section_citations_missing"
-    assert citation_gate["status"] == "fail"
+    assert citation_gate["check_status"] == "fail" and citation_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "Introduction=0" in citation_gate["detail"]
-    assert readiness["status"] == "blocked"
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert citation_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["citation_audit_failed_issues"] >= 1
     assert "Citation Coverage Issue" in citation_html
 
@@ -4809,7 +4817,7 @@ def test_citation_audit_warns_about_excessive_global_citation_density(tmp_path: 
     assert issue["section"] == "Main text"
 
 
-def test_citation_audit_blocks_repeated_large_citation_clusters(tmp_path: Path) -> None:
+def test_citation_audit_warns_on_repeated_large_citation_clusters(tmp_path: Path) -> None:
     project = Project("repeated large citation cluster", output_dir=tmp_path / uuid4().hex)
     references = "\n".join(f"[{i}] Reference {i}." for i in range(1, 24))
     project.save_text(
@@ -4834,9 +4842,12 @@ def test_citation_audit_blocks_repeated_large_citation_clusters(tmp_path: Path) 
     audit = _build_citation_audit_review(project)
 
     issue = next(item for item in audit["issues"] if item["code"] == "repeated_large_citation_cluster")
-    assert audit["passed"] is False
-    assert issue["severity"] == "fail"
-    assert audit["summary"]["failed_issues"] >= 1
+    # A warning with its locations since 2026-09-29 (coordinator ruling,
+    # principle 13): a repeated bundle no longer blocks the whole manuscript.
+    assert issue["severity"] == "warn"
+    assert audit["summary"]["warning_issues"] >= 1
+    assert audit["summary"]["repeated_large_citation_cluster_locations"] == [
+        {"citation_marker": issue["citation_marker"], "sections": ["Discussion"], "occurrences": 3}]
     assert audit["summary"]["repeated_large_citation_clusters"] == 1
     assert issue["citation_numbers"] == [3, 5, 7, 20, 23]
     assert issue["occurrences"] == 3
@@ -6301,7 +6312,7 @@ def test_readiness_audits_recognize_chinese_table_and_figure_labels(tmp_path: Pa
     assert summary["figure_count"] == 1
 
 
-def test_submission_readiness_blocks_unreferenced_main_figures(tmp_path: Path) -> None:
+def test_submission_readiness_flags_unreferenced_main_figures(tmp_path: Path) -> None:
     project = Project("cross reference audit package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     long_text = " ".join(["crossrefaudit"] * 6200)
@@ -6372,9 +6383,11 @@ def test_submission_readiness_blocks_unreferenced_main_figures(tmp_path: Path) -
     assert cross_ref["summary"]["defined_figures"] == 1
     assert cross_ref["summary"]["main_text_referenced_figures"] == 0
     assert cross_ref["issues"][0]["code"] == "figure_unreferenced_in_main_text"
-    assert cross_ref_gate["status"] == "fail"
+    assert cross_ref_gate["check_status"] == "fail" and cross_ref_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "figures=0/1" in cross_ref_gate["detail"]
-    assert readiness["status"] == "blocked"
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert cross_ref_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["cross_reference_audit_unreferenced_figures"] == 1
     assert "Cross-Reference Issue" in cross_ref_html
 
@@ -6426,7 +6439,7 @@ def test_writer_backfills_missing_figure_reference_after_fact_repair_removes_tex
     assert 2 in WritingAgent._numbered_label_refs(main_text, "Figure")
 
 
-def test_submission_readiness_blocks_figures_without_legends(tmp_path: Path) -> None:
+def test_submission_readiness_flags_figures_without_legends(tmp_path: Path) -> None:
     project = Project("figure legend audit package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     long_text = " ".join(["figurelegendaudit"] * 6200)
@@ -6501,13 +6514,13 @@ def test_submission_readiness_blocks_figures_without_legends(tmp_path: Path) -> 
     assert legend_audit["summary"]["figure_count"] == 1
     assert legend_audit["summary"]["figures_with_legends"] == 0
     assert legend_audit["issues"][0]["code"] == "figure_legend_missing"
-    assert legend_gate["status"] == "fail"
+    assert legend_gate["check_status"] == "fail" and legend_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "legends=0/1" in legend_gate["detail"]
     assert manifest["review"]["figure_legend_audit_missing_legends"] == 1
     assert "Figure Legend Issue" in legend_html
 
 
-def test_submission_readiness_blocks_tables_without_footnotes(tmp_path: Path) -> None:
+def test_submission_readiness_flags_tables_without_footnotes(tmp_path: Path) -> None:
     project = Project("table footnote audit package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     long_text = " ".join(["footnoteaudit"] * 6200)
@@ -6578,13 +6591,13 @@ def test_submission_readiness_blocks_tables_without_footnotes(tmp_path: Path) ->
     assert table_audit["summary"]["table_count"] == 1
     assert table_audit["summary"]["tables_with_notes"] == 0
     assert table_audit["issues"][0]["code"] == "table_footnote_missing"
-    assert table_gate["status"] == "fail"
+    assert table_gate["check_status"] == "fail" and table_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "notes=0/1" in table_gate["detail"]
     assert manifest["review"]["table_footnote_audit_missing_notes"] == 1
     assert "Table Footnote Issue" in table_html
 
 
-def test_submission_readiness_blocks_prisma_flow_mismatch(tmp_path: Path) -> None:
+def test_submission_readiness_flags_prisma_flow_mismatch(tmp_path: Path) -> None:
     project = Project("prisma audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -6741,8 +6754,10 @@ def test_submission_readiness_blocks_prisma_flow_mismatch(tmp_path: Path) -> Non
     assert prisma_audit["summary"]["mismatched_fields"] == 5
     assert prisma_audit["issues"][0]["code"] == "prisma_field_mismatch"
     prisma_gate = next(gate for gate in readiness["gates"] if gate["id"] == "prisma_flow")
-    assert prisma_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert prisma_gate["check_status"] == "fail" and prisma_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert prisma_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["prisma_audit_mismatched_fields"] == 5
     assert "PRISMA Flow Mismatch" in prisma_html
 
@@ -6857,7 +6872,7 @@ def test_citation_audit_recommends_bibliography_trials_for_uncited_discussion_cl
     assert issue["recommended_citations"][:2] == [1, 2]
 
 
-def test_submission_readiness_blocks_when_exact_search_query_is_not_in_manuscript(tmp_path: Path) -> None:
+def test_submission_readiness_flags_when_exact_search_query_is_not_in_manuscript(tmp_path: Path) -> None:
     project = Project("search audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -7013,13 +7028,15 @@ def test_submission_readiness_blocks_when_exact_search_query_is_not_in_manuscrip
     assert search_audit["summary"]["query_chars"] == len(exact_query)
     assert search_audit["issues"][0]["code"] == "search_query_not_reproduced"
     search_gate = next(gate for gate in readiness["gates"] if gate["id"] == "search_strategy")
-    assert search_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert search_gate["check_status"] == "fail" and search_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert search_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["search_strategy_audit_exact_query_reproduced"] is False
     assert "Search Query Mismatch" in search_html
 
 
-def test_submission_readiness_blocks_missing_referenced_figure_asset(tmp_path: Path) -> None:
+def test_submission_readiness_flags_missing_referenced_figure_asset(tmp_path: Path) -> None:
     project = Project("figure audit package", output_dir=tmp_path / uuid4().hex)
     exact_query = '("COVID-19"[tiab] AND corticosteroids[tiab]) AND mortality[tiab]'
     project.save_text(
@@ -7175,8 +7192,10 @@ def test_submission_readiness_blocks_missing_referenced_figure_asset(tmp_path: P
     assert figure_audit["summary"]["missing_referenced_images"] == 1
     assert figure_audit["issues"][0]["code"] == "figure_image_missing"
     figures_gate = next(gate for gate in readiness["gates"] if gate["id"] == "figures")
-    assert figures_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert figures_gate["check_status"] == "fail" and figures_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert figures_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
     assert manifest["review"]["figure_audit_missing_referenced_images"] == 1
     assert "Missing Figure Asset" in figure_html
 
@@ -7345,7 +7364,7 @@ def test_submission_readiness_blocks_primary_result_mismatch(tmp_path: Path) -> 
     assert "Primary Result Mismatch" in primary_html
 
 
-def test_submission_readiness_blocks_unsupported_primary_effect_claim(tmp_path: Path) -> None:
+def test_submission_readiness_flags_unsupported_primary_effect_claim(tmp_path: Path) -> None:
     project = Project("claim support package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -7415,7 +7434,7 @@ def test_submission_readiness_blocks_unsupported_primary_effect_claim(tmp_path: 
     assert "Claim support manuscript" in audit_html
     assert "0.90" in audit_html
     claim_gate = next(gate for gate in readiness["gates"] if gate["id"] == "claim_support")
-    assert claim_gate["status"] == "fail"
+    assert claim_gate["check_status"] == "fail" and claim_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert "unsupported=1" in claim_gate["detail"]
     assert manifest["review"]["claim_support_audit_included"] is True
     assert manifest["review"]["claim_support_unsupported_claims"] == 1
@@ -7711,7 +7730,7 @@ def test_claim_support_audit_ignores_method_descriptions_without_result_values(t
     assert "review/claim_support_audit.json" not in names
 
 
-def test_submission_readiness_blocks_internal_abstract_notes(tmp_path: Path) -> None:
+def test_submission_readiness_flags_internal_abstract_notes(tmp_path: Path) -> None:
     project = Project("abstract polish audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -7773,13 +7792,13 @@ def test_submission_readiness_blocks_internal_abstract_notes(tmp_path: Path) -> 
     assert abstract_audit["summary"]["failed_issues"] == 1
     assert abstract_audit["issues"][0]["code"] == "abstract_internal_note"
     abstract_gate = next(gate for gate in readiness["gates"] if gate["id"] == "abstract_polish")
-    assert abstract_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert abstract_gate["check_status"] == "fail" and abstract_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    assert readiness["status"] == "ready_with_warnings"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["abstract_audit_failed_issues"] == 1
     assert "Abstract Polish Issue" in abstract_html
 
 
-def test_submission_readiness_blocks_internal_publication_tone(tmp_path: Path) -> None:
+def test_submission_readiness_flags_internal_publication_tone(tmp_path: Path) -> None:
     project = Project("publication tone audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -7847,8 +7866,8 @@ def test_submission_readiness_blocks_internal_publication_tone(tmp_path: Path) -
     assert {issue["code"] for issue in tone_audit["issues"]} == {"publication_internal_tone"}
     assert all("Source audit for selected primary rows" not in issue.get("excerpt", "") for issue in tone_audit["issues"])
     tone_gate = next(gate for gate in readiness["gates"] if gate["id"] == "publication_tone")
-    assert tone_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert tone_gate["check_status"] == "fail" and tone_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    assert readiness["status"] == "ready_with_warnings"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["publication_tone_audit_failed_issues"] == 4
     assert "Publication Tone Issue" in tone_html
 
@@ -8061,7 +8080,7 @@ def test_publication_tone_audit_omits_chinese_issue_banner_when_clean(tmp_path: 
     assert "主稿正文包含内部或工程化措辞" not in html
 
 
-def test_clinical_interpretation_audit_blocks_process_only_discussion(tmp_path: Path) -> None:
+def test_clinical_interpretation_audit_flags_process_only_discussion(tmp_path: Path) -> None:
     project = Project("clinical interpretation process-only package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -8120,7 +8139,7 @@ def test_clinical_interpretation_audit_blocks_process_only_discussion(tmp_path: 
     assert "benefit_harm_safety" in audit["summary"]["missing_domains"]
     assert audit["issues"][0]["code"] == "clinical_interpretation_depth_low"
     interpretation_gate = next(gate for gate in readiness["gates"] if gate["id"] == "clinical_interpretation")
-    assert interpretation_gate["status"] == "fail"
+    assert interpretation_gate["check_status"] == "fail" and interpretation_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["clinical_interpretation_audit_failed_issues"] == 1
     assert "Clinical Interpretation Issue" in html
 
@@ -8295,7 +8314,7 @@ def test_chinese_clinical_interpretation_audit_accepts_multidomain_discussion(tm
     assert audit["summary"]["result_context_present"] is True
 
 
-def test_submission_readiness_blocks_verbose_pico_in_interpretive_sections(tmp_path: Path) -> None:
+def test_submission_readiness_flags_verbose_pico_in_interpretive_sections(tmp_path: Path) -> None:
     project = Project("readability audit package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -8368,13 +8387,13 @@ def test_submission_readiness_blocks_verbose_pico_in_interpretive_sections(tmp_p
     assert readability_audit["issues"][0]["code"] == "verbose_pico_fragment"
     assert {issue["section"] for issue in readability_audit["issues"]} == {"Methods", "Discussion"}
     readability_gate = next(gate for gate in readiness["gates"] if gate["id"] == "readability")
-    assert readability_gate["status"] == "fail"
-    assert readiness["status"] == "blocked"
+    assert readability_gate["check_status"] == "fail" and readability_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
+    assert readiness["status"] == "ready_with_warnings"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["review"]["readability_audit_failed_issues"] == 4
     assert "Readability Issue" in readability_html
 
 
-def test_submission_readiness_blocks_chinese_verbose_pico_in_interpretive_sections(tmp_path: Path) -> None:
+def test_submission_readiness_flags_chinese_verbose_pico_in_interpretive_sections(tmp_path: Path) -> None:
     project = Project("readability audit chinese package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -8429,10 +8448,10 @@ def test_submission_readiness_blocks_chinese_verbose_pico_in_interpretive_sectio
         "Detailed Chinese comparator phrase",
     }.issubset({issue["label"] for issue in readability_audit["issues"]})
     readability_gate = next(gate for gate in readiness["gates"] if gate["id"] == "readability")
-    assert readability_gate["status"] == "fail"
+    assert readability_gate["check_status"] == "fail" and readability_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
 
 
-def test_submission_readiness_blocks_overlong_english_interpretive_sentences(tmp_path: Path) -> None:
+def test_submission_readiness_flags_overlong_english_interpretive_sentences(tmp_path: Path) -> None:
     project = Project("readability long sentence package", output_dir=tmp_path / uuid4().hex)
     long_discussion_sentence = (
         "For clinical interpretation the pooled estimate should be considered together with baseline risk, "
@@ -8482,10 +8501,10 @@ def test_submission_readiness_blocks_overlong_english_interpretive_sentences(tmp
     assert readability_audit["issues"][0]["section"] == "Discussion"
     assert "Methods" not in {issue.get("section") for issue in readability_audit["issues"]}
     readability_gate = next(gate for gate in readiness["gates"] if gate["id"] == "readability")
-    assert readability_gate["status"] == "fail"
+    assert readability_gate["check_status"] == "fail" and readability_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
 
 
-def test_submission_readiness_blocks_overlong_chinese_interpretive_sentences(tmp_path: Path) -> None:
+def test_submission_readiness_flags_overlong_chinese_interpretive_sentences(tmp_path: Path) -> None:
     project = Project("readability long chinese sentence package", output_dir=tmp_path / uuid4().hex)
     long_discussion_sentence = (
         "临床解释时应同时考虑基线风险、复合终点组成、随访时间、肾功能、容量状态、背景治疗、"
@@ -8528,7 +8547,7 @@ def test_submission_readiness_blocks_overlong_chinese_interpretive_sentences(tmp
     assert readability_audit["issues"][0]["code"] == "overlong_sentence"
     assert readability_audit["issues"][0]["section"] == "讨论"
     readability_gate = next(gate for gate in readiness["gates"] if gate["id"] == "readability")
-    assert readability_gate["status"] == "fail"
+    assert readability_gate["check_status"] == "fail" and readability_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
 
 
 def test_submission_readiness_warns_when_no_benchmark_is_attached(tmp_path: Path) -> None:
@@ -9086,7 +9105,7 @@ def test_submission_readiness_warns_about_short_meta_manuscript_without_blocking
     assert manifest["submission"]["warning_gates"] >= 1
 
 
-def test_submission_readiness_blocks_full_length_meta_manuscript_missing_core_article_content(tmp_path: Path) -> None:
+def test_submission_readiness_flags_full_length_meta_manuscript_missing_core_article_content(tmp_path: Path) -> None:
     project = Project("missing manuscript content package", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -9179,13 +9198,16 @@ def test_submission_readiness_blocks_full_length_meta_manuscript_missing_core_ar
         readiness = json.loads(zf.read("review/submission_readiness_review.json"))
 
     content_gate = next(gate for gate in readiness["gates"] if gate["id"] == "manuscript_content")
-    assert content_gate["status"] == "fail"
+    assert content_gate["check_status"] == "fail" and content_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
     assert manifest["manuscript"]["reference_count"] == 0
     assert manifest["manuscript"]["table_count"] == 0
     assert manifest["manuscript"]["figure_count"] == 0
     assert manifest["manuscript"]["has_search_query_in_manuscript"] is False
     assert manifest["manuscript"]["has_calculation_detail"] is False
-    assert readiness["status"] == "blocked"
+    # Advisory since 2026-09-29 (core.release_tiers): this check never blocks; the fixture's
+    # blocking gates (calculation, primary result, citation numbers) decide its status.
+    assert content_gate["id"] not in {g["id"] for g in readiness["gates"] if g["status"] == "fail"}
+    # The fixture has no calculation audit or reference list, so its blocking gates fail.
     assert manifest["submission"]["passed"] is False
 
 

@@ -1090,3 +1090,17 @@ test("the reconcile sweep is what replays a fold left in `verifying`, and a row 
   assert.equal(f.jobs.items.filter((job) => job.kind === "verify" && job.payload.episodeId === merged.episode.id).length, 1,
     "and it must not be billed a second time");
 });
+
+test("an agenda's task types take turns by the day, so each runs within any two days", async () => {
+  const at = new Date("2026-09-06T01:00:00Z");
+  const { service } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const types = [];
+  for (const date of ["2026-09-06", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"]) {
+    const scheduled = await service.schedule("user-one", agenda.id, { date });
+    types.push(scheduled.episode.payload.taskType);
+  }
+  for (let day = 1; day < types.length; day += 1) assert.notEqual(types[day], types[day - 1], `day ${day} repeats the previous type`);
+  assert.deepEqual(new Set(types), new Set(agendaInput.taskTypes));
+});

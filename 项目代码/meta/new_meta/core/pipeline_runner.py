@@ -717,6 +717,18 @@ class PipelineRunner:
             by_row = {}
             for item in trial_issues:
                 by_row.setdefault(item["row_id"], []).append(item)
+            if unattended:
+                # A row whose own trial cannot be identified is left out and
+                # named, not a stop for the whole synthesis; overlapping trial
+                # units still need a person.
+                for row in primary_selection_audit:
+                    issues = by_row.get(row["row_id"]) or []
+                    if issues and all(item["reason"] == "trial_identity_required" and "overlapping_rows" not in item
+                                      for item in issues):
+                        row.update({"decision": "excluded", "reason": "trial_identity_unresolved",
+                                    "trial_unit_issues": issues, "in_final_primary_analysis": False})
+                        left_out[row["row_id"]] = "trial_identity_unresolved"
+                        by_row.pop(row["row_id"])
             for row in primary_selection_audit:
                 if row["row_id"] in by_row:
                     row.update({"decision": "needs_input", "reason": by_row[row["row_id"]][0]["reason"],

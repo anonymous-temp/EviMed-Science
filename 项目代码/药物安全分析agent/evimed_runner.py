@@ -152,6 +152,8 @@ def run(request_path: Path, output_dir: Path) -> int:
                 "snapshotId": provenance.get("snapshot_id", ""),
                 "snapshotSha256": provenance.get("snapshot_sha256", ""),
                 "extractedAt": provenance.get("extracted_at", ""),
+                # The data date of live counts: openFDA's FAERS release.
+                "dataLastUpdated": provenance.get("openfda_last_updated", ""),
                 "scope": {
                     "drugAliases": list(aliases or ()),
                     "suspectRoles": list(roles or ()),

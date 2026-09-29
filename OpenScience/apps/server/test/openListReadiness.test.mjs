@@ -82,3 +82,17 @@ test("an OpenList that is not configured is never probed and never offered", asy
   assert.equal((await app.features()).openList, false);
   assert.equal(openList.requests.length, 0);
 });
+
+test("the OpenList bootstrap hands the administrator secret after `--`, so a secret starting with '-' is not read as a flag", async () => {
+  // configure-production-state writes randomBytes(36) as base64url, which
+  // starts with "-" one time in 64; OpenList 4.2.6 then exits 1 with
+  // "unknown shorthand flag" (measured against the pinned image, 2026-09-29).
+  const { readFile } = await import("node:fs/promises");
+  const script = await readFile(new URL("../../../deploy/openlist/bootstrap.sh", import.meta.url), "utf8");
+  const call = script.split("\n").find((line) => line.includes("openlist admin set"));
+  assert.ok(call, "the bootstrap sets the administrator password");
+  const secretAt = call.indexOf('"$password"');
+  const endAt = call.indexOf(" -- ");
+  assert.ok(endAt > 0 && endAt < secretAt, "`--` comes before the secret");
+  assert.ok(call.indexOf("--data") < endAt, "the data directory is an option, so it goes before `--`");
+});

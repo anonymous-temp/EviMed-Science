@@ -272,7 +272,8 @@ async def test_memory_cache_avoids_second_request(tmp_path):
         first = await client.count_total(drug_clause("atorvastatin"))
         second = await client.count_total(drug_clause("atorvastatin"))
     assert first == second == 12345
-    assert route.call_count == 1
+    assert route.call_count == 2  # the release check, then one count
+    assert client.releases_used == {"2024-06-30"}
 
 
 @respx.mock
@@ -282,12 +283,12 @@ async def test_disk_cache_survives_new_client_instance(tmp_path):
     )
     async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0)) as client:
         await client.count_total(drug_clause("atorvastatin"))
-    assert route.call_count == 1
+    assert route.call_count == 2  # the release check, then one count
     # Fresh client = empty memory cache; the disk level must still serve it.
     async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0)) as client2:
         total = await client2.count_total(drug_clause("atorvastatin"))
     assert total == 12345
-    assert route.call_count == 1
+    assert route.call_count == 3  # only the new client's release check
 
 
 @respx.mock
@@ -312,7 +313,67 @@ async def test_no_results_is_not_cached(tmp_path):
         for _ in range(2):
             with pytest.raises(NoResults):
                 await client.count_total(drug_clause("ghost-drug"))
-    assert route.call_count == 2  # 404 must not poison the cache
+    assert route.call_count == 3  # the release check, then 404 twice: never cached
+
+
+def _answer(release: str, total: int) -> dict:
+    return {"meta": {"last_updated": release, "results": {"skip": 0, "limit": 1, "total": total}}, "results": []}
+
+
+@respx.mock
+async def test_a_cached_count_from_a_superseded_faers_release_is_refetched(tmp_path):
+    # openFDA replaces FAERS quarterly; a cached count from the previous release
+    # is stale however young it is, and must not mix into a new analysis.
+    serving = {"release": "2026-04-28", "total": 100}
+    route = respx.get(f"{BASE}/{EVENT_ENDPOINT}").mock(
+        side_effect=lambda request: httpx.Response(200, json=_answer(serving["release"], serving["total"]))
+    )
+    async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0), event_ttl_seconds=86400.0) as client:
+        assert await client.count_total(drug_clause("atorvastatin")) == 100
+    serving.update(release="2026-07-30", total=120)
+    async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0), event_ttl_seconds=86400.0) as client:
+        assert await client.count_total(drug_clause("atorvastatin")) == 120
+        assert client.releases_used == {"2026-07-30"}
+    assert route.call_count == 4  # two release checks, two counts
+    # The same release again is served from the cache.
+    async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0), event_ttl_seconds=86400.0) as client:
+        assert await client.count_total(drug_clause("atorvastatin")) == 120
+    assert route.call_count == 5
+
+
+@respx.mock
+async def test_event_answers_keep_the_release_cycle_and_labels_the_default_ttl(tmp_path):
+    respx.get(f"{BASE}/{EVENT_ENDPOINT}").mock(return_value=httpx.Response(200, json=_answer("2026-07-30", 7)))
+    respx.get(f"{BASE}/{LABEL_ENDPOINT}").mock(return_value=httpx.Response(200, json=_load("label.json")))
+    cache = TwoLevelCache(tmp_path, ttl_seconds=3600.0)
+    async with _client(cache=cache, event_ttl_seconds=92 * 86400.0) as client:
+        await client.count_total(drug_clause("atorvastatin"))
+        await client.search_labels("atorvastatin")
+    lifetimes = sorted(
+        json.loads(path.read_text())["expires_at"] - path.stat().st_mtime for path in tmp_path.glob("*.json")
+    )
+    assert len(lifetimes) == 2
+    assert abs(lifetimes[0] - 3600.0) < 60
+    assert abs(lifetimes[1] - 92 * 86400.0) < 60
+
+
+@respx.mock
+async def test_without_a_release_answer_the_ttl_alone_bounds_reuse(tmp_path):
+    def answer(request):
+        if "search" not in request.url.params:
+            return httpx.Response(503)
+        return httpx.Response(200, json=_answer("2026-07-30", 9))
+
+    route = respx.get(f"{BASE}/{EVENT_ENDPOINT}").mock(side_effect=answer)
+    async with _client(cache=TwoLevelCache(tmp_path, ttl_seconds=3600.0), sleep=_no_wait) as client:
+        assert await client.count_total(drug_clause("atorvastatin")) == 9
+        assert await client.count_total(drug_clause("atorvastatin")) == 9
+        assert client.releases_used == {"2026-07-30"}
+    assert route.call_count == 4 + 1  # four failed release checks, one count, one cache hit
+
+
+async def _no_wait(_seconds: float) -> None:
+    return None
 
 
 def test_memory_cache_uses_a_bounded_lru_when_disk_is_disabled():

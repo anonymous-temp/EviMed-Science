@@ -118,12 +118,13 @@ def test_markdown_contains_all_required_sections():
 
 def test_markdown_numbers_match_statistics_input():
     md = render_markdown(_result())
-    # every figure comes from T1_ROW, formatted to 3 decimals
-    assert "10.444 [4.750, 22.968]" in md
-    assert "9.500 [4.569, 19.752]" in md
-    assert "51.474" in md
-    assert "2.737 (1.735)" in md
-    assert "6.354 (3.421)" in md
+    # every figure comes from T1_ROW's display strings: ratios and their
+    # intervals to two decimals, other estimates to three significant figures
+    assert "10.44 [4.75, 22.97]" in md
+    assert "9.50 [4.57, 19.75]" in md
+    assert "51.5" in md
+    assert "2.74 (1.73)" in md
+    assert "6.35 (3.42)" in md
     assert "2,000" in md  # total reports with thousands separator
     # LLM narrative is present but the numbers above are the renderer's own
     assert "总览文字" in md and "重点段落文字" in md
@@ -208,7 +209,28 @@ def test_markdown_degraded_run_shows_methodology_note():
     assert "方法学声明" in md
     assert "LLM 解读缺失" in md
     # statistics survive degradation
-    assert "10.444 [4.750, 22.968]" in md
+    assert "10.44 [4.75, 22.97]" in md
+
+
+def test_every_derived_column_publishes_its_formula(tmp_path):
+    """A delivered report called expected_count's formula unknown and rebuilt it
+    with (c+d); the engine states each derived column's formula itself."""
+    import json
+
+    from safety_agent.analysis.runner import write_artifacts
+    from safety_agent.signals.disproportionality import FORMULAS
+    from safety_agent.signals.disproportionality import analyze
+    from safety_agent.signals.tables import build_table_from_counts
+
+    provenance = json.loads(write_artifacts(_result(), tmp_path)["provenance"].read_text(encoding="utf-8"))
+    assert provenance["formulas"] == FORMULAS
+    assert provenance["display_convention"] == "evimed-display-v1"
+    for column in ("expected_count", "ROR", "PRR", "chi2", "IC", "IC025", "EBGM", "EB05"):
+        assert column in FORMULAS, column
+    assert FORMULAS["expected_count"].startswith("E = (a+b)(a+c)/N")
+    table = build_table_from_counts(joint=10, drug_total=100, event_total=30, grand_total=2000)
+    metrics = analyze(table)
+    assert metrics.ebgm.expected == (10 + 90) * (10 + 20) / 2000
 
 
 def test_signal_csv_same_data_source():
@@ -225,14 +247,21 @@ def test_signal_csv_same_data_source():
     cells = rows[2]
     assert cells[0] == "myalgia"
     assert cells[2:7] == ["10", "90", "20", "1,880", "2,000"]
-    assert cells[7] == "10.444"
-    assert cells[-1] == "yes"
-    assert rows[1][-4:] == [
+    # Raw columns carry the value at full precision; the *_display columns
+    # carry what a report states.
+    header = rows[1]
+    assert float(cells[header.index("ROR")]) == T1_ROW.ror
+    assert cells[header.index("ROR_display")] == "10.44"
+    assert cells[header.index("ROR_CI_display")] == "4.75–22.97"
+    assert cells[header.index("IC025_display")] == "1.73"
+    assert cells[header.index("is_signal")] == "yes"
+    assert header[header.index("expected_count"):header.index("is_signal") + 1] == [
         "expected_count",
         "haldane_anscombe_applied",
         "gps_prior_id",
         "is_signal",
     ]
+    assert header[-1] == "expected_count_display"
 
 
 def test_docx_export_roundtrip(tmp_path):
@@ -253,7 +282,7 @@ def test_docx_export_roundtrip(tmp_path):
         cell.text for table in document.tables for row in table.rows for cell in row.cells
     )
     assert "myalgia" in tables_text
-    assert "10.444" in tables_text
+    assert "10.44 [4.75, 22.97]" in tables_text
 
 
 def test_pdf_export_via_libreoffice(tmp_path):

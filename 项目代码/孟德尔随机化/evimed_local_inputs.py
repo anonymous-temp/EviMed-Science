@@ -768,12 +768,18 @@ def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict
             if role is None:
                 raise _manifest_failure()
             study = record[role]
+            samples = study.get("sampleMetadata") or {}
             setattr(result, f"{label}_metadata", {
                 "gwas_id": study["accession"],
                 "trait": study.get("trait") or request[role],
                 "requested_trait": request[role],
                 # Verbatim as the catalogue declares them; not parsed into a number.
                 "sample_size": study.get("initialSampleSize") or None,
+                # As numbers, from the GWAS-SSF metadata file beside the harmonised data.
+                "sample_size_total": samples.get("sampleSize"),
+                "case_control_study": samples.get("caseControlStudy"),
+                "case_count": samples.get("caseCount"),
+                "control_count": samples.get("controlCount"),
                 "population": "; ".join(study.get("discoveryAncestry") or []) or None,
                 "pubmed_id": study.get("pubmedId") or None,
                 "repository": study.get("repository"),
@@ -783,6 +789,8 @@ def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict
                 "metadata_source": "gwas_catalog",
                 "verification_status": "read_from_repository",
             })
+            if isinstance(samples.get("sampleSize"), int):
+                setattr(result, f"sample_size_{label}", samples["sampleSize"])
 
 
 def bind_result_provenance(

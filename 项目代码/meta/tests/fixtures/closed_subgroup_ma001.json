@@ -1,0 +1,1434 @@
+{
+ "source": "production job meta-20260928185649 (ma-001, 2026-09-28): tranexamic acid in total knee arthroplasty",
+ "protocol": {
+  "research_question": "In adults undergoing primary unilateral total knee arthroplasty, does tranexamic acid administered intravenously, topically, or by combined routes reduce perioperative total blood loss compared with placebo or no tranexamic acid, and what is its effect on allogeneic transfusion rate and symptomatic venous thromboembolic events?",
+  "pico": {
+   "population": "Adults undergoing primary unilateral total knee arthroplasty.",
+   "intervention": "Tranexamic acid administered intravenously, topically (intra-articular), or by combined routes.",
+   "comparator": "Placebo or no tranexamic acid.",
+   "outcome_primary": "Total blood loss, measured in millilitres (mL).",
+   "outcomes_secondary": [
+    "Allogeneic blood transfusion rate (dichotomous; proportion of patients receiving allogeneic blood transfusion).",
+    "Symptomatic venous thromboembolic events (dichotomous; deep vein thrombosis and pulmonary embolism within 30 days)."
+   ]
+  },
+  "study_design": "cluster_rct / crossover_rct / multi_arm_rct / parallel_rct",
+  "study_designs": [
+   "cluster_rct",
+   "crossover_rct",
+   "multi_arm_rct",
+   "parallel_rct"
+  ],
+  "inclusion_criteria": [
+   "Adults undergoing primary unilateral total knee arthroplasty.",
+   "Randomized controlled trials.",
+   "Intervention: tranexamic acid administered intravenously, topically (intra-articular), or by combined routes.",
+   "Comparator: placebo or no tranexamic acid.",
+   "Reports at least one of the following outcomes: total blood loss (mL), allogeneic blood transfusion rate, or symptomatic venous thromboembolic events within 30 days.",
+   "No language or country restriction."
+  ],
+  "exclusion_criteria": [
+   "Revision knee arthroplasty.",
+   "Bilateral or simultaneous bilateral knee arthroplasty.",
+   "Non-randomized study designs.",
+   "Studies not evaluating tranexamic acid in the specified population or with an ineligible comparator.",
+   "Duplicate publications or overlapping patient populations, with only the most informative report included.",
+   "Studies without extractable data for the primary or secondary outcomes."
+  ],
+  "databases": [
+   "Internal literature database",
+   "PubMed"
+  ],
+  "date_range": "No date restriction",
+  "language": "No language restriction",
+  "effect_measure": "MD",
+  "model_preference": "random",
+  "tau_estimator": "DL",
+  "subgroup_variables": [
+   "Route of tranexamic acid administration (intravenous vs topical vs combined)"
+  ],
+  "review_family": "intervention_rct",
+  "primary_outcome_type": "continuous",
+  "protocol_version": "1.0",
+  "interventions": [
+   "Tranexamic acid administered intravenously",
+   "Tranexamic acid administered topically (intra-articular)",
+   "Tranexamic acid administered by combined routes"
+  ],
+  "analysis_type": "pairwise"
+ },
+ "studies": {
+  "29410968": {
+   "characteristics": {
+    "study_id": "29410968",
+    "title": "Topical Tranexamic Acid Reduces Blood Loss in Minimally Invasive Total Knee Arthroplasty Receiving Rivaroxaban.",
+    "authors": [
+     "Yen Shih-Hsiang",
+     "Lin Po-Chun",
+     "Chen Bradley",
+     "Huang Chung-Chen",
+     "Wang Jun-Wen"
+    ],
+    "year": 2017,
+    "journal": "BioMed research international",
+    "doi": "10.1155/2017/9105645",
+    "pmid": "29410968",
+    "study_design": "Prospective, randomized, double-blind, controlled trial (parallel, three-arm) - source wording: 'This prospective, randomized, controlled trial demonstrated...' and 'Our prospective, randomized, double-blind trial'",
+    "country": "Taiwan",
+    "sample_size_intervention": 63,
+    "sample_size_control": 30,
+    "total_sample_size": 93,
+    "population_description": "Patients aged 40 years or more who underwent unilateral primary minimally invasive total knee arthroplasty; 93 patients enrolled (23 male and 70 female). Exclusion criteria included documented history of thromboembolic disease, cardiovascular disease (myocardial infarction or angina), stroke, coagulopathy, lifelong warfarin treatment, impaired hepatic or renal function, allergy to TXA, and preoperative anemia (Hb <= 10 g/dL). All patients received oral rivaroxaban 10 mg daily for thromboprophylaxis.",
+    "intervention_description": "Tranexamic acid by two routes. Intravenous (IV) group (n = 31) received 1 g TXA (20 mL) intravenously 10 minutes before skin closure. Topical group (n = 32) received 3 g (60 mL) TXA (Transamin 50 mg/mL) in 100 mL saline intra-articularly via the drain after capsule closure (final volume 160 mL). Drainage tubes clamped for 1 hour after injection.",
+    "control_description": "Placebo group (n = 30) received saline twice: 20 mL intravenously 10 minutes before skin closure and 160 mL intra-articularly via the drain after capsule closure before deflation of the tourniquet. No tranexamic acid administered.",
+    "follow_up_duration": "Postoperative clinic follow-up at 2, 6, and 12 weeks (clinical follow-up for 3 months).",
+    "funding": "Institutional grant (CMRPG8D1051)",
+    "source_type": "database",
+    "pdf_path": "",
+    "metadata_source": "bibliographic_metadata"
+   },
+   "outcomes": [
+    {
+     "primary_analysis_alignment": {
+      "schema_version": 1,
+      "assessment": {
+       "outcome_index": 0,
+       "outcome": {
+        "status": "match",
+        "rationale": "Table 2 reports 'Total blood loss (mL)', the review's prespecified primary continuous outcome, in millilitres.",
+        "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+        "source_location": "Page 1; characters 19422:19537"
+       },
+       "population": {
+        "status": "match",
+        "rationale": "Participants were adults aged 40 years or more undergoing unilateral primary minimally invasive TKA, which falls within the protocol's primary unilateral TKA population.",
+        "quote": "Between August 2015 and April 2016, a consecutive series of 145 patients aged 40 years or more who underwent unilateral primary minimally invasive TKA were assessed in terms of their eligibility for inclusion in this study.",
+        "source_location": "Page 1; characters 6406:6629"
+       },
+       "contrast": {
+        "status": "match",
+        "rationale": "Randomized comparison of intravenous tranexamic acid (1 g IV) versus placebo (saline both intravenously and intra-articularly), matching the review's intervention and comparator.",
+        "quote": "Ninety-three patients who underwent primary minimally invasive TKA were divided into placebo group (30 patients) that received saline both intravenously and intra-articularly, intravenous (IV) group (31 patients) that received 1 g TXA intravenously, and topical group (32 patients) that received 3 g TXA in 100 ml saline intra-articularly.",
+        "source_location": "Page 1; characters 1483:1822"
+       },
+       "verification": {
+        "numeric_status": "verified",
+        "numeric_findings": [
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "mean_intervention",
+          "status": "match",
+          "reported_value": 921.0,
+          "rationale": "Table 2 lists the IV group mean total blood loss as 921 mL, corroborated by the Results text (921 mL)."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "sd_intervention",
+          "status": "match",
+          "reported_value": 252.0,
+          "rationale": "Table 2 shows the IV group value as 921 (252; 465–1495), i.e. SD 252 mL."
+         },
+         {
+          "quote": "Event | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p |",
+          "source_location": "Page 1; characters 18428:18494",
+          "field": "n_intervention",
+          "status": "match",
+          "reported_value": 31.0,
+          "rationale": "Table 2 header states the IV arm as n = 31."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "mean_control",
+          "status": "match",
+          "reported_value": 1131.0,
+          "rationale": "Table 2 lists the placebo group mean total blood loss as 1131 mL, corroborated by the Results text and the Discussion (1131 ± 336 mL)."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "sd_control",
+          "status": "match",
+          "reported_value": 336.0,
+          "rationale": "Table 2 shows the placebo value as 1131 (336; 567–1845), i.e. SD 336 mL."
+         },
+         {
+          "quote": "Event | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p |",
+          "source_location": "Page 1; characters 18428:18494",
+          "field": "n_control",
+          "status": "match",
+          "reported_value": 30.0,
+          "rationale": "Table 2 header states the placebo arm as n = 30."
+         },
+         {
+          "quote": "The total blood loss was 1131 mL (range, 567–1845 mL) in the placebo group, which was higher than that in the topical group (795 mL; range, 336–1350 mL; p < 0.001) and the IV group (921 mL; range, 465–1495 mL; p = 0.014).",
+          "source_location": "Page 1; characters 19932:20153",
+          "field": "p_value",
+          "status": "match",
+          "reported_value": 0.014,
+          "rationale": "The Results text states the IV group differed from placebo with p = 0.014, matching the middle comparison p-column (placebo versus IV) in the total blood loss row."
+         }
+        ],
+        "endpoint_relation": "equivalent",
+        "source_endpoint_definition": {
+         "quote": "The primary outcome measured was the estimated total blood loss. Hemoglobin (Hb) and hematocrit (Hct) levels were measured on PODs 1, 2, and 4. The blood volume was assumed to have normalized on the fourth postoperative day. Total blood loss was calculated according to the method of Nadler et al. [ 29 ] using the maximum postoperative decrease in Hb level adjusted for the weight and height of the patient. The formula can be summarized as \n(1) T o t a l b l o o d l o s s = T o t a l b l o o d v o l u m e × m a x i m u m r e d u c t i o n i n H b l e v e l m e a n H b l e v e l + v o l u m e t r a n s f u s e d .",
+         "source_location": "Page 1; characters 14125:14189 through characters 14743"
+        },
+        "components": [
+         {
+          "source_component": "The primary outcome measured was the estimated total blood loss. Hemoglobin (Hb) and hematocrit (Hct) levels were measured on PODs 1, 2, and 4. The blood volume was assumed to have normalized on the fourth postoperative day. Total blood loss was calculated according to the method of Nadler et al. [ 29 ] using the maximum postoperative decrease in Hb level adjusted for the weight and height of the patient. The formula can be summarized as \n(1) T o t a l b l o o d l o s s = T o t a l b l o o d v o l u m e × m a x i m u m r e d u c t i o n i n H b l e v e l m e a n H b l e v e l + v o l u m e t r a n s f u s e d . \nThe secondary outcomes were the rate of perioperative blood transfusion, the rate of deep-vein thrombosis (DVT), wound complications, visual analogue scale (VAS) on POD 1, the length of hospital stay, and the range of motion of the knee. The trigger for allogenic transfusion of red blood cells was set at a Hb level of 8 g/dl in healthy patients, or between 8 and 9 g/dl in patients with clinical symptoms and signs of acute anemia. In patients with cardiovascular disease, the transfusion threshold was set at a Hb level of 9 g/dl. The amount and rate of blood transfusion and the length of hospital stay were recorded in all patients. \n\nThe patients were followed-up at the clinic postoperatively after 2, 6, and 12 weeks. All postoperative conditions, including wound erythema, hematoma, infection, bleedings, and blisters, were recorded. We inspected the appearance of the operated knee, and if the swelling was noted, the knee circumference was measured 1 cm proximal to the upper pole of the patella. If the circumference of operated knee increased ≧3 cm compared with the opposite knee, it was defined as intraarticular hematoma formation. All wound complications requiring return to surgery because of hematoma and infection within 30 days of procedure were recorded. The presence of DVT was detected upon measurement of thigh or leg edema of >3 cm as compared with the contralateral leg in association with calf tenderness or tightness [ 30 ]. Ascending venography of the leg was performed using the Rabinov and Paulin technique [ 31 ] if symptomatic DVT appeared. Computerized tomography of the chest was performed if there was a suspicion of pulmonary embolism. All radiographic images were interpreted by an independent radiologist. \n\n3. Statistical Analysis \n\nOne-way ANOVA was used to determine differences between the three groups in the demographic characteristics, preoperative clinical data, total blood loss, postoperative drainage amount, postoperative hemoglobin level, length of hospital stay, VAS, range of motion of knee, and wound length. If the one-way ANOVA result was significant ( p < 0.05), post hoc tests were performed to confirm where the differences occurred between the groups. \n\nDifferences in descriptive data, including gender, ASA level, incidence of DVT, blood transfusion rate, and safety outcome, between the three groups were compared using the chi-square test or Fisher's exact test. An intention-to-treat analysis was used in patients who undergone planned surgery, had taken study medications, and withdrew blood for preoperative and postoperative Hb levels. All statistical comparisons were made using the Statistical Package for Social Sciences (SPSS) (version 18; SPSS Inc., Chicago, IL, USA). \n\n4. Results \n\nThe postoperative results are shown in Table 2 . The wound length under full extension of the knee did not differ between the 3 groups. The Hb levels on POD1, POD2, and POD4 were significantly higher in the topical group than in the placebo group ( p = 0.005, p < 0.001, and p < 0.001, resp.). There were no significant differences in Hb level between the placebo group and the IV group on POD1 and POD2, but the Hb level on POD4 was higher in the IV group than in the placebo group ( p = 0.043). The postoperative drainage amount within 16 hours was higher in the placebo group (409 ± 134 mL) than in the topical group (222 ± 85 mL, p < 0.001) and the IV group (304 ± 147 mL, p = 0.006). The total drainage amount was also higher in the placebo group than in the topical and IV groups (626 ± 149 mL versus 412 ± 122 mL versus 525 ± 185 mL, p < 0.001 and p = 0.041, resp.). \nTable 2 \n\nPostoperative data for all patients. \n\nEvent | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p | \n\nPlacebo versus Topical | Placebo versus IV | Topical versus IV | \n\nWound length on extension (cm) | 8.66 (0.923; 7–11) | 8.66 (1.143; 7–12) | 8.61 (0.998; 7–11) | 0.265 | 0.265 | 0.261 | \n\nPostoperative Hb level | | | | | | | \n\nPOD1 (g/dl) | 11.02 (1.06; 8.6–13.2) | 11.57 (1.26; 9.7–15.5) | 12.04 (1.28; 9.8–14.7) | 0.005 | 0.214 | 0.304 | \n\nPOD2 (g/dl) | 9.73 (0.98; 7.2–11.4) | 10.46 (1.27; 8.8–15.1) | 11.28 (1.26; 8.8–14.1) | <0.001 | 0.063 | 0.025 | \n\nPOD4 (g/dl) | 9.23 (1.11; 7.4-11.1) | 10.06 (1.29; 8.0–13.8) | 10.64 (1.34; 8.4–14.3) | <0.001 | 0.043 | 0.193 | \n\nPostoperative drainage (mL) | | | | | | | \n\n0–16 hours | 409 (134; 180–810) | 304 (147; 75–700) | 222 (85; 20–345) | <0.001 | 0.006 | 0.036 | \n\n0–48 hours | 626 (149; 260–1020) | 525 (185; 220–1000) | 412 (122; 145–610) | <0.001 | 0.041 | 0.018 | \n\nBlood transfusion rate (number/total number) | 6.7% (2/30) | 0.0% (0/31) | 0.0% (0/32) | 0.102 | | | \n\nTotal blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "protocol_component": "Total blood loss (mL)",
+          "relation": "match"
+         }
+        ],
+        "estimand_relation": "match",
+        "randomized_comparison": true,
+        "postrandomization_conditioning": false,
+        "selection_timing": "baseline",
+        "conditioning_variables": [],
+        "estimand_support": {
+         "quote": "Patients were assigned randomly into 3 groups: a placebo group ( n = 30), a topical TXA group ( n = 32) and an IV TXA group ( n = 31) by an independent research assistant who was not involved in the study via a computer-generated method.",
+         "source_location": "Page 1; characters 7958:8195"
+        },
+        "trial_coverage": "complete",
+        "trial_units": [
+         {
+          "quote": "This study was registered in the public register at Clinical Trials.gov ( NCT02453802 ) and supported by our institutional grant (CMRPG8D1051).",
+          "source_location": "Page 1; characters 5748:5816 through characters 5891",
+          "registry_id": "NCT02453802",
+          "trial_name": "",
+          "role": "contributing"
+         }
+        ],
+        "schema_version": 3,
+        "selected_endpoint_result": {
+         "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+         "source_location": "Page 1; characters 19422:19537",
+         "source_range": {
+          "catalogue_sha256": "463d341bc36e359da1a12e7a3c810a997b70794bcf33e01b0b0aa848ba0cab73",
+          "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+          "source_id": "s2f645ccc0cff470f524b_9e",
+          "end_source_id": "s2f645ccc0cff470f524b_9e",
+          "start": 19422,
+          "end": 19537,
+          "start_byte": 19627,
+          "end_byte": 19748,
+          "text_sha256": "a7b37b551ea555d76849d32b53507781e54b2a7a0848ad00e241e1d3e9a563af"
+         }
+        },
+        "definition_scope": "selected_endpoint",
+        "component_bindings": [
+         {
+          "component_index": 0,
+          "source_membership": "included_in_selected_endpoint",
+          "target_result": {
+           "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+           "source_location": "Page 1; characters 19422:19537",
+           "source_range": {
+            "catalogue_sha256": "463d341bc36e359da1a12e7a3c810a997b70794bcf33e01b0b0aa848ba0cab73",
+            "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+            "source_id": "s2f645ccc0cff470f524b_9e",
+            "end_source_id": "s2f645ccc0cff470f524b_9e",
+            "start": 19422,
+            "end": 19537,
+            "start_byte": 19627,
+            "end_byte": 19748,
+            "text_sha256": "a7b37b551ea555d76849d32b53507781e54b2a7a0848ad00e241e1d3e9a563af"
+           }
+          },
+          "support": {
+           "quote": "The primary outcome measured was the estimated total blood loss. Hemoglobin (Hb) and hematocrit (Hct) levels were measured on PODs 1, 2, and 4. The blood volume was assumed to have normalized on the fourth postoperative day. Total blood loss was calculated according to the method of Nadler et al. [ 29 ] using the maximum postoperative decrease in Hb level adjusted for the weight and height of the patient. The formula can be summarized as \n(1) T o t a l b l o o d l o s s = T o t a l b l o o d v o l u m e × m a x i m u m r e d u c t i o n i n H b l e v e l m e a n H b l e v e l + v o l u m e t r a n s f u s e d . \nThe secondary outcomes were the rate of perioperative blood transfusion, the rate of deep-vein thrombosis (DVT), wound complications, visual analogue scale (VAS) on POD 1, the length of hospital stay, and the range of motion of the knee. The trigger for allogenic transfusion of red blood cells was set at a Hb level of 8 g/dl in healthy patients, or between 8 and 9 g/dl in patients with clinical symptoms and signs of acute anemia. In patients with cardiovascular disease, the transfusion threshold was set at a Hb level of 9 g/dl. The amount and rate of blood transfusion and the length of hospital stay were recorded in all patients. \n\nThe patients were followed-up at the clinic postoperatively after 2, 6, and 12 weeks. All postoperative conditions, including wound erythema, hematoma, infection, bleedings, and blisters, were recorded. We inspected the appearance of the operated knee, and if the swelling was noted, the knee circumference was measured 1 cm proximal to the upper pole of the patella. If the circumference of operated knee increased ≧3 cm compared with the opposite knee, it was defined as intraarticular hematoma formation. All wound complications requiring return to surgery because of hematoma and infection within 30 days of procedure were recorded. The presence of DVT was detected upon measurement of thigh or leg edema of >3 cm as compared with the contralateral leg in association with calf tenderness or tightness [ 30 ]. Ascending venography of the leg was performed using the Rabinov and Paulin technique [ 31 ] if symptomatic DVT appeared. Computerized tomography of the chest was performed if there was a suspicion of pulmonary embolism. All radiographic images were interpreted by an independent radiologist. \n\n3. Statistical Analysis \n\nOne-way ANOVA was used to determine differences between the three groups in the demographic characteristics, preoperative clinical data, total blood loss, postoperative drainage amount, postoperative hemoglobin level, length of hospital stay, VAS, range of motion of knee, and wound length. If the one-way ANOVA result was significant ( p < 0.05), post hoc tests were performed to confirm where the differences occurred between the groups. \n\nDifferences in descriptive data, including gender, ASA level, incidence of DVT, blood transfusion rate, and safety outcome, between the three groups were compared using the chi-square test or Fisher's exact test. An intention-to-treat analysis was used in patients who undergone planned surgery, had taken study medications, and withdrew blood for preoperative and postoperative Hb levels. All statistical comparisons were made using the Statistical Package for Social Sciences (SPSS) (version 18; SPSS Inc., Chicago, IL, USA). \n\n4. Results \n\nThe postoperative results are shown in Table 2 . The wound length under full extension of the knee did not differ between the 3 groups. The Hb levels on POD1, POD2, and POD4 were significantly higher in the topical group than in the placebo group ( p = 0.005, p < 0.001, and p < 0.001, resp.). There were no significant differences in Hb level between the placebo group and the IV group on POD1 and POD2, but the Hb level on POD4 was higher in the IV group than in the placebo group ( p = 0.043). The postoperative drainage amount within 16 hours was higher in the placebo group (409 ± 134 mL) than in the topical group (222 ± 85 mL, p < 0.001) and the IV group (304 ± 147 mL, p = 0.006). The total drainage amount was also higher in the placebo group than in the topical and IV groups (626 ± 149 mL versus 412 ± 122 mL versus 525 ± 185 mL, p < 0.001 and p = 0.041, resp.). \nTable 2 \n\nPostoperative data for all patients. \n\nEvent | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p | \n\nPlacebo versus Topical | Placebo versus IV | Topical versus IV | \n\nWound length on extension (cm) | 8.66 (0.923; 7–11) | 8.66 (1.143; 7–12) | 8.61 (0.998; 7–11) | 0.265 | 0.265 | 0.261 | \n\nPostoperative Hb level | | | | | | | \n\nPOD1 (g/dl) | 11.02 (1.06; 8.6–13.2) | 11.57 (1.26; 9.7–15.5) | 12.04 (1.28; 9.8–14.7) | 0.005 | 0.214 | 0.304 | \n\nPOD2 (g/dl) | 9.73 (0.98; 7.2–11.4) | 10.46 (1.27; 8.8–15.1) | 11.28 (1.26; 8.8–14.1) | <0.001 | 0.063 | 0.025 | \n\nPOD4 (g/dl) | 9.23 (1.11; 7.4-11.1) | 10.06 (1.29; 8.0–13.8) | 10.64 (1.34; 8.4–14.3) | <0.001 | 0.043 | 0.193 | \n\nPostoperative drainage (mL) | | | | | | | \n\n0–16 hours | 409 (134; 180–810) | 304 (147; 75–700) | 222 (85; 20–345) | <0.001 | 0.006 | 0.036 | \n\n0–48 hours | 626 (149; 260–1020) | 525 (185; 220–1000) | 412 (122; 145–610) | <0.001 | 0.041 | 0.018 | \n\nBlood transfusion rate (number/total number) | 6.7% (2/30) | 0.0% (0/31) | 0.0% (0/32) | 0.102 | | | \n\nTotal blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+           "source_location": "Page 1; characters 14125:14189 through characters 19537"
+          },
+          "rationale": "The primary endpoint was estimated total blood loss, reported as 'Total blood loss (mL)' with placebo and IV arm means in the selected row."
+         }
+        ]
+       }
+      },
+      "assessor": "extraction-check-sources-v3",
+      "assessor_id": "deepseek-flash",
+      "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+      "row_sha256": "74396f5797e01b5961dbfa72effe1d0f2ffdb516fe8955322d22b49998987b70",
+      "source_path": "papers/29410968.fulltext.txt",
+      "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+      "checked_source_path": "extraction/primary_alignment/5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7.txt",
+      "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+      "unresolved_data_issues": [],
+      "issue_history_complete": true,
+      "current_checkpoint_path": "extraction/29410968.json",
+      "proof_id": "d53555f9b4218eb253ea2213462ae7ce3259e3c4d799fb71628a67c6347431ae",
+      "source_reference": {
+       "path": "extraction/verification/resolved/29c4714040af7517af4f999c25b0788a3d47dcde48eb18032fbc3a1f43af6b83.json",
+       "sha256": "29c4714040af7517af4f999c25b0788a3d47dcde48eb18032fbc3a1f43af6b83"
+      }
+     },
+     "outcome_name": "Total blood loss (mL)",
+     "outcome_type": "continuous",
+     "protocol_outcome_role": "primary",
+     "mean_intervention": 921.0,
+     "sd_intervention": 252.0,
+     "n_intervention": 31,
+     "mean_control": 1131.0,
+     "sd_control": 336.0,
+     "n_control": 30,
+     "median_intervention": null,
+     "q1_intervention": null,
+     "q3_intervention": null,
+     "min_intervention": null,
+     "max_intervention": null,
+     "median_control": null,
+     "q1_control": null,
+     "q3_control": null,
+     "min_control": null,
+     "max_control": null,
+     "events_intervention": null,
+     "total_intervention": null,
+     "events_control": null,
+     "total_control": null,
+     "effect_size": null,
+     "ci_lower": null,
+     "ci_upper": null,
+     "p_value": 0.014,
+     "p_value_inequality": "",
+     "reported_effect_measure": "",
+     "reported_effect_standard_error": null,
+     "reported_effect_scale": "original",
+     "reported_effect_adjusted": false,
+     "adjustment_covariates": [],
+     "source_location": "Table 2, 'Total blood loss (mL)' row (Placebo versus IV column); Results text paragraph 1",
+     "source_quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "source_page": 1,
+     "source_section": "Results",
+     "source_quote_verified": true,
+     "source_quote_match": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "extraction_confidence": "high",
+     "conflicts": [],
+     "user_override_applied": false,
+     "override_revision": null,
+     "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+     "accepted_timepoint": null,
+     "timepoint_adjudication": null,
+     "timepoint_adjudication_note": null,
+     "manual_adjudication": null,
+     "subgroup": "Intravenous (IV) route",
+     "hazard_ratio": null,
+     "hr_ci_lower": null,
+     "hr_ci_upper": null,
+     "hr_se": null,
+     "events": null,
+     "total_n": null,
+     "correlation_r": null,
+     "correlation_n": null,
+     "pyears_intervention": null,
+     "pyears_control": null,
+     "person_time": null,
+     "person_time_unit": "person_years",
+     "true_positive": null,
+     "false_negative": null,
+     "false_positive": null,
+     "true_negative": null,
+     "diagnostic_threshold": "",
+     "prediction_model_id": "",
+     "prediction_model_version": "",
+     "prediction_validation_type": "",
+     "prediction_performance_measure": "",
+     "prediction_performance_estimate": null,
+     "prediction_performance_se": null,
+     "prediction_performance_ci_lower": null,
+     "prediction_performance_ci_upper": null,
+     "prediction_sample_size": null,
+     "prediction_events": null,
+     "prediction_expected_events": null,
+     "treatment_arm": "IV TXA 1 g (tranexamic acid)",
+     "reference_arm": "Placebo (saline)",
+     "treatment_arm_role": "review_intervention",
+     "reference_arm_role": "review_comparator",
+     "comparative_design": "multi_arm_rct",
+     "contrast_id": "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0",
+     "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+     "precision_basis": "computed_from_source_verified_arm_summaries",
+     "covariance_with": {
+      "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1": 3763.2
+     },
+     "covariance_basis": {
+      "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1": "derived:shared_control_arm_summaries"
+     },
+     "paired_analysis": false,
+     "intracluster_correlation": null,
+     "mean_cluster_size": null,
+     "dose_response_design": "",
+     "dose_value": null,
+     "reference_dose_value": null,
+     "dose_unit": "",
+     "denominator_source": ""
+    },
+    {
+     "primary_analysis_alignment": {
+      "schema_version": 1,
+      "assessment": {
+       "outcome_index": 1,
+       "outcome": {
+        "status": "match",
+        "rationale": "Source reports estimated total blood loss in mL as the primary outcome, matching the review's prespecified primary continuous outcome.",
+        "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+        "source_location": "Page 1; characters 19422:19537"
+       },
+       "population": {
+        "status": "match",
+        "rationale": "Participants were adults (aged >= 40 y) undergoing primary unilateral minimally invasive TKA, the protocol population.",
+        "quote": "Between August 2015 and April 2016, a consecutive series of 145 patients aged 40 years or more who underwent unilateral primary minimally invasive TKA were assessed in terms of their eligibility for inclusion in this study.",
+        "source_location": "Page 1; characters 6406:6629"
+       },
+       "contrast": {
+        "status": "match",
+        "rationale": "Randomized comparison of topical intra-articular TXA 3 g versus saline placebo, an eligible intervention and comparator.",
+        "quote": "Patients in the placebo group received saline twice, 20 mL intravenously 10 minutes before skin closure and 160 mL intra-articularly via the drain after capsule closure before deflation of the tourniquet. Patients in the topical TXA group received 10 mL of saline intravenously 10 minutes before skin closure and 3 g (60 mL) TXA (Transamin 50 mg/mL; China Chemical and Pharmaceutical Co, Taiwan) in 100 mL saline intra-articularly via the drain after capsule closure.",
+        "source_location": "Page 1; characters 10836:11040 through characters 11303"
+       },
+       "verification": {
+        "numeric_status": "verified",
+        "numeric_findings": [
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "mean_intervention",
+          "status": "match",
+          "reported_value": 795.0,
+          "rationale": "Table 2 topical column gives total blood loss 795 (SD 231), matching the extracted mean."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "sd_intervention",
+          "status": "match",
+          "reported_value": 231.0,
+          "rationale": "Table 2 topical cell reports SD 231, matching the extracted SD."
+         },
+         {
+          "quote": "Event | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p |",
+          "source_location": "Page 1; characters 18428:18494",
+          "field": "n_intervention",
+          "status": "match",
+          "reported_value": 32.0,
+          "rationale": "Table 2 header lists the topical group as n = 32, matching the extracted n."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "mean_control",
+          "status": "match",
+          "reported_value": 1131.0,
+          "rationale": "Table 2 placebo column gives total blood loss 1131 (SD 336), matching the extracted mean."
+         },
+         {
+          "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+          "source_location": "Page 1; characters 19422:19537",
+          "field": "sd_control",
+          "status": "match",
+          "reported_value": 336.0,
+          "rationale": "Table 2 placebo cell reports SD 336, matching the extracted SD."
+         },
+         {
+          "quote": "Event | Placebo ( n = 30) | IV ( n = 31) | Topical ( n = 32) | p |",
+          "source_location": "Page 1; characters 18428:18494",
+          "field": "n_control",
+          "status": "match",
+          "reported_value": 30.0,
+          "rationale": "Table 2 header lists the placebo group as n = 30, matching the extracted n."
+         }
+        ],
+        "endpoint_relation": "equivalent",
+        "source_endpoint_definition": {
+         "quote": "The primary outcome measured was the estimated total blood loss.",
+         "source_location": "Page 1; characters 14125:14189"
+        },
+        "components": [
+         {
+          "source_component": "The primary outcome measured was the estimated total blood loss.",
+          "protocol_component": "Total blood loss (mL)",
+          "relation": "match"
+         }
+        ],
+        "estimand_relation": "match",
+        "randomized_comparison": true,
+        "postrandomization_conditioning": false,
+        "selection_timing": "baseline",
+        "conditioning_variables": [],
+        "estimand_support": {
+         "quote": "One-way ANOVA was used to determine differences between the three groups in the demographic characteristics, preoperative clinical data, total blood loss, postoperative drainage amount, postoperative hemoglobin level, length of hospital stay, VAS, range of motion of knee, and wound length. If the one-way ANOVA result was significant ( p < 0.05), post hoc tests were performed to confirm where the differences occurred between the groups. \n\nDifferences in descriptive data, including gender, ASA level, incidence of DVT, blood transfusion rate, and safety outcome, between the three groups were compared using the chi-square test or Fisher's exact test. An intention-to-treat analysis was used in patients who undergone planned surgery, had taken study medications, and withdrew blood for preoperative and postoperative Hb levels.",
+         "source_location": "Page 1; characters 16519:16809 through characters 17350"
+        },
+        "trial_coverage": "complete",
+        "trial_units": [
+         {
+          "quote": "This study was registered in the public register at Clinical Trials.gov ( NCT02453802 ) and supported by our institutional grant (CMRPG8D1051).",
+          "source_location": "Page 1; characters 5748:5816 through characters 5891",
+          "registry_id": "NCT02453802",
+          "trial_name": "",
+          "role": "contributing"
+         }
+        ],
+        "schema_version": 3,
+        "selected_endpoint_result": {
+         "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+         "source_location": "Page 1; characters 19422:19537",
+         "source_range": {
+          "catalogue_sha256": "463d341bc36e359da1a12e7a3c810a997b70794bcf33e01b0b0aa848ba0cab73",
+          "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+          "source_id": "s2f645ccc0cff470f524b_9e",
+          "end_source_id": "s2f645ccc0cff470f524b_9e",
+          "start": 19422,
+          "end": 19537,
+          "start_byte": 19627,
+          "end_byte": 19748,
+          "text_sha256": "a7b37b551ea555d76849d32b53507781e54b2a7a0848ad00e241e1d3e9a563af"
+         }
+        },
+        "definition_scope": "selected_endpoint",
+        "component_bindings": [
+         {
+          "component_index": 0,
+          "source_membership": "included_in_selected_endpoint",
+          "target_result": {
+           "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197 |",
+           "source_location": "Page 1; characters 19422:19537",
+           "source_range": {
+            "catalogue_sha256": "463d341bc36e359da1a12e7a3c810a997b70794bcf33e01b0b0aa848ba0cab73",
+            "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+            "source_id": "s2f645ccc0cff470f524b_9e",
+            "end_source_id": "s2f645ccc0cff470f524b_9e",
+            "start": 19422,
+            "end": 19537,
+            "start_byte": 19627,
+            "end_byte": 19748,
+            "text_sha256": "a7b37b551ea555d76849d32b53507781e54b2a7a0848ad00e241e1d3e9a563af"
+           }
+          },
+          "support": {
+           "quote": "The primary outcome measured was the estimated total blood loss.",
+           "source_location": "Page 1; characters 14125:14189"
+          },
+          "rationale": "The paper states the primary outcome measured was the estimated total blood loss, which is the single continuous component of this result."
+         }
+        ]
+       }
+      },
+      "assessor": "extraction-check-sources-v3",
+      "assessor_id": "deepseek-flash",
+      "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+      "row_sha256": "1571064f17549d6afa0ddac56067d240ee37b4e98b39a39dfb6b7330209243b5",
+      "source_path": "papers/29410968.fulltext.txt",
+      "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+      "checked_source_path": "extraction/primary_alignment/5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7.txt",
+      "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+      "unresolved_data_issues": [],
+      "issue_history_complete": true,
+      "current_checkpoint_path": "extraction/29410968.json",
+      "proof_id": "05c9af4cfcd1eebc6cb67095d82e34eecf431ad3f5bdee41c23cfb6eaa61423c",
+      "source_reference": {
+       "path": "extraction/verification/resolved/c0977fd6472fb5f69f7bbe20e94a023f3bcebaf62784ae2078157e4e7b9cbff5.json",
+       "sha256": "c0977fd6472fb5f69f7bbe20e94a023f3bcebaf62784ae2078157e4e7b9cbff5"
+      }
+     },
+     "outcome_name": "Total blood loss (mL)",
+     "outcome_type": "continuous",
+     "protocol_outcome_role": "primary",
+     "mean_intervention": 795.0,
+     "sd_intervention": 231.0,
+     "n_intervention": 32,
+     "mean_control": 1131.0,
+     "sd_control": 336.0,
+     "n_control": 30,
+     "median_intervention": null,
+     "q1_intervention": null,
+     "q3_intervention": null,
+     "min_intervention": null,
+     "max_intervention": null,
+     "median_control": null,
+     "q1_control": null,
+     "q3_control": null,
+     "min_control": null,
+     "max_control": null,
+     "events_intervention": null,
+     "total_intervention": null,
+     "events_control": null,
+     "total_control": null,
+     "effect_size": null,
+     "ci_lower": null,
+     "ci_upper": null,
+     "p_value": null,
+     "p_value_inequality": "p<0.001",
+     "reported_effect_measure": "",
+     "reported_effect_standard_error": null,
+     "reported_effect_scale": "original",
+     "reported_effect_adjusted": false,
+     "adjustment_covariates": [],
+     "source_location": "Table 2, 'Total blood loss (mL)' row (Placebo versus Topical column); Results text paragraph 1",
+     "source_quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "source_page": 1,
+     "source_section": "Results",
+     "source_quote_verified": true,
+     "source_quote_match": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "extraction_confidence": "high",
+     "conflicts": [],
+     "user_override_applied": false,
+     "override_revision": null,
+     "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+     "accepted_timepoint": null,
+     "timepoint_adjudication": null,
+     "timepoint_adjudication_note": null,
+     "manual_adjudication": null,
+     "subgroup": "Topical (intra-articular) route",
+     "hazard_ratio": null,
+     "hr_ci_lower": null,
+     "hr_ci_upper": null,
+     "hr_se": null,
+     "events": null,
+     "total_n": null,
+     "correlation_r": null,
+     "correlation_n": null,
+     "pyears_intervention": null,
+     "pyears_control": null,
+     "person_time": null,
+     "person_time_unit": "person_years",
+     "true_positive": null,
+     "false_negative": null,
+     "false_positive": null,
+     "true_negative": null,
+     "diagnostic_threshold": "",
+     "prediction_model_id": "",
+     "prediction_model_version": "",
+     "prediction_validation_type": "",
+     "prediction_performance_measure": "",
+     "prediction_performance_estimate": null,
+     "prediction_performance_se": null,
+     "prediction_performance_ci_lower": null,
+     "prediction_performance_ci_upper": null,
+     "prediction_sample_size": null,
+     "prediction_events": null,
+     "prediction_expected_events": null,
+     "treatment_arm": "Topical TXA 3 g (tranexamic acid)",
+     "reference_arm": "Placebo (saline)",
+     "treatment_arm_role": "review_intervention",
+     "reference_arm_role": "review_comparator",
+     "comparative_design": "multi_arm_rct",
+     "contrast_id": "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1",
+     "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+     "precision_basis": "computed_from_source_verified_arm_summaries",
+     "covariance_with": {
+      "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0": 3763.2
+     },
+     "covariance_basis": {
+      "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0": "derived:shared_control_arm_summaries"
+     },
+     "paired_analysis": false,
+     "intracluster_correlation": null,
+     "mean_cluster_size": null,
+     "dose_response_design": "",
+     "dose_value": null,
+     "reference_dose_value": null,
+     "dose_unit": "",
+     "denominator_source": ""
+    }
+   ],
+   "quality_notes": "Study: single-center prospective randomized double-blind trial (NCT02453802); 93 patients undergoing primary unilateral minimally invasive TKA, randomized to 3 parallel arms: placebo (n=30; saline IV + saline intra-articular), IV TXA (n=31; 1 g TXA IV + saline intra-articular), topical TXA (n=32; 3 g TXA in 100 mL saline intra-articular + saline IV). All received oral rivaroxaban 10 mg daily x14 days for thromboprophylaxis. comparative_design set to multi_arm_rct because the source is a 3-arm parallel randomized trial analyzed with pairwise (post hoc) comparisons. Treatment vs control comparisons extracted for the review's route-based subgroup analysis: IV vs placebo and topical vs placebo; the head-to-head topical vs IV comparison (total blood loss p=0.179/0.197) is not a review comparator and was not extracted. Total blood loss is reported as mean (SD; range) in Table 2 (Placebo 1131 [336; 567-1845]; IV 921 [252; 465-1495]; Topical 795 [231; 336-1350]); ranges not entered into min/max fields since mean/SD were reported. Blood transfusion rows use the overall 3-group p=0.102, not a pairwise test. The secondary VTE endpoint was reported by the source as separate components (symptomatic DVT and pulmonary embolism, follow-up up to 3 months) rather than a combined composite; components were kept as reported. One symptomatic DVT occurred in the IV group (1/31); no pulmonary embolism occurred in any arm. Note an internal denominator inconsistency in Table 3: the topical arm is shown as n=31 for the PE and DVT rows but n=32 in Table 1, Table 2 and the text; values were retained exactly as printed in Table 3."
+  },
+  "39673144": {
+   "characteristics": {
+    "study_id": "39673144",
+    "title": "Efficacy of Different Doses of Intra‐Articular Tranexamic Acid for Reducing Blood Loss and Lower Limb Swelling After Total Knee Arthroplasty: A Prospective, Randomized, Controlled Trial",
+    "authors": [
+     "Shuwei Ye",
+     "Yue Luo",
+     "Qianhao Li",
+     "Lijun Cai",
+     "Pengde Kang"
+    ],
+    "year": 2024,
+    "journal": "Orthopaedic Surgery",
+    "doi": "10.1111/os.14317",
+    "pmid": "39673144",
+    "study_design": "Prospective, randomized, controlled trial (single-center RCT with three parallel arms: two TXA dose arms vs. placebo)",
+    "country": "China",
+    "sample_size_intervention": 150,
+    "sample_size_control": 75,
+    "total_sample_size": 225,
+    "population_description": "Adults (18 to 80 years of age, ASA I-III) with osteoarthritis of the knee who underwent primary unilateral total knee arthroplasty; recruited from September 2020 to January 2021. Mean age ~65-66 years; predominantly female (e.g., 55/75, 58/75, 51/75 across groups).",
+    "intervention_description": "Intra-articular (topical) tranexamic acid injected into the joint after prosthesis implantation and joint capsule closure: low-dose group B = 20 mL (1 g) TXA; high-dose group C = 60 mL (3 g) TXA. Route: intra-articular/topical only.",
+    "control_description": "Group A received 20 mL of placebo (saline solution) injected into the joint cavity.",
+    "follow_up_duration": "2 weeks (14 days)",
+    "funding": "1.3.5 Project for Disciplines of Excellence–Clinical Research Incubation Project, West China Hospital, Sichuan University, grant no. ZYJC18040",
+    "source_type": "openalex",
+    "pdf_path": "",
+    "metadata_source": "bibliographic_metadata"
+   },
+   "outcomes": [
+    {
+     "primary_analysis_alignment": {
+      "schema_version": 1,
+      "assessment": {
+       "outcome_index": 0,
+       "outcome": {
+        "status": "match",
+        "rationale": "The source reports total blood loss (TBL) during the perioperative period in mL, which is the review's prespecified primary outcome.",
+        "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+        "source_location": "Page 1; characters 17700:18045"
+       },
+       "population": {
+        "status": "match",
+        "rationale": "Participants were adults with knee osteoarthritis undergoing primary unilateral TKA, matching the protocol population.",
+        "quote": "From September 2020 to January 2021, a total of 225 consecutive patients with osteoarthritis of the knee who underwent primary unilateral TKA at our institution were enrolled.",
+        "source_location": "Page 1; characters 8760:8935"
+       },
+       "contrast": {
+        "status": "match",
+        "rationale": "This result compares intra-articular (topical) TXA 1 g against intra-articular placebo (saline), the review's eligible intervention and comparator.",
+        "quote": "In control group A, 20 mL of placebo was injected into the joint cavity. In the low‐dose B and high‐dose C groups, 20 mL (1 g) and 60 mL (3 g) of TXA were injected into the joint after prosthesis implantation and joint capsule closure, respectively.",
+        "source_location": "Page 1; characters 10969:11041 through characters 11218"
+       },
+       "verification": {
+        "numeric_status": "verified",
+        "numeric_findings": [
+         {
+          "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+          "source_location": "Page 1; characters 17700:18045",
+          "field": "mean_intervention",
+          "status": "match",
+          "reported_value": 754.0,
+          "rationale": "Source states the low-dose intra-articular TXA group TBL was 754.0 ± 409.7 mL."
+         },
+         {
+          "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+          "source_location": "Page 1; characters 17700:18045",
+          "field": "sd_intervention",
+          "status": "match",
+          "reported_value": 409.7,
+          "rationale": "Source states the low-dose intra-articular TXA group TBL SD was 409.7 mL."
+         },
+         {
+          "quote": "Characteristic | Group A ( n = 75) | Group B ( n = 75) | Group C ( n = 75) | p |",
+          "source_location": "Page 1; characters 15866:15946",
+          "field": "n_intervention",
+          "status": "match",
+          "reported_value": 75.0,
+          "rationale": "Table 1 lists Group B (low-dose TXA) as n = 75."
+         },
+         {
+          "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+          "source_location": "Page 1; characters 17700:18045",
+          "field": "mean_control",
+          "status": "match",
+          "reported_value": 977.3,
+          "rationale": "Source states the control (placebo) group TBL was 977.3 ± 418.7 mL."
+         },
+         {
+          "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+          "source_location": "Page 1; characters 17700:18045",
+          "field": "sd_control",
+          "status": "match",
+          "reported_value": 418.7,
+          "rationale": "Source states the control (placebo) group TBL SD was 418.7 mL."
+         },
+         {
+          "quote": "Characteristic | Group A ( n = 75) | Group B ( n = 75) | Group C ( n = 75) | p |",
+          "source_location": "Page 1; characters 15866:15946",
+          "field": "n_control",
+          "status": "match",
+          "reported_value": 75.0,
+          "rationale": "Table 1 lists Group A (placebo) as n = 75."
+         }
+        ],
+        "endpoint_relation": "equivalent",
+        "source_endpoint_definition": {
+         "quote": "The main indicators were postoperative blood loss, including intraoperative blood loss (IBL), hidden blood loss (HBL), total blood loss (TBL) during the perioperative period, and postoperative hemoglobin.",
+         "source_location": "Page 1; characters 12426:12630"
+        },
+        "components": [
+         {
+          "source_component": "The main indicators were postoperative blood loss, including intraoperative blood loss (IBL), hidden blood loss (HBL), total blood loss (TBL) during the perioperative period, and postoperative hemoglobin.",
+          "protocol_component": "Total blood loss (mL)",
+          "relation": "match"
+         }
+        ],
+        "estimand_relation": "match",
+        "randomized_comparison": true,
+        "postrandomization_conditioning": false,
+        "selection_timing": "baseline",
+        "conditioning_variables": [],
+        "estimand_support": {
+         "quote": "One‐way analysis of variance and post hoc Bonferroni correction were used to analyze significant differences between groups of normally distributed data.",
+         "source_location": "Page 1; characters 14906:15059"
+        },
+        "trial_coverage": "complete",
+        "trial_units": [
+         {
+          "quote": "The trial was approved by the Clinical Trials and Biomedical Ethics Committee at our institution (number: 2018.676), all participants provided written informed consent, and the trial was prospectively registered in the Chinese Clinical Trial Registry (ChiCTR2000035271)",
+          "source_location": "Page 1; characters 3785:4054",
+          "registry_id": "ChiCTR2000035271",
+          "trial_name": "",
+          "role": "contributing"
+         }
+        ],
+        "schema_version": 3,
+        "selected_endpoint_result": {
+         "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+         "source_location": "Page 1; characters 17700:18045",
+         "source_range": {
+          "catalogue_sha256": "3ef96a0d2d51d939a4f319133526c238d14dd1c94408db88db09141d83765be4",
+          "checked_source_sha256": "7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392",
+          "source_id": "sd2075d4a6eea06fb0852_a7",
+          "end_source_id": "sd2075d4a6eea06fb0852_a7",
+          "start": 17700,
+          "end": 18045,
+          "start_byte": 18274,
+          "end_byte": 18654,
+          "text_sha256": "e1d36fa8630e266e17af99b440c7999b0913dc55c3421d804137146afdd4708b"
+         }
+        },
+        "definition_scope": "selected_endpoint",
+        "component_bindings": [
+         {
+          "component_index": 0,
+          "source_membership": "included_in_selected_endpoint",
+          "target_result": {
+           "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high‐dose intra‐articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low‐dose intra‐articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant ( p = 0.006) (Figure 2 ).",
+           "source_location": "Page 1; characters 17700:18045",
+           "source_range": {
+            "catalogue_sha256": "3ef96a0d2d51d939a4f319133526c238d14dd1c94408db88db09141d83765be4",
+            "checked_source_sha256": "7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392",
+            "source_id": "sd2075d4a6eea06fb0852_a7",
+            "end_source_id": "sd2075d4a6eea06fb0852_a7",
+            "start": 17700,
+            "end": 18045,
+            "start_byte": 18274,
+            "end_byte": 18654,
+            "text_sha256": "e1d36fa8630e266e17af99b440c7999b0913dc55c3421d804137146afdd4708b"
+           }
+          },
+          "support": {
+           "quote": "The main indicators were postoperative blood loss, including intraoperative blood loss (IBL), hidden blood loss (HBL), total blood loss (TBL) during the perioperative period, and postoperative hemoglobin.",
+           "source_location": "Page 1; characters 12426:12630"
+          },
+          "rationale": "The source defines total blood loss (TBL) during the perioperative period as a main indicator, which the selected result reports in mL."
+         }
+        ]
+       }
+      },
+      "assessor": "extraction-check-sources-v3",
+      "assessor_id": "deepseek-flash",
+      "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+      "row_sha256": "9146a96e863c382a991f1f568d14aeaa8e8786564dc7d05a45d6668af8497daa",
+      "source_path": "papers/39673144.fulltext.txt",
+      "source_sha256": "3a7372f883c3e5efdcbbf6dd0b716a1c9082d5918f6505e143e50511b1b847b7",
+      "checked_source_path": "extraction/primary_alignment/7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392.txt",
+      "checked_source_sha256": "7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392",
+      "unresolved_data_issues": [],
+      "issue_history_complete": true,
+      "current_checkpoint_path": "extraction/39673144.json",
+      "proof_id": "b7299846092180546d3a608c6c40351647e01990d259c8a7a3ed63f27d1f52b8",
+      "source_reference": {
+       "path": "extraction/verification/resolved/bcd2d71d367caca7c336a5bcddaf40c9e60a4b565918073530fc655f2b63b662.json",
+       "sha256": "bcd2d71d367caca7c336a5bcddaf40c9e60a4b565918073530fc655f2b63b662"
+      }
+     },
+     "outcome_name": "Total blood loss (TBL)",
+     "outcome_type": "continuous",
+     "protocol_outcome_role": "primary",
+     "mean_intervention": 754.0,
+     "sd_intervention": 409.7,
+     "n_intervention": 75,
+     "mean_control": 977.3,
+     "sd_control": 418.7,
+     "n_control": 75,
+     "median_intervention": null,
+     "q1_intervention": null,
+     "q3_intervention": null,
+     "min_intervention": null,
+     "max_intervention": null,
+     "median_control": null,
+     "q1_control": null,
+     "q3_control": null,
+     "min_control": null,
+     "max_control": null,
+     "events_intervention": null,
+     "total_intervention": null,
+     "events_control": null,
+     "total_control": null,
+     "effect_size": null,
+     "ci_lower": null,
+     "ci_upper": null,
+     "p_value": null,
+     "p_value_inequality": "p<0.001",
+     "reported_effect_measure": "MD",
+     "reported_effect_standard_error": null,
+     "reported_effect_scale": "original",
+     "reported_effect_adjusted": false,
+     "adjustment_covariates": [],
+     "source_location": "Results 3.2 Blood Loss (Figure 2)",
+     "source_quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high-dose intra-articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low-dose intra-articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant (p = 0.006).",
+     "source_page": 1,
+     "source_section": "Results – 3.2 Blood Loss",
+     "source_quote_verified": true,
+     "source_quote_match": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the hig",
+     "extraction_confidence": "high",
+     "conflicts": [],
+     "user_override_applied": false,
+     "override_revision": null,
+     "timepoint": "Perioperative (total blood loss during the perioperative period)",
+     "accepted_timepoint": null,
+     "timepoint_adjudication": null,
+     "timepoint_adjudication_note": null,
+     "manual_adjudication": null,
+     "subgroup": "Topical (intra-articular) TXA",
+     "hazard_ratio": null,
+     "hr_ci_lower": null,
+     "hr_ci_upper": null,
+     "hr_se": null,
+     "events": null,
+     "total_n": null,
+     "correlation_r": null,
+     "correlation_n": null,
+     "pyears_intervention": null,
+     "pyears_control": null,
+     "person_time": null,
+     "person_time_unit": "person_years",
+     "true_positive": null,
+     "false_negative": null,
+     "false_positive": null,
+     "true_negative": null,
+     "diagnostic_threshold": "",
+     "prediction_model_id": "",
+     "prediction_model_version": "",
+     "prediction_validation_type": "",
+     "prediction_performance_measure": "",
+     "prediction_performance_estimate": null,
+     "prediction_performance_se": null,
+     "prediction_performance_ci_lower": null,
+     "prediction_performance_ci_upper": null,
+     "prediction_sample_size": null,
+     "prediction_events": null,
+     "prediction_expected_events": null,
+     "treatment_arm": "Group B: 1 g intra-articular TXA (tranexamic acid)",
+     "reference_arm": "Group A: placebo (saline)",
+     "treatment_arm_role": "review_intervention",
+     "reference_arm_role": "review_comparator",
+     "comparative_design": "multi_arm_rct",
+     "contrast_id": "39673144:group-b-1-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:0",
+     "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+     "precision_basis": "computed_from_source_verified_arm_summaries",
+     "covariance_with": {
+      "39673144:group-c-3-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:1": 2337.4625333333333
+     },
+     "covariance_basis": {
+      "39673144:group-c-3-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:1": "derived:shared_control_arm_summaries"
+     },
+     "paired_analysis": false,
+     "intracluster_correlation": null,
+     "mean_cluster_size": null,
+     "dose_response_design": "",
+     "dose_value": null,
+     "reference_dose_value": null,
+     "dose_unit": "",
+     "denominator_source": ""
+    }
+   ],
+   "quality_notes": "Design: single-center, prospective, randomized controlled trial with three parallel arms (Group A placebo/saline n=75; Group B intra-articular TXA 1 g n=75; Group C intra-articular TXA 3 g n=75). 225 patients randomized; no loss to follow-up (2-week follow-up). All TXA was administered intra-articular (topical) — no intravenous or combined-route arm, so the prespecified route subgroup is represented only by the topical route. Two TXA dose levels (1 g and 3 g) were compared against the same saline placebo; because a single placebo arm is shared by both dose contrasts, each contrast is reported as a separate row from the multi-arm RCT. Total blood loss (TBL) was not shown numerically in Table 2 (reported in Figure 2 and Results text); values were taken from Results 3.2. A minor discrepancy exists between the abstract (3 g TXA TBL 568.70 ± 408.27 mL) and the Results text (567.7 ± 408.3 mL) — noted as a conflict. Reported between-group p-values for the dichotomous outcomes (transfusion, DVT, CMVT) are overall three-group comparisons (Pearson chi-square), not pairwise; noted. Time horizon: the trial followed patients 2 weeks (DVT assessed by Doppler ultrasound on postoperative day 14); the protocol's VTE secondary outcome specifies within 30 days, and this paper's follow-up is shorter. HSS score, range of motion, VAS pain, lower-limb swelling, hemoglobin decrease, IBL, HBL, length of stay, and wound complications were reported but are not among the protocol's requested outcomes and were not extracted."
+  }
+ },
+ "ledger_results": [
+  {
+   "schema_version": 1,
+   "entity_id": "result:29410968:0",
+   "review_id": "review:1c624b41-c441-4970-bafa-e1d13f3b99db",
+   "kind": "result",
+   "evidence_state": "verified",
+   "tags": [],
+   "study_id": "study:29410968",
+   "report_id": "report:29410968",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "arm_ids": [
+    "arm:29410968:iv-txa-1-g-tranexamic-acid-4aed9d7e",
+    "arm:29410968:placebo-saline-6d6fbc8d"
+   ],
+   "cohort_id": "",
+   "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+   "subgroup": "Intravenous (IV) route",
+   "analysis_population": "",
+   "effect_measure": "MD",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "IV TXA 1 g (tranexamic acid)",
+    "comparator": "Placebo (saline)",
+    "contrast_id": "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1": 3763.2
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -210.0,
+    "standard_error": 76.23461240822478,
+    "variance": 5811.716129032258,
+    "ci_lower": -359.41709469549085,
+    "ci_upper": -60.582905304509126,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "source_locators": [
+    {
+     "document_id": "report:29410968",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results",
+     "table": "Table 2, 'Total blood loss (mL)' row (Placebo versus IV column); Results text paragraph 1",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "quote_verified": true
+    }
+   ],
+   "derivation": {
+    "legacy_outcome_index": 0,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "74396f5797e01b5961dbfa72effe1d0f2ffdb516fe8955322d22b49998987b70",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+     "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+     "inputs_sha256": "283bcb2afddb4806b04ff62f554e4a20752e4e68f83f48e6615708667f241dc7"
+    }
+   }
+  },
+  {
+   "schema_version": 1,
+   "entity_id": "result:29410968:1",
+   "review_id": "review:1c624b41-c441-4970-bafa-e1d13f3b99db",
+   "kind": "result",
+   "evidence_state": "verified",
+   "tags": [],
+   "study_id": "study:29410968",
+   "report_id": "report:29410968",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "arm_ids": [
+    "arm:29410968:topical-txa-3-g-tranexamic-acid-240b5fc3",
+    "arm:29410968:placebo-saline-6d6fbc8d"
+   ],
+   "cohort_id": "",
+   "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+   "subgroup": "Topical (intra-articular) route",
+   "analysis_population": "",
+   "effect_measure": "MD",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "Topical TXA 3 g (tranexamic acid)",
+    "comparator": "Placebo (saline)",
+    "contrast_id": "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0": 3763.2
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -336.0,
+    "standard_error": 73.69349530318127,
+    "variance": 5430.73125,
+    "ci_lower": -480.4365966891069,
+    "ci_upper": -191.56340331089308,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "source_locators": [
+    {
+     "document_id": "report:29410968",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results",
+     "table": "Table 2, 'Total blood loss (mL)' row (Placebo versus Topical column); Results text paragraph 1",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "quote_verified": true
+    }
+   ],
+   "derivation": {
+    "legacy_outcome_index": 1,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "1571064f17549d6afa0ddac56067d240ee37b4e98b39a39dfb6b7330209243b5",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+     "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+     "inputs_sha256": "8fec23c3db8dd341fc08e7f81671e10a590667b54673a570079a384a047c6c28"
+    }
+   }
+  },
+  {
+   "schema_version": 1,
+   "entity_id": "result:39673144:0",
+   "review_id": "review:1c624b41-c441-4970-bafa-e1d13f3b99db",
+   "kind": "result",
+   "evidence_state": "verified",
+   "tags": [],
+   "study_id": "study:39673144",
+   "report_id": "report:39673144",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "arm_ids": [
+    "arm:39673144:group-b-1-g-intra-articular-txa-tranexamic-acid-f2ba3ae3",
+    "arm:39673144:group-a-placebo-saline-7d3234bd"
+   ],
+   "cohort_id": "",
+   "timepoint": "Perioperative (total blood loss during the perioperative period)",
+   "subgroup": "Topical (intra-articular) TXA",
+   "analysis_population": "",
+   "effect_measure": "MD",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "Group B: 1 g intra-articular TXA (tranexamic acid)",
+    "comparator": "Group A: placebo (saline)",
+    "contrast_id": "39673144:group-b-1-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:0",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "39673144:group-c-3-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:1": 2337.4625333333333
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -223.29999999999995,
+    "standard_error": 67.64256845113636,
+    "variance": 4575.517066666667,
+    "ci_lower": -355.8769979860125,
+    "ci_upper": -90.72300201398738,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "source_locators": [
+    {
+     "document_id": "report:39673144",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results – 3.2 Blood Loss",
+     "table": "Results 3.2 Blood Loss (Figure 2)",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high-dose intra-articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low-dose intra-articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant (p = 0.006).",
+     "quote_verified": true
+    }
+   ],
+   "derivation": {
+    "legacy_outcome_index": 0,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "9146a96e863c382a991f1f568d14aeaa8e8786564dc7d05a45d6668af8497daa",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "3a7372f883c3e5efdcbbf6dd0b716a1c9082d5918f6505e143e50511b1b847b7",
+     "checked_source_sha256": "7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392",
+     "inputs_sha256": "92cbb5a7feb27b4614a618f69a512010b1e61cf443cb36b5f0cf23f9c6b17008"
+    }
+   }
+  }
+ ],
+ "method_inputs": [
+  {
+   "result_id": "result:29410968:0",
+   "entity_version": 1,
+   "study_id": "study:29410968",
+   "report_id": "report:29410968",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+   "subgroup": "Intravenous (IV) route",
+   "effect_measure": "MD",
+   "evidence_state": "verified",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "IV TXA 1 g (tranexamic acid)",
+    "comparator": "Placebo (saline)",
+    "contrast_id": "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1": 3763.2
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -210.0,
+    "standard_error": 76.23461240822478,
+    "variance": 5811.716129032258,
+    "ci_lower": -359.41709469549085,
+    "ci_upper": -60.582905304509126,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "derivation": {
+    "legacy_outcome_index": 0,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "74396f5797e01b5961dbfa72effe1d0f2ffdb516fe8955322d22b49998987b70",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+     "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+     "inputs_sha256": "283bcb2afddb4806b04ff62f554e4a20752e4e68f83f48e6615708667f241dc7"
+    }
+   },
+   "source_locators": [
+    {
+     "document_id": "report:29410968",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results",
+     "table": "Table 2, 'Total blood loss (mL)' row (Placebo versus IV column); Results text paragraph 1",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "quote_verified": true
+    }
+   ]
+  },
+  {
+   "result_id": "result:29410968:1",
+   "entity_version": 1,
+   "study_id": "study:29410968",
+   "report_id": "report:29410968",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+   "subgroup": "Topical (intra-articular) route",
+   "effect_measure": "MD",
+   "evidence_state": "verified",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "Topical TXA 3 g (tranexamic acid)",
+    "comparator": "Placebo (saline)",
+    "contrast_id": "29410968:topical-txa-3-g-tranexamic-acid-vs-placebo-saline:1",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "29410968:iv-txa-1-g-tranexamic-acid-vs-placebo-saline:0": 3763.2
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -336.0,
+    "standard_error": 73.69349530318127,
+    "variance": 5430.73125,
+    "ci_lower": -480.4365966891069,
+    "ci_upper": -191.56340331089308,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "derivation": {
+    "legacy_outcome_index": 1,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "1571064f17549d6afa0ddac56067d240ee37b4e98b39a39dfb6b7330209243b5",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "fd4ff77bab86f118fd2abe19e5e14c1d41eeab2dc0cdd47ba4397a023e00cb9b",
+     "checked_source_sha256": "5a3da3ae15ea4e57ff88f87fffdb58567547ba151b7003c6a7621f00d76264d7",
+     "inputs_sha256": "8fec23c3db8dd341fc08e7f81671e10a590667b54673a570079a384a047c6c28"
+    }
+   },
+   "source_locators": [
+    {
+     "document_id": "report:29410968",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results",
+     "table": "Table 2, 'Total blood loss (mL)' row (Placebo versus Topical column); Results text paragraph 1",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Total blood loss (mL) | 1131 (336; 567–1845) | 921 (252; 465–1495) | 795 (231; 336–1350) | <0.001 | 0.014 | 0.197",
+     "quote_verified": true
+    }
+   ]
+  },
+  {
+   "result_id": "result:39673144:0",
+   "entity_version": 1,
+   "study_id": "study:39673144",
+   "report_id": "report:39673144",
+   "outcome_id": "outcome:total-blood-loss-measured-in-millilitres-ml:598de1d792",
+   "timepoint": "Perioperative (total blood loss during the perioperative period)",
+   "subgroup": "Topical (intra-articular) TXA",
+   "effect_measure": "MD",
+   "evidence_state": "verified",
+   "raw_data": {
+    "data_type": "comparative_effect",
+    "design": "multi_arm_rct",
+    "treatment": "Group B: 1 g intra-articular TXA (tranexamic acid)",
+    "comparator": "Group A: placebo (saline)",
+    "contrast_id": "39673144:group-b-1-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:0",
+    "estimand_id": "primary:total-blood-loss-measured-in-millilitres-ml:tranexamic-acid-administered-intravenously-topically-intra-articular-or-by-combi:vs:placebo-or-no-tranexamic-acid",
+    "precision_basis": "computed_from_source_verified_arm_summaries",
+    "covariance_with": {
+     "39673144:group-c-3-g-intra-articular-txa-tranexamic-acid-vs-group-a-placebo-saline:1": 2337.4625333333333
+    },
+    "paired_analysis": false,
+    "intracluster_correlation": null,
+    "mean_cluster_size": null
+   },
+   "estimate": {
+    "measure": "MD",
+    "estimate": -223.29999999999995,
+    "standard_error": 67.64256845113636,
+    "variance": 4575.517066666667,
+    "ci_lower": -355.8769979860125,
+    "ci_upper": -90.72300201398738,
+    "scale": "original",
+    "adjusted": false,
+    "adjusted_covariates": []
+   },
+   "derivation": {
+    "legacy_outcome_index": 0,
+    "extraction_confidence": "high",
+    "denominator_source": "",
+    "events_intervention": null,
+    "total_intervention": null,
+    "events_control": null,
+    "total_control": null,
+    "override_revision": null,
+    "extraction_binding": {
+     "schema_version": 1,
+     "row_sha256": "9146a96e863c382a991f1f568d14aeaa8e8786564dc7d05a45d6668af8497daa",
+     "protocol_sha256": "28955f37a73fdfb670f2d9e6dd600f05086423878cd637c939b8345cc286a23b",
+     "source_sha256": "3a7372f883c3e5efdcbbf6dd0b716a1c9082d5918f6505e143e50511b1b847b7",
+     "checked_source_sha256": "7d27244b22393171dcf224976472e0c480ff97f22f79031b62f891747dcee392",
+     "inputs_sha256": "92cbb5a7feb27b4614a618f69a512010b1e61cf443cb36b5f0cf23f9c6b17008"
+    }
+   },
+   "source_locators": [
+    {
+     "document_id": "report:39673144",
+     "file_path": "",
+     "file_sha256": "",
+     "page": 1,
+     "section": "Results – 3.2 Blood Loss",
+     "table": "Results 3.2 Blood Loss (Figure 2)",
+     "figure": "",
+     "row": "",
+     "column": "",
+     "char_start": null,
+     "char_end": null,
+     "bounding_box": null,
+     "quote": "Compared with those of the control group (977.3 ± 418.7 mL), the TBLs of the high-dose intra-articular TXA group (567.7 ± 408.3 mL, p = 0.001), and the low-dose intra-articular TXA group (754.0 ± 409.7 mL, p < 0.001) were significantly lower, and the difference between the two groups was also statistically significant (p = 0.006).",
+     "quote_verified": true
+    }
+   ]
+  }
+ ],
+ "saved_moderator_subgroups": {
+  "labels": {
+   "Intravenous (IV) route": {
+    "n_studies": 1,
+    "pooled": null
+   },
+   "Topical (intra-articular) TXA": {
+    "n_studies": 1,
+    "pooled": null
+   },
+   "Topical (intra-articular) route": {
+    "n_studies": 1,
+    "pooled": null
+   }
+  },
+  "between": null,
+  "note": "Labels are the results' own; a trial contributing to two labels shares its control across them, so the between-label test is approximate."
+ },
+ "saved_pooled": {
+  "n_studies": 2,
+  "n_contrasts": 3,
+  "pooled_effect": -251.05519396348726,
+  "ci_lower": -345.34285150005326,
+  "ci_upper": -156.76753642692123
+ }
+}

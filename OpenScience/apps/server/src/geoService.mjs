@@ -1124,7 +1124,7 @@ export class GeoService {
 
   /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {{ marketConfigured?: boolean }} [options] */
   async distributionOf(project, { marketConfigured = geoMarketConfigured(this.config) } = {}) {
-    const [orders, money, targets] = await Promise.all([
+    const [orders, money, targets, ownedLinks] = await Promise.all([
       this.store.query(`SELECT o.*, a.title AS article_title, a.layer AS article_layer, m.name AS media_name, m.domain AS media_domain
         FROM evimed_geo.orders o LEFT JOIN evimed_geo.articles a ON a.id = o.article_id
           LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id
@@ -1135,6 +1135,9 @@ export class GeoService {
       this.store.query(`SELECT order_id, kind, sum(amount_cny) AS amount FROM evimed_geo.ledger WHERE geo_project_id = $1 GROUP BY order_id, kind`,
         [project.id]),
       this.store.latestTargets(project.id),
+      // The links the brand published itself sit beside the placements: the
+      // same post-publication checks, no order and no money (gap E6).
+      this.store.ownedLinks(project.id),
     ]);
     const suggested = (targets?.rows ?? []).filter((row) => row.tier === project.tier && row.budgetCny != null)
       .reduce((/** @type {number | null} */ max, row) => Math.max(max ?? 0, Number(row.budgetCny)), null);
@@ -1154,6 +1157,7 @@ export class GeoService {
         publishedUrl: text(row.published_url), checks: Array.isArray(row.checks) ? row.checks : [], updatedAt: iso(row.updated_at),
         cancellable: GEO_ORDER_CANCELLABLE_STATES.includes(String(row.state)),
       })),
+      ownedLinks,
     };
   }
 
@@ -1385,6 +1389,10 @@ export class GeoService {
         const view = await this.distributionOf(project);
         const orders = page(view.orders);
         return { budget: view.budget, spentCny: view.spentCny, reservedCny: view.reservedCny, orders: orders.items, total: orders.total, more: orders.more };
+      }
+      case "owned_links": {
+        const links = page(await this.store.ownedLinks(project.id));
+        return { links: links.items, total: links.total, more: links.more };
       }
       case "monitoring": return this.monitoringOf(project);
       default:

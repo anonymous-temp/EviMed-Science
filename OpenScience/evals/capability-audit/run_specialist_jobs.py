@@ -260,8 +260,10 @@ def main():
     tools = args.tool or list(BRIEFS)
     scope = None
     mr_arguments = None
-    if "mendelian_randomization" in tools:
+    # Every adapter-run engine is scoped and receipted, not only MR (2026-09-29).
+    if any(tool != "meta_analysis" for tool in tools):
         scope = adapter_context(args, workspace)
+    if "mendelian_randomization" in tools:
         mr_arguments = prepare_public_mr(workspace, cache=args.mr_fixture_cache,
             download=args.download_public_mr, rscript=args.rscript)
     server = load_server()
@@ -284,7 +286,7 @@ def main():
                 continue
             arguments["manuscript"] = args.manuscript
         results.append(run_one(server, tool, arguments, args.job_timeout_seconds,
-            workspace=workspace, scope=scope if tool == "mendelian_randomization" else None))
+            workspace=workspace, scope=scope if tool != "meta_analysis" else None))
 
     report_path = ".evimed-audit/driver-runs/%s-%s.json" % (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), uuid.uuid4().hex[:12])
     write_new(workspace, report_path, canonical(results) + b"\n")

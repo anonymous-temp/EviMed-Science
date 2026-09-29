@@ -951,13 +951,51 @@ class FallbackContentMixin:
         return date.today().isoformat()
 
     # Reasons the PRISMA ledger records for records removed before screening
-    # (``PRISMAFlow.set_records_not_screened``); a closed vocabulary set by code.
+    # (core/record_drops.py labels, via ``PRISMAFlow``); a closed vocabulary
+    # set by code. English labels read as a verb phrase after the count.
     _NOT_SCREENED_REASON_LABELS = {
         "relevance cap before screening": (
             "相关性排序超出筛选上限",
             "ranked beyond the relevance cap for screening",
         ),
+        "supplementary-source relevance cap": (
+            "补充来源结果超出其相关性上限",
+            "ranked beyond the supplementary-source cap",
+        ),
+        "outside the protocol date range": (
+            "超出方案检索日期范围",
+            "fell outside the protocol date range",
+        ),
+        "not retrieved from the source (retrieval limit)": (
+            "被检索式命中但超出获取上限未获取",
+            "were matched by the search but not retrieved (retrieval limit)",
+        ),
+        "source metadata unavailable": (
+            "数据库未返回题录",
+            "had no retrievable source record",
+        ),
     }
+    # Why a report sought for retrieval was not retrieved (record_drops).
+    _NOT_RETRIEVED_REASON_LABELS = {
+        "abstract only": ("仅有摘要", "abstract only"),
+        "registry metadata only": ("仅有注册信息", "registry metadata only"),
+        "no text retrieved": ("未获取任何文本", "no text retrieved"),
+    }
+
+    def _prisma_not_screened_parts(self, prisma: dict | None) -> list[tuple[int, str]]:
+        """(count, localized reason) for each reason records were removed before screening."""
+        prisma = prisma or {}
+        reasons = prisma.get("records_not_screened_reasons")
+        reasons = reasons if isinstance(reasons, dict) else {}
+        parts: list[tuple[int, str]] = []
+        for reason, count in reasons.items():
+            zh_label, en_label = self._NOT_SCREENED_REASON_LABELS.get(
+                str(reason),
+                ("在筛选前被移除", "removed before screening"),
+            )
+            if self._int(count) > 0:
+                parts.append((self._int(count), zh_label if self._zh else en_label))
+        return parts
 
     def _prisma_records_not_screened(self, prisma: dict | None) -> tuple[int, str]:
         """Return the ledger's records removed before screening and why (localized)."""
@@ -965,18 +1003,19 @@ class FallbackContentMixin:
         count = self._int(prisma.get("records_not_screened"))
         if not count:
             return 0, ""
-        reasons = prisma.get("records_not_screened_reasons")
-        reasons = reasons if isinstance(reasons, dict) else {}
-        labels = []
-        for reason in reasons:
-            zh_label, en_label = self._NOT_SCREENED_REASON_LABELS.get(
-                str(reason),
-                ("在筛选前被移除", "removed before screening"),
-            )
-            labels.append(zh_label if self._zh else en_label)
+        labels = [label for _, label in self._prisma_not_screened_parts(prisma)]
         if not labels:
             labels = ["在筛选前被移除" if self._zh else "removed before screening"]
         return count, ("、" if self._zh else "; ").join(dict.fromkeys(labels))
+
+    def _not_screened_breakdown(self, prisma: dict | None) -> str:
+        """Per-reason counts when records left before screening for more than one reason."""
+        parts = self._prisma_not_screened_parts(prisma)
+        if len(parts) < 2:
+            return ""
+        if self._zh:
+            return "；".join(f"{label}{count}条" for count, label in parts)
+        return "; ".join(f"{count} {label}" for count, label in parts)
 
     def _screening_entry_phrase(self, prisma: dict | None, dedup_phrase: str) -> str:
         """Continue a deduplication phrase with the records that entered screening.
@@ -990,7 +1029,13 @@ class FallbackContentMixin:
         dedup = self._int(prisma.get("records_after_dedup"))
         screened = self._int(prisma.get("title_abstract_screened")) or dedup
         not_screened, reason = self._prisma_records_not_screened(prisma)
+        breakdown = self._not_screened_breakdown(prisma)
         if self._zh:
+            if not_screened and breakdown:
+                return (
+                    f"{dedup_phrase}；其中{not_screened}条未进入筛选（{breakdown}），"
+                    f"{screened}条进入题名/摘要筛选"
+                )
             if not_screened:
                 return (
                     f"{dedup_phrase}；其中{not_screened}条因{reason}未进入筛选，"
@@ -999,12 +1044,100 @@ class FallbackContentMixin:
             if screened != dedup:
                 return f"{dedup_phrase}；{screened}条进入题名/摘要筛选"
             return f"{dedup_phrase}进入题名/摘要筛选"
+        if not_screened and breakdown:
+            return (
+                f"{dedup_phrase}; {not_screened} were not screened ({breakdown}), "
+                f"and {screened} title/abstract records were screened"
+            )
         if not_screened:
             return (
                 f"{dedup_phrase}; {not_screened} {reason} and were not screened, "
                 f"and {screened} title/abstract records were screened"
             )
         return f"{dedup_phrase}, and {screened} title/abstract records were screened"
+
+    def _reports_not_retrieved_phrase(self, prisma: dict | None) -> str:
+        """Reports sought for retrieval and not retrieved, with reasons; empty when unrecorded."""
+        prisma = prisma or {}
+        if prisma.get("full_text_sought") is None:
+            return ""
+        sought = self._int(prisma.get("full_text_sought"))
+        not_retrieved = self._int(prisma.get("not_retrieved"))
+        reasons = prisma.get("not_retrieved_reasons") if isinstance(prisma.get("not_retrieved_reasons"), dict) else {}
+        labelled = []
+        for reason, count in reasons.items():
+            zh_label, en_label = self._NOT_RETRIEVED_REASON_LABELS.get(str(reason), (str(reason), str(reason)))
+            if self._int(count) > 0:
+                labelled.append((self._int(count), zh_label if self._zh else en_label))
+        if self._zh:
+            detail = f"（{'；'.join(f'{label}{count}篇' for count, label in labelled)}）" if labelled and not_retrieved else ""
+            return f"寻求全文{sought}篇，其中{not_retrieved}篇未获取全文{detail}"
+        detail = f" ({'; '.join(f'{label} {count}' for count, label in labelled)})" if labelled and not_retrieved else ""
+        return f"{sought} reports sought for retrieval, {not_retrieved} not retrieved{detail}"
+
+    @staticmethod
+    def _screening_cap_ranking_label(ranking: str, zh: bool) -> str:
+        # The ranking rule strings are set by paper_retriever (closed vocabulary).
+        text = str(ranking or "")
+        if text.startswith("query concept groups"):
+            return "题名和摘要对检索概念组的覆盖程度" if zh else "coverage of the search concepts in the title and abstract"
+        if text.startswith("monotherapy"):
+            return "单药研究优先、再按发表年份由新到旧" if zh else "monotherapy-focused records first, then publication year"
+        return "试验发表特征和被引次数" if zh else "trial-publication features and citation counts"
+
+    def _screening_cap_methods_text(self, prisma: dict | None) -> str:
+        """The screening cap and PubMed retrieval limit, stated with their numbers.
+
+        Empty unless a limit actually removed records. A cap that removes
+        records before anyone screens them is a limitation of the review and
+        is reported as one (PRISMA 2020 item 8: automation tools used in
+        selection).
+        """
+        prisma = prisma or {}
+        sentences: list[str] = []
+        hits = prisma.get("database_hits") if isinstance(prisma.get("database_hits"), dict) else {}
+        pubmed_hits = hits.get("pubmed") if isinstance(hits.get("pubmed"), dict) else {}
+        if pubmed_hits.get("hits") is not None and self._int(pubmed_hits.get("not_retrieved")) > 0:
+            matched = self._int(pubmed_hits.get("hits"))
+            retrieved = self._int(pubmed_hits.get("retrieved"))
+            left = self._int(pubmed_hits.get("not_retrieved"))
+            sentences.append(
+                f"PubMed检索式命中{matched:,}条记录，按PubMed相关性排序获取{retrieved:,}条，其余{left:,}条未获取。"
+                if self._zh else
+                f"The PubMed search matched {matched:,} records; {retrieved:,} were retrieved in PubMed relevance order and {left:,} were not retrieved."
+            )
+        cap = prisma.get("screening_cap") if isinstance(prisma.get("screening_cap"), dict) else {}
+        cut = self._int(cap.get("cut"))
+        if cap and cut > 0:
+            total = self._int(cap.get("T"))
+            budget = self._int(cap.get("budget"))
+            floor = self._int(cap.get("floor"))
+            ceiling = self._int(cap.get("ceiling"))
+            try:
+                fraction = float(cap.get("fraction"))
+            except (TypeError, ValueError):
+                fraction = 0.0
+            explicit = self._int(cap.get("explicit_max"))
+            ranking = self._screening_cap_ranking_label(cap.get("ranking"), self._zh)
+            share = f"{fraction * 100:g}%"
+            if self._zh:
+                explicit_text = f"；另受指定上限{explicit:,}条限制" if explicit else ""
+                sentences.append(
+                    f"题名/摘要筛选设有相关性上限：在检索日期范围内去重后的{total:,}条记录中，按规则"
+                    f"min(T, max({floor}, ⌈{fraction:g}×T⌉), {ceiling})筛选{budget:,}条"
+                    f"（{floor:,}条以内全部筛选；更多时筛选相关性较高的{share}，最多{ceiling:,}条{explicit_text}），"
+                    f"排序依据为{ranking}；其余{cut:,}条未经人工或模型筛选，这是本综述的局限。"
+                )
+            else:
+                explicit_text = f"; the requested maximum of {explicit:,} also applied" if explicit else ""
+                sentences.append(
+                    f"Title/abstract screening was limited by a relevance cap: of {total:,} de-duplicated records "
+                    f"within the date range, {budget:,} were screened under the rule "
+                    f"min(T, max({floor}, ⌈{fraction:g} × T⌉), {ceiling}) (every record up to {floor:,}; for larger sets "
+                    f"the more relevant {share}, at most {ceiling:,}{explicit_text}), ranked by {ranking}. "
+                    f"The remaining {cut:,} records were not screened, which is a limitation of this review."
+                )
+        return " ".join(sentences) if not self._zh else "".join(sentences)
 
     def _fallback_prisma_flow_legend(
         self,
@@ -1021,19 +1154,32 @@ class FallbackContentMixin:
         included = self._int(prisma.get("studies_included"))
         quantitative = self._int(n_primary) or self._int(prisma.get("studies_quantitative")) or included
         not_screened, reason = self._prisma_records_not_screened(prisma)
+        breakdown = self._not_screened_breakdown(prisma)
+        reports = self._reports_not_retrieved_phrase(prisma)
+        limits = self._screening_cap_methods_text(prisma)
         if self._zh:
-            not_screened_text = f"其中{not_screened}条因{reason}未进入筛选；" if not_screened else ""
+            if not_screened and breakdown:
+                not_screened_text = f"其中{not_screened}条未进入筛选（{breakdown}）；"
+            else:
+                not_screened_text = f"其中{not_screened}条因{reason}未进入筛选；" if not_screened else ""
+            reports_text = f"{reports}，" if reports else ""
             return (
                 f"图注：PRISMA流程图显示共识别{records}条记录，删除{duplicates}条重复记录后"
-                f"{dedup}条进入去重后记录集；{not_screened_text}筛选{screened}条题名/摘要记录，全文评估{full_text}篇，"
+                f"{dedup}条进入去重后记录集；{not_screened_text}筛选{screened}条题名/摘要记录，{reports_text}全文评估{full_text}篇，"
                 f"最终纳入{included}项研究，其中{quantitative}项进入定量合成。"
+                + limits
             )
-        not_screened_text = f"{not_screened} records not screened ({reason}), " if not_screened else ""
+        if not_screened and breakdown:
+            not_screened_text = f"{not_screened} records not screened ({breakdown}), "
+        else:
+            not_screened_text = f"{not_screened} records not screened ({reason}), " if not_screened else ""
+        reports_text = f"{reports}, " if reports else ""
         return (
             f"Legend: The PRISMA flow diagram shows {records} records identified, {duplicates} duplicates removed, "
             f"{dedup} records after deduplication, {not_screened_text}{screened} records screened, "
-            f"{full_text} full-text reports assessed, "
+            f"{reports_text}{full_text} full-text reports assessed, "
             f"{included} studies included, and {quantitative} studies in the quantitative synthesis."
+            + (f" {limits}" if limits else "")
         )
 
     def _fallback_prisma_2020_checklist(
@@ -1049,6 +1195,23 @@ class FallbackContentMixin:
         dedup = self._int(prisma.get("records_after_dedup"))
         full_text = self._int(prisma.get("full_text_assessed"))
         included = self._int(prisma.get("studies_included"))
+        # Item 8 names automation tools used in selection; item 16a accounts
+        # for every record from identification to inclusion.
+        limits = self._screening_cap_methods_text(prisma)
+        not_screened = self._int(prisma.get("records_not_screened"))
+        reports = self._reports_not_retrieved_phrase(prisma)
+        if self._zh:
+            selection_extra = f"{limits}" if limits else ""
+            flow_extra = (
+                (f"筛选前另移除{not_screened}条（见图1）；" if not_screened else "")
+                + (f"{reports}；" if reports else "")
+            )
+        else:
+            selection_extra = f" {limits}" if limits else ""
+            flow_extra = (
+                (f" {not_screened} further records were removed before screening (Figure 1)." if not_screened else "")
+                + (f" Full text: {reports}." if reports else "")
+            )
         if self._zh:
             rows = [
                 ("标题/摘要", "1-2", "标题识别为系统综述和Meta分析；摘要报告目的、资料来源、纳入标准、合成方法和主要结果。", "标题；摘要"),
@@ -1056,12 +1219,12 @@ class FallbackContentMixin:
                 ("纳入标准", "5", "说明人群、干预、对照、结局和研究设计标准。", "方法"),
                 ("信息来源", "6", f"列出检索来源和检索日期（{search_date}）。", "方法"),
                 ("检索策略", "7", "报告完整检索式。", "附录1"),
-                ("筛选和提取", "8-10", "说明筛选、提取和资料条目，来源核验见附录2。", "方法；附录2"),
+                ("筛选和提取", "8-10", f"说明筛选、提取和资料条目，来源核验见附录2。{selection_extra}", "方法；附录2"),
                 ("偏倚风险", "11", "报告研究层面偏倚风险评估方法和结果。", "方法；结果" if has_rob else "未正式评价"),
                 ("效应量和合成", "12-13", "说明效应量、模型、异质性和敏感性分析。", "方法；结果；附录3"),
                 ("发表偏倚", "14,20", "研究数不足时不作确认性小样本效应判断。", "方法；讨论"),
                 ("证据确定性", "15,21", "报告GRADE评价和降级理由。", "表3" if has_grade else "未正式评价"),
-                ("筛选结果", "16", f"报告{records}条识别记录、{dedup}条去重后记录、{full_text}篇全文和{included}项纳入研究。", "结果；图1"),
+                ("筛选结果", "16", f"报告{records}条识别记录、{dedup}条去重后记录、{full_text}篇全文和{included}项纳入研究。{flow_extra}", "结果；图1"),
                 ("讨论和其他", "22-23", "解释结果、限制、注册、数据可得性、资助和利益冲突。", "讨论；声明"),
             ]
             header = "| 主题 | PRISMA条目 | 本稿填写内容 | 位置 |\n|---|---|---|---|"
@@ -1072,12 +1235,12 @@ class FallbackContentMixin:
                 ("Eligibility criteria", "5", "Population, intervention, comparator, outcome, and design criteria are specified.", "Methods"),
                 ("Information sources", "6", f"Sources and search date ({search_date}) are reported.", "Methods"),
                 ("Search strategy", "7", "Full Boolean strategy is reproduced.", "Appendix 1"),
-                ("Selection/data collection", "8-10", "Screening, extraction, and data items are described; source documentation is tabulated.", "Methods; Appendix 2"),
+                ("Selection/data collection", "8-10", f"Screening, extraction, and data items are described; source documentation is tabulated.{selection_extra}", "Methods; Appendix 2"),
                 ("Risk of bias", "11", "Study-level risk-of-bias approach and results are reported.", "Methods; Results" if has_rob else "Not formally assessed"),
                 ("Effect measures/synthesis", "12-13", "Effect measure, model, heterogeneity, and sensitivity methods are reported.", "Methods; Results; Appendix 3"),
                 ("Reporting bias", "14,20", "Small-study effects are not interpreted confirmatorily when study counts are sparse.", "Methods; Discussion"),
                 ("Certainty", "15,21", "GRADE certainty and downgrading rationale are reported.", "Table 3" if has_grade else "Not formally assessed"),
-                ("Study selection", "16", f"Reports {records} records identified, {dedup} after deduplication, {full_text} full texts, and {included} included studies.", "Results; Figure 1"),
+                ("Study selection", "16", f"Reports {records} records identified, {dedup} after deduplication, {full_text} full texts, and {included} included studies.{flow_extra}", "Results; Figure 1"),
                 ("Discussion/other", "22-23", "Interpretation, limitations, registration, data availability, funding, and competing interests are reported.", "Discussion; Declarations"),
             ]
             header = "| Topic | PRISMA item | Completed reporting content | Location |\n|---|---|---|---|"

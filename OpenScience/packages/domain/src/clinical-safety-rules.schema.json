@@ -33,6 +33,13 @@
     "highRiskEntitiesNote": {
       "type": "string"
     },
+    "highRiskEntityPhysiologyTerms": {
+      "description": "Whole terms blanked from a text before highRiskEntities are looked for: a medicine's name inside the name of a receptor, a pathway or the body's own hormone at work (胰岛素抵抗, dopamine receptor).",
+      "$ref": "#/$defs/termList"
+    },
+    "highRiskEntityPhysiologyTermsNote": {
+      "type": "string"
+    },
     "rules": {
       "description": "Regular-expression rules, required inside the run (check clinical-safety-rules, tier safety). Do not add new ones here: a new medicine or scenario is a caution rule below.",
       "type": "array",

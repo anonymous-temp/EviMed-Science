@@ -854,6 +854,13 @@ docker compose --env-file deploy/web/.env \
   --profile tls up -d --no-build --pull never
 ```
 
+On the production host the TLS edge is the host's own nginx, not the bundled
+Caddy profile. Its two EviMed sites are recorded in `deploy/web/nginx/`:
+`evimed-science.conf` (ports 80/443, the ACME webroot, gzip, the hour-long
+proxy timeouts the event stream needs) and `evimed-runtime-ui.conf` (the kernel
+browser application on an origin of its own). The host is shared, so other
+products' `include` lines are theirs and appear only as comments.
+
 ### A delta release on the serving host
 
 The current production host is released as a delta on its own live release:

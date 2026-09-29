@@ -18,6 +18,10 @@ ROOT_PACKAGE_FILES = [
     "search_source_counts.json",
     "prisma_flow.json",
     "pdf_intake_manifest.json",
+    # Which route produced each paper's text, and what was not retrieved: the
+    # evidence ledger's source quotes cannot be re-checked without them.
+    "pdf_download_results.json",
+    "fulltext_retrieval_summary.json",
 ]
 
 PACKAGE_SUBDIR_FILES = {
@@ -47,6 +51,18 @@ PACKAGE_SUBDIR_FILES = {
         "claim_map_authoring_audit.json",
         "citation_audit_review.json",
         "citation_grounding_audit.json",
+    ],
+    "screening": [
+        "title_abstract_screening.json",
+        "full_text_screening.json",
+        "records_removed.json",
+    ],
+    "quality": [
+        "model_stage_failures.json",
+        "real_llm_pdf_web_smoke.json",
+    ],
+    "package": [
+        "evidence_accounting.json",
     ],
     "extraction": [
         "extraction_audit.json",
@@ -95,6 +111,12 @@ def iter_existing_package_files(project: Project) -> Iterable[tuple[Path, str]]:
     if figures_dir.exists():
         for path in sorted(figures_dir.glob("*.png")):
             yield from entry_if_exists(path, f"figures/{path.name}", seen)
+
+    # Why each unverified result was left out (core/verification_outcome.py).
+    outcomes_dir = project.base_dir / "extraction" / "verification_outcomes"
+    if outcomes_dir.exists():
+        for path in sorted(outcomes_dir.glob("*.json")):
+            yield from entry_if_exists(path, f"extraction/verification_outcomes/{path.name}", seen)
 
     benchmark_parsed_dir = project.base_dir / "benchmark" / "source_parsed"
     if benchmark_parsed_dir.exists():

@@ -110,12 +110,16 @@ def _module_ledger(results: list, bidirectional: bool) -> dict:
     else:
         modules["sensitivityAnalyses"] = _module("ok")
 
-    if any(result.steiger_correct is None for result in results):
-        modules["steigerDirection"] = _module(
-            "degraded", "the Steiger directionality test produced no verdict"
-        )
-    else:
-        modules["steigerDirection"] = _module("ok")
+    # The reason names what the test lacked ("not computable: no instrument has
+    # samplesize.outcome"), so the report can say why direction is untested.
+    unresolved = sorted({
+        ": ".join(filter(None, (result.steiger_status.replace("_", " "), result.steiger_reason)))
+        for result in results
+        if result.steiger_correct is None
+    })
+    modules["steigerDirection"] = (
+        _module("degraded", "; ".join(unresolved)) if unresolved else _module("ok")
+    )
 
     if bidirectional:
         forward = {(r.exposure_id, r.outcome_id) for r in results}

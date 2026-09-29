@@ -421,6 +421,20 @@ export interface GeoOrder {
   checks: GeoOrderCheck[];
   updatedAt: string;
 }
+/** A page the brand published itself (百家号, 公众号, 官网 …): checked after publication as an order is, with no money behind it. */
+export interface GeoOwnedLink {
+  id: string;
+  url: string;
+  platform: string;
+  title: string;
+  publishedAt: string | null;
+  articleId: string | null;
+  groupId: string | null;
+  status: "active" | "retired";
+  retiredAt: string | null;
+  /** The engines that cited it, each with the day it first did. */
+  citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }>;
+}
 export interface GeoDistribution {
   budget: { totalCny: number; dailyCny: number } | null;
   spentCny: number;
@@ -428,6 +442,8 @@ export interface GeoDistribution {
   suggestedBudgetCny: number | null;
   market: { configured: boolean };
   orders: GeoOrder[];
+  /** Absent from a server older than the owned links. */
+  ownedLinks?: GeoOwnedLink[];
 }
 
 export interface GeoSeriesPoint {

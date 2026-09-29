@@ -1,0 +1,448 @@
+{
+  "deliverable_id": "txa-tka-meta",
+  "contract_kind": "meta-analysis-report",
+  "capability": "meta-analysis",
+  "report_file": "meta-analysis-report.md",
+  "reporting_checklist_file": "reporting-checklist.md",
+  "jobId": "meta-20260928185649-1fc3ffd33a97",
+  "status": "succeeded",
+  "releaseStatus": "blocked",
+  "job": {
+    "job_id": "meta-20260928185649-1fc3ffd33a97",
+    "status": "succeeded",
+    "release_status": "blocked",
+    "ready_for_submission": false,
+    "requires_review": true,
+    "output_language": "zh",
+    "analysis_type": "pairwise",
+    "max_papers": null,
+    "user_pdf_directory": null,
+    "ipd_data": null,
+    "created_at": "2026-09-28T18:56:49.450506Z",
+    "started_at": "2026-09-28T18:56:50.447146Z",
+    "finished_at": "2026-09-28T19:30:16.573126Z",
+    "elapsed_seconds": 1981,
+    "return_code": 2,
+    "retrieved_at": "2026-09-28T19:40:00Z",
+    "project_relative_path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l",
+    "modules": {
+      "synthesis": {
+        "status": "degraded",
+        "reason": "unverified_results_left_out: 3 extracted result(s) from 3 studies were left out of the synthesis because their independent source verification did not complete or did not match.; primary_timepoints_merged: Results reported at different time windows were analysed as one outcome."
+      }
+    },
+    "blocking_reasons": [
+      "manuscript_validation",
+      "project_submission_quality_gate",
+      "manuscript_language",
+      "manuscript_length",
+      "abstract_polish",
+      "clinical_interpretation",
+      "manuscript_content",
+      "references",
+      "citation_coverage",
+      "search_strategy",
+      "prisma_flow",
+      "declarations",
+      "figures",
+      "figure_legends",
+      "cross_references",
+      "table_footnotes",
+      "compiled_method_release"
+    ],
+    "warning_codes": [
+      "benchmark",
+      "publication_similarity"
+    ],
+    "next_actions": [
+      "Resolve the blocking issues and rerun article generation.",
+      "Keep the current draft only as a diagnostic artifact."
+    ],
+    "blocking_root_causes": [
+      {
+        "gate": "project_submission_quality_gate > citation_contract",
+        "detail": "Writable claim-map items are missing citation contract entries (16 rows).",
+        "consequence": "Manuscript reference count 0, which in turn failed the hard manuscript validation of the reference section."
+      },
+      {
+        "gate": "project_submission_quality_gate > real_llm_pdf_web_smoke > real_pdf_or_fulltext",
+        "detail": "No usable PDF/full-text parsing evidence was found.",
+        "consequence": "Independent of the citation-contract defect."
+      }
+    ]
+  },
+  "scope": {
+    "population": "Adults undergoing primary unilateral total knee arthroplasty.",
+    "intervention": "Tranexamic acid administered intravenously, topically (intra-articular), or by combined routes.",
+    "comparator": "Placebo or no tranexamic acid.",
+    "primary_outcome": "Total blood loss, continuous, measured in millilitres (mL).",
+    "secondary_outcomes": [
+      "Allogeneic blood transfusion rate (dichotomous).",
+      "Symptomatic venous thromboembolic events (dichotomous; DVT and PE within 30 days)."
+    ],
+    "study_design": "Randomized controlled trials only.",
+    "subgroup_variable": "Route of administration (intravenous vs topical vs combined).",
+    "language_restriction": "None.",
+    "date_restriction": "None."
+  },
+  "evidence_accounting": {
+    "records_identified": 400,
+    "duplicates_removed": 4,
+    "records_after_dedup": 396,
+    "records_not_screened_before_title_abstract": 196,
+    "records_not_screened_reason": "relevance cap before screening",
+    "title_abstract_screened": 200,
+    "title_abstract_excluded": 141,
+    "full_text_assessed": 21,
+    "full_text_excluded": 16,
+    "studies_included": 5,
+    "studies_in_primary_synthesis": 2,
+    "records_with_abstract_level_text_only": 33,
+    "search_source_counts": {
+      "internal_db": 150,
+      "pubmed": 200,
+      "openalex": 50
+    }
+  },
+  "included_studies": [
+    {
+      "label": "Yen 2017",
+      "pmid": "29410968",
+      "doi": "10.1155/2017/9105645",
+      "country": "China (Taiwan)",
+      "reported_participants": 93,
+      "arms": "IV TXA 1 g n=31 / topical TXA 3 g n=32 / placebo n=30",
+      "in_primary_synthesis": true,
+      "contrasts_in_synthesis": 2
+    },
+    {
+      "label": "Wang 2015",
+      "pmid": "26550418",
+      "doi": null,
+      "country": "China",
+      "reported_participants": 100,
+      "arms": "intra-articular TXA 1 g n=50 / placebo n=50",
+      "in_primary_synthesis": false,
+      "exclusion_from_synthesis_reason": "verification_not_completed"
+    },
+    {
+      "label": "Zhang 2019",
+      "pmid": "31348286",
+      "doi": "10.1097/MD.0000000000016570",
+      "country": "China",
+      "reported_participants": 210,
+      "arms": "local TXA variants n=161 (all arms received baseline IV TXA 20 mg/kg) / double placebo n=57",
+      "in_primary_synthesis": false,
+      "exclusion_from_synthesis_reason": "not among the extracted results that carried a source-verified primary-outcome effect"
+    },
+    {
+      "label": "Yang 2020",
+      "pmid": "33094562",
+      "doi": "10.1111/os.12814",
+      "country": "China",
+      "reported_participants": 94,
+      "arms": "intra-articular TXA 500 mg plus limb flexion n=47 / placebo n=47 (96 randomized)",
+      "in_primary_synthesis": false,
+      "exclusion_from_synthesis_reason": "verification_issue_history_required"
+    },
+    {
+      "label": "Shuwei Ye 2024",
+      "pmid": "39673144",
+      "doi": "10.1111/os.14317",
+      "country": "China",
+      "reported_participants": 225,
+      "arms": "intra-articular TXA 1 g n=75 / intra-articular TXA 3 g n=75 / placebo n=75",
+      "in_primary_synthesis": true,
+      "contrasts_in_synthesis": 1,
+      "note": "the 1 g contrast entered the synthesis; the 3 g contrast was excluded (verification_not_completed)"
+    }
+  ],
+  "primary_analysis": {
+    "outcome": "Total blood loss (mL)",
+    "measure": "MD",
+    "estimator": "DESIGN_AWARE_REML_HKSJ",
+    "n_studies": 2,
+    "n_contrasts": 3,
+    "participants_across_contrasts": 318,
+    "pooled_effect": -251.05519396348726,
+    "ci_lower": -345.34285150005326,
+    "ci_upper": -156.76753642692123,
+    "standard_error": 48.10683169705925,
+    "tau_squared": 0.0,
+    "i_squared": 0.0,
+    "q": 0.34066197158736644,
+    "prediction_interval": null,
+    "leave_one_out": null,
+    "design_counts": {
+      "multi_arm_rct": 2
+    },
+    "converged": true,
+    "study_effects": [
+      {
+        "study_id": "study:29410968",
+        "n_contrasts": 2,
+        "analysis_effect": -279.45902619930615,
+        "variance": 4682.446799856441
+      },
+      {
+        "study_id": "study:39673144",
+        "n_contrasts": 1,
+        "analysis_effect": -223.29999999999995,
+        "variance": 4575.517066666665
+      }
+    ],
+    "contrasts": [
+      {
+        "result_id": "result:29410968:0",
+        "study_pmid": "29410968",
+        "route_label": "Intravenous (IV) route",
+        "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+        "effect_size": -210.0,
+        "standard_error": 76.23461240822478,
+        "variance": 5811.716129032258,
+        "ci_lower": -359.41709469549085,
+        "ci_upper": -60.582905304509126,
+        "source_quote_verified": true,
+        "extraction_confidence": "verified"
+      },
+      {
+        "result_id": "result:29410968:1",
+        "study_pmid": "29410968",
+        "route_label": "Topical (intra-articular) route",
+        "timepoint": "Postoperative (calculated using maximum Hb drop through POD4)",
+        "effect_size": -336.0,
+        "standard_error": 73.69349530318127,
+        "variance": 5430.73125,
+        "ci_lower": -480.4365966891069,
+        "ci_upper": -191.56340331089308,
+        "source_quote_verified": true,
+        "extraction_confidence": "verified"
+      },
+      {
+        "result_id": "result:39673144:0",
+        "study_pmid": "39673144",
+        "route_label": "Topical (intra-articular) TXA",
+        "timepoint": "Perioperative (total blood loss during the perioperative period)",
+        "effect_size": -223.29999999999995,
+        "standard_error": 67.64256845113636,
+        "variance": 4575.517066666665,
+        "ci_lower": -355.8769979860125,
+        "ci_upper": -90.72300201398738,
+        "source_quote_verified": true,
+        "extraction_confidence": "verified"
+      }
+    ],
+    "sensitivity": {
+      "HKSJ": {
+        "estimate": -251.05519396348726,
+        "ci_lower": -345.34285150005326,
+        "ci_upper": -156.76753642692123
+      },
+      "paule_mandel": null,
+      "fixed_effect": null
+    },
+    "subgroups": {
+      "labels": {
+        "Intravenous (IV) route": {
+          "n_studies": 1,
+          "pooled": null
+        },
+        "Topical (intra-articular) TXA": {
+          "n_studies": 1,
+          "pooled": null
+        },
+        "Topical (intra-articular) route": {
+          "n_studies": 1,
+          "pooled": null
+        }
+      },
+      "between": null,
+      "note": "Labels are the results' own; a trial contributing to two labels shares its control across them, so the between-label test is approximate."
+    },
+    "multi_arm_covariance_handling": "explicit_gls_consolidation",
+    "within_study_covariance_example": 3763.2
+  },
+  "secondary_outcomes": {
+    "pooled_estimates_produced": 0,
+    "transfusion_rate": {
+      "pooled_effect": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "reason": "No dichotomous outcome row exists in the engine's effect-selection audit; secondary effect count reported by the engine is 0."
+    },
+    "symptomatic_vte": {
+      "pooled_effect": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "reason": "No dichotomous outcome row exists in the engine's effect-selection audit; secondary effect count reported by the engine is 0."
+    },
+    "per_study_descriptive_counts_reported_in_the_review": true,
+    "sparse_event_note": "Only one symptomatic event was reported across the included studies (Yen 2017, IV arm, symptomatic DVT 1/31); the remaining thrombosis counts were screening-detected (Wang 2015, ultrasound at 1 week) or explicitly asymptomatic (Zhang 2019). Zero events in a small arm does not bound the risk."
+  },
+  "results_excluded_from_synthesis": [
+    {
+      "result_id": "result:26550418:0",
+      "study_pmid": "26550418",
+      "reason": "verification_not_completed"
+    },
+    {
+      "result_id": "result:33094562:0",
+      "study_pmid": "33094562",
+      "reason": "verification_issue_history_required"
+    },
+    {
+      "result_id": "result:39673144:1",
+      "study_pmid": "39673144",
+      "reason": "verification_not_completed"
+    }
+  ],
+  "certainty": {
+    "framework": "GRADE certainty for randomized intervention evidence",
+    "outcome": "pooled_design_aware_effect",
+    "starting_certainty": "high",
+    "certainty": "very_low",
+    "domains": {
+      "risk_of_bias": "serious",
+      "inconsistency": "no_concern",
+      "indirectness": "serious",
+      "imprecision": "serious",
+      "publication_bias": "serious"
+    }
+  },
+  "risk_of_bias": {
+    "tool": "RoB 2",
+    "result_assessments": {
+      "total": 3,
+      "complete": 3,
+      "pending": 0,
+      "status": "ready",
+      "blocker_codes": []
+    },
+    "study_judgements": {
+      "39673144": "Low risk (all five domains)",
+      "29410968": "Low risk (four domains); Some concerns for selection of the reported result",
+      "31348286": "Some concerns (randomization process, selection of the reported result)",
+      "26550418": "Some concerns (randomization process, deviations from intended interventions, measurement of the outcome, selection of the reported result)",
+      "33094562": "Some concerns (randomization process, deviations from intended interventions, measurement of the outcome, selection of the reported result)"
+    }
+  },
+  "extraction": {
+    "studies": 5,
+    "outcome_rows": 29,
+    "source_quotes_verified": 29,
+    "source_quotes_unverified": 0,
+    "confidence": {
+      "high": 22,
+      "medium": 7,
+      "low": 0
+    },
+    "rows_requiring_review": 15,
+    "conflict_rows": 15,
+    "overrides_applied": 0,
+    "review_flags_all_severity": "warning"
+  },
+  "pipeline_warnings": [
+    {
+      "code": "unverified_results_left_out",
+      "severity": "warning",
+      "message": "3 extracted result(s) from 3 studies were left out of the synthesis because their independent source verification did not complete or did not match."
+    },
+    {
+      "code": "primary_timepoints_merged",
+      "severity": "warning",
+      "message": "Results reported at different time windows were analysed as one outcome: Perioperative (total blood loss during the perioperative period) and Postoperative (calculated using maximum Hb drop through POD4)."
+    }
+  ],
+  "protocol_deviations": [
+    "The protocol declared DL as the tau-squared estimator; the engine's method plan and result record the primary estimator as REML with HKSJ, Paule-Mandel and fixed-effect sensitivity estimators, and the executed estimator was DESIGN_AWARE_REML_HKSJ.",
+    "Total blood loss was fixed as the single primary outcome and the two dichotomous outcomes were declared secondary after the first run was terminated by the protocol scope check (blocker protocol_scope_input_required).",
+    "Diagnostics required by the method plan but not produced: prediction interval, leave-one-out, Paule-Mandel and fixed-effect sensitivity estimates."
+  ],
+  "artifacts": [
+    {
+      "kind": "manuscript",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/manuscript/draft.md"
+    },
+    {
+      "kind": "manuscript_pdf",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/manuscript/draft.pdf"
+    },
+    {
+      "kind": "manuscript_docx",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/manuscript/draft.docx"
+    },
+    {
+      "kind": "release_decision",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/package/release_decision.json"
+    },
+    {
+      "kind": "review_package",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/package/metaagent_export.zip"
+    },
+    {
+      "kind": "synthesis_result",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/analysis/synthesis_result.json"
+    },
+    {
+      "kind": "method_result",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/analysis/method_result.json"
+    },
+    {
+      "kind": "effect_selection_audit",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/analysis/effect_selection_audit.json"
+    },
+    {
+      "kind": "method_certainty",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/analysis/method_certainty.json"
+    },
+    {
+      "kind": "rob_summary",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/risk_of_bias/rob_summary.json"
+    },
+    {
+      "kind": "extraction_audit",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/extraction/extraction_audit.json"
+    },
+    {
+      "kind": "prisma_flow",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/prisma_flow.json"
+    },
+    {
+      "kind": "pipeline_warnings",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/pipeline_warnings.json"
+    },
+    {
+      "kind": "manuscript_validation",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/manuscript/manuscript_validation.json"
+    },
+    {
+      "kind": "quality_gate",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/manuscript/quality_gate.json"
+    },
+    {
+      "kind": "smoke_manifest",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/quality/real_llm_pdf_web_smoke.json"
+    },
+    {
+      "kind": "forest_plot",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/figures/forest_plot.png"
+    },
+    {
+      "kind": "prisma_diagram",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/figures/prisma_diagram.png"
+    },
+    {
+      "kind": "rob_summary_plot",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/figures/rob_summary.png"
+    },
+    {
+      "kind": "references_bib",
+      "path": "meta-analysis-runs/meta-20260928185649-1fc3ffd33a97/output/20260928_185654_Tranexamic_acid_for_reducing_perioperative_blood_l/references.bib"
+    }
+  ],
+  "notes": [
+    "The managed job reached a terminal state (succeeded) but the engine's own release decision is blocked; this deliverable reports that status verbatim and does not present the run as submission-ready.",
+    "Individual patient management is out of scope: this is research evidence synthesis, not a treatment recommendation.",
+    "The earlier job meta-20260928184219-d0a6bd5ee443 was terminated by the protocol scope check and its artifacts are preserved under deliverables/txa-tka-meta/blocked-attempt-1/ for audit only; no statistic from it is used in this report."
+  ]
+}

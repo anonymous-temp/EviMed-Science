@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
-import { cancelGeoOrder, getGeoDistribution, type GeoDistribution, type GeoOrder, type GeoProject } from "@/lib/geoClient";
+import { cancelGeoOrder, getGeoDistribution, type GeoDistribution, type GeoOrder, type GeoOwnedLink, type GeoProject } from "@/lib/geoClient";
 import { safeWebHref } from "@/lib/readPages";
 import { toast } from "@/lib/toast";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { GEO_ORDER_CANCELLABLE, layerName, monthDay, orderStateWord } from "../geoText";
+import { GEO_ORDER_CANCELLABLE, engineName, layerName, monthDay, orderStateWord, ownedPlatformName } from "../geoText";
 import { BudgetDialog } from "./BudgetDialog";
 import { StepPending, TabError, TabSection, TabSkeleton, TD, TH, useGeoLoad } from "./geoTabKit";
 import { yuan } from "./geoTabText";
@@ -18,7 +18,9 @@ import { yuan } from "./geoTabText";
  * where each article went and where it stands; “撤单” is offered only while
  * the outlet has not accepted it yet. While the marketplace is not connected
  * nothing can be placed: the tab says so in a sentence and asks for nothing —
- * no budget button, no “等你” (G20).
+ * no budget button, no “等你” (G20). Below the orders, the pages the brand
+ * published itself (百家号, 公众号 …), which the program checks after
+ * publication as it checks an order.
  */
 export function DistributionTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoLoad(`distribution:${geoId}`, () => getGeoDistribution(geoId));
@@ -30,6 +32,7 @@ export function DistributionTab({ geoId, project }: { geoId: string; project: Ge
 function Distribution({ geoId, project, data, onChanged }: { geoId: string; project: GeoProject; data: GeoDistribution; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const orders = (Array.isArray(data?.orders) ? data.orders : []).filter((order) => order && order.id);
+  const ownedLinks = (Array.isArray(data?.ownedLinks) ? data.ownedLinks : []).filter((link) => link && link.id);
   const budget = data?.budget && typeof data.budget.totalCny === "number" ? data.budget : null;
   const configured = data?.market?.configured !== false;
 
@@ -44,6 +47,7 @@ function Distribution({ geoId, project, data, onChanged }: { geoId: string; proj
       {orders.length > 0
         ? <Orders geoId={geoId} orders={orders} onChanged={onChanged} />
         : budget && configured && <StepPending geoId={geoId} project={project} step="distribution" />}
+      {ownedLinks.length > 0 && <OwnedLinks links={ownedLinks} />}
       {editing && (
         <BudgetDialog
           geoId={geoId}
@@ -190,6 +194,52 @@ function Orders({ geoId, orders, onChanged }: { geoId: string; orders: GeoOrder[
           onCancel={() => setPending(null)}
         />
       )}
+    </TabSection>
+  );
+}
+
+/** The pages the brand published itself: where, what, which engines cite it, since when. */
+function OwnedLinks({ links }: { links: GeoOwnedLink[] }) {
+  return (
+    <TabSection title="自有发布" meta={`${links.length} 条`} className="mt-8">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] border-collapse">
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className={`${TH} sticky left-0 bg-bg`}>平台</th>
+              <th scope="col" className={TH}>标题</th>
+              <th scope="col" className={TH}>被 AI 引用</th>
+              <th scope="col" className={`${TH} text-right`}>发布日期</th>
+              <th scope="col" className={TH}><span className="sr-only">操作</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {links.map((link) => {
+              const href = safeWebHref(link.url);
+              const cited = Array.isArray(link.citedBy) ? link.citedBy : [];
+              return (
+                <tr key={link.id} data-geo-owned-link={link.id} className="border-b border-faint">
+                  <th scope="row" className={`${TD} sticky left-0 bg-bg text-left font-normal`}>{ownedPlatformName(link.platform)}</th>
+                  <td className={TD}>
+                    <span className="block">{link.title || "—"}</span>
+                    {link.status === "retired" && <span className="block text-caption text-text-3">已下线</span>}
+                  </td>
+                  <td className={`${TD} text-text-2`}>{cited.length ? cited.map((entry) => engineName(entry.engine)).join("、") : "—"}</td>
+                  <td className={`${TD} text-right tabular-nums text-text-2`}>{monthDay(link.publishedAt) ?? "—"}</td>
+                  <td className={`${TD} w-24 whitespace-nowrap text-right`}>
+                    {href && (
+                      <a href={href} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "text", size: "sm", className: "text-accent hover:text-accent" })}>
+                        查看
+                        <ExternalLink size={16} aria-hidden="true" />
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </TabSection>
   );
 }

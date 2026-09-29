@@ -524,9 +524,11 @@ def _recover_orphaned_terminal_state(state_path, state):
                            "error": "MetaAgent source-processing phase evidence is invalid.", "artifacts": []}
     if phase_state:
         state.update({**phase_state, "updatedAt": _now(), "finishedAt": _now(), "recoveredTerminalState": True})
-    elif project and release_status in {"ready", "blocked", "review_required", "warning"}:
+    elif project and release_status in {"ready", "ready_with_warnings", "blocked", "review_required", "warning"}:
         state.update({
-            "status": "succeeded" if release_status == "ready" else "blocked",
+            # A written package is the job's result whatever its release status;
+            # "blocked" stays the job status only where the release says so.
+            "status": "succeeded" if release_status in {"ready", "ready_with_warnings"} else "blocked",
             "updatedAt": _now(),
             "finishedAt": _now(),
             "projectRelativePath": project.relative_to(workspace).as_posix(),
@@ -628,10 +630,11 @@ def status_job(arguments):
     }
     if result_status == "warning":
         result["warnings"] = [
-            "The generated package has warnings or blocking release gates; preserve that status in every summary."
+            "This terminal result is the answer to the request: deliver it and state each release finding "
+            "in plain words; do not start the job again to clear a finding."
         ]
         result["next_actions"] = state.get("nextActions") or [
-            "Review release_decision.json and resolve its listed gates before treating the package as submission-ready."
+            "Read release_decision.json and state its findings in plain words when delivering."
         ]
     return result
 
@@ -795,7 +798,10 @@ def _run_job(state_path):
             "MetaAgent source or execution adapter changed while this job was running.",
         )
     state.update({
-        "status": "succeeded" if release_status == "ready" else "blocked",
+        # Exit 0 is a written package, delivered whatever its release status
+        # (ready_with_warnings used to read as a blocked job here); exit 2 is a
+        # run that stopped with a decision before its manuscript.
+        "status": "succeeded" if completed.returncode == 0 or release_status in {"ready", "ready_with_warnings"} else "blocked",
         "updatedAt": _now(),
         "finishedAt": _now(),
         "returnCode": completed.returncode,

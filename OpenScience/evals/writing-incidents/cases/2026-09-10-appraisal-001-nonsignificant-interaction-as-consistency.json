@@ -1,0 +1,10 @@
+{
+  "id": "2026-09-10-appraisal-001-nonsignificant-interaction-as-consistency",
+  "genre": "number-prose-divergence",
+  "observedIn": "evals/evidence-appraisal/results/2026-09-10-appraisal-001-sglt2-hfpef/deliverable/deliverables/hfpef-sglt2-hospitalization/appraisal-table.md",
+  "line": 160,
+  "verbatim": "分层方向一致：HFpEF 0.79（0.71–0.87）、HFmrEF 0.77（0.67–0.89）；LVEF 三层为 0.76、0.79、0.82，交互作用 P=0.690。",
+  "whyItIsWrong": "A non-significant interaction test (P=0.690, from the source's own meta-regression over two trials) is absence of evidence of heterogeneity, not evidence of consistency; the row scores inconsistency 0 on it.",
+  "caughtBy": "reviewer",
+  "note": "Contradicted by the review and left in under the older loop. Language: the reviewer's interpretation finding, not a pattern."
+}

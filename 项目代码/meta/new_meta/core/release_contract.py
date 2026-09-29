@@ -1,11 +1,13 @@
 """Terminal release-state contract shared by CLI, Web, API and packages."""
 from __future__ import annotations
 
+import copy
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from new_meta.core.project import Project
+from new_meta.core.release_tiers import BLOCKING_GATES, NO_MANUSCRIPT_CODE, apply_release_tiers
 
 
 class ReleaseStatus(str, Enum):
@@ -44,40 +46,71 @@ def build_release_decision(
     *,
     package_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Normalize package readiness into one terminal, harness-friendly decision."""
-    readiness = submission_readiness if isinstance(submission_readiness, dict) else {}
+    """Normalize package readiness into one terminal, harness-friendly decision.
+
+    Every written manuscript is delivered; the status says how it may be
+    presented. The gates are re-tiered here (``core.release_tiers``), so a
+    readiness review from any source - including one saved before the table -
+    is decided by the same few blocking checks. ``blocked`` is reserved for
+    those checks and for a run with no manuscript at all; nothing in a
+    decision asks for the job to be run again.
+    """
+    readiness = copy.deepcopy(submission_readiness) if isinstance(submission_readiness, dict) else {}
+    if readiness.get("gates"):
+        apply_release_tiers(readiness)
     raw_status = str(readiness.get("status") or "").strip().lower()
     failed_gates = _gate_rows(readiness, "fail")
     warning_gates = _gate_rows(readiness, "warn")
 
     if not readiness:
         status = ReleaseStatus.BLOCKED
-        blocker_codes = ["missing_submission_readiness_review"]
-    elif raw_status == ReleaseStatus.READY.value and not failed_gates:
-        status = ReleaseStatus.READY
-        blocker_codes = []
-    elif raw_status == ReleaseStatus.READY_WITH_WARNINGS.value and not failed_gates:
-        status = ReleaseStatus.READY_WITH_WARNINGS
-        blocker_codes = []
-    else:
+        blocker_codes = [NO_MANUSCRIPT_CODE]
+    elif failed_gates:
         status = ReleaseStatus.BLOCKED
         blocker_codes = _gate_codes(failed_gates, fallback="submission_readiness_blocked")
+    elif warning_gates or raw_status == ReleaseStatus.READY_WITH_WARNINGS.value:
+        status = ReleaseStatus.READY_WITH_WARNINGS
+        blocker_codes = []
+    elif raw_status == ReleaseStatus.READY.value:
+        status = ReleaseStatus.READY
+        blocker_codes = []
+    else:
+        # A readiness without gates whose status is not a release status.
+        status = ReleaseStatus.BLOCKED
+        blocker_codes = ["submission_readiness_blocked"]
 
     warning_codes = _gate_codes(warning_gates, fallback="submission_warning") if warning_gates else []
     package = str(package_path or "")
     ready_for_submission = status is not ReleaseStatus.BLOCKED
     requires_review = status is not ReleaseStatus.READY
-    if status is ReleaseStatus.READY:
-        summary = "Generated article passed all hard quality gates."
-        next_actions = ["Use or edit the generated article and supporting files."]
-    elif status is ReleaseStatus.READY_WITH_WARNINGS:
-        summary = "Generated article passed hard gates with non-blocking quality warnings."
-        next_actions = ["Review the listed warnings while editing the article."]
-    else:
-        summary = "Generated article failed one or more required evidence or statistical quality gates."
+    if not readiness:
+        summary = "No manuscript was written, so there is no article to release."
         next_actions = [
-            "Resolve the blocking issues and rerun article generation.",
-            "Keep the current draft only as a diagnostic artifact.",
+            "Report why the run stopped before its manuscript; do not present partial files as a review.",
+        ]
+    elif status is ReleaseStatus.READY:
+        summary = "The generated article passed every release check."
+        next_actions = ["Use or edit the generated article and its supporting files."]
+    elif status is ReleaseStatus.READY_WITH_WARNINGS:
+        summary = (
+            "The generated article is delivered with advisory findings; none of them makes it "
+            "unreadable or hides a defect from its reader."
+        )
+        next_actions = [
+            "State each listed finding in plain words when handing the article over.",
+            "A finding is not a reason to run the job again; the same request reproduces it.",
+        ]
+    else:
+        reasons = "; ".join(
+            dict.fromkeys(BLOCKING_GATES.get(code, code) for code in blocker_codes)
+        )
+        summary = (
+            "The generated article is delivered, but a check that protects its reader failed: "
+            f"{reasons}. Present it as unverified, with these findings."
+        )
+        next_actions = [
+            "Deliver the article as unverified and state each blocking finding in plain words.",
+            "Do not run the job again for the same request; the same inputs reproduce the same result.",
         ]
 
     return {
@@ -85,6 +118,9 @@ def build_release_decision(
         "status": status.value,
         "ready_for_submission": ready_for_submission,
         "requires_review": requires_review,
+        # A written manuscript is delivered whatever its status (the platform
+        # delivers everything, 2026-09-17); False only when none was written.
+        "deliverable": bool(readiness),
         "summary": summary,
         "next_actions": next_actions,
         "artifacts": ([{"kind": "review_package", "path": package}] if package else []),

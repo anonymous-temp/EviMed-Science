@@ -31,7 +31,13 @@ It does not estimate clinical efficacy, treatment effects, or evidence certainty
 
 Write `bibliometric-analysis-report.md` with scope, search strategy, corpus,
 methods, trends, networks, topic evolution, frontiers, limits, and links to the
-managed figures and tables. Write `bibliometric-analysis-run.json` with the
+managed figures and tables. This engine rounds its measures where it computes
+them, and its own `report.md` renders them to the display convention every
+engine report shares (other estimates to three significant figures, p values to
+two or three decimals and `<0.001`, percentages to two significant figures,
+counts with thousands separators): write numbers as rendered there, and any
+other number to the same convention, never with more digits. Write
+`bibliometric-analysis-run.json` with the
 terminal job state, corpus count, query, and exact returned artifacts.
 
 ## Method priors
@@ -44,7 +50,8 @@ sizes with intervals, multiplicity, missing data, sensitivity analyses) and
 produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files, so a number typed from
-memory, or rounded differently from the output, comes back as a finding.
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
 
 ## Before delivering: two fixed steps
 
@@ -67,3 +74,23 @@ Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
 rejection, and process description; the report itself carries none of them, and
 no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

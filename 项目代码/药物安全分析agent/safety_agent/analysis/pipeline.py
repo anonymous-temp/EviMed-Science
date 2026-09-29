@@ -386,6 +386,12 @@ class AnalysisPipeline:
             else self._query_urls(drug_search, drug_norm.normalized, user_pts)
         )
         provenance = self._faers_snapshot.provenance if self._faers_snapshot else None
+        releases = sorted(getattr(self._openfda, "releases_used", None) or ())
+        if len(releases) > 1:
+            notes.append(
+                "openFDA 计数来自多个 FAERS 数据版本(" + "、".join(releases) + "),"
+                "版本核对未能完成,缓存中的旧版本答案未被替换。"
+            )
         return AnalysisResult(
             drug_query=drug,
             drug_normalized=drug_norm.normalized,
@@ -448,6 +454,7 @@ class AnalysisPipeline:
             snapshot_sha256=provenance.sha256 if provenance else None,
             snapshot_extracted_at=provenance.extracted_at if provenance else None,
             snapshot_deduplication=provenance.deduplication if provenance else None,
+            openfda_last_updated=releases,
             gps_prior_fitted=self._gps_prior.fitted,
             gps_prior_id=self._gps_prior.fit_id,
         )

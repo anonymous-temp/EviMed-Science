@@ -962,7 +962,11 @@ export class AutopilotService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) throw new HttpError(400, "autopilot_payload_invalid", "Episode date is invalid.");
     if (this.usage) await this.usage.assertWithinLimits(userId, { dailyLimit: agenda.payload.dailyBudgetCny, weeklyLimit: agenda.payload.weeklyBudgetCny, now: this.now() });
     const episodeId = `episode-${hash(`${userId}:${agenda.id}:${date}`).slice(0, 32)}`;
-    const index = Number.parseInt(hash(`${agenda.id}:${date}`).slice(0, 8), 16) % agenda.payload.taskTypes.length;
+    // By the day, not by a hash of it: the task types take turns, so an agenda
+    // that names two runs each of them within any two days. A hash picked the
+    // same type four days running about one time in eight, and the owner's
+    // agenda has two types (2026-09-29).
+    const index = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000) % agenda.payload.taskTypes.length;
     const taskType = agenda.payload.taskTypes[index];
     // The night's money, split before anything is dispatched: the episode is
     // told a smaller number so that the claims it earns can still be re-checked
