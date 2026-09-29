@@ -699,3 +699,22 @@ test("a fork is adopted as its own run, named after the line it branched from, a
   await f.store.adoptRuntimeSession(f.project, forkId, { transcript, routeTurn: async () => ({}), forkedFrom: fixture.sessionId });
   assert.equal((await f.runs()).length, sourceRuns.length + 1);
 });
+
+test("a later observed steer joins the existing native turn's request identities without creating a run", async t => {
+  const initial = fixture.events.filter(event => event.seq <= inputs[0].seq);
+  const f = await setup(t, initial);
+  await f.adopt();
+  const [before] = await f.runs();
+  const steered = structuredClone(inputs[1]);
+  steered.seq = inputs[0].seq + 1;
+  steered.time = inputs[0].time + 1;
+  steered.data.turn = 1;
+  f.setEvents([...initial, steered]);
+  await f.adopt();
+  const [after] = await f.runs();
+  assert.equal(after.id, before.id);
+  assert.equal((await f.runs()).length, 1);
+  assert.deepEqual(after.kernelRequestIds, [inputs[0].data.source.rpcId, inputs[1].data.source.rpcId]);
+  await f.adopt();
+  assert.deepEqual((await f.runs())[0].kernelRequestIds, after.kernelRequestIds);
+});
