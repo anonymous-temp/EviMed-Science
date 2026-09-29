@@ -62,7 +62,7 @@ class MRContractTests(unittest.TestCase):
                     "request",
                 )
         self.server._validate(
-            {**request, "outcomeSource": {"type": "opengwas", "gwasId": "ieu-a-7"}},
+            {**request, "outcomeSource": {"type": "opengwas", "gwasId": "ieu-a-7", "effectScale": {"unit": "SD", "evidence": "User declaration"}}},
             schema,
             "request",
         )
