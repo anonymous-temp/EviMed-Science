@@ -30,7 +30,7 @@ test("every host release script parses", async () => {
 
 test("the switch moves `current` first and runs compose through it", async () => {
   const text = await code("host-release-switch.sh");
-  const moved = text.indexOf('mv -T "${ROOT}/current.next" "${ROOT}/current"');
+  const moved = text.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');
   const entered = text.indexOf('cd "${ROOT}/current/OpenScience/deploy/web"');
   const composed = text.indexOf('"${COMPOSE[@]}" config --hash');
   assert.ok(moved > 0 && entered > moved && composed > entered, "current is moved, then entered, then compose runs");

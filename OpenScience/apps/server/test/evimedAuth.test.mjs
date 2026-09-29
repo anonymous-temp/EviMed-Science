@@ -315,9 +315,9 @@ test("with the mode off the route is not there and nothing else changes", async 
     // And the session it was asked about is untouched.
     assert.equal((await fetch(`${base}/api/me`, { headers: { Cookie: cookie } })).status, 200);
 
-    // The login page is told the same thing it was told before the mode existed.
+    // The local mode retains the approved open-registration default.
     const methods = await (await fetch(`${base}/api/auth/methods`)).json();
-    assert.deepEqual(methods.data, { mode: "local", selfRegistration: false });
+    assert.deepEqual(methods.data, { mode: "local", selfRegistration: true });
   });
 });
 

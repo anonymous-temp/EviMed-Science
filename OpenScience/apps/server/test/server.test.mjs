@@ -306,6 +306,7 @@ test("specialty agent catalog requires authentication and exposes only public me
       "peer-review",
       "research-grant-development",
       "research-topic-selection",
+      "statistical-analysis",
     ]);
     assert.equal(body.data[0].title, "Drug Safety Analysis");
     assert.deepEqual(body.data[0].estimatedMinutes, [20, 40]);
@@ -2971,7 +2972,7 @@ test("no cap configured refuses no dispatch, whatever the account has spent", as
   });
 });
 
-test("self-registration is off unless the deployment turns it on", async () => {
+test("self-registration can be explicitly disabled by the deployment", async () => {
   await withAuthApp(async ({ base }) => {
     const methods = await (await fetch(`${base}/api/auth/methods`)).json();
     assert.deepEqual(methods.data, { mode: "local", selfRegistration: false });
@@ -2983,7 +2984,7 @@ test("self-registration is off unless the deployment turns it on", async () => {
     });
     assert.equal(refused.status, 403);
     assert.equal((await refused.json()).code, "self_registration_disabled");
-  });
+  }, { selfRegistrationEnabled: false });
 });
 
 test("registering creates the account, signs it in, and gives it its own space", async () => {
@@ -3016,7 +3017,7 @@ test("registering creates the account, signs it in, and gives it its own space",
     });
     assert.equal(again.status, 409);
     assert.equal((await again.json()).code, "user_exists");
-  }, { selfRegistrationEnabled: true });
+  });
 });
 
 test("an account changes its own password with the current one, and signs in with the new one", async () => {

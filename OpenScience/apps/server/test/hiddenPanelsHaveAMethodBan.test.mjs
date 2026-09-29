@@ -45,7 +45,8 @@ const WHAT_STOPS_IT = {
   "ui-settings-web-search": { namespace: "settings" },
   "ui-settings-plugin-inventory": { namespace: "evimedPlugins" },
   "ui-settings-plugins": { namespace: "cordis" },
-  "ui-model-selection": { methods: ["session/selectModel", "session/modelCatalog"] },
+  // Model selection is visible for the approved thinking controls; the
+  // runtime proxy still validates the configured provider/model selection.
   "ui-agent-preset": { methods: ["agentPresets/select", "agentPresets/copy", "agentPresets/deletePreset"] },
   "ui-message-feedback": { namespace: "messageFeedback" },
   "ui-goal": { namespace: "goals" },

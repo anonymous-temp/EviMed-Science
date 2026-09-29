@@ -179,10 +179,10 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // The 0.1.7-rc.2 inventory declares 135 RPCs: 9 the control plane calls, 124
-  // denied and the two follow streams; plus the two EviMed probe endpoints and
-  // the gateway acknowledgement endpoint.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 136);
+  // Nine kernel calls and two EviMed probe calls, 122 refused methods and
+  // the gateway acknowledgement. Browser model-selection methods have their
+  // own validated policy, so they no longer belong to this denied inventory.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 134);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }

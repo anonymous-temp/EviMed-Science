@@ -26,7 +26,12 @@ const file = process.env.FAKE_DOCKER_STATE;
 const state = JSON.parse(fs.readFileSync(file, "utf8"));
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.FAKE_DOCKER_LOG, args.join(" ") + "\n");
-const save = () => fs.writeFileSync(file, JSON.stringify(state));
+const save = () => {
+  // A background inspect must see a whole snapshot while restart updates it.
+  const next = file + "." + process.pid + ".next";
+  fs.writeFileSync(next, JSON.stringify(state));
+  fs.renameSync(next, file);
+};
 const now = () => new Date().toISOString();
 const byService = (service) => Object.entries(state.containers).find(([, c]) => c.service === service);
 const flag = (name) => { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : undefined; };
@@ -309,7 +314,7 @@ test("the live pages are walked after the switch, and a failed walk says the rel
     try {
       const result = await runSwitch(root, ["--no-prune"]);
       assert.equal(result.code, code, result.stdout + result.stderr);
-      assert.match(result.stdout, said);
+      assert.match(result.stdout, said, result.stdout + result.stderr);
       assert.match(result.stdout, /=== switched to evimed-1cf308956b6e-1 ===/);
       const calls = await readFile(path.join(root, "docker.log"), "utf8");
       const walk = calls.split("\n").find((line) => line.startsWith("run ") && line.includes("--entrypoint sh"));

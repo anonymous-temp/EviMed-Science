@@ -2050,7 +2050,7 @@ test("a command the record says we have is a command that exists", async () => {
   assert.ok(mentions >= 5, `only ${mentions} pnpm commands found across the docs — the scan did not read them`);
 });
 
-test("every capability fixes the two pre-delivery steps instead of leaving them to the model", async () => {
+test("file-delivery capabilities fix the two pre-delivery steps instead of leaving them to the model", async () => {
   // Plan item A3. `manuscript-humanize` was named by one capability of eleven
   // and `traceability-review` by none — so a register pass and a citation sweep
   // happened when the model thought of them, which is on the easy runs and not
@@ -2082,6 +2082,10 @@ test("every capability fixes the two pre-delivery steps instead of leaving them 
     }
     const shipped = await readFile(new URL(`${name}/SKILL.md`, shippedRoot), "utf8").catch(() => null);
     assert.ok(shipped !== null, `${name} has no shipped body under capability-skills/, so a delegated child reads nothing`);
+    // Data-first scoping and native statistics use proportional numerical
+    // checks and optional companions, as covered by their capability suites.
+    // They do not inherit the full report pipeline's mandatory skill sequence.
+    if (["dataset-research-scoping", "statistical-analysis"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

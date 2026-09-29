@@ -1990,7 +1990,8 @@ for (const lossStage of [2, 3]) test(`verifier takeover at stage ${lossStage} ke
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
   app.researchSessions.stateStore = null;
   app.runtimeManager.sessionMessages = async () => [];
-  let target = null, reservations = 0, prompts = 0, closed = [];
+  let target = null, reservations = 0, prompts = 0;
+  const closed = [];
   app.runtimeManager.reserveBoundedRuntimeSession = async (_project, scope) => {
     reservations += 1; target = { runId: scope.runId, generation: `verify-generation-${reservations}` };
     return { id: `verify-session-${reservations}`, kernel: "dsh" };

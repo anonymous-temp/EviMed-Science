@@ -35,6 +35,23 @@ const gbkFile = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0x2e, 0x74, 0x78, 0x74]); /
 // cleanly as "Ŀ¼" and is, correctly, archived under that name.
 const gbkDirectory = Buffer.from([0xca, 0xfd, 0xbe, 0xdd]);
 
+function supportsRawNames(directory) {
+  const file = Buffer.concat([Buffer.from(`${directory}/raw-probe-`), gbkFile]);
+  const folder = Buffer.concat([Buffer.from(`${directory}/raw-probe-`), gbkDirectory]);
+  let wrote = false, made = false;
+  try {
+    fs.writeFileSync(file, "probe"); wrote = true;
+    fs.mkdirSync(folder); made = true;
+    return true;
+  } catch (error) {
+    if (["EILSEQ", "EINVAL"].includes(error.code)) return false;
+    throw error;
+  } finally {
+    if (made) fs.rmdirSync(folder);
+    if (wrote) fs.unlinkSync(file);
+  }
+}
+
 async function scratch(t) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "backup-entries-"));
   t.after(async () => {
@@ -73,9 +90,12 @@ async function fixture(t) {
   const other = await put(data, "users/u/projects/q/workspace/cross.txt", `${shared}\n`);
   await link(other, path.join(ws, "cross.txt"));
   // Names that are not UTF-8: an unzipped GBK archive does exactly this.
-  fs.writeFileSync(Buffer.concat([Buffer.from(`${ws}/`), gbkFile]), "gbk named file\n");
-  fs.mkdirSync(Buffer.concat([Buffer.from(`${ws}/`), gbkDirectory]));
-  fs.writeFileSync(Buffer.concat([Buffer.from(`${ws}/`), gbkDirectory, Buffer.from("/inside.txt")]), "inside\n");
+  const rawNames = supportsRawNames(ws);
+  if (rawNames) {
+    fs.writeFileSync(Buffer.concat([Buffer.from(`${ws}/`), gbkFile]), "gbk named file\n");
+    fs.mkdirSync(Buffer.concat([Buffer.from(`${ws}/`), gbkDirectory]));
+    fs.writeFileSync(Buffer.concat([Buffer.from(`${ws}/`), gbkDirectory, Buffer.from("/inside.txt")]), "inside\n");
+  }
   const records = [
     { path: `${workspace}/endpoint`, kind: "socket" },
     { path: `${workspace}/pipe`, kind: "fifo" },
@@ -83,8 +103,10 @@ async function fixture(t) {
     { path: `${workspace}/from-cache.txt`, kind: "hardlink-dropped" },
     { path: `${workspace}/cross.txt`, kind: "hardlink-dropped" },
     { path: "users/u/projects/q/workspace/cross.txt", kind: "hardlink-dropped" },
-    { parent: workspace, kind: "non-utf8-name", nameHex: gbkFile.toString("hex") },
-    { parent: workspace, kind: "non-utf8-name", nameHex: gbkDirectory.toString("hex") },
+    ...(rawNames ? [
+      { parent: workspace, kind: "non-utf8-name", nameHex: gbkFile.toString("hex") },
+      { parent: workspace, kind: "non-utf8-name", nameHex: gbkDirectory.toString("hex") },
+    ] : []),
   ];
   if (!privileged) {
     await chmod(await put(data, `${workspace}/locked.txt`, "unreadable\n"), 0o000);
@@ -196,6 +218,9 @@ module.restore_numeric(sys.argv[2], Path(sys.argv[3]), require_privilege=False)
       const root = await scratch(t);
       const data = path.join(root, "data");
       await put(data, `${workspace}/kept.txt`, "kept\n");
+      if (kind === "non-utf8-name" && !supportsRawNames(data)) {
+        t.skip("This filesystem rejects non-UTF-8 names"); return;
+      }
       await make(data);
       await assert.rejects(backup({ root, data }, { ...environment, OPEN_SCIENCE_BACKUP_STRICT: strict }),
         (error) => refusal.test(error.stderr));
@@ -208,6 +233,7 @@ test("a name that is not UTF-8 in the runtime scratch the backup never walks is 
   const root = await scratch(t);
   const data = path.join(root, "data");
   await put(data, `${workspace}/kept.txt`, "kept\n");
+  if (!supportsRawNames(data)) { t.skip("This filesystem rejects non-UTF-8 names"); return; }
   const cache = path.join(data, "users/u/projects/p/runtime/container-runtime/xdg-cache");
   await mkdir(cache, { recursive: true });
   fs.writeFileSync(Buffer.concat([Buffer.from(`${cache}/`), gbkFile]), "scratch\n");
@@ -256,7 +282,11 @@ for (const mutation of ["unknown-kind", "outside-workspace", "alias-of-nothing",
     if (mutation === "unknown-kind") byKind("fifo").kind = "door";
     else if (mutation === "outside-workspace") byKind("fifo").path = "users/u/projects/p/pipe";
     else if (mutation === "alias-of-nothing") byKind("hardlink").of = `${workspace}/missing.txt`;
-    else if (mutation === "utf8-name-as-non-utf8") byKind("non-utf8-name").nameHex = Buffer.from("plain.txt").toString("hex");
+    else if (mutation === "utf8-name-as-non-utf8") {
+      const record = byKind("non-utf8-name") ?? { parent: workspace, kind: "non-utf8-name" };
+      if (!manifest.omitted.includes(record)) manifest.omitted.push(record);
+      record.nameHex = Buffer.from("plain.txt").toString("hex");
+    }
     else await writeFile(path.join(extracted, byKind("fifo").path), "a file where the record says a FIFO was\n");
     await writeFile(manifestPath, JSON.stringify(manifest));
     const corrupt = path.join(f.root, "corrupt.tar.gz");
@@ -291,7 +321,7 @@ test("the scheduler records what was left out, by kind, and stays healthy", asyn
   assert.equal(state.status, "healthy");
   assert.equal(state.lastOmittedRecorded, f.records.length);
   assert.equal(state.lastOmittedKinds["hardlink-dropped"], 3);
-  assert.equal(state.lastOmittedKinds["non-utf8-name"], 2);
+  assert.equal(state.lastOmittedKinds["non-utf8-name"] ?? 0, f.records.filter(record => record.kind === "non-utf8-name").length);
   assert.equal(state.lastOmittedSample.length, 5);
   assert.equal(state.lastLinksRecorded, 0);
 });

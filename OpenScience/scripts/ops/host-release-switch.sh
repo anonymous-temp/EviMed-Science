@@ -143,7 +143,10 @@ case "$ACTIVITY" in
     ;;
 esac
 echo "=== current -> ${NEW} ==="
-ln -sfn "$REL" "${ROOT}/current.next" && mv -T "${ROOT}/current.next" "${ROOT}/current"
+ln -sfn "$REL" "${ROOT}/current.next"
+# Both names are in the same directory: rename replaces the link atomically
+# without following it, on the Linux host and in local macOS release tests.
+node -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' "${ROOT}/current.next" "${ROOT}/current"
 readlink -f "${ROOT}/current"
 # Whole seconds, floored: a container started in the same second as the move
 # counts as started after it, and it did resolve the new link.
