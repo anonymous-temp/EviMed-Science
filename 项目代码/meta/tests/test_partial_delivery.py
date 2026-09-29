@@ -175,3 +175,52 @@ def test_two_reports_of_one_model_identified_trial_contribute_once(tmp_path, mon
     assert len(effects) == 1
     assert sum(row["in_final_primary_analysis"] for row in audit) == 1
     assert any("overlap" in row.get("reason", "") for row in audit)
+
+
+def test_uncertain_selection_can_be_reused_without_claiming_verified_proofs(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import cached_alignment_is_current
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert cached_alignment_is_current(project)
+    studies[0].outcomes[0].events_intervention = 7
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    assert not cached_alignment_is_current(project)
+
+
+def test_compiled_review_preserves_uncertain_trial_and_renders_limitations(tmp_path, monkeypatch):
+    import json
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.autonomous_analysis import AnalysisJudgment, RowJudgment
+    from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
+    from new_meta.core.extraction_verification import calculation_fields
+    from new_meta.core.method_delivery import run_method_delivery
+    from new_meta.core.primary_analysis_alignment import require_current_compiled_alignment
+    from new_meta.schemas.protocol import ResearchProtocol
+    from test_unattended_primary_analysis_set import _production_studies, _project
+    studies = _production_studies()
+    project, _ = _project(tmp_path, studies, unattended=True)
+    protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
+    source = project.get_path(studies[0].outcomes[0].primary_analysis_alignment.checked_source_path).read_text()
+    studies[0].outcomes[0].primary_analysis_alignment = None
+    studies[0].outcomes[0].source_quote_verified = False
+    project.save_json("parsed_papers.json", {"22053253": {"full_text": source}}, subdir="papers")
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
+    def choose(self, prompt, schema, **kwargs):
+        request = json.loads(prompt.split("REQUEST_JSON\n", 1)[1])
+        return AnalysisJudgment(rows=[RowJudgment(outcome_index=0, include=True, trial_id=request["study_id"],
+            rationale="Results-section data support the estimate; verifier unavailable.", assumptions=["Trial identity is uncertain."],
+            numeric_quotes={field: source for field in calculation_fields(studies[0].outcomes[0], protocol)})])
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", choose)
+    delivery = run_method_delivery(project=project, protocol=protocol, extracted_studies=studies, rob_results=[],
+        prisma_data=project.prisma.to_dict(), search_query="TXA TKA", lang="en", auto_resolve_uncertainty=True)
+    assert delivery.phase.status.value == "succeeded", delivery.phase.summary
+    result = project.load_json("synthesis_result.json", subdir="analysis")
+    assert result["engine_payload"]["n_studies"] == 4
+    assert result["engine_payload"]["n_contrasts"] == 6
+    assert "verifier unavailable" in delivery.manuscript and "Trial identity is uncertain" in delivery.manuscript
+    assert project.get_path("draft.md", subdir="manuscript").exists()
+    assert studies[0].outcomes[0].primary_analysis_alignment is None
+    require_current_compiled_alignment(project)
