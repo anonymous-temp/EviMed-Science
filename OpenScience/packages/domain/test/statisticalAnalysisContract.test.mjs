@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { runGate } from '../src/contractRegistry.mjs'
 
+/** @param {Record<string, string>} files */
 const verdict = (files) => runGate({ contractKind: 'statistical-analysis-package', files: new Map(Object.entries(files)) })
+/** @param {unknown[]} analyses */
 const results = (analyses) => JSON.stringify({ schemaVersion: 1, analyses })
 
 test('statistical analysis keeps descriptive, partial and unknown-method results deliverable', () => {

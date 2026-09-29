@@ -525,7 +525,11 @@
       ],
       "knownLimits": [
         "结论取决于数据质量与研究设计；缺少有效输入的计算会注明限制。"
-      ]
+      ],
+      "evaluation": {
+        "lastStatus": "not-run",
+        "lastRunAt": null
+      }
     }
   }
 }
