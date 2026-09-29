@@ -18,127 +18,34 @@ from new_meta.engines.meta_engine import _to_original
 class SectionWritersMixin:
     """The per-section manuscript writers and the figure assembly."""
 
-    def _write_validation_blocked_report(
-        self,
-        *,
-        protocol: ResearchProtocol,
-        facts: dict,
-        validation: dict,
-    ) -> str:
-        """Build a deterministic report when generated prose fails hard fact checks."""
-        errors = [item for item in validation.get("issues", []) if item.get("severity") == "error"]
-        warnings = [item for item in validation.get("issues", []) if item.get("severity") != "error"]
-        primary = facts.get("primary_effect") or {}
-        population = facts.get("primary_population") or {}
-        readiness = facts.get("evidence_readiness") or {}
-        has_primary_effect = all(
-            primary.get(key) not in {None, "", "NR"}
-            for key in ("pooled_effect", "ci_lower", "ci_upper")
+    def _keep_draft_not_ready(self, *, validation: dict, project: Project | None, stage: str) -> None:
+        """A manuscript that fails validation stays the delivered draft, marked not ready.
+
+        Until 2026-09-29 a failed check replaced the draft with a one-page
+        "Manuscript Validation Blocked" stub (the draft moved to
+        draft.rejected.md), and every other manuscript gate then measured the
+        stub: production ma-001 reported 17 failed gates and 0 references
+        for one mislabelled reference number, and a local ma-001 run 18 gates
+        for one citation-cluster finding. The draft is kept; the validation
+        record says why it is not ready for submission, and the release
+        decision reports it as its blocking reason.
+        """
+        errors = [issue for issue in validation.get("issues", []) if issue.get("severity") == "error"]
+        validation["release_hold"] = {
+            "ready_for_submission": False,
+            "stage": stage,
+            "blocking_issues": [
+                {key: issue.get(key) for key in ("kind", "code", "message") if issue.get(key)}
+                for issue in errors
+            ][:20],
+        }
+        self.log(
+            f"{stage}: the manuscript failed {len(errors)} hard check(s); it stays the delivered draft, "
+            "marked not ready for submission.",
+            level="error",
         )
-
-        if self._zh:
-            lines = [
-                "# Manuscript Validation Blocked",
-                "",
-                "## 当前状态",
-                (
-                    f"本次运行已经进入 `{facts.get('report_type', 'meta')}` 写作路径，但最终事实校验失败。"
-                    "系统已阻止把投稿式正文作为最终稿输出；被拒绝的草稿保存在 `manuscript/draft.rejected.md`，"
-                    "用于定位写作器问题。"
-                ),
-                "",
-                "## 已核验的主分析",
-                f"- 主结局：{primary.get('outcome_name') or protocol.pico.outcome_primary or '未报告'}",
-                f"- 入池研究数：{primary.get('n_studies', '不适用')}",
-                (
-                    f"- 合并效应：{primary.get('effect_measure', protocol.effect_measure)} "
-                    f"{primary.get('pooled_effect')} "
-                    f"(95% CI {primary.get('ci_lower')} 到 {primary.get('ci_upper')})"
-                    if has_primary_effect
-                    else "- 定量合成：未进行。"
-                ),
-                f"- 主分析总样本量：{population.get('selected_total_participants', '不适用')}",
-                "",
-                "## 阻断的事实校验错误",
-            ]
-            lines.extend(self._validation_issue_lines(errors, empty="- 无 hard error。"))
-            lines.extend([
-                "",
-                "## 仍需复核的警告",
-            ])
-            lines.extend(self._validation_issue_lines(warnings, empty="- 无 warning。"))
-            lines.extend([
-                "",
-                "## 下一步处理建议",
-                "1. 先修复上述 hard validation 错误，尤其是样本量、效应量、图表/表格引用和结局名称串位。",
-                "2. 若错误来自提取数据，回到 extraction review 做人工裁决并写入 overrides。",
-                "3. 若错误来自写作器，把对应章节改为从 manuscript_facts.json 渲染或重写。",
-                "4. 只有 `manuscript_validation.json` 中 `passed=true` 后，才允许导出投稿式 manuscript。",
-            ])
-            if readiness.get("warnings"):
-                lines.extend([
-                    "",
-                    "## 证据复核提示",
-                    *[f"- `{item.get('code', 'unknown')}`: {item.get('message', '')}" for item in readiness.get("warnings", [])],
-                ])
-            return "\n".join(lines).strip() + "\n"
-
-        lines = [
-            "# Manuscript Validation Blocked",
-            "",
-            "## Current Status",
-            (
-                f"This run reached the `{facts.get('report_type', 'meta')}` writing path, but hard fact validation failed. "
-                "The pipeline blocked the publication-style draft from being saved as the final manuscript. "
-                "The rejected draft is retained at `manuscript/draft.rejected.md` for debugging."
-            ),
-            "",
-            "## Verified Primary Analysis",
-            f"- Primary outcome: {primary.get('outcome_name') or protocol.pico.outcome_primary or 'Not reported'}",
-            f"- Studies contributing to the primary synthesis: {primary.get('n_studies', 'Not applicable')}",
-            (
-                f"- Pooled effect: {primary.get('effect_measure', protocol.effect_measure)} "
-                f"{primary.get('pooled_effect')} "
-                f"(95% CI {primary.get('ci_lower')} to {primary.get('ci_upper')})"
-                if has_primary_effect
-                else "- Quantitative synthesis: Not performed."
-            ),
-            f"- Selected primary-analysis participants: {population.get('selected_total_participants', 'Not applicable')}",
-            "",
-            "## Blocking Fact-Check Errors",
-        ]
-        lines.extend(self._validation_issue_lines(errors, empty="- No hard errors."))
-        lines.extend([
-            "",
-            "## Remaining Warnings",
-        ])
-        lines.extend(self._validation_issue_lines(warnings, empty="- No warnings."))
-        lines.extend([
-            "",
-            "## Recommended Next Actions",
-            "1. Fix the hard validation errors above, especially participant totals, effect estimates, figure/table references, and outcome/effect alignment.",
-            "2. If an error comes from extracted data, adjudicate it in the extraction review workflow and persist an override.",
-            "3. If an error comes from prose generation, render that section from manuscript_facts.json or rewrite it.",
-            "4. Export a publication-style manuscript only after manuscript_validation.json reports passed=true.",
-        ])
-        if readiness.get("warnings"):
-            lines.extend([
-                "",
-                "## Evidence Review Notes",
-                *[f"- `{item.get('code', 'unknown')}`: {item.get('message', '')}" for item in readiness.get("warnings", [])],
-            ])
-        return "\n".join(lines).strip() + "\n"
-
-    @staticmethod
-    def _validation_issue_lines(issues: list[dict], *, empty: str) -> list[str]:
-        if not issues:
-            return [empty]
-        lines = []
-        for issue in issues:
-            kind = issue.get("kind") or "unknown"
-            message = issue.get("message") or ""
-            lines.append(f"- `{kind}`: {message}")
-        return lines
+        if project:
+            project.save_json("manuscript_validation.json", validation, subdir="manuscript")
 
     @staticmethod
     def _selected_row_lines(rows: list[dict], *, zh: bool) -> list[str]:

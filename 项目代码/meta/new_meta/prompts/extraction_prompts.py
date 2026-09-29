@@ -64,6 +64,19 @@ Set protocol_outcome_role on every row: primary when the row reports the Primary
 Outcome above (the protocol and the paper may use different languages or wording),
 secondary for a listed Secondary Outcome, other otherwise.
 
+## Closed Subgroup Values
+{subgroup_vocabulary}
+
+Set subgroup_values on every row: for each variable id listed above, exactly one
+of its listed values, judged for that row's own comparison - what its treatment
+arm receives (route, dose, timing) and whom the comparison reports on - against
+the value definitions, not against how the paper labels its groups. Use
+not_reported when the source does not say. Two comparisons of one trial take the
+values of their own treatment arms. Use only the listed ids and values.
+subgroup names a restriction of the participants only (for example "patients
+aged 65 or over"); leave it empty for the whole randomized population. An arm's
+route or dose belongs in treatment_arm and subgroup_values, not in subgroup.
+
 ## Paper Content
 The paper text contains [PAGE N] markers indicating page boundaries.
 
@@ -294,6 +307,11 @@ Required per-row verification payload (never omit it, even with a high score):
   of the original trial design; unknown timing is uncertain, never assumed baseline.
   Measuring an outcome after randomization is normal follow-up, NOT conditioning:
   distinguish outcome measurement time from model adjustment and cohort selection.
+  Participants lost, withdrawn or excluded after randomization (attrition, a
+  complete-case analysis) are missing outcome data, judged in risk of bias; they
+  do not make selection_timing postrandomization. That value is for an analysed
+  cohort defined by something treatment could change (responders, completers of
+  the drug, patients who had an event).
   For observational or single-arm protocols, assess their specified estimand and
   explicitly mark randomized-comparison/trial identities not applicable where justified.
 - trial_units: identify ALL underlying trials/cohorts CONTRIBUTING to THIS row,
@@ -303,6 +321,9 @@ Required per-row verification payload (never omit it, even with a high score):
   in the selected source passage. A pooled
   estimate carries all component trials. Do not invent an ID from PMID, DOI, author
   or sample size. Missing identity or uncertain membership means uncertain coverage.
+  A randomized cohort that reports no registration or trial name is still one
+  contributing unit (role contributing, identifiers empty); role uncertain is for
+  a unit whose membership in this result, or overlap with another, is unclear.
   An anchored registry_id is sufficient when no explicit trial name is reported;
   leave trial_name empty rather than invent a descriptive name or expand an acronym.
 

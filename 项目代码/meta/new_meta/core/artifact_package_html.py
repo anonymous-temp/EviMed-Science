@@ -1033,9 +1033,11 @@ def _render_prisma_field_row(field: dict[str, Any]) -> str:
 
 
 def _render_prisma_issue_row(issue: dict[str, Any]) -> str:
+    # Removal-line arithmetic checks are warnings (notices), not failures.
+    css_class = "fail" if str(issue.get("severity") or "") == "fail" else "warn"
     return (
         "<tr>"
-        f"<td class=\"fail\">{escape(str(issue.get('severity') or ''))}</td>"
+        f"<td class=\"{css_class}\">{escape(str(issue.get('severity') or ''))}</td>"
         f"<td>{escape(str(issue.get('code') or ''))}</td>"
         f"<td>{escape(str(issue.get('label') or issue.get('field') or ''))}</td>"
         f"<td>{escape(str(issue.get('message') or ''))}</td>"

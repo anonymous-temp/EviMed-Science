@@ -423,7 +423,12 @@ def test_json_null_is_invalid_judgment_not_missing_provider_content(provider, ki
         assert all(c["can_write_main_text"] is False for c in claims)
     else:
         assert _semantic(agent, kind) is None
-    assert len(requests) == 1
+    # "null" is an unusable judgment, never missing provider content. The
+    # risk-of-bias stage asks again under the shared bounded retry
+    # (core/llm_retry.py) - no high-risk domain was observed, so re-asking is
+    # not shopping - and records the failure when every attempt is unusable.
+    from new_meta.core.llm_retry import STAGE_OUTPUT_ATTEMPTS
+    assert len(requests) == (STAGE_OUTPUT_ATTEMPTS if kind == "rob" else 1)
 
 
 def test_withheld_claims_are_absent_from_main_prose_authoring_and_judge_inputs(provider, monkeypatch):

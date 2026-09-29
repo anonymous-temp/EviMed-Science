@@ -192,6 +192,14 @@ class FallbackReportsMixin:
         manuscript, fact_validation = validate_and_repair_manuscript(manuscript, facts)
         manuscript = self._backfill_after_fact_repair(manuscript)
         manuscript, fact_validation = validate_and_repair_manuscript(manuscript, facts)
+        # The one genuine fallback: the model wrote no draft at all. It is
+        # labelled as such in the validation record and the release report.
+        fact_validation.setdefault("issues", []).append({
+            "kind": "deterministic_fallback_manuscript",
+            "severity": "warning",
+            "message": ("The model produced no manuscript draft; this is the deterministic fact-locked "
+                        "fallback manuscript."),
+        })
         manuscript = self._repair_covid_contextual_citation_attribution(manuscript)
         manuscript = self._normalize_citation_marker_style(manuscript, lang=self._lang)
         manuscript = self._normalize_figure_heading_spacing(manuscript)
@@ -1421,7 +1429,9 @@ class FallbackReportsMixin:
             "同一临床试验的多份报告在合成前进行协调。优先选择最直接报告预设主要终点的主要论文或注册结果；相近但不等同的结局、仅提供设计信息的记录或资料不足的摘要记录不进入主要合成。",
             endpoint_definition_caveat,
             "### 信息来源与检索策略\n"
-            f"检索覆盖{source_label}；各来源初检记录数为{source_counts}。检索日期为{search_date_text}。数据库来源、全文可得性和检索日期均被记录，以支持检索过程复现；检索报告在资料允许范围内参照PRISMA-S原则{search_method_cite}。",
+            f"检索覆盖{source_label}；各来源初检记录数为{source_counts}。检索日期为{search_date_text}。数据库来源、全文可得性和检索日期均被记录，以支持检索过程复现；检索报告在资料允许范围内参照PRISMA-S原则{search_method_cite}。"
+            # A retrieval limit or relevance cap that removed records is stated with its numbers.
+            + self._screening_cap_methods_text(prisma),
             "跨来源去重和同源记录合并在记录层面完成：同一临床试验的正式论文、注册结果、二次分析、预印本或重复索引记录被视为关联记录，而不是独立研究。PRISMA中的记录数反映筛选记录，纳入研究数则反映进入主要分析的独立随机化比较。",
             "### 研究选择与数据提取\n"
             ""
@@ -2219,7 +2229,8 @@ class FallbackReportsMixin:
             "For trials with multiple reports, the primary publication or the most directly documented result was preferred. Secondary analyses were not allowed to displace a primary trial row unless they contained the only documented value for the prespecified outcome. Duplicate trial records were reconciled before effect-size calculation.",
             endpoint_definition_caveat,
             "### Information sources and search strategy\n"
-            f"The search covered {source_label}; initial records by source were {source_counts}. Search date: {search_date_text}. The full Boolean query is reported in Appendix 1.\n\n"
+            f"The search covered {source_label}; initial records by source were {source_counts}. Search date: {search_date_text}. The full Boolean query is reported in Appendix 1."
+            + (" " + self._screening_cap_methods_text(prisma) if self._screening_cap_methods_text(prisma) else "") + "\n\n"
             f"{source_reproducibility_methods_note}"
             f"Database source, search date, and full-text availability were documented to support reproducibility. Search reporting followed PRISMA-S where the records permitted it{search_method_cite}.",
             "### Study selection and extraction\n"

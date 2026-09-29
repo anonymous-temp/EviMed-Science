@@ -17,6 +17,42 @@ from new_meta.agents.paper_retriever import _query_concept_groups
 from new_meta.core.project import Project
 from new_meta.tools.pubmed import _parse_article
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _pubmed_counted_search_follows_patched_search(monkeypatch):
+    """search_and_fetch asks PubMed for its hit count through search_with_count.
+
+    These offline tests patch pubmed.search; route the counted search through
+    whatever they patched (no hit count reported), so no test reaches NCBI.
+    """
+    from new_meta.tools import pubmed
+
+    def counted(query, max_results=200, min_date=None, max_date=None, **_):
+        pmids = pubmed.search(query, max_results=max_results, min_date=min_date, max_date=max_date)
+        return pubmed.PubMedSearchResult(pmids=list(pmids), count=None, unretrieved_pmids=[], unretrieved_listed=True)
+
+    monkeypatch.setattr(pubmed, "search_with_count", counted)
+
+
+def _removed(project, stage: str) -> dict:
+    ledger = project.load_json("records_removed.json", subdir="screening") or {}
+    return next((item for item in ledger.get("entries", []) if item["stage"] == stage), {"count": 0, "records": []})
+
+
+def _assert_identification_reconciles(project, papers) -> dict:
+    """identified - duplicates - automation - other = records going to screening."""
+    identification = project.prisma.to_dict()["identification"]
+    assert identification["records_identified"] == sum(project.load_json("search_source_counts.json").values())
+    assert (
+        identification["records_identified"]
+        - identification["duplicates_removed"]
+        - identification["automation_excluded"]
+        - identification["records_removed_other"]
+    ) == len(papers)
+    return identification
+
 
 def test_search_and_fetch_caps_merged_internal_db_results(monkeypatch, tmp_path: Path) -> None:
     db_rows = [
@@ -681,8 +717,15 @@ def test_search_and_fetch_uses_multi_source_fallback_on_pubmed_failure(monkeypat
     assert len(papers) == 1
     assert papers[0]["source_type"] == "openalex"
     assert seen["max_per_source"] == 50
-    assert project.prisma.records_identified == 1
-    assert project.load_json("search_source_counts.json")["OpenAlex"] == 1
+    # Every fallback query variant returned the same record: each return is an
+    # identified record and all but one are duplicates (PRISMA 2020 counts the
+    # records the searches yielded, then removes duplicates).
+    queries = len(project.load_json("registry_seed_fallback_manifest.json")["queries"])
+    identification = _assert_identification_reconciles(project, papers)
+    assert identification["records_identified"] == queries
+    assert identification["duplicates_removed"] == queries - 1
+    assert identification["records_after_dedup"] == 1
+    assert project.load_json("search_source_counts.json")["OpenAlex"] == queries
 
 
 def test_search_and_fetch_supplements_registry_first_trials_when_pubmed_succeeds(monkeypatch, tmp_path: Path) -> None:
@@ -747,8 +790,13 @@ def test_search_and_fetch_supplements_registry_first_trials_when_pubmed_succeeds
     assert {paper.get("pmid") for paper in papers} >= {"123"}
     assert any(paper.get("trial_registration") == "NCT04244591" for paper in papers)
     assert source_counts["pubmed"] == 1
-    assert source_counts["RegistrySeed"] == 1
-    assert project.prisma.records_identified == 2
+    # The seed record came back for each supplement query that named
+    # methylprednisolone; every return is identified, the repeats are duplicates.
+    seed_queries = sum(1 for item in seed_manifest["queries"] if item.get("n_records"))
+    assert source_counts["RegistrySeed"] == seed_queries
+    assert _removed(project, "registry_supplement_duplicates")["count"] == seed_queries - 1
+    identification = _assert_identification_reconciles(project, papers)
+    assert identification["records_after_dedup"] == 2
     assert seed_manifest["enabled"] is True
 
 
@@ -808,8 +856,11 @@ def test_search_and_fetch_supplements_academic_primary_trials_when_pubmed_succee
     assert any(paper.get("pmid") == "32876695" for paper in papers)
     assert any("COVID-19 dexamethasone randomized trial" == query for query in seen_queries)
     assert source_counts["pubmed"] == 1
-    assert source_counts["OpenAlex"] == 1
-    assert project.prisma.records_identified == 2
+    # Each dexamethasone query returned the CoDEX record once.
+    dexamethasone_queries = sum(1 for query in seen_queries if "dexamethasone" in query.lower())
+    assert source_counts["OpenAlex"] == dexamethasone_queries
+    identification = _assert_identification_reconciles(project, papers)
+    assert identification["records_after_dedup"] == 2
 
 
 def test_search_date_filter_keeps_online_first_pubmed_article_with_epub_year(
@@ -971,8 +1022,16 @@ def test_registry_supplement_caps_noisy_clinicaltrials_results_and_keeps_seed(mo
 
     assert "NCT04244591" in registrations
     assert len(registrations) <= 3
-    assert source_counts["RegistrySeed"] == 1
-    assert source_counts["ClinicalTrials.gov"] <= 2
+    # The counts are what the registry queries returned; the cap to three is a
+    # ranking cut, listed in the ledger with each record's rank.
+    cap = _removed(project, "registry_supplement_cap")
+    assert cap["prisma_slot"] == "automation_ineligible"
+    assert cap["count"] == len(noisy_registry) + 1 - 3
+    assert all(record["rank"] > 3 for record in cap["records"])
+    assert "NCT04244591" not in {record["id"] for record in cap["records"]}
+    duplicates = _removed(project, "registry_supplement_duplicates")["count"]
+    assert source_counts["RegistrySeed"] + source_counts["ClinicalTrials.gov"] == duplicates + len(noisy_registry) + 1
+    _assert_identification_reconciles(project, papers)
 
 
 def test_multi_source_fallback_runs_recall_query_first_and_all_variants(monkeypatch) -> None:
@@ -1323,7 +1382,9 @@ def test_search_and_fetch_writes_clinicaltrials_manifest(monkeypatch, tmp_path: 
     assert any(paper.get("trial_registration") == "NCT04348305" for paper in papers)
     assert manifest["enabled"] is True
     assert manifest["queries"][0]["status"] == "ok"
-    assert source_counts["ClinicalTrials.gov"] == 1
+    registry_queries = sum(1 for item in manifest["queries"] if item.get("type") == "query_search")
+    assert source_counts["ClinicalTrials.gov"] == registry_queries
+    _assert_identification_reconciles(project, papers)
 
 
 def test_search_and_fetch_clears_stale_clinicaltrials_warning_after_success(monkeypatch, tmp_path: Path) -> None:

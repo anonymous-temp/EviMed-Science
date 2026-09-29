@@ -1044,40 +1044,12 @@ class WritingAgent(
         for issue in fact_validation.get("issues", []):
             level = "warning" if issue.get("severity") != "error" else "error"
             self.log(f"MANUSCRIPT FACT CHECK: {issue.get('message')}", level=level)
-        if self._needs_fact_locked_rewrite(fact_validation):
-            self.log(
-                "Substantive fact repairs were needed after LLM drafting; rewriting with the fact-locked manuscript template.",
-                level="warning",
-            )
-            manuscript = self._write_meta_fallback_report(
-                protocol=protocol,
-                facts=manuscript_facts,
-                prisma_data=prisma_data,
-                grade_profile=grade_profile,
-                project=project,
-                ref_manager=ref_manager,
-            )
-            manuscript, fact_validation = validate_and_repair_manuscript(manuscript, manuscript_facts)
-            manuscript = self._backfill_after_fact_repair(manuscript)
-            manuscript = self._normalize_figure_heading_spacing(manuscript)
-            manuscript = self._repair_markdown_image_syntax(manuscript)
-            if project:
-                project.save_json("manuscript_validation.json", fact_validation, subdir="manuscript")
-            for issue in fact_validation.get("issues", []):
-                level = "warning" if issue.get("severity") != "error" else "error"
-                self.log(f"FACT-LOCKED MANUSCRIPT CHECK: {issue.get('message')}", level=level)
+        # A draft that needed substantive fact repairs keeps its repaired text;
+        # it is no longer swapped for the fact-locked template (a failure keeps
+        # the partial result; the repairs stay listed in the validation record).
         if not fact_validation.get("passed", False):
-            if project:
-                project.save_text("draft.rejected.md", manuscript, subdir="manuscript")
-            manuscript = self._write_validation_blocked_report(
-                protocol=protocol,
-                facts=manuscript_facts,
-                validation=fact_validation,
-            )
-            self.log(
-                "Manuscript failed hard validation; saved validation-blocked report instead of publication-style draft.",
-                level="error",
-            )
+            self._keep_draft_not_ready(validation=fact_validation, project=project,
+                                       stage="manuscript validation")
 
         manuscript = re.sub(
             r"(These rows did not affect the selected primary mortality comparisons or the pooled estimate)\s*\[[^\]\n]+\]",
@@ -1093,21 +1065,10 @@ class WritingAgent(
         manuscript = self._normalize_figure_heading_spacing(manuscript)
         manuscript = self._repair_markdown_image_syntax(manuscript)
         manuscript = self._normalize_structured_abstract_spacing(manuscript)
+        fact_validation = final_fact_validation
         if not final_fact_validation.get("passed", False):
-            fact_validation = final_fact_validation
-            if project:
-                project.save_text("draft.rejected.md", manuscript, subdir="manuscript")
-            manuscript = self._write_validation_blocked_report(
-                protocol=protocol,
-                facts=manuscript_facts,
-                validation=fact_validation,
-            )
-            self.log(
-                "Final manuscript failed hard validation after post-processing; saved validation-blocked report instead of publication-style draft.",
-                level="error",
-            )
-        else:
-            fact_validation = final_fact_validation
+            self._keep_draft_not_ready(validation=fact_validation, project=project,
+                                       stage="final manuscript validation")
 
         # Save
         if project:
@@ -1120,19 +1081,8 @@ class WritingAgent(
             )
             manuscript = getattr(self, "_quality_checked_manuscript", manuscript)
             if not fact_validation.get("passed", False):
-                project.save_text("draft.rejected.md", manuscript, subdir="manuscript")
-                manuscript = self._write_validation_blocked_report(
-                    protocol=protocol,
-                    facts=manuscript_facts,
-                    validation=fact_validation,
-                )
-                fact_validation, _, _ = self._quality_checked_validation(
-                    manuscript,
-                    manuscript_facts,
-                    fact_validation,
-                    project=project,
-                )
-                manuscript = getattr(self, "_quality_checked_manuscript", manuscript)
+                self._keep_draft_not_ready(validation=fact_validation, project=project,
+                                           stage="quality-checked manuscript validation")
             manuscript = self._normalize_structured_abstract_spacing(manuscript)
             project.save_text("draft.md", manuscript, subdir="manuscript")
         self.log(f"Manuscript saved ({len(manuscript)} chars, ~{len(manuscript.split())} words)")

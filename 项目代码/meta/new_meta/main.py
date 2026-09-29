@@ -1201,6 +1201,22 @@ def _can_resume_direct_to_manuscript(project: Project) -> bool:
     return (not project.is_step_done("manuscript")) and late_steps_done and _can_write_manuscript_from_cached_artifacts(project)
 
 
+def _is_compiled_method_project(project: Project) -> bool:
+    """A project whose synthesis ran through the compiled method route and completed.
+
+    Its analysis lives in synthesis_result.json and method_result.json, never
+    in meta_results.json, so the pairwise manuscript-only paths refused it.
+    """
+    from new_meta.core.synthesis_routing import SynthesisRoute, load_synthesis_route
+    try:
+        route = load_synthesis_route(project).route
+    except (FileNotFoundError, ValueError):
+        return False
+    return (route is SynthesisRoute.METHOD_PLUGIN and project.is_step_done("meta_analysis")
+            and (project.base_dir / "analysis" / "synthesis_result.json").exists()
+            and (project.base_dir / "analysis" / "method_result.json").exists())
+
+
 def _can_rerun_manuscript_only(project: Project) -> bool:
     """Return True when cached artifacts allow a forced manuscript rewrite."""
     return (
@@ -3235,6 +3251,52 @@ def _ensure_cached_model_artifacts(
     return meta_results
 
 
+def _closed_value_subgroup_results(
+    project: Project,
+    protocol: ResearchProtocol,
+    extracted_studies: list[ExtractedStudy],
+    study_effects: list[StudyEffect],
+) -> dict:
+    """Pairwise subgroup analyses on closed protocol subgroup values, keyed by the protocol's variable."""
+    from new_meta.core.subgroup_vocabulary import (
+        NOT_RUN_CONSEQUENCE, SUBGROUP_NOT_REPORTED, load_subgroup_vocabulary, protocol_subgroup_variables,
+        selected_row_subgroup_values,
+    )
+
+    project.clear_warnings(stage="meta_analysis", code="subgroup_analysis_not_run")
+    if not protocol_subgroup_variables(protocol):
+        return {}
+    vocabulary = load_subgroup_vocabulary(project, protocol)
+    values_by_study = selected_row_subgroup_values(project, extracted_studies, vocabulary)
+    results: dict = {}
+    not_run: dict[str, str] = {}
+    for variable in (vocabulary.variables if vocabulary is not None else []):
+        valued = [
+            effect.model_copy(update={"subgroup": values_by_study[effect.study_id][variable.variable_id]})
+            for effect in study_effects
+            if values_by_study.get(effect.study_id, {}).get(variable.variable_id, SUBGROUP_NOT_REPORTED)
+            != SUBGROUP_NOT_REPORTED
+        ]
+        pooled = meta_engine.subgroup_analysis(
+            valued, protocol.effect_measure, protocol.pico.outcome_primary, model=protocol.model_preference,
+        ) if valued else []
+        if pooled:
+            results[variable.protocol_text] = pooled
+        else:
+            not_run[variable.protocol_text] = "no closed subgroup value is shared by at least two studies"
+    if vocabulary is None:
+        not_run = {text: NOT_RUN_CONSEQUENCE for text in protocol_subgroup_variables(protocol)}
+    if not_run:
+        project.add_warning(
+            "meta_analysis",
+            "Prespecified subgroup analysis not run for " + "; ".join(
+                f"{text}: {reason}" for text, reason in not_run.items()) + ".",
+            code="subgroup_analysis_not_run",
+            context={"variables": not_run},
+        )
+    return results
+
+
 def _run_meta_analysis_from_effects(
     project: Project,
     *,
@@ -3275,6 +3337,14 @@ def _run_meta_analysis_from_effects(
     regression_results = []
     effect_map = {se.study_id: se for se in study_effects}
     for var_name in protocol.subgroup_variables:
+        # A protocol subgroup variable is free text ("Route of tranexamic acid
+        # administration (intravenous vs topical vs combined)"). It is a numeric
+        # covariate only when it names a study-characteristics field exactly -
+        # a closed vocabulary, e.g. "year"; a categorical variable is analysed
+        # on its closed subgroup values below, never looked up by its wording.
+        from new_meta.schemas.study import StudyCharacteristics
+        if var_name not in StudyCharacteristics.model_fields:
+            continue
         cov_values = []
         cov_studies = []
         for study in extracted_studies:
@@ -3352,15 +3422,12 @@ def _run_meta_analysis_from_effects(
                   f"(95% CI: {sec_pooled.ci_lower:.3f} to {sec_pooled.ci_upper:.3f}), "
                   f"k={sec_pooled.n_studies}")
 
-    subgroup_results = {}
-    if any(s.subgroup for s in study_effects):
-        sg = meta_engine.subgroup_analysis(
-            study_effects,
-            protocol.effect_measure,
-            protocol.pico.outcome_primary,
-            model=protocol.model_preference,
-        )
-        subgroup_results[protocol.pico.outcome_primary] = sg
+    # Subgroups are the protocol's closed values (core/subgroup_vocabulary.py)
+    # of the row each study's effect came from, one analysis per variable.
+    # Grouping the effects by their free-text subgroup labels split one route
+    # into one-study labels (ma-001, 2026-09-28); without closed values no
+    # subgroup analysis is run, and the pipeline warning says why.
+    subgroup_results = _closed_value_subgroup_results(project, protocol, extracted_studies, study_effects)
 
     pub_bias = publication_bias.run_all_tests(study_effects, protocol.effect_measure)
 
@@ -4137,7 +4204,13 @@ def main():
     if cached_protocol:
         _admit_cli_protocol(project, ResearchProtocol.model_validate(cached_protocol),
                             allow_validating=args.allow_validating_methods, enforce=True)
-    if args.rerun_manuscript_only:
+    if args.rerun_manuscript_only and _is_compiled_method_project(project):
+        # The compiled route keeps no meta_results.json to rewrite from; its
+        # manuscript is written at the end of the resumed pipeline, after the
+        # cached steps and a deterministic re-run of the compiled synthesis.
+        print("Forcing manuscript-only rewrite of a compiled-method project from its cached steps.")
+        project.clear_checkpoint("manuscript")
+    elif args.rerun_manuscript_only:
         if not _can_rerun_manuscript_only(project):
             print("Error: cached protocol/extraction/analysis artifacts are incomplete; cannot rerun manuscript only.")
             sys.exit(1)
@@ -4398,6 +4471,17 @@ def main():
         papers_with_pdf, _limited_or_missing = _partition_full_text_sources(cached_screened)
         print(f"Full texts available: {len(papers_with_pdf)} (cached), "
               f"extra user PDFs: {len(extra_user_papers)}")
+        if project.prisma.full_text_sought is None:
+            # A project from before 2026-09-29 never counted the reports it
+            # sought and did not retrieve; its cached records still say which.
+            from new_meta.core import record_drops
+
+            record_drops.apply_full_text_retrieval(
+                project,
+                sought=cached_screened + extra_user_papers,
+                not_retrieved=_limited_or_missing,
+            )
+            project.save_json("prisma_flow.json", project.prisma.to_dict())
     else:
         print_step("5", "Full-text Handling (Automatic Retrieval → Optional User Fallback)")
         retriever = PaperRetriever(model=model)
@@ -4470,14 +4554,29 @@ def main():
         # own identification arm. A supplied full text that matched a screened
         # record is a source for that record, not a new record; an unmatched one
         # is a record this search never found.
-        if extra_user_papers:
-            project.prisma.records_from_user_upload = len(extra_user_papers)
-            project.prisma.records_identified += len(extra_user_papers)
-            project.prisma.records_after_dedup += len(extra_user_papers)
+        # Replace, not add: a re-run of this step starts from a PRISMA flow
+        # that already counts the previous run's uploads.
+        previous_uploads = int(project.prisma.records_from_user_upload or 0)
+        project.prisma.records_from_user_upload = len(extra_user_papers)
+        project.prisma.records_identified += len(extra_user_papers) - previous_uploads
+        project.prisma.records_after_dedup += len(extra_user_papers) - previous_uploads
 
         # Combine all papers with PDF
         papers_with_pdf, papers_without_pdf = _partition_full_text_sources(
             ta_included_papers
+        )
+
+        # PRISMA 2020 "Reports sought for retrieval" are the records included at
+        # title/abstract plus unmatched uploads; "Reports not retrieved" are
+        # those left with an abstract, registry metadata or nothing. They used
+        # to vanish between screening and full-text assessment (ma-001: 59
+        # included, 21 assessed, 38 unaccounted).
+        from new_meta.core import record_drops
+
+        record_drops.apply_full_text_retrieval(
+            project,
+            sought=ta_included_papers + extra_user_papers,
+            not_retrieved=papers_without_pdf,
         )
 
         # Save all (T/A matched + extra user papers) for downstream

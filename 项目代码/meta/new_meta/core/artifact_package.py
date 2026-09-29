@@ -215,6 +215,8 @@ def create_artifact_package(project: Project, package_name: str = "metaagent_exp
 
     export_manuscript_docx(project)
     export_manuscript_pdf(project)
+    from new_meta.core.evidence_accounting import write_evidence_accounting
+    write_evidence_accounting(project)  # the counts a report quotes, never summed by the run
     entries = list(_iter_package_entries(project))
     existing_arcnames = {arcname for _, arcname in entries}
     entries.extend(
@@ -613,7 +615,12 @@ def _build_risk_of_bias_completeness_review(project: Project) -> dict | None:
     """Verify every primary meta-analysis contributor has a formal RoB assessment."""
     meta_results = project.load_json("meta_results.json", subdir="analysis")
     if not isinstance(meta_results, dict):
-        return None
+        # The compiled-method route never writes meta_results.json (and
+        # clears a stale one); its pooled inputs are synthesis_result.json's
+        # input_result_ids. Returning None here made the gate pass unchecked
+        # on every compiled run, production ma-001 included.
+        from new_meta.core.artifact_package_compiled_rob import build_compiled_risk_of_bias_completeness_review
+        return build_compiled_risk_of_bias_completeness_review(project)
     primary = meta_results.get("primary_outcome")
     if not isinstance(primary, dict):
         return None
@@ -2201,7 +2208,60 @@ def _prisma_logical_issues(flow: dict[str, Any]) -> list[dict[str, Any]]:
             })
         previous_name = name
         previous_value = value
+    issues.extend(_prisma_removal_notices(flow, values))
     return issues
+
+
+def _prisma_removal_notices(flow: dict[str, Any], values: dict[str, int | None]) -> list[dict[str, Any]]:
+    """Check the PRISMA 2020 removal lines add up (notices, not release blockers).
+
+    Records removed before screening (automation tools + other reasons) and
+    reports not retrieved were added to prisma_flow.json on 2026-09-29, after
+    ma-001 lost 38 included records between screening and full-text
+    assessment without a count. Until these checks have a record on real
+    runs they are warnings: a mismatch is reported, never withheld.
+    """
+    identification = flow.get("identification") if isinstance(flow.get("identification"), dict) else {}
+    screening = flow.get("screening") if isinstance(flow.get("screening"), dict) else {}
+    eligibility = flow.get("eligibility") if isinstance(flow.get("eligibility"), dict) else {}
+    after_dedup = values.get("records_after_dedup")
+    screened = values.get("title_abstract_screened")
+    assessed = values.get("full_text_assessed")
+    not_screened = _integer_or_none(identification.get("records_not_screened")) or 0
+    uploads = _integer_or_none(identification.get("records_from_user_upload")) or 0
+    notices: list[dict[str, Any]] = []
+
+    def notice(code: str, message: str) -> None:
+        notices.append({"code": code, "severity": "warn", "message": message})
+
+    if "records_removed_other" in identification:
+        automation = _integer_or_none(identification.get("automation_excluded")) or 0
+        other = _integer_or_none(identification.get("records_removed_other")) or 0
+        if automation + other != not_screened:
+            notice(
+                "prisma_removed_before_screening_split",
+                "automation_excluded + records_removed_other does not equal records_not_screened.",
+            )
+    if after_dedup is not None and screened is not None and after_dedup - not_screened - uploads != screened:
+        notice(
+            "prisma_removed_before_screening_mismatch",
+            "records_after_dedup - records_not_screened - records_from_user_upload does not equal title_abstract_screened.",
+        )
+    sought = _integer_or_none(eligibility.get("full_text_sought"))
+    if sought is not None:
+        not_retrieved = _integer_or_none(eligibility.get("not_retrieved")) or 0
+        if assessed is not None and sought - not_retrieved != assessed:
+            notice(
+                "prisma_reports_not_retrieved_mismatch",
+                "full_text_sought - not_retrieved does not equal full_text_assessed.",
+            )
+        excluded = _integer_or_none(screening.get("title_abstract_excluded"))
+        if screened is not None and excluded is not None and screened - excluded + uploads != sought:
+            notice(
+                "prisma_reports_sought_mismatch",
+                "title_abstract_screened - title_abstract_excluded + records_from_user_upload does not equal full_text_sought.",
+            )
+    return notices
 
 
 def _build_search_strategy_audit_review(project: Project) -> dict | None:

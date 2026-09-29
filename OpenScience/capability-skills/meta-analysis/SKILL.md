@@ -16,8 +16,7 @@ language-model estimate.
 
 Unless the user requests another language, pass Simplified Chinese as the job
 language and write the EviMed navigation deliverables in Simplified Chinese.
-Preserve study titles, identifiers, statistical notation, and generated package
-field names where translation would reduce traceability.
+Preserve study titles, identifiers, and statistical notation.
 
 ## Scope the question
 
@@ -49,17 +48,19 @@ full text.
    while `updatedAt` advances (every 30 s); treat the job as failed only on a
    terminal failure or when `updatedAt` has not moved for 10 minutes, and record
    the state you observed either way.
-4. At the terminal response, preserve the exact `releaseStatus`, artifact paths,
-   warnings, blockers, and next actions. `blocked` means the package is not
-   submission-ready. `ready_with_warnings` means the warnings still require
-   review; it is not equivalent to an unconditional pass. A failed job names
+4. At the terminal response, record the exact `releaseStatus`, artifact paths,
+   warnings, blockers, and next actions in `meta-analysis-run.json`. `blocked`
+   means the package is not submission-ready. `ready_with_warnings` means the
+   warnings still require review; it is not equivalent to an unconditional pass. A failed job names
    the steps it completed and the files it wrote; report them as partial work,
    resume once as its next action says, and never present them as a review.
    The job decides some things without asking, and its `modules` name each:
    studies excluded at full text (unusable text, unresolved design), results
-   left out because their verification did not complete, and unregistered
-   trials counted by their own publication. Name each in the limitations; a
-   left-out result was not pooled.
+   left out of pooling with the reason their verification gave (the verifier
+   judged the comparison ineligible, the source contradicts itself, a number
+   was not found, the verifier gave no usable answer), and unregistered trials
+   counted by their own publication. Name each, with its reason in plain
+   words, in the limitations; a left-out result was not pooled.
 
 MetaAgent may legitimately conclude that quantitative synthesis is impossible
 or that direct evidence is absent. Report that result as an evidence gap, not as
@@ -70,10 +71,16 @@ calculations, LLM interpretations, and unresolved review items distinguishable.
 
 Write `meta-analysis-report.md` as a concise navigation and interpretation layer:
 question, protocol scope, search and eligibility summary, synthesis method,
-primary results, certainty, limitations, release status, and links to the
-generated manuscript, figures, evidence ledger, and package. Every numerical
+primary results, certainty, limitations, and, in plain words, whether the
+engine's own manuscript is ready for release and why not. Every numerical
 claim must match the generated artifacts and every evidence claim must remain
-traceable.
+traceable. Every count and total - records, exclusions, studies, participants -
+is copied from the engine's records (the project's `prisma_flow.json` and
+`package/evidence_accounting.json`, which also states whether the counts add
+up), never added up in the report. Release and blocker codes, job ids,
+file paths and field names are bookkeeping for `meta-analysis-run.json` and
+`revision-notes.md`, not for the reader; nor does the report carry author,
+funding or conflict-of-interest declarations - the run is not an author.
 
 Write `meta-analysis-run.json` with the job id, terminal job status, release
 status, project path, returned artifacts, warnings or blockers, and the retrieval
@@ -90,8 +97,8 @@ sizes with intervals, multiplicity, missing data, sensitivity analyses) and
 `stats-integrity` (report the estimate and its uncertainty as the software
 produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
-traces every stated result to the job's own output files, so a number typed from
-memory, or rounded differently from the output, comes back as a finding.
+traces every stated result to the job's own output files. Write each result from
+the engine's display value; rounding is checked, not forbidden.
 
 ## Before delivering: two fixed steps
 
@@ -114,3 +121,23 @@ Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
 rejection, and process description; the report itself carries none of them, and
 no check reads the notes as report prose.
+
+**What the reader gets.** The deliverable is read by a clinician, pharmacist or
+reviewer, not by this platform.
+
+- The package's bookkeeping — which acceptance or checklist item is answered
+  where, where a number came from, why an item does not apply — goes to
+  `revision-notes.md`, never into a section of the deliverable. A statement
+  nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Say what a field, status or file means, never its name: 「未排序（未提供评分
+  细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
+  file paths, or sentences about this deployment, its tools or its routing.
+- A count, sum, share or formula result the run makes itself — sources, rows,
+  categories, placeholders — is computed by a script over the file that holds
+  the items and copied from its output, with its definition beside it; count
+  again after the items change. Where a tool does not state how it computed a
+  value, say so; never reconstruct the formula.
+- Reference entries — title, authors, journal, year, DOI, PMID — are copied
+  from the record the retrieval tool returned, never typed from memory.
+- Write in the language of the user's request: a brief written in English gets
+  an English deliverable.

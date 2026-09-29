@@ -1,0 +1,196 @@
+{
+ "source": "production ma-001 job meta-20260928185649-1fc3ffd33a97, extraction/verification records and papers/*.fulltext.txt",
+ "wang2015": {
+  "study_id": "26550418",
+  "table_excerpt": "Table 2. \n\nComparison of observed postoperative indexes between TXA group and control group \n\nObserved indexes TXA group Control group T (X 2 ) value P value \n\nOperation time 58.2 ± 10.63 60.8 ± 9.87 1.2674 a > 0.05 \n\nHemoglobin D-value (g/L) 22.9 ± 8.27 39.73 ± 10.01 9.1654 a < 0.05 \n\nTotal blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05 \n\nDrainage volume (ML) 389.15 ± 108.83 796.3 ± 212.6 -12.0542 a < 0.05 \n\nPreoperative D-dimer 0.46 ± 0.05 0.47 ± 0.04 1.1043 a > 0.05 \n\nPreoperative platelet 236 ± 64.95 227 ± 59.24 0.7239 a > 0.05 \n\nPreoperative APTT 36.75 ± 3.31 35.91 ± 2.87 1.3558 a > 0.05 \n\nBlood transfusion rate 4% (2/50) 18% (9/50) 5.0051 b < 0.05 ",
+  "findings": [
+   {
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "source_location": "Page 1; characters 14740:14811",
+    "field": "mean_intervention",
+    "status": "match",
+    "reported_value": 678.45,
+    "rationale": "Table 2 TXA group total blood loss mean is 678.45 mL."
+   },
+   {
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "source_location": "Page 1; characters 14740:14811",
+    "field": "sd_intervention",
+    "status": "match",
+    "reported_value": 112.77,
+    "rationale": "Table 2 TXA group SD for total blood loss is 112.77."
+   },
+   {
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "source_location": "Page 1; characters 14740:14811",
+    "field": "mean_control",
+    "status": "match",
+    "reported_value": 1136.3,
+    "rationale": "Table 2 control group total blood loss mean is 1136.3 mL."
+   },
+   {
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "source_location": "Page 1; characters 14740:14811",
+    "field": "sd_control",
+    "status": "match",
+    "reported_value": 224.52,
+    "rationale": "Table 2 control group SD for total blood loss is 224.52."
+   }
+  ],
+  "recorded_reasons": [
+   {
+    "code": "numeric_quote_not_anchored",
+    "outcome_index": 0,
+    "field": "mean_control",
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "reported": 1136.3
+   },
+   {
+    "code": "numeric_quote_not_anchored",
+    "outcome_index": 0,
+    "field": "sd_control",
+    "quote": "Total blood loss (ML) 678.45 ± 112.77 1136.3 ± 224.52 -12.8856 a < 0.05",
+    "reported": 224.52
+   }
+  ]
+ },
+ "yang2020": {
+  "study_id": "33094562",
+  "registration_excerpt": "Trial registration: ChiCTR‐INR‐16010287, registered at chictr.org.cn . \n\nRandomization \n\nThe patients were randomized 1:",
+  "trial_units": [
+   {
+    "quote": "Trial registration: ChiCTR‐INR‐16010287, registered at chictr.",
+    "source_location": "Page 1; characters 10036:10098",
+    "registry_id": "ChiCTR-INR-16010287",
+    "trial_name": "",
+    "role": "contributing"
+   }
+  ],
+  "retained_clinical_judgments": [
+   {
+    "outcome_index": 0,
+    "dimension": "verification",
+    "field": "selection_timing",
+    "judgment": {
+     "selection_timing": "postrandomization",
+     "estimand_support": {
+      "quote": "The patients were randomized 1:1 to the TXA and control groups equally by a third‐party junior doctor who opened sequentially numbered sealed opaque envelopes that were initially prepared by an independent statistician.",
+      "source_location": "Page 1; characters 10125:10344"
+     }
+    },
+    "verdict": {
+     "status": "mismatch",
+     "reason": "randomized_total_effect_required"
+    }
+   }
+  ],
+  "recorded_reasons": [
+   {
+    "code": "trial_identifier_not_anchored",
+    "outcome_index": 0
+   },
+   {
+    "code": "verification_partial_clinical_judgment_retained",
+    "outcome_indices": [
+     0
+    ]
+   }
+  ]
+ },
+ "zhang2019": {
+  "study_id": "31348286",
+  "final_reasons": [
+   {
+    "code": "verification_response_unavailable",
+    "error_type": "LLMOutputError"
+   },
+   {
+    "code": "numeric_quote_not_anchored",
+    "outcome_index": 0,
+    "field": "n_intervention",
+    "quote": "Because of the high incidence of osteoarthritis in female patients, the male/female ratios in each group were 14/38, 16/37, 11/39, and 12/43, respectively; however, there was no significant difference in gender distribution among the groups ( P = .709) (Table 1 ).",
+    "reported": 50.0
+   },
+   {
+    "code": "numeric_quote_not_anchored",
+    "outcome_index": 0,
+    "field": "n_control",
+    "quote": "Because of the high incidence of osteoarthritis in female patients, the male/female ratios in each group were 14/38, 16/37, 11/39, and 12/43, respectively; however, there was no significant difference in gender distribution among the groups ( P = .709) (Table 1 ).",
+    "reported": 55.0
+   },
+   {
+    "code": "verification_partial_clinical_judgment_retained",
+    "outcome_indices": [
+     0
+    ]
+   },
+   {
+    "code": "verification_issue_history_required",
+    "outcome_index": 0
+   },
+   {
+    "code": "verification_observed_clinical_judgment_incomplete",
+    "outcome_indices": [
+     0
+    ]
+   }
+  ],
+  "retained_clinical_judgments": [
+   {
+    "outcome_index": 0,
+    "dimension": "contrast",
+    "judgment": {
+     "status": "mismatch",
+     "rationale": "All arms, including the 'double placebo' group, received intravenous TXA 20 mg/kg, so the randomized contrast (local combined TXA vs saline local placebo) does not compare TXA against placebo or no TXA as the protocol requires.",
+     "quote": "All patients were injected intravenously with 20 mg/kg TXA (TXA Injection; Reyong Pharmaceutical Factory, Shandong, China)15 minutes before tourniquet compression.",
+     "source_location": "Page 1; characters 8351:8514"
+    }
+   }
+  ]
+ },
+ "ye2024_3g": {
+  "study_id": "39673144",
+  "final_reasons": [
+   {
+    "code": "numeric_conflict_requires_adjudication",
+    "outcome_index": 1,
+    "conflicts": [
+     {
+      "conflict_index": 0,
+      "field": "mean_intervention",
+      "message": "The abstract reports the 3 g TXA group TBL as 568.70 ± 408.27 mL, whereas the Results text reports 567.7 ± 408.3 mL. The text value was extracted; abstract value noted.",
+      "severity": "warning",
+      "observed_values": {
+       "results_text": 567.7,
+       "abstract": 568.7
+      },
+      "sources": [
+       "Abstract Results",
+       "Results 3.2 Blood Loss"
+      ]
+     }
+    ]
+   },
+   {
+    "code": "numeric_conflict_requires_adjudication",
+    "outcome_index": 1,
+    "conflicts": [
+     {
+      "conflict_index": 0,
+      "field": "mean_intervention",
+      "message": "The abstract reports the 3 g TXA group TBL as 568.70 ± 408.27 mL, whereas the Results text reports 567.7 ± 408.3 mL. The text value was extracted; abstract value noted.",
+      "severity": "warning",
+      "observed_values": {
+       "results_text": 567.7,
+       "abstract": 568.7
+      },
+      "sources": [
+       "Abstract Results",
+       "Results 3.2 Blood Loss"
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

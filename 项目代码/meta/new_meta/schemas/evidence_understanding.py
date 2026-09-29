@@ -42,6 +42,9 @@ class StudyIntelligenceCard(BaseModel):
     source_backed_claims: list[SourceBackedClaim] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
     audit_notes: list[str] = Field(default_factory=list)
+    # "model": the model read the source; "fallback": the model gave no usable
+    # card and this one is built from the extraction alone; "" for saved runs.
+    understanding_status: str = ""
 
 
 class EvidenceUnderstandingReport(BaseModel):

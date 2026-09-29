@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.llm_retry import STAGE_OUTPUT_ATTEMPTS, output_unusable
 from new_meta.core.extraction_status import extraction_failure, extraction_incomplete
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
@@ -75,19 +76,20 @@ class ExtractionRefinement(BaseModel):
 #: source disagreeing. On 2026-09-28 (ma-001, job meta-20260928154619) an
 #: LLMOutputError, a JSONDecodeError and a ValueError each left a row
 #: unverified and out of the synthesis.
-VERIFIER_OUTPUT_ATTEMPTS = 3
+#: Now the shared stage bound (core/llm_retry.py), which every evidence stage uses.
+VERIFIER_OUTPUT_ATTEMPTS = STAGE_OUTPUT_ATTEMPTS
 VERIFICATION_OUTPUT_UNUSABLE = "verification_output_unusable"
 
 
 def verifier_output_unusable(exc: BaseException) -> bool:
     """A failure of the verifier's own response: unparseable, off-schema, truncated or empty.
 
-    JSONDecodeError and pydantic's ValidationError are ValueErrors; the
-    client's LLMOutputError covers truncation and empty text. Anything else -
-    a transport error, a failed durable write - is not re-asked here.
+    The shared rule (core/llm_retry.output_unusable): JSONDecodeError and
+    pydantic's ValidationError are ValueErrors; the client's LLMOutputError
+    covers truncation and empty text. A transport error or a failed durable
+    write is not re-asked here.
     """
-    from new_meta.core.llm import LLMOutputError
-    return isinstance(exc, (ValueError, LLMOutputError))
+    return output_unusable(exc)
 
 
 # One result has its own numeric, endpoint, population, estimand and trial proof.
@@ -135,11 +137,23 @@ class DataExtractionAgent(BaseAgent):
         """
         self.excluded_ids: set[str] = set()
         self.log(f"Extracting data from {len(included_papers)} papers...")
+        # The protocol's subgroup variables become closed values once, before
+        # any paper is read; every row is then assigned one value per variable
+        # (core/subgroup_vocabulary.py). No variables, no model call.
+        from new_meta.core.subgroup_vocabulary import ensure_subgroup_vocabulary
+        self.subgroup_value_refusals: list[dict] = []
+        self.subgroup_values_missing = 0
+        subgroup_vocabulary = ensure_subgroup_vocabulary(
+            project, protocol, lambda prompt, schema: self.call_llm_structured(prompt, schema),
+            log=lambda message: self.log(message, level="warning"),
+        )
+
+        closed_subgroups = {"subgroup_vocabulary": subgroup_vocabulary} if subgroup_vocabulary is not None else {}
 
         def extract_one(paper):
             paper_id = paper_identity(paper)
             parsed = parsed_papers.get(paper_id, {})
-            return self._extract_single(paper, parsed, protocol, project)
+            return self._extract_single(paper, parsed, protocol, project, **closed_subgroups)
 
         verification_inputs = {}
         failures = []
@@ -195,6 +209,7 @@ class DataExtractionAgent(BaseAgent):
             audit["summary"].update({"status": "incomplete", "required_studies": len(required_ids),
                                      "incomplete_studies": len(failures)})
             audit["failures"] = failures
+            self._audit_subgroup_values(audit, protocol, subgroup_vocabulary)
             project.save_json("extraction_audit.json", audit, subdir="extraction")
             project.save_text("extraction_audit.md", self._audit_to_markdown(audit), subdir="extraction")
             raise extraction_incomplete(
@@ -252,6 +267,7 @@ class DataExtractionAgent(BaseAgent):
         audit = self._build_extraction_audit(results)
         audit["summary"]["overrides_revision"] = overrides.current_revision
         audit["summary"]["overrides_applied"] = applied_overrides
+        self._audit_subgroup_values(audit, protocol, subgroup_vocabulary)
         project.save_json("extraction_audit.json", audit, subdir="extraction")
         project.save_text("extraction_audit.md", self._audit_to_markdown(audit), subdir="extraction")
         migration = migrate_extractions_to_ledger(
@@ -262,7 +278,24 @@ class DataExtractionAgent(BaseAgent):
         # A dropped dependency-design result changes what the review pools, so
         # it is reported where a reader will meet it rather than left in a
         # return value nobody read.
+        inconsistent = [item for item in migration.skipped_results
+                        if item.get("reason") == "extracted_numbers_inconsistent"]
+        project.clear_warnings(code="extracted_numbers_inconsistent")
+        if inconsistent:
+            # A result left out of pooling, like an unverified one: named, with
+            # why; the rest of the review goes on.
+            project.add_warning(
+                "synthesis",
+                f"{len(inconsistent)} extracted result(s) were left out because their numbers contradict each "
+                "other (for example more events than participants).",
+                code="extracted_numbers_inconsistent",
+                context={"results": inconsistent},
+            )
         for skipped in migration.skipped_results:
+            if skipped.get("reason") == "extracted_numbers_inconsistent":
+                self.log(f"Dropped {skipped['resultId']} from the evidence ledger: {skipped['detail']}",
+                         level="warning")
+                continue
             self.log(
                 "Dropped %s from the evidence ledger: a %s result is missing %s and cannot be pooled."
                 % (skipped["resultId"], skipped["design"], ", ".join(skipped["missing"])),
@@ -287,9 +320,15 @@ class DataExtractionAgent(BaseAgent):
         return results
 
     def _extract_single(
-        self, paper: dict, parsed: dict, protocol: ResearchProtocol, project: Project
+        self, paper: dict, parsed: dict, protocol: ResearchProtocol, project: Project,
+        *, subgroup_vocabulary=None,
     ) -> ExtractedStudy | None:
-        """Extract data from a single paper with self-verification loop."""
+        """Extract data from a single paper with self-verification loop.
+
+        ``subgroup_vocabulary`` is the protocol's closed subgroup vocabulary
+        (core/subgroup_vocabulary.py); without one no row keeps a closed value.
+        """
+        from new_meta.core.subgroup_vocabulary import extraction_prompt_block
         paper_id = paper_identity(paper)
         pmid = paper.get("pmid", "")
         full_text = parsed.get("full_text", "")
@@ -384,6 +423,7 @@ class DataExtractionAgent(BaseAgent):
             primary_outcome=protocol.pico.outcome_primary,
             secondary_outcomes=secondary_str,
             planned_subgroups=json.dumps(protocol.subgroup_variables or [], ensure_ascii=False),
+            subgroup_vocabulary=extraction_prompt_block(subgroup_vocabulary),
             effect_measure=protocol.effect_measure,
             outcome_types=json.dumps(CANONICAL_EXTRACTION_OUTCOME_TYPES),
             paper_content=paper_content,
@@ -415,6 +455,7 @@ class DataExtractionAgent(BaseAgent):
             except Exception as exc:  # pragma: no cover - defensive
                 self.log(f"[{paper_id}] Denominator recovery skipped: {exc}", level="warning")
         self._finalize_outcome_review_fields(extracted, protocol)
+        self._admit_subgroup_values(extracted, subgroup_vocabulary, paper_id)
 
         # Save individual extraction
         sid = extracted.characteristics.pmid or extracted.characteristics.study_id or paper_id
@@ -483,7 +524,12 @@ class DataExtractionAgent(BaseAgent):
         elif characteristics.pmid.startswith("user_pdf_"):
             characteristics.pmid = ""
 
-        characteristics.pdf_path = paper.get("pdf_path", "") or characteristics.pdf_path
+        # The source file the rows were read from, PDF or not: full text is
+        # fetched by route and most of it arrives as text (fulltext_path), and
+        # the evidence ledger's file hash is taken from this field. With PDFs
+        # only, every ma-001 locator of 2026-09-28 carried an empty file hash.
+        characteristics.pdf_path = (paper.get("pdf_path") or paper.get("fulltext_path") or ""
+                                    ) or characteristics.pdf_path
         characteristics.source_type = self._source_type(paper)
         if self._has_real_value(paper.get("authors")) or self._has_real_value(paper.get("year")):
             characteristics.metadata_source = "bibliographic_metadata"
@@ -509,8 +555,19 @@ class DataExtractionAgent(BaseAgent):
             return "database"
         return "unknown"
 
-    def _extract_with_retry(self, prompt: str, schema: type[BaseModel], pmid: str, max_retries: int = 2) -> BaseModel:
-        """Call structured extraction with retry and simplified fallback."""
+    def _extract_with_retry(self, prompt: str, schema: type[BaseModel], pmid: str, max_retries: int | None = None) -> BaseModel:
+        """Structured extraction under the shared bounded retry (core/llm_retry.py).
+
+        An unusable response (not JSON, off-schema, truncated, empty) is asked
+        again, stricter about the form from the second attempt. There is no
+        looser fallback any more: a "just fill in what you can" prompt used to
+        follow two failures, and because every StudyCharacteristics field has a
+        default, an empty answer became a study with no design, population or
+        intervention and no trace of the failures before it. Exhaustion raises
+        StudyExtractionFailed with each attempt's error type; a transport error
+        keeps the client's own retries and is recorded the same way.
+        """
+        from new_meta.core.llm_retry import StageOutputUnusable, bounded_output_call, strict_suffix
         attempts = []
 
         def record_failure(error, attempt):
@@ -519,30 +576,25 @@ class DataExtractionAgent(BaseAgent):
             attempts.append({"attempt": attempt, "error_type": type(error).__name__,
                              "status_code": getattr(error, "status_code", None)})
 
-        for attempt in range(max_retries):
+        def call(attempt):
             try:
-                return self.call_llm_structured(prompt, schema, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
-            except Exception as e:
-                record_failure(e, attempt + 1)
-                self.log(f"[{pmid}] Structured extraction attempt {attempt + 1} failed: {type(e).__name__}", level="warning")
-                if attempt < max_retries - 1:
-                    continue
+                return self.call_llm_structured(prompt + strict_suffix(attempt), schema,
+                                                max_tokens=LLM_MAX_TOKENS_EXTRACTION)
+            except Exception as error:
+                record_failure(error, attempt)
+                raise
 
-        # Fallback: use simpler prompt asking for minimal data
-        self.log(f"[{pmid}] Falling back to simplified extraction", level="warning")
         try:
-            simple_prompt = (
-                f"Extract any available data from the following text as JSON.\n"
-                f"Just fill in what you can find. For fields you cannot find, use null or empty string.\n"
-                f"Respond ONLY with a valid JSON object.\n\n"
-                f"Schema fields needed: {', '.join(schema.model_fields.keys())}\n\n"
-                f"Text:\n{prompt}"
-            )
-            return self.call_llm_structured(simple_prompt, schema, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
-        except Exception as e:
-            record_failure(e, "simplified")
-            self.log(f"[{pmid}] Simplified extraction also failed: {type(e).__name__}", level="warning")
-            raise StudyExtractionFailed(pmid, schema.__name__, attempts) from e
+            return bounded_output_call(call, stage="extraction", entity_id=f"{pmid}:{schema.__name__}",
+                                       attempts=max_retries,
+                                       log=lambda message: self.log(f"[{pmid}] {message}", level="warning"))
+        except Exception as error:
+            self.log(f"[{pmid}] Structured extraction failed: {type(error).__name__}", level="warning")
+            failed = StudyExtractionFailed(pmid, schema.__name__, attempts)
+            # The classified cause travels with the study's failure record
+            # (extraction/extraction_status.json): the model's output, or transport.
+            failed.failure["reason"] = error.reason if isinstance(error, StageOutputUnusable) else "model_call_failed"
+            raise failed from error
 
     def _check_extraction(
         self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
@@ -595,6 +647,11 @@ class DataExtractionAgent(BaseAgent):
             _PROOF_DIR, _read_scoped, _write_scoped_atomic, _write_scoped_once, digest, protocol_fingerprint,
             invalidate_alignment_proofs, record_checked_alignments, recover_issue_history, row_fingerprint,
         )
+        from new_meta.core.llm_retry import (
+            StageOutputUnusable, bounded_output_call, clear_stage_failure, record_exhausted,
+        )
+        from new_meta.core.verification_outcome import classify as classify_verification
+        from new_meta.core.verification_outcome import save_outcomes as save_verification_outcomes
         content = str(parsed.get("full_text") or "")
         if parsed.get("tables"):
             content += "\n\n## EXTRACTED TABLES\n\n" + "\n\n".join(parsed["tables"])
@@ -659,10 +716,15 @@ class DataExtractionAgent(BaseAgent):
                     raise ValueError("Parsed source version does not match current document")
             except (OSError, ValueError) as exc:
                 record_attempt(indices, 0, "needs_input", [{"code": "verification_source_version_invalid", "error_type": type(exc).__name__}])
+                save_verification_outcomes(project, protocol, extracted, {index: {"status": "left_out", **classify_verification(
+                    [{"code": "verification_source_version_invalid"}])} for index in indices})
                 return extracted
         if not content.strip() or len(content) > VERIFICATION_SOURCE_CHAR_LIMIT:
             record_attempt(indices, 0, "needs_input", [{"code": "verification_source_context_unavailable",
                 "source_characters": len(content), "limit": VERIFICATION_SOURCE_CHAR_LIMIT}])
+            save_verification_outcomes(project, protocol, extracted, {index: {"status": "left_out", **classify_verification(
+                [{"code": "verification_source_context_unavailable", "source_characters": len(content)}])}
+                for index in indices})
             return extracted
         _write_scoped_once(project, f"{_PROOF_DIR}/{checked_sha}.txt", content.encode())
         from new_meta.core.extraction_sources import OBSERVATION_VERSION, source_catalogue, resolve_reference_payload
@@ -681,6 +743,10 @@ class DataExtractionAgent(BaseAgent):
                                      page_map=parsed.get("page_map", []))
         catalogue_record = write_source_record("sources", catalogue)
         assessments, checked_rows, pending_reasons, source_references = {}, {}, {}, {}
+        # Each row's final verification finding, classified for the report
+        # (core/verification_outcome.py), and the clinical nonmatches a
+        # verifier stated before its response failed.
+        row_outcomes, retained_negatives = {}, {}
         for start in range(0, len(indices), VERIFICATION_BATCH_SIZE):
             batch = indices[start:start + VERIFICATION_BATCH_SIZE]
             feedback = []
@@ -738,6 +804,8 @@ class DataExtractionAgent(BaseAgent):
                             checked_rows=snapshot, complete_current_check=set())
                         negative_rows = {item["outcome_index"] for item in observation["clinical_negatives"]}
                         observed_negative_rows.update(negative_rows)
+                        for item in observation["clinical_negatives"]:
+                            retained_negatives.setdefault(item["outcome_index"], []).append(item)
                         incomplete = (bool(observation_errors) or raw_response["finish_reason"] == "length"
                                       or observation["response"] is None)
                         if negative_rows and incomplete:
@@ -767,36 +835,33 @@ class DataExtractionAgent(BaseAgent):
                     if terminal_observation:
                         raise ValueError("Incomplete independent verification retains a clinical nonmatch")
 
-                output_attempts = 0
                 output_unusable = False
+
+                def ask(attempt, round_feedback=feedback):
+                    nonlocal checked, latest_payload, latest_resolution
+                    checked = latest_payload = latest_resolution = None
+                    # Mark before the provider call so interruptions during the
+                    # first observer write, or any internal length retry, fail closed.
+                    persist_observation_pending()
+                    returned = self._check_extraction(content, extracted, protocol, batch, round_feedback, observe,
+                                                      catalogue, **({"strict_output": True} if attempt > 1 else {}))
+                    if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
+                        raise ValueError("Independent verification did not return its durably observed source response")
+                    return returned
+
                 try:
                     # The verifier's own output failing to parse or to fit its
                     # schema is the verifier failing, not the source disagreeing:
-                    # ask again (bounded, stricter from the second attempt). A
-                    # response that already recorded a clinical nonmatch is never
-                    # re-asked - that would be shopping for a match.
-                    while True:
-                        output_attempts += 1
-                        checked = latest_payload = latest_resolution = None
-                        # Mark before the provider call so interruptions during the
-                        # first observer write, or any internal length retry, fail closed.
-                        persist_observation_pending()
-                        try:
-                            returned = self._check_extraction(content, extracted, protocol, batch, feedback, observe,
-                                                              catalogue, **({"strict_output": True}
-                                                                            if output_attempts > 1 else {}))
-                            if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
-                                raise ValueError("Independent verification did not return its durably observed source response")
-                            break
-                        except Exception as exc:
-                            if not verifier_output_unusable(exc) or terminal_observation or observed_negative_rows:
-                                raise
-                            if output_attempts >= VERIFIER_OUTPUT_ATTEMPTS:
-                                output_unusable = True
-                                raise
-                            self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1}: "
-                                     f"the verifier's output was unusable ({type(exc).__name__}); asking again "
-                                     f"({output_attempts + 1}/{VERIFIER_OUTPUT_ATTEMPTS})", level="warning")
+                    # the shared bounded retry asks again, stricter from the
+                    # second attempt. A response that already recorded a clinical
+                    # nonmatch is never re-asked - that would be shopping for a match.
+                    bounded_output_call(
+                        ask, stage="extraction_verification", entity_id=f"{study_id}:{','.join(map(str, batch))}",
+                        attempts=VERIFIER_OUTPUT_ATTEMPTS,
+                        retry_if=lambda exc: (verifier_output_unusable(exc) and not terminal_observation
+                                              and not observed_negative_rows),
+                        log=lambda message: self.log(message, level="warning"))
+                    clear_stage_failure(project, "extraction_verification", f"{study_id}:{','.join(map(str, batch))}")
                     feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol,
                                                     notices=notices)
                     feedback.extend(observation_errors)
@@ -809,18 +874,29 @@ class DataExtractionAgent(BaseAgent):
                     if source_before is not None and _read_scoped(project, relative_source) != source_before:
                         feedback.append({"code": "verification_source_changed_during_check"})
                 except Exception as exc:
-                    if output_unusable:
+                    root = exc
+                    if isinstance(exc, StageOutputUnusable):
                         # Every attempt's output was unusable: verification could
                         # not complete. Not a mismatch, and never a match either.
-                        feedback = [{"code": VERIFICATION_OUTPUT_UNUSABLE, "error_type": type(exc).__name__,
-                                     "attempts": output_attempts}]
+                        output_unusable = True
+                        root = exc.last_error or exc
+                        feedback = [{"code": VERIFICATION_OUTPUT_UNUSABLE, "error_type": exc.error_type,
+                                     "attempts": exc.attempts}]
+                        record_exhausted(project, exc, consequence=(
+                            "the result is left out of synthesis as a verification that could not complete"))
+                    elif terminal_observation or observed_negative_rows:
+                        # The engine's own stop after the verifier stated a clinical
+                        # nonmatch (the client reports it as an observer failure):
+                        # that judgment is the finding, not a model output failure.
+                        feedback = [{"code": "verification_clinical_nonmatch_retained", "error_type": type(exc).__name__}]
                     else:
                         feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
                     feedback.extend(observation_errors)
-                    cause = exc.__cause__
+                    cause = root.__cause__
                     if hasattr(cause, "errors"):
                         feedback[0]["validation_errors"] = cause.errors(include_input=False, include_context=False)
-                    self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1} failed: {type(exc).__name__}", level="warning")
+                    self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1}: "
+                             + (f"{feedback[0]['code']} ({type(exc).__name__})"), level="warning")
                 stable_rows = all(row_fingerprint(extracted, index) == fingerprint for index, fingerprint in snapshot.items())
                 # A source-row issue about a number this row's computation does
                 # not read leaves the row complete; it stays in the history.
@@ -866,6 +942,10 @@ class DataExtractionAgent(BaseAgent):
                     item["code"] in {"numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"} for item in feedback))
                 record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
                                feedback, checked=checked, snapshot=snapshot, notices=notices)
+                for index in batch:
+                    row_outcomes[index] = ({"status": "verified", "reason": "", "codes": [], "detail": []} if complete
+                                           else {"status": "left_out", **classify_verification(
+                                               feedback, retained_negatives.get(index))})
                 if complete:
                     break
                 for index in batch:
@@ -890,11 +970,18 @@ class DataExtractionAgent(BaseAgent):
                 pending_reasons=pending_reasons, issue_histories=histories, source_references=source_references)
             if record_errors:
                 record_attempt(indices, 0, "needs_input", record_errors)
+                for index in {item.get("outcome_index") for item in record_errors} & set(indices):
+                    row_outcomes[index] = {"status": "left_out", **classify_verification(
+                        [item for item in record_errors if item.get("outcome_index") == index],
+                        retained_negatives.get(index))}
         except (OSError, ValueError) as exc:
             record_attempt(indices, 0, "needs_input", [{"code": "verification_source_changed", "error_type": type(exc).__name__}])
             invalidate_alignment_proofs(project, protocol, extracted, histories,
                                         reason="Source or protocol changed during independent verification.")
+            row_outcomes = {index: {"status": "left_out", **classify_verification(
+                [{"code": "verification_source_changed"}])} for index in indices}
         persist_pending_extraction()
+        save_verification_outcomes(project, protocol, extracted, row_outcomes)
         return extracted
 
     def _refine_extraction(
@@ -1078,6 +1165,34 @@ class DataExtractionAgent(BaseAgent):
         for outcome in extracted.outcomes:
             outcome.extraction_confidence = self._normalize_confidence(outcome)
             self._flag_internal_conflicts(outcome, protocol)
+
+    def _admit_subgroup_values(self, extracted: ExtractedStudy, vocabulary, study_id: str) -> None:
+        """Keep each row's in-vocabulary closed subgroup values; refuse and count the rest.
+
+        An id or value outside the protocol's vocabulary is dropped, never
+        mapped to the nearest one; a variable the model left out stays
+        unassigned (not_reported is the model's judgment, not a default).
+        """
+        from new_meta.core.subgroup_vocabulary import admit_subgroup_values
+        refusals = self.__dict__.setdefault("subgroup_value_refusals", [])
+        for index, outcome in enumerate(extracted.outcomes):
+            kept, refused = admit_subgroup_values(outcome.subgroup_values, vocabulary)
+            outcome.subgroup_values = kept
+            refusals.extend({"row_id": f"{study_id}:{index}", **item} for item in refused)
+            if vocabulary is not None:
+                missing = sum(1 for variable in vocabulary.variables if variable.variable_id not in kept)
+                self.subgroup_values_missing = getattr(self, "subgroup_values_missing", 0) + missing
+
+    def _audit_subgroup_values(self, audit: dict, protocol: ResearchProtocol, vocabulary) -> None:
+        """Say in the extraction audit what the subgroup vocabulary was and what was refused."""
+        from new_meta.core.subgroup_vocabulary import protocol_subgroup_variables
+        refusals = list(getattr(self, "subgroup_value_refusals", []))
+        audit["summary"]["subgroup_vocabulary"] = (
+            "derived" if vocabulary is not None
+            else "unavailable" if protocol_subgroup_variables(protocol) else "not_applicable")
+        audit["summary"]["subgroup_values_refused"] = len(refusals)
+        audit["summary"]["subgroup_values_missing"] = int(getattr(self, "subgroup_values_missing", 0))
+        audit["subgroup_value_refusals"] = refusals
 
     @staticmethod
     def _normalize_confidence(outcome: OutcomeData) -> str:

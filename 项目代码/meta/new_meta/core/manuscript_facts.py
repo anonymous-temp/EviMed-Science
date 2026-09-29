@@ -516,6 +516,11 @@ def build_manuscript_facts(
     absolute_effects = _absolute_effect_facts(primary, primary_population, baseline_risk_scenarios)
     secondary_effects = _secondary_effect_facts(meta_results)
     subgroup_effects = _subgroup_effect_facts(meta_results)
+    subgroup_analyses: list[dict[str, Any]] = []
+    if compiled_method_active and not (meta_results and meta_results.primary_outcome):
+        compiled_effects, subgroup_analyses = _compiled_subgroup_facts(
+            synthesis_result, protocol=protocol, project=project)
+        subgroup_effects = subgroup_effects + compiled_effects
 
     primary_label_keys = {_study_label_key(item) for item in primary_study_labels}
     facts = {
@@ -556,6 +561,7 @@ def build_manuscript_facts(
         "primary_effect": primary,
         "secondary_effects": secondary_effects,
         "subgroup_effects": subgroup_effects,
+        "subgroup_analyses": subgroup_analyses,
         "source_provenance": provenance,
         "primary_population": primary_population,
         "study_cards": study_cards,
@@ -1828,30 +1834,62 @@ def _study_label(study: ExtractedStudy) -> str:
     return label
 
 
+def _prisma_count_dict(value: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for reason, count in (value.items() if isinstance(value, dict) else []):
+        try:
+            number = int(count or 0)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            counts[str(reason)] = number
+    return counts
+
+
 def _prisma_facts(prisma_data: dict) -> dict[str, Any]:
     ident = prisma_data.get("identification", {})
     screening = prisma_data.get("screening", {})
     eligibility = prisma_data.get("eligibility", {})
     included = prisma_data.get("included", {})
-    not_screened_reasons = ident.get("records_not_screened_reasons")
-    return {
+    not_screened = int(ident.get("records_not_screened") or 0)
+    facts = {
         "records_identified": int(ident.get("records_identified") or 0),
         "records_after_dedup": int(ident.get("records_after_dedup") or 0),
         "duplicates_removed": int(ident.get("duplicates_removed") or 0),
         # Records removed after deduplication and before anyone screened them
-        # (PRISMA 2020 "records removed before screening"), with the ledger's reasons.
-        "records_not_screened": int(ident.get("records_not_screened") or 0),
-        "records_not_screened_reasons": {
-            str(reason): int(count or 0)
-            for reason, count in (not_screened_reasons.items() if isinstance(not_screened_reasons, dict) else [])
-            if int(count or 0) > 0
-        },
+        # (PRISMA 2020 "records removed before screening"), with the ledger's
+        # reasons: automation tools (a relevance ranking) and other reasons
+        # (date range, source retrieval limit), which files written before
+        # 2026-09-29 did not separate.
+        "records_not_screened": not_screened,
+        "records_not_screened_reasons": _prisma_count_dict(ident.get("records_not_screened_reasons")),
+        "automation_excluded": int(ident.get("automation_excluded", not_screened) or 0),
+        "automation_excluded_reasons": _prisma_count_dict(ident.get("automation_excluded_reasons")),
+        "records_removed_other": int(ident.get("records_removed_other") or 0),
+        "records_removed_other_reasons": _prisma_count_dict(ident.get("records_removed_other_reasons")),
         "records_from_database": int(ident.get("records_from_database") or 0),
         "records_from_user_upload": int(ident.get("records_from_user_upload") or 0),
+        "identified_by_source": _prisma_count_dict(ident.get("identified_by_source")),
+        "database_hits": {
+            str(source): dict(value)
+            for source, value in (ident.get("database_hits") or {}).items()
+            if isinstance(value, dict)
+        } if isinstance(ident.get("database_hits"), dict) else {},
+        # The relevance-cap rule and its inputs; the manuscript states it when
+        # it removed records (a limitation of the review).
+        "screening_cap": dict(ident.get("screening_cap")) if isinstance(ident.get("screening_cap"), dict) else {},
         "title_abstract_screened": int(screening.get("title_abstract_screened") or 0),
+        "title_abstract_excluded": int(screening.get("title_abstract_excluded") or 0),
         "full_text_assessed": int(eligibility.get("full_text_assessed") or 0),
         "studies_included": int(included.get("studies_included") or 0),
     }
+    # PRISMA 2020 "Reports sought for retrieval" / "Reports not retrieved";
+    # absent from files written before full-text handling counted them.
+    if eligibility.get("full_text_sought") is not None:
+        facts["full_text_sought"] = int(eligibility.get("full_text_sought") or 0)
+        facts["not_retrieved"] = int(eligibility.get("not_retrieved") or 0)
+        facts["not_retrieved_reasons"] = _prisma_count_dict(eligibility.get("not_retrieved_reasons"))
+    return facts
 
 
 def _actual_primary_model(effect: PooledEffect, model_decision: dict[str, Any] | None) -> str:
@@ -1892,6 +1930,78 @@ def _subgroup_effect_facts(meta_results: MetaAnalysisResults | None) -> list[dic
         for effect in effects:
             facts.append(_pooled_effect_fact(effect, analysis_group=str(analysis_group)))
     return facts
+
+
+def _compiled_subgroup_facts(
+    synthesis_result: dict[str, Any] | None, *, protocol: ResearchProtocol, project=None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The design-aware engine's per-variable subgroup results, numbers only from the engine.
+
+    The engine groups contrasts by the protocol's closed subgroup values
+    (core/subgroup_vocabulary.py). Returns the pooled values as subgroup
+    effect facts (the shape of the pairwise ones) and, per protocol variable,
+    what was analysed - every value's study count, the between-value test,
+    or why it was not run - so the manuscript reports what was and was not done.
+    """
+    payload = (synthesis_result or {}).get("engine_payload") or {}
+    moderators = payload.get("moderator_subgroups") if isinstance(payload, dict) else None
+    if not isinstance(moderators, dict) or not isinstance(moderators.get("variables"), list):
+        return [], []
+    definitions: dict[tuple[str, str], str] = {}
+    try:
+        from new_meta.core.subgroup_vocabulary import load_subgroup_vocabulary
+        vocabulary = load_subgroup_vocabulary(project, protocol)
+    except (OSError, ValueError, TypeError):
+        vocabulary = None
+    for variable in (vocabulary.variables if vocabulary is not None else []):
+        definitions.update({(variable.variable_id, item.value): item.definition for item in variable.values})
+    measure = str(payload.get("measure") or protocol.effect_measure or "")
+    outcome = str(protocol.pico.outcome_primary or "")
+    effects: list[dict[str, Any]] = []
+    analyses: list[dict[str, Any]] = []
+    for variable in moderators["variables"]:
+        if not isinstance(variable, dict):
+            continue
+        variable_id = str(variable.get("variable_id") or "")
+        label = str(variable.get("label") or variable_id)
+        values = []
+        for value, entry in (variable.get("values") or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            item = {
+                "value": value,
+                "definition": definitions.get((variable_id, value), ""),
+                "n_studies": entry.get("n_studies"),
+                "n_contrasts": entry.get("n_contrasts"),
+                "pooled": bool(entry.get("pooled")),
+            }
+            if entry.get("pooled"):
+                item.update({key: entry.get(key) for key in ("estimate", "ci_lower", "ci_upper", "i_squared")})
+                effects.append({
+                    "analysis_group": label,
+                    "subgroup_variable_id": variable_id,
+                    "subgroup_value": value,
+                    "subgroup_value_definition": item["definition"],
+                    "outcome_name": f"{outcome} — {value}",
+                    "effect_measure": measure,
+                    "n_studies": entry.get("n_studies"),
+                    "pooled_effect": entry.get("estimate"),
+                    "ci_lower": entry.get("ci_lower"),
+                    "ci_upper": entry.get("ci_upper"),
+                    "p_value": None,
+                    "i_squared": entry.get("i_squared"),
+                })
+            values.append(item)
+        analyses.append({
+            "variable_id": variable_id,
+            "label": label,
+            "values": values,
+            "not_reported_results": len(variable.get("not_reported") or []),
+            "unassigned_results": len(variable.get("unassigned") or []),
+            "between_value_test": variable.get("between"),
+            "not_run_reason": str(variable.get("not_run_reason") or ""),
+        })
+    return effects, analyses
 
 
 def _grade_facts(
@@ -2660,7 +2770,9 @@ def _merge_evidence_understanding_study_cards(
             value = llm.get(key)
             if isinstance(value, list) and value:
                 merged[key] = value
-        merged["evidence_understanding_available"] = bool(llm)
+        # A card built from the extraction alone after the model failed is not
+        # model understanding (evidence_understanding_agent marks it "fallback").
+        merged["evidence_understanding_available"] = bool(llm) and llm.get("understanding_status") != "fallback"
         merged_cards.append(merged)
 
     for llm in cards:

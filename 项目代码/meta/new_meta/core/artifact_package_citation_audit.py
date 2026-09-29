@@ -849,9 +849,14 @@ def build_citation_audit_review(project: Project) -> dict | None:
             ),
         })
     for cluster in repeated_large_citation_clusters:
+        # A warning, not a hard fail (coordinator ruling of 2026-09-29, platform
+        # principle 13: no whole-answer release condition for template
+        # conformity). A local ma-001 run cited its eight pooled trials as one
+        # bundle twice in Results, and this single finding blocked the whole
+        # manuscript. The locations stay in the release report.
         issues.append({
             "code": "repeated_large_citation_cluster",
-            "severity": "fail",
+            "severity": "warn",
             "section": ", ".join(cluster["sections"]),
             "sections": cluster["sections"],
             "citation_numbers": cluster["citation_numbers"],
@@ -1158,6 +1163,11 @@ def build_citation_audit_review(project: Project) -> dict | None:
             "overloaded_citation_clusters": len(overloaded_citation_clusters),
             "maximum_inline_citation_cluster_size": CITATION_AUDIT_MAX_INLINE_CLUSTER_SIZE,
             "repeated_large_citation_clusters": len(repeated_large_citation_clusters),
+            "repeated_large_citation_cluster_locations": [
+                {"citation_marker": cluster["citation_marker"], "sections": cluster["sections"],
+                 "occurrences": cluster["occurrences"]}
+                for cluster in repeated_large_citation_clusters
+            ],
             "repeated_large_citation_cluster_minimum_size": CITATION_AUDIT_REPEATED_CLUSTER_MIN_SIZE,
             "mechanical_citation_density_paragraphs": len(mechanical_citation_density_paragraphs),
             "maximum_mechanical_markers_per_35_text_units": (

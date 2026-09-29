@@ -90,7 +90,7 @@ def test_the_six_production_strata_are_one_primary_candidate(tmp_path: Path):
     studies = warning["context"]["studies"]
     assert studies["study:27222617"]["timepoints"] == ["postoperative calculated total blood loss"]
     assert studies["study:22053253"]["timepoints"] == ["postoperative blood loss measured to 4th postoperative day"]
-    assert sorted(item["moderator"] for item in studies["study:24308672"]["contrasts"]) == [
+    assert sorted(item["label"] for item in studies["study:24308672"]["contrasts"]) == [
         "txa dose level: 250 mg (single intra-articular)", "txa dose level: 500 mg (single intra-articular)"]
 
     phase = PipelineRunner(project).run_compiled_method_synthesis()
@@ -103,8 +103,9 @@ def test_the_six_production_strata_are_one_primary_candidate(tmp_path: Path):
     assert by_study["study:27222617"]["variance"] > 300.0 ** 2 / 40
     # Heterogeneity and the prediction interval run on the joined set.
     assert payload["prediction_interval"] is not None and payload["tau_squared"] >= 0
-    labels = payload["moderator_subgroups"]["labels"]
-    assert labels["route of administration: intravenous"] == {"n_studies": 1, "pooled": None}
+    # The free-text labels group nothing: moderators are closed protocol
+    # subgroup values (test_closed_subgroup_values.py), and this protocol has none.
+    assert payload["moderator_subgroups"] == {}
     audit = project.load_json("method_input_audit.json", subdir="analysis")
     assert {item["timepoint"] for item in audit["inputs"]} == {
         "postoperative blood loss measured to 4th postoperative day", "perioperative",
@@ -148,20 +149,22 @@ def test_a_trial_never_enters_twice_without_its_covariance(tmp_path: Path):
 
 
 def test_a_moderator_shared_by_two_trials_is_pooled_and_tested():
-    def record(study, contrast, estimate, moderator, covariance=None):
+    def record(study, contrast, estimate, route, covariance=None):
         return {"result_id": f"{study}:{contrast}", "study_id": study, "design": "multi_arm_rct", "measure": "MD",
                 "estimate": estimate, "variance": 900.0, "precision_basis": "computed", "estimand_id": "primary",
                 "treatment": contrast, "comparator": "control", "contrast_id": f"{study}:{contrast}",
-                "covariance_with": covariance or {}, "moderator": moderator}
+                "covariance_with": covariance or {}, "subgroup_values": {"route": route}}
     records = [
         record("A", "iv", -300.0, "intravenous", {"A:topical": 400.0}),
         record("A", "topical", -200.0, "topical", {"A:iv": 400.0}),
         record("B", "iv", -280.0, "intravenous", {"B:topical": 400.0}),
         record("B", "topical", -150.0, "topical", {"B:iv": 400.0}),
     ]
-    result = run_complex_rct(records)
+    result = run_complex_rct(records, subgroup_variables=[
+        {"variable_id": "route", "label": "Route", "values": ["intravenous", "topical", "not_reported"]}])
     assert result.n_studies == 2 and result.n_contrasts == 4
-    labels = result.moderator_subgroups["labels"]
-    assert labels["intravenous"]["n_studies"] == 2 and labels["intravenous"]["estimate"] == pytest.approx(-290.0)
-    assert labels["topical"]["estimate"] == pytest.approx(-175.0)
-    assert result.moderator_subgroups["between"]["df"] == 1 and result.moderator_subgroups["between"]["q"] > 0
+    route = result.moderator_subgroups["variables"][0]
+    values = route["values"]
+    assert values["intravenous"]["n_studies"] == 2 and values["intravenous"]["estimate"] == pytest.approx(-290.0)
+    assert values["topical"]["estimate"] == pytest.approx(-175.0)
+    assert route["between"]["df"] == 1 and route["between"]["q"] > 0 and route["between"]["approximate"] is True

@@ -750,21 +750,20 @@ class QueryBuilder(BaseAgent):
             study_design=protocol.study_design,
         )
 
-        raw = self.call_llm(prompt, max_tokens=8192)
-        raw = _strip_markdown_fences(raw)
+        from new_meta.core.llm_retry import bounded_output_call, strict_suffix
 
-        try:
+        def plan(attempt):
+            # The shared bounded retry (core/llm_retry.py): a non-JSON plan is
+            # asked again, stricter about the form. When every attempt fails,
+            # run() falls back and the strategy report says which query was used.
+            raw = _strip_markdown_fences(self.call_llm(prompt + strict_suffix(attempt), max_tokens=8192))
             data = json.loads(raw)
-        except json.JSONDecodeError:
-            self.log("LLM returned non-JSON SQP; attempting repair...", level="warning")
-            repair_prompt = (
-                "The following text was supposed to be a valid JSON Structured Query Plan. "
-                "Fix it and return ONLY the corrected JSON. No explanation.\n\n"
-                f"{raw}"
-            )
-            raw = _strip_markdown_fences(self.call_llm(repair_prompt, max_tokens=8192))
-            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise ValueError("The structured query plan is not a JSON object")
+            return data
 
+        data = bounded_output_call(plan, stage="search_query_plan", entity_id="protocol",
+                                   log=lambda message: self.log(message, level="warning"))
         return self._parse_sqp(data)
 
     def _parse_sqp(self, data: dict) -> StructuredQueryPlan:

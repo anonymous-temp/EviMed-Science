@@ -88,7 +88,13 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
     # 250 mg"), each label became a one-study stratum, and four trials that
     # report the primary outcome gave "1 contrast from 1 study". Which rows are
     # one trial's distinct contrasts is decided by their own arm metadata, not
-    # by reading the labels; the labels stay on each result as moderators.
+    # by reading the labels; the moderators are each result's closed subgroup
+    # values (core/subgroup_vocabulary.py), never the labels.
+    # Every other stratum is still keyed by its timepoint and subgroup text,
+    # on purpose: a wording difference there can only split a stratum (offered
+    # to a person interactively, ranked unattended), never pool unlike
+    # results, and no closed field says whether a subgroup label restricts
+    # the participants - the closed values describe the contrast, not that.
     review_estimand = _review_estimand(project) if merge_windows and plan.family is ReviewFamily.INTERVENTION_RCT else ""
     windows: dict[tuple[str, str, str, str], set[str]] = {}
     joined_keys: set[tuple[str, str, str, str]] = set()
@@ -128,7 +134,8 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
                     "result_id": item.entity_id,
                     "treatment": item.raw_data.treatment,
                     "comparator": item.raw_data.comparator,
-                    "moderator": " ".join(item.subgroup.split()),
+                    "label": " ".join(item.subgroup.split()),
+                    "subgroup_values": dict((item.derivation or {}).get("subgroup_values") or {}),
                 })
         if merge_windows:
             timepoint = "; ".join(sorted(window for window in windows[key] if window)).casefold()
@@ -173,7 +180,7 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
                 "Results reported at different time windows were analysed as one outcome, because the independent "
                 "source verification judged each to match the protocol's primary outcome, time horizon included. "
                 "Each trial contributes once; a multi-arm trial's contrasts enter together with their shared-control "
-                "covariance, and their arm labels are kept as moderators.",
+                "covariance, and their closed protocol subgroup values are kept as moderators.",
                 code="primary_timepoints_merged",
                 context={"windows": merged, "studies": joined_report},
             )
@@ -429,6 +436,10 @@ def _one_contribution_per_trial(entities: list[ResultEntity]) -> tuple[list[Resu
         chosen, reason = [], ""
         for rows in by_contrast.values():
             if len(rows) > 1:
+                # An empty subgroup is the whole randomized population: the
+                # extraction prompt keeps an arm's route or dose out of
+                # `subgroup` (it goes to subgroup_values), so a label left
+                # here restricts the participants.
                 whole = [item for item in rows if not item.subgroup.strip()]
                 if len(whole) != 1:
                     reason = "same_comparison_reported_more_than_once"

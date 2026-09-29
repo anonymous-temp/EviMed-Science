@@ -5,6 +5,7 @@ import time
 import logging
 import os
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
 
 import requests
 
@@ -73,6 +74,43 @@ def _ids_from_esearch_xml(text: str) -> list[str]:
     return [id_elem.text for id_elem in root.findall(".//Id") if id_elem.text]
 
 
+def _count_from_esearch_xml(text: str) -> int | None:
+    """The query's hit count (esearch <Count>), or None when PubMed did not report one."""
+    root = ET.fromstring(text)
+    # The top-level Count; a TranslationStack also carries per-term Count nodes.
+    raw = root.findtext("Count")
+    if raw is None:
+        raw = root.findtext(".//Count")
+    try:
+        return int(str(raw).strip()) if raw is not None and str(raw).strip() else None
+    except ValueError:
+        return None
+
+
+@dataclass
+class PubMedSearchResult:
+    """One PubMed query: what was retrieved, and what it matched but was not.
+
+    ``pmids`` are the retrieved IDs in PubMed relevance order. ``count`` is the
+    number of records the query matches (esearch <Count>; None when PubMed
+    did not report it). ``unretrieved_pmids`` are the matching IDs past the
+    retrieval limit that esearch listed; esearch lists at most
+    PUBMED_ESEARCH_PAGE_SIZE IDs per query without paging, so
+    ``unretrieved_listed`` says whether every unretrieved ID is in the list.
+    """
+
+    pmids: list[str] = field(default_factory=list)
+    count: int | None = None
+    unretrieved_pmids: list[str] = field(default_factory=list)
+    unretrieved_listed: bool = True
+
+    @property
+    def unretrieved_count(self) -> int:
+        if self.count is None:
+            return len(self.unretrieved_pmids)
+        return max(0, self.count - len(self.pmids))
+
+
 def _search_with_history(
     query: str,
     *,
@@ -81,6 +119,22 @@ def _search_with_history(
     max_date: str | None = None,
 ) -> list[str]:
     """Retrieve large PubMed result sets via WebEnv/query_key paging."""
+    return _search_with_history_counted(
+        query,
+        max_results=max_results,
+        min_date=min_date,
+        max_date=max_date,
+    )[0]
+
+
+def _search_with_history_counted(
+    query: str,
+    *,
+    max_results: int,
+    min_date: str | None = None,
+    max_date: str | None = None,
+) -> tuple[list[str], int | None]:
+    """History paging that also returns the query's hit count."""
     history_params = _search_params(
         query=query,
         retmax=0,
@@ -93,10 +147,8 @@ def _search_with_history(
     root = ET.fromstring(resp.text)
     webenv = root.findtext(".//WebEnv", "")
     query_key = root.findtext(".//QueryKey", "")
-    try:
-        count = int(root.findtext(".//Count", "") or "0")
-    except ValueError:
-        count = 0
+    reported_count = _count_from_esearch_xml(resp.text)
+    count = reported_count or 0
     if not webenv or not query_key:
         logger.warning("PubMed history paging unavailable; falling back to first %s records.", PUBMED_ESEARCH_PAGE_SIZE)
         fallback_resp = requests.post(
@@ -110,7 +162,7 @@ def _search_with_history(
             timeout=PUBMED_SEARCH_TIMEOUT,
         )
         fallback_resp.raise_for_status()
-        return _ids_from_esearch_xml(fallback_resp.text)
+        return _ids_from_esearch_xml(fallback_resp.text), reported_count
 
     target = min(max_results, count) if count > 0 else max_results
     pmids: list[str] = []
@@ -137,7 +189,7 @@ def _search_with_history(
         retstart += len(page_pmids)
         if len(page_pmids) < retmax:
             break
-    return pmids[:max_results]
+    return pmids[:max_results], reported_count
 
 
 def search(query: str, max_results: int = 200, min_date: str = None, max_date: str = None) -> list[str]:
@@ -172,6 +224,58 @@ def search(query: str, max_results: int = 200, min_date: str = None, max_date: s
     pmids = _ids_from_esearch_xml(resp.text)
     logger.info(f"PubMed search returned {len(pmids)} results for: {query[:80]}...")
     return pmids
+
+
+def search_with_count(
+    query: str,
+    max_results: int = 200,
+    min_date: str = None,
+    max_date: str = None,
+    list_unretrieved: bool = True,
+) -> PubMedSearchResult:
+    """Search PubMed and report the hit count and the IDs left unretrieved.
+
+    ``search()`` returns only the first ``max_results`` IDs, so a query that
+    matched 1,082 records and retrieved 200 left no trace of the other 882
+    (ma-001, 2026-09-28). One esearch call returns the <Count> and up to
+    PUBMED_ESEARCH_PAGE_SIZE IDs without fetching any record, so the IDs past
+    the retrieval limit are listed at the cost of that one call; beyond the
+    page size only their number is known.
+    """
+    max_results = max(0, int(max_results or 0))
+    if max_results > PUBMED_ESEARCH_PAGE_SIZE:
+        pmids, count = _search_with_history_counted(
+            query,
+            max_results=max_results,
+            min_date=min_date,
+            max_date=max_date,
+        )
+        return PubMedSearchResult(
+            pmids=pmids,
+            count=count,
+            unretrieved_pmids=[],
+            unretrieved_listed=count is not None and count <= len(pmids),
+        )
+
+    retmax = PUBMED_ESEARCH_PAGE_SIZE if list_unretrieved else max(max_results, 1)
+    params = _search_params(query=query, retmax=retmax, min_date=min_date, max_date=max_date)
+    resp = requests.post(f"{BASE_URL}/esearch.fcgi", data=params, timeout=PUBMED_SEARCH_TIMEOUT)
+    resp.raise_for_status()
+    ids = _ids_from_esearch_xml(resp.text)
+    count = _count_from_esearch_xml(resp.text)
+    pmids = ids[:max_results]
+    unretrieved = ids[max_results:] if list_unretrieved else []
+    expected_unretrieved = max(0, count - len(pmids)) if count is not None else len(unretrieved)
+    logger.info(
+        f"PubMed search matched {count if count is not None else 'an unreported number of'} records, "
+        f"retrieved {len(pmids)} for: {query[:80]}..."
+    )
+    return PubMedSearchResult(
+        pmids=pmids,
+        count=count,
+        unretrieved_pmids=unretrieved,
+        unretrieved_listed=len(unretrieved) >= expected_unretrieved,
+    )
 
 
 def fetch_details(pmids: list[str], batch_size: int = 50) -> list[dict]:

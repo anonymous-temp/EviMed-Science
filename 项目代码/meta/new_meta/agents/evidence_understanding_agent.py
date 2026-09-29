@@ -10,6 +10,9 @@ from tqdm import tqdm
 
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.llm_retry import (
+    StageOutputUnusable, bounded_output_call, clear_stage_failure, record_stage_failure, strict_suffix,
+)
 from new_meta.core.project import Project
 from new_meta.schemas.evidence_understanding import (
     EvidenceUnderstandingReport,
@@ -75,12 +78,27 @@ class EvidenceUnderstandingAgent(BaseAgent):
                 study = futures[future]
                 try:
                     drafts.append(future.result())
+                    clear_stage_failure(project, "evidence_understanding", self._study_id(study))
                 except Exception as exc:
-                    self.log(f"Evidence understanding failed for {self._study_id(study)}: {exc}", level="warning")
-                    drafts.append(self._fallback_understanding(study, [], f"LLM understanding failed: {exc}"))
+                    # The card built from the extraction alone says so
+                    # (understanding_status "fallback"), and the failure is
+                    # recorded; it must not pass for a model-read card.
+                    self.log(f"Evidence understanding failed for {self._study_id(study)}: {type(exc).__name__}",
+                             level="warning")
+                    unusable = isinstance(exc, StageOutputUnusable)
+                    drafts.append(self._fallback_understanding(
+                        study, [], "Model evidence understanding failed: " + (
+                            f"no usable output in {exc.attempts} attempt(s)" if unusable else type(exc).__name__)))
+                    record_stage_failure(
+                        project, stage="evidence_understanding", entity_id=self._study_id(study),
+                        reason=exc.reason if unusable else "model_call_failed",
+                        error_type=exc.error_type if unusable else type(exc).__name__,
+                        attempts=exc.attempts if unusable else 1,
+                        consequence="the study card is built from the extraction alone and marked as such")
 
+        fallback_cards = sum(draft.card.understanding_status == "fallback" for draft in drafts)
         report = EvidenceUnderstandingReport(
-            status="ok",
+            status="partial" if fallback_cards else "ok",
             study_cards=[draft.card for draft in drafts],
             cross_study_claims=self._cross_study_claims(drafts, protocol),
             authoring_priorities=self._dedupe_text(
@@ -126,16 +144,17 @@ class EvidenceUnderstandingAgent(BaseAgent):
             "SOURCE TEXT EXCERPT:\n"
             f"{source_text[:50000]}"
         )
-        try:
-            draft = self.call_llm_structured(
-                prompt,
+        draft = bounded_output_call(
+            lambda attempt: self.call_llm_structured(
+                prompt + strict_suffix(attempt),
                 StudyUnderstandingDraft,
                 temperature=0.0,
                 max_tokens=max(4096, min(LLM_MAX_TOKENS_EXTRACTION, 12000)),
-            )
-        except Exception as exc:
-            return self._fallback_understanding(study, [], f"LLM understanding failed: {exc}")
+            ),
+            stage="evidence_understanding", entity_id=self._study_id(study),
+            log=lambda message: self.log(message, level="warning"))
         self._normalize_card(draft.card, study)
+        draft.card.understanding_status = "model"
         return draft
 
     @staticmethod
@@ -312,6 +331,7 @@ class EvidenceUnderstandingAgent(BaseAgent):
             source_backed_claims=claims or self._claims_from_extraction(study),
             unresolved_questions=["Full-text clinical interpretation requires manual review."],
             audit_notes=[note],
+            understanding_status="fallback",
         )
         return StudyUnderstandingDraft(card=card, audit_notes=[note])
 

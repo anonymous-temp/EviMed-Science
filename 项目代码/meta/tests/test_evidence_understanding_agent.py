@@ -75,10 +75,17 @@ def test_evidence_understanding_persists_auditable_fallback_when_llm_fails(tmp_p
     saved = project.load_json("evidence_understanding.json", subdir="extraction")
     md = (project.base_dir / "extraction" / "evidence_understanding.md").read_text()
 
-    assert report.status == "ok"
+    # A card the model never read is still built and kept, but it no longer
+    # passes for model understanding (2026-09-29): the report is "partial",
+    # the card says "fallback", and the failure is recorded with its reason.
+    assert report.status == "partial"
     assert saved["study_cards"][0]["study_id"] == "123"
+    assert saved["study_cards"][0]["understanding_status"] == "fallback"
     assert saved["study_cards"][0]["source_backed_claims"][0]["source_location"] == "Table 2"
     assert saved["study_cards"][0]["source_backed_claims"][0]["manuscript_use"] == "main"
-    assert "LLM understanding failed" in saved["audit_notes"][0]
+    assert "Model evidence understanding failed" in saved["audit_notes"][0]
+    failures = project.load_json("model_stage_failures.json", subdir="quality")["failures"]
+    assert [(item["stage"], item["entity_id"], item["reason"]) for item in failures] == [
+        ("evidence_understanding", "123", "model_call_failed")]
     assert "## Author 2024" in md
     assert "Mortality occurred in 10 of 100 treatment patients" in md

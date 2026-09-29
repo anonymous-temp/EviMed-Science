@@ -4809,7 +4809,7 @@ def test_citation_audit_warns_about_excessive_global_citation_density(tmp_path: 
     assert issue["section"] == "Main text"
 
 
-def test_citation_audit_blocks_repeated_large_citation_clusters(tmp_path: Path) -> None:
+def test_citation_audit_warns_on_repeated_large_citation_clusters(tmp_path: Path) -> None:
     project = Project("repeated large citation cluster", output_dir=tmp_path / uuid4().hex)
     references = "\n".join(f"[{i}] Reference {i}." for i in range(1, 24))
     project.save_text(
@@ -4834,9 +4834,12 @@ def test_citation_audit_blocks_repeated_large_citation_clusters(tmp_path: Path) 
     audit = _build_citation_audit_review(project)
 
     issue = next(item for item in audit["issues"] if item["code"] == "repeated_large_citation_cluster")
-    assert audit["passed"] is False
-    assert issue["severity"] == "fail"
-    assert audit["summary"]["failed_issues"] >= 1
+    # A warning with its locations since 2026-09-29 (coordinator ruling,
+    # principle 13): a repeated bundle no longer blocks the whole manuscript.
+    assert issue["severity"] == "warn"
+    assert audit["summary"]["warning_issues"] >= 1
+    assert audit["summary"]["repeated_large_citation_cluster_locations"] == [
+        {"citation_marker": issue["citation_marker"], "sections": ["Discussion"], "occurrences": 3}]
     assert audit["summary"]["repeated_large_citation_clusters"] == 1
     assert issue["citation_numbers"] == [3, 5, 7, 20, 23]
     assert issue["occurrences"] == 3

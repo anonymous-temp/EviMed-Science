@@ -1028,6 +1028,15 @@ def _module_ledger(project: Path) -> dict[str, dict[str, Any]]:
     return modules
 
 
+def _evidence_accounting(project: Path) -> dict[str, Any]:
+    """The engine's own counts (package/evidence_accounting.json) for the run to quote, not to add up."""
+    try:
+        loaded = json.loads((project / "package" / "evidence_accounting.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
     candidates = [
         ("manuscript", project / "manuscript" / "draft.md"),
@@ -1035,7 +1044,15 @@ def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
         ("manuscript_docx", project / "manuscript" / "draft.docx"),
         ("release_decision", project / "package" / "release_decision.json"),
         ("review_package", project / "package" / "metaagent_export.zip"),
-        ("analysis", project / "analysis" / "meta_analysis.json"),
+        # The pooled result under the name each route writes: meta_results.json
+        # (pairwise) or synthesis_result.json (compiled). "meta_analysis.json"
+        # was listed here and never written, so no analysis was ever reported.
+        ("analysis", project / "analysis" / "meta_results.json"),
+        ("analysis", project / "analysis" / "synthesis_result.json"),
+        # The counts a report quotes (records, exclusions, studies) come from
+        # here, never from a sum the run makes.
+        ("prisma_flow", project / "prisma_flow.json"),
+        ("evidence_accounting", project / "package" / "evidence_accounting.json"),
     ]
     return [
         {"kind": kind, "path": candidate.relative_to(workspace).as_posix()}
@@ -1242,6 +1259,7 @@ def run_job(state_file: str) -> int:
             if str(item).strip()
         ][:20],
         "modules": _module_ledger(project),
+        "evidenceAccounting": _evidence_accounting(project),
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
         "artifacts": _artifact_list(workspace, project),
     })

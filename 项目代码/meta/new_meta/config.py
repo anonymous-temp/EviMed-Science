@@ -132,6 +132,18 @@ MINERU_TOKEN = os.getenv("MINERU_TOKEN", "")
 
 # --- Pipeline Parameters ---
 MAX_SEARCH_RESULTS = int(os.getenv("MAX_SEARCH_RESULTS", "200"))
+# Title/abstract screening budget (the relevance cap). With T de-duplicated
+# records inside the protocol date range, the number screened is
+#   B(T) = min(T, max(TA_SCREENING_FLOOR, ceil(TA_SCREENING_FRACTION * T)), TA_SCREENING_CEILING)
+# so every record is screened up to the floor, and a larger topic screens its
+# more relevant half, never fewer than the floor and never more than the
+# ceiling. An explicit --max-papers lowers it further. PubMed retrieval reaches
+# the ceiling so the ranking sees the topic. This replaced a fixed
+# MAX_SEARCH_RESULTS=200 (no longer read by the retriever): on 2026-09-28 the
+# ma-001 run screened 200 of 396 records and never retrieved 882 PubMed hits.
+TA_SCREENING_FLOOR = max(1, int(os.getenv("TA_SCREENING_FLOOR", "400")))
+TA_SCREENING_FRACTION = min(1.0, max(0.0, float(os.getenv("TA_SCREENING_FRACTION", "0.5"))))
+TA_SCREENING_CEILING = max(1, int(os.getenv("TA_SCREENING_CEILING", "1000")))
 TOP_K_PAPERS = int(os.getenv("TOP_K_PAPERS", "30"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "4"))
 # Planning proposals per review, each checked by the compiler and by an

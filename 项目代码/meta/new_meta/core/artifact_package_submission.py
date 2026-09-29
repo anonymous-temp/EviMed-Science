@@ -99,10 +99,8 @@ def build_submission_readiness_review(
     search_report_path = project.base_dir / "search_strategy_report.txt"
     figures_dir = project.base_dir / "figures"
     figure_files = sorted(figures_dir.glob("*.png")) if figures_dir.exists() else []
-    draft_text = (project.base_dir / "manuscript" / "draft.md").read_text(
-        encoding="utf-8",
-        errors="replace",
-    )
+    draft_path = project.base_dir / "manuscript" / "draft.md"
+    draft_text = draft_path.read_text(encoding="utf-8", errors="replace") if draft_path.exists() else ""
     readiness_language = _submission_readiness_language(manuscript, draft_text)
 
     evidence_summary = (evidence_review or {}).get("summary") or {}
@@ -489,6 +487,11 @@ def build_submission_readiness_review(
                 f"failed_issues={citation_summary.get('failed_issues', 0)}; "
                 f"warning_issues={citation_summary.get('warning_issues', 0)}; "
                 f"density={citation_summary.get('citation_density_per_1000_words', 0)} per 1000 words."
+                + "".join(
+                    f" Repeated citation cluster {item.get('citation_marker')} in "
+                    f"{', '.join(item.get('sections') or [])} ({item.get('occurrences')}x)."
+                    for item in citation_summary.get("repeated_large_citation_cluster_locations") or []
+                )
             ),
             warning=citation_complete and citation_warning_issues > 0,
         ),
@@ -666,6 +669,14 @@ def build_submission_readiness_review(
         ),
     ]
 
+    if not draft_text.strip():
+        # No manuscript at all: a gate that reads the text cannot be evaluated,
+        # and says so instead of failing with counts measured on nothing. The
+        # missing draft itself still blocks (manuscript_formats).
+        for gate in gates:
+            if gate["id"] in _MANUSCRIPT_TEXT_GATES:
+                gate.update({"status": "not_evaluated", "passed": False,
+                             "detail": "not evaluated: no manuscript draft was written."})
     failed = sum(1 for gate in gates if gate["status"] == "fail")
     warnings = sum(1 for gate in gates if gate["status"] == "warn")
     _localize_submission_gates(gates, readiness_language)
@@ -689,6 +700,14 @@ def build_submission_readiness_review(
         "manuscript": manuscript,
         "gates": gates,
     }
+
+
+#: Gates that measure the manuscript text itself.
+_MANUSCRIPT_TEXT_GATES = frozenset({
+    "manuscript_language", "manuscript_length", "abstract_polish", "clinical_interpretation",
+    "manuscript_content", "references", "citation_coverage", "claim_support", "declarations",
+    "figure_legends", "cross_references", "table_footnotes", "publication_tone", "readability",
+})
 
 
 def _calculation_audit_is_complete(summary: dict[str, Any]) -> bool:
@@ -871,8 +890,13 @@ def _risk_of_bias_completeness_is_complete(summary: dict[str, Any]) -> bool:
     primary_studies = _coerce_int(summary.get("primary_contributing_studies"))
     if primary_studies <= 0:
         return False
+    # Result-level reviews count one formal assessment per pooled result; a
+    # multi-arm trial contributes several (compiled route, ma-001: 3 results
+    # from 2 trials), so their formal count is compared with the results.
+    expected = (_coerce_int(summary.get("primary_contributing_results")) or primary_studies
+                if summary.get("scope") == "result" else primary_studies)
     return (
-        _coerce_int(summary.get("formal_rob")) == primary_studies
+        _coerce_int(summary.get("formal_rob")) == expected
         and _coerce_int(summary.get("missing_formal_rob")) == 0
         and _coerce_int(summary.get("synthetic_rob")) == 0
         and _coerce_int(summary.get("incomplete_rob")) == 0
@@ -927,13 +951,22 @@ def _project_submission_quality_gate(project: Project) -> dict[str, Any]:
 
 
 def _manuscript_validation_gate_detail(validation: dict[str, Any], counts: dict[str, int]) -> str:
+    # The blocking reasons themselves, not only their count: the delivered
+    # draft is the real manuscript, and this is what holds it back.
+    blocking = [issue for issue in validation.get("issues") or []
+                if isinstance(issue, dict) and issue.get("severity") == "error"]
+    reasons = "".join(
+        f" Blocking: {issue.get('kind') or issue.get('code') or 'issue'}"
+        + (f" - {str(issue.get('message'))[:200]}" if issue.get("message") else "") + "."
+        for issue in blocking[:3]
+    )
     return (
         f"passed={bool(validation.get('passed') is True)}; "
         f"blocking={counts.get('blocking', 0)}; "
         f"warnings={counts.get('warnings', 0)}; "
         f"fixed={counts.get('fixed', 0)}; "
         f"info={counts.get('info', 0)}; "
-        f"total={counts.get('total', 0)}."
+        f"total={counts.get('total', 0)}." + reasons
     )
 
 

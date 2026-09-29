@@ -251,6 +251,14 @@ def _apply_text_source_downstream_uses(project: Project, records_by_key: dict[st
                 continue
             add_scope({"study_id": study.get("study_id")}, "primary_meta_analysis")
             add_scope({"study_id": study.get("study_id")}, "grade_contributor")
+    else:
+        # The compiled-method route writes synthesis_result.json instead; its
+        # pooled results name their studies ("result:<study>:<row>").
+        synthesis = project.load_json("synthesis_result.json", subdir="analysis")
+        for result_id in (synthesis.get("input_result_ids") or []) if isinstance(synthesis, dict) else []:
+            study_id = str(result_id).removeprefix("result:").rsplit(":", 1)[0]
+            add_scope({"study_id": study_id}, "primary_meta_analysis")
+            add_scope({"study_id": study_id}, "grade_contributor")
 
     references_text = ""
     references_path = project.base_dir / "references.bib"

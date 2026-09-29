@@ -338,8 +338,8 @@ def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "
     source values; they are not split into misleading numerator/denominator values.
     Interval endpoints are supported, including the common PDF en-dash form.
     "a ± b" gives a mean and its SD when the quote or, through ``plus_minus_sd``,
-    the whole source declares that notation. An event count may be written as a
-    word (``_COUNT_WORDS``).
+    the whole source declares that notation. An event count or a group size may
+    be written as a word (``_COUNT_WORDS``).
     """
     from new_meta.core.primary_analysis_alignment import _normalized_quote, _NUMBER_ATOM, _NUMERIC_TOKEN
     if value is None or not math.isfinite(float(value)):
@@ -395,7 +395,10 @@ def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "
                     return True
             except (ValueError, OverflowError):
                 continue
-    return event_field and _count_word_in_quote(float(value), text)
+    # A count written as a word: events ("no patient had ...") and, since a
+    # local ma-001 run of 2026-09-29, group sizes ("There were fourteen
+    # patients in group A"), which were refused although the quote says it.
+    return (event_field or total_field) and _count_word_in_quote(float(value), text)
 
 
 _P_EXPRESSION = re.compile(r"p\s*(?:-?\s*values?)?\s*(<=|>=|≤|≥|<|>|=)\s*(\d*\.?\d+(?:e-?\d+)?)")

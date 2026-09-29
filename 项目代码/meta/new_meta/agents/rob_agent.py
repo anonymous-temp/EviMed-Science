@@ -14,6 +14,10 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.llm_retry import (
+    StageOutputUnusable, bounded_output_call, clear_stage_failure, output_unusable, record_exhausted,
+    record_stage_failure, strict_suffix,
+)
 from new_meta.core.llm import parse_source_json
 from new_meta.core.project import Project
 from new_meta.schemas.risk_of_bias import (
@@ -97,13 +101,15 @@ class RoBAgent(BaseAgent):
             else:
                 to_assess.append(study)
 
-        def assess_one(study):
-            parsed = self._parsed_for_study(study, parsed_papers)
-            policy = resolve_rob_policy(
+        def policy_for(study):
+            return resolve_rob_policy(
                 family=method_plan.family,
                 study_design=study.characteristics.study_design,
             ) if method_plan else None
-            return self._assess_single(study, parsed, rob_policy=policy)
+
+        def assess_one(study):
+            parsed = self._parsed_for_study(study, parsed_papers)
+            return self._assess_single(study, parsed, rob_policy=policy_for(study))
 
         cache_changed = False
         if to_assess:
@@ -119,12 +125,28 @@ class RoBAgent(BaseAgent):
                             if not result.is_synthetic:
                                 self._store_cached_rob(cache, study, result)
                                 cache_changed = True
+                                clear_stage_failure(project, "risk_of_bias", study_sid)
                         else:
                             # Synthetic fallback for None results
-                            results.append(self._synthetic_rob(study_sid, study.characteristics.study_design or ""))
+                            results.append(self._synthetic_rob(study_sid, study.characteristics.study_design or "",
+                                                               rob_policy=policy_for(study)))
                     except Exception as e:
-                        self.log(f"RoB failed for {study_sid}: {e}", level="warning")
-                        results.append(self._synthetic_rob(study_sid, study.characteristics.study_design or ""))
+                        # Not "full text not available": the text was there and
+                        # the assessment failed. Say so, and record it.
+                        self.log(f"RoB failed for {study_sid}: {type(e).__name__}", level="warning")
+                        unusable = isinstance(e, StageOutputUnusable)
+                        reason = ("Risk-of-bias assessment could not complete: the model gave no usable "
+                                  "judgment in its bounded attempts" if unusable
+                                  else f"Risk-of-bias assessment failed ({type(e).__name__})")
+                        results.append(self._synthetic_rob(study_sid, study.characteristics.study_design or "",
+                                                           rob_policy=policy_for(study), support=reason))
+                        consequence = "the study's risk of bias is reported as not assessed"
+                        if unusable:
+                            record_exhausted(project, e, consequence=consequence)
+                        else:
+                            record_stage_failure(project, stage="risk_of_bias", entity_id=study_sid,
+                                                 reason="model_call_failed", error_type=type(e).__name__,
+                                                 consequence=consequence)
 
         if cache_changed:
             self._save_shared_cache(cache_path, cache)
@@ -279,6 +301,26 @@ class RoBAgent(BaseAgent):
                         "requires_adjudication": True,
                         "assessment_origin": "agent_result_specific_insufficient",
                     })
+                else:
+                    # No draft to downgrade: record the result anyway, so a
+                    # required result can never drop out of the readiness count.
+                    existing[result_id] = ResultRoBAssessment(
+                        assessment_id=f"rob:{result_id}:insufficient",
+                        result_id=result_id,
+                        study_id=sid,
+                        outcome_name=outcome.outcome_name or "Outcome",
+                        timepoint=str(outcome.accepted_timepoint or outcome.timepoint or ""),
+                        subgroup=str(outcome.subgroup or ""),
+                        tool_used=policy.tool_name,
+                        tool_version=policy.tool_version,
+                        target_effect=policy.target_effect,
+                        assessment_status=RoBAssessmentStatus.INSUFFICIENT_INFORMATION,
+                        assessed_by="agent:source-grounded-result-rob",
+                        overall_judgment="Not assessed (insufficient information)",
+                        is_synthetic=True,
+                        assessment_origin="agent_result_specific_insufficient",
+                        requires_adjudication=True,
+                    )
                 continue
             existing[result_id] = ResultRoBAssessment(
                 assessment_id=f"rob:{result_id}:complete",
@@ -544,12 +586,23 @@ class RoBAgent(BaseAgent):
                     and self._normalized_text(candidate.overall_judgment) == "low risk"):
                 raise ValueError("Overall low risk contradicts an observed high-risk domain")
 
-        try:
-            candidate = self.llm.structured_output(
-                [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
+        def ask(attempt):
+            return self.llm.structured_output(
+                [{"role": "system", "content": self.system_prompt},
+                 {"role": "user", "content": prompt + strict_suffix(attempt)}],
                 StudyRoB, temperature=0.0, max_tokens=6000,
                 source_faithful=True, on_raw_response=observe,
             )
+
+        entity = f"{self._study_sid(study)}:{outcome.outcome_name or ''}"
+        try:
+            # The shared bounded retry, but never after a response in which a
+            # high-risk domain was observed: re-asking then would be shopping
+            # for a lower rating.
+            candidate = bounded_output_call(
+                ask, stage="result_risk_of_bias", entity_id=entity,
+                retry_if=lambda exc: output_unusable(exc) and not audit["high_risk_domains"],
+                log=lambda message: self.log(message, level="warning"))
         except Exception as exc:
             audit["error"] = str(exc)[:500]
             audit["status"] = "incomplete" if any(
@@ -557,6 +610,12 @@ class RoBAgent(BaseAgent):
             ) else "empty"
             self._persist_result_rob_observations(project)
             self.log(f"[{self._study_sid(study)}] result-specific RoB incomplete: {exc}", level="warning")
+            record_stage_failure(
+                project, stage="result_risk_of_bias", entity_id=entity,
+                reason=exc.reason if isinstance(exc, StageOutputUnusable) else "model_call_failed",
+                error_type=exc.error_type if isinstance(exc, StageOutputUnusable) else type(exc).__name__,
+                attempts=getattr(exc, "attempts", 1),
+                consequence="the result's risk of bias is recorded as insufficient information for adjudication")
             return None
         if not audit["raw_responses"]:
             audit["error"] = "Result-specific risk-of-bias response was not observed"
@@ -762,14 +821,18 @@ class RoBAgent(BaseAgent):
             normalized = (
                 str(value or "")
                 .replace("\u00ad", "")
+                .replace("\u2010", "-")
+                .replace("\u2011", "-")
                 .replace("–", "-")
                 .replace("—", "-")
                 .replace("−", "-")
                 .casefold()
             )
-            normalized = re.sub(r"(?<=\w)-\s+(?=\w)", "", normalized)
-            # Treat hyphenation as layout, not meaning: PDF parsers may emit
-            # ``intention- to-treat`` or a non-breaking dash for the same words.
+            # Treat hyphenation as layout, not meaning, and the same way on both
+            # sides: PDF parsers emit ``triple-\nblinded`` for a verifier's
+            # ``triple-blinded`` (a local ma-001 run of 2026-09-29 refused four
+            # result-level assessments over exactly this), or a non-breaking dash.
+            normalized = re.sub(r"(?<=\w)-\s*(?=\w)", "", normalized)
             return re.findall(r"[\w]+", normalized, flags=re.UNICODE)
 
         report_tokens = tokens(full_text)
@@ -815,7 +878,20 @@ class RoBAgent(BaseAgent):
                     cursor = report_index
                     break
             if found < 0:
-                return False
+                # The same letters with the report's own word boundaries: a PDF
+                # layer that runs words together ("Thecalculatedblood loss")
+                # while the verifier's copy separates them. Exact and in order,
+                # only the spacing differs.
+                joined_report = "".join(report_tokens[cursor:])
+                at = joined_report.find("".join(fragment))
+                if at < 0:
+                    return False
+                end, consumed = at + len("".join(fragment)), 0
+                for offset, token in enumerate(report_tokens[cursor:]):
+                    consumed += len(token)
+                    if consumed >= end:
+                        cursor += offset + 1
+                        break
         return True
 
     def _is_traceable_for_rob(self, study: ExtractedStudy, parsed_papers: dict[str, dict]) -> bool:
@@ -1042,15 +1118,31 @@ class RoBAgent(BaseAgent):
             prompt = rob_prompts.NOS_PROMPT.format(paper_content=full_text)
             tool = "Newcastle-Ottawa Scale"
 
-        rob = self.call_llm_structured(prompt, StudyRoB, max_tokens=4096)
+        def assess(attempt):
+            judged = self.call_llm_structured(prompt + strict_suffix(attempt), StudyRoB, max_tokens=4096)
+            # Every schema field has a default, so "{}" validates. A judgment
+            # with no domains or no overall rating is an unusable output, not a
+            # risk-of-bias assessment (GRADE would read it as "no concern").
+            if not judged.domains or not str(judged.overall_judgment or "").strip() or any(
+                    not str(domain.judgment or "").strip() for domain in judged.domains):
+                raise ValueError("Risk-of-bias response lacks domain or overall judgments")
+            return judged
+
+        rob = bounded_output_call(assess, stage="risk_of_bias", entity_id=study_id,
+                                  log=lambda message: self.log(message, level="warning"))
         rob.study_id = study_id
         rob.tool_used = tool
 
         self.log(f"[{study_id}] RoB: {rob.overall_judgment} ({tool})")
         return rob
 
-    def _synthetic_rob(self, study_id: str, study_design: str = "", *, rob_policy=None) -> StudyRoB:
-        """Generate a synthetic RoB entry for studies with insufficient information."""
+    def _synthetic_rob(self, study_id: str, study_design: str = "", *, rob_policy=None,
+                       support: str = "Full text not available for assessment") -> StudyRoB:
+        """Generate a synthetic RoB entry for studies with insufficient information.
+
+        ``support`` states why no judgment exists; a failed assessment of an
+        available text must not read as missing full text.
+        """
         design_lower = (study_design or "").lower()
         is_rct = any(kw in design_lower for kw in ["rct", "randomized", "randomised", "随机对照", "随机化"])
 
@@ -1075,8 +1167,7 @@ class RoBAgent(BaseAgent):
             tool = "Newcastle-Ottawa Scale"
 
         default_domains = [
-            RoBDomain(domain=d, judgment="Insufficient information",
-                      support="Full text not available for assessment")
+            RoBDomain(domain=d, judgment="Insufficient information", support=support)
             for d in domains
         ]
         return StudyRoB(

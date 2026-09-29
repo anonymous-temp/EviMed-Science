@@ -64,7 +64,8 @@ All settings via `.env` file or environment variables (`config.py`). Key variabl
 - `LLM_MODEL` — model name (default: `gpt-4o`)
 - `MANUSCRIPT_POLISH_ENABLED` — defaults to `False`; set to `1` to enable post-write polish
 - `MINERU_TOKEN` — optional, enables better PDF parsing via MinEru API
-- `MAX_SEARCH_RESULTS` — default `200`; `MAX_WORKERS` — default `4`
+- `TA_SCREENING_FLOOR` / `TA_SCREENING_FRACTION` / `TA_SCREENING_CEILING` — defaults `400` / `0.5` / `1000`: of T de-duplicated records, min(T, max(floor, ⌈fraction·T⌉), ceiling) are title/abstract screened; every record removed before screening is listed in `screening/records_removed.json` and counted on its PRISMA 2020 line; `MAX_WORKERS` — default `4`
+- `LLM_STAGE_OUTPUT_ATTEMPTS` — default `3`: the shared bounded retry (`core/llm_retry.py`) every evidence stage uses when the model's own output is unusable; exhausted entities are recorded in `quality/model_stage_failures.json`
 
 ## File Organization
 - `main.py`: Pipeline orchestrator — 14 checkpointed steps with interactive decision points

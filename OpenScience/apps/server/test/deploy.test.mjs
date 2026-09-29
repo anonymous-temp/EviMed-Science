@@ -981,13 +981,17 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
   assert.match(launcher, /"TCP:127\.0\.0\.1:\$\{port\}"/);
 });
 
-test("drug-safety specialist writes its response cache to a writable mount", async () => {
+test("drug-safety specialist keeps its openFDA cache on a volume that outlives the container", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const start = compose.indexOf("\n  evimed-drug-safety-agent:\n");
   const end = compose.indexOf("\n  evimed-drug-evidence-adapter:\n", start);
   const service = compose.slice(start, end);
 
-  assert.match(service, /CACHE_DIR:\s+\/tmp\/openfda-cache/);
+  // On the container's tmpfs until 2026-09-29, so every release threw the
+  // cache away; the client now keys it by FAERS data release.
+  assert.match(service, /CACHE_DIR:\s+\/var\/cache\/evimed-openfda/);
+  assert.match(service, /- evimed-openfda-cache:\/var\/cache\/evimed-openfda/);
+  assert.match(compose, /\nvolumes:\n[\s\S]*\n  evimed-openfda-cache:\n/);
   assert.match(service, /\/tmp:rw,nosuid,nodev,size=1g/);
 });
 
@@ -1888,24 +1892,37 @@ test("a capability's two skill copies never drift apart by more than their known
   // and the two sentences that named OpenGWAS as the only remote path), and meta-analysis says what a
   // repeated start and a failed job return (+7), then which unattended
   // decisions a finished job names in its modules (+5).
+  // Raised on 2026-09-29, same direction (quality classes C1–C3, C14, C15):
+  // the shared pre-delivery block says what the reader gets — bookkeeping to
+  // revision-notes.md, no field names, self-made counts computed, references
+  // copied from the retrieval record, the request's language (+18 in each of
+  // the eleven); the three drug-evaluation skills no longer ask to preserve
+  // field names (+1 each).
+  // Raised on 2026-09-29, same direction (engine display strings, principle
+  // 10c): MR, ADR, bibliometrics and research-topic tell the writer to copy the
+  // engine's display strings and drop the false "rounded differently … comes
+  // back as a finding" sentence (ADR +13, bibliometrics +8, topic +2; MR +25
+  // with its Steiger and MR-PRESSO paragraph); meta-analysis copies counts from
+  // the engine's evidence accounting, keeps release codes and paths out of the
+  // report and writes no author or COI statements (+15).
   const knownDivergence = {
-    "adr-analysis": 32,
-    "bibliometric-analysis": 32,
-    "clinical-evidence-synthesis": 249,
-    "comprehensive-drug-evaluation": 26,
-    "dataset-research-scoping": 41,
-    "drug-selection": 25,
+    "adr-analysis": 63,
+    "bibliometric-analysis": 58,
+    "clinical-evidence-synthesis": 267,
+    "comprehensive-drug-evaluation": 45,
+    "dataset-research-scoping": 59,
+    "drug-selection": 44,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
     // revision-notes lines into the retained copy; none was removed, and the
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
-    "mendelian-randomization": 38,
-    "meta-analysis": 44,
-    "off-label-analysis": 25,
-    "peer-review": 22,
+    "mendelian-randomization": 81,
+    "meta-analysis": 77,
+    "off-label-analysis": 44,
+    "peer-review": 40,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are
     // DSH-only; the retained kernel copy is not edited.
-    "research-topic-selection": 65,
+    "research-topic-selection": 85,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

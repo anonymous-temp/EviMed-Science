@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,7 +22,13 @@ from new_meta.tools.fulltext import (
 )
 from new_meta.tools.fulltext_retrieval import retrieve_paper_text, summarize_routes
 from new_meta.tools.pdf_downloader import HostMemo, download_pdf
-from new_meta.config import FULLTEXT_MAX_WORKERS, MAX_SEARCH_RESULTS
+from new_meta.config import (
+    FULLTEXT_MAX_WORKERS,
+    TA_SCREENING_CEILING,
+    TA_SCREENING_FLOOR,
+    TA_SCREENING_FRACTION,
+)
+from new_meta.core import record_drops
 
 logger = logging.getLogger("metaagent.retriever")
 ENABLE_MULTI_SEARCH_FALLBACK = os.getenv("ENABLE_MULTI_SEARCH_FALLBACK", "1").lower() not in {
@@ -45,6 +52,94 @@ ACADEMIC_SUPPLEMENT_MAX_RESULTS = int(os.getenv("ACADEMIC_SUPPLEMENT_MAX_RESULTS
 PUBMED_PRECISION_SUPPLEMENT_MAX_RESULTS = int(os.getenv("PUBMED_PRECISION_SUPPLEMENT_MAX_RESULTS", "5"))
 PUBMED_CANDIDATE_POOL_MIN = int(os.getenv("PUBMED_CANDIDATE_POOL_MIN", "50"))
 PUBMED_CANDIDATE_POOL_MULTIPLIER = int(os.getenv("PUBMED_CANDIDATE_POOL_MULTIPLIER", "5"))
+
+SCREENING_BUDGET_FORMULA = "B(T) = min(T, max(floor, ceil(fraction * T)), ceiling)"
+PUBMED_RETRIEVAL_ORDER = "PubMed Best Match (esearch sort=relevance)"
+MERGED_RANKING_RULE = (
+    "query concept groups matched in title/abstract, then lexical match strength, "
+    "then a study-design and identifier tiebreak, then citation count "
+    "(_merged_search_relevance_score)"
+)
+FALLBACK_RANKING_RULE = "trial-publication heuristics, then citation count (_academic_fallback_score)"
+
+
+def screening_budget(total: int, explicit_max: int | None = None) -> int:
+    """How many de-duplicated, in-range records go to title/abstract screening.
+
+    B(T) = min(T, max(TA_SCREENING_FLOOR, ceil(TA_SCREENING_FRACTION * T)), TA_SCREENING_CEILING)
+
+    With the defaults (400, 0.5, 1000) every record is screened up to 400; a
+    larger topic screens its more relevant half, never fewer than 400 and
+    never more than 1,000. A caller's explicit maximum (--max-papers) is a
+    further ceiling. The budget used to be a fixed 200 whatever the topic's
+    size (ma-001, 2026-09-28: 200 of 396 screened).
+    """
+    total = max(0, int(total or 0))
+    budget = min(
+        total,
+        max(TA_SCREENING_FLOOR, math.ceil(TA_SCREENING_FRACTION * total)),
+        TA_SCREENING_CEILING,
+    )
+    if explicit_max and explicit_max > 0:
+        budget = min(budget, int(explicit_max))
+    return budget
+
+
+def screening_cap_rule(total: int, explicit_max: int | None, budget: int) -> dict:
+    """The relevance-cap rule with its inputs, as stated in the ledger and the manuscript."""
+    return {
+        "formula": SCREENING_BUDGET_FORMULA,
+        "T": int(total),
+        "floor": TA_SCREENING_FLOOR,
+        "fraction": TA_SCREENING_FRACTION,
+        "ceiling": TA_SCREENING_CEILING,
+        "explicit_max": int(explicit_max) if explicit_max and explicit_max > 0 else None,
+        "budget": int(budget),
+        "cut": max(0, int(total) - int(budget)),
+    }
+
+
+def _explicit_max(max_results: int | None) -> int | None:
+    try:
+        value = int(max_results or 0)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _pubmed_retrieval_limit(explicit_max: int | None) -> int:
+    """How many PubMed IDs to retrieve, in PubMed relevance order.
+
+    Without an explicit maximum PubMed is read up to TA_SCREENING_CEILING, so
+    the relevance ranking sees as much of the topic as could ever be screened.
+    With one, the candidate pool stays PUBMED_CANDIDATE_POOL_MULTIPLIER times
+    the maximum (at least PUBMED_CANDIDATE_POOL_MIN, at most the ceiling).
+    Hits past the limit are counted and listed as not retrieved.
+    """
+    if explicit_max:
+        return max(
+            PUBMED_CANDIDATE_POOL_MIN,
+            min(TA_SCREENING_CEILING, explicit_max * PUBMED_CANDIDATE_POOL_MULTIPLIER),
+        )
+    return max(PUBMED_CANDIDATE_POOL_MIN, TA_SCREENING_CEILING)
+
+
+def _source_label(source: str) -> str:
+    """The key a source's records are counted under (search_source_counts.json)."""
+    normalized = str(source or "").strip().lower()
+    return {
+        "openalex": "OpenAlex",
+        "semantic_scholar": "Semantic Scholar",
+        "semantic scholar": "Semantic Scholar",
+        "clinicaltrials": "ClinicalTrials.gov",
+        "clinicaltrials.gov": "ClinicalTrials.gov",
+        "registry_seed": "RegistrySeed",
+        "registryseed": "RegistrySeed",
+    }.get(normalized, str(source or "") or "multi_search")
+
+
+def _paper_source_label(paper: dict) -> str:
+    return _source_label(str(paper.get("source") or paper.get("source_type") or "multi_search"))
 
 
 def _parse_date_range(date_range: str) -> tuple[int | None, int | None]:
@@ -579,14 +674,59 @@ def _rank_search_results(papers: list[dict], query: str = "") -> list[dict]:
     that only have a result list. Production merged searches always supply the
     exact reviewed query.
     """
+    return [paper for paper, _ in _rank_search_results_with_scores(papers, query)]
+
+
+def _rank_search_results_with_scores(papers: list[dict], query: str = "") -> list[tuple[dict, dict]]:
+    """The ranking of ``_rank_search_results`` with each record's score, for the drop ledger."""
     concept_groups = _query_concept_groups(query)
     if not concept_groups:
-        return _rank_academic_fallback_papers(papers)
-    return sorted(
-        papers,
-        key=lambda paper: _merged_search_relevance_score(paper, concept_groups),
-        reverse=True,
-    )
+        scored = [(paper, _academic_fallback_score(paper)) for paper in papers]
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return [
+            (paper, {"fallback_score": round(float(score[0]), 3), "citations": int(score[1])})
+            for paper, score in scored
+        ]
+    scored = [(paper, _merged_search_relevance_score(paper, concept_groups)) for paper in papers]
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return [
+        (
+            paper,
+            {
+                "concept_groups_matched": int(score[0]),
+                "concept_groups": len(concept_groups),
+                "lexical": round(float(score[1]), 3),
+                "quality": round(float(score[2]), 3),
+                "citations": int(score[3]),
+            },
+        )
+        for paper, score in scored
+    ]
+
+
+def _fallback_score_fields(paper: dict) -> dict:
+    score, citations = _academic_fallback_score(paper)
+    return {"fallback_score": round(float(score), 3), "citations": int(citations)}
+
+
+def _split_by_year_range(
+    papers: list[dict],
+    start_year: int | None,
+    end_year: int | None,
+    *,
+    within=None,
+) -> tuple[list[dict], list[dict]]:
+    """Split records into (inside the protocol date range, outside it)."""
+    within = within or _paper_within_year_range
+    kept: list[dict] = []
+    removed: list[dict] = []
+    for paper in papers:
+        (kept if within(paper, start_year, end_year) else removed).append(paper)
+    return kept, removed
+
+
+def _date_rule(start_year: int | None, end_year: int | None, test: str) -> dict:
+    return {"start_year": start_year, "end_year": end_year, "test": test}
 
 
 def _paper_within_year_range(
@@ -795,12 +935,67 @@ def _titles_are_near_duplicates(title: str, existing_title: str) -> bool:
     return SequenceMatcher(None, title, existing_title).ratio() > 0.95
 
 
+def _pubmed_unretrieved_total(result, rescued: set) -> int:
+    """Hits past the retrieval limit, less those another PubMed query retrieved."""
+    rescued_listed = sum(1 for pmid in result.unretrieved_pmids if pmid in rescued)
+    return max(0, result.unretrieved_count - rescued_listed)
+
+
+def _records_by_pmid(papers: list[dict]) -> dict[str, dict]:
+    by_pmid: dict[str, dict] = {}
+    for paper in papers:
+        pmid = str(paper.get("pmid") or "").strip()
+        if pmid:
+            by_pmid.setdefault(pmid, paper)
+    return by_pmid
+
+
+def _count_aggregate_batch(batch: list[dict], batch_counts: dict, raw_by_source: dict[str, int]) -> int:
+    """Add one aggregate query's raw per-source counts; return its in-query duplicates.
+
+    ``multi_search.aggregate_search`` reports what each source returned and
+    de-duplicates across them before returning, so the records it dropped are
+    counted here (not listed: it does not return them).
+    """
+    reported = 0
+    for source, count in (batch_counts or {}).items():
+        try:
+            number = max(0, int(count or 0))
+        except (TypeError, ValueError):
+            continue
+        reported += number
+        if number:
+            label = _source_label(source)
+            raw_by_source[label] = raw_by_source.get(label, 0) + number
+    if reported < len(batch):
+        # A source that returned more than it reported: count what arrived.
+        for paper in batch[reported:]:
+            label = _paper_source_label(paper)
+            raw_by_source[label] = raw_by_source.get(label, 0) + 1
+        reported = len(batch)
+    return reported - len(batch)
+
+
 class PaperRetriever(BaseAgent):
     def __init__(self, model: str = None):
         super().__init__("paper_retriever", "Paper retrieval agent.", model=model)
 
     def _cap_results(self, papers: list[dict], max_results: int | None, label: str) -> list[dict]:
         """Apply a source-balanced hard cap after all sources are merged."""
+        return self._select_within_budget(papers, max_results, label)[0]
+
+    def _select_within_budget(
+        self,
+        papers: list[dict],
+        max_results: int | None,
+        label: str,
+    ) -> tuple[list[dict], int]:
+        """(selected records, PubMed-origin records reserved) for a ranked list.
+
+        Up to half the budget is reserved for PubMed-origin records in ranked
+        order, so a large internal or supplementary result set cannot crowd the
+        primary database out; the rest is filled in ranked order.
+        """
         if max_results and max_results > 0 and len(papers) > max_results:
             pubmed_rows = [
                 paper
@@ -821,8 +1016,8 @@ class PaperRetriever(BaseAgent):
                 f"before LLM screening (reserved {pubmed_target} PubMed-origin records)",
                 level="warning",
             )
-            return selected
-        return papers
+            return selected, pubmed_target
+        return papers, 0
 
     def _multi_source_fallback(
         self,
@@ -831,12 +1026,15 @@ class PaperRetriever(BaseAgent):
         start_year: int | None,
         end_year: int | None,
         project: Project | None = None,
+        account: record_drops.SearchAccount | None = None,
     ) -> tuple[list[dict], dict[str, int]]:
         """Search Semantic Scholar/OpenAlex when PubMed is unavailable.
 
         This is deliberately a fallback, not the primary PRISMA search yet. It
         prevents a transient PubMed failure from collapsing the whole run to
         zero records and creates an explicit source-count artifact for review.
+        With ``account``, every record the queries returned is counted as
+        identified and every duplicate removed here is listed.
         """
         if not ENABLE_MULTI_SEARCH_FALLBACK:
             return [], {}
@@ -859,6 +1057,8 @@ class PaperRetriever(BaseAgent):
             project.clear_warnings(code="clinicaltrials_fallback_failed")
         registry_failures = 0
         fallback_depth = max(max_results, 50)
+        raw_by_source: dict[str, int] = {}
+        in_query_duplicates = 0
         for idx, fallback_query in enumerate(candidate_queries, start=1):
             try:
                 self.log(f"Fallback query {idx}: {fallback_query[:180]}")
@@ -872,6 +1072,7 @@ class PaperRetriever(BaseAgent):
                 logger.warning(f"Multi-source fallback failed: {exc}")
                 batch, batch_counts = [], {"Semantic Scholar": 0, "OpenAlex": 0}
 
+            in_query_duplicates += _count_aggregate_batch(batch, batch_counts, raw_by_source)
             papers.extend(batch)
             for source, count in batch_counts.items():
                 counts[source] = counts.get(source, 0) + count
@@ -929,6 +1130,9 @@ class PaperRetriever(BaseAgent):
                     })
                 if registry_batch:
                     papers.extend(registry_batch)
+                    for record in registry_batch:
+                        label = _paper_source_label(record)
+                        raw_by_source[label] = raw_by_source.get(label, 0) + 1
                 counts["ClinicalTrials.gov"] = counts.get("ClinicalTrials.gov", 0) + len(registry_batch)
             if ENABLE_REGISTRY_SEED_FALLBACK and project is not None:
                 seed_records, seed_status = registry_seed.search_seed_records(
@@ -944,9 +1148,27 @@ class PaperRetriever(BaseAgent):
                 if seed_records:
                     papers.extend(seed_records)
                     counts["RegistrySeed"] = counts.get("RegistrySeed", 0) + len(seed_records)
+                    for record in seed_records:
+                        label = _paper_source_label(record)
+                        raw_by_source[label] = raw_by_source.get(label, 0) + 1
 
-        papers = self._deduplicate(papers)
+        merges: list = []
+        papers = self._deduplicate(papers, merges=merges)
         papers = _rank_academic_fallback_papers(papers)
+        if account is not None:
+            for label, count in raw_by_source.items():
+                account.identify(label, count)
+            account.duplicates(
+                "fallback_duplicates",
+                merges,
+                unlisted=in_query_duplicates,
+                source="multi_source_fallback",
+                rule={
+                    "what": "the same record returned by more than one fallback query or source",
+                    "unlisted": "duplicates removed inside one aggregate query are counted, not listed",
+                    "queries": len(candidate_queries),
+                },
+            )
         unique_counts: dict[str, int] = {}
 
         for paper in papers:
@@ -1008,6 +1230,7 @@ class PaperRetriever(BaseAgent):
         start_year: int | None,
         end_year: int | None,
         project: Project | None = None,
+        account: record_drops.SearchAccount | None = None,
     ) -> tuple[list[dict], dict[str, int]]:
         """Supplement a successful database/PubMed search with registry-first trials.
 
@@ -1104,8 +1327,14 @@ class PaperRetriever(BaseAgent):
                 })
                 papers.extend(seed_records)
 
-        papers = self._deduplicate(papers)
+        raw_by_source: dict[str, int] = {}
+        for paper in papers:
+            label = _paper_source_label(paper)
+            raw_by_source[label] = raw_by_source.get(label, 0) + 1
+        merges: list = []
+        papers = self._deduplicate(papers, merges=merges)
         papers = _rank_academic_fallback_papers(papers)
+        cut: list[dict] = []
         if REGISTRY_SUPPLEMENT_MAX_RESULTS > 0 and len(papers) > REGISTRY_SUPPLEMENT_MAX_RESULTS:
             seed_papers = [
                 paper for paper in papers
@@ -1115,7 +1344,33 @@ class PaperRetriever(BaseAgent):
                 paper for paper in papers
                 if str(paper.get("source") or paper.get("source_type") or "").lower() != "registry_seed"
             ]
-            papers = (seed_papers + other_papers)[:REGISTRY_SUPPLEMENT_MAX_RESULTS]
+            ordered = seed_papers + other_papers
+            papers = ordered[:REGISTRY_SUPPLEMENT_MAX_RESULTS]
+            cut = ordered[REGISTRY_SUPPLEMENT_MAX_RESULTS:]
+        if account is not None:
+            for label, count in raw_by_source.items():
+                account.identify(label, count)
+            account.duplicates(
+                "registry_supplement_duplicates",
+                merges,
+                source="registry_supplement",
+                rule={"what": "the same registry record returned by more than one supplement query"},
+            )
+            account.removed(
+                "registry_supplement_cap",
+                record_drops.REASON_SUPPLEMENT_RELEVANCE_CAP,
+                cut,
+                source="registry_supplement",
+                rule={
+                    "cap": REGISTRY_SUPPLEMENT_MAX_RESULTS,
+                    "setting": "REGISTRY_SUPPLEMENT_MAX_RESULTS",
+                    "ranking": "registry seed records first, then " + FALLBACK_RANKING_RULE,
+                },
+                extra={
+                    id(paper): {**_fallback_score_fields(paper), "rank": REGISTRY_SUPPLEMENT_MAX_RESULTS + index + 1}
+                    for index, paper in enumerate(cut)
+                },
+            )
 
         counts: dict[str, int] = {}
         for paper in papers:
@@ -1173,8 +1428,17 @@ class PaperRetriever(BaseAgent):
         start_year: int | None,
         end_year: int | None,
         project: Project | None = None,
+        account: record_drops.SearchAccount | None = None,
     ) -> tuple[list[dict], dict[str, int]]:
-        """Supplement successful PubMed searches with recall-first academic APIs."""
+        """Supplement successful PubMed searches with recall-first academic APIs.
+
+        Every query's records are identified; they are de-duplicated, ranked by
+        the fallback heuristics and cut to ACADEMIC_SUPPLEMENT_MAX_RESULTS. That
+        cut is a ranking that removes records before screening (PRISMA:
+        automation), so with ``account`` it is listed with each record's score.
+        On ma-001 (2026-09-28) OpenAlex returned 198 records and this cut kept
+        50 without a trace.
+        """
         if not ENABLE_MULTI_SEARCH_SUPPLEMENT or not ENABLE_MULTI_SEARCH_FALLBACK:
             return [], {}
         candidate_queries = _candidate_queries_for_academic_search(query)
@@ -1185,6 +1449,8 @@ class PaperRetriever(BaseAgent):
         supplement_depth = max(max_results or 20, 50)
         papers: list[dict] = []
         query_manifest: list[dict] = []
+        raw_by_source: dict[str, int] = {}
+        in_query_duplicates = 0
         for idx, supplement_query in enumerate(candidate_queries, start=1):
             try:
                 batch, batch_counts = multi_search.aggregate_search(
@@ -1193,6 +1459,7 @@ class PaperRetriever(BaseAgent):
                     year_range=year_range,
                     include_semantic_scholar=(idx == 1),
                 )
+                in_query_duplicates += _count_aggregate_batch(batch, batch_counts, raw_by_source)
                 query_manifest.append({
                     "query": supplement_query,
                     "status": "ok",
@@ -1211,10 +1478,43 @@ class PaperRetriever(BaseAgent):
                 })
             papers.extend(batch)
 
-        papers = self._deduplicate(papers)
+        n_retrieved = len(papers) + in_query_duplicates
+        merges: list = []
+        papers = self._deduplicate(papers, merges=merges)
         papers = _rank_academic_fallback_papers(papers)
+        cut: list[dict] = []
         if ACADEMIC_SUPPLEMENT_MAX_RESULTS > 0 and len(papers) > ACADEMIC_SUPPLEMENT_MAX_RESULTS:
+            cut = papers[ACADEMIC_SUPPLEMENT_MAX_RESULTS:]
             papers = papers[:ACADEMIC_SUPPLEMENT_MAX_RESULTS]
+        if account is not None:
+            for label, count in raw_by_source.items():
+                account.identify(label, count)
+            account.duplicates(
+                "academic_supplement_duplicates",
+                merges,
+                unlisted=in_query_duplicates,
+                source="academic_supplement",
+                rule={
+                    "what": "the same record returned by more than one supplement query or source",
+                    "unlisted": "duplicates removed inside one aggregate query are counted, not listed",
+                    "queries": len(candidate_queries),
+                },
+            )
+            account.removed(
+                "academic_supplement_cap",
+                record_drops.REASON_SUPPLEMENT_RELEVANCE_CAP,
+                cut,
+                source="academic_supplement",
+                rule={
+                    "cap": ACADEMIC_SUPPLEMENT_MAX_RESULTS,
+                    "setting": "ACADEMIC_SUPPLEMENT_MAX_RESULTS",
+                    "ranking": FALLBACK_RANKING_RULE,
+                },
+                extra={
+                    id(paper): {**_fallback_score_fields(paper), "rank": ACADEMIC_SUPPLEMENT_MAX_RESULTS + index + 1}
+                    for index, paper in enumerate(cut)
+                },
+            )
         counts: dict[str, int] = {}
         for paper in papers:
             paper["source_type"] = paper.get("source_type") or paper.get("source") or "multi_search"
@@ -1237,6 +1537,11 @@ class PaperRetriever(BaseAgent):
                 {
                     "enabled": ENABLE_MULTI_SEARCH_SUPPLEMENT,
                     "queries": query_manifest,
+                    "records_retrieved": n_retrieved,
+                    "duplicates_removed": n_retrieved - len(papers) - len(cut),
+                    "records_cut": len(cut),
+                    "records_kept": len(papers),
+                    "cap": ACADEMIC_SUPPLEMENT_MAX_RESULTS,
                 },
             )
         return papers, counts
@@ -1318,55 +1623,70 @@ class PaperRetriever(BaseAgent):
         """Search both internal DB AND PubMed, merge and deduplicate.
 
         Args:
+            max_results: explicit ceiling on the records screened (--max-papers);
+                None screens the topic-scaled budget ``screening_budget``.
             date_range: Protocol date range (e.g. "2010-2024"). If set, internal DB
                         results outside this range are filtered.
+
+        Every record identified and every record dropped before screening is
+        counted in PRISMA and listed in screening/records_removed.json.
         """
-        max_results = max_results or MAX_SEARCH_RESULTS
+        explicit_max = _explicit_max(max_results)
+        source_depth = explicit_max or TA_SCREENING_CEILING
         start_year, end_year = _parse_date_range(date_range)
+        account = record_drops.SearchAccount()
 
         all_papers = []
-        n_db_raw = 0
-        n_pm_raw = 0
-        n_multi_raw = 0
-        n_registry_raw = 0
         source_counts: dict[str, int] = {}
         pubmed_failed = False
+        pubmed_result = None
+        pmids: list[str] = []
+        n_pm_retrieved = 0
 
-        # Step 1: Internal database
+        # Step 1: Internal database. It reports no hit count, so what it
+        # returned is what was identified.
         self.log("Searching internal database...")
-        db_papers = internal_db.search_internal_db(query)
+        db_papers = internal_db.search_internal_db(query) or []
+        account.identify("internal_db", len(db_papers))
         if db_papers:
-            n_db_raw = len(db_papers)
-            db_papers = self._deduplicate(db_papers)
+            merges: list = []
+            db_papers = self._deduplicate(db_papers, merges=merges)
+            account.duplicates(
+                "internal_db_duplicates",
+                merges,
+                source="internal_db",
+                rule={"what": "the same record returned twice by the internal database"},
+            )
             self.log(f"Internal DB found {len(db_papers)} unique papers")
 
             if start_year or end_year:
                 before = len(db_papers)
-                db_papers = [p for p in db_papers if _paper_within_year_range(p, start_year, end_year)]
+                db_papers, outside = _split_by_year_range(db_papers, start_year, end_year)
+                account.removed(
+                    "internal_db_date_filter",
+                    record_drops.REASON_OUTSIDE_DATE_RANGE,
+                    outside,
+                    source="internal_db",
+                    rule=_date_rule(start_year, end_year, "any known publication or online year inside the range"),
+                )
                 if len(db_papers) < before:
                     self.log(f"年份过滤: {before} → {len(db_papers)} (范围 {start_year or '*'}-{end_year or '*'})")
 
             all_papers.extend(db_papers)
 
         # Step 2: PubMed (always search to supplement internal DB)
-        self.log(f"Searching PubMed (max {max_results})...")
+        retrieval_limit = _pubmed_retrieval_limit(explicit_max)
+        min_date = f"{start_year}/01/01" if start_year else None
+        max_date = f"{end_year}/12/31" if end_year else None
+        self.log(f"Searching PubMed (up to {retrieval_limit} records in relevance order)...")
         try:
-            min_date = f"{start_year}/01/01" if start_year else None
-            max_date = f"{end_year}/12/31" if end_year else None
-            pubmed_candidate_limit = min(
-                MAX_SEARCH_RESULTS,
-                max(
-                    max_results,
-                    PUBMED_CANDIDATE_POOL_MIN,
-                    max_results * PUBMED_CANDIDATE_POOL_MULTIPLIER,
-                ),
-            )
-            pmids = pubmed.search(
+            pubmed_result = pubmed.search_with_count(
                 query,
-                max_results=pubmed_candidate_limit,
+                max_results=retrieval_limit,
                 min_date=min_date,
                 max_date=max_date,
             )
+            pmids = list(pubmed_result.pmids)
             precision_pmids = self._pubmed_precision_supplement_pmids(
                 query=query,
                 existing_pmids=pmids,
@@ -1376,62 +1696,87 @@ class PaperRetriever(BaseAgent):
             )
             if precision_pmids:
                 pmids = list(dict.fromkeys([*pmids, *precision_pmids]))
-            n_pm_raw = len(pmids)
-            self.log(f"PubMed found {len(pmids)} records")
+            self.log(
+                f"PubMed found {len(pmids)} records"
+                + (f" (query matched {pubmed_result.count})" if pubmed_result.count is not None else "")
+            )
         except Exception as e:
             logger.warning(f"PubMed search failed: {e}. Continuing with internal DB results only.")
             pmids = []
+            pubmed_result = None
             pubmed_failed = True
 
         if pmids:
             self.log("Fetching PubMed paper details...")
             pm_papers = pubmed.fetch_details(pmids)
             self.log(f"Retrieved details for {len(pm_papers)} PubMed papers")
+            n_pm_retrieved = max(len(pmids), len(pm_papers))
+            self._account_missing_pubmed_details(account, pmids, pm_papers)
             all_papers.extend(pm_papers)
+
+        pubmed_runs = []
+        if pubmed_result is not None:
+            pubmed_runs.append(("primary", pubmed_result, set(pmids) - set(pubmed_result.pmids)))
+        n_pm_unretrieved = sum(_pubmed_unretrieved_total(result, rescued) for _, result, rescued in pubmed_runs)
+        account.identify("pubmed", n_pm_retrieved + n_pm_unretrieved)
+        if pubmed_result is not None:
+            account.hits(
+                "pubmed",
+                hits=pubmed_result.count,
+                retrieved=n_pm_retrieved,
+                not_retrieved=n_pm_unretrieved,
+            )
 
         if pubmed_failed:
             fallback_papers, source_counts = self._multi_source_fallback(
                 query=query,
-                max_results=max_results,
+                max_results=source_depth,
                 start_year=start_year,
                 end_year=end_year,
                 project=project,
+                account=account,
             )
-            n_multi_raw = len(fallback_papers)
             all_papers.extend(fallback_papers)
         else:
             if pmids:
                 academic_papers, academic_counts = self._academic_source_supplement(
                     query=query,
-                    max_results=max_results,
+                    max_results=source_depth,
                     start_year=start_year,
                     end_year=end_year,
                     project=project,
+                    account=account,
                 )
-                n_multi_raw = len(academic_papers)
                 all_papers.extend(academic_papers)
                 source_counts.update(academic_counts)
             registry_papers, registry_counts = self._registry_source_supplement(
                 query=query,
-                max_results=max_results,
+                max_results=source_depth,
                 start_year=start_year,
                 end_year=end_year,
                 project=project,
+                account=account,
             )
-            n_registry_raw = len(registry_papers)
             all_papers.extend(registry_papers)
             source_counts.update(registry_counts)
 
-        if not all_papers:
-            project.save_json(
-                "search_source_counts.json",
-                {
-                    "internal_db": n_db_raw,
-                    "pubmed": n_pm_raw,
-                    **source_counts,
-                },
-            )
-            return []
+        self._account_unretrieved_pubmed(
+            account,
+            pubmed_runs,
+            retrieved_by_pmid=_records_by_pmid(all_papers),
+            rule={
+                "retrieval_limit": retrieval_limit,
+                "order": PUBMED_RETRIEVAL_ORDER,
+                "limit_rule": (
+                    "TA_SCREENING_CEILING without an explicit maximum; with one, "
+                    "max(PUBMED_CANDIDATE_POOL_MIN, min(TA_SCREENING_CEILING, "
+                    "maximum x PUBMED_CANDIDATE_POOL_MULTIPLIER))"
+                ),
+                "explicit_max": explicit_max,
+                "min_date": min_date,
+                "max_date": max_date,
+            },
+        )
 
         pubmed_pmid_set = {str(pmid).strip() for pmid in pmids if str(pmid).strip()}
         if pubmed_pmid_set:
@@ -1443,39 +1788,45 @@ class PaperRetriever(BaseAgent):
                     paper["retrieval_sources"] = sources
 
         # Step 3: Merge and deduplicate
-        all_papers = self._deduplicate(all_papers)
+        merges = []
+        all_papers = self._deduplicate(all_papers, merges=merges)
+        account.duplicates(
+            "merged_duplicates",
+            merges,
+            rule={"what": "the same record from more than one source (PMID, DOI, exact or near-identical title)"},
+        )
         if start_year or end_year:
             before = len(all_papers)
-            all_papers = [p for p in all_papers if _paper_within_year_range(p, start_year, end_year)]
+            all_papers, outside = _split_by_year_range(all_papers, start_year, end_year)
+            account.removed(
+                "merged_date_filter",
+                record_drops.REASON_OUTSIDE_DATE_RANGE,
+                outside,
+                rule=_date_rule(start_year, end_year, "any known publication or online year inside the range"),
+            )
             if len(all_papers) < before:
                 self.log(f"年份过滤(合并后): {before} → {len(all_papers)}")
 
-        all_papers = _rank_search_results(all_papers, query=query)
-        deduplicated = len(all_papers)
-
-        # Apply user/requested cap to the merged set, not just PubMed.
-        all_papers = self._cap_results(all_papers, max_results, "Search")
-
-        # PRISMA: records_identified = pre-dedup total (sum of all sources)
-        project.prisma.records_from_database = n_db_raw + n_pm_raw + n_multi_raw + n_registry_raw
-        project.prisma.records_identified = n_db_raw + n_pm_raw + n_multi_raw + n_registry_raw
-        project.prisma.records_after_dedup = deduplicated
-        project.prisma.set_records_not_screened(deduplicated - len(all_papers), "relevance cap before screening")
+        # Apply the topic-scaled screening budget to the merged set.
+        ranking_rule = MERGED_RANKING_RULE if _query_concept_groups(query) else FALLBACK_RANKING_RULE
+        ranked = _rank_search_results_with_scores(all_papers, query=query)
+        all_papers, screening_cap = self._apply_screening_budget(
+            account,
+            ranked,
+            explicit_max=explicit_max,
+            ranking_rule=ranking_rule,
+            label="Search",
+        )
+        self._finish_search_accounting(project, account, screened=len(all_papers), screening_cap=screening_cap)
         self.log(
-            f"Combined search: {len(all_papers)} unique papers "
-            f"(raw: {n_db_raw} DB + {n_pm_raw} PubMed + {n_multi_raw} fallback + "
-            f"{n_registry_raw} registry supplement)"
+            f"Combined search: {len(all_papers)} unique papers screened of "
+            f"{project.prisma.records_identified} identified "
+            f"({', '.join(f'{k}={v}' for k, v in account.identified.items())})"
         )
 
-        project.save_json("search_results.json", all_papers)
-        project.save_json(
-            "search_source_counts.json",
-            {
-                "internal_db": n_db_raw,
-                "pubmed": n_pm_raw,
-                **source_counts,
-            },
-        )
+        if all_papers:
+            project.save_json("search_results.json", all_papers)
+        project.save_json("search_source_counts.json", dict(account.identified))
         project.save_json("prisma_flow.json", project.prisma.to_dict())
 
         return all_papers
@@ -1493,12 +1844,18 @@ class PaperRetriever(BaseAgent):
         Pass 1: Query with monotherapy preference terms (drug in title + mono keywords)
         Pass 2: Original broad query to catch studies missed by Pass 1
 
-        Results are merged and deduplicated. Monotherapy-priority papers appear first.
+        Results are merged and deduplicated. Monotherapy-priority papers appear
+        first. The same screening budget and drop ledger as ``search_and_fetch``
+        apply.
         """
         from new_meta.agents.query_builder import build_monotherapy_query
 
-        max_results = max_results or MAX_SEARCH_RESULTS
+        explicit_max = _explicit_max(max_results)
+        retrieval_limit = _pubmed_retrieval_limit(explicit_max)
         start_year, end_year = _parse_date_range(date_range)
+        account = record_drops.SearchAccount()
+        min_date = f"{start_year}/01/01" if start_year else None
+        max_date = f"{end_year}/12/31" if end_year else None
 
         # Build monotherapy-focused query
         # Extract study design filter from primary query if present
@@ -1513,112 +1870,296 @@ class PaperRetriever(BaseAgent):
         mono_query = build_monotherapy_query(primary_query, intervention, design_filter)
         self.log(f"单药优先查询 ({len(mono_query)} chars)")
 
+        all_papers: list[dict] = []
+        kept_by_pmid: dict[str, dict] = {}
+        pubmed_runs = []
+        n_pm_retrieved = 0
+
+        def admit(papers: list[dict], priority: bool, stage: str, source: str) -> int:
+            """De-duplicate a batch against itself and everything admitted so far."""
+            merges: list = []
+            added = 0
+            for paper in self._deduplicate(papers, merges=merges):
+                pmid = paper.get("pmid", "")
+                if pmid in kept_by_pmid:
+                    merges.append((paper, kept_by_pmid[pmid]))
+                    continue
+                paper["_monotherapy_priority"] = priority
+                all_papers.append(paper)
+                kept_by_pmid[pmid] = paper
+                added += 1
+            account.duplicates(
+                stage,
+                merges,
+                source=source,
+                rule={"what": "the same record within this batch or already found by an earlier pass"},
+            )
+            return added
+
+        def pubmed_pass(query: str, label: str) -> list[dict]:
+            nonlocal n_pm_retrieved
+            result = pubmed.search_with_count(query, max_results=retrieval_limit, min_date=min_date, max_date=max_date)
+            pubmed_runs.append((label, result, set()))
+            account.hits(
+                "pubmed" if label == "broad" else f"pubmed ({label} query)",
+                hits=result.count,
+                retrieved=len(result.pmids),
+                not_retrieved=result.unretrieved_count,
+            )
+            if not result.pmids:
+                return []
+            details = pubmed.fetch_details(result.pmids)
+            n_pm_retrieved += max(len(result.pmids), len(details))
+            self._account_missing_pubmed_details(account, result.pmids, details, stage=f"pubmed_{label}_metadata_unavailable")
+            return details
+
         # === Pass 1: Monotherapy-focused ===
-        all_papers = []
-        seen_pmids = set()
-        n_mono_db = 0
-        n_mono_pm = 0
-
         self.log("Pass 1: Searching with monotherapy preference...")
-
-        # Internal DB with monotherapy query
-        mono_db = internal_db.search_internal_db(mono_query)
-        if mono_db:
-            n_mono_db = len(mono_db)
-            for p in self._deduplicate(mono_db):
-                pmid = p.get("pmid", "")
-                if pmid not in seen_pmids:
-                    p["_monotherapy_priority"] = True
-                    all_papers.append(p)
-                    seen_pmids.add(pmid)
-
-        # PubMed with monotherapy query
+        mono_db = internal_db.search_internal_db(mono_query) or []
+        account.identify("internal_db", len(mono_db))
+        admit(mono_db, True, "monotherapy_internal_db_duplicates", "internal_db")
         try:
-            min_date = f"{start_year}/01/01" if start_year else None
-            max_date = f"{end_year}/12/31" if end_year else None
-            mono_pmids = pubmed.search(mono_query, max_results=max_results, min_date=min_date, max_date=max_date)
-            n_mono_pm = len(mono_pmids)
-            if mono_pmids:
-                mono_pm_papers = pubmed.fetch_details(mono_pmids)
-                for p in self._deduplicate(mono_pm_papers):
-                    pmid = p.get("pmid", "")
-                    if pmid not in seen_pmids:
-                        p["_monotherapy_priority"] = True
-                        all_papers.append(p)
-                        seen_pmids.add(pmid)
+            admit(pubmed_pass(mono_query, "monotherapy"), True, "monotherapy_pubmed_duplicates", "pubmed")
         except Exception as e:
             logger.warning(f"Monotherapy PubMed search failed: {e}")
-
         self.log(f"Pass 1 (单药优先): {len(all_papers)} papers")
 
         # === Pass 2: Broad supplement ===
-        n_broad_db = 0
-        n_broad_pm = 0
-        broad_papers = []
-
         self.log("Pass 2: Broad supplement search...")
-
-        broad_db = internal_db.search_internal_db(primary_query)
-        if broad_db:
-            n_broad_db = len(broad_db)
-            broad_papers.extend(broad_db)
-
+        broad_papers: list[dict] = []
+        broad_db = internal_db.search_internal_db(primary_query) or []
+        account.identify("internal_db", len(broad_db))
+        broad_papers.extend(broad_db)
         try:
-            min_date = f"{start_year}/01/01" if start_year else None
-            max_date = f"{end_year}/12/31" if end_year else None
-            broad_pmids = pubmed.search(primary_query, max_results=max_results, min_date=min_date, max_date=max_date)
-            n_broad_pm = len(broad_pmids)
-            if broad_pmids:
-                broad_papers.extend(pubmed.fetch_details(broad_pmids))
+            broad_papers.extend(pubmed_pass(primary_query, "broad"))
         except Exception as e:
             logger.warning(f"Broad PubMed search failed: {e}")
-
-        # Deduplicate broad results and add unseen ones (lower priority)
-        broad_unique = self._deduplicate(broad_papers)
-        added = 0
-        for p in broad_unique:
-            pmid = p.get("pmid", "")
-            if pmid not in seen_pmids:
-                p["_monotherapy_priority"] = False
-                all_papers.append(p)
-                seen_pmids.add(pmid)
-                added += 1
-
+        added = admit(broad_papers, False, "broad_pass_duplicates", "")
         self.log(f"Pass 2 (补充): +{added} new papers")
 
-        # Year filter
+        n_pm_unretrieved = sum(_pubmed_unretrieved_total(result, rescued) for _, result, rescued in pubmed_runs)
+        account.identify("pubmed", n_pm_retrieved + n_pm_unretrieved)
+        self._account_unretrieved_pubmed(
+            account,
+            pubmed_runs,
+            retrieved_by_pmid=kept_by_pmid,
+            rule={
+                "retrieval_limit": retrieval_limit,
+                "order": PUBMED_RETRIEVAL_ORDER,
+                "explicit_max": explicit_max,
+                "min_date": min_date,
+                "max_date": max_date,
+            },
+        )
+
+        # Year filter (issue year, as this search always used)
         if start_year or end_year:
             before = len(all_papers)
-            all_papers = [p for p in all_papers
-                          if (not start_year or (p.get("year") or 0) >= start_year)
-                          and (not end_year or (p.get("year") or 0) <= end_year)]
+            all_papers, outside = _split_by_year_range(
+                all_papers,
+                start_year,
+                end_year,
+                within=lambda p, start, end: (
+                    (not start or (p.get("year") or 0) >= start)
+                    and (not end or (p.get("year") or 0) <= end)
+                ),
+            )
+            account.removed(
+                "date_filter",
+                record_drops.REASON_OUTSIDE_DATE_RANGE,
+                outside,
+                rule=_date_rule(start_year, end_year, "journal issue year inside the range"),
+            )
             if len(all_papers) < before:
                 self.log(f"年份过滤: {before} → {len(all_papers)}")
 
         # Sort: monotherapy priority first, then by year desc
         all_papers.sort(key=lambda p: (not p.get("_monotherapy_priority", False),
                                        -(p.get("year") or 0)))
+        ranked = [
+            (paper, {"monotherapy_priority": bool(paper.get("_monotherapy_priority")), "year": paper.get("year") or 0})
+            for paper in all_papers
+        ]
 
         # Clean up priority markers
         for p in all_papers:
             p.pop("_monotherapy_priority", None)
 
-        deduplicated = len(all_papers)
-        all_papers = self._cap_results(all_papers, max_results, "Monotherapy-priority search")
-
-        # PRISMA counts
-        total_raw = n_mono_db + n_mono_pm + n_broad_db + n_broad_pm
-        project.prisma.records_from_database = n_mono_db + n_broad_db
-        project.prisma.records_identified = total_raw
-        project.prisma.records_after_dedup = deduplicated
-        project.prisma.set_records_not_screened(deduplicated - len(all_papers), "relevance cap before screening")
+        all_papers, screening_cap = self._apply_screening_budget(
+            account,
+            ranked,
+            explicit_max=explicit_max,
+            ranking_rule="monotherapy-priority records first, then newest publication year",
+            label="Monotherapy-priority search",
+        )
+        self._finish_search_accounting(project, account, screened=len(all_papers), screening_cap=screening_cap)
         self.log(f"单药优先检索合计: {len(all_papers)} unique papers "
-                 f"(Pass1: {n_mono_db}+{n_mono_pm}, Pass2 补充: {added})")
+                 f"(identified {project.prisma.records_identified}, Pass 2 补充: {added})")
 
         project.save_json("search_results.json", all_papers)
+        project.save_json("search_source_counts.json", dict(account.identified))
         project.save_json("prisma_flow.json", project.prisma.to_dict())
 
         return all_papers
+
+    def _account_missing_pubmed_details(
+        self,
+        account: record_drops.SearchAccount,
+        pmids: list[str],
+        details: list[dict],
+        *,
+        stage: str = "pubmed_metadata_unavailable",
+    ) -> None:
+        """PMIDs that efetch did not return (a failed batch is skipped after retries)."""
+        fetched = {str(paper.get("pmid") or "").strip() for paper in details}
+        missing = [str(pmid).strip() for pmid in pmids if str(pmid).strip() not in fetched]
+        account.add(
+            stage,
+            record_drops.REASON_SOURCE_METADATA_UNAVAILABLE,
+            [{"id": pmid, "pmid": pmid} for pmid in missing],
+            count=max(len(missing), len(pmids) - len(details)),
+            source="pubmed",
+            rule={"what": "PubMed IDs retrieved by esearch whose records efetch did not return"},
+        )
+
+    def _account_unretrieved_pubmed(
+        self,
+        account: record_drops.SearchAccount,
+        runs: list,
+        *,
+        retrieved_by_pmid: dict[str, dict],
+        rule: dict,
+    ) -> None:
+        """Account the PubMed hits past the retrieval limit.
+
+        A hit another source (or another query) did retrieve is a duplicate of
+        that record; the rest were never retrieved, listed by PMID and PubMed
+        rank when esearch returned the ID, counted otherwise.
+        """
+        seen: set[str] = set()
+        duplicates: list[tuple[dict, dict]] = []
+        not_retrieved: list[dict] = []
+        unlisted = 0
+        hits_by_query: dict[str, dict] = {}
+        for label, result, rescued in runs:
+            listed = 0
+            for offset, pmid in enumerate(result.unretrieved_pmids):
+                pmid = str(pmid).strip()
+                if not pmid or pmid in rescued:
+                    continue
+                listed += 1
+                stub = {"pmid": pmid, "retrieval_sources": ["pubmed"]}
+                if pmid in retrieved_by_pmid:
+                    duplicates.append((stub, retrieved_by_pmid[pmid]))
+                elif pmid in seen:
+                    duplicates.append((stub, {"pmid": pmid}))
+                else:
+                    seen.add(pmid)
+                    not_retrieved.append({
+                        "id": pmid,
+                        "pmid": pmid,
+                        "rank": len(result.pmids) + offset + 1,
+                        "query": label,
+                    })
+            total = _pubmed_unretrieved_total(result, rescued)
+            unlisted += max(0, total - listed)
+            hits_by_query[label] = {
+                "hits": result.count,
+                "retrieved": len(result.pmids),
+                "not_retrieved": total,
+                "listed": listed,
+            }
+        account.duplicates(
+            "pubmed_unretrieved_duplicates",
+            duplicates,
+            source="pubmed",
+            rule={"what": "a PubMed hit past the retrieval limit that another source or query retrieved"},
+        )
+        account.add(
+            "pubmed_retrieval_limit",
+            record_drops.REASON_SOURCE_RETRIEVAL_LIMIT,
+            not_retrieved,
+            count=len(not_retrieved) + unlisted,
+            source="pubmed",
+            rule={**rule, "queries": hits_by_query},
+        )
+
+    def _apply_screening_budget(
+        self,
+        account: record_drops.SearchAccount,
+        ranked: list[tuple[dict, dict]],
+        *,
+        explicit_max: int | None,
+        ranking_rule: str,
+        label: str,
+    ) -> tuple[list[dict], dict]:
+        """Keep the topic-scaled budget of a ranked list and list every record cut."""
+        papers = [paper for paper, _ in ranked]
+        total = len(papers)
+        budget = screening_budget(total, explicit_max)
+        selected, reserved = self._select_within_budget(papers, budget, label)
+        selected_ids = {id(paper) for paper in selected}
+        cut: list[dict] = []
+        extra: dict[int, dict] = {}
+        for rank, (paper, score) in enumerate(ranked, start=1):
+            if id(paper) in selected_ids:
+                continue
+            cut.append(paper)
+            extra[id(paper)] = {"rank": rank, "score": score}
+        rule = {
+            **screening_cap_rule(total, explicit_max, budget),
+            "ranking": ranking_rule,
+            "pubmed_reserved": reserved,
+            "pubmed_reservation": "up to half the budget is kept for PubMed-origin records in ranked order",
+        }
+        account.removed(
+            "relevance_cap",
+            record_drops.REASON_RELEVANCE_CAP,
+            cut,
+            rule=rule,
+            extra=extra,
+            keep_empty=True,
+        )
+        return selected, rule
+
+    def _finish_search_accounting(
+        self,
+        project: Project,
+        account: record_drops.SearchAccount,
+        *,
+        screened: int,
+        screening_cap: dict,
+    ) -> None:
+        """Set PRISMA identification from the account and write the drop ledger."""
+        totals = account.slot_totals()
+        project.prisma.set_search_counts(
+            identified_by_source=account.identified,
+            duplicates_removed=totals[record_drops.SLOT_DUPLICATES],
+            automation_reasons=account.line_reasons(record_drops.SLOT_AUTOMATION),
+            other_reasons=account.line_reasons(record_drops.SLOT_OTHER),
+            database_hits=account.database_hits,
+            screening_cap=screening_cap,
+        )
+        expected = account.screened_by_arithmetic()
+        project.clear_warnings(code="prisma_identification_gap")
+        if expected != screened:
+            # Every stage counts its own drops, so a gap means a source handed
+            # back a different number of records than it reported.
+            logger.warning(
+                "PRISMA identification does not reconcile: identified minus removals = %s, screened = %s",
+                expected,
+                screened,
+            )
+            project.add_warning(
+                "retrieval",
+                (
+                    f"PRISMA identification does not reconcile: identified minus removals is {expected}, "
+                    f"but {screened} records go to screening."
+                ),
+                code="prisma_identification_gap",
+                context={"expected": expected, "screened": screened, "identified": dict(account.identified)},
+            )
+        account.write(project)
 
     def download_pdfs(self, papers: list[dict], project: Project) -> tuple[list[dict], list[dict]]:
         """Download PDFs for given papers.
@@ -1782,12 +2323,14 @@ class PaperRetriever(BaseAgent):
                  f"{len(extra_papers)} extra user PDFs")
         return matched, extra_papers, parsed_papers
 
-    def _deduplicate(self, papers: list[dict]) -> list[dict]:
+    def _deduplicate(self, papers: list[dict], merges: list | None = None) -> list[dict]:
         """Remove duplicate papers based on DOI and title similarity.
 
         DOI/PMID are treated as exact identities. Title matching is deliberately
         conservative because trial programs often publish design, subgroup, and
-        primary-result papers that share long title prefixes.
+        primary-result papers that share long title prefixes. When ``merges``
+        is given, each removed duplicate is appended as (removed, kept) for the
+        drop ledger, before its metadata is merged into the kept record.
         """
         seen_dois: dict[str, dict] = {}
         seen_pmids: dict[str, dict] = {}
@@ -1807,6 +2350,8 @@ class PaperRetriever(BaseAgent):
                 seen_titles.get(title) if title else None
             )
             if duplicate is not None:
+                if merges is not None:
+                    merges.append((paper, duplicate))
                 _merge_duplicate_metadata(duplicate, paper)
                 continue
 
@@ -1818,6 +2363,8 @@ class PaperRetriever(BaseAgent):
                     near_duplicate = existing_paper
                     break
             if near_duplicate is not None:
+                if merges is not None:
+                    merges.append((paper, near_duplicate))
                 _merge_duplicate_metadata(near_duplicate, paper)
                 continue
 

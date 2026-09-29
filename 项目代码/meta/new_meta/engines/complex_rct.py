@@ -37,9 +37,10 @@ class ComplexRCTRecord(BaseModel):
     paired_analysis: bool = False
     intracluster_correlation: float | None = Field(default=None, ge=0, lt=1)
     mean_cluster_size: float | None = Field(default=None, gt=1)
-    #: The result's own label for what distinguishes it (a multi-arm trial's
-    #: route or dose, as the source names it): a moderator, never a stratum.
-    moderator: str = ""
+    #: The result's closed value of each protocol subgroup variable (variable
+    #: id -> value), assigned at extraction against the protocol's closed
+    #: vocabulary: a moderator, never a stratum.
+    subgroup_values: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_precision(self):
@@ -77,7 +78,18 @@ class ComplexRCTResult(BaseModel):
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
-def run_complex_rct(records: list[ComplexRCTRecord | dict]) -> ComplexRCTResult:
+class SubgroupVariableSpec(BaseModel):
+    """One prespecified subgroup variable: its id, the protocol's text and its closed values."""
+
+    variable_id: str = Field(min_length=1)
+    label: str = ""
+    values: list[str] = Field(default_factory=list)
+
+
+def run_complex_rct(
+    records: list[ComplexRCTRecord | dict],
+    subgroup_variables: list[SubgroupVariableSpec | dict] | None = None,
+) -> ComplexRCTResult:
     """Pool one coherent estimand after resolving every design dependency.
 
     Cluster trials must provide either source-reported cluster-adjusted precision
@@ -85,10 +97,16 @@ def run_complex_rct(records: list[ComplexRCTRecord | dict]) -> ComplexRCTResult:
     Crossover trials must provide a source-reported paired analysis. Multiple
     eligible contrasts from one multi-arm trial are first consolidated with
     explicit within-study GLS, producing one independent contribution per trial.
+    ``subgroup_variables`` declares the protocol's subgroup variables and their
+    closed values; each is analysed as a moderator of the pooled contrasts.
     """
     rows = [
         item if isinstance(item, ComplexRCTRecord) else ComplexRCTRecord.model_validate(item)
         for item in records
+    ]
+    variables = [
+        item if isinstance(item, SubgroupVariableSpec) else SubgroupVariableSpec.model_validate(item)
+        for item in subgroup_variables or []
     ]
     if len(rows) < 2:
         raise ValueError("complex RCT synthesis requires at least two contrasts")
@@ -189,7 +207,7 @@ def run_complex_rct(records: list[ComplexRCTRecord | dict]) -> ComplexRCTResult:
                 "ci_upper": hksj.ci_upper,
             }
         },
-        moderator_subgroups=_moderator_subgroups(prepared, measure),
+        moderator_subgroups=_moderator_subgroups(prepared, measure, variables),
         diagnostics={
             "analysis_scale": "log" if measure in _RATIO_MEASURES else "original",
             "cluster_adjustment": "reported_or_design_effect",
@@ -271,55 +289,100 @@ def _consolidate_study(study_id: str, group: list[dict[str, Any]]) -> tuple[floa
     return float(ones @ precision @ y / denominator), float(1.0 / denominator)
 
 
-def _moderator_subgroups(prepared: list[dict[str, Any]], measure: str) -> dict[str, Any]:
-    """Pool within each moderator label that at least two trials share; test between them.
+#: The value every subgroup variable reserves for "the source does not say".
+_NOT_REPORTED = "not_reported"
+_NO_CLOSED_VALUES = "no closed subgroup values"
+_TOO_FEW_SHARED = "fewer than two values with at least two trials each"
 
-    Labels are compared exactly as recorded - whether two differently worded
-    labels mean the same route or dose is not decided here. Within a label a
-    trial still counts once (its contrasts GLS-consolidated). One trial can
-    sit in two labels with a shared control, so the between-label Q test is
-    approximate, and says so.
+
+def _moderator_subgroups(
+    prepared: list[dict[str, Any]], measure: str, variables: list[SubgroupVariableSpec],
+) -> dict[str, Any]:
+    """Per protocol subgroup variable: pool within each closed value, then compare the values.
+
+    Contrasts are grouped by the closed value assigned at extraction, never
+    by their wording. On 2026-09-28 (ma-001) grouping by the results' own
+    labels made two trials' "Topical (intra-articular) route" and "Topical
+    (intra-articular) TXA" two one-study labels, and nothing was pooled.
+    A value pools when at least two trials share it; within a value a trial
+    still counts once (its contrasts GLS-consolidated). not_reported and
+    unassigned contrasts are listed, never grouped. The between-value Q test
+    runs when at least two values pooled; one trial can sit in two values with
+    a shared control, so the test is then approximate, and says so.
     """
+    if not variables:
+        return {}
     from scipy import stats
 
-    by_label: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
-    for item in prepared:
-        label = " ".join(item["record"].moderator.split())
-        if label:
-            by_label[label][item["record"].study_id].append(item)
-    if not by_label:
-        return {}
-    labels: dict[str, Any] = {}
-    pooled_groups = []
-    for label, studies in sorted(by_label.items()):
-        effects = []
-        for study_id, group in sorted(studies.items()):
-            yi, vi = _consolidate_study(study_id, group)
-            effects.append(StudyEffect(study_id=study_id, study_label=study_id, yi=yi, vi=vi, se=math.sqrt(vi)))
-        if len(effects) < 2:
-            labels[label] = {"n_studies": len(effects), "pooled": None}
-            continue
-        pooled = random_effects_reml(effects, measure, label)
-        analysis = float(pooled.pooled_log if pooled.pooled_log is not None else pooled.pooled_effect)
-        se = _ci_se(pooled, measure)
-        labels[label] = {
-            "n_studies": len(effects), "estimate": pooled.pooled_effect, "ci_lower": pooled.ci_lower,
-            "ci_upper": pooled.ci_upper, "tau_squared": pooled.tau_squared, "i_squared": pooled.i_squared,
-        }
-        pooled_groups.append((analysis, se))
-    between = None
-    if len(pooled_groups) >= 2:
-        weights = np.array([1.0 / (se * se) for _, se in pooled_groups])
-        values = np.array([value for value, _ in pooled_groups])
-        centre = float(weights @ values / weights.sum())
-        q = float(weights @ (values - centre) ** 2)
-        df = len(pooled_groups) - 1
-        between = {"q": q, "df": df, "p_value": float(1 - stats.chi2.cdf(q, df))}
+    analyses = []
+    for spec in variables:
+        declared = list(dict.fromkeys(value for value in spec.values if value and value != _NOT_REPORTED))
+        by_value: dict[str, dict[str, list[dict[str, Any]]]] = {value: defaultdict(list) for value in declared}
+        not_reported: list[str] = []
+        unassigned: list[str] = []
+        for item in prepared:
+            record = item["record"]
+            value = record.subgroup_values.get(spec.variable_id, "")
+            if value in by_value:
+                by_value[value][record.study_id].append(item)
+            elif value == _NOT_REPORTED:
+                not_reported.append(record.result_id)
+            else:
+                unassigned.append(record.result_id)
+        values: dict[str, Any] = {}
+        pooled_groups: list[tuple[float, float, set[str]]] = []
+        for value in declared:
+            studies = by_value[value]
+            effects = []
+            for study_id, group in sorted(studies.items()):
+                yi, vi = _consolidate_study(study_id, group)
+                effects.append(StudyEffect(study_id=study_id, study_label=study_id, yi=yi, vi=vi, se=math.sqrt(vi)))
+            entry: dict[str, Any] = {
+                "n_studies": len(effects),
+                "n_contrasts": sum(len(group) for group in studies.values()),
+                "study_ids": sorted(studies),
+                "pooled": len(effects) >= 2,
+            }
+            if len(effects) >= 2:
+                pooled = random_effects_reml(effects, measure, f"{spec.label or spec.variable_id}: {value}")
+                entry.update({
+                    "estimate": pooled.pooled_effect, "ci_lower": pooled.ci_lower, "ci_upper": pooled.ci_upper,
+                    "tau_squared": pooled.tau_squared, "i_squared": pooled.i_squared,
+                })
+                analysis = float(pooled.pooled_log if pooled.pooled_log is not None else pooled.pooled_effect)
+                pooled_groups.append((analysis, _ci_se(pooled, measure), set(studies)))
+            values[value] = entry
+        between = None
+        if not declared or not any(by_value[value] for value in declared):
+            reason = _NO_CLOSED_VALUES
+        elif len(pooled_groups) < 2:
+            reason = _TOO_FEW_SHARED
+        else:
+            reason = ""
+            weights = np.array([1.0 / (se * se) for _, se, _ in pooled_groups])
+            estimates = np.array([value for value, _, _ in pooled_groups])
+            centre = float(weights @ estimates / weights.sum())
+            q = float(weights @ (estimates - centre) ** 2)
+            df = len(pooled_groups) - 1
+            shared = Counter(study for _, _, members in pooled_groups for study in members)
+            between = {
+                "q": q, "df": df, "p_value": float(1 - stats.chi2.cdf(q, df)),
+                "approximate": any(count > 1 for count in shared.values()),
+            }
+        analyses.append({
+            "variable_id": spec.variable_id,
+            "label": spec.label,
+            "values": values,
+            "not_reported": sorted(not_reported),
+            "unassigned": sorted(unassigned),
+            "between": between,
+            "not_run_reason": reason,
+        })
     return {
-        "labels": labels,
-        "between": between,
-        "note": ("Labels are the results' own; a trial contributing to two labels shares its control "
-                 "across them, so the between-label test is approximate."),
+        "schema_version": 2,
+        "variables": analyses,
+        "note": ("Values are the protocol's closed subgroup values assigned at extraction; a trial contributing "
+                 "to two values shares its control across them, so the between-value test is then approximate."),
     }
 
 

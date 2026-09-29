@@ -347,6 +347,12 @@ def _resolve_remaining_covariances(study: ExtractedStudy, protocol: ResearchProt
                 or not outcome.contrast_id or not targets_review_estimand(outcome.estimand_id)
                 or outcome.precision_basis in {"", PRECISION_NOT_COMPUTABLE}):
             continue
+        # The subgroup text stays in the key on purpose: two results for
+        # different participant subsets share no control participants, and no
+        # closed field says a label restricts the participants (subgroup_values
+        # describe the contrast). A wording difference only leaves a pair
+        # unresolved, which the engine refuses; the extraction prompt keeps an
+        # arm's route or dose out of `subgroup`.
         key = (
             outcome.estimand_id,
             _normalise_label(outcome.accepted_timepoint or outcome.timepoint or ""),

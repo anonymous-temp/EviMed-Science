@@ -418,11 +418,18 @@ def evaluate_project_against_benchmark(
 
     pooled_effect = None
     meta_results_path = project_dir / "analysis" / "meta_results.json"
+    synthesis_path = project_dir / "analysis" / "synthesis_result.json"
     if meta_results_path.exists():
         pooled_effect = compare_pooled_effect(
             manifest,
             json.loads(meta_results_path.read_text(encoding="utf-8")),
         )
+    elif synthesis_path.exists():
+        # The compiled-method route writes synthesis_result.json and never
+        # meta_results.json; without this the benchmark "passed" with no
+        # pooled-effect comparison at all.
+        pooled_effect = compare_pooled_effect(
+            manifest, _compiled_primary_as_meta_results(json.loads(synthesis_path.read_text(encoding="utf-8"))))
 
     manuscript_gate = _evaluate_manuscript_gate(project_dir)
 
@@ -708,6 +715,21 @@ def benchmark_anchor_summary(manifest: BenchmarkManifest) -> BenchmarkAnchorSumm
         aggregate_total_control=_int_or_zero(primary.get("aggregate_total_control")) or expected["total_control"],
         expected_trial_ids=[trial.trial_id for trial in manifest.expected_trials],
     )
+
+
+def _compiled_primary_as_meta_results(synthesis: dict[str, Any]) -> dict[str, Any]:
+    """The compiled synthesis's first pooled estimate in the meta_results shape compared below."""
+    estimates = synthesis.get("primary_estimates") if isinstance(synthesis, dict) else None
+    estimate = estimates[0] if isinstance(estimates, list) and estimates and isinstance(estimates[0], dict) else {}
+    heterogeneity = synthesis.get("heterogeneity") if isinstance(synthesis.get("heterogeneity"), dict) else {}
+    if not estimate:
+        return {}
+    return {"primary_outcome": {
+        "pooled_effect": estimate.get("estimate"), "ci_lower": estimate.get("ci_lower"),
+        "ci_upper": estimate.get("ci_upper"), "effect_measure": estimate.get("measure"),
+        "model": "random", "tau_squared": heterogeneity.get("tau_squared"),
+        "n_studies": synthesis.get("n_studies"),
+    }}
 
 
 def compare_pooled_effect(

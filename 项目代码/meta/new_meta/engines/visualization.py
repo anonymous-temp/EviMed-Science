@@ -367,7 +367,9 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
     - Left: Databases/Registers identification
     - Center: Screening flow
     - Right: Other methods (websites, citation searching)
-    Includes "Previous studies" row and automation exclusion row.
+    Includes a "Previous studies" row, the "Records removed before screening"
+    box (duplicates, automation tools, other reasons) and "Reports not
+    retrieved" with their reasons.
 
     Args:
         lang: "en" for English labels, "zh" for Chinese labels.
@@ -387,8 +389,10 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
         "previous":      f"既往研究\n（n = %d）" if zh else "Previous studies\n(n = %d)",
         "identified":    f"数据库检索记录\n（n = %d）" if zh else "Records identified from\nDatabases (n = %d)",
         "other":         f"其他来源记录\n（n = %d）" if zh else "Records identified from\nother methods (n = %d)",
-        "dedup":         f"去重后记录\n（n = %d）" if zh else "Records after duplicates removed\n(n = %d)",
-        "auto_excl":     f"自动化工具排除\n（n = %d）" if zh else "Records removed by\nautomation tools\n(n = %d)",
+        "removed_hdr":   "筛选前移除的记录：" if zh else "Records removed before screening:",
+        "removed_dup":   "重复记录（n = %d）" if zh else "Duplicate records removed (n = %d)",
+        "removed_auto":  "自动化工具标记为不合格（n = %d）" if zh else "Marked ineligible by automation tools (n = %d)",
+        "removed_other": "其他原因移除（n = %d）" if zh else "Removed for other reasons (n = %d)",
         "ta_screened":   f"标题/摘要筛选\n（n = %d）" if zh else "Records screened\n(title/abstract)\n(n = %d)",
         "ta_excluded":   f"标题/摘要排除\n（n = %d）" if zh else "Records excluded\n(n = %d)",
         "ft_sought":     f"全文获取\n（n = %d）" if zh else "Reports sought for\nretrieval (n = %d)",
@@ -412,11 +416,21 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
     n_other = other.get("records_identified", 0)
     n_previous = prev.get("previous_studies", 0)
     n_dedup = ident.get("records_after_dedup", 0)
-    n_auto_excluded = ident.get("automation_excluded", 0)
+    # PRISMA 2020 "Records removed before screening" (three lines). Files from
+    # before 2026-09-29 reported every non-duplicate removal as automation.
+    n_duplicates = ident.get("duplicates_removed")
+    if n_duplicates is None:
+        n_duplicates = max(0, n_identified - n_dedup)
+    n_auto_excluded = ident.get("automation_excluded", 0) or 0
+    n_removed_other = ident.get("records_removed_other", 0) or 0
+    other_reasons = ident.get("records_removed_other_reasons") or {}
     n_screened = screen.get("title_abstract_screened", 0)
     n_ta_excluded = screen.get("title_abstract_excluded", 0)
-    n_sought = elig.get("full_text_sought", elig.get("full_text_assessed", 0))
-    n_not_retrieved = elig.get("not_retrieved", 0)
+    n_sought = elig.get("full_text_sought")
+    if n_sought is None:
+        n_sought = elig.get("full_text_assessed", 0)
+    n_not_retrieved = elig.get("not_retrieved") or 0
+    not_retrieved_reasons = elig.get("not_retrieved_reasons") or {}
     n_ft_assessed = elig.get("full_text_assessed", 0)
     n_ft_excluded = elig.get("full_text_excluded", 0)
     n_included = incl.get("studies_included", 0)
@@ -433,6 +447,45 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
                 k_str = k_str[:key_max - 1] + "…"
             lines.append(f"• {k_str}: {v}")
         return "\n".join(lines)
+
+    # Code-set reason labels (core/record_drops.py) shown in the removal boxes.
+    short_reason = {
+        "relevance cap before screening": ("相关性上限", "relevance cap"),
+        "supplementary-source relevance cap": ("补充来源上限", "supplement cap"),
+        "outside the protocol date range": ("超出日期范围", "outside date range"),
+        "not retrieved from the source (retrieval limit)": ("未获取（检索上限）", "not retrieved (retrieval limit)"),
+        "source metadata unavailable": ("无题录信息", "no source metadata"),
+        "abstract only": ("仅摘要", "abstract only"),
+        "registry metadata only": ("仅注册信息", "registry metadata only"),
+        "no text retrieved": ("未获取文本", "no text"),
+    }
+
+    def _short(reason) -> str:
+        pair = short_reason.get(str(reason))
+        return (pair[0] if zh else pair[1]) if pair else str(reason)
+
+    source_names = {"internal_db": ("内部数据库", "Internal DB"), "pubmed": ("PubMed", "PubMed")}
+    hits = ident.get("database_hits") or {}
+    source_lines = []
+    for source, count in list((ident.get("identified_by_source") or {}).items())[:4]:
+        name = source_names.get(str(source), (str(source), str(source)))[0 if zh else 1]
+        line = f"{name} {int(count):,}"
+        retrieved = (hits.get(source) or {}).get("retrieved")
+        if retrieved is not None and int(retrieved) < int(count):
+            line += f"（获取{int(retrieved):,}）" if zh else f" ({int(retrieved):,} retrieved)"
+        source_lines.append(line)
+
+    removed_lines = [
+        T["removed_hdr"],
+        T["removed_dup"] % n_duplicates,
+        T["removed_auto"] % n_auto_excluded,
+        T["removed_other"] % n_removed_other,
+    ]
+    for reason, count in list(other_reasons.items())[:3]:
+        removed_lines.append(f"• {_short(reason)}: {count}")
+    not_retrieved_note = ("；" if zh else "; ").join(
+        f"{_short(reason)} {count}" for reason, count in not_retrieved_reasons.items()
+    )
 
     ta_reasons_str = _fmt_reasons(screen.get("exclusion_reasons", {}), max_n=4)
     ft_reasons_str = _fmt_reasons(elig.get("exclusion_reasons", {}), max_n=5)
@@ -506,8 +559,10 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
              color="#E8EAF6")
 
     # === Databases ===
-    draw_box(X_LEFT, sy(8.4), W_MAIN, 0.65 * S,
-             T["identified"] % n_identified,
+    # Two lines fit the base box; each further source line needs ~0.12 units.
+    identified_h = 0.65 * S + max(0, len(source_lines) - 1) * 0.12
+    draw_box(X_LEFT, sy(8.4), W_MAIN, identified_h,
+             "\n".join([T["identified"] % n_identified, *source_lines]),
              color="#BBDEFB")
 
     # === Other methods ===
@@ -515,26 +570,20 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
              T["other"] % n_other,
              color="#B2DFDB")
 
-    draw_arrow(X_LEFT, sy(9.12), X_LEFT, sy(8.72))
+    draw_arrow(X_LEFT, sy(9.12), X_LEFT, sy(8.4) + identified_h / 2)
 
-    # === Deduplication ===
-    draw_box(X_LEFT, sy(7.5), W_MAIN, 0.60 * S,
-             T["dedup"] % n_dedup,
-             color="#E3F2FD")
-    draw_arrow(X_LEFT, sy(8.07), X_LEFT, sy(7.80))
-
-    # === Automation exclusion ===
-    if n_auto_excluded > 0:
-        draw_box(X_EXCL, sy(7.5), W_EXCL, 0.52 * S,
-                 T["auto_excl"] % n_auto_excluded,
-                 color="#FFCDD2", fontsize=6.5)
-        draw_arrow(X_LEFT + W_MAIN / 2, sy(7.5), X_EXCL - W_EXCL / 2, sy(7.5))
+    # === Records removed before screening (PRISMA 2020: three lines) ===
+    removed_h = 0.25 + len(removed_lines) * LINE_H
+    draw_box(X_EXCL, sy(8.4), W_EXCL, removed_h,
+             "\n".join(removed_lines),
+             color="#FFCDD2", fontsize=6.5)
+    draw_arrow(X_LEFT + W_MAIN / 2, sy(8.4), X_EXCL - W_EXCL / 2, sy(8.4))
 
     # === T/A Screening box ===
     draw_box(X_LEFT, sy(6.56), W_MAIN, 0.60 * S,
              T["ta_screened"] % n_screened,
              color="#C8E6C9")
-    draw_arrow(X_LEFT, sy(7.20), X_LEFT, sy(6.86))
+    draw_arrow(X_LEFT, sy(8.4) - identified_h / 2, X_LEFT, sy(6.86))
 
     # === T/A Exclusion box ===
     ta_excl_text = T["ta_excluded"] % n_ta_excluded
@@ -554,8 +603,11 @@ def prisma_flow_diagram(prisma_data: dict, save_path: str = None, lang: str = "e
     draw_arrow(X_LEFT, sy(6.26), X_LEFT, sy(5.80))
 
     if n_not_retrieved > 0:
+        not_retrieved_text = T["not_retrieved"] % n_not_retrieved
+        if not_retrieved_note:
+            not_retrieved_text += "\n" + not_retrieved_note[:40]
         draw_box(X_EXCL, sy(5.5), W_EXCL, 0.50 * S,
-                 T["not_retrieved"] % n_not_retrieved,
+                 not_retrieved_text,
                  color="#FFCDD2", fontsize=6.5)
         draw_arrow(X_LEFT + W_MAIN / 2, sy(5.5), X_EXCL - W_EXCL / 2, sy(5.5))
 

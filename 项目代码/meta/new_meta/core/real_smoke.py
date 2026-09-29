@@ -62,19 +62,67 @@ def _check_llm_authoring(base: Path) -> dict[str, Any]:
 
 
 def _check_pdf_or_fulltext(base: Path) -> dict[str, Any]:
+    """Whether the run parsed at least one retrieved full text, in the shape retrieval writes today.
+
+    Full text is fetched by route (tools/fulltext_retrieval.py): Europe PMC
+    XML and PMC HTML land as ``papers/<id>.fulltext.txt`` recorded in
+    pdf_download_results.json (``fulltext_path``, ``fulltext_route``,
+    ``text_availability``); a PDF is one route among several. This check
+    looked only for ``*.pdf`` and failed production ma-001 (2026-09-28), whose
+    21 full texts all came back as Europe PMC XML. A paper counts when its
+    record says full text, its file exists, and parsed_papers.json holds a
+    parse of exactly that file (``_source_sha256``); an abstract never counts.
+    """
+    import hashlib
+
     pdfs = list((base / "user_fulltexts").glob("*.pdf")) + list((base / "papers").glob("*.pdf"))
     parse_cache = list((base / "pdf_parse_cache").glob("*.json"))
-    parsed = base / "papers" / "parsed_papers.json"
-    if pdfs and (parse_cache or parsed.exists()):
+    parsed_papers = _load_json(base / "papers" / "parsed_papers.json")
+    parsed_papers = parsed_papers if isinstance(parsed_papers, dict) else {}
+    records = _load_json(base / "pdf_download_results.json")
+    by_route: dict[str, int] = {}
+    for record in records if isinstance(records, list) else []:
+        if not isinstance(record, dict) or record.get("text_availability") == "abstract_only":
+            continue
+        if record.get("text_availability") not in {"full_text", None, ""}:
+            continue
+        paper_id = next((str(record.get(key) or "").strip() for key in ("pmid", "doi", "openalex_id", "s2_paper_id")
+                         if str(record.get(key) or "").strip()), "")
+        parsed = parsed_papers.get(paper_id) if paper_id else None
+        source = record.get("pdf_path") or record.get("fulltext_path")
+        if not isinstance(parsed, dict) or not str(parsed.get("full_text") or "").strip() or not source:
+            continue
+        path = Path(str(source))
+        path = path if path.is_absolute() else base / path
+        try:
+            source_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            # A record written on another host keeps its absolute path; the
+            # project's own copy is the same file name under papers/.
+            try:
+                source_sha = hashlib.sha256((base / "papers" / path.name).read_bytes()).hexdigest()
+            except OSError:
+                continue
+        if parsed.get("_source_sha256") and parsed.get("_source_sha256") != source_sha:
+            continue
+        route = str(record.get("fulltext_route") or ("pdf" if record.get("pdf_path") else "fulltext"))
+        by_route[route] = by_route.get(route, 0) + 1
+    parsed_full_texts = sum(by_route.values())
+    if parsed_full_texts or (pdfs and (parse_cache or parsed_papers)):
         return _pass(
             "real_pdf_or_fulltext",
-            f"Found {len(pdfs)} PDF file(s) and {len(parse_cache)} parse-cache artifact(s).",
-            paths=["user_fulltexts/", "papers/", "pdf_parse_cache/"],
+            f"Parsed {parsed_full_texts} retrieved full text(s) by route {by_route or {}}; "
+            f"{len(pdfs)} PDF file(s) and {len(parse_cache)} parse-cache artifact(s).",
+            paths=["pdf_download_results.json", "papers/parsed_papers.json", "user_fulltexts/", "papers/",
+                   "pdf_parse_cache/"],
+            parsed_full_texts=parsed_full_texts,
+            full_texts_by_route=by_route,
         )
     return _fail(
         "real_pdf_or_fulltext",
         "No usable PDF/full-text parsing evidence was found.",
-        paths=["user_fulltexts/", "papers/", "pdf_parse_cache/", "papers/parsed_papers.json"],
+        paths=["pdf_download_results.json", "papers/parsed_papers.json", "user_fulltexts/", "papers/",
+               "pdf_parse_cache/"],
     )
 
 

@@ -273,6 +273,15 @@ class MethodExecutor:
         from new_meta.core.primary_analysis_alignment import require_method_source_alignment
         require_method_source_alignment(project, plan, requested, entities=entities)
 
+        # A comparative result's moderators are its closed subgroup values
+        # (core/subgroup_vocabulary.py), re-checked here against the protocol's
+        # current vocabulary: a value outside it is refused, never regrouped.
+        subgroup_variables: list[dict[str, Any]] = []
+        vocabulary = None
+        refused_subgroup_values: dict[str, list[dict[str, str]]] = {}
+        if plan.family in {ReviewFamily.INTERVENTION_RCT, ReviewFamily.NETWORK_META}:
+            subgroup_variables, vocabulary = _project_subgroup_variables(project)
+
         records: list[dict[str, Any]] = []
         for entity in entities:
             if plan.family is ReviewFamily.PREVALENCE_INCIDENCE:
@@ -343,8 +352,7 @@ class MethodExecutor:
                     "study_id": entity.study_id,
                     **entity.raw_data.model_dump(mode="json", exclude={"data_type"}),
                     **estimate.model_dump(mode="json"),
-                    # The result's own label (a multi-arm trial's route or dose) as a moderator.
-                    "moderator": entity.subgroup,
+                    "subgroup_values": _admitted_subgroup_values(entity, vocabulary, refused_subgroup_values),
                 })
             elif plan.family is ReviewFamily.DOSE_RESPONSE:
                 if not isinstance(entity.raw_data, DoseResponseData):
@@ -412,6 +420,8 @@ class MethodExecutor:
                 raise MethodExecutionBlocked(
                     f"ledger materializer is not implemented for {plan.family.value}"
                 )
+        if subgroup_variables and plan.engine_entrypoint == "new_meta.engines.complex_rct:run_complex_rct":
+            options = {**(options or {}), "subgroup_variables": subgroup_variables}
         result = self.execute(plan, records=records, options=options)
         # A long computation may overlap a verification update. Recheck before
         # persisting or returning any synthesized result to its caller.
@@ -433,6 +443,7 @@ class MethodExecutor:
                 "analysis_set_candidate_id": analysis_set.candidate_id,
                 "analysis_set_status": analysis_set.status,
                 "ledger_head_hash": verification.head_hash,
+                **({"subgroup_values_refused": refused_subgroup_values} if refused_subgroup_values else {}),
                 "inputs": [
                     {
                         "result_id": entity.entity_id,
@@ -499,3 +510,25 @@ class MethodExecutor:
             encoding="utf-8",
         )
         temporary.replace(path)
+
+
+def _project_subgroup_variables(project) -> tuple[list[dict[str, Any]], Any]:
+    """The protocol's subgroup variables with their closed values, and the vocabulary (or None)."""
+    from new_meta.core.subgroup_vocabulary import engine_subgroup_variables, load_subgroup_vocabulary
+    from new_meta.schemas.protocol import ResearchProtocol
+
+    payload = project.load_json("protocol.json")
+    if not payload:
+        return [], None
+    protocol = ResearchProtocol.model_validate(payload)
+    vocabulary = load_subgroup_vocabulary(project, protocol)
+    return engine_subgroup_variables(protocol, vocabulary), vocabulary
+
+
+def _admitted_subgroup_values(entity, vocabulary, refused: dict[str, list[dict[str, str]]]) -> dict[str, str]:
+    from new_meta.core.subgroup_vocabulary import admit_subgroup_values
+
+    kept, rejected = admit_subgroup_values((entity.derivation or {}).get("subgroup_values") or {}, vocabulary)
+    if rejected:
+        refused[entity.entity_id] = rejected
+    return kept

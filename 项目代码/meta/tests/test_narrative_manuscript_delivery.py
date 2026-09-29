@@ -25,32 +25,6 @@ def test_narrative_final_replaces_pooled_effect_placeholder_without_dropping_par
     assert "pooled effect" not in repaired.lower()
 
 
-def test_narrative_validation_blocked_report_does_not_create_nr_effect_claim() -> None:
-    writer = WritingAgent(narrative_mode=True)
-    protocol = SimpleNamespace(
-        effect_measure="RR",
-        pico=SimpleNamespace(outcome_primary="Postoperative delirium"),
-    )
-
-    manuscript = writer._write_validation_blocked_report(
-        protocol=protocol,
-        facts={
-            "report_type": "narrative",
-            "primary_effect": {},
-            "primary_population": {},
-            "evidence_readiness": {"warnings": []},
-        },
-        validation={
-            "passed": False,
-            "issues": [{"kind": "example", "severity": "error", "message": "Example failure."}],
-        },
-    )
-
-    assert "Quantitative synthesis: Not performed." in manuscript
-    assert "NR (95% CI" not in manuscript
-    assert "Pooled effect:" not in manuscript
-
-
 def test_non_meta_validation_does_not_misread_700_as_zero_participants() -> None:
     issues = _detect_publication_contract_violations(
         "One randomized trial enrolled 700 participants.",

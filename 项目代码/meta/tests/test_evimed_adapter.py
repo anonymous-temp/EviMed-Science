@@ -133,7 +133,10 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
             json.dumps({"status": "ready", "next_actions": []}),
             encoding="utf-8",
         )
-        (project / "analysis" / "meta_analysis.json").write_text("{}", encoding="utf-8")
+        # The compiled route's pooled result; "meta_analysis.json" was listed
+        # by the adapter but never written by any route.
+        (project / "analysis" / "synthesis_result.json").write_text("{}", encoding="utf-8")
+        (project / "prisma_flow.json").write_text("{}", encoding="utf-8")
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(evimed_adapter.subprocess, "run", fake_run)
@@ -150,6 +153,8 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
     assert body["data"]["releaseStatus"] == "ready"
     assert body["artifacts"]
     assert all(not Path(item["path"]).is_absolute() for item in body["artifacts"])
+    assert {item["path"].rsplit("/", 1)[-1] for item in body["artifacts"] if item["kind"] in {"analysis", "prisma_flow"}} == {
+        "synthesis_result.json", "prisma_flow.json"}
 
 
 def test_release_blocked_exit_preserves_evidence_gap_artifacts(tmp_path, monkeypatch) -> None:

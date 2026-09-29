@@ -83,6 +83,19 @@ def _check_citation_contract(base: Path) -> dict[str, Any]:
     items = contract.get("items") if isinstance(contract, dict) else None
     if not isinstance(items, list):
         return _fail("citation_contract", "citation_contract.json does not contain an items array.")
+    if contract.get("status") == "skipped" and not items:
+        # The final citation pass writes a skipped contract when the text it
+        # finalized has no numbered reference list - on 2026-09-28 (ma-001)
+        # the blocked-manuscript stub. Name that cause, not 16 "missing" rows.
+        plan = _load_json(base / "manuscript" / "final_claim_map_citation_plan.json", default={})
+        reason = str((plan or {}).get("reason") or "unknown") if isinstance(plan, dict) else "unknown"
+        return _fail(
+            "citation_contract",
+            f"The final manuscript has no numbered reference list to bind claims to (final citation pass: "
+            f"{reason}); see manuscript_validation for why the manuscript was blocked.",
+            rows=sorted(str(claim.get("id") or "") for claim in writable_claims)[:20],
+            cause=reason,
+        )
     contract_claim_ids = {
         str(item.get("claim_id") or "").strip()
         for item in items
