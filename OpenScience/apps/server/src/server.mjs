@@ -7182,7 +7182,7 @@ async function readinessAuth(config, store) {
       throw readinessFailure("bootstrap_password_placeholder");
     }
     // New credentials share the same floor; existing accounts need no password reset.
-    if (bootstrapUser !== "present" && !meetsPasswordMinimum(config.bootstrapPassword)) {
+    if (!["present", "deleted"].includes(bootstrapUser) && !meetsPasswordMinimum(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_too_short", { minimumCharacters: MIN_PASSWORD_LENGTH });
     }
   }

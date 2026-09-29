@@ -8,6 +8,7 @@ import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "../../packages/domain
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const checkOnly = process.argv.includes("--check");
+const newAccount = process.argv.includes("--new-account");
 const secretFile = path.resolve(
   process.env.OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE ??
     path.join(repoRoot, "deploy/web/secrets/bootstrap-password.txt"),
@@ -44,7 +45,12 @@ function validateValue(value) {
     throw failure("local_auth_secret_placeholder", "Bootstrap password must not use a placeholder value.");
   }
   const bytes = Buffer.byteLength(value, "utf8");
-  if (!meetsPasswordMinimum(value) || bytes > 8192) {
+  // Existing secret files may belong to pre-policy accounts. Validate their
+  // original byte floor without forcing a reset; stores enforce the new
+  // character floor whenever an account is actually created. Operators can
+  // explicitly check a proposed new credential with --new-account.
+  const validMinimum = meetsPasswordMinimum(value) || (!newAccount && bytes >= MIN_PASSWORD_LENGTH);
+  if (!validMinimum || bytes > 8192) {
     throw failure("local_auth_secret_size", `Bootstrap password must contain at least ${MIN_PASSWORD_LENGTH} characters and at most 8192 UTF-8 bytes.`);
   }
 }

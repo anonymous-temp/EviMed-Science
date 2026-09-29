@@ -1004,11 +1004,17 @@ export class PostgresStore extends InMemoryStore {
     const bootstrapMissing = Boolean(bootstrapId)
       && !result.rows.some((row) => row.id === bootstrapId);
     if (bootstrapMissing && this.config.bootstrapPassword) {
-      if (!meetsPasswordMinimum(this.config.bootstrapPassword)) {
-        throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-      }
       await this.database.transaction(async (client) => {
         await lockUserIdentity(client, bootstrapId);
+        const current = await client.query(
+          `SELECT EXISTS (SELECT 1 FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1) AS present,
+                  EXISTS (SELECT 1 FROM ${CONTROL_PLANE_SCHEMA}.deleted_users WHERE id = $1) AS deleted`,
+          [bootstrapId],
+        );
+        if (current.rows[0].present || current.rows[0].deleted) return;
+        if (!meetsPasswordMinimum(this.config.bootstrapPassword)) {
+          throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+        }
         await client.query(
           `INSERT INTO ${CONTROL_PLANE_SCHEMA}.users(id, name, password_hash, auth_type)
            SELECT $1, $2, $3, 'local'
