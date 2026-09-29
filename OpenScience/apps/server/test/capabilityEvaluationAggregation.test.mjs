@@ -36,7 +36,7 @@ test("terminal observations use actual completion time, not directory sort or a 
 test("different executions, capabilities, cases, projects and deployments remain distinct", async () => fixture({
   a: record("succeeded", "2026-09-29T01:00:00Z"),
   b: record("succeeded", "2026-09-29T01:00:00Z", { runId: "another-run" }),
-  c: record("failed", "2026-09-29T01:00:00Z", { brief: "case-b" }),
+  c: record("failed", "2026-09-29T01:00:00Z", { brief: "case-b", runId: "case-b-run" }),
   d: record("running", "2026-09-29T01:00:00Z", { project: "other-project" }),
   e: record("failed", "2026-09-29T01:00:00Z", { base: "https://another.test" }),
   f: record("succeeded", "2026-09-29T01:00:00Z", { capability: "geo-content" }),
@@ -56,3 +56,8 @@ test("equally dated conflicting terminal evidence cannot win a success from file
   a: record("failed", "2026-09-29T01:00:00Z"),
   z: record("succeeded", "2026-09-29T01:00:00Z"),
 }, (evaluations) => { assert.equal(evaluations.get("meta-analysis").delivered, 0); }));
+
+test("another carrier brief observing the same execution does not create another measured run", async () => fixture({
+  a: record("running", "2026-09-29T01:00:00Z", { brief: "carrier-a" }),
+  b: record("succeeded", "2026-09-29T02:00:00Z", { brief: "carrier-b" }),
+}, (evaluations) => { assert.deepEqual(evaluations.get("meta-analysis"), { runs: 1, delivered: 1, typicalMinutes: 2 }); }));
