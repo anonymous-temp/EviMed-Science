@@ -360,3 +360,10 @@ describe("the card's facts on the wire", () => {
   });
 });
 
+
+
+it("sends the owned follow as a scoped feed filter", async () => {
+  fetchMock.mockResolvedValue(reply(200, { data: { items: [], nextCursor: null, version: 1, mode: "list" } }));
+  await listFrontierItems({ view: "all", follow: "7" });
+  expect(new URL(requested()[0].url, "http://localhost").searchParams.get("follow")).toBe("7");
+});

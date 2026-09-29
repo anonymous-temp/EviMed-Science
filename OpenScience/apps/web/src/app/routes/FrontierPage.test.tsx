@@ -19,6 +19,7 @@ import { FrontierPage } from "./FrontierPage";
 
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(),
+  listFrontierFollows: vi.fn(),
   fetchFrontierStatus: vi.fn(),
   listFrontierItems: vi.fn(),
   fetchFrontierForYou: vi.fn(),
@@ -119,6 +120,7 @@ beforeEach(() => {
   Object.values(client).forEach((mock) => mock.mockReset());
   useToastStore.setState({ toasts: [] });
   client.useFrontierFeature.mockReturnValue("on");
+  client.listFrontierFollows.mockResolvedValue([{ id: "7", kind: "topic", key: "obesity", label: "肥胖研究", muted: false }]);
   client.fetchFrontierStatus.mockResolvedValue(status());
   feed = async () => page([today, yesterday]);
   alerts = async () => page([alert, alert2, oldAlert]);
@@ -745,4 +747,22 @@ describe("the sources", () => {
     await userEvent.click(within(drawer).getByRole("button", { name: "按名称" }));
     expect(within(list).getAllByRole("listitem").map((row) => row.textContent?.split("近")[0])).toEqual(["FDA", "新英格兰医学杂志"].sort((a, b) => a.localeCompare(b, "zh")));
   });
+});
+
+
+it("restores an owned follow from the URL and clears it when changing views", async () => {
+  const user = userEvent.setup();
+  renderPage("/app/frontier?view=following&follow=7");
+  expect(await screen.findByRole("tab", { name: "关注" })).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(client.listFrontierItems).toHaveBeenCalledWith(expect.objectContaining({ view: "all", follow: "7" })));
+  await user.click(screen.getByRole("tab", { name: "全部" }));
+  expect(location()).not.toContain("follow=");
+});
+
+it("selects a saved topic into the URL without using private memory", async () => {
+  const user = userEvent.setup();
+  renderPage("/app/frontier?view=following");
+  await user.click(await screen.findByRole("button", { name: "肥胖研究" }));
+  expect(location()).toContain("follow=7");
+  expect(client.fetchFrontierForYou).not.toHaveBeenCalled();
 });
