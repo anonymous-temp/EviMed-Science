@@ -245,3 +245,21 @@ test("the gateway refuses engine credentials with the lever off, on the Messages
   assert.equal(runtime.status, 200);
   assert.deepEqual([events[0].input.runId, events[0].input.purpose], ["run_interactive", "kernel"]);
 });
+
+test("different engine jobs retain their signed reasoning choice despite interleaved bodies", async t => {
+  const seen = [];
+  const tokens = ["low", "max", "off"].map(reasoningEffort => issueEngineModelToken({
+    secret: gatewaySecret, userId: "user-1", projectId: "project-1", kind: "peer-review",
+    jobId: `review-${reasoningEffort}-20260929`, runId: `run_${reasoningEffort}`,
+    sessionId: `session-${reasoningEffort}`, reasoningEffort, ttlSeconds: 3600,
+  }).token);
+  for (let index = 0; index < tokens.length; index++) {
+    const response = await gatewayCall(t, { token: tokens[index], upstreamBodies: seen,
+      body: { model: "pro-is-not-authorized", messages: [{ role: "user", content: "hi" }], reasoning_effort: "high" } });
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(seen.map(body => body.reasoning_effort), ["low", "max", undefined]);
+  assert.deepEqual(seen.map(body => body.thinking.type), ["enabled", "enabled", "disabled"]);
+  assert.ok(seen.every(body => body.model === "deepseek-v4-flash"));
+  assert.equal(verifyEngineModelToken(tokens[0], { secret: gatewaySecret }).sessionId, "session-low");
+});
