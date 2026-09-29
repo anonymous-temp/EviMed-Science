@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -35,7 +36,7 @@ class AnalysisExecutionTests(unittest.TestCase):
         attempt = self.receipt()[0]
         self.assertEqual(attempt['inputs'][0]['sha256'], hashlib.sha256((self.root / 'data.csv').read_bytes()).hexdigest())
         self.assertEqual(attempt['script']['sha256'], hashlib.sha256((self.root / 'analysis.py').read_bytes()).hexdigest())
-        self.assertEqual(attempt['argv'][0], sys.executable)
+        self.assertEqual(Path(attempt['argv'][0]).resolve(), Path(sys.executable).resolve())
         self.assertTrue(attempt['versions']['interpreter'])
         self.assertEqual(attempt['output']['observation'], 'created')
         self.assertIn('Infinity', (self.root / attempt['output']['raw']['path']).read_text())
@@ -83,6 +84,45 @@ class AnalysisExecutionTests(unittest.TestCase):
         self.assertNotEqual(attempts[0]['transforms'], attempts[1]['transforms'])
         self.assertEqual(attempts[1]['output']['observation'], 'rewritten_same_bytes')
         self.assertTrue(attempts[1]['output']['observedWrite'])
+
+    def test_failed_overwrite_preserves_previous_result_bytes(self):
+        self.run_script("from pathlib import Path\nPath('analysis-results.json').write_text('{\"analyses\":[{\"estimate\":7}]}')")
+        previous = (self.root / 'analysis-results.json').read_bytes()
+        result = self.run_script("from pathlib import Path\nPath('analysis-results.json').write_text('{broken')\nraise RuntimeError('formatting failed')")
+        self.assertNotEqual(result.returncode, 0)
+        backup = self.receipt()[1]['output']['beforeArtifact']
+        self.assertEqual((self.root / backup['path']).read_bytes(), previous)
+        self.assertEqual(backup['sha256'], hashlib.sha256(previous).hexdigest())
+        self.assertEqual((self.root / 'analysis-results.json').read_text(), '{broken')
+
+    def test_post_execution_symlink_escape_is_not_read_and_attempt_is_recorded(self):
+        with tempfile.TemporaryDirectory() as external:
+            source = Path(external) / 'outside.json'
+            source.write_text('{"private":1}')
+            result = self.run_script(f"from pathlib import Path\nPath('analysis-results.json').symlink_to({str(source)!r})")
+            self.assertNotEqual(result.returncode, 0)
+            attempt = self.receipt()[0]
+            self.assertEqual(attempt['exitCode'], 0)
+            self.assertEqual(attempt['output']['observation'], 'unreadable')
+            self.assertFalse(attempt['output']['observedWrite'])
+            self.assertNotIn('private', json.dumps(attempt))
+
+    @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
+    def test_native_r_execution_records_observed_versions(self):
+        (self.root / 'analysis.R').write_text("cat('{\"analyses\":[{\"estimate\":2}]}', file='analysis-results.json')")
+        result = self.run_script('print(1)', '--interpreter', 'r', '--script', 'analysis.R')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        attempt = self.receipt()[0]
+        self.assertIn('--vanilla', attempt['argv'])
+        self.assertIn('R version', attempt['versions']['interpreter'])
+        self.assertIn('survival', attempt['versions']['libraries'])
+        self.assertEqual(attempt['exitCode'], 0)
+
+    def test_malformed_result_is_preserved_and_logged_without_losing_execution(self):
+        result = self.run_script("from pathlib import Path\nPath('analysis-results.json').write_text('{broken')")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual((self.root / 'analysis-results.json').read_text(), '{broken')
+        self.assertEqual(self.receipt()[0]['warnings'][0]['code'], 'results_unreadable')
 
     def test_refuses_overlapping_outputs_and_does_not_replace_invalid_receipt(self):
         result = self.run_script('print(1)', '--results', 'data.csv')
