@@ -91,7 +91,7 @@ BACKUP_CONTAINER="${PROJECT}-open-science-backup-1"
 # Compose reads `.env` from the project directory itself. Sourcing it in bash
 # must not be attempted: `OPEN_SCIENCE_OIDC_SCOPES=openid profile email` is a
 # legal compose value and an illegal shell assignment.
-export COMPOSE_PROFILES="${COMPOSE_PROFILES:-backup,monitoring,receipt,web-search}"
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-$(env -u COMPOSE_PROFILES node --env-file="${REL}/OpenScience/deploy/web/.env" -e 'process.stdout.write(process.env.COMPOSE_PROFILES || "backup,monitoring,receipt,web-search")')}"
 
 # The backup's readiness code once the switch has read it (item 10); `ok`
 # until then. Every way the switch ends after the release is live goes
