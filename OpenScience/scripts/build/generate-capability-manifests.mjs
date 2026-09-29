@@ -262,9 +262,9 @@ export async function readEvaluations(root) {
       }
       const durationMs = Number(record.outcome.durationMs);
       const executions = runs.get(record.capability) ?? new Map();
-      // One execution may have many watcher files. Case and owner-project
-      // scope stay distinct even when a fixture reuses a run id.
-      const identity = JSON.stringify([record.capability, record.brief ?? record.caseId ?? "",
+      // One execution may have many watcher files or carrier brief labels.
+      // Different cases count separately only when they actually ran again.
+      const identity = JSON.stringify([record.capability,
         String(record.base ?? "").replace(/\/+$/, ""), record.project ?? "", record.runId]);
       const observed = evaluationTime(record.observedAt ?? record.dispatchedAt);
       const completed = evaluationTime(record.outcome.finishedAt ?? record.finishedAt);
