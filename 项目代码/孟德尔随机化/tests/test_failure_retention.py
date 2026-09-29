@@ -157,3 +157,20 @@ def test_incomplete_primary_csv_never_becomes_completed_partial_statistics(direc
         jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_analysis_failed", {})
     assert not list(output.iterdir())
     assert not list(output.rglob("mr_results.csv"))
+
+
+def test_zero_iv_catalogue_projection_preserves_stage_and_does_not_claim_independence(directories, tmp_path):
+    stage, _, source, _ = directories
+    (stage / "inputs").mkdir()
+    (stage / "inputs/open-exposure.csv").write_text("SNP,beta,se,pval\n")
+    (stage / "mendelian-randomization-open-sources.json").write_text(json.dumps({
+        "analysisStatus": "not_computed", "exposure": {"accession": "GCST000001"}, "outcome": {"accession": "GCST000002"},
+        "instrumentSelection": {"stage": "candidates_before_clumping", "ldChecked": False, "genomeWideSignificantVariants": 0}}))
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_open_no_instruments", {})
+    summary = json.loads((output / "partial-research.json").read_text())
+    assert summary["primary_estimate_available"] is False
+    assert summary["selection"]["stage"] == "candidates_before_clumping"
+    assert summary["selection"]["ldChecked"] is False
+    assert summary["source_accessions"] == ["GCST000001", "GCST000002"]
