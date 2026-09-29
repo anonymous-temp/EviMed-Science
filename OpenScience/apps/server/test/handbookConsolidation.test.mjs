@@ -156,3 +156,16 @@ test("an explicitly configured evaluation records its actual in-progress state",
   assert.equal(result.verification, "evaluated");
   assert.equal(result.evaluation.verdict, "non_inferior");
 });
+
+test("personal method lookups and mutations cannot read or reinterpret handbook records", async () => {
+  const f = fixture(); const candidate = await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry });
+  const applied = await loop.run({ job: f.queued[0] });
+  for (const id of [candidate.id, applied.handbookId]) {
+    const current = await f.documents.get("alice", "method", id);
+    await assert.rejects(f.learning.getMethod("alice", id), { code: "method_not_found" });
+    await assert.rejects(f.learning.retire("alice", id, { expectedRevision: current.revision }), { code: "method_not_found" });
+    await assert.rejects(f.learning.rollback("alice", id, { expectedRevision: current.revision, targetRevision: 1 }), { code: "method_not_found" });
+    assert.deepEqual(await f.documents.get("alice", "method", id), current);
+  }
+});
