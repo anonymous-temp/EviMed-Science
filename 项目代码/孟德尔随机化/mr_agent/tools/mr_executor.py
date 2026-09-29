@@ -422,10 +422,12 @@ def _parse_results(
         raw_data_path=output_dir,
     )
     current = _output_identities(output_dir)
-    files = {"summary": "summary.json", "instrumentStrength": "f_statistics.csv", "primaryEstimate": "mr_results.csv",
+    files = {"summary": "mr_summary.json", "instrumentSelection": "instrument-selection.json", "harmonisation": "harmonisation.json",
+             "instrumentStrength": "f_statistics.csv", "primaryEstimate": "mr_results.csv",
              "heterogeneity": "heterogeneity.csv", "pleiotropy": "pleiotropy.csv", "steiger": "steiger.csv",
              "presso": "mrpresso.csv", "radial": "radial.csv", "conmix": "conmix.csv"}
-    for name, parser in (("summary", _parse_summary), ("instrumentStrength", _parse_f_statistics),
+    for name, parser in (("summary", _parse_summary), ("instrumentSelection", _parse_selection_json),
+                         ("harmonisation", _parse_harmonisation_json), ("instrumentStrength", _parse_f_statistics),
                          ("primaryEstimate", _parse_mr_csv), ("heterogeneity", _parse_het_csv),
                          ("pleiotropy", _parse_plt_csv), ("steiger", _parse_steiger_csv),
                          ("presso", _parse_presso_csv), ("radial", _parse_radial_csv), ("conmix", _parse_conmix_csv)):
@@ -492,6 +494,9 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
     if isinstance(skipped, str):
         skipped = [skipped]
     result.skipped_analyses = [str(item) for item in skipped]
+
+
+def _parse_harmonisation_json(result: MRAnalysisResult, output_dir: Path) -> None:
     harmonisation_file = output_dir / "harmonisation.json"
     if harmonisation_file.is_file():
         try:
@@ -500,6 +505,9 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
             value = None
         if isinstance(value, dict):
             result.harmonisation = value
+
+
+def _parse_selection_json(result: MRAnalysisResult, output_dir: Path) -> None:
     selection_file = output_dir / "instrument-selection.json"
     if selection_file.exists():
         result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))

@@ -347,7 +347,8 @@ def _copy_release_artifacts(output_dir: Path, state, results: list, *, include_r
     allowed_suffixes = {".csv", ".json", ".png", ".pdf"}
     numerical_modules = {"mr_results.csv": "primaryEstimate", "heterogeneity.csv": "heterogeneity", "pleiotropy.csv": "pleiotropy",
                          "steiger.csv": "steiger", "mrpresso.csv": "presso", "radial.csv": "radial", "conmix.csv": "conmix", "f_statistics.csv": "instrumentStrength",
-                         "selected-source-rows.csv": "selectedSourceRows", "harmonised-rows.csv": "harmonisedRows"}
+                         "selected-source-rows.csv": "selectedSourceRows", "harmonised-rows.csv": "harmonisedRows",
+                         "mr_summary.json": "summary", "instrument-selection.json": "instrumentSelection", "harmonisation.json": "harmonisation"}
     for index, result in enumerate(results, start=1):
         raw = Path(result.raw_data_path).resolve() if result.raw_data_path else None
         plot_checks = diagnostic_plot_checks(result)
