@@ -35,6 +35,8 @@
     # deployment-independent form the header asks for: the bundle names the
     # variable, the deployment sets it, and a laptop with neither gets a row
     # that registers nothing and boots.
+    - id: evimed-engine-context
+      name: '@evimed/dsh-socket/plugins/engine-context'
     - id: evimed-web
       name: '@evimed/dsh-socket/plugins/web'
       config:

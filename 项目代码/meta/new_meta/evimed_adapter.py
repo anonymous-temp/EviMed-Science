@@ -644,7 +644,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
     # The same request while its job runs is that job: a run that lost the id
     # (or asked twice) gets it back instead of paying for a second review.
     for path, state in active:
-        if state.get("requestDigest") == digest:
+        if _same_execution(state, digest, execution_context):
             return _existing_job(path, state, "reused-running")
     limit = _positive_int_env("EVIMED_META_MAX_ACTIVE_JOBS", _DEFAULT_MAX_ACTIVE_JOBS)
     if len(active) >= limit:
@@ -660,7 +660,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
             ],
             stop_reason="Stop starting jobs until the running MetaAgent job is terminal.",
         )
-    previous = next(((path, state) for path, state in jobs if state.get("requestDigest") == digest), None)
+    previous = next(((path, state) for path, state in jobs if _same_execution(state, digest, execution_context)), None)
     if previous is not None:
         path, state = previous
         # A terminal decision is the answer to its request, blocked or not,
@@ -670,7 +670,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         if state.get("status") == "succeeded":
             return _existing_job(path, state, "reused-succeeded")
         if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
-            return _resume_job(path, state)
+            return _resume_job(path, state, workload_token=workload_token, execution_context=execution_context)
     job_id = f"meta-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
     model_credentials = {}
     if engine_model.enabled():
@@ -774,7 +774,15 @@ def _existing_job(state_path: Path, state: dict[str, Any], outcome: str) -> dict
     }
 
 
-def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
+def _same_execution(state: dict[str, Any], digest: str, context: dict | None) -> bool:
+    if state.get("requestDigest") != digest:
+        return False
+    selected = (context or {}).get("reasoningEffort")
+    return selected is None or (state.get("modelPolicy") or {}).get("reasoningEffort") == selected
+
+
+def _resume_job(state_path: Path, state: dict[str, Any], *, workload_token: str | None = None,
+                execution_context: dict | None = None) -> dict[str, Any]:
     """Run a failed job again from its own checkpoint, within the attempt limit."""
     job_id = str(state.get("jobId"))
     limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
@@ -793,6 +801,14 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
             artifacts=state.get("artifacts") or None,
             stop_reason="Stop retrying this request; its partial results are preserved.",
         )
+    model_credentials = {}
+    if engine_model.enabled():
+        try:
+            model_credentials = engine_model.request_credential(
+                url=engine_model.token_url(), secret=_read_signing_secret(), workload_token=workload_token,
+                kind="meta-analysis", job_id=job_id, execution_context=execution_context)
+        except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
+            return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta retry.", True)
     previous_error = state.get("error")
     for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid",
                 "releaseStatus", "blockingReasons", "warningReasons", "releaseSummary",
@@ -805,7 +821,7 @@ def _resume_job(state_path: Path, state: dict[str, Any]) -> dict[str, Any]:
         "previousError": previous_error,
     })
     _atomic_json(state_path, state)
-    failure = _launch_worker(state_path, state)
+    failure = _launch_worker(state_path, state, model_credentials=model_credentials)
     if failure is not None:
         return failure
     starts = _record_start_request(state_path, "resumed")

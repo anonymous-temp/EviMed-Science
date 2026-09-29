@@ -249,7 +249,9 @@ def _python(spec, root):
     return executable
 
 
-def _model_environment():
+def _model_environment(execution_context=None):
+    from execution_context import model_environment
+    policy = model_environment(execution_context)
     # The three facts a specialist run needs — gateway URL, model, token —
     # arrive as two environment variables plus a bare token file.
     #
@@ -295,8 +297,6 @@ def _model_environment():
             True,
         )
     return {
-        # Budget metadata for the fixed gateway policy, never request authority.
-        "EVIMED_MODEL_GATEWAY_POLICY": "high-thinking",
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": base_url.rstrip("/"),
         "DEEPSEEK_PRO_MODEL": "deepseek-flash",
@@ -304,8 +304,7 @@ def _model_environment():
         "LLM_API_KEY": api_key,
         "LLM_BASE_URL": base_url.rstrip("/"),
         "LLM_MODEL": "deepseek-flash",
-        "LLM_ENABLE_THINKING": "true",
-        "LLM_REASONING_EFFORT": "high",
+        **policy,
         "LLM_MAX_CONCURRENT": "2",
         "MAX_CONCURRENT_REVIEWS": "1",
         "MAX_CONCURRENT_REVIEWS_V2": "1",
@@ -436,7 +435,7 @@ def capabilities(tool_name):
     }
 
 
-def start_job(tool_name, arguments):
+def start_job(tool_name, arguments, execution_context=None):
     spec = SPECS[tool_name]
     allowed = {"action", *spec["inputs"]}
     if tool_name == "research_topic_selection":
@@ -466,7 +465,7 @@ def start_job(tool_name, arguments):
         )
     root = _root(spec)
     python = _python(spec, root)
-    model_environment = _model_environment()
+    model_environment = _model_environment(execution_context)
     workspace = _workspace()
     request = {key: arguments.get(key) for key in spec["inputs"] if arguments.get(key) is not None}
     if tool_name == "peer_review":
@@ -652,13 +651,13 @@ def status_job(tool_name, arguments):
     }
 
 
-def call(tool_name, arguments):
+def call(tool_name, arguments, execution_context=None):
     try:
         action = arguments.get("action")
         if action == "capabilities":
             return capabilities(tool_name)
         if action == "start":
-            return start_job(tool_name, arguments)
+            return start_job(tool_name, arguments, execution_context)
         if action == "status":
             return status_job(tool_name, arguments)
         raise SpecialistJobError("specialist_action_invalid", "Unsupported specialist action.")

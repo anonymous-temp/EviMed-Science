@@ -2134,7 +2134,7 @@ def _dispatch(name, arguments, execution_context=None):
     if name == "meta_analysis" and not os.environ.get("EVIMED_META_ANALYSIS_URL", "").strip():
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
-        return meta_agent.call(arguments)
+        return meta_agent.call(arguments, execution_context=execution_context) if execution_context else meta_agent.call(arguments)
     if name == "literature_search" and not any(arguments.get(key) for key in ("query", "relation", "pmids")):
         return failure(
             "invalid_input",
@@ -2196,7 +2196,7 @@ def _dispatch(name, arguments, execution_context=None):
             return _managed_status_with_wait(
                 lambda value: specialist_jobs.status_job(name, value), arguments
             )
-        return specialist_jobs.call(name, arguments)
+        return specialist_jobs.call(name, arguments, execution_context=execution_context) if execution_context else specialist_jobs.call(name, arguments)
     return (_adapter_call(name, arguments, execution_context=execution_context) if execution_context is not None
             else _adapter_call(name, arguments))
 

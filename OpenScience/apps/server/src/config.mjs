@@ -45,7 +45,7 @@ const bundledEviMedMcpDir = path.resolve(
 
 /** DeepSeek's thinking-effort levels, exactly. Anything else is a typo that
  *  would otherwise ride to the provider on every call. */
-export const DEEPSEEK_REASONING_EFFORTS = Object.freeze(["low", "high", "max"]);
+export const DEEPSEEK_REASONING_EFFORTS = Object.freeze(["off", "low", "high", "max"]);
 
 /** @param {unknown} value */
 function parseReasoningEffort(value) {

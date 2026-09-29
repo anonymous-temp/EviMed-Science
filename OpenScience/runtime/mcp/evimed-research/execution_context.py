@@ -13,3 +13,15 @@ def validate_context(value):
             or ("reasoningEffort" in value and value["reasoningEffort"] not in {"off", "low", "high", "max"})):
         raise ValueError("invalid engine execution context")
     return dict(value)
+
+
+def model_environment(context=None):
+    """A per-call choice; never modify the runtime's shared environment."""
+    import os
+    selected = validate_context(context).get("reasoningEffort") if context is not None else None
+    effort = selected or os.environ.get("EVIMED_MODEL_GATEWAY_REASONING_EFFORT", "high")
+    if effort not in {"off", "low", "high", "max"}:
+        raise ValueError("invalid managed reasoning effort")
+    return {"LLM_ENABLE_THINKING": "false" if effort == "off" else "true",
+            "LLM_REASONING_EFFORT": effort,
+            "EVIMED_MODEL_GATEWAY_POLICY": "high-thinking" if effort in {"high", "max"} else "managed-thinking"}

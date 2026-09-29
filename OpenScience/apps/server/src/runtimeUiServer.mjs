@@ -1,3 +1,4 @@
+import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
@@ -187,6 +188,18 @@ function destroyUpgrade(socket, status, code) {
     socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
   } catch { /* the peer may already be gone */ }
   socket.destroy();
+}
+
+/** @param {Record<string, any>} config @param {any} payload */
+function assertNativeModelSelection(config, payload) {
+  const request = payload?.args?.request;
+  if (!exactFields(payload, ["args"]) || !exactFields(payload.args, ["request"])
+    || !exactFields(request, ["sessionId", "provider", "model", "reasoningEffort"])
+    || typeof request.sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(request.sessionId)
+    || request.provider !== "deepseek-official" || request.model !== config.deepseekModel
+    || (request.reasoningEffort !== undefined && !MODEL_REASONING_EFFORTS.includes(request.reasoningEffort))) {
+    throw new HttpError(403, "runtime_ui_model_selection_forbidden", "Only the certified model's thinking intensity can be changed.");
+  }
 }
 
 /**
@@ -473,6 +486,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     }
     let workspaceBody = null;
     let promptBody = null;
+    let modelBody = null;
     if (method === "session/prompt" && (authorizePrompt || agentRuns)) {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
@@ -480,6 +494,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       if (promptBody?.type !== "client-request" || promptBody.method !== "session/prompt") {
         throw new HttpError(400, "runtime_ui_prompt_invalid", "A native prompt RPC is required.");
       }
+    }
+    if (method === "session/selectModel") {
+      if (req.method !== "POST") { sendDenied(res, method); return; }
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      try { modelBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (modelBody?.type !== "client-request" || modelBody.method !== method) { sendDenied(res, method); return; }
+      assertNativeModelSelection(config, modelBody.payload);
     }
     if (method === "workspace/create" && req.method === "POST") {
       const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
@@ -574,6 +596,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
       else await forwardPrompt();
+    } else if (method === "session/selectModel") {
+      const select = async () => { await authorizePromptSession(project, modelBody?.payload); return forward(); };
+      if (authorizeMutation) await authorizeMutation(select); else await select();
     } else await forward();
   }
 
@@ -616,6 +641,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           }
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
           assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project));
+          if (endpoint === "session/selectModel") {
+            assertNativeModelSelection(config, payload);
+            await authorizePromptSession(project, payload);
+          }
           if (endpoint === "session/prompt") {
             // The mux's plugin admission owns the full upstream operation. This
             // short maintenance admission serializes its start with an expiring

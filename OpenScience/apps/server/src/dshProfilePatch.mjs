@@ -73,7 +73,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @typedef {object} ProfilePatchInput
  * @property {string} modelGatewayUrl        absolute URL of /internal/model/v1
  * @property {string} model                  the certified model id
- * @property {string} [reasoningEffort]      low | high | max; the gateway enforces the same value
+ * @property {string} [reasoningEffort]      off | low | high | max; initial default for unconfigured sessions
  * @property {number} contextWindow
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
@@ -377,7 +377,6 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   "ui-settings-web-search",
   "ui-settings-plugin-inventory",
   "ui-settings-plugins",
-  "ui-model-selection",
   // The composition names this row `ui-permission`, not
   // `ui-permission-presets` after its package. Written from the package name it
   // addressed nothing, and the check that reads the recorded composition is

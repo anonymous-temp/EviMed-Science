@@ -213,10 +213,8 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
   "agentPresets/select",
   "agentPresets/copy",
   "agentPresets/deletePreset",
-  // The model is certified per release by the model gateway. A page that
-  // chooses one would produce runs whose receipt names a different model.
-  "session/selectModel",
-  "session/modelCatalog",
+  // selectModel is admitted by the native proxy only for the certified
+  // provider/model and a closed reasoning effort; provider settings stay denied.
   // Opening a workspace path is a host integration: it asks the machine
   // running the kernel to reveal or open a directory.
   "session/openWorkspacePath",

@@ -92,7 +92,8 @@ def _is_dashscope_responses_search_model(model: str) -> bool:
 def _is_deepseek_v4_chat(base_url: str, model: str) -> bool:
     base = str(base_url or "").rstrip("/").lower()
     model_name = str(model or "").strip().lower()
-    return "api.deepseek.com" in base and model_name in {
+    managed = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") in {"high-thinking", "managed-thinking"}
+    return ("api.deepseek.com" in base or managed) and model_name in {
         "deepseek-flash",
         "deepseek-v4-flash-vision-exp",
         "deepseek-v4-flash",
