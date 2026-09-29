@@ -180,7 +180,10 @@ const job = () => ({
   jobId: "job_1", studyId: "std_1", kind: "design_simulation", method: "design.simulate",
   methodVersion: "1.0.0", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, seed: 20260928,
   replicates: 20_000, cpuSecondsLimit: 600,
-  scenario: { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" } },
+  scenario: {
+    design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" },
+    truth: { hazardRatio: 0.6, controlMedian: 12 },
+  },
   inputs: [{ kind: "assumption", id: "asm_1@3", value: { hr: 0.6 } }],
 });
 
@@ -191,21 +194,25 @@ test("a well-formed job validates, and a mismatched protocol or unknown method d
   assert.ok(validateEngineJob({ ...job(), seed: -1 }).some((issue) => issue.code === "seed_invalid"));
 });
 
-test("a job that reads patient-level rows must name the snapshot it was granted", () => {
-  const issues = validateEngineJob({ ...job(), kind: "weight_comparator", method: "comparator.entropy_balance" });
-  assert.ok(issues.some((issue) => issue.code === "snapshot_required"));
-  const withSnapshot = validateEngineJob({
-    ...job(), kind: "weight_comparator", method: "comparator.entropy_balance",
-    inputs: [{ kind: "snapshot", id: "snp_1", hash: "a".repeat(64) }],
+test("a job that reads patient-level rows must carry the table the control plane built from the granted snapshot", () => {
+  const weighting = { ...job(), kind: "weight_comparator", method: "comparator.entropy_balance", scenario: { covariates: ["age"] } };
+  const issues = validateEngineJob(weighting);
+  assert.ok(issues.some((issue) => issue.code === "patient_input_required"));
+  // The caller's own spelling is not what the engine receives.
+  assert.ok(validateEngineJob({ ...weighting, inputs: [{ kind: "snapshot", id: "snp_1", hash: "a".repeat(64) }] })
+    .some((issue) => issue.code === "input_kind_caller_only"));
+  const withTable = validateEngineJob({
+    ...weighting,
+    inputs: [{ kind: "analysis_table", id: "snp_1:subject", shape: "subject", location: "std_1/snp_1/subject.csv", hash: "a".repeat(64), valueSource: "observed" }],
   });
-  assert.deepEqual(withSnapshot, []);
+  assert.deepEqual(withTable, []);
 });
 
 const result = () => ({
-  jobId: "job_1", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: "succeeded",
-  method: "design.simulate", methodVersion: "1.0.0", scenarioHash: "b".repeat(64), seed: 20260928,
-  measures: [{ name: "power", value: 0.81, simulated: true, mcse: 0.003, interval: { kind: "monte_carlo", low: 0.8, high: 0.82 } }],
-  manifest: { engineVersion: "1.0.0", rVersion: "R 4.3.3", packageLockHash: "c".repeat(64), startedAt: "t", finishedAt: "t", cpuSeconds: 1 },
+  jobId: "job_1", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: "succeeded", conclusion: "estimable",
+  method: "design.simulate", methodVersion: "1.0.0", scenarioHash: "b".repeat(64), seed: 20260928, replicates: 20_000,
+  measures: [{ name: "power", value: 0.81, simulated: true, mcse: 0.003, source: "calculated", interval: { kind: "monte_carlo", low: 0.8, high: 0.82 } }],
+  manifest: { engineVersion: "1.0.0", rVersion: "R 4.3.3", packageLockHash: "c".repeat(64), startedAt: "t", finishedAt: "t", cpuSeconds: 1, outputHash: "d".repeat(64) },
 });
 
 test("a simulated measure without a Monte-Carlo standard error is refused (AC-28)", () => {
@@ -216,7 +223,7 @@ test("a simulated measure without a Monte-Carlo standard error is refused (AC-28
 });
 
 test("a not-estimable result names the rule that fired, and a manifest states its environment", () => {
-  const notEstimable = { ...result(), status: "not_estimable" };
+  const notEstimable = { ...result(), status: "not_estimable", conclusion: "not_estimable" };
   assert.ok(validateEngineResult(notEstimable).some((issue) => issue.code === "not_estimable_rule_missing"));
   const noEnv = result();
   delete /** @type {any} */ (noEnv).manifest.rVersion;

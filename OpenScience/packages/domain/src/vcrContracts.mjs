@@ -31,6 +31,7 @@
 import {
   VCR_CONCLUSIONS, VCR_COUNT_KEYS, VCR_CRITERION_STATES, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
+import { validateRequirement } from './vcrRules.mjs'
 
 /** @typedef {{ code: string, message: string, severity: 'required'|'advisory', path?: string, check?: string }} VcrIssue */
 /** @typedef {{ issues: VcrIssue[], metrics: Record<string, unknown> }} VcrFindings */
@@ -45,6 +46,8 @@ export const VCR_CHECK_IDS = Object.freeze([
   'vcr-assumption-source',
   'vcr-simulation-report-shape',
   'vcr-matching-state-shape',
+  'vcr-criteria-shape',
+  'vcr-package-cover',
 ])
 
 /** The machine-readable result file every package ships beside its prose. */
@@ -53,6 +56,16 @@ export const VCR_RESULTS_FILE = 'results.json'
 export const VCR_SIMULATION_FILE = 'simulation.json'
 /** The matching assessment's structured companion (plan §7.1). */
 export const VCR_MATCHING_FILE = 'matching.json'
+/** The protocol step's structured eligibility criteria (plan §7.1). */
+export const VCR_CRITERIA_FILE = 'criteria.json'
+/** The study package's own document, whose cover states review and sealing. */
+export const VCR_PACKAGE_FILE = 'study-package.md'
+/**
+ * Files that are the run's own back office (principle 10a): revision notes name
+ * numbers being changed, not numbers being reported, so they are not read for
+ * provenance.
+ */
+export const VCR_BACKSTAGE_FILES = Object.freeze(['revision-notes.md'])
 
 /** @param {string} code @param {string} message @param {{path?: string, check?: string}} [extra] @returns {VcrIssue} */
 const notice = (code, message, extra = {}) => ({ code, message, severity: 'advisory', ...extra })
@@ -69,8 +82,13 @@ function parsed(files, path) {
  * @param {any} files
  */
 function proseOf(files) {
-  return [...files.keys()].filter((path) => path.endsWith('.md')).sort()
+  return [...files.keys()]
+    .filter((path) => path.endsWith('.md') && !VCR_BACKSTAGE_FILES.includes(String(path.split('/').pop())))
+    .sort()
 }
+
+/** A confidence level written as a label: 95% CI, 95%置信区间, 90 % CrI. */
+const INTERVAL_LEVEL_LABEL = /\d{1,3}(?:\.\d+)?\s*%\s*(?:CI|CrI|PI|置信区间|可信区间|预测区间|蒙特卡洛区间)/gi
 
 /**
  * Numbers a reader sees in prose, with the year-like and list-index shapes
@@ -81,9 +99,12 @@ function proseOf(files) {
 export function proseNumbers(text) {
   /** @type {string[]} */
   const found = []
+  // 「95% CI」 and 「95%置信区间」 name the interval's level, not a result: the
+  // label is read past, so the 95 in it is not a number to trace.
+  const unlabelled = String(text).replace(INTERVAL_LEVEL_LABEL, ' ')
   const pattern = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g
   let match
-  while ((match = pattern.exec(text))) {
+  while ((match = pattern.exec(unlabelled))) {
     const raw = match[1]
     const value = Number(raw.replace(/,/g, ''))
     if (!Number.isFinite(value)) continue
@@ -99,15 +120,24 @@ export function proseNumbers(text) {
  * @param {any} value @param {Set<string>} [out]
  */
 export function resultNumbers(value, out = new Set()) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    out.add(String(value))
-    out.add(String(Math.round(value)))
-    for (const digits of [1, 2, 3]) out.add(value.toFixed(digits))
-    out.add(String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ','))
-    if (value > 0 && value < 1) {
-      const percent = value * 100
-      out.add(String(Number(percent.toFixed(6))))
-      for (const digits of [0, 1, 2]) out.add(percent.toFixed(digits))
+  // A number that arrives as a numeric string ("0.81") is the same number to a
+  // reader; a template bound to it renders it the same way.
+  const numeric = typeof value === 'string' && /^\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s*$/.test(value) ? Number(value) : value
+  if (typeof numeric === 'number' && Number.isFinite(numeric)) {
+    // Prose writes the magnitude and the sign apart (「偏倚 -0.12」, 「−0.12」,
+    // 「下降 0.12」), and the scan reads the digits, so a negative is known by
+    // its absolute value too.
+    const magnitude = Math.abs(numeric)
+    for (const each of numeric === magnitude ? [numeric] : [numeric, magnitude]) {
+      out.add(String(each))
+      out.add(String(Math.round(each)))
+      for (const digits of [1, 2, 3]) out.add(each.toFixed(digits))
+      out.add(String(Math.round(each)).replace(/\B(?=(\d{3})+(?!\d))/g, ','))
+      if (each > 0 && each < 1) {
+        const percent = each * 100
+        out.add(String(Number(percent.toFixed(6))))
+        for (const digits of [0, 1, 2]) out.add(percent.toFixed(digits))
+      }
     }
   } else if (Array.isArray(value)) {
     for (const item of value) resultNumbers(item, out)
@@ -118,11 +148,14 @@ export function resultNumbers(value, out = new Set()) {
 }
 
 /**
- * The study package: prose plus the results it renders from.
+ * What every package that renders from a `results.json` shares: the results
+ * parse, the numbers in prose trace to them, the four counts are apart, the
+ * conclusion is stated, intervals are named, assumptions are anchored. The
+ * comparator and cohort packages are exactly this plus their own section.
  * @param {{ files: Map<string, string> }} input
  * @returns {VcrFindings}
  */
-export function vcrStudyPackageFindings(input) {
+function packageFindings(input) {
   /** @type {VcrIssue[]} */
   const issues = []
   /** @type {Record<string, unknown>} */
@@ -180,7 +213,13 @@ export function vcrStudyPackageFindings(input) {
     issues.push(notice('vcr_conclusion_missing', `结果要写明科学结论（${VCR_CONCLUSIONS.join(' / ')}）。`,
       { path: VCR_RESULTS_FILE, check: 'vcr-conclusion-stated' }))
   } else if (conclusion === 'not_estimable' && !VCR_NOT_ESTIMABLE_RULES.includes(results.notEstimableRule)) {
-    issues.push(notice('vcr_not_estimable_rule_missing', '「不可估计」要写明触发的确定性规则和缺口清单（方案 §5.3）。',
+    // Say which field, and what is wrong with it: 「不可估计」 is a finished
+    // result and the rule that fired is what makes it one (plan §5.3).
+    const present = results.notEstimableRule !== undefined && results.notEstimableRule !== null && results.notEstimableRule !== ''
+    issues.push(notice('vcr_not_estimable_rule_missing',
+      present
+        ? `${VCR_RESULTS_FILE} 的 notEstimableRule 是「${String(results.notEstimableRule)}」，不在确定性规则的词表里（${VCR_NOT_ESTIMABLE_RULES.join(' / ')}）（方案 §5.3）。`
+        : `${VCR_RESULTS_FILE} 缺 notEstimableRule 字段：结论为 not_estimable 时要写明触发的确定性规则（${VCR_NOT_ESTIMABLE_RULES.join(' / ')}）（方案 §5.3）。`,
       { path: VCR_RESULTS_FILE, check: 'vcr-conclusion-stated' }))
   }
   metrics.vcrConclusion = conclusion ?? null
@@ -208,6 +247,107 @@ export function vcrStudyPackageFindings(input) {
     }
   }
   return { issues, metrics }
+}
+
+/** How many findings of one kind a package reports in full before it summarises the rest. */
+const FINDING_DETAIL_CAP = 5
+
+/**
+ * The criteria a protocol step wrote (`criteria.json`): every one is a
+ * requirement the matching step can evaluate, kept beside the sentence it came
+ * from (plan §7.1). A requirement outside the closed grammar would read 「未知」
+ * for every patient without saying why, and a criterion without its source
+ * sentence cannot be checked against the protocol.
+ * @param {Map<string, string>} files @param {VcrIssue[]} issues @param {Record<string, unknown>} metrics
+ */
+function criteriaFindings(files, issues, metrics) {
+  const criteria = parsed(files, VCR_CRITERIA_FILE)
+  if (criteria === null) return
+  if (criteria === undefined) {
+    issues.push(notice('vcr_criteria_unreadable', `${VCR_CRITERIA_FILE} 不是有效的 JSON，入排条件无法核对。`, { path: VCR_CRITERIA_FILE, check: 'vcr-criteria-shape' }))
+    return
+  }
+  const list = Array.isArray(criteria) ? criteria : Array.isArray(criteria?.criteria) ? criteria.criteria : null
+  if (!list) {
+    issues.push(notice('vcr_criteria_not_list', `${VCR_CRITERIA_FILE} 应是入排条件的数组。`, { path: VCR_CRITERIA_FILE, check: 'vcr-criteria-shape' }))
+    return
+  }
+  let invalid = 0
+  let unanchored = 0
+  list.forEach((/** @type {any} */ criterion, /** @type {number} */ index) => {
+    const at = `criteria[${index}]`
+    const requirement = criterion?.requirement
+    const found = requirement && typeof requirement === 'object' ? validateRequirement(requirement, { path: `${at}.requirement` }) : null
+    if (!found || found.length) {
+      invalid += 1
+      if (invalid <= FINDING_DETAIL_CAP) {
+        const first = found?.[0]
+        issues.push(notice('vcr_criterion_requirement_invalid',
+          `第 ${index + 1} 条入排条件的 requirement ${first ? `不符合封闭语法（${first.code}，位置 ${first.field}）` : '缺失'}；判不了的条件写成 { "op": "language", "text": "…" }（契约 §2.2）。`,
+          { path: VCR_CRITERIA_FILE, check: 'vcr-criteria-shape' }))
+      }
+    }
+    const text = typeof criterion?.sourceText === 'string' && criterion.sourceText.trim().length > 0
+    const locator = criterion?.sourceLocator && typeof criterion.sourceLocator === 'object' && Object.keys(criterion.sourceLocator).length > 0
+    if (!text || !locator) {
+      unanchored += 1
+      if (unanchored <= FINDING_DETAIL_CAP) {
+        issues.push(notice('vcr_criterion_source_missing',
+          `第 ${index + 1} 条入排条件缺${[!text ? '原句 sourceText' : null, !locator ? '出处 sourceLocator' : null].filter(Boolean).join('和')}：原文要照抄并指回位置，才能对照方案检查（方案 §7.1）。`,
+          { path: VCR_CRITERIA_FILE, check: 'vcr-criteria-shape' }))
+      }
+    }
+  })
+  for (const [count, what] of [[invalid, 'requirement 不合语法'], [unanchored, '缺原句或出处']]) {
+    if (/** @type {number} */ (count) > FINDING_DETAIL_CAP) {
+      issues.push(notice('vcr_criteria_more', `另有 ${/** @type {number} */ (count) - FINDING_DETAIL_CAP} 条入排条件${what}。`, { path: VCR_CRITERIA_FILE, check: 'vcr-criteria-shape' }))
+    }
+  }
+  metrics.vcrCriteria = list.length
+  metrics.vcrCriteriaInvalid = invalid
+  metrics.vcrCriteriaUnanchored = unanchored
+}
+
+/**
+ * The cover of a study package states two things the reader cannot otherwise
+ * see: whether anyone reviewed it, and — under a confirmatory use — when the
+ * analysis plan was frozen and when the outcome was first read (plan §10.2,
+ * AC-32). Both are read from the structured `results.json` the cover is
+ * rendered from, never from the prose.
+ * @param {Map<string, string>} files @param {any} results @param {VcrIssue[]} issues @param {Record<string, unknown>} metrics
+ */
+function coverFindings(files, results, issues, metrics) {
+  if (!files.has(VCR_PACKAGE_FILE) || !results || typeof results !== 'object') return
+  const at = { path: VCR_RESULTS_FILE, check: 'vcr-package-cover' }
+  if (!results.review || typeof results.review !== 'object') {
+    issues.push(notice('vcr_cover_review_missing', `封面缺复核状态：${VCR_RESULTS_FILE} 没有 review 字段；未复核也要照实写成「未复核」（方案 §10.2）。`, at))
+  }
+  const use = String(results.intendedUse ?? results.study?.intendedUse ?? '')
+  const confirmatory = use === 'specified_analysis' || use === 'submission_preparation'
+  metrics.vcrConfirmatory = confirmatory
+  if (confirmatory && String(results.study?.dataTier ?? 'T1') !== 'T0') {
+    const seal = results.seal && typeof results.seal === 'object' ? results.seal : {}
+    for (const field of ['planFrozenAt', 'outcomeFirstReadAt']) {
+      if (typeof seal[field] !== 'string' || !seal[field]) {
+        issues.push(notice('vcr_cover_seal_missing',
+          `确证性用途的封面要并列两个封存时间戳，${VCR_RESULTS_FILE} 的 seal.${field} 缺失（${field === 'planFrozenAt' ? '分析计划冻结时间' : '结局字段首次读取时间'}）（方案 §8.1，AC-32）。`, at))
+      }
+    }
+  }
+}
+
+/**
+ * The study package: prose plus the results it renders from, the criteria the
+ * protocol step structured, and the cover's review and sealing statements.
+ * @param {{ files: Map<string, string> }} input
+ * @returns {VcrFindings}
+ */
+export function vcrStudyPackageFindings(input) {
+  const base = packageFindings(input)
+  const results = parsed(input.files, VCR_RESULTS_FILE)
+  criteriaFindings(input.files, base.issues, base.metrics)
+  coverFindings(input.files, results, base.issues, base.metrics)
+  return base
 }
 
 /**
@@ -252,7 +392,7 @@ export function vcrSimulationReportFindings(input) {
  * @returns {VcrFindings}
  */
 export function vcrComparatorFindings(input) {
-  const base = vcrStudyPackageFindings(input)
+  const base = packageFindings(input)
   const results = parsed(input.files, VCR_RESULTS_FILE)
   if (!results || typeof results !== 'object') return base
   const diagnostics = results.diagnostics ?? null
@@ -273,7 +413,7 @@ export function vcrComparatorFindings(input) {
  * @returns {VcrFindings}
  */
 export function vcrCohortFindings(input) {
-  const base = vcrStudyPackageFindings(input)
+  const base = packageFindings(input)
   const results = parsed(input.files, VCR_RESULTS_FILE)
   if (!results || typeof results !== 'object') return base
   const waterfall = Array.isArray(results.waterfall) ? results.waterfall : []

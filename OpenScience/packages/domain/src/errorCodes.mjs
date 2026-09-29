@@ -222,6 +222,44 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "vcr_response_too_large",
   "engine_unavailable",
   "registry_unavailable",
+  // The trial registry answered, or could not, in a way that is a fact about the
+  // record and not about the run: not configured here, no such record, a record
+  // or an answer this build cannot read. The run reports the registry item as
+  // 「不可得」 and goes on — it never writes a registry field it did not read.
+  "registry_not_configured",
+  "registry_not_found",
+  "registry_record_unreadable",
+  "registry_answer_unreadable",
+  // What a computation's status can tell a run (`vcr_simulate` `status`): the
+  // engine was not there, did not answer in time, or answered with something the
+  // control plane will not take as a result (a receipt that does not verify, a
+  // result that does not echo the job). Each means 「这一步暂不可用」, and the
+  // study's other steps stand: a number the engine did not compute is never
+  // written by the run instead.
+  "vcr_engine_unconfigured",
+  "vcr_engine_not_composed",
+  "vcr_engine_unreachable",
+  "vcr_engine_timeout",
+  "vcr_engine_secret_missing",
+  "vcr_engine_token_file_short",
+  "vcr_engine_receipt_key_file_unavailable",
+  "vcr_engine_catalogue_mismatch",
+  "vcr_engine_not_found",
+  "vcr_engine_response_invalid",
+  "vcr_engine_receipt_invalid",
+  "vcr_engine_result_invalid",
+  "vcr_engine_result_mismatch",
+  "vcr_job_failed",
+  "vcr_job_canceled",
+  // Parts of the module this deployment has not opened: the data plane, the
+  // evidence and matching subsystems, the access check. The T0 steps, which
+  // need none of them, run as always.
+  "vcr_data_plane_unavailable",
+  "vcr_data_plane_not_configured",
+  "vcr_data_plane_unconfigured",
+  "vcr_evidence_unavailable",
+  "vcr_matching_unavailable",
+  "vcr_access_unavailable",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -494,6 +532,30 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_simulate_action_invalid",
   "vcr_simulate_payload_invalid",
   "vcr_job_not_found",
+  // The run's own request was wrong: a job the engine's protocol refuses (the
+  // scenario names a key the method does not read, a design it does not
+  // implement, a number out of its range), or an engine that rejected what the
+  // control plane sent. And the per-item refusals of a write, which are answered
+  // as `issues` beside the items that were written rather than failing the
+  // call: they are here because the run's answer to each is the same — correct
+  // that item and write it again — and a code no set names would inherit
+  // "fails the run" by omission.
+  "vcr_job_scenario_invalid",
+  "vcr_job_kind_invalid",
+  "vcr_engine_job_invalid",
+  "vcr_engine_rejected",
+  "registry_id_invalid",
+  "vcr_write_empty",
+  "vcr_write_field_forbidden",
+  "vcr_write_refused",
+  "vcr_write_value_invalid",
+  "vcr_criterion_malformed",
+  "vcr_evidence_unverified",
+  "vcr_number_format_unknown",
+  "vcr_number_mcse_missing",
+  "vcr_number_typed",
+  "vcr_number_unbound",
+  "vcr_interval_unnamed",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -936,6 +998,147 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'vcr_simulate_action_invalid',
   'vcr_simulate_payload_invalid',
   'registry_unavailable',
+  // What the trial registry channel answers (`trialRegistryClient.mjs`): each
+  // reaches the run as itself, because 「没有这条登记」 and 「登记库没配置」 are
+  // different facts and the run reports them differently.
+  'registry_not_configured',
+  'registry_not_found',
+  'registry_id_invalid',
+  'registry_record_unreadable',
+  'registry_answer_unreadable',
+])
+
+/**
+ * The per-item issue codes of `vcr_write` and its report renderer (2026-09-29):
+ * an item refused in `issues` while the rest of the write stands, a criterion
+ * whose requirement is outside the closed grammar, an evidence citation the
+ * platform could not verify against the record it names, a number in a report
+ * that is typed rather than bound. The run reads them and corrects that item.
+ */
+export const VCR_WRITE_ISSUE_CODES = Object.freeze([
+  'vcr_write_empty',
+  'vcr_write_field_forbidden',
+  'vcr_write_refused',
+  'vcr_write_value_invalid',
+  'vcr_criterion_malformed',
+  'vcr_evidence_unverified',
+  'vcr_number_format_unknown',
+  'vcr_number_mcse_missing',
+  'vcr_number_typed',
+  'vcr_number_unbound',
+  'vcr_interval_unnamed',
+])
+
+/**
+ * The rest of 「虚拟临研」's codes: refusals and states of the module's own
+ * subsystems that a page shows a person (members, access to data, the data
+ * plane, the engine channel, the referral ledger and its contact stop) and the
+ * background loops' health. None reaches a run's verdict — the gateway hands the
+ * run only the codes in `VCR_GATEWAY_ERROR_CODES` — but each is held to a
+ * sentence, and the server's scan of its own sources holds every literal to
+ * this list (`vcrErrorCodesRegistered.test.mjs`).
+ */
+export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  // members and access to data
+  'vcr_member_role_unknown',
+  'vcr_member_user_required',
+  'vcr_member_owner_fixed',
+  'vcr_access_no_actor',
+  'vcr_role_forbids',
+  'vcr_no_grant',
+  'vcr_source_not_found',
+  'vcr_source_withdrawn',
+  'vcr_purpose_not_granted',
+  'vcr_outside_window',
+  'vcr_field_not_granted',
+  'vcr_field_sealed',
+  'vcr_field_identifying',
+  'vcr_snapshot_not_found',
+  'vcr_snapshot_not_named',
+  // the data plane
+  'vcr_analysis_table_invalid',
+  'vcr_artifact_outside_plane',
+  'vcr_artifact_remove_failed',
+  'vcr_data_plane_location_missing',
+  'vcr_data_plane_location_outside',
+  'vcr_data_plane_location_runtime_readable',
+  'vcr_snapshot_profile_failed',
+  // the engine channel and its jobs
+  'vcr_engine_job_remove_failed',
+  'vcr_engine_result_mismatch',
+  // the referral ledger and its contact stop
+  'vcr_referral_state_unknown',
+  'vcr_referral_transition_invalid',
+  'vcr_referral_transition_refused',
+  'vcr_referral_role_forbidden',
+  'vcr_referrals_contact_needs_approval',
+  'vcr_contact_not_approved',
+  'vcr_contact_role_forbidden',
+  'vcr_contact_approval_not_per_person',
+  'vcr_screen_failure_needs_criterion',
+  'vcr_enrollment_needs_date',
+  'vcr_exit_field_not_derivable',
+  'vcr_exit_date_rewritten',
+  'vcr_exit_reason_rewritten',
+  'vcr_followup_kind_unknown',
+  'vcr_restricted_field_not_marked',
+  'vcr_site_not_found',
+  'vcr_model_exists',
+  // the module's own health
+  'vcr_migration_failed',
+  'vcr_loop_failed',
+  'vcr_orchestrator_failed',
+  'vcr_worker_loop_missing',
+  'vcr_worker_loop_failing',
+  'vcr_worker_loop_stalled',
+])
+
+/**
+ * The issue codes the engine protocol's validators return
+ * (`validateEngineJob`, `validateCallerInputs`, `validateScenario`,
+ * `validateRowRule`, `validateRequirement`, `validateEngineResult`,
+ * `validateCounts`): one per refused field, rendered to the person or model that
+ * caused it. They live with the protocol in `vcrEngineJob.mjs` and
+ * `vcrRules.mjs`; the test `vcrProtocolCodesRegistered` walks those sources.
+ */
+export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
+  // a job
+  'job_not_object', 'job_field_unknown', 'job_id_invalid', 'study_id_invalid', 'protocol_version_mismatch',
+  'kind_unknown', 'method_unknown', 'kind_method_mismatch', 'method_version_missing', 'method_version_mismatch',
+  'seed_invalid', 'replicates_invalid', 'replicates_missing', 'cpu_limit_invalid', 'cores_invalid', 'batch_size_invalid',
+  // its inputs
+  'inputs_missing', 'input_not_object', 'input_kind_missing', 'input_kind_unknown', 'input_kind_caller_only',
+  'input_id_invalid', 'input_version_missing', 'input_hash_invalid', 'input_hash_missing', 'input_value_source_invalid',
+  'input_value_source_missing', 'input_location_invalid', 'input_location_missing', 'input_location_forbidden',
+  'input_field_unknown', 'input_shape_invalid', 'input_source_not_individual', 'patient_input_required', 'snapshot_required',
+  // its scenario
+  'scenario_missing', 'scenario_value_invalid', 'scenario_field_unknown', 'scenario_field_missing',
+  'endpoint_unknown', 'endpoint_not_supported', 'design_unknown', 'design_not_supported',
+  // the two rule grammars
+  'rule_op_unknown', 'rule_shape_invalid', 'rule_too_deep', 'rule_too_large', 'rule_column_unknown', 'rule_expression_forbidden',
+  // a result
+  'result_not_object', 'status_unknown', 'scenario_hash_invalid', 'conclusion_missing', 'conclusion_unknown',
+  'conclusion_status_mismatch', 'not_estimable_rule_missing', 'not_estimable_rule_unknown', 'measures_missing',
+  'measure_not_object', 'measure_name_missing', 'measure_value_invalid', 'measure_source_missing', 'measure_source_invalid',
+  'mcse_missing', 'mcse_invalid', 'interval_kind_unknown', 'interval_invalid', 'table_invalid', 'model_tier_invalid',
+  'model_risk_invalid', 'manifest_missing', 'manifest_field_missing', 'cpu_seconds_invalid', 'package_lock_hash_invalid',
+  'output_hash_missing', 'output_hash_invalid', 'counts_not_object', 'count_invalid', 'ess_above_real',
+])
+
+/**
+ * The issue codes the engine raises itself, beyond the protocol's validators
+ * (`VCR_ENGINE_OWN_ISSUE_CODES` in `项目代码/vcr-engine/R/engine.R`; the engine
+ * case E10d fails on a literal code in neither list). They travel inside a
+ * failed or limited result's `diagnostics.issues`, never as a call failure, so
+ * they are held to a sentence here and relayed by the control plane as the
+ * result's reason.
+ */
+export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
+  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'grid_cell_failed', 'handler_error',
+  'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_too_large',
+  'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
+  'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
+  'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
@@ -1013,6 +1216,10 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...GEO_ROUTE_ERROR_CODES,
   ...VCR_ROUTE_ERROR_CODES,
   ...VCR_GATEWAY_ERROR_CODES,
+  ...VCR_WRITE_ISSUE_CODES,
+  ...VCR_MODULE_ERROR_CODES,
+  ...VCR_PROTOCOL_ISSUE_CODES,
+  ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
 ])])
 
@@ -1060,6 +1267,170 @@ export function turnEndErrorCode(kind, wireCode) {
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  // 「虚拟临研」's page refusals. Every one of these is permanent for the request
+  // that caused it — retrying the same thing gets the same answer — so none of
+  // them says 「稍后再试」, which is what the family sentence for an unknown
+  // vcr_ code says and is wrong here. Each says what happened and what to do.
+  vcr_study_paused: '这个研究已暂停，继续之后再让 AI 做。',
+  vcr_forbidden: '你在这个研究里没有做这件事的权限。',
+  vcr_unavailable: '这个操作在当前部署里还没有开放。',
+  vcr_not_enabled: '这个部署没有开通虚拟临研。',
+  vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
+  vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
+  vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
+  vcr_name_invalid: '研究名要写 1 到 80 个字。',
+  vcr_tier_invalid: '数据档位只能选 T0 到 T3 之一。',
+  vcr_intended_use_invalid: '预期用途只能选：探索、研究设计支持、指定研究分析、申报准备。',
+  vcr_status_invalid: '研究状态只能是进行中、已暂停或已归档。',
+  vcr_step_invalid: '没有这一步；研究的步骤是定义、证据、人群、患者、对照、试验、匹配。',
+  vcr_tab_not_found: '研究页没有这个页签。',
+  vcr_job_kind_invalid: '没有这种计算；请在页面上给出的计算类型里选。',
+  vcr_job_scenario_invalid: '这项计算的参数不符合引擎的要求，没有排队；按提示的字段修改后再提交。',
+  vcr_job_not_found: '这个研究里没有这项计算。',
+  vcr_budget_invalid: '计算预算要填一个不小于 0 的数（单位是 CPU 秒）。',
+  vcr_assumption_invalid: '这张假设卡填得不完整：要写参数名、取值或分布，以及它的来源。',
+  vcr_review_kind_invalid: '复核类型只能是临床、统计或数据。',
+  vcr_decision_invalid: '决策记录要写明决定的是什么，以及依据。',
+  vcr_export_kind_invalid: '没有这种导出；可选研究包、CDE 沟通交流资料包、模拟报告、系统验证文档包。',
+  vcr_export_not_found: '找不到这次导出，可能已被清理；重新导出即可。',
+  vcr_model_invalid: '模型卡填得不完整：要有名字、版本和层级。',
+  vcr_member_role_invalid: '成员角色只能选研究负责人、临床复核、统计复核、数据管理、招募协调员、中心或只读查看者。',
+  vcr_referral_not_found: '找不到这条转诊记录。',
+  // The runtime channel's write items. The run reads these in `issues` and
+  // corrects the item it named.
+  // Four the runtime channel already had, which fell through to the family's
+  // 「稍后再试」: none is a refusal of the run's request.
+  vcr_unconfigured: '虚拟临研的运行时通道在本部署里没有配置；运行会如实记下这一点，用已有的资料继续。',
+  vcr_upstream_error: '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。',
+  vcr_response_invalid: '虚拟临研返回的内容读不出来，这次没有采用；运行会如实记下，用已有的资料继续。',
+  vcr_response_too_large: '虚拟临研返回的内容太大，这次没有采用；缩小范围再问。',
+  vcr_write_empty: '这次写入没有任何内容，什么都没有保存。',
+  vcr_write_field_forbidden: '这次写入里带了不允许由运行写入的字段，那一项没有保存，其余照常。',
+  vcr_write_refused: '平台拒绝了这一项，原因见提示；其余各项照常保存。',
+  vcr_write_value_invalid: '这一项的取值不在允许的范围里，没有保存；按提示修改后再写。',
+  vcr_criterion_malformed: '这条入排条件的结构化要求不在封闭语法里，没有保存；判不了的条件写成 language 类型并保留原句。',
+  vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
+  vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
+  vcr_number_mcse_missing: '这个数字来自仿真，引用它必须带蒙特卡洛标准误。',
+  vcr_number_typed: '报告里有手打的数字；改成对结果字段的引用，由平台渲染。',
+  vcr_number_unbound: '报告里引用的结果字段不存在；核对字段名。',
+  vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
+  // The trial registry channel.
+  registry_not_configured: '本部署没有配置试验登记库，登记信息取不到；报告会写「不可得」，不会编造。',
+  registry_not_found: '登记库里没有这条记录；报告会写「不可得」，不会编造。',
+  registry_id_invalid: '登记号的格式不对；核对后重查。',
+  registry_record_unreadable: '这条登记记录读不出来；报告会写「不可得」。',
+  registry_answer_unreadable: '登记库的应答读不出来，这次没有采用；稍后可以重查。',
+  // The engine channel and its jobs.
+  vcr_engine_unconfigured: '本部署还没有配置计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
+  vcr_engine_not_composed: '本部署没有接入计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
+  vcr_engine_unreachable: '连不上计算引擎；这一步暂不可用，研究的其余部分照常，引擎恢复后可以重新计算。',
+  vcr_engine_timeout: '计算引擎这次没有及时应答；作业会自动重试。',
+  vcr_engine_secret_missing: '计算引擎的口令或回执密钥没有配置，引擎按未配置处理；请联系管理员。',
+  vcr_engine_token_file_short: '计算引擎的口令文件太短（至少 32 字节），引擎按未配置处理；请联系管理员。',
+  vcr_engine_receipt_key_file_unavailable: '回执密钥文件读不到，引擎按未配置处理；请联系管理员。',
+  vcr_engine_catalogue_mismatch: '计算引擎和平台的方法目录对不上，已停用这个引擎；请联系管理员升级。',
+  vcr_engine_not_found: '引擎里找不到这项作业，可能已被清理；重新排一次即可。',
+  vcr_engine_response_invalid: '计算引擎的应答格式不对，这次没有采用；可以重新计算。',
+  vcr_engine_receipt_invalid: '计算引擎的运行回执验不过，这次结果没有采用；请重新计算。',
+  vcr_engine_result_invalid: '计算引擎的结果没有通过协议校验，这次没有采用；请重新计算。',
+  vcr_engine_result_mismatch: '引擎返回的结果和提交的作业对不上（方法、版本、种子或情景哈希不同），这次结果没有采用。',
+  vcr_engine_job_invalid: '这项计算的参数不符合引擎协议，没有提交；按提示的字段修改后再排。',
+  vcr_engine_rejected: '计算引擎拒绝了这项作业，原因见作业详情；参数需要修改后再排。',
+  vcr_engine_job_remove_failed: '引擎侧的作业目录没能清理；已记录，不影响研究。',
+  vcr_job_failed: '这项计算没有做成；已保留能保留的部分，研究的其余部分照常。',
+  vcr_job_canceled: '这项计算已取消。',
+  // Parts of the module this deployment has not opened.
+  vcr_data_plane_unavailable: '数据平面暂时不可用；T0（公开资料）的步骤照常。',
+  vcr_data_plane_not_configured: '本部署没有配置数据平面；T0（公开资料）的步骤照常。',
+  vcr_data_plane_unconfigured: '本部署未接入数据平面；T0（公开资料）的全部步骤照常。',
+  vcr_evidence_unavailable: '证据模块在本部署里还没有接入。',
+  vcr_matching_unavailable: '匹配与招募在本部署里还没有开放。',
+  vcr_access_unavailable: '数据访问的权限检查这次没能完成，已按不允许处理；稍后再试。',
+  // Members and access to data.
+  vcr_member_role_unknown: '这个角色不在研究成员的角色里；换一个再加。',
+  vcr_member_user_required: '添加成员要指明是哪个账号。',
+  vcr_member_owner_fixed: '研究负责人是研究的创建者，不能被移除，也不能改成别的角色。',
+  vcr_access_no_actor: '这次读取没有指明是谁在操作，已拒绝；从研究页里重新发起。',
+  vcr_role_forbids: '你在这个研究里的角色不能读取这份数据。',
+  vcr_no_grant: '这份数据还没有授权给这个研究；请数据管理员先做授权。',
+  vcr_source_not_found: '找不到这个数据源，或它不属于这个研究。',
+  vcr_source_withdrawn: '这个数据源已被撤回，不能再读取。',
+  vcr_purpose_not_granted: '授权里没有包含这次读取的用途；请数据管理员补授权。',
+  vcr_outside_window: '这次读取超出了授权的时间范围。',
+  vcr_field_not_granted: '这次要读的字段不在授权范围内。',
+  vcr_field_sealed: '这个字段处于封存状态：分析计划冻结之前，结局字段不向任何人开放。',
+  vcr_field_identifying: '这是标识性字段，不向分析开放。',
+  vcr_snapshot_not_found: '找不到这个数据快照，或它不属于这个研究。',
+  vcr_snapshot_not_named: '这项计算没有指明要用哪个数据快照；先选一个已冻结的快照。',
+  // The data plane.
+  vcr_analysis_table_invalid: '这份分析表不符合要求（缺必填列，或取值不合理），没有登记；按提示修正后重新提交。',
+  vcr_artifact_outside_plane: '这个文件不在数据平面目录里，已拒绝处理。',
+  vcr_artifact_remove_failed: '数据平面里的文件没能删除；已记录，管理员可以手动清理。',
+  vcr_data_plane_location_missing: '数据平面的存放目录没有配置。',
+  vcr_data_plane_location_outside: '数据平面的存放目录不在允许的位置。',
+  vcr_data_plane_location_runtime_readable: '数据平面目录不能放在运行时读得到的位置；请改到运行时看不到的目录。',
+  vcr_snapshot_profile_failed: '这个数据快照的概况没能生成；快照本身没有受影响，可以重试。',
+  // The referral ledger and its contact stop.
+  vcr_referral_state_unknown: '转诊状态不在允许的范围内。',
+  vcr_referral_transition_invalid: '转诊状态不能这样变化；按顺序一步步推进。',
+  vcr_referral_transition_refused: '这次转诊状态变更被拒绝，原因见提示。',
+  vcr_referral_role_forbidden: '你的角色不能做这一步转诊操作。',
+  vcr_referrals_contact_needs_approval: '联系状态必须有具名的确认人才能保存。',
+  vcr_contact_not_approved: '联系患者之前要由协调员逐人确认，这一位还没有确认。',
+  vcr_contact_role_forbidden: '你的角色在这个研究里不能联系患者。',
+  vcr_contact_approval_not_per_person: '联系确认必须逐人进行，不接受批量确认。',
+  vcr_screen_failure_needs_criterion: '筛选失败要写明不满足的是哪一条入排标准。',
+  vcr_enrollment_needs_date: '入组要写明入组日期。',
+  vcr_exit_field_not_derivable: '出组信息由随访事件推出，不能手填。',
+  vcr_exit_date_rewritten: '出组日期已经记录，不能改写；需要更正请新增一条说明。',
+  vcr_exit_reason_rewritten: '出组原因已经记录，不能改写；需要更正请新增一条说明。',
+  vcr_followup_kind_unknown: '随访类型只能是常规诊疗观察、研究专属随访或出组后观察。',
+  vcr_restricted_field_not_marked: '试验期间受限的字段要标明缺失原因，不能留空。',
+  vcr_site_not_found: '找不到这个中心。',
+  vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
+  // The module's own health (an operator reads these).
+  vcr_migration_failed: '虚拟临研的数据表升级失败，模块已停用；请联系管理员。',
+  vcr_loop_failed: '虚拟临研的后台循环出错，已记录并会重试。',
+  vcr_orchestrator_failed: '虚拟临研的自动编排出错，已记录并会重试。',
+  vcr_worker_loop_missing: '虚拟临研的后台循环没有启动；请联系管理员。',
+  vcr_worker_loop_failing: '虚拟临研的后台循环在反复出错；请联系管理员。',
+  vcr_worker_loop_stalled: '虚拟临研的后台循环停住了；请联系管理员。',
+  // The protocol's issues that a person or a model is told by name.
+  rule_expression_forbidden: '规则里不能写表达式：入排、筛选和约束都要用封闭语法的规则对象，平台从不把它当代码执行。',
+  rule_op_unknown: '规则用了封闭语法里没有的运算；可用 all、any、not、compare、between、in、not_in、missing、present。',
+  rule_column_unknown: '规则里用了数据表里没有的列；核对列名。',
+  rule_too_deep: '规则嵌套太深（最多 8 层）；拆成几条更简单的规则。',
+  rule_too_large: '规则太大（最多 200 个节点）；拆成几条更简单的规则。',
+  rule_shape_invalid: '规则的结构不符合封闭语法，位置见提示。',
+  endpoint_not_supported: '这个方法不处理这种终点类型。',
+  design_not_supported: '引擎没有实现这种设计和终点的组合；已拒绝，不会当成别的设计去算。',
+  kind_method_mismatch: '这项计算的类型和它要用的方法对不上；已拒绝。',
+  input_location_forbidden: '输入的存放位置、哈希和形态只能由平台从数据快照解析，不接受调用方给出。',
+  constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
+  cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
+  grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
+  handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
+  input_format_unsupported: '数据文件的格式不受支持（支持 CSV、TSV、JSON、Parquet）。',
+  input_hash_mismatch: '数据文件的内容和冻结快照时的哈希对不上；已拒绝读取。',
+  input_out_of_range: '有一个输入值超出了这个方法允许的范围。',
+  input_parse_failed: '数据文件无法解析成表格。',
+  input_too_large: '数据文件超过了引擎允许读取的大小。',
+  job_invalid: '这项计算不符合引擎协议，已拒绝，没有运行。',
+  mechanistic_engine_unknown: '机制模型声明的计算引擎不在支持列表里。',
+  mechanistic_field_missing: '机制模型缺少必需的字段。',
+  missing_covariate: '有效应的协变量存在缺失值或不是数值；补齐或去掉这个协变量。',
+  model_card_field_missing: '模型卡缺少必需的字段。',
+  model_risk_unknown: '模型卡的风险等级不在词表里。',
+  performance_measure_unsupported: '有一个性能指标这个方法算不出来，已略过。',
+  replicates_all_failed: '仿真的每一次重复都失败了，没有可报告的结果。',
+  required_field_missing: '缺少必需的字段。',
+  twin_label_inconsistent: '「数字孪生」标签与模型的证据不一致，已拒绝。',
+  uncertainty_and_variability_conflated: '模型把参数不确定性和个体变异混在了一起；分开声明。',
+  input_source_not_individual: '这个方法只接受观察到的真实患者数据，不接受合成、汇总、预测或重建的数据。',
+  scenario_field_unknown: '情景里有引擎不读取的键，已拒绝——被忽略的参数等于悄悄改了参数；删掉它，或核对拼写。',
+  scenario_field_missing: '情景里缺少这个方法必需的键，位置见提示。',
+  scenario_value_invalid: '情景里这个值的类型或范围不对，位置见提示。',
   runtime_canceled: '运行已被取消。可以重新发起，或从某一步分叉后继续。',
   runtime_stopped: '运行进程中断，已按中断记录收尾。重试即可继续。',
   runtime_deliverable_never_submitted:
@@ -1368,6 +1739,16 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
+  // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
+  // no earlier family can take one of them. Three families, because each is
+  // held by a different hand: the request a run or a page built, the inputs
+  // named in it, and what the engine sent back.
+  [/^(?:scenario_|rule_|endpoint_|design_|job_|study_id_|protocol_version_|kind_|method_version_|method_unknown$|seed_invalid$|replicates_|cpu_limit_|cores_|batch_size_|inputs_missing$)/,
+    '这项计算的请求不符合引擎协议，已拒绝；按提示的字段修改后再提交。'],
+  [/^(?:input_|patient_input_|snapshot_required$)/,
+    '这项计算的输入不符合要求，已拒绝；数据只能通过研究里已授权的数据快照给出。'],
+  [/^(?:result_|status_unknown$|conclusion_|not_estimable_rule_|measure|mcse_|interval_|table_invalid$|model_(?:tier|risk)_|manifest_|cpu_seconds_|package_lock_|output_hash_|counts_not_|count_invalid$|ess_above_)/,
+    '计算引擎返回的结果没有通过协议校验，这次结果没有采用；可以重新计算。'],
 ])
 
 /**
@@ -1548,6 +1929,11 @@ export function errorCodeOutcome(code) {
   // composed — never a verdict on a run.
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
   if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
+  // The rest of the module's codes and the protocol's per-field issues are about
+  // the module, the engine channel or the shape of a computation's request —
+  // never a verdict on a run.
+  if (VCR_WRITE_ISSUE_CODES.includes(text) || VCR_MODULE_ERROR_CODES.includes(text) || VCR_PROTOCOL_ISSUE_CODES.includes(text)
+    || VCR_ENGINE_ISSUE_CODES.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
   if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'

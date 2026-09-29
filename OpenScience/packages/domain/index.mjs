@@ -117,7 +117,11 @@ export {
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
+  VCR_MODULE_ERROR_CODES,
+  VCR_PROTOCOL_ISSUE_CODES,
+  VCR_ENGINE_ISSUE_CODES,
   VCR_ROUTE_ERROR_CODES,
+  VCR_WRITE_ISSUE_CODES,
   RUNTIME_ERROR_CODES,
   RUN_OUTCOME_KINDS,
   RUN_VERDICT_ERROR_CODES,
@@ -954,7 +958,7 @@ export {
   wilsonInterval,
 } from './src/geoMetrics.mjs'
 
-// vcrVocabulary — 116 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 127 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -962,6 +966,8 @@ export {
   VCR_ACTION_LABELS_ZH,
   VCR_ANALYSIS_TABLES,
   VCR_ANALYSIS_TABLE_LABELS_ZH,
+  VCR_ASSUMPTION_KEY,
+  VCR_ASSUMPTION_KEY_PATTERN,
   VCR_ASSUMPTION_SOURCE_KINDS,
   VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH,
   VCR_BOOTSTRAP_MIN,
@@ -990,6 +996,7 @@ export {
   VCR_ENDPOINT_TYPES,
   VCR_ENDPOINT_TYPE_LABELS_ZH,
   VCR_ENROLLMENT_KINDS,
+  VCR_ESS_FLOOR,
   VCR_ESTIMANDS,
   VCR_ESTIMAND_LABELS_ZH,
   VCR_EXPORT_KINDS,
@@ -1006,6 +1013,7 @@ export {
   VCR_JOB_STATES,
   VCR_JOB_STATE_LABELS_ZH,
   VCR_LINEAGE_NODE_KINDS,
+  VCR_MAP_CONFLICT_BOUND,
   VCR_MEMBER_ROLES,
   VCR_MEMBER_ROLE_LABELS_ZH,
   VCR_MIN_CELL_SIZE,
@@ -1023,6 +1031,8 @@ export {
   VCR_NOT_ESTIMABLE_RULES,
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OPTIONAL_COUNT_KEYS,
+  VCR_PEOPLE_COUNT_FIELDS,
+  VCR_PEOPLE_COUNT_MAP_KEYS,
   VCR_PERFORMANCE_MEASURES,
   VCR_PERFORMANCE_MEASURE_LABELS_ZH,
   VCR_POOLING_METHODS,
@@ -1032,6 +1042,7 @@ export {
   VCR_QUALITY_CATEGORIES,
   VCR_QUALITY_CATEGORY_LABELS_ZH,
   VCR_REAL_PATIENT_SOURCES,
+  VCR_RECONSTRUCTION_TOLERANCE,
   VCR_REFERRAL_STATES,
   VCR_REFERRAL_STATE_LABELS_ZH,
   VCR_REPLICATES_ALT_MIN,
@@ -1040,6 +1051,7 @@ export {
   VCR_REVIEW_KIND_LABELS_ZH,
   VCR_REVIEW_STATES,
   VCR_REVIEW_STATE_LABELS_ZH,
+  VCR_RISK_USE_CEILING,
   VCR_ROLE_ABILITIES,
   VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR,
@@ -1056,6 +1068,7 @@ export {
   VCR_STEP_STATUS_LABELS_ZH,
   VCR_STUDY_STATUSES,
   VCR_STUDY_STATUS_LABELS_ZH,
+  VCR_SUPPORT_CEILING,
   VCR_SYNTHETIC_USES,
   VCR_SYNTHETIC_USE_LABELS_ZH,
   VCR_TABS,
@@ -1069,6 +1082,8 @@ export {
   VCR_VALUE_SOURCES,
   VCR_VALUE_SOURCE_LABELS_ZH,
   intendedUseCeiling,
+  intendedUseCeilingDetail,
+  intendedUseCeilingFor,
   missingModelEvidence,
   roleAllows,
   twinLabel,
@@ -1076,40 +1091,98 @@ export {
   vcrKnown,
 } from './src/vcrVocabulary.mjs'
 
-// vcrEngineJob — 12 exports: the engine protocol: a frozen scenario, its canonical bytes, the
-// replicate arithmetic behind every Monte-Carlo standard error, and the two
-// validators the control plane and `vcr-engine` both run
+// vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
+// below the floor, in any shape the stores produce
 export {
+  VCR_CELL_IDENTITY_KEYS,
+  suppressForModel,
+} from './src/vcrSuppression.mjs'
+
+// vcrRules — 16 exports: the two closed rule grammars 「虚拟临研」 uses instead of code: row rules over table
+// columns (three-valued, Kleene) and eligibility requirements over dated facts,
+// with their limits, validators and the row-rule evaluator the parity fixture pins
+export {
+  VCR_REQUIREMENT_AGGREGATES,
+  VCR_ELAPSED_COMPARATORS,
+  VCR_REQUIREMENT_COMPARATORS,
+  VCR_REQUIREMENT_LIMITS,
+  VCR_REQUIREMENT_OPS,
+  VCR_REQUIREMENT_VARIABLE_PATTERN,
+  VCR_ROW_RULE_COLUMN_PATTERN,
+  VCR_ROW_RULE_COMPARATORS,
+  VCR_ROW_RULE_LIMITS,
+  VCR_ROW_RULE_OPS,
+  VCR_ROW_RULE_ORDERING_COMPARATORS,
+  evaluateRowRule,
+  evaluateRowRuleColumn,
+  findExpressionFields,
+  validateNamedRules,
+  validateRequirement,
+  validateRowRule,
+} from './src/vcrRules.mjs'
+
+// vcrEngineJob — 28 exports: the engine protocol: a frozen scenario, its canonical bytes, the replicate
+// arithmetic behind every Monte-Carlo standard error, the input kinds a caller
+// and the control plane may write, and the validators the control plane and
+// `vcr-engine` both run
+export {
+  VCR_CALLER_SNAPSHOT_KIND,
+  VCR_DESIGN_SUPPORT,
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
   VCR_ENGINE_PROTOCOL_VERSION,
+  VCR_ENGINE_TABLE_INPUT_KINDS,
+  VCR_INPUT_KINDS,
+  VCR_JOB_FIELDS,
   VCR_JOB_METHODS,
+  VCR_LOCATION_LIMITS,
+  VCR_MAX_REPLICATES,
+  VCR_INDIVIDUAL_INPUT_SOURCES,
+  VCR_OBSERVED_ONLY_METHODS,
   VCR_PATIENT_LEVEL_JOB_KINDS,
+  VCR_PATTERNS,
+  VCR_SCENARIO_SCHEMAS,
+  VCR_VERSIONED_INPUT_KINDS,
   canonicalScenarioJson,
   mcseOf,
   replicateFloor,
   replicatesForMcse,
+  validateCallerInputs,
   validateCounts,
   validateEngineJob,
   validateEngineResult,
+  vcrIsNullScenario,
+  vcrLocationIsValid,
+  vcrReplicateFloorFor,
+  vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
-// vcrLineage — 7 exports: lineage: which results a changed input makes stale, and whether a
+// vcrScenarioSchemas — 2 exports: the walker that checks a scenario against its method's schema
+export {
+  validateScenario,
+  whenHolds,
+} from './src/vcrScenarioSchemas.mjs'
+
+// vcrLineage — 8 exports: lineage: which results a changed input makes stale, and whether a
 // countersignature still holds
 export {
   VCR_HEAVY_NODE_KINDS,
   VCR_LIGHT_NODE_KINDS,
   affectedNodes,
+  lineageImpact,
   lineageNode,
   parseLineageNode,
   recomputePlan,
   reviewStateFor,
 } from './src/vcrLineage.mjs'
 
-// vcrContracts — 11 exports: the five 「虚拟临研」 contracts' own findings — all advisory
+// vcrContracts — 14 exports: the five 「虚拟临研」 contracts' own findings — all advisory
 export {
+  VCR_BACKSTAGE_FILES,
   VCR_CHECK_IDS,
+  VCR_CRITERIA_FILE,
   VCR_MATCHING_FILE,
+  VCR_PACKAGE_FILE,
   VCR_RESULTS_FILE,
   VCR_SIMULATION_FILE,
   proseNumbers,

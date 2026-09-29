@@ -158,6 +158,95 @@ export function useWithin(use, ceiling) {
 }
 
 /**
+ * The use each model risk is evidence for (plan §8.2's fourth column).
+ * Weakest risk first, so an index doubles as a strength.
+ */
+export const VCR_RISK_USE_CEILING = Object.freeze({
+  none: 'exploratory',
+  low: 'design_support',
+  medium: 'specified_analysis',
+  high: 'submission_preparation',
+})
+
+/**
+ * One model's ceiling, and what set it.
+ *
+ * - **Tier** (§3.6): the most a model of that kind can carry, whatever evidence
+ *   it holds. An unknown tier is a `scenario` model — the weakest — because a
+ *   word nobody recognises has earned nothing.
+ * - **Risk** (§8.2): the model's declared risk in this use. An unknown risk
+ *   counts as `high`, the most demanding, so a typo cannot make a model look
+ *   cheap to trust.
+ * - **Evidence**: the highest risk level whose evidence set the model card
+ *   actually holds (each set contains the one below), read as the use that
+ *   evidence supports. A model declared `high` that holds only the `low`
+ *   evidence is labelled `low`'s use, and the missing items are what the result
+ *   says (AC-34). Nothing is blocked.
+ *
+ * The ceiling is the lowest of the three.
+ * @param {{ tier?: unknown, risk?: unknown, evidence?: readonly string[] | null }} model
+ */
+function modelCeiling(model) {
+  const tier = VCR_MODEL_TIERS.includes(/** @type {string} */ (model?.tier)) ? /** @type {string} */ (model.tier) : 'scenario'
+  const declared = VCR_MODEL_RISKS.includes(/** @type {string} */ (model?.risk)) ? /** @type {string} */ (model.risk) : 'high'
+  const held = new Set(model?.evidence ?? [])
+  let supported = 0
+  VCR_MODEL_RISKS.forEach((risk, index) => {
+    const needed = VCR_MODEL_RISK_EVIDENCE[/** @type {keyof typeof VCR_MODEL_RISK_EVIDENCE} */ (risk)]
+    if (needed.every((item) => held.has(item))) supported = index
+  })
+  const declaredIndex = VCR_MODEL_RISKS.indexOf(declared)
+  const riskIndex = Math.min(declaredIndex, supported)
+  const tierUse = VCR_MODEL_TIER_USE_CEILING[/** @type {keyof typeof VCR_MODEL_TIER_USE_CEILING} */ (tier)]
+  const riskUse = VCR_RISK_USE_CEILING[/** @type {keyof typeof VCR_RISK_USE_CEILING} */ (VCR_MODEL_RISKS[riskIndex])]
+  const tierIndex = VCR_INTENDED_USES.indexOf(tierUse)
+  const riskUseIndex = VCR_INTENDED_USES.indexOf(riskUse)
+  const use = VCR_INTENDED_USES[Math.min(tierIndex, riskUseIndex)]
+  /** @type {'tier' | 'evidence' | 'declared_risk'} */
+  const cause = tierIndex <= riskUseIndex ? 'tier' : supported < declaredIndex ? 'evidence' : 'declared_risk'
+  return {
+    tier, declaredRisk: declared, supportedRisk: VCR_MODEL_RISKS[supported], use, cause,
+    missing: missingModelEvidence(declared, /** @type {readonly string[]} */ ([...held])),
+  }
+}
+
+/**
+ * The highest use a result may be labelled with, from the models it used
+ * (plan §8.2, AC-34): each model's ceiling is the lowest of its tier's, its
+ * declared risk's and what its held evidence supports, and the weakest model
+ * decides. `tiers` is the older, tier-only input (every entry counts as a model
+ * with no evidence beyond its tier); no models at all is `submission_preparation`
+ * as far as models go — the study's own review state still applies.
+ * @param {{ tiers?: readonly string[], models?: readonly { tier?: unknown, risk?: unknown, evidence?: readonly string[] | null }[] }} [input]
+ * @returns {{ ceiling: string, limitedBy: readonly { index: number, cause: string, tier: string, declaredRisk: string, supportedRisk: string, use: string, missing: readonly string[] }[] }}
+ */
+export function intendedUseCeilingDetail({ tiers = [], models = [] } = {}) {
+  let ceiling = VCR_INTENDED_USES.length - 1
+  /** @type {{ index: number, cause: string, tier: string, declaredRisk: string, supportedRisk: string, use: string, missing: readonly string[] }[]} */
+  const limitedBy = []
+  for (const tier of tiers ?? []) {
+    const index = VCR_INTENDED_USES.indexOf(VCR_MODEL_TIER_USE_CEILING[/** @type {keyof typeof VCR_MODEL_TIER_USE_CEILING} */ (tier)] ?? VCR_MODEL_TIER_USE_CEILING.scenario)
+    if (index < ceiling) ceiling = index
+  }
+  ;(models ?? []).forEach((model, index) => {
+    const one = modelCeiling(model)
+    const at = VCR_INTENDED_USES.indexOf(one.use)
+    if (at < VCR_INTENDED_USES.length - 1) limitedBy.push({ index, cause: one.cause, tier: one.tier, declaredRisk: one.declaredRisk, supportedRisk: one.supportedRisk, use: one.use, missing: one.missing })
+    if (at < ceiling) ceiling = at
+  })
+  return { ceiling: VCR_INTENDED_USES[ceiling], limitedBy: Object.freeze(limitedBy) }
+}
+
+/**
+ * The ceiling alone: see `intendedUseCeilingDetail` for what set it.
+ * @param {Parameters<typeof intendedUseCeilingDetail>[0]} [input]
+ * @returns {string}
+ */
+export function intendedUseCeilingFor(input) {
+  return intendedUseCeilingDetail(input).ceiling
+}
+
+/**
  * Which evidence items are missing for a model risk, given what a model card
  * declares. Never blocks: the caller labels the result down and says why.
  * @param {string} risk @param {readonly string[]} evidence
@@ -241,10 +330,10 @@ export const VCR_MEMBER_ROLE_LABELS_ZH = Object.freeze({
 })
 /** What a role may do. Checked in code, per operation (platform principle 14). */
 export const VCR_ROLE_ABILITIES = Object.freeze({
-  lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'review_any', 'contact_patients', 'read_patient_level']),
+  lead: frozen(['read', 'write', 'run', 'export', 'manage_members', 'manage_study', 'manage_data', 'review_any', 'contact_patients', 'read_patient_level']),
   clinical_reviewer: frozen(['read', 'review_clinical', 'export']),
   statistical_reviewer: frozen(['read', 'review_statistical', 'export']),
-  data_manager: frozen(['read', 'write', 'run', 'read_patient_level']),
+  data_manager: frozen(['read', 'write', 'run', 'manage_data', 'read_patient_level']),
   recruiter: frozen(['read', 'write_referrals', 'contact_patients']),
   site: frozen(['read_referrals', 'write_referrals']),
   viewer: frozen(['read']),
@@ -490,6 +579,53 @@ export const VCR_REPLICATES_NULL_MIN = 20_000
 export const VCR_REPLICATES_ALT_MIN = 5_000
 /** A weighted covariate above this standardized difference is not balanced (§5.3). */
 export const VCR_SMD_FLOOR = 0.1
+/**
+ * The other deterministic 「不可估计」 presets (§5.3: 「越过预设界限」). They are
+ * deployment presets the engine reads from its snapshot, never scenario keys: a
+ * scenario a model wrote must not be able to loosen the rule that stops a
+ * comparison from being reported. The plan fixes the standardized-difference
+ * floor (0.1); the values below are the build's, to be confirmed by the owner.
+ *
+ * - `VCR_ESS_FLOOR`: a weighted control arm with fewer effective patients than
+ *   this carries no estimate.
+ * - `VCR_SUPPORT_CEILING`: the largest share of the trial population that may
+ *   fall outside the control score range.
+ * - `VCR_MAP_CONFLICT_BOUND`: the prior-data conflict p-value below which a MAP
+ *   prior is refused.
+ * - `VCR_RECONSTRUCTION_TOLERANCE`: how far a reconstructed KM may sit from the
+ *   published numbers (at risk: max of the absolute count and the relative
+ *   share; events, median and log hazard ratio: relative, and absolute for the
+ *   log ratio).
+ */
+export const VCR_ESS_FLOOR = 10
+export const VCR_SUPPORT_CEILING = 0.1
+export const VCR_MAP_CONFLICT_BOUND = 0.01
+export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
+  atRiskAbsolute: 2, atRiskRelative: 0.05, events: 0.05, median: 0.05, logHazardRatio: 0.05,
+})
+
+/**
+ * The keys that count people. A value under one of these names is a head count
+ * of real or generated persons and is what small-cell suppression reads
+ * (`suppressForModel`): extend the list here and nowhere else.
+ */
+export const VCR_PEOPLE_COUNT_FIELDS = frozen([
+  'n', 'count', 'patients', 'realPatients', 'subjects', 'events', 'kept', 'excluded', 'indeterminate',
+  'cohortSize', 'screened', 'eligible', 'enrolled', 'referred', 'contacted', 'candidates',
+])
+/**
+ * Keys under which an object maps a category to a head count
+ * (`{ "A": 12, "B": 3 }`): its entries are sibling cells.
+ */
+export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
+
+/**
+ * An assumption's key — the name a lineage node and an engine input id carry
+ * (`assumption:<key>@<version>`), so it has to be a name both can spell and
+ * read back: lowercase ASCII, digits and underscores.
+ */
+export const VCR_ASSUMPTION_KEY_PATTERN = '^[a-z][a-z0-9_]{0,63}$'
+export const VCR_ASSUMPTION_KEY = new RegExp(VCR_ASSUMPTION_KEY_PATTERN)
 
 /**
  * Is this word in this vocabulary? Used by the schema builder before splicing

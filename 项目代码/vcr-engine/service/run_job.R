@@ -30,7 +30,19 @@ source(file.path(root, "R", "engine.R"))
 vcr_engine_load(root)
 
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
-job <- jsonlite::fromJSON(job_path, simplifyVector = TRUE, simplifyDataFrame = FALSE)
+
+# A job is read as lists all the way down (`simplifyVector = FALSE`): a
+# one-element array stays an array, `{}` stays apart from `[]` and `null` stays
+# `null`, which is what lets the scenario hash agree with the control plane's.
+# See `vcr_read_job` in R/protocol.R.
+job <- tryCatch(vcr_read_job(job_path), error = function(e) NULL)
+if (is.null(job)) {
+  # The service wrote this file after validating it, so this is a disk or
+  # encoding fault. Say so in a result rather than dying without one.
+  failed <- list(status = "failed", issues = list(vcr_issue("job_not_object", "", "The job file could not be read as a JSON object.")))
+  writeLines(vcr_result_json(failed), file.path(out_dir, "result.json"))
+  quit(status = 1L)
+}
 cancel_file <- file.path(out_dir, "CANCEL")
 progress_path <- file.path(out_dir, "progress.json")
 
@@ -41,14 +53,16 @@ write_progress <- function(done, total) {
                               auto_unbox = TRUE), tmp)
   invisible(file.rename(tmp, progress_path))
 }
-write_progress(0, job$replicates %||% 1)
+write_progress(0, job[["replicates"]] %||% 1)
 
 result <- vcr_run_job(job, output_dir = out_dir, cancel_file = cancel_file, progress = write_progress)
 
 tmp <- file.path(out_dir, "result.json.tmp")
-# `digits = NA` asks jsonlite for full round-trip precision. Without it every
-# number in the result is silently rounded to four significant digits, which
-# is invisible in a page and fatal in a cross-software comparison.
-writeLines(jsonlite::toJSON(result, auto_unbox = TRUE, digits = NA, null = "null", na = "null"), tmp)
+# `vcr_result_json` writes seventeen significant digits. jsonlite's default is
+# four (every number silently rounded, invisible in a page and fatal in a
+# cross-software comparison) and its `digits = NA` is fifteen, which reads
+# 0.1 + 0.2 back as 0.3: the output hash computed from what is written would
+# then be a hash of different numbers from the ones the run held.
+writeLines(vcr_result_json(result), tmp)
 invisible(file.rename(tmp, file.path(out_dir, "result.json")))
 quit(status = if (identical(result$status, "failed")) 1L else 0L)
