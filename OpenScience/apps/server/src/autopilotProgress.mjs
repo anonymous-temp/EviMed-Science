@@ -44,11 +44,14 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
   const followUps = (agenda.payload.followUps ?? []).filter(item => !item.consumedBy && beforeNow(item.at));
   if (followUps.length > 5) snapshot.truncated = true;
   for (const item of followUps.slice(-5)) add(snapshot.followUps, { digestId: cut(item.digestId, 160), claimId: cut(item.claimId, 160), note: cut(item.note, 600), at: item.at });
-  const ownedDigests = digests.filter(row => owns(row) && row.payload.date <= date && !(row.payload.episodeIds ?? []).includes(episodeId));
+  const ownedDigests = digests.filter(row => owns(row) && row.payload.date <= date && !(row.payload.episodeIds ?? []).includes(episodeId))
+    .sort((left, right) => String(right.payload.date).localeCompare(String(left.payload.date)) || String(right.id).localeCompare(String(left.id)));
+  if (ownedDigests.length > 8) snapshot.truncated = true;
   for (const row of ownedDigests.slice(0, 8)) {
     const claims = [...(row.payload.headlines ?? []), ...(row.payload.leads ?? [])];
     const decisions = (row.payload.decisions ?? []).filter(item => beforeNow(item.at));
     const standing = [...new Set(decisions.map(item => String(item.claimId ?? "")))].map(id => standingVerdict(decisions, id)).filter(item => item?.action === "reject");
+    if (standing.length > 5) snapshot.truncated = true;
     for (const decision of standing.slice(-5)) {
       if (snapshot.rejectedDirections.length >= 5) { snapshot.truncated = true; break; }
       add(snapshot.rejectedDirections, { digestId: row.id, claimId: cut(decision.claimId, 160),
@@ -60,13 +63,16 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
   if (previous.length > MAX_EPISODES) snapshot.truncated = true;
   for (const row of previous.slice(0, MAX_EPISODES)) {
     const payload = row.payload;
-    const claims = (payload.claims ?? payload.completion?.claims ?? []).slice(0, 3).map(claim => ({ id: cut(claim.id, 160), statement: cut(claim.statement, 600),
+    const allClaims = payload.status === "verifying" ? payload.completion?.claims ?? payload.claims ?? [] : payload.claims ?? [];
+    if (allClaims.length > 3 || allClaims.slice(0, 3).some(claim => Array.isArray(claim.sources) && claim.sources.length > 4)) snapshot.truncated = true;
+    const claims = allClaims.slice(0, 3).map(claim => ({ id: cut(claim.id, 160), statement: cut(claim.statement, 600),
       tier: ["unverified", "gated", "reproduced"].includes(claim.tier) ? claim.tier : "unverified", refutation: cut(claim.refutation, 40) || null,
       sources: (Array.isArray(claim.sources) ? claim.sources : []).slice(0, 4).map(source => cut(source, 300)),
       verification: claim.verification ? { status: cut(claim.verification.status, 32), reason: cut(claim.verification.reason, 200) } : null,
     }));
-    if ((payload.claims ?? []).length > claims.length) snapshot.truncated = true;
-    const artifacts = (payload.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload.runId && ref.sessionId === payload.sessionId && safePath(ref.path)).slice(0, 6);
+    const availableArtifacts = (payload.artifactRefs ?? payload.completion?.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload.runId && ref.sessionId === payload.sessionId && safePath(ref.path));
+    if (availableArtifacts.length > 6) snapshot.truncated = true;
+    const artifacts = availableArtifacts.slice(0, 6);
     add(snapshot.episodes, { id: row.id, revision: row.revision ?? null, date: payload.date, status: payload.status,
       taskType: cut(payload.taskType, 80), claims, errorCode: cut(payload.error?.code ?? payload.deltaErrorCode, 100) || null,
       resourceReason: cut(payload.resourceDeferrals?.episode?.code, 100) || null, artifactRefs: artifacts });
