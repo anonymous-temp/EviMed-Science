@@ -101,20 +101,23 @@ def test_repeated_bad_source_id_preserves_real_diagnostic_without_replanning(mon
 
     monkeypatch.setattr(planner, "call_llm_structured", generate)
     monkeypatch.setattr(planner.llm, "structured_output", check)
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(TOPIC)
+    planned = planner.run(TOPIC)
     assert len(generated) == 1 and len(checks) == 2
-    assert caught.value.phase.data["original_question"] == TOPIC
-    attempts = caught.value.phase.data["scope_check_attempts"]
+    receipt = planned._scope_receipt
+    assert receipt["status"] == "unverified" and receipt["original_question"] == TOPIC
+    attempts = receipt["scope_check_attempts"]
     assert [row["reference_response"] for row in attempts] == checks
     assert all("source_id" not in field for record in attempts for field in record["resolved_assessment"]["fields"])
     assert all(checks[0]["fields"][0]["field"] not in [field["field"] for field in record["resolved_assessment"]["fields"]] for record in attempts)
     assert all(row["topic_sha256"] == digest(TOPIC) for row in attempts)
     assert all(row["protocol_sha256"] == protocol_hash(protocol) for row in attempts)
     assert attempts[-1]["validation"]["code"] == "scope_source_id_unknown"
-    caught.value.persist(Project(TOPIC, output_dir=tmp_path))
-    saved = caught.value.project.load_json("protocol_rejected_proposal.json", subdir="analysis")
-    assert saved["scope_check_attempts"] == attempts
+    project = Project(TOPIC, output_dir=tmp_path)
+    project.save_json("unattended_run.json", {"unattended": True})
+    from new_meta.core.protocol_scope import ensure_project_protocol_scope
+    ensure_project_protocol_scope(project, planned)
+    saved = project.load_json("protocol_scope.json", subdir="analysis")
+    assert saved["status"] == "unverified" and saved["scope_check_attempts"] == attempts
 
 
 @pytest.mark.parametrize("status", ["mismatch", "uncertain"])
