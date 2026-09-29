@@ -1,0 +1,1690 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-evidence",
+  "version": "sha256:f587e4524120728546a13f3a07eeeff30c6c7023ee6fb1c5d644ff657fe47b26",
+  "generatedBy": "scripts/dev/build-tool-graph.mjs",
+  "counts": {
+    "nodes": 29,
+    "edges": 13,
+    "byVia": {
+      "schema": 13,
+      "model": 0,
+      "executed": 0
+    },
+    "sampleable": 0
+  },
+  "suppressed": [
+    {
+      "reason": "kernel-to-kernel type match; every file tool can feed every other, so the pair says nothing about this capability",
+      "count": 22
+    }
+  ],
+  "removed": [
+    {
+      "from": "mcp__evimed__evidence_deduplicate",
+      "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ask_user",
+      "source": "kernel",
+      "description": "Ask the operator a question.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "bash",
+      "source": "kernel",
+      "description": "Run a shell command in the run workspace.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "edit",
+      "source": "kernel",
+      "description": "Replace an exact string in a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "old_string": {
+            "type": "string"
+          },
+          "new_string": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "old_string",
+          "new_string"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_edit",
+      "source": "kernel",
+      "description": "Edit a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_read",
+      "source": "kernel",
+      "description": "Read a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_search",
+      "source": "kernel",
+      "description": "Search the workspace through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_write",
+      "source": "kernel",
+      "description": "Write a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "glob",
+      "source": "kernel",
+      "description": "List workspace paths matching a glob.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[]",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "grep",
+      "source": "kernel",
+      "description": "Search workspace file contents.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "job_run",
+      "source": "kernel",
+      "description": "Start a long-running job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "job_status",
+      "source": "kernel",
+      "description": "Poll a started job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "list",
+      "source": "kernel",
+      "description": "List the entries of a workspace directory.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "entries[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__clinical_trial_search",
+      "source": "mcp",
+      "description": "Search configured clinical-trial registries.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "recruitmentStatus": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "registry": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "startYear": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "endYear": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "status": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "phase": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "studyType": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "hasArticles": {
+            "type": "array",
+            "maxItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "PubMed",
+              "Embase",
+              "ICTRP",
+              "CT.gov",
+              "CINAHL"
+            ]
+          },
+          "minSampleSize": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "maxSampleSize": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "items[].nctId",
+            "type": "nct_id"
+          },
+          {
+            "path": "items[].pmid",
+            "type": "pmid"
+          }
+        ]
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "nct_id",
+        "pmid"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__evidence_deduplicate",
+      "source": "mcp",
+      "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                },
+                "doi": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "pmid": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "title"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "items[].doi",
+            "type": "doi"
+          },
+          {
+            "path": "items[].pmid",
+            "type": "pmid"
+          }
+        ]
+      },
+      "typeTags": [
+        "doi",
+        "pmid"
+      ],
+      "requiredTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "outputTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__guideline_search",
+      "source": "mcp",
+      "description": "Search configured clinical-guideline sources.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "jurisdiction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "records",
+              "blocks"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "publisher": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "startYear": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "endYear": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "items[].doi",
+            "type": "doi"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "doi"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__kb_search",
+      "source": "mcp",
+      "description": "Search the researcher's own knowledge base (this project's uploaded documents and their personal library) for passages. Answers with quotable snippets, the document, page and character offsets; a small library is answered with the files to read instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "sourceIds": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "pattern": "^src_[a-f0-9]{32}$"
+            }
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__literature_search",
+      "source": "mcp",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 200); each abstract is preserved and quotable. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "pmids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "pattern": "^\\s*(?:PMID\\s*:?\\s*)?\\d{1,9}\\s*$"
+            }
+          },
+          "relation": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "treat",
+                  "cause",
+                  "prevent",
+                  "inhibit",
+                  "stimulate",
+                  "interact",
+                  "drug_interact",
+                  "associate",
+                  "compare",
+                  "cotreat",
+                  "positive_correlate",
+                  "negative_correlate"
+                ]
+              },
+              "object": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "dateFrom": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "dateTo": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "articleTypes": {
+            "type": "array",
+            "maxItems": 15,
+            "items": {
+              "type": "string",
+              "enum": [
+                "系统综述/Meta分析",
+                "指南/共识",
+                "传统综述",
+                "随机对照试验",
+                "临床试验",
+                "队列研究",
+                "病例对照研究",
+                "横断面研究",
+                "病例系列",
+                "病例报告",
+                "经济学评价",
+                "专家意见和评价",
+                "动物实验",
+                "体外实验",
+                "其他"
+              ]
+            },
+            "description": "EviMed's own study-type labels, e.g. 随机对照试验 for randomized controlled trials."
+          },
+          "hasPdf": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "minImpactFactor": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "maxImpactFactor": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "journalTiers": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "enum": [
+                "北大核心",
+                "科技核心",
+                "南大核心"
+              ]
+            }
+          },
+          "databases": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "enum": [
+                "internal",
+                "pubmed",
+                "crossref"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "items[].pmid",
+            "type": "pmid"
+          },
+          {
+            "path": "items[].doi",
+            "type": "doi"
+          }
+        ]
+      },
+      "typeTags": [
+        "mesh_term",
+        "pmid",
+        "source_id"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__locate_quote",
+      "source": "mcp",
+      "description": "Find a quotation in a source this run preserved, judged exactly as the delivery gate judges a claim's supportQuote (case, quotation marks, dashes, whitespace, full-width forms, CJK spacing, PDF line breaks, inline citation markers and marked … elisions are forgiven; anything else is not). found=true only for a match the gate accepts; each match has character offsets into the preserved file, its line and context. When not found, match=near passages show what the source actually says, to quote instead. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The .evimed-sources/... path a preserving tool returned, or the id it reported (PMCID, DOI, web-page:<hash>, EVIMED-GUIDE:<id>, label:<approval number>#<section>)."
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "maxResults": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "quote"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [
+        "source_id"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__open_access_full_text",
+      "source": "mcp",
+      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "identifier"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "artifacts[].path",
+            "type": "file_path"
+          },
+          {
+            "path": "metadata.doi",
+            "type": "doi"
+          },
+          {
+            "path": "metadata.pmcid",
+            "type": "pmid"
+          }
+        ]
+      },
+      "typeTags": [
+        "doi",
+        "pmid"
+      ],
+      "requiredTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "outputTypeTags": [
+        "doi",
+        "file_path",
+        "pmid"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "mcp__evimed__term_normalize",
+      "source": "mcp",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "general",
+              "drug",
+              "disease",
+              "indication",
+              "adverse_event"
+            ]
+          },
+          "annotate": {
+            "type": "boolean"
+          },
+          "mesh": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "term"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "normalized.term",
+            "type": "mesh_term"
+          }
+        ]
+      },
+      "typeTags": [
+        "mesh_term"
+      ],
+      "requiredTypeTags": [
+        "mesh_term"
+      ],
+      "outputTypeTags": [
+        "mesh_term"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__trial_registry_record",
+      "source": "mcp",
+      "description": "Fetch one trial-registry record as structured fields: PICO, design, arms, planned and actual enrolment with their dates, sites, the eligibility text as written, endpoints and published results. Planned and actual enrolment are kept apart -- the gap between them is the most useful accrual prior there is.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "registryId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "registry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        },
+        "required": [
+          "registryId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__vcr_read",
+      "source": "mcp",
+      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, population and patient sets, comparator designs, trial scenarios, saved results, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "what": {
+            "type": "string",
+            "enum": [
+              "study",
+              "definition",
+              "criteria",
+              "assumptions",
+              "population",
+              "patients",
+              "comparator",
+              "trial",
+              "precedents",
+              "matching",
+              "results",
+              "snapshot_profile",
+              "models",
+              "jobs",
+              "trial_registry_record"
+            ]
+          },
+          "filter": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "registryId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "registry": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "snapshotId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "subjectKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9_.:@-]+$"
+              },
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "default": 20
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "what"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "source_id"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__vcr_simulate",
+      "source": "mcp",
+      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to: cohort building, population or patient generation, comparator weighting, RMST, analytic or simulated trial design, assurance, accrual forecasting or criterion evaluation. start returns a jobId; status reports state and progress; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "status",
+              "cancel"
+            ],
+            "default": "start"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "profile_snapshot",
+              "build_cohort",
+              "generate_population",
+              "synthesize_population",
+              "generate_patients",
+              "reconstruct_km",
+              "pool_evidence",
+              "weight_comparator",
+              "rmst",
+              "design_analytic",
+              "design_simulation",
+              "design_grid",
+              "assurance",
+              "accrual_forecast",
+              "map_prior",
+              "match_criteria"
+            ]
+          },
+          "scenario": {
+            "type": "object"
+          },
+          "inputs": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "type": "object"
+            }
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "replicates": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000000
+          },
+          "cpuSecondsLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "subjectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__vcr_write",
+      "source": "mcp",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards, population, patient-set, comparator and trial designs, a design grid, a decision record, a registered forecast, a fitted literature model, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "what": {
+            "type": "string",
+            "enum": [
+              "definition",
+              "protocol",
+              "criteria",
+              "assumption",
+              "population",
+              "patient_set",
+              "comparator",
+              "trial_scenario",
+              "design_grid",
+              "decision",
+              "report",
+              "model",
+              "forecast",
+              "step"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object"
+            }
+          },
+          "data": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "what"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__web_read",
+      "source": "mcp",
+      "description": "Read one public web page or online document (HTML, PDF, office file) through the platform gateway and preserve it in the workspace as a citable snapshot with a sha256 receipt. Long text comes in pages: pass page=N for the next one (nextPage says whether there is one). Pages from regulators, guideline bodies and trial registries are marked official.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "data.markdownPath",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "read",
+      "source": "kernel",
+      "description": "Read a workspace file, paginated.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "skill",
+      "source": "kernel",
+      "description": "Load a skill body into the run.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "task",
+      "source": "kernel",
+      "description": "Run a scoped subtask in a fresh context.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "write",
+      "source": "kernel",
+      "description": "Write a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    }
+  ],
+  "edges": [
+    {
+      "from": "mcp__evimed__clinical_trial_search",
+      "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__clinical_trial_search",
+      "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__guideline_search",
+      "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi"
+      ]
+    },
+    {
+      "from": "mcp__evimed__guideline_search",
+      "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__web_read",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    }
+  ]
+}

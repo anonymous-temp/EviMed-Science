@@ -38,6 +38,7 @@ import web_search
 import kb_search
 import frontier_search
 import geo_platform
+import vcr_platform
 
 
 SERVER_NAME = "evimed-research"
@@ -888,6 +889,12 @@ TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
 # the module is on and open to the account (EVIMED_GEO_GATEWAY_URL), and used by
 # the GEO capabilities' runs.
 TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
+# 「虚拟临研」's platform data, its deterministic engine behind a submit/poll
+# pair, and the two evidence tools it parameterizes from (2026-09-28): offered
+# only where the module is on and open to the account
+# (EVIMED_VCR_GATEWAY_URL), and used by the module's five capabilities' runs.
+# None of them computes in the model: `vcr_simulate` queues a frozen scenario.
+TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -967,7 +974,13 @@ def disabled_tools():
 # may not run at all (`OPEN_SCIENCE_GEO_ENABLED`, off by default), and the
 # social channel is a separate host a deployment may not have; every research
 # question is answered without them (2026-09-25).
-OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search"})
+# vcr_read, vcr_write, vcr_simulate, trial_registry_record, evidence_pool:
+# 「虚拟临研」 is a module a deployment may not run at all
+# (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its five tools answer
+# `vcr_disabled` without asking where it is not open to this account; every
+# research question is answered without them (2026-09-28).
+OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"})
 
 
 def list_tools():
@@ -1983,6 +1996,33 @@ def _dispatch(name, arguments):
             else:
                 stop_reason, next_action = "unsupported", (
                     "Go on without the platform's GEO data and say so; never invent a measured number or a real phrasing."
+                )
+            return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"):
+        try:
+            if name == "vcr_read":
+                result = vcr_platform.read(arguments)
+            elif name == "vcr_write":
+                result = vcr_platform.write(arguments)
+            elif name == "vcr_simulate":
+                result = vcr_platform.simulate(arguments)
+            elif name == "trial_registry_record":
+                result = vcr_platform.registry_record(arguments)
+            else:
+                result = vcr_platform.evidence_pool(arguments)
+        except vcr_platform.VcrPlatformError as error:
+            # The same three next steps as GEO's, for the same reasons: a
+            # malformed call is the run's to fix, an outage may pass, and a
+            # module this conversation does not have is simply not there.
+            if error.code.endswith("_invalid"):
+                stop_reason, next_action = "invalid_input", "Correct the named field and call again."
+            elif error.retryable:
+                stop_reason, next_action = "retry", "Retry once, then go on and say what could not be read or written."
+            else:
+                stop_reason, next_action = "unsupported", (
+                    "Go on without the study's platform data and say so; never write a number the engine did not compute."
                 )
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())

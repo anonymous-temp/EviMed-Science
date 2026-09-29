@@ -120,6 +120,16 @@ class ToolContractTests(unittest.TestCase):
             "geo_read",
             "geo_write",
             "social_posts_search",
+            # 「虚拟临研」's study data, its deterministic engine behind a
+            # submit/poll pair, and the two evidence tools it parameterizes
+            # from (`vcr_platform.py`, 2026-09-28). `vcr_simulate` queues a
+            # frozen scenario and answers with a job id: the model never
+            # computes, and never writes a number it did not read back.
+            "vcr_read",
+            "vcr_write",
+            "vcr_simulate",
+            "trial_registry_record",
+            "evidence_pool",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

@@ -367,7 +367,13 @@ class RealLedgerTests(unittest.TestCase):
         # first run — eighteen accepted, two failed, one never run.
         # geo-insight finished a turn for the first time on the next release:
         # nineteen accepted, one failed (meta-analysis), one never run.
-        self.assertEqual(statuses.count("not-run"), 1)
+        # 2026-09-28, later: 「虚拟临研」 added five capabilities at once
+        # (vcr-protocol, vcr-evidence, vcr-analysis, vcr-matching,
+        # vcr-package). None has been dispatched — the module is off by
+        # default and its first run needs an account it is opened to — so all
+        # five are `not-run`, beside meta-analysis's failure and the one row
+        # that was already never run.
+        self.assertEqual(statuses.count("not-run"), 6)
         self.assertEqual(statuses.count("accepted"), 19)
         self.assertEqual(statuses.count("failed"), 1)
         self.assertIn("notice:", checker.coverage_notice())

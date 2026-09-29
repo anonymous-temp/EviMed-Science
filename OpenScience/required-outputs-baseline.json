@@ -31,6 +31,37 @@
         }
       ]
     },
+    "appraisal-table": {
+      "capability": "evidence-appraisal",
+      "requiredCount": 5,
+      "outputs": [
+        {
+          "path": "appraisal-table.json",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "appraisal-table.md",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "appraisal-table.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-09-02"
+        }
+      ]
+    },
     "bibliometric-analysis-report": {
       "capability": "bibliometric-analysis",
       "requiredCount": 2,
@@ -60,32 +91,6 @@
           "path": "clinical-evidence-matrix.json",
           "required": true,
           "addedOn": "2026-07-22"
-        }
-      ]
-    },
-    "drug-evaluation-report": {
-      "capability": "comprehensive-drug-evaluation",
-      "requiredCount": 4,
-      "outputs": [
-        {
-          "path": "comprehensive-evaluation-report.md",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "evidence-table.csv",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "evaluation-summary.json",
-          "required": true,
-          "addedOn": "2026-08-30"
-        },
-        {
-          "path": "evidence-snapshot.json",
-          "required": true,
-          "addedOn": "2026-08-30"
         }
       ]
     },
@@ -145,6 +150,32 @@
         }
       ]
     },
+    "drug-evaluation-report": {
+      "capability": "comprehensive-drug-evaluation",
+      "requiredCount": 4,
+      "outputs": [
+        {
+          "path": "comprehensive-evaluation-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-table.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evaluation-summary.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-snapshot.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
     "drug-selection-report": {
       "capability": "drug-selection",
       "requiredCount": 4,
@@ -167,6 +198,32 @@
         {
           "path": "evidence-snapshot.json",
           "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "geo-content-pack": {
+      "capability": "geo-content",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "geo-content.md",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "articles.json",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "geo-probe-log.jsonl",
+          "required": false,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
           "addedOn": "2026-08-30"
         }
       ]
@@ -202,6 +259,27 @@
         }
       ]
     },
+    "geo-proposal-pack": {
+      "capability": "geo-proposal",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "geo-proposal.md",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "proposal-package.json",
+          "required": true,
+          "addedOn": "2026-09-25"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-09-25"
+        }
+      ]
+    },
     "geo-strategy-pack": {
       "capability": "geo-strategy",
       "requiredCount": 2,
@@ -223,50 +301,75 @@
         }
       ]
     },
-    "geo-content-pack": {
-      "capability": "geo-content",
-      "requiredCount": 2,
+    "grant-proposal-package": {
+      "capability": "research-grant-development",
+      "requiredCount": 7,
       "outputs": [
         {
-          "path": "geo-content.md",
+          "path": "call-requirements.json",
           "required": true,
-          "addedOn": "2026-09-25"
+          "addedOn": "2026-08-31"
         },
         {
-          "path": "articles.json",
+          "path": "specific-aims.md",
           "required": true,
-          "addedOn": "2026-09-25"
+          "addedOn": "2026-08-31"
         },
         {
-          "path": "geo-probe-log.jsonl",
-          "required": false,
-          "addedOn": "2026-09-25"
+          "path": "proposal-outline.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "milestones.csv",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "grant-audit.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-08-31"
         },
         {
           "path": "revision-notes.md",
           "required": false,
-          "addedOn": "2026-08-30"
+          "addedOn": "2026-08-31"
         }
       ]
     },
-    "geo-proposal-pack": {
-      "capability": "geo-proposal",
-      "requiredCount": 2,
+    "manuscript-section": {
+      "capability": "manuscript-support",
+      "requiredCount": 4,
       "outputs": [
         {
-          "path": "geo-proposal.md",
+          "path": "manuscript-section.md",
           "required": true,
-          "addedOn": "2026-09-25"
+          "addedOn": "2026-09-02"
         },
         {
-          "path": "proposal-package.json",
+          "path": "section-claims.json",
           "required": true,
-          "addedOn": "2026-09-25"
+          "addedOn": "2026-09-02"
         },
         {
-          "path": "revision-notes.md",
-          "required": false,
-          "addedOn": "2026-09-25"
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-09-02"
         }
       ]
     },
@@ -299,6 +402,33 @@
           "path": "meta-analysis-run.json",
           "required": true,
           "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "method-candidate": {
+      "capability": "method-distillation",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "SKILL.md",
+          "required": true,
+          "addedOn": "2026-09-07"
+        },
+        {
+          "path": "method-candidate.json",
+          "required": true,
+          "addedOn": "2026-09-07"
+        }
+      ]
+    },
+    "method-relations": {
+      "capability": "method-relations",
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "method-relations.json",
+          "required": true,
+          "addedOn": "2026-09-07"
         }
       ]
     },
@@ -375,109 +505,6 @@
         }
       ]
     },
-    "grant-proposal-package": {
-      "capability": "research-grant-development",
-      "requiredCount": 7,
-      "outputs": [
-        {
-          "path": "call-requirements.json",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "specific-aims.md",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "proposal-outline.md",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "milestones.csv",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "grant-audit.md",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "citation-ledger.csv",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "delivery-summary.md",
-          "required": true,
-          "addedOn": "2026-08-31"
-        },
-        {
-          "path": "revision-notes.md",
-          "required": false,
-          "addedOn": "2026-08-31"
-        }
-      ]
-    },
-    "appraisal-table": {
-      "capability": "evidence-appraisal",
-      "requiredCount": 5,
-      "outputs": [
-        {
-          "path": "appraisal-table.json",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "appraisal-table.md",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "appraisal-table.csv",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "citation-ledger.csv",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "delivery-summary.md",
-          "required": true,
-          "addedOn": "2026-09-02"
-        }
-      ]
-    },
-    "manuscript-section": {
-      "capability": "manuscript-support",
-      "requiredCount": 4,
-      "outputs": [
-        {
-          "path": "manuscript-section.md",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "section-claims.json",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "citation-ledger.csv",
-          "required": true,
-          "addedOn": "2026-09-02"
-        },
-        {
-          "path": "delivery-summary.md",
-          "required": true,
-          "addedOn": "2026-09-02"
-        }
-      ]
-    },
     "source-understanding": {
       "capability": "source-understanding",
       "requiredCount": 2,
@@ -494,30 +521,98 @@
         }
       ]
     },
-    "method-candidate": {
-      "capability": "method-distillation",
+    "vcr-cohort-snapshot": {
+      "capability": "vcr-analysis",
       "requiredCount": 2,
       "outputs": [
         {
-          "path": "SKILL.md",
+          "path": "analysis-report.md",
           "required": true,
-          "addedOn": "2026-09-07"
+          "addedOn": "2026-09-28"
         },
         {
-          "path": "method-candidate.json",
+          "path": "results.json",
           "required": true,
-          "addedOn": "2026-09-07"
+          "addedOn": "2026-09-28"
         }
       ]
     },
-    "method-relations": {
-      "capability": "method-relations",
+    "vcr-comparator-analysis": {
+      "capability": "vcr-analysis",
       "requiredCount": 1,
       "outputs": [
         {
-          "path": "method-relations.json",
+          "path": "comparability.md",
           "required": true,
-          "addedOn": "2026-09-07"
+          "addedOn": "2026-09-28"
+        }
+      ]
+    },
+    "vcr-matching-assessment": {
+      "capability": "vcr-matching",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "matching-assessment.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "matching.json",
+          "required": true,
+          "addedOn": "2026-09-28"
+        }
+      ]
+    },
+    "vcr-simulation-report": {
+      "capability": "vcr-analysis",
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "simulation.json",
+          "required": true,
+          "addedOn": "2026-09-28"
+        }
+      ]
+    },
+    "vcr-study-package": {
+      "capability": "vcr-evidence",
+      "requiredCount": 7,
+      "outputs": [
+        {
+          "path": "evidence-parameters.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "results.json",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "study-package.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "assumption-register.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "execution-record.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "study-definition.md",
+          "required": true,
+          "addedOn": "2026-09-28"
+        },
+        {
+          "path": "criteria.json",
+          "required": true,
+          "addedOn": "2026-09-28"
         }
       ]
     }

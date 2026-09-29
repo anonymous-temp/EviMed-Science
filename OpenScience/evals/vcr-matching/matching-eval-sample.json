@@ -1,0 +1,1157 @@
+{
+  "schemaVersion": "1.0.0",
+  "label": "vcr-matching 合成示例评测集",
+  "synthetic": true,
+  "note": "合成数据，不是真实病历：七份人工编写的中文病程摘要，用来让评测函数可跑、可回归。真实基线按方案 §7.4 与 AC-36 用合作方的真实病例、两位医生独立判定产生，本文件不代表任何真实人群的表现，也不构成准确率承诺。goldJudgments 的 state 是裁决后的标签，raterA / raterB 是两位阅片者各自的标签，二者的一致率就是这一批能达到的上限。",
+  "asOf": "2026-09-28T00:00:00Z",
+  "protocolVersionId": "prt-demo-v1",
+  "criteria": [
+    {
+      "id": "crt-age",
+      "ordinal": 1,
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "sourceText": "年龄 ≥ 18 岁",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18
+      }
+    },
+    {
+      "id": "crt-mi",
+      "ordinal": 2,
+      "kind": "exclusion",
+      "criterionType": "time_window",
+      "sourceText": "近 6 个月内发生过心肌梗死者除外",
+      "requirement": {
+        "op": "absent",
+        "variable": "myocardial_infarction",
+        "window": {
+          "months": 6
+        }
+      }
+    },
+    {
+      "id": "crt-washout",
+      "ordinal": 3,
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "sourceText": "距末次多西他赛给药不足 28 天者除外",
+      "requirement": {
+        "op": "elapsed_since",
+        "variable": "docetaxel",
+        "days": 28,
+        "comparator": "gte"
+      }
+    },
+    {
+      "id": "crt-creatinine",
+      "ordinal": 4,
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "sourceText": "血肌酐 ≤ 1.5 mg/dL",
+      "requirement": {
+        "op": "compare",
+        "variable": "creatinine",
+        "comparator": "lte",
+        "value": 1.5,
+        "unit": "mg/dL",
+        "aggregate": "latest"
+      }
+    },
+    {
+      "id": "crt-pregnancy",
+      "ordinal": 5,
+      "kind": "exclusion",
+      "criterionType": "pregnancy",
+      "sourceText": "妊娠或哺乳期女性除外",
+      "requirement": {
+        "op": "absent",
+        "variable": "pregnancy"
+      },
+      "applicability": {
+        "op": "compare",
+        "variable": "sex",
+        "comparator": "in",
+        "value": [
+          "female"
+        ]
+      }
+    },
+    {
+      "id": "crt-consent",
+      "ordinal": 6,
+      "kind": "inclusion",
+      "criterionType": "consent_capacity",
+      "sourceText": "能够理解研究内容并签署知情同意书",
+      "requirement": {
+        "op": "language",
+        "key": "crt-consent"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "subjectKey": "S1",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s1": {
+          "id": "doc-s1",
+          "text": "女，62 岁。既往体健，否认心梗史，否认妊娠。2026-09-01 血肌酐 1.1 mg/dL。末次多西他赛：2026-01-10。患者本人可理解研究内容并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S1-sex",
+          "variable": "sex",
+          "value": "female",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S1-age",
+          "variable": "age",
+          "value": 62,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S1-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认心梗史",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s1",
+            "start": 12,
+            "end": 17,
+            "quote": "否认心梗史"
+          }
+        },
+        {
+          "id": "S1-preg",
+          "variable": "pregnancy",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认妊娠",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s1",
+            "start": 18,
+            "end": 22,
+            "quote": "否认妊娠"
+          }
+        },
+        {
+          "id": "S1-creat",
+          "variable": "creatinine",
+          "value": 1.1,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-01T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s1",
+            "start": 34,
+            "end": 47,
+            "quote": "血肌酐 1.1 mg/dL"
+          }
+        },
+        {
+          "id": "S1-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-01-10",
+          "occurredAt": "2026-01-10T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s1",
+            "start": 48,
+            "end": 65,
+            "quote": "末次多西他赛：2026-01-10"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S1-consent",
+              "documentId": "doc-s1",
+              "start": 66,
+              "end": 84,
+              "quote": "患者本人可理解研究内容并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "eligible"
+    },
+    {
+      "subjectKey": "S2",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s2": {
+          "id": "doc-s2",
+          "text": "男，55 岁。2026-06-28 因急性心梗入院。2026-09-02 血肌酐 1.0 mg/dL。末次多西他赛：2026-02-01。可理解并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S2-sex",
+          "variable": "sex",
+          "value": "male",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S2-age",
+          "variable": "age",
+          "value": 55,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S2-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "2026-06-28 因急性心梗入院",
+          "occurredAt": "2026-06-28T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s2",
+            "start": 7,
+            "end": 25,
+            "quote": "2026-06-28 因急性心梗入院"
+          }
+        },
+        {
+          "id": "S2-creat",
+          "variable": "creatinine",
+          "value": 1.0,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-02T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s2",
+            "start": 37,
+            "end": 50,
+            "quote": "血肌酐 1.0 mg/dL"
+          }
+        },
+        {
+          "id": "S2-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-02-01",
+          "occurredAt": "2026-02-01T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s2",
+            "start": 51,
+            "end": 68,
+            "quote": "末次多西他赛：2026-02-01"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S2-consent",
+              "documentId": "doc-s2",
+              "start": 69,
+              "end": 79,
+              "quote": "可理解并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "not_satisfied",
+          "applicable": true,
+          "raterA": "not_satisfied",
+          "raterB": "not_satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "unknown",
+          "applicable": false,
+          "raterA": "unknown",
+          "raterB": "unknown"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "ineligible"
+    },
+    {
+      "subjectKey": "S3",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s3": {
+          "id": "doc-s3",
+          "text": "男，71 岁。否认心梗史。2026-09-03 血肌酐 1.2 mg/dL。可理解并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S3-sex",
+          "variable": "sex",
+          "value": "male",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S3-age",
+          "variable": "age",
+          "value": 71,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S3-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认心梗史",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s3",
+            "start": 7,
+            "end": 12,
+            "quote": "否认心梗史"
+          }
+        },
+        {
+          "id": "S3-creat",
+          "variable": "creatinine",
+          "value": 1.2,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-03T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s3",
+            "start": 24,
+            "end": 37,
+            "quote": "血肌酐 1.2 mg/dL"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S3-consent",
+              "documentId": "doc-s3",
+              "start": 38,
+              "end": 48,
+              "quote": "可理解并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "unknown",
+          "applicable": true,
+          "raterA": "unknown",
+          "raterB": "not_satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "unknown",
+          "applicable": false,
+          "raterA": "unknown",
+          "raterB": "unknown"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "insufficient_evidence"
+    },
+    {
+      "subjectKey": "S4",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s4": {
+          "id": "doc-s4",
+          "text": "女，44 岁。否认心梗史，否认妊娠。2026-09-05 血肌酐 0.9 mg/dL。末次多西他赛：2026-09-20。可理解并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S4-sex",
+          "variable": "sex",
+          "value": "female",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S4-age",
+          "variable": "age",
+          "value": 44,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S4-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认心梗史",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s4",
+            "start": 7,
+            "end": 12,
+            "quote": "否认心梗史"
+          }
+        },
+        {
+          "id": "S4-preg",
+          "variable": "pregnancy",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认妊娠",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s4",
+            "start": 13,
+            "end": 17,
+            "quote": "否认妊娠"
+          }
+        },
+        {
+          "id": "S4-creat",
+          "variable": "creatinine",
+          "value": 0.9,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-05T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s4",
+            "start": 29,
+            "end": 42,
+            "quote": "血肌酐 0.9 mg/dL"
+          }
+        },
+        {
+          "id": "S4-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-09-20",
+          "occurredAt": "2026-09-20T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s4",
+            "start": 43,
+            "end": 60,
+            "quote": "末次多西他赛：2026-09-20"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S4-consent",
+              "documentId": "doc-s4",
+              "start": 61,
+              "end": 71,
+              "quote": "可理解并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "pending_recheck",
+          "applicable": true,
+          "raterA": "pending_recheck",
+          "raterB": "pending_recheck"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "pending"
+    },
+    {
+      "subjectKey": "S5",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s5": {
+          "id": "doc-s5",
+          "text": "男，67 岁。否认心梗史。2026-09-06 血肌酐 2.4 mg/dL。末次多西他赛：2026-01-05。可理解并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S5-sex",
+          "variable": "sex",
+          "value": "male",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S5-age",
+          "variable": "age",
+          "value": 67,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S5-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认心梗史",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s5",
+            "start": 7,
+            "end": 12,
+            "quote": "否认心梗史"
+          }
+        },
+        {
+          "id": "S5-creat",
+          "variable": "creatinine",
+          "value": 1.2,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-06T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s5",
+            "start": 24,
+            "end": 37,
+            "quote": "血肌酐 2.4 mg/dL"
+          }
+        },
+        {
+          "id": "S5-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-01-05",
+          "occurredAt": "2026-01-05T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s5",
+            "start": 38,
+            "end": 55,
+            "quote": "末次多西他赛：2026-01-05"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S5-consent",
+              "documentId": "doc-s5",
+              "start": 56,
+              "end": 66,
+              "quote": "可理解并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "not_satisfied",
+          "applicable": true,
+          "raterA": "not_satisfied",
+          "raterB": "unknown"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "unknown",
+          "applicable": false,
+          "raterA": "unknown",
+          "raterB": "unknown"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "ineligible"
+    },
+    {
+      "subjectKey": "S6",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s6": {
+          "id": "doc-s6",
+          "text": "女，39 岁。2026-02-20 因急性心梗入院。否认妊娠。2026-09-07 血肌酐 1.0 mg/dL。末次多西他赛：2026-03-15。可理解并签署知情同意。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S6-sex",
+          "variable": "sex",
+          "value": "female",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S6-age",
+          "variable": "age",
+          "value": 39,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S6-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "2026-02-20 因急性心梗入院",
+          "occurredAt": "2026-02-20T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s6",
+            "start": 7,
+            "end": 25,
+            "quote": "2026-02-20 因急性心梗入院"
+          }
+        },
+        {
+          "id": "S6-preg",
+          "variable": "pregnancy",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认妊娠",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s6",
+            "start": 26,
+            "end": 30,
+            "quote": "否认妊娠"
+          }
+        },
+        {
+          "id": "S6-creat",
+          "variable": "creatinine",
+          "value": 1.0,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-07T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s6",
+            "start": 42,
+            "end": 55,
+            "quote": "血肌酐 1.0 mg/dL"
+          }
+        },
+        {
+          "id": "S6-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-03-15",
+          "occurredAt": "2026-03-15T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s6",
+            "start": 56,
+            "end": 73,
+            "quote": "末次多西他赛：2026-03-15"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "satisfied",
+          "evidence": [
+            {
+              "factId": "S6-consent",
+              "documentId": "doc-s6",
+              "start": 74,
+              "end": 84,
+              "quote": "可理解并签署知情同意",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        }
+      ],
+      "goldSummary": "eligible"
+    },
+    {
+      "subjectKey": "S7",
+      "asOf": "2026-09-28T00:00:00Z",
+      "documents": {
+        "doc-s7": {
+          "id": "doc-s7",
+          "text": "男，58 岁。否认心梗史。2026-09-08 血肌酐 1.3 mg/dL。末次多西他赛：2026-02-11。患者听力下降，沟通需家属协助，但能理解研究内容并同意参加。"
+        }
+      },
+      "facts": [
+        {
+          "id": "S7-sex",
+          "variable": "sex",
+          "value": "male",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "sex"
+          }
+        },
+        {
+          "id": "S7-age",
+          "variable": "age",
+          "value": 58,
+          "unit": "year",
+          "polarity": "affirmed",
+          "extractedBy": "structured",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "snapshot": {
+            "id": "snp-demo",
+            "field": "age"
+          }
+        },
+        {
+          "id": "S7-mi",
+          "variable": "myocardial_infarction",
+          "value": null,
+          "polarity": "negated",
+          "extractedBy": "model",
+          "surface": "否认心梗史",
+          "occurredAt": null,
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s7",
+            "start": 7,
+            "end": 12,
+            "quote": "否认心梗史"
+          }
+        },
+        {
+          "id": "S7-creat",
+          "variable": "creatinine",
+          "value": 1.3,
+          "unit": "mg/dL",
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "血肌酐",
+          "occurredAt": "2026-09-08T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s7",
+            "start": 24,
+            "end": 37,
+            "quote": "血肌酐 1.3 mg/dL"
+          }
+        },
+        {
+          "id": "S7-doce",
+          "variable": "docetaxel",
+          "value": null,
+          "polarity": "affirmed",
+          "extractedBy": "model",
+          "surface": "末次多西他赛",
+          "dateSurface": "2026-02-11",
+          "occurredAt": "2026-02-11T00:00:00Z",
+          "visibleAt": "2026-09-10T00:00:00Z",
+          "source": {
+            "documentId": "doc-s7",
+            "start": 38,
+            "end": 55,
+            "quote": "末次多西他赛：2026-02-11"
+          }
+        }
+      ],
+      "modelJudgments": {
+        "crt-consent": {
+          "state": "not_satisfied",
+          "evidence": [
+            {
+              "factId": "S7-consent",
+              "documentId": "doc-s7",
+              "start": 56,
+              "end": 70,
+              "quote": "患者听力下降，沟通需家属协助",
+              "visibleAt": "2026-09-10T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "goldJudgments": [
+        {
+          "criterionId": "crt-age",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-mi",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-washout",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-creatinine",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "satisfied"
+        },
+        {
+          "criterionId": "crt-pregnancy",
+          "state": "unknown",
+          "applicable": false,
+          "raterA": "unknown",
+          "raterB": "unknown"
+        },
+        {
+          "criterionId": "crt-consent",
+          "state": "satisfied",
+          "applicable": true,
+          "raterA": "satisfied",
+          "raterB": "not_satisfied"
+        }
+      ],
+      "goldSummary": "eligible"
+    }
+  ]
+}

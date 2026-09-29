@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-protocol",
+  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临研」's first step, chosen for the specific way a research definition goes wrong while looking finished — an estimand with no intercurrent-event strategy, an eligibility criterion rewritten wider than the protocol says, an 'unknown' folded into 'does not qualify'. mustDo / mustNotDo are the rubric; the deterministic half (three files at their names, every criterion with its source sentence and locator, the four counts stated apart) is the vcr-study-package contract in @evimed/domain plus this capability's preflight.",
+  "briefs": [
+    {
+      "id": "vcr-protocol-001-nsclc-single-arm",
+      "title": "EV-201 二线 NSCLC：单臂 II 期的研究定义与入排结构化",
+      "why": "The ordinary full case, and the one the whole module was designed around (plan §10.3). A single-arm trial that may need an external control has to state its estimand precisely enough that the comparator step can later judge whether it is estimable at all; teams routinely write 'PFS' and stop, leaving the intercurrent-event strategy — the thing that decides what the number means — unwritten.",
+      "inputs": {
+        "question": "EV-201 二线非小细胞肺癌：单臂 II 期能不能用外部对照，还是必须做随机？",
+        "protocolText": "入选：经组织学或细胞学确诊的 IIIB/IV 期非小细胞肺癌；至少接受过一线含铂化疗后进展；ECOG 0–1；至少一个 RECIST v1.1 可测量病灶；预期生存 ≥3 个月。排除：既往接受过抗 Nectin-4 治疗；活动性脑转移；未控制的糖尿病（HbA1c ≥8%）；3 级以上周围神经病变；妊娠或哺乳。主要终点：研究者评估的客观缓解率。次要终点：PFS、OS、安全性。",
+        "dataTier": "T0",
+        "intendedUse": "design_support"
+      },
+      "mustDo": [
+        "Write the estimand's five attributes, including a named intercurrent-event strategy (treatment policy, hypothetical, composite, while-on-treatment or principal stratum) with the reason it was chosen.",
+        "Set endpointType from how the primary endpoint is actually measured — ORR is binary, and PFS as a secondary endpoint does not change that.",
+        "Structure every inclusion and exclusion criterion with its own source sentence copied verbatim and a locator.",
+        "Write each exclusion as a requirement to satisfy, so 「满足」 means 「not excluded by this one」.",
+        "Give the HbA1c and ECOG criteria machine-evaluable requirements with the operator and the threshold as written.",
+        "Say in evidenceNeeded what a判定 of 「既往抗 Nectin-4 治疗」 and 「活动性脑转移」 actually requires.",
+        "State the study's estimability at T0 and why: what can be estimated with no patient-level data and what cannot.",
+        "Record every default taken (intended use, endpoint type, data tier) in fieldSources with its reason."
+      ],
+      "mustNotDo": [
+        "Widen ECOG 0–1 to ECOG ≤2, or drop the 「至少一线含铂化疗后进展」 time and sequence conditions.",
+        "Write a sample size, an expected ORR or a hazard ratio — this step computes nothing.",
+        "File a criterion with no source sentence because the protocol text was paraphrased.",
+        "Ask the user to confirm the estimand before writing it.",
+        "Write 0 for a count nobody has taken."
+      ],
+      "gradedOn": "Whether a statistician could take the definition card and the criteria file and start designing without going back to the protocol PDF."
+    },
+    {
+      "id": "vcr-protocol-002-tcm-cdss-eligibility",
+      "title": "中医院真实世界研究：把一份中药上市后研究方案的入排条件结构化",
+      "why": "A protocol whose eligibility is written in syndrome-differentiation language (「气阴两虚证」) rather than in fields a database holds. The failure mode is not a wrong threshold but a false one: turning a syndrome pattern into a lab cutoff the protocol never states, so a patient who cannot be judged is silently judged.",
+      "inputs": {
+        "question": "这份中药上市后安全性研究的入排条件，帮我逐条结构化，保留原文。",
+        "protocolText": "入选标准：1. 年龄 18–75 岁；2. 符合 2 型糖尿病西医诊断标准（WHO 1999）；3. 中医辨证属气阴两虚证（参照《中药新药临床研究指导原则》）；4. 入组前 3 个月内未调整降糖方案；5. 签署知情同意书。排除标准：1. 1 型糖尿病或特殊类型糖尿病；2. 近 3 个月发生过糖尿病酮症酸中毒或高渗状态；3. 严重肝肾功能不全（ALT 或 AST >2.5 倍正常上限，eGFR <45 mL/min/1.73m²）；4. 妊娠、哺乳或近期有生育计划的女性；5. 研究者认为不适宜参加者。",
+        "dataTier": "T1",
+        "intendedUse": "exploratory"
+      },
+      "mustDo": [
+        "Keep 「气阴两虚证」 as a criterion in the protocol's own words, typed as `diagnosis`, with evidenceNeeded naming what a judgment of it requires (a documented syndrome differentiation by a qualified physician).",
+        "Give ALT / AST / eGFR machine-evaluable requirements with the exact thresholds and their units.",
+        "Type 「研究者认为不适宜参加者」 as a free-text requirement and say plainly in evidenceNeeded that only the investigator can judge it.",
+        "Keep the pregnancy criterion marked so a patient it cannot apply to is flagged not-applicable rather than unknown.",
+        "State that at T1 the study can profile baseline and feasibility but cannot estimate a treatment effect."
+      ],
+      "mustNotDo": [
+        "Convert 「气阴两虚证」 into a set of laboratory thresholds the protocol does not state.",
+        "Drop 「研究者认为不适宜参加者」 because it is not machine-evaluable.",
+        "Merge the two liver-enzyme thresholds into one 「肝功能异常」 criterion.",
+        "Write a criterion whose source sentence is a paraphrase rather than the protocol's own line."
+      ],
+      "gradedOn": "Whether every criterion can be traced to one sentence of the protocol, and whether the ones a machine cannot judge say so instead of being invented."
+    },
+    {
+      "id": "vcr-protocol-003-one-sentence-power",
+      "title": "一句话起步：「PFS 预计 HR 0.70、对照中位 6 个月、两年入组，要多少例？」",
+      "why": "The single-step path (plan §4): a question with no protocol behind it. The definition has to be minimal and say so, and the temptation is to answer the sample-size question directly — which is exactly what this step must not do, because the number belongs to the engine and the run would be typing it from memory.",
+      "inputs": {
+        "question": "PFS 预计 HR 0.70、对照组中位 6 个月、两年入组，1:1 随机要多少例？",
+        "dataTier": "T0",
+        "intendedUse": "exploratory"
+      },
+      "mustDo": [
+        "Write a minimal definition card and mark it minimal: what the population is left as, that the comparator is the stated control, that the primary endpoint is PFS and its type is time_to_event.",
+        "State the estimand's intercurrent-event strategy as an explicit AI-set default, with the reason, rather than leaving it blank.",
+        "Record HR 0.70, median 6 months and a two-year accrual window as inputs to be turned into assumption cards by the evidence step — not as results.",
+        "Say in the report that the sample size itself is computed by a design job, and name which one (design_analytic, cross-checked by design_simulation).",
+        "Mark every field of the card ai_set, so the page shows the label."
+      ],
+      "mustNotDo": [
+        "Answer with a sample size, an event count or a power figure.",
+        "Present the minimal definition as a full one.",
+        "Ask the user for the population, the analysis method or the dropout rate before writing anything.",
+        "Invent a dropout rate or an accrual curve and present it as the user's input."
+      ],
+      "gradedOn": "Whether the run resisted answering the number and instead produced a definition precise enough for the design job to answer it."
+    }
+  ]
+}
