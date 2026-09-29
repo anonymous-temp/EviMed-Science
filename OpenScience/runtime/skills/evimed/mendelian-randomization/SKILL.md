@@ -113,3 +113,32 @@ Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
 rejection, and process description; the report itself carries none of them, and
 no check reads the notes as report prose.
+
+Scientific scale and denominators. Each source can carry optional `effectScale`
+with `unit`, `transformation` and source-linked `evidence`; these are declarations,
+not proof of repository confirmation. Results preserve `exposure_scale` and
+`outcome_scale` with unknown, declared, repository-reported or conflicting status.
+Use only the documented unit and transformation. Unknown units mean per source
+exposure unit, never automatically per SD from the phenotype name, F statistic or
+coefficient. A documented SD applies to that exact transformed or original trait;
+retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
+limitation rather than choosing a convenient unit.
+
+Keep catalogue sample totals distinct from `variant_sample_sizes` and the
+`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
+Neither denominator establishes exact ancestry shares in the analyzed variants.
+`sample_overlap` records unknown or possible overlap from the prefix heuristic;
+this does not measure overlapping participants, independence, or the direction
+or magnitude of bias. Discuss directional mechanisms only conditionally with
+explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
+not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+
+A failed managed job may return top-level `artifacts` with `partial-research.json`,
+`partial-research.md` and bounded scientific CSV projections. Keep the original
+failed state and error code. Inspect only the returned public artifact paths;
+private diagnostics, runner logs and model responses are not deliverables. Use
+available primary numbers when explicitly marked available. With 0–2 candidate
+or retained variants, preserve observed source/selection/harmonized rows and
+state that unsupported downstream estimates were not computed. Candidate rows
+before clumping are not independently verified instruments. Missing modules are
+not negative findings, and an incomplete job is not a successful full analysis.

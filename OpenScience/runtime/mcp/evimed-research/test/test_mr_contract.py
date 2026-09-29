@@ -121,6 +121,16 @@ class MRContractTests(unittest.TestCase):
         )
         self.assertEqual(normalized["error"]["code"], "mr_input_changed")
 
+    def test_partial_scientific_artifacts_preserve_the_original_failed_state(self):
+        error = self.server.failure("mr_interpretation_failed", "Interpretation incomplete.", False, "Incomplete job.", ["Inspect available partial outputs."])
+        artifacts = [{"kind": "json", "path": "mendelian-randomization-runs/mr-test/output/partial-research.json"}]
+        normalized = self.server._normalize_tool_result("mendelian_randomization", {**error, "artifacts": artifacts}, {}, {})
+        self.assertEqual(normalized["status"], "error")
+        self.assertEqual(normalized["error"]["code"], "mr_interpretation_failed")
+        self.assertEqual(normalized["artifacts"], artifacts)
+        self.assertNotIn("data", normalized)
+        self.assertNotIn("sources", normalized)
+
 
 if __name__ == "__main__":
     unittest.main()

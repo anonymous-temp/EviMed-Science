@@ -124,6 +124,9 @@ def diagnostic_plot_checks(result: MRAnalysisResult) -> dict:
 def require_report_ready(results: list[MRAnalysisResult]) -> None:
     if not results:
         raise MRDeliveryError("mr_analysis_incomplete", "primaryEstimate")
+    for result in results:
+        if result.analysis_status != "completed":
+            raise MRDeliveryError(result.analysis_error_code or "mr_analysis_incomplete", "primaryEstimate")
     require_interpretations(results)
     for result in results:
         if any(item["status"] == "failed" for item in diagnostic_plot_checks(result).values()):

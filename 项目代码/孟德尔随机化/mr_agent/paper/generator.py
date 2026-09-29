@@ -822,7 +822,7 @@ class PaperGenerator:
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")
                 )
                 paragraphs.append(
-                    ("运行时标记了潜在样本重叠，可能将估计推向观察性关联。"
+                    ("运行时标记了潜在样本重叠；重叠程度和偏倚方向尚未确定。"
                      if result.sample_overlap_warning else "源元数据不足以证明队列完全无重叠。")
                     + self._reverse_sentence(result)
                     + "该结果适合作为可追溯的因果推断证据，"
@@ -846,7 +846,7 @@ class PaperGenerator:
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")
                 )
                 paragraphs.append(
-                    ("The runtime flagged possible sample overlap, which may move estimates toward observational associations. "
+                    ("The runtime flagged possible sample overlap; its extent and bias direction are unestablished. "
                      if result.sample_overlap_warning else
                      "Source metadata was insufficient to establish complete cohort non-overlap. ")
                     + self._reverse_sentence(result)

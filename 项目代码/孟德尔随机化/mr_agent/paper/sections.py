@@ -267,7 +267,7 @@ def write_limitations(
     outcome: str,
     results: list[MRAnalysisResult],
     bidirectional: bool = False,
-    population: str = "European",
+    population: str = "Unknown",
     language: str = "en",
 ) -> str:
     """Generate Limitations section."""

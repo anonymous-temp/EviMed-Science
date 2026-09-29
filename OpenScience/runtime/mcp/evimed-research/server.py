@@ -71,6 +71,7 @@ STRING = {"type": "string", "minLength": 1, "maxLength": 512}
 SHORT_STRING = {"type": "string", "minLength": 1, "maxLength": 128}
 LONG_STRING = {"type": "string", "minLength": 1, "maxLength": 4000}
 MR_COLUMN_KEYS = ("snp", "beta", "se", "effect_allele", "other_allele", "eaf", "pval")
+MR_SCALE_SCHEMA = object_schema({key: {"type": "string", "minLength": 1, "maxLength": 1000} for key in ("unit", "transformation", "evidence")})
 MR_SOURCE_SCHEMA = {
     "oneOf": [
         object_schema(
@@ -86,7 +87,7 @@ MR_SOURCE_SCHEMA = {
                 "columnMapping": object_schema(
                     {key: SHORT_STRING for key in (*MR_COLUMN_KEYS, "samplesize")}, MR_COLUMN_KEYS
                 ),
-                "effectScale": object_schema({key: {"type": "string", "minLength": 1, "maxLength": 1000} for key in ("unit", "transformation", "evidence")}),
+                "effectScale": MR_SCALE_SCHEMA,
                 "sampleSize": {
                     "type": "integer",
                     "minimum": 1,
@@ -101,6 +102,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["opengwas"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "gwasId": {
                     "type": "string",
                     "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
@@ -112,6 +114,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "accession": {"type": "string", "pattern": r"^GCST\d{6,9}$"},
             },
             ("type", "accession"),
@@ -119,6 +122,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "pubmedId": {"type": "string", "pattern": r"^\d{1,9}$"},
             },
             ("type", "pubmedId"),

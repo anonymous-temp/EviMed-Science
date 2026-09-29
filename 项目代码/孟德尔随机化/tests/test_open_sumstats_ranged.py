@@ -216,7 +216,7 @@ def test_a_file_system_that_cannot_reserve_the_room_means_the_stream(server, mon
     def full(descriptor, offset, length):
         raise OSError(errno.ENOSPC, "No space left on device")
 
-    monkeypatch.setattr(osm.os, "posix_fallocate", full)
+    monkeypatch.setattr(osm.os, "posix_fallocate", full, raising=False)
     kept, read = osm.read_whole_file(URL, osm._Http(opener=server), significant, size=len(BIG))
     assert (read["mode"], read["rangedSkipped"]) == ("streamed", "no_room")
     assert kept == _streamed()[0] and _spools(server.cache) == []

@@ -586,6 +586,9 @@ class MRPipeline:
         # Keep the completed numerical work when generation fails afterwards.
         self.state.analysis_results = results
         for r in results:
+            if r.analysis_status != "completed":
+                r.interpretation_status = "not_applicable"
+                continue
             if not r.mr_results:
                 r.interpretation_status = "not_applicable"
                 r.interpretation = (

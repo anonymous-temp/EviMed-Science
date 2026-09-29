@@ -93,9 +93,13 @@ def relative_parts(value: Any) -> tuple[str, ...]:
 def _validate_source(source: Any) -> None:
     if not isinstance(source, dict):
         raise _invalid("Each GWAS source must be an object.")
+    scale = source.get("effectScale")
+    if "effectScale" in source and (not isinstance(scale, dict) or not scale or set(scale) - {"unit", "transformation", "evidence"}
+                              or any(not _text(value, 1000) for value in scale.values())):
+        raise _invalid("effectScale accepts only bounded unit, transformation and evidence declarations.")
     if source.get("type") == "opengwas":
         if (
-            set(source) != {"type", "gwasId"}
+            set(source) - {"effectScale"} != {"type", "gwasId"}
             or not isinstance(source["gwasId"], str)
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", source["gwasId"])
         ):
@@ -105,7 +109,7 @@ def _validate_source(source: Any) -> None:
         # One identifier the catalogue itself resolves: a study accession, or
         # the PubMed id of the paper when it has a single study with full
         # summary statistics. Never a trait name the engine would have to guess.
-        keys = set(source) - {"type"}
+        keys = set(source) - {"type", "effectScale"}
         if not (
             (keys == {"accession"} and isinstance(source["accession"], str)
              and re.fullmatch(r"GCST\d{6,9}", source["accession"]))
@@ -138,10 +142,6 @@ def _validate_source(source: Any) -> None:
         or len(set(mapping.values())) != len(mapping)
     ):
         raise _invalid("Map each of the seven required GWAS columns to a distinct nonempty header.")
-    scale = source.get("effectScale")
-    if scale is not None and (not isinstance(scale, dict) or not scale or set(scale) - {"unit", "transformation", "evidence"}
-                              or any(not _text(value, 1000) for value in scale.values())):
-        raise _invalid("effectScale accepts only bounded unit, transformation and evidence declarations.")
     if not isinstance(source["instrumentsPreclumped"], bool):
         raise _invalid("instrumentsPreclumped must be a JSON boolean.")
     if "sampleSize" in source and (
@@ -672,6 +672,7 @@ def runner_sources(
                         sources[role] = DataSource(
                             source_type=DataSourceType.OPENGWAS,
                             gwas_id=source["gwasId"],
+                            effect_scale=declared_scale(source.get("effectScale")),
                             trait_name=request[role],
                         )
                         continue
@@ -722,10 +723,18 @@ def open_catalog_sources(
         or not isinstance(authority.get("sources"), dict)
     ):
         raise _manifest_failure()
+    from mr_agent.source_context import merge_scale
+    partial_error = None
     try:
         pair = (build or open_sumstats.build_pair)(request["exposureSource"], request["outcomeSource"])
     except open_sumstats.OpenSourceError as error:
-        raise MRInputError(error.code, str(error)) from None
+        if error.partial_pair is None:
+            raise MRInputError(error.code, str(error)) from None
+        pair, partial_error = error.partial_pair, error
+    for role in ("exposure", "outcome"):
+        samples = pair.record[role].setdefault("sampleMetadata", {}) or {}
+        samples["effectScale"] = merge_scale(declared_scale(request[f"{role}Source"].get("effectScale")), samples.get("effectScale") or unknown_scale())
+        pair.record[role]["sampleMetadata"] = samples
     try:
         absolute = output_root.absolute()
         with directory_fd(
@@ -753,6 +762,8 @@ def open_catalog_sources(
         if isinstance(error, MRInputError):
             raise
         raise _manifest_failure() from None
+    if partial_error is not None:
+        raise MRInputError(partial_error.code, str(partial_error)) from None
     mapping = ColumnMapping(**STANDARD_MAPPING, samplesize="samplesize", chr="chr", pos="pos")
     sources = {}
     for role in ("exposure", "outcome"):
@@ -853,6 +864,7 @@ def bind_result_provenance(
 def remote_metadata(sources: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Mixed-mode repository facts must come from the existing exact-ID client."""
     from mr_agent.tools import gwas
+    from mr_agent.source_context import merge_scale, unknown_scale
 
     metadata = {}
     for source in sources.values():
@@ -860,6 +872,7 @@ def remote_metadata(sources: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         try:
             metadata[source.gwas_id] = gwas.fetch_gwas_metadata(source.gwas_id)
+            metadata[source.gwas_id]["effect_scale"] = merge_scale(source.effect_scale, metadata[source.gwas_id].get("effect_scale") or unknown_scale())
             source.effect_scale = copy.deepcopy(metadata[source.gwas_id]["effect_scale"])
             source.sample_size = metadata[source.gwas_id]["sample_size"]
             source.population = metadata[source.gwas_id]["population"]

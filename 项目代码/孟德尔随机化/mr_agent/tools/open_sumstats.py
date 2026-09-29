@@ -107,10 +107,11 @@ class OpenSourceError(RuntimeError):
     what tells a missing directory (404, a fact about the study) from an outage.
     """
 
-    def __init__(self, code: str, message: str, *, status: int | None = None):
+    def __init__(self, code: str, message: str, *, status: int | None = None, partial_pair=None):
         super().__init__(message)
         self.code = code
         self.status = status
+        self.partial_pair = partial_pair
 
 
 def _sleep(seconds: float) -> None:
@@ -1863,6 +1864,9 @@ def _build_pair(
         raise OpenSourceError(
             "mr_open_no_instruments",
             f"{exposure.accession} has {len(candidates)} variant(s) at p < {p_threshold:g}; at least 3 are needed.",
+            partial_pair=OpenPair(candidates, [], {"schemaVersion": 1, "analysisStatus": "not_computed",
+                "exposure": {**exposure.record(), "read": exposure_read}, "outcome": outcome.record(),
+                "instrumentSelection": {"stage": "candidates_before_clumping", "ldChecked": False, "pThreshold": p_threshold, "genomeWideSignificantVariants": len(candidates)}}),
         )
 
     exposure.samples = read_sample_metadata(exposure, http)
@@ -1896,7 +1900,10 @@ def _build_pair(
         }
     if len(instruments) < 3:
         raise OpenSourceError(
-            "mr_open_no_instruments", f"{len(instruments)} instrument(s) remained after clumping; at least 3 are needed."
+            "mr_open_no_instruments", f"{len(instruments)} instrument(s) remained after clumping; at least 3 are needed.",
+            partial_pair=OpenPair(instruments, [], {"schemaVersion": 1, "analysisStatus": "not_computed",
+                "exposure": {**exposure.record(), "read": exposure_read}, "outcome": outcome.record(),
+                "instrumentSelection": {"stage": "selected_after_clumping", "pThreshold": p_threshold, "genomeWideSignificantVariants": len(candidates), "afterClumping": len(instruments), **clumping}})
         )
 
     wanted = [(variant.snp, variant.chrom, variant.pos) for variant in instruments]

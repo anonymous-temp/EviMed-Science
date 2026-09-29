@@ -36,8 +36,13 @@ def merge_scale(declaration: dict, repository: dict) -> dict:
         return declaration
     conflicting = any(declaration.get(key) and repository.get(key) and declaration[key] != repository[key]
                       for key in ("unit", "transformation"))
-    return {**(unknown_scale() if conflicting else repository),
-            "status": "conflicting" if conflicting else repository["status"],
+    if conflicting:
+        return {**unknown_scale(), "status": "conflicting", "sources": [declaration, repository]}
+    supplied = any(declaration.get(key) and not repository.get(key) for key in ("unit", "transformation"))
+    return {**repository, "unit": repository.get("unit") or declaration.get("unit"),
+            "transformation": repository.get("transformation") or declaration.get("transformation"),
+            "status": "declared" if supplied else repository["status"],
+            "source": "mixed_declaration_and_repository" if supplied else repository.get("source"),
             "sources": [declaration, repository]}
 
 
@@ -85,7 +90,7 @@ def scientific_context_prompt(result) -> str:
 
 def scale_sentence(result, *, zh=False) -> str:
     scale = result.exposure_scale
-    if not scale.get("unit") or scale.get("status") in {"unknown", "conflicting"}:
+    if not scale.get("unit") or scale.get("status", "unknown") in {"unknown", "conflicting"}:
         return ("效应按来源暴露单位报告；物理或标准差尺度未确定，不解释为每增加1个标准差。" if zh else
                 "Effects are reported per source exposure unit; its physical or standardized scale is unestablished, so this is not interpreted as per SD.")
     provenance = "来源报告" if scale["status"] == "repository_reported" else "提供者声明（未独立核验）"

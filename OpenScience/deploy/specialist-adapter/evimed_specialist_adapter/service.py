@@ -53,6 +53,8 @@ _PROGRESS_LIMIT = 4 * 1024
 _MR_RUNNER_CODE = re.compile(r"mr_(?:input|analysis|open)_[a-z_]{1,80}")
 _MR_RUNNER_NAMED_CODES = frozenset({
     "mr_interpretation_failed", "mr_interpretation_incomplete", "mr_plot_generation_failed",
+    "analysis_failed", "no_instruments", "no_outcome_data", "insufficient_harmonised_snps", "ld_clumping_failed",
+    "opengwas_auth_failed", "opengwas_rate_limited", "opengwas_unavailable", "mr_analysis_incomplete", "mr_no_instruments",
 })
 _MR_RUNNER_FAILED = "The fixed MR runner failed."
 _MR_RUNNER_MESSAGE_LIMIT = 2000

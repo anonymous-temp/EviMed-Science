@@ -433,7 +433,7 @@ def _scientific_rows(body: bytes, name: str) -> tuple[bytes, int]:
                     raise ValueError("incomplete primary statistic")
             elif len(value) > 40 or not math.isfinite(float(value)):
                 raise ValueError("invalid number")
-            elif key in {"se", "nsnp"} and float(value) <= 0 or key in {"pval", "Q_pval"} and not 0 <= float(value) <= 1:
+            elif (key in {"se", "nsnp"} and float(value) <= 0) or (key in {"pval", "Q_pval"} and not 0 <= float(value) <= 1):
                 raise ValueError("invalid statistic")
             projected[key] = value
         writer.writerow(projected); count += 1
@@ -454,6 +454,29 @@ def _publish_partial_failure(inputs, stage, output, prefix, error_code, environm
     summary = {"schema_version": 1, "status": "partial", "primary_estimate_available": False,
                "original_error_code": error_code if isinstance(error_code, str) and _RUNNER_CODE.fullmatch(error_code) else "mr_analysis_failed",
                "available": [], "unavailable": []}
+    try:
+        with inputs._regular_file(stage, ("mendelian-randomization-open-sources.json",)) as descriptor:
+            before = inputs._identity(os.fstat(descriptor))
+            with os.fdopen(os.dup(descriptor), "rb") as stream:
+                body = stream.read(256 * 1024 + 1)
+            if len(body) > 256 * 1024 or before != inputs._identity(os.fstat(descriptor)) or any(secret in body for secret in secrets):
+                raise ValueError("invalid source record")
+        record = json.loads(body)
+        if not isinstance(record, dict):
+            raise ValueError("invalid source record")
+        summary["source_accessions"] = [record[role]["accession"] for role in ("exposure", "outcome")
+                                        if isinstance(record.get(role), dict) and re.fullmatch(r"GCST\d{6,9}", str(record[role].get("accession", "")))]
+        selection = record.get("instrumentSelection") or {}
+        if not isinstance(selection, dict):
+            raise ValueError("invalid selection record")
+        summary["selection"] = {key: selection[key] for key in ("genomeWideSignificantVariants", "afterClumping")
+                                if type(selection.get(key)) is int and 0 <= selection[key] <= 10_000_000}
+        if selection.get("stage") in {"candidates_before_clumping", "selected_after_clumping"}:
+            summary["selection"]["stage"] = selection["stage"]
+        if type(selection.get("ldChecked")) is bool:
+            summary["selection"]["ldChecked"] = selection["ldChecked"]
+    except (OSError, ValueError, TypeError, KeyError, inputs.MRInputError):
+        pass
     try:
         candidates = [(parts, size) for parts, size in _inventory(inputs, stage)
                       if (len(parts) == 3 and parts[0] == "analysis-data" and parts[-1] in _NUMERIC_FILES | {"selected-source-rows.csv", "harmonised-rows.csv"})
@@ -483,7 +506,7 @@ def _publish_partial_failure(inputs, stage, output, prefix, error_code, environm
                     with inputs.directory_fd(projection, (pair,)) as destination:
                         inputs._write_new(destination, parts[-1], body)
                     summary["available"].append({"path": f"{pair}/{parts[-1]}", "rows": count,
-                                                 "scope": "completed_numeric_module" if parts[-1] in _NUMERIC_FILES else "observed_source_or_harmonised_rows"})
+                                                 "scope": "validated_numeric_rows" if parts[-1] in _NUMERIC_FILES else "observed_source_or_harmonised_rows"})
                     if parts[-1] == "mr_results.csv":
                         summary["primary_estimate_available"] = True
                 except (OSError, ValueError, UnicodeError, csv.Error, inputs.MRInputError):
@@ -492,7 +515,7 @@ def _publish_partial_failure(inputs, stage, output, prefix, error_code, environm
                 return [], []
             summary["not_computed"] = [] if summary["primary_estimate_available"] else ["causal_effect_not_available"]
             inputs._write_new(projection, "partial-research.json", json.dumps(summary, indent=2).encode())
-            text = ("# Partial Mendelian randomization results\n\nThe job failed. These are validated numerical projections of completed files, not a completed research report.\n\n"
+            text = ("# Partial Mendelian randomization results\n\nThe job failed. These are validated numerical projections of readable rows, not a completed research report.\n\n"
                     + ("A completed primary estimate is available.\n" if summary["primary_estimate_available"] else "No completed primary causal estimate is available; source or harmonized rows do not establish a causal result.\n")
                     + "\nUnlisted or unavailable modules were not verified as complete. Missing tests are not negative findings. Effect units, cohort overlap and analyzed ancestry proportions remain unknown unless separately documented.\n")
             text += "\n".join(f"- [{item['path']}]({item['path']}): {item['rows']} rows, {item['scope']}" for item in summary["available"])
