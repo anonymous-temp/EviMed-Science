@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, agentRuns = null, audit = undefined } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, agentRuns = null, audit = undefined } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, agentRuns, audit });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, agentRuns, audit });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -1276,4 +1276,40 @@ test('native mux selection preserves the effort and rejects provider or metadata
   }
   assert.equal(f.received.length, before);
   assert.deepEqual(checked, ['s-one', 's-one', 's-one', 's-one', 'private-source']);
+});
+
+
+test("native HTTP and mux freeze context only for admitted prompts without rewriting identity or queue mode", async t => {
+  const frozen = [];
+  const f = await fixture(t, {}, {}, {
+    authorizePrompt: async (_project, sessionId) => { if (sessionId === "private") throw new HttpError(403, "agent_background_only", "Internal"); },
+    preparePrompt: async (project, request) => { frozen.push({ userId: project.userId, projectId: project.id, request: structuredClone(request) }); },
+  });
+  const forwarded = [];
+  f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody.toString("utf8")); res.writeHead(200); res.end("{}"); };
+  const request = { requestId: "actual-request-A", sessionId: "ordinary", mode: "queue", content: [{ type: "text", text: "Current A" }] };
+  const rpc = JSON.stringify({ type: "client-request", rpcId: "transport-only-id", method: "session/prompt", payload: { args: { request } } });
+  const post = body => fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body });
+  assert.equal((await post(rpc)).status, 200);
+  assert.deepEqual(forwarded, [rpc]);
+  assert.deepEqual(frozen, [{ userId: f.user.id, projectId: "default", request }]);
+  const denied = JSON.stringify({ type: "client-request", rpcId: "denied", method: "session/prompt", payload: { args: { request: { ...request, sessionId: "private" } } } });
+  assert.equal((await post(denied)).status, 403);
+  assert.equal(frozen.length, 1);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const steer = open("transport-B", "session/prompt", { request: { ...request, requestId: "actual-request-B", mode: "steer" } });
+  c.send(steer); assert.equal((await c.next()).type, "item");
+  assert.deepEqual(f.received.at(-1), steer);
+  assert.deepEqual(frozen[1].request, steer.payload.args.request);
+});
+
+test("failed native supplemental context never refuses an otherwise authorized prompt", async t => {
+  const audits = [];
+  const f = await fixture(t, {}, {}, { preparePrompt: async () => { throw new HttpError(503, "handbook_context_timeout", "Context timed out"); },
+    audit: async (event, detail) => audits.push({ event, ...detail }) });
+  const request = { type: "client-request", rpcId: "transport", method: "session/prompt",
+    payload: { args: { request: { requestId: "input", sessionId: "ordinary", mode: "queue", content: [{ type: "text", text: "Question" }] } } } };
+  const response = await fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(request) });
+  assert.equal(response.status, 200);
+  assert.ok(audits.some(item => item.code === "handbook_context_timeout"));
 });
