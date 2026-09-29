@@ -107,6 +107,13 @@ class AnalysisExecutionTests(unittest.TestCase):
             self.assertFalse(attempt['output']['observedWrite'])
             self.assertNotIn('private', json.dumps(attempt))
 
+    def test_post_execution_alias_cannot_normalize_source_data(self):
+        (self.root / 'data.csv').write_text('{"x":NaN}')
+        result = self.run_script("from pathlib import Path\nPath('analysis-results.json').symlink_to('data.csv')")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / 'data.csv').read_text(), '{"x":NaN}')
+        self.assertEqual(self.receipt()[0]['output']['observation'], 'unreadable')
+
     @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
     def test_native_r_execution_records_observed_versions(self):
         (self.root / 'analysis.R').write_text("cat('{\"analyses\":[{\"estimate\":2}]}', file='analysis-results.json')")

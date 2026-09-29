@@ -42,6 +42,16 @@ def snapshot(root: Path, path: Path):
             'inode': stat.st_ino}
 
 
+def distinct_outputs(root: Path, outputs: tuple, sources: list):
+    for output in outputs:
+        confined(root, str(output))
+        for other in sources + [item for item in outputs if item != output]:
+            if output == other or (output.exists() and other.exists() and output.samefile(other)):
+                raise ValueError('Outputs must not replace source, script, state or each other.')
+    if outputs[0] == outputs[1]:
+        raise ValueError('Results and receipt must be distinct files.')
+
+
 def write_bytes(root: Path, path: Path, data: bytes):
     path = confined(root, str(path))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,10 +101,7 @@ def execute(args) -> int:
     for path in sources:
         if not path.is_file():
             raise ValueError('Script, input and transformation files must exist.')
-    for output in (results, receipt):
-        for other in sources + ([receipt] if output == results else []):
-            if output == other or (output.exists() and other.exists() and output.samefile(other)):
-                raise ValueError('Outputs must not replace source, script, state or each other.')
+    distinct_outputs(root, (results, receipt), sources)
     ledger = json.loads(receipt.read_text()) if receipt.exists() else {'schemaVersion': 1, 'executions': []}
     if not isinstance(ledger, dict) or ledger.get('schemaVersion') != 1 or not isinstance(ledger.get('executions'), list):
         raise ValueError('Existing receipt is not an execution ledger; retain it and use a different receipt path.')
@@ -107,6 +114,11 @@ def execute(args) -> int:
                'transforms': [snapshot(root, item) for item in transforms],
                'startedAt': datetime.now(timezone.utc).isoformat(), 'warnings': []}
     before = snapshot(root, results)
+    before_artifact = None
+    if before is not None:
+        backup = confined(root, f'.analysis-provenance/{attempt["id"]}-previous-results.json')
+        write_bytes(root, backup, results.read_bytes())
+        before_artifact = snapshot(root, backup)
     try:
         if executable is None:
             raise FileNotFoundError('Rscript is unavailable')
@@ -117,11 +129,22 @@ def execute(args) -> int:
         attempt['exitCode'] = 127
         attempt['warnings'].append({'code': 'execution_unavailable', 'message': type(error).__name__})
     attempt['endedAt'] = datetime.now(timezone.utc).isoformat()
-    after = snapshot(root, results)
+    output_error = False
+    try:
+        # A native script may replace an authorized path with a symlink/hardlink.
+        # Recheck aliases before reading or normalizing through that path.
+        distinct_outputs(root, (results, receipt), sources)
+        after = snapshot(root, results)
+    except (OSError, ValueError) as error:
+        after = None
+        output_error = True
+        attempt['warnings'].append({'code': 'output_unreadable', 'message': type(error).__name__})
     wrote = after is not None and before != after
-    observation = ('missing' if after is None else 'created' if before is None else
+    observation = ('unreadable' if output_error else 'missing' if after is None else 'created' if before is None else
                    'unchanged' if not wrote else 'rewritten_same_bytes' if before['sha256'] == after['sha256'] else 'changed')
     attempt['output'] = {'before': before, 'after': after, 'observation': observation, 'observedWrite': wrote}
+    if before_artifact is not None:
+        attempt['output']['beforeArtifact'] = before_artifact
     if wrote:
         raw = results.read_bytes()
         try:
@@ -135,7 +158,12 @@ def execute(args) -> int:
                 attempt['output']['normalized'] = snapshot(root, results)
         except (UnicodeError, ValueError, RecursionError) as error:
             attempt['warnings'].append({'code': 'results_unreadable', 'message': type(error).__name__})
-    source_after = [snapshot(root, item) for item in sources]
+    source_after = []
+    for item in sources:
+        try:
+            source_after.append(snapshot(root, item))
+        except (OSError, ValueError):
+            source_after.append(None)
     source_before = [attempt['script'], *attempt['inputs'], *attempt['transforms']]
     attempt['sourcesUnchanged'] = all(a and b and a['sha256'] == b['sha256'] for a, b in zip(source_before, source_after))
     if not attempt['sourcesUnchanged']:
@@ -144,6 +172,8 @@ def execute(args) -> int:
     ledger['executions'].append(attempt)
     write_bytes(root, receipt, encoded(ledger))
     print(json.dumps({'execution': attempt['id'], 'exitCode': attempt['exitCode'], 'outputObservation': observation}))
+    if output_error and attempt['exitCode'] == 0:
+        return 2
     return attempt['exitCode'] if attempt['exitCode'] >= 0 else 128 - attempt['exitCode']
 
 
