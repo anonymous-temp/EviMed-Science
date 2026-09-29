@@ -7,17 +7,17 @@ description: 把一句话或一份方案草稿变成「虚拟临研」的研究�
 
 ## 模型不产生数字
 
-**这一步不算任何统计量。** 样本量、事件数、功效、把握度、入组速度、脱落率——全部来自 `vcr_read` 读到的已保存结果，或 `vcr_simulate` 排出去的引擎作业。你自己心算、估算、"大约"出来的数不得写进任何交付物。需要一个数而它还不存在时，写清楚它缺，并说明由哪一步产生。
+**这一步不算任何统计量。** 样本量、事件数、功效、把握度、入组速度、脱落率——全部来自 `mcp__evimed__vcr_read` 读到的已保存结果，或 `mcp__evimed__vcr_simulate` 排出去的引擎作业。你自己心算、估算、"大约"出来的数不得写进任何交付物。需要一个数而它还不存在时，写清楚它缺，并说明由哪一步产生。
 
 ## 一、先读，再写
 
-1. `vcr_read` `what: "study"`：研究的名称、问题、数据档位、预期用途、七步进度、结局封存状态。
-2. `vcr_read` `what: "definition"`：是否已经有定义卡。**有就改，不从头写**——写出去的是下一个版本，旧版本仍然可查（AC-05）。
-3. 有登记号就 `trial_registry_record`；有方案全文就用 `locate_quote` 把每条入排条件的原句定位下来。
+1. `mcp__evimed__vcr_read` `what: "study"`：研究的名称、问题、数据档位、预期用途、七步进度、结局封存状态。
+2. `mcp__evimed__vcr_read` `what: "definition"`：是否已经有定义卡。**有就改，不从头写**——写出去的是下一个版本，旧版本仍然可查（AC-05）。
+3. 有登记号就 `mcp__evimed__trial_registry_record`；有方案全文就用 `mcp__evimed__locate_quote` 把每条入排条件的原句定位下来。
 
 ## 二、研究定义卡
 
-`vcr_write` `what: "definition"`，一次写完：
+`mcp__evimed__vcr_write` `what: "definition"`，一次写完：
 
 - `pico`：`population` / `intervention` / `comparator` / `outcome`，每项写成一句可判定的话，不要形容词。
 - `estimand`：ICH E9(R1) 的五要素——`population`、`variable`（终点变量）、`treatment`（处理条件）、`intercurrentEvents`（伴随事件及其处理策略）、`summary`（群体层面的汇总量）。**伴随事件的处理策略必须写**：治疗策略、假想策略、复合策略、在治策略、主层策略，写哪一条就说明理由。
@@ -29,7 +29,7 @@ description: 把一句话或一份方案草稿变成「虚拟临研」的研究�
 
 ## 三、入排条件
 
-`vcr_write` `what: "criteria"`，`criteria` 是一个数组，每条：
+`mcp__evimed__vcr_write` `what: "criteria"`，`criteria` 是一个数组，每条：
 
 - `kind`：`inclusion` 或 `exclusion`。
 - `criterionType`：从封闭词表里选（`demographic` `diagnosis` `biomarker` `lab` `prior_treatment` `time_window` `performance_status` `comorbidity` `concomitant_medication` `pregnancy` `consent_capacity` `other`）。

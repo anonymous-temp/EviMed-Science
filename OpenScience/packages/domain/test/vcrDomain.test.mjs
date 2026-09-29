@@ -59,7 +59,7 @@ test("the nine value sources include the two literature ones the v1.0 plan lacke
 test("the study has seven steps and seven tabs, and every step dispatches to a capability", () => {
   assert.equal(VCR_STEPS.length, 7);
   assert.equal(VCR_TABS.length, 7, "the design spec caps a page at seven tabs");
-  for (const step of VCR_STEPS) assert.ok(VCR_STEP_CAPABILITIES[step], `step ${step} has no capability`);
+  for (const step of VCR_STEPS) assert.ok(/** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES)[step], `step ${step} has no capability`);
 });
 
 test("intended use is capped by the weakest model a result used", () => {
@@ -131,7 +131,7 @@ test("the module's five tools and its usage purpose are in the platform's lists"
   for (const tool of ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]) {
     assert.ok(MCP_TOOL_BASE_NAMES.includes(tool), `${tool} is not a tool name`);
   }
-  assert.ok(USAGE_PURPOSES.includes("vcr"));
+  assert.ok(/** @type {readonly string[]} */ (USAGE_PURPOSES).includes("vcr"));
 });
 
 // --- the engine protocol ----------------------------------------------------
@@ -142,17 +142,17 @@ test("every engine method has a job kind, and every job kind a method", () => {
   // the gap was invisible until a call site had to invent a pairing. One map,
   // both directions, and a new method without a kind is a red test rather than
   // a convention someone guesses.
-  const mapped = new Set(Object.values(VCR_JOB_METHODS));
+  const mapped = new Set(/** @type {string[]} */ (Object.values(VCR_JOB_METHODS)));
   assert.deepEqual(VCR_ENGINE_METHOD_IDS.filter((id) => !mapped.has(id)), [], "a method no job kind can ask for");
   assert.equal(VCR_JOB_KINDS.length, VCR_ENGINE_METHOD_IDS.length);
 });
 
 test("every job kind maps to a method this build publishes", () => {
   for (const kind of VCR_JOB_KINDS) {
-    const method = VCR_JOB_METHODS[kind];
+    const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     assert.ok(method, `job kind ${kind} has no method`);
     assert.ok(VCR_ENGINE_METHOD_IDS.includes(method), `method ${method} is not published`);
-    assert.ok(VCR_ENGINE_METHODS[method].version, `method ${method} has no version`);
+    assert.ok(/** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method].version, `method ${method} has no version`);
   }
 });
 
@@ -211,7 +211,7 @@ const result = () => ({
 test("a simulated measure without a Monte-Carlo standard error is refused (AC-28)", () => {
   assert.deepEqual(validateEngineResult(result()), []);
   const bad = result();
-  delete bad.measures[0].mcse;
+  delete /** @type {any} */ (bad).measures[0].mcse;
   assert.ok(validateEngineResult(bad).some((issue) => issue.code === "mcse_missing"));
 });
 
@@ -219,7 +219,7 @@ test("a not-estimable result names the rule that fired, and a manifest states it
   const notEstimable = { ...result(), status: "not_estimable" };
   assert.ok(validateEngineResult(notEstimable).some((issue) => issue.code === "not_estimable_rule_missing"));
   const noEnv = result();
-  delete noEnv.manifest.rVersion;
+  delete /** @type {any} */ (noEnv).manifest.rVersion;
   assert.ok(validateEngineResult(noEnv).some((issue) => issue.field === "manifest.rVersion"));
 });
 
@@ -273,7 +273,7 @@ test("a review holds only while every version it signed is still current (AC-21)
 
 // --- contracts (all findings advisory) --------------------------------------
 
-const pkg = (results, prose = "") => ({
+const pkg = (/** @type {any} */ results, prose = "") => ({
   files: new Map([["results.json", JSON.stringify(results)], ["report.md", prose]]),
 });
 

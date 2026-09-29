@@ -64,7 +64,10 @@ function parsed(files, path) {
   try { return JSON.parse(raw) } catch { return undefined }
 }
 
-/** Markdown files of a package, in path order. */
+/**
+ * Markdown files of a package, in path order.
+ * @param {any} files
+ */
 function proseOf(files) {
   return [...files.keys()].filter((path) => path.endsWith('.md')).sort()
 }
@@ -91,7 +94,10 @@ export function proseNumbers(text) {
   return found
 }
 
-/** Every number a result tree carries, as strings normalized the way prose writes them. */
+/**
+ * Every number a result tree carries, as strings normalized the way prose writes them.
+ * @param {any} value @param {Set<string>} [out]
+ */
 export function resultNumbers(value, out = new Set()) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     out.add(String(value))
@@ -191,7 +197,7 @@ export function vcrStudyPackageFindings(input) {
   for (const assumption of assumptions) {
     const sources = Array.isArray(assumption?.sources) ? assumption.sources : []
     const external = assumption?.sourceKind === 'external_evidence'
-    if (external && !sources.some((source) => source?.quote && source?.locator)) {
+    if (external && !sources.some((/** @type {any} */ source) => source?.quote && source?.locator)) {
       issues.push(notice('vcr_assumption_unanchored',
         `假设卡「${assumption?.name ?? ''}」标为外部证据，但没有带原文位置的抽取值（AC-25）。`,
         { path: VCR_RESULTS_FILE, check: 'vcr-assumption-source' }))
@@ -228,11 +234,11 @@ export function vcrSimulationReportFindings(input) {
       { path: VCR_SIMULATION_FILE, check: 'vcr-simulation-report-shape' }))
   }
   const scenarios = Array.isArray(report.scenarios) ? report.scenarios : []
-  if (scenarios.length && !scenarios.some((scenario) => scenario?.isNull === true)) {
+  if (scenarios.length && !scenarios.some((/** @type {any} */ scenario) => scenario?.isNull === true)) {
     issues.push(notice('vcr_null_scenario_missing', '情景里必须有零假设情景（方案 §5.4）。', { path: VCR_SIMULATION_FILE, check: 'vcr-simulation-report-shape' }))
   }
   const characteristics = Array.isArray(report.operatingCharacteristics) ? report.operatingCharacteristics : []
-  const withoutMcse = characteristics.filter((row) => row?.simulated !== false && (typeof row?.mcse !== 'number' || !Number.isFinite(row.mcse)))
+  const withoutMcse = characteristics.filter((/** @type {any} */ row) => row?.simulated !== false && (typeof row?.mcse !== 'number' || !Number.isFinite(row.mcse)))
   if (withoutMcse.length) {
     issues.push(notice('vcr_mcse_missing', `${withoutMcse.length} 个运行特征没有蒙特卡洛标准误（AC-28）。`,
       { path: VCR_SIMULATION_FILE, check: 'vcr-simulation-report-shape' }))
@@ -271,7 +277,7 @@ export function vcrCohortFindings(input) {
   const results = parsed(input.files, VCR_RESULTS_FILE)
   if (!results || typeof results !== 'object') return base
   const waterfall = Array.isArray(results.waterfall) ? results.waterfall : []
-  const missingUnknown = waterfall.filter((step) => step?.unknown === undefined)
+  const missingUnknown = waterfall.filter((/** @type {any} */ step) => step?.unknown === undefined)
   if (waterfall.length && missingUnknown.length) {
     base.issues.push(notice('vcr_waterfall_unknown_missing', '筛选流程的每一步都要单列「无法判断」，不能并入「排除」（方案 §5.1）。',
       { path: VCR_RESULTS_FILE, check: 'vcr-counts-separated' }))
@@ -305,7 +311,7 @@ export function vcrMatchingFindings(input) {
   for (const judgment of judgments) {
     if (judgment?.state === 'satisfied' || judgment?.state === 'not_satisfied') {
       const evidence = Array.isArray(judgment?.evidence) ? judgment.evidence : []
-      if (!evidence.some((item) => item?.quote && item?.locator)) unanchored += 1
+      if (!evidence.some((/** @type {any} */ item) => item?.quote && item?.locator)) unanchored += 1
     }
   }
   if (unanchored) {

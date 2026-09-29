@@ -76,7 +76,7 @@ export function affectedNodes(edges, changed) {
   const out = []
   const queue = [...(changed ?? [])]
   while (queue.length) {
-    const node = queue.shift()
+    const node = /** @type {string} */ (queue.shift())
     for (const next of downstream.get(node) ?? []) {
       if (seen.has(next)) continue
       seen.add(next)
@@ -99,7 +99,9 @@ export function recomputePlan({ edges, changed, reason }) {
   const all = affectedNodes(edges, changed)
   const costOf = new Map()
   for (const edge of edges ?? []) if (edge?.to && edge.cost) costOf.set(edge.to, edge.cost)
+  /** @type {string[]} */
   const light = []
+  /** @type {string[]} */
   const heavy = []
   for (const node of all) {
     const parsed = parseLineageNode(node)

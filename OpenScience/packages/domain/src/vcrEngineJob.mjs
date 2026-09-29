@@ -191,8 +191,9 @@ const SHA256 = /^[a-f0-9]{64}$/
  */
 export function validateEngineJob(job) {
   /** @type {{ code: string, field: string, detail: string }[]} */
+  /** @type {{ code: string, field: string, detail: string }[]} */
   const issues = []
-  const bad = (code, field, detail) => issues.push({ code, field, detail })
+  const bad = (/** @type {string} */ code, /** @type {string} */ field, /** @type {string} */ detail) => issues.push({ code, field, detail })
   if (!job || typeof job !== 'object') return frozen([{ code: 'job_not_object', field: '', detail: 'A job is a JSON object.' }])
 
   if (!ID.test(String(job.jobId ?? ''))) bad('job_id_invalid', 'jobId', 'A job id is 1–121 characters of [A-Za-z0-9_.:-].')
@@ -220,7 +221,7 @@ export function validateEngineJob(job) {
   const inputs = Array.isArray(job.inputs) ? job.inputs : null
   if (!inputs) bad('inputs_missing', 'inputs', 'A job lists every frozen input it used.')
   else {
-    inputs.forEach((input, index) => {
+    inputs.forEach((/** @type {any} */ input, /** @type {number} */ index) => {
       if (!input || typeof input !== 'object') { bad('input_not_object', `inputs[${index}]`, 'An input is an object.'); return }
       if (!INPUT_ID.test(String(input.id ?? ''))) bad('input_id_invalid', `inputs[${index}].id`, 'An input carries the id of the object version it froze (`asm_1@3`).')
       if (!input.kind) bad('input_kind_missing', `inputs[${index}].kind`, 'An input names what it is (assumption, snapshot, population …).')
@@ -231,7 +232,7 @@ export function validateEngineJob(job) {
   }
 
   if (VCR_PATIENT_LEVEL_JOB_KINDS.includes(job.kind)) {
-    const snapshot = (inputs ?? []).find((input) => input?.kind === 'snapshot')
+    const snapshot = (inputs ?? []).find((/** @type {any} */ input) => input?.kind === 'snapshot')
     if (!snapshot) bad('snapshot_required', 'inputs', `A ${job.kind} job reads patient-level rows and must name the snapshot it is granted.`)
   }
 
@@ -259,8 +260,9 @@ export function validateEngineJob(job) {
  */
 export function validateEngineResult(result) {
   /** @type {{ code: string, field: string, detail: string }[]} */
+  /** @type {{ code: string, field: string, detail: string }[]} */
   const issues = []
-  const bad = (code, field, detail) => issues.push({ code, field, detail })
+  const bad = (/** @type {string} */ code, /** @type {string} */ field, /** @type {string} */ detail) => issues.push({ code, field, detail })
   if (!result || typeof result !== 'object') return frozen([{ code: 'result_not_object', field: '', detail: 'A result is a JSON object.' }])
 
   if (!ID.test(String(result.jobId ?? ''))) bad('job_id_invalid', 'jobId', 'A result carries the job id it answers.')
@@ -276,7 +278,7 @@ export function validateEngineResult(result) {
   const measures = Array.isArray(result.measures) ? result.measures : null
   if (!measures) bad('measures_missing', 'measures', 'A result lists its measures, even when the list is empty.')
   else {
-    measures.forEach((measure, index) => {
+    measures.forEach((/** @type {any} */ measure, /** @type {number} */ index) => {
       if (!measure || typeof measure !== 'object') { bad('measure_not_object', `measures[${index}]`, 'A measure is an object.'); return }
       if (!measure.name) bad('measure_name_missing', `measures[${index}].name`, 'A measure is named.')
       if (typeof measure.value !== 'number' || !Number.isFinite(measure.value)) {

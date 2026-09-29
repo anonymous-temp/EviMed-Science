@@ -523,7 +523,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const routes: Record<string, string> = {
           "new-task": "/app/chat", knowledge: "/app/files",
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
-          geo: "/app/geo",
+          geo: "/app/geo", "virtual-research": "/app/virtual-research",
         };
         const to = routes[String(message.destination)];
         if (!to) return;

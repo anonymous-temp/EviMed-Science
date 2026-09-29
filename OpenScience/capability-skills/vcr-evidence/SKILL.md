@@ -28,30 +28,30 @@ metadata:
 
 ### 1. 读研究定义
 
-`vcr_read` `{ what: "study" }` 拿到 PICO、估计目标、主要终点和预期用途；
+`mcp__evimed__vcr_read` `{ what: "study" }` 拿到 PICO、估计目标、主要终点和预期用途；
 `{ what: "assumptions" }` 看已经有哪些卡、哪些还空着。**先看已有的**——这一步常常是接着上次跑的。
 
 ### 2. 找先例
 
-按 PICO 检索：`clinical_trial_search`（ChiCTR / ClinicalTrials.gov / Cochrane Central），
-`literature_search` 与 `open_access_full_text` 找已发表的对照组数据，`guideline_search` 看终点口径，
-`kb_search` 看这个项目自己的知识库。
+按 PICO 检索：`mcp__evimed__clinical_trial_search`（ChiCTR / ClinicalTrials.gov / Cochrane Central），
+`mcp__evimed__literature_search` 与 `mcp__evimed__open_access_full_text` 找已发表的对照组数据，`mcp__evimed__guideline_search` 看终点口径，
+`mcp__evimed__kb_search` 看这个项目自己的知识库。
 
 相似度**只用来排候选**。终点定义不同、人群不同、年代差很远的研究，不会因为「看起来像」
 就可以合并——合并前逐项检查，见第 4 步。
 
 ### 3. 逐项抽取
 
-对每一条候选，用 `vcr_read` `{ what: "trial_registry_record", registry, registryId }`
-（或工具 `trial_registry_record`）拿结构化记录。它回给你：
+对每一条候选，用 `mcp__evimed__vcr_read` `{ what: "trial_registry_record", registry, registryId }`
+（或工具 `mcp__evimed__trial_registry_record`）拿结构化记录。它回给你：
 
 - `record.values[]`：平台已经从登记字段里抽好的值，每个都带 `quote`、`locator` 和
   `verification`。`verification` 不是 `verified` 的，就是核对没过，按「未知」处理。
 - `record.text`：这条记录的**保全文本**。你自己再补抽的数（例如从全文 PDF 或图表里读到的），
-  引文必须能在对应来源里逐字找到；用 `locate_quote` 确认位置再写。
+  引文必须能在对应来源里逐字找到；用 `mcp__evimed__locate_quote` 确认位置再写。
 - `record.unavailable[]`：这个登记平台**根本不记录**的量。
 
-写回用 `vcr_write`，一次一项，每项带 `parameter`、`arm`、`value`、`unit`、`quote`、`locator`。
+写回用 `mcp__evimed__vcr_write`，一次一项，每项带 `parameter`、`arm`、`value`、`unit`、`quote`、`locator`。
 另外要标两件事：
 
 - **`endpointKey`**：这个值量的是哪个终点口径（例如 `pfs-blinded` 与 `pfs-investigator` 是两个口径）。
@@ -70,7 +70,7 @@ metadata:
 
 ### 4. 合并（交给引擎）
 
-同一个参数、同一个 `endpointKey` 的核对通过值，交给 `vcr_simulate`
+同一个参数、同一个 `endpointKey` 的核对通过值，交给 `mcp__evimed__vcr_simulate`
 `{ action: "start", kind: "pool_evidence", scenario: { parameter, endpointKey, calibre } }`。
 平台会按三种口径各排一个作业：
 

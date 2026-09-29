@@ -1211,4 +1211,11 @@ describe("循证 GEO in the conversation", () => {
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/geo\/geo_1$/));
     view.unmount();
   });
+
+  it("opens 虚拟临研 when the frame asks for it, instead of dropping the destination", async () => {
+    const { view, frame } = await openGeoConversation();
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "virtual-research" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research$/));
+    view.unmount();
+  });
 });

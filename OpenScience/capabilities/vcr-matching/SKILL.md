@@ -111,7 +111,7 @@ negative one. If any exclusion criterion is 未知, the subject cannot be 「符
   `subjectKey`, `asOf`, `summary`, `counts`, `judgments[]` (each with
   `criterionId`, `state`, `applicable`, `decidedBy`, `recheckAt`, and
   `evidence[]` of `{ quote, locator }`), `evidenceGaps[]` and `voidedFacts[]`.
-  Do not compute `summary` yourself — take it from `vcr_read`'s assessment.
+  Do not compute `summary` yourself — take it from `mcp__evimed__vcr_read`'s assessment.
 - `matching-assessment.md` — what a coordinator reads: per subject, why they
   may fit, what is still missing, and how to obtain it. Every 满足 and 不满足
   cites its sentence. Numbers come from the assessment, not from your memory.

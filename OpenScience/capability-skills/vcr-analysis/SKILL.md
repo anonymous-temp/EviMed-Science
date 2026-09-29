@@ -7,17 +7,17 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 ## 模型不产生数字
 
-**这一条排在最前面，因为它是整个板块成立的前提。** 你不做统计：样本量、功效、I 类错误、偏倚、覆盖率、有效样本量、标准化差异、RMST、入组时间分布、蒙特卡洛标准误——每一个都来自 `vcr_read` 读到的已保存结果，或 `vcr_simulate` 排出去的引擎作业。你负责的是：说清楚要算什么、把场景配对、读回结果、判断它可信到什么程度、讲清楚它意味着什么。
+**这一条排在最前面，因为它是整个板块成立的前提。** 你不做统计：样本量、功效、I 类错误、偏倚、覆盖率、有效样本量、标准化差异、RMST、入组时间分布、蒙特卡洛标准误——每一个都来自 `mcp__evimed__vcr_read` 读到的已保存结果，或 `mcp__evimed__vcr_simulate` 排出去的引擎作业。你负责的是：说清楚要算什么、把场景配对、读回结果、判断它可信到什么程度、讲清楚它意味着什么。
 
 心算出来的、"按经验大约"的、从记忆里搬来的数，一律不得写进交付物。需要而没有的数，写清楚缺它、缺的原因、由哪一步能补上。
 
 ## 先读
 
-- `vcr_read` `what: "study"` — 数据档位（T0/T1/T2/T3）、预期用途、七步进度、结局封存状态。
-- `vcr_read` `what: "definition"` — 估计目标与终点类型。**终点类型决定所有方法分支。**
-- `vcr_read` `what: "assumptions"` — 已有的假设卡及其版本。
-- `vcr_read` `what: "results"` — 已经算过什么。**算过的不重算**；过期的（带 `stale`）要重算。
-- `vcr_read` `what: "models"` — 模型与方法库：能用哪些模型、每个模型的层级与缺什么证据。
+- `mcp__evimed__vcr_read` `what: "study"` — 数据档位（T0/T1/T2/T3）、预期用途、七步进度、结局封存状态。
+- `mcp__evimed__vcr_read` `what: "definition"` — 估计目标与终点类型。**终点类型决定所有方法分支。**
+- `mcp__evimed__vcr_read` `what: "assumptions"` — 已有的假设卡及其版本。
+- `mcp__evimed__vcr_read` `what: "results"` — 已经算过什么。**算过的不重算**；过期的（带 `stale`）要重算。
+- `mcp__evimed__vcr_read` `what: "models"` — 模型与方法库：能用哪些模型、每个模型的层级与缺什么证据。
 
 ## 步骤 3：人群
 
@@ -30,7 +30,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 | 只有文献基线表 | `literature` | `generate_population` |
 | 什么都没有 | `scenario` | `generate_population` |
 
-`vcr_write` `what: "population"`，写 `kind`、`definition`（筛选条件或分布设定）、`allowedUses`。合成人群的 `allowedUses` 只能是 `design` / `feasibility` / `testing` / `training` / `shared_preview`——**合成人群永远不进真实外部对照**（§5.1）。
+`mcp__evimed__vcr_write` `what: "population"`，写 `kind`、`definition`（筛选条件或分布设定）、`allowedUses`。合成人群的 `allowedUses` 只能是 `design` / `feasibility` / `testing` / `training` / `shared_preview`——**合成人群永远不进真实外部对照**（§5.1）。
 
 筛选流程每一步都要单列三个数：保留、排除、**无法判断**。把「无法判断」并进「排除」，是这一步最常见也最贵的错误。
 
@@ -38,7 +38,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 在库里选能覆盖这个人群和这个终点的**最高一级**模型（`validated` > `data` > `literature` > `scenario`）。选不到就用文献模型或情景模型，并在报告里写明是哪一级、为什么。
 
-`vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`。
+`mcp__evimed__vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`。
 
 **「数字孪生」这四个字有门槛**：个体条件化、随新数据更新、校准过的不确定性、验证记录，四项齐全才是 `digital_twin`，否则是 `baseline_conditioned_prediction`（基线条件化预测）。平台自己按证据推导这个标签，你不要替它下结论。
 
@@ -46,7 +46,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 ## 步骤 5：对照
 
-`vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的：
+`mcp__evimed__vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的：
 
 | 路线 | 最低档位 | 作业 |
 |---|---|---|
@@ -60,11 +60,11 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 估计目标默认 `ATT`（对试验人群）。换成 `ATE` 或 `ATO` 必须写明理由——加权改变的是"这个效应是对谁说的"。
 
-**「不可估计」是一份完成的结果。** 熵平衡无解、共同支持域外比例越界、加权后有效样本量低于下限、关键协变量标准化差异 ≥ 0.1、τ 超过随访、重建未过质控、MAP 先验冲突——这七条是确定性规则，由引擎判定。触发了就 `vcr_write` `what: "comparator"` 带 `conclusion: "not_estimable"` 和 `gapList`（缺什么、缺到什么程度、补上之后能做什么），照常交付。
+**「不可估计」是一份完成的结果。** 熵平衡无解、共同支持域外比例越界、加权后有效样本量低于下限、关键协变量标准化差异 ≥ 0.1、τ 超过随访、重建未过质控、MAP 先验冲突——这七条是确定性规则，由引擎判定。触发了就 `mcp__evimed__vcr_write` `what: "comparator"` 带 `conclusion: "not_estimable"` 和 `gapList`（缺什么、缺到什么程度、补上之后能做什么），照常交付。
 
 ## 步骤 6：试验
 
-按 ADEMP 五段组织场景，`vcr_write` `what: "trial_scenario"`，通常写三个方案并排比。每个方案：
+按 ADEMP 五段组织场景，`mcp__evimed__vcr_write` `what: "trial_scenario"`，通常写三个方案并排比。每个方案：
 
 - `design`：`single_arm` / `single_arm_external` / `two_arm_fixed` / `group_sequential` / `simon_two_stage`。
 - `endpointType`：与研究定义一致。
@@ -77,7 +77,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 重复次数不用你定：零假设情景默认不少于 2 万次，备择不少于 5,000 次，`configuration.targetMcse` 写了目标精度就按 p(1−p)/MCSE² 自动抬高。
 
-排作业：`vcr_simulate` `action: "start"`，拿到 `jobId`，`action: "status"` 轮询。**作业超出研究计算预算会停在确认处**——这是平台三个人工停点之一。停了就照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
+排作业：`mcp__evimed__vcr_simulate` `action: "start"`，拿到 `jobId`，`action: "status"` 轮询。**作业超出研究计算预算会停在确认处**——这是平台三个人工停点之一。停了就照实告诉用户在等什么、大概多少机时，然后继续做不依赖它的部分。
 
 ## 四个数永远分开
 

@@ -78,6 +78,17 @@ TASK_FIXTURES = {
     "geo_read": {"what": "project"},
     "geo_write": {"what": "step", "data": {"step": "diagnosis", "status": "none"}},
     "social_posts_search": {"query": "降糖药", "platform": "xhs", "limit": 3},
+    # Added 2026-09-29 with 「虚拟临研」's five tools. None changes anything: the
+    # probe's project carries no study, so the three module tools answer the
+    # warning `vcr_no_study` (the route and the token certified), the registry
+    # record is one public read, and the evidence pool only asks after a job
+    # that does not exist. A deployment that does not run the module declares
+    # all five not offered (`OPTIONAL_TOOLS`).
+    "vcr_read": {"what": "study"},
+    "vcr_write": {"what": "step", "data": {"step": "definition", "status": "none"}},
+    "vcr_simulate": {"action": "status", "jobId": "job_release_audit_probe"},
+    "trial_registry_record": {"registryId": "NCT04280705"},
+    "evidence_pool": {"action": "status", "jobId": "job_release_audit_probe"},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
