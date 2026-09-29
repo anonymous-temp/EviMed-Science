@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
   STOPPING_RULES, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
+import { loadAutopilotProgress, renderAutopilotProgress } from "./autopilotProgress.mjs";
 import { HttpError } from "./security.mjs";
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -977,12 +978,17 @@ export class AutopilotService {
     // It rides exactly one brief: the episode this call creates, never one
     // that already existed when the question was asked.
     const followUps = (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).slice(-5);
+    const existingEpisode = await this.documents.get(userId, "episode", episodeId);
+    const progress = existingEpisode?.payload?.progress ?? (!existingEpisode ? await loadAutopilotProgress(this.documents, {
+      userId, agenda, date, episodeId, asOf: this.now().toISOString(),
+    }) : null);
     const prompt = [
       `Run the ${taskType} proactive research episode for agenda "${agenda.payload.title}".`,
       `Episode ID: ${episodeId}. Use this exact value as provenance.episodeId in agenda-delta.json.`,
       `Topics: ${agenda.payload.topics.join(", ")}.`,
       `Maximum episode budget: CNY ${budgetCny.toFixed(2)}.`,
       ...(followUps.length ? [`Researcher follow-up questions to answer first: ${followUps.map((item, position) => `(${position + 1}) ${item.note}`).join(" ")}`] : []),
+      ...(progress ? [renderAutopilotProgress(progress)] : []),
       "Use the ordinary capability contract and delivery gate. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
     ].join("\n");
     let episode;
@@ -990,7 +996,7 @@ export class AutopilotService {
     try {
       episode = await this.documents.put(userId, "episode", episodeId, {
         schemaVersion: 1, agendaId: agenda.id, taskType, date, budgetCny, verificationBudgetCny: verificationCny,
-        prompt, status: "queued",
+        prompt, progress, status: "queued",
         runId: null, claims: [], createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
       }, { expectedRevision: 0, projectId: agenda.projectId });
       createdEpisode = true;
@@ -999,7 +1005,8 @@ export class AutopilotService {
       episode = await this.documents.get(userId, "episode", episodeId);
       if (!episode) throw error;
     }
-    const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId, taskType, budgetCny, prompt }, {
+    const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId,
+      taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
       idempotencyKey: `episode:${agenda.id}:${date}`, projectId: agenda.projectId, maxAttempts: 10,
     });
     const consumeFollowUps = createdEpisode && followUps.length > 0;
