@@ -8,6 +8,9 @@ import { createAgenda, getDigest, listAgendas, listEpisodes, markDigestOpened, s
 import { listInbox } from "@/lib/inboxClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
+import { safeWorkspacePath } from "@/lib/claimCitations";
+import { artifactDisplayName } from "@/lib/artifactNames";
+import { snapshotHref } from "@/lib/readPages";
 import { chatPath } from "@/lib/runLocation";
 import { formatDay } from "@/lib/format";
 import { toast } from "@/lib/toast";
@@ -302,12 +305,24 @@ function EpisodeHistory({ projectId, agenda, onOpen }: { projectId: string; agen
   return (
     <List label="运行">
       {episodes.map((episode) => {
-        const state = EPISODE_STATE[episode.payload.status];
+        const waiting = !episode.payload.runId && episode.payload.resourceDeferrals?.episode?.code === "credits_exhausted";
+        const state = waiting ? (episode.payload.resourceDeferrals?.episode?.status === "exhausted" ? "余额不足" : "等待余额") : EPISODE_STATE[episode.payload.status];
+        const claims = (episode.payload.claims ?? []).slice(0, 3);
+        const artifacts = (episode.payload.artifactRefs ?? []).filter(ref => ref.projectId === projectId && ref.runId === episode.payload.runId
+          && ref.sessionId === episode.payload.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path)).slice(0, 12);
         return (
           <ListRow
             key={episode.id}
             title={formatDay(episode.payload.date) || episode.payload.date}
             onOpen={episode.payload.sessionId ? () => onOpen(episode) : undefined}
+            meta={(claims.length > 0 || artifacts.length > 0) ? <>
+              {claims.map(claim => <p key={claim.id} className="line-clamp-2">
+                {claim.tier === "reproduced" && claim.verification?.status === "recorded" && claim.verification.reproductionMatched && claim.verification.isolationEnforced ? "已复现：" : "研究线索："}{claim.statement}
+              </p>)}
+              {artifacts.length > 0 ? <div className="relative z-10 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                {artifacts.map(ref => <Link key={`${ref.runId}:${ref.path}`} to={snapshotHref(ref.runId, ref.path)} className="text-link hover:underline">{artifactDisplayName(ref.path)}</Link>)}
+              </div> : claims.length > 0 ? <p>成果文件暂不可用</p> : null}
+            </> : undefined}
             trailing={state ? <span>{state}</span> : undefined}
           />
         );

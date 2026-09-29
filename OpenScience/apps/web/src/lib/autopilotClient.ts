@@ -6,21 +6,24 @@ export interface AgendaPayload { title: string; topics: string[]; taskTypes: str
   lastScheduledDate?: string | null;
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
   followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
+export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string }
 export interface DigestClaim { id: string; statement: string;
   /** How far the claim has been checked: only an independent rerun reaches `reproduced`. */
   tier?: string; type?: string;
   /** What an independent refuter concluded: refuted / weakened / stands. */
   refutation?: string | null;
-  verification?: { status: string; verdict?: string; reason?: string; code?: string; reproductionMatched?: boolean } | null }
+  verification?: { status: string; verdict?: string; reason?: string; code?: string; reproductionMatched?: boolean; isolationEnforced?: boolean } | null }
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
   openedAt?: string | null;
   /** The runs this briefing merged; each is a conversation. */
-  agendaId?: string; episodeIds?: string[];
+  agendaId?: string; episodeIds?: string[]; artifactRefs?: AutopilotArtifactRef[];
   decisions: Array<{ action: string; claimId: string; note: string; memory?: { status: string; reason?: string; code?: string } }> }
 /** One scheduled run of an agenda: the conversation it ran in and the briefing it fed. */
 export interface EpisodePayload { agendaId: string; taskType: string; date: string; budgetCny: number;
   status: "queued" | "running" | "merged" | "failed" | "canceled" | string;
   runId: string | null; sessionId?: string | null; digestId?: string | null;
+  artifactRefs?: AutopilotArtifactRef[]; claims?: DigestClaim[];
+  resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; retryAt?: string | null } | null>;
   error?: { code: string } | null; createdAt: string; updatedAt: string }
 export type EpisodeRecord = ProductRecord<EpisodePayload> & { projectId: string };
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
