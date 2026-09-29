@@ -89,3 +89,87 @@ def test_pairwise_excluded_trial_never_survives_in_numeric_inputs(tmp_path, monk
         rob_results=[StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])])
     selected_ids = {row["study_id"] for row in audit if row["in_final_primary_analysis"]}
     assert {effect.study_id for effect in effects} == selected_ids
+
+
+def _uncertain_pairwise(tmp_path):
+    from test_primary_analysis_alignment import alignment_fixture, SOURCE
+    from new_meta.schemas.study import ExtractedStudy
+    project, protocol, first, _ = alignment_fixture(tmp_path)
+    unattended(project)
+    first.outcomes[0].protocol_outcome_role = "primary"
+    second = ExtractedStudy.model_validate(first.model_dump())
+    second.characteristics.study_id = "S2"
+    second.outcomes[0].events_intervention = 6
+    studies = [first, second]
+    project.save_json("protocol.json", protocol)
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    project.save_json("parsed_papers.json", {"S1": {"full_text": SOURCE}, "S2": {"full_text": SOURCE}}, subdir="papers")
+    return project, protocol, studies
+
+
+def _model_decisions(studies, *, same_trial=False, bad_quote=False):
+    from new_meta.core.autonomous_analysis import AnalysisJudgment, RowJudgment
+    from new_meta.core.extraction_verification import calculation_fields
+    from test_primary_analysis_alignment import SOURCE
+    from test_primary_analysis_alignment import alignment_fixture
+    from new_meta.schemas.protocol import ResearchProtocol
+    # This mock chooses source rows and quotes; it never supplies a new number.
+    def respond(prompt, schema, **kwargs):
+        import json
+        request = json.loads(prompt.split("REQUEST_JSON\n", 1)[1])
+        study = next(item for item in studies if item.characteristics.study_id == request["study_id"])
+        protocol = ResearchProtocol.model_validate(request["protocol"])
+        return AnalysisJudgment(rows=[RowJudgment(
+            outcome_index=0, include=True, rationale="Use the results-section estimate despite unresolved source comparison.",
+            assumptions=["Publication is treated as one trial; independent verification remains incomplete."],
+            trial_id="S1" if same_trial else study.characteristics.study_id,
+            numeric_quotes={field: ("no numbers here" if bad_quote and study.characteristics.study_id == "S2" else SOURCE)
+                            for field in calculation_fields(study.outcomes[0], protocol)},
+        )])
+    return respond
+
+
+def test_model_selected_uncertain_rows_with_missing_rob_remain_numeric_and_unverified(tmp_path, monkeypatch):
+    from new_meta.core.autonomous_analysis import resolve_analysis_judgments
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.effect_selection import compute_study_effect
+    import logging
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    before = [row.model_dump() for row in studies]
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    resolve_analysis_judgments(project, protocol, studies)
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == 2
+    assert [(effect.yi, effect.vi) for effect in effects] == [
+        (expected.yi, expected.vi) for row in studies
+        for expected in [compute_study_effect(row, row.outcomes[0], protocol, logging.getLogger(__name__))]]
+    assert [row.model_dump() for row in studies] == before
+    assert all(row["alignment"]["status"] == "unknown" for row in audit)
+    assert all(row["in_final_primary_analysis"] for row in audit)
+    warnings = project.load_json("pipeline_warnings.json")
+    assert any(row["code"] == "analysis_assumptions" for row in warnings)
+    assert any(row["code"] == "risk_of_bias_unavailable" for row in warnings)
+
+
+def test_unanchored_numeric_input_affects_only_that_estimate(tmp_path, monkeypatch):
+    from new_meta.core.autonomous_analysis import resolve_analysis_judgments
+    from new_meta.core.agent_base import BaseAgent
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies, bad_quote=True))
+    resolve_analysis_judgments(project, protocol, studies)
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert [effect.study_id for effect in effects] == ["S1"]
+    assert next(row for row in audit if row["study_id"] == "S2")["in_final_primary_analysis"] is False
+    assert studies[1].outcomes[0].events_intervention == 6
+
+
+def test_two_reports_of_one_model_identified_trial_contribute_once(tmp_path, monkeypatch):
+    from new_meta.core.autonomous_analysis import resolve_analysis_judgments
+    from new_meta.core.agent_base import BaseAgent
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies, same_trial=True))
+    resolve_analysis_judgments(project, protocol, studies)
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == 1
+    assert sum(row["in_final_primary_analysis"] for row in audit) == 1
+    assert any("overlap" in row.get("reason", "") for row in audit)
