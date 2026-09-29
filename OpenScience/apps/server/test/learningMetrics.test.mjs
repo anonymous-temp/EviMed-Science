@@ -115,3 +115,17 @@ test("launches and runs count what they carried, and the families expose all of 
   // Off is one line.
   assert.deepEqual(learningMetricFamilies(false, null, counters).map((family) => family.name), ["open_science_learning_enabled"]);
 });
+
+test("handbook outcomes distinguish applied, attached, used and verified improvement without counting candidates as personal methods", async () => {
+  const original = ledger();
+  const database = { query: async (sql, values) => sql.includes("AS handbook_summary") ? { rows: [{ handbook_summary: {
+    dispositions: { queued: 2, applied: 3, failed: 1 }, applied: 3, unmeasured: 2, evaluated: 1, verifiedImprovement: 0,
+    attached: 4, used: 1, outcomes: 2, recent: [{ id: "h1", title: "Check denominators", capabilityId: "geo-content", verification: "unmeasured" }],
+  } }] } : original.query(sql, values) };
+  const summary = await learningSummary(database, "u1");
+  assert.equal(summary.handbooks.applied, 3);
+  assert.equal(summary.handbooks.verifiedImprovement, 0);
+  assert.equal(summary.handbooks.used, 1);
+  assert.equal(summary.handbooks.recent[0].verification, "unmeasured");
+  assert.equal(summary.methods.approved, 2);
+});

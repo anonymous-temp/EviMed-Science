@@ -261,15 +261,10 @@ test("integrate looks at a bounded neighbourhood, never the whole library", asyn
   assert.ok(dispatched[0].input.methods.length <= 8);
 });
 
-test("optimize stages nothing from the control plane, and says why", async () => {
+test("optimize without its consumer fails explicitly instead of pretending to complete", async () => {
   const { instance } = consolidation({ learning: fakeLearning([]) });
-  const result = await instance.optimize({ job: { payload: { action: "optimize", capabilityId: "meta-analysis" } } });
-  assert.equal(result.staged, false);
-  assert.match(result.reason, /open-method-pr/);
-  await assert.rejects(
-    () => instance.optimize({ job: { payload: { action: "optimize" } } }),
-    (error) => error.code === "consolidate_payload_invalid",
-  );
+  await assert.rejects(instance.optimize({ job: { payload: { action: "optimize", capabilityId: "meta-analysis" } } }),
+    { code: "handbook_loop_unavailable" });
 });
 
 test("a library too small to compare does nothing and spends nothing", async () => {
