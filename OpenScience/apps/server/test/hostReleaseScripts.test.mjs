@@ -136,3 +136,16 @@ test("a delta may move the community skills but not a bundle pin the profile see
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("MR full and delta images install the same pinned PLINK executable", async () => {
+  const full = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile"), "utf8");
+  const pin = full.match(/^ARG MR_PLINK_VERSION=(\S+)$/m)?.[1];
+  assert.ok(pin, "the image declares one exact Debian PLINK package version");
+  assert.match(full, /"plink1\.9=\$\{MR_PLINK_VERSION\}"/);
+  assert.match(full, /plink1\.9 --version/);
+  const delta = await code("host-engine-delta.sh");
+  assert.match(delta, /if \[ "\$service" = "evimed-mr-agent" \]/);
+  assert.match(delta, /sed -n 's\/\^ARG MR_PLINK_VERSION=\/\/p'/);
+  assert.match(delta, /apt-get install -y --no-install-recommends plink1\.9=%s/);
+  assert.match(delta, /plink1\.9 --version/);
+});

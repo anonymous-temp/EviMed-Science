@@ -586,3 +586,18 @@ test("all six engines use the gateway by default and have a keyless overlay", as
     assert.equal(overlay.services[id].volumes[0].target, "/run/secrets/deepseek-api-key");
   }
 });
+
+test("only MR receives the read-only ancestry reference and its actual clumping executable", async () => {
+  const base = (await composeFiles()).find(({ name }) => name === "docker-compose.yml");
+  const services = YAML.parse(base.text).services;
+  const mr = services["evimed-mr-agent"];
+  assert.equal(mr.environment.EVIMED_MR_PLINK_BIN, "/usr/bin/plink1.9");
+  const target = mr.environment.EVIMED_MR_LD_REFERENCE_DIR;
+  assert.equal(target, "/opt/evimed/mr-ld-reference");
+  const mount = mr.volumes.find((value) => value.target === target);
+  assert.deepEqual(mount, { type: "bind", source: "${OPEN_SCIENCE_MR_LD_REFERENCE_HOST_DIR:-/dev/null}",
+    target, read_only: true, bind: { create_host_path: false } });
+  for (const [name, service] of Object.entries(services)) {
+    if (name !== "evimed-mr-agent") assert.ok(!service.volumes?.some((value) => value.target === target), name);
+  }
+});
