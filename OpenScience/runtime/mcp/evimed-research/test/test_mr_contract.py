@@ -44,6 +44,11 @@ class MRContractTests(unittest.TestCase):
             outcomeSource=source,
         )
         self.server._validate(request, schema, "request")
+        declared = {**source, "effectScale": {"unit": "SD", "transformation": "inverse_normal", "evidence": "Provided data dictionary"},
+                    "columnMapping": {**source["columnMapping"], "samplesize": "variant_n"}}
+        self.server._validate({**request, "exposureSource": declared}, schema, "request")
+        with self.assertRaises(ValueError):
+            self.server._validate({**request, "exposureSource": {**declared, "effectScale": {"unit": "SD", "status": "repository_reported"}}}, schema, "request")
         for delta in (
             {"instrumentsPreclumped": "false"},
             {"columnMapping": {}},
