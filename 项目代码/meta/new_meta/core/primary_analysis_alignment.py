@@ -698,14 +698,14 @@ def cached_alignment_is_current(project) -> bool:
             return False
         if not project.is_step_done("effect_sizes") or binding["rows"] != {key: selection_input_fingerprint(study, index) for key, (study, index) in current.items()}:
             return False
+        from new_meta.core.autonomous_analysis import row_is_admitted, judgment_for_row
         for row_id, proof_id in binding["proofs"].items():
             study, index = current[row_id]
             status = alignment_status(project, protocol, study, index)
             if status.get("proof_id") != proof_id or status["status"] not in {"match", "mismatch"}:
                 return False
-            if row_id in binding["selected_row_ids"] and status["status"] != "match":
+            if row_id in binding["selected_row_ids"] and not row_is_admitted(project, protocol, study, index):
                 return False
-        from new_meta.core.autonomous_analysis import row_is_admitted, judgment_for_row
         if any(not row_is_admitted(project, protocol, *current[row_id]) for row_id in binding["selected_row_ids"]):
             return False
         for study in studies:

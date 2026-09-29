@@ -1089,6 +1089,19 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
     if phase.status is ExecutionStatus.SUCCEEDED:
         return
     project.save_json("method_delivery_status.json", phase, subdir="analysis")
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    if project_is_unattended(project):
+        from new_meta.core.partial_delivery import write_partial_report
+        if write_partial_report(project, phase):
+            package_path = create_artifact_package(project)
+            persist_release_decision(project, {
+                "schema_version": 1, "status": "ready_with_warnings", "ready_for_submission": False,
+                "requires_review": False, "deliverable": True, "verification": "unverified",
+                "summary": phase.summary + " Available evidence is delivered with limitations.",
+                "blocker_codes": [], "warning_codes": [phase.error_code or "partial_analysis"],
+                "next_actions": [], "artifacts": [str(package_path)],
+            })
+            raise SystemExit(0)
     if phase.status not in {ExecutionStatus.NEEDS_INPUT, ExecutionStatus.BLOCKED}:
         raise MethodDeliveryBlocked(phase)
     blocker_codes = [issue.code for issue in phase.issues if issue.blocking]
@@ -1149,6 +1162,12 @@ def _require_cli_pairwise_rob(project, *, protocol, meta_results, extracted_stud
         return completed
     except PrimaryAlignmentRequired as exc:
         project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
+        from new_meta.core.primary_analysis_alignment import project_is_unattended, require_current_cached_alignment
+        if project_is_unattended(project) and exc.phase.error_code.startswith("pairwise_result_rob_"):
+            require_current_cached_alignment(project, protocol=protocol, meta_results=meta_results)
+            project.add_warning("synthesis", "Result-level risk of bias could not be completed; pooled estimates "
+                                "are retained with unknown risk of bias.", code="risk_of_bias_unavailable")
+            return []
         _require_cli_method_delivery(project, exc.phase)
 
 

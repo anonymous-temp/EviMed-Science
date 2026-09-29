@@ -230,7 +230,9 @@ def test_compiled_estimator_label_describes_the_interval_actually_returned():
     """Live ma-001 labelled a normal REML CI as HKSJ; the primary math stays unchanged."""
     from new_meta.engines.complex_rct import run_complex_rct
     from test_method_executor import _complex_rct_records
-    result = run_complex_rct(_complex_rct_records())
+    records = _complex_rct_records()
+    records.append({**records[0], "study_id": "S3", "result_id": "S3:0", "contrast_id": "S3:0", "estimate": 1.1})
+    result = run_complex_rct(records)
     assert result.estimator == "DESIGN_AWARE_REML"
     assert result.diagnostics["primary_interval"] == "normal_wald"
     assert result.diagnostics["sensitivity_interval"] == "HKSJ"
@@ -265,6 +267,7 @@ def test_missing_result_rob_does_not_stop_the_unattended_pairwise_writer(tmp_pat
     project = unattended(Project("missing result rob", output_dir=tmp_path))
     monkeypatch.setattr(cli, "validated_pairwise_result_rob", Mock(side_effect=PrimaryAlignmentRequired(
         needs_input_phase(project, [], reason="pairwise_result_rob_incomplete"))))
+    monkeypatch.setattr("new_meta.core.primary_analysis_alignment.require_current_cached_alignment", lambda *args, **kwargs: None)
     writer = Mock()
     writer.run.return_value = "Readable manuscript"
     assert cli._run_verified_pairwise_writer(writer, project=project, protocol=object(), meta_results=object(),
@@ -306,7 +309,8 @@ def test_model_source_resolution_replays_an_existing_negative_verification(tmp_p
     from new_meta.core.primary_analysis_alignment import record_checked_alignments, cached_alignment_is_current
     from test_primary_analysis_alignment import SOURCE, assessment_payload
     project, protocol, studies = _uncertain_pairwise(tmp_path)
-    record_checked_alignments(project, protocol, studies[0], [assessment_payload(contrast="mismatch")], source_text=SOURCE)
+    record_checked_alignments(project, protocol, studies[0], [assessment_payload(contrast="mismatch")], source_text=SOURCE,
+                              issue_histories={0: ([], True)})
     project.save_json("all_extractions.json", studies, subdir="extraction")
     monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
     effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)

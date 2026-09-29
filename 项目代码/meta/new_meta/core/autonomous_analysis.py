@@ -55,8 +55,23 @@ def _source(project, study, index):
     return (str(record.get("full_text") or "") + "\n\n" + "\n\n".join(record.get("tables") or [])).strip()
 
 
+
+def _catalogue(studies):
+    return [{"study_id": _study_id(study), "characteristics": study.characteristics.model_dump(mode="json"),
+             "trial_units": [unit.model_dump(mode="json") for outcome in study.outcomes
+                             if outcome.primary_analysis_alignment and outcome.primary_analysis_alignment.assessment.verification
+                             for unit in outcome.primary_analysis_alignment.assessment.verification.trial_units]}
+            for study in studies]
+
+
+def _catalogue_hash(project):
+    from new_meta.schemas.study import ExtractedStudy
+    return digest(_catalogue([ExtractedStudy.model_validate(row) for row in
+                              project.load_json("all_extractions.json", subdir="extraction") or []]))
+
 def _signature(project, protocol, study, index, source=None):
-    return {"protocol_sha256": protocol_fingerprint(protocol), "row_sha256": row_fingerprint(study, index),
+    return {"catalogue_sha256": _catalogue_hash(project),
+            "protocol_sha256": protocol_fingerprint(protocol), "row_sha256": row_fingerprint(study, index),
             "source_sha256": digest(_source(project, study, index) if source is None else source)}
 
 
@@ -90,8 +105,7 @@ def resolve_analysis_judgments(project, protocol, studies):
     from new_meta.core.primary_analysis_alignment import project_trial_unit_issues
     from new_meta.core.verification_outcome import left_out_reason
 
-    catalogue = [{"study_id": _study_id(study), "characteristics": study.characteristics.model_dump(mode="json")}
-                 for study in studies]
+    catalogue = _catalogue(studies)
     ids = {item["study_id"] for item in catalogue}
     saved = project.load_json(FILE, subdir="analysis") or {"schema_version": 1, "rows": {}}
     agent = None
@@ -177,6 +191,11 @@ def resolve_analysis_judgments(project, protocol, studies):
     # the first selected publication deterministically; its own multi-arm rows
     # still pass the existing covariance/dependency checks.
     selected_publications = {}
+    for study in studies:
+        for index, outcome in enumerate(study.outcomes):
+            if (alignment_status(project, protocol, study, index)["status"] == "match"
+                    and f"{_study_id(study)}:{index}" not in saved["rows"]):
+                selected_publications[_study_id(study)] = _study_id(study)
     for row_id, decision in sorted(saved["rows"].items()):
         if not decision.get("include"):
             continue

@@ -4118,10 +4118,21 @@ def _ensure_protocol_deviation_note(manuscript: str, facts: dict[str, Any]) -> t
 
 
 def _ensure_pipeline_warning_note(manuscript: str, facts: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    """Keep run warnings in structured outputs rather than the journal manuscript."""
+    """Keep evidence limitations visible; ordinary run diagnostics stay in sidecars."""
     warnings = facts.get("pipeline_warnings") or []
     if not warnings:
         return manuscript, []
+    evidence_codes = {"analysis_assumptions", "risk_of_bias_unavailable", "partial_screening", "partial_extraction",
+                      "protocol_scope_unverified"}
+    evidence_notes = [str(item.get("message") or "").strip() for item in warnings
+                      if item.get("code") in evidence_codes and item.get("message")]
+    missing = [note for note in evidence_notes if note not in manuscript]
+    if missing:
+        note = "\n\n## Evidence limitations\n\n" + "\n\n".join(dict.fromkeys(missing)) + "\n"
+        repaired = _insert_before_heading(manuscript, "## References", note)
+        if repaired == manuscript:
+            repaired = manuscript + note
+        return repaired, [_issue("evidence_limitations_note", "fixed", "Retained the stated analysis assumptions and missing evidence.")]
     if facts.get("report_type", "meta") != "evidence_gap":
         return manuscript, []
     normalized_manuscript = manuscript.casefold()

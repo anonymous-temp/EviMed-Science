@@ -58,7 +58,7 @@ class ComplexRCTRecord(BaseModel):
 
 class ComplexRCTResult(BaseModel):
     schema_version: int = 1
-    estimator: str = "DESIGN_AWARE_REML_HKSJ"
+    estimator: str = "DESIGN_AWARE_REML"
     measure: str
     n_studies: int
     n_contrasts: int
@@ -210,6 +210,8 @@ def run_complex_rct(
         },
         moderator_subgroups=_moderator_subgroups(prepared, measure, variables),
         diagnostics={
+            "primary_interval": "normal_wald",
+            "sensitivity_interval": "HKSJ",
             "analysis_scale": "log" if measure in _RATIO_MEASURES else "original",
             "cluster_adjustment": "reported_or_design_effect",
             "crossover_precision": "paired_only",
