@@ -3,11 +3,13 @@ import test from "node:test";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { renderMethodSkill } from "@evimed/domain";
+import { MethodDistillationRuns } from "../src/methodDistillationRuns.mjs";
 import { HandbookConsolidation } from "../src/handbookConsolidation.mjs";
 import { prepareCapabilityHandbooks } from "../src/capabilityHandbooks.mjs";
 import { prepareResearchContext } from "../src/researchContext.mjs";
 import { recordHandbookRunObservations } from "../src/methodObservations.mjs";
-import { fixture, registry, BODY } from "./helpers/handbookFixture.mjs";
+import { fixture, registry, BODY, frontmatter } from "./helpers/handbookFixture.mjs";
 
 export const config = { maxFileBytes: 1_048_576, maxProjectBytes: 16_777_216, maxWorkspaceScanEntries: 100, mountedMethodPromptBytes: 8000 };
 async function workspace(fn) {
@@ -19,7 +21,13 @@ async function workspace(fn) {
 
 test("consumption applies a supplement which the next authorized prepared turn carries and observes by exact digest", async () => workspace(async (project) => {
   const f = fixture();
-  const candidate = await f.learning.recordHandbookCandidate("alice", f.input());
+  const distillation = new MethodDistillationRuns({ learning: f.learning, jobs: f.jobs,
+    dispatch: async () => { throw new Error("No provider calls in this test"); }, readResult: async () => null });
+  const lesson = await distillation.applyCandidate({ id: "distill", userId: "alice", projectId: "source-project", payload: { trigger: "repair_accepted" } },
+    { id: "source-run", effectiveAgentId: "geo-content" },
+    { candidate: { operation: "create", capabilityId: "meta-analysis" }, skill: renderMethodSkill(frontmatter, BODY) }, { signal: "reviewer" });
+  const candidate = await f.documents.get("alice", "method", lesson.methodId);
+  assert.equal(candidate.payload.capabilityId, "geo-content", "the stored source run outranks a model-invented target");
   const loop = new HandbookConsolidation({ ...f, registry });
   const applied = await loop.run({ job: f.queued[0] });
   const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });

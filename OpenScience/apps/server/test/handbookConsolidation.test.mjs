@@ -128,3 +128,19 @@ test("a baseline changed during evaluation gets one fresh digest-bound retry", a
   assert.equal((await loop.run({ job: f.queued[2] })).disposition, "stale");
   assert.equal(f.queued.length, 3, "one bounded retry, never an autonomous paid loop");
 });
+
+test("legacy candidates missing target metadata derive it from the stored source and do not remain queued forever", async () => {
+  const f = fixture(); f.learning.jobs = null;
+  const old = await f.learning.recordHandbookCandidate("alice", f.input({ capabilityId: null }));
+  const { candidateRevision: _revision, dispositions: _dispositions, ...payload } = old.payload;
+  await f.documents.put("alice", "method", old.id, payload, { expectedRevision: old.revision });
+  f.learning.jobs = f.jobs;
+  const loop = new HandbookConsolidation({ ...f, registry });
+  await loop.reconcile("alice");
+  assert.equal(f.queued.length, 1);
+  const result = await loop.run({ job: f.queued[0] });
+  assert.equal(result.disposition, "applied");
+  assert.equal(result.capabilityId, "geo-content");
+  await loop.reconcile("alice");
+  assert.equal(f.queued.length, 1);
+});

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { before, after, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
+import { handbookSummary } from "../src/learningMetrics.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { HandbookConsolidation, capabilityHandbookId } from "../src/handbookConsolidation.mjs";
 import { frontmatter, BODY, registry } from "./helpers/handbookFixture.mjs";
@@ -36,6 +37,11 @@ test("Postgres applies supplement, disposition and job exactly once in the same 
   const f = await setup();
   const result = await f.loop.run({ job: f.job });
   assert.equal(result.disposition, "applied");
+  const summary = await handbookSummary(database, f.owner);
+  assert.equal(summary.applied, 1);
+  assert.equal(summary.unmeasured, 1);
+  assert.equal(summary.verifiedImprovement, 0);
+  assert.equal(summary.recent[0].source.runId, "source-run");
   assert.equal((await jobs.get(f.owner, f.job.id)).status, "succeeded");
   const row = await documents.get(f.owner, "method", result.handbookId);
   assert.equal(row.payload.contentDigest, f.candidate.payload.contentDigest);
@@ -81,4 +87,15 @@ test("Postgres account deletion while evaluating prevents any application", opti
   };
   await assert.rejects(f.loop.run({ job: f.job }), { code: "handbook_candidate_unavailable" });
   assert.equal(await documents.get(f.owner, "method", capabilityHandbookId("geo-content", frontmatter.name)), null);
+});
+
+test("Postgres handbook metrics count the entire owner ledger beyond the recent-card page", options, async () => {
+  const f = await setup();
+  const result = await f.loop.run({ job: f.job });
+  const original = await documents.get(f.owner, "method", result.handbookId);
+  await documents.createBatch(f.owner, Array.from({ length: 60 }, (_, index) => ({ kind: "method", id: `${original.id}-${index}`, payload: original.payload })));
+  const summary = await handbookSummary(database, f.owner);
+  assert.equal(summary.applied, 61);
+  assert.equal(summary.recent.length, 6);
+  assert.equal((await handbookSummary(database, "missing-owner")).applied, 0);
 });
