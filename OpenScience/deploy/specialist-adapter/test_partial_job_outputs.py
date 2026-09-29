@@ -1,6 +1,8 @@
 """A late engine failure exposes already retained usable files as partial outputs."""
 import json
 
+import pytest
+
 from test_job_receipts import RUNNER, _complete, _setup
 
 
@@ -38,9 +40,10 @@ def test_failed_job_with_only_bookkeeping_does_not_claim_partial_results(tmp_pat
     assert not status.get("artifacts")
 
 
-def test_invalid_result_metadata_preserves_safe_partial_outputs(tmp_path, monkeypatch):
+@pytest.mark.parametrize("metadata", ["{broken", "[]", "", "null"])
+def test_invalid_result_metadata_preserves_safe_partial_outputs(tmp_path, monkeypatch, metadata):
     module, client, secret, workspace, agent, _, _ = _setup(tmp_path, monkeypatch)
-    (agent / "evimed_runner.py").write_text(RUNNER + "(out/'result.json').write_text('{broken')\nraise SystemExit(7)\n")
+    (agent / "evimed_runner.py").write_text(RUNNER + f"(out/'result.json').write_text({metadata!r})\nraise SystemExit(7)\n")
     code, job_id, status = _complete(module, client, secret, {"topic": "sepsis"}, monkeypatch,
                                      "/api/v1/evimed/bibliometric-analysis")
     assert code == 7 and status["status"] == "error"

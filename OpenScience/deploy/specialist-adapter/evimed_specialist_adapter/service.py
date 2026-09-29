@@ -977,7 +977,13 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
-        return _error("specialist_execution_failed", message, bool(state.get("retryable")))
+        failure = _error("specialist_execution_failed", message, bool(state.get("retryable")))
+        if state.get("artifacts"):
+            failure["artifacts"] = state["artifacts"]
+            failure["warnings"] = ["These are partial outputs from a failed job; verify their scope before drawing conclusions."]
+            failure["next_actions"] = ["Preserve and inspect the available partial outputs; repair only the failed or missing work."]
+            failure["error"]["stopReason"] = "The failed step is incomplete; available partial outputs remain usable after review."
+        return failure
     if job_status != "succeeded":
         return _error("specialist_job_state_invalid", "The specialist job state is invalid.")
     finished = _moment(state.get("finishedAt"))
@@ -1384,7 +1390,12 @@ def run_job(state_file: str) -> int:
         except OSError:
             pass
     result_path = output_root / "result.json"
-    result = _read_json(result_path) if result_path.is_file() else {}
+    try:
+        result = _read_json(result_path)
+    except (OSError, ValueError, RuntimeError):
+        # A final serialization failure must not hide the files already
+        # published through the worker's verified directory descriptors.
+        result = {"status": "failed", "error": "The engine's final result metadata is missing or invalid."}
     # What the engine spent at the provider, success or not: a failed job's
     # tokens were paid for as well.
     usage = usage_report.normalize(result.get("usage"))
@@ -1395,6 +1406,11 @@ def run_job(state_file: str) -> int:
                 "updatedAt": _now(),
                 "finishedAt": _now(),
                 "returnCode": return_code,
+                "artifacts": [
+                    {"kind": Path(row["path"]).suffix.lstrip(".") or "file", "path": row["path"]}
+                    for row in (receipt_rows or {}).get("artifacts", [])
+                    if Path(row["path"]).name not in {"request.json", "result.json"}
+                ][:100],
                 "retryable": return_code in {75, 137, 143},
                 "error": str(
                     result.get("error")
@@ -1484,7 +1500,7 @@ def _run_isolated(
     log: Any,
     credentials: dict[str, Any],
 ) -> tuple[int, dict[str, list[dict[str, Any]]]]:
-    """Run the engine as the analysis UID in a private stage (isolated_job).
+    """Run the engine in a private stage and publish its regular output files.
 
     Returns its exit code and the owner's receipt rows: the inputs it was
     handed and every file published into the job's output, the request the
