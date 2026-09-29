@@ -2562,6 +2562,11 @@ export function createWebApiApp(overrides = {}) {
     select: (project, session, route) => selectOwnedHandbooks(project, session, {}, route),
     budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
     attached: recordNativeSessionHandbooks,
+    allowed: async (project, sessionId) => {
+      if (!config.learningEnabled || isInternalProject(project.id)) return false;
+      const state = await memoryPausedFor(researchMemory, project.userId, project.id, sessionId);
+      return !state.learning && !state.trial;
+    },
   });
   if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
     config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,

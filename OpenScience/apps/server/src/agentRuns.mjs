@@ -790,7 +790,7 @@ function normalizeCapabilityHandbooks(value) {
     && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
     && Number.isSafeInteger(item.version) && item.version > 0)
     .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
-      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && !/[\u0000-\u001f\u007f]/.test(requestId) ? { requestId } : {}),
+      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && ![...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ? { requestId } : {}),
     }));
 }
 

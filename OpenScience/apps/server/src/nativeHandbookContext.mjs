@@ -12,15 +12,15 @@ const MAX_FILE_BYTES = 32_768;
 const digest = (value) => createHash("sha256").update(value).digest("hex");
 const textDigest = (value) => digest(String(value));
 const routeDigest = (value) => textDigest(String(value).replace(/\s+/g, " ").trim());
-const validRequestId = (value) => typeof value === "string" && value.length > 0 && value.length <= 512 && !/[\u0000-\u001f\u007f]/.test(value);
+const validRequestId = (value) => typeof value === "string" && value.length > 0 && value.length <= 512 && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const validSession = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const routeFields = ["effectiveAgentId", "effectiveAgentVersion", "effectiveRuntimeAgent", "effectiveRouteReason", "estimatedMinutes"];
 
 export class NativeHandbookContext {
   /** @param {{route:(project:any,sessionId:string,text:string)=>Promise<any>,select:(project:any,session:any,route:any)=>Promise<any>,
-   * budget:(project:any)=>number,attached?:(project:any,sessionId:string,requestIds:string[])=>Promise<any>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
-  constructor({ route, select, budget, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
-    this.route = route; this.select = select; this.budget = budget; this.attached = attached;
+   * budget:(project:any)=>number,allowed?:(project:any,sessionId:string)=>Promise<boolean>,attached?:(project:any,sessionId:string,requestIds:string[])=>Promise<any>,now?:()=>number,ttlMs?:number,timeoutMs?:number}} options */
+  constructor({ route, select, budget, allowed = async () => true, attached = async () => {}, now = () => Date.now(), ttlMs = 24 * 60 * 60_000, timeoutMs = 5000 }) {
+    this.route = route; this.select = select; this.budget = budget; this.allowed = allowed; this.attached = attached;
     this.now = now; this.ttlMs = ttlMs; this.timeoutMs = timeoutMs;
   }
 
@@ -68,6 +68,7 @@ export class NativeHandbookContext {
   /** Freeze before forwarding, never write to a shared session context file. */
   async prepare(project, request) {
     if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
+    if (!await this.allowed(project, request.sessionId)) return null;
     const fingerprint = digest(JSON.stringify(request));
     const existing = await this.envelope(project, request.sessionId, request.requestId);
     if (existing) {
@@ -114,6 +115,7 @@ export class NativeHandbookContext {
   /** Read only actual current-step input identities, within one combined context allowance. */
   async read(project, { sessionId, inputs }) {
     if (!validSession(sessionId) || !Array.isArray(inputs) || inputs.length > 16) throw new HttpError(400, "handbook_request_invalid", "Invalid current inputs.");
+    if (!await this.allowed(project, sessionId)) return { contexts: [] };
     const contexts = [];
     let bytes = 0;
     const allowance = Math.min(MAX_HANDBOOK_PROMPT_BYTES, Math.max(0, this.budget(project)));

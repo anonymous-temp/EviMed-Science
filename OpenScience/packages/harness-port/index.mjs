@@ -622,7 +622,7 @@ export function stepUserInputs(payload) {
   for (const message of (Array.isArray(payload?.messages) ? payload.messages : [])) {
     const requestId = message?.source?.rpcId
     if (message?.source?.kind !== 'user' || typeof requestId !== 'string' || !requestId || requestId.length > 512
-      || /[\u0000-\u001f\u007f]/.test(requestId) || conflicts.has(requestId)) continue
+      || [...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) || conflicts.has(requestId)) continue
     const text = nativeInputText(message.content)
     if (inputs.has(requestId) && inputs.get(requestId) !== text) { inputs.delete(requestId); conflicts.add(requestId); continue }
     inputs.set(requestId, text)
