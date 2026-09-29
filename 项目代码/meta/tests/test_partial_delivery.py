@@ -80,6 +80,8 @@ def test_unsupported_specific_calculation_keeps_narrative_delivery(code):
 def test_pairwise_excluded_trial_never_survives_in_numeric_inputs(tmp_path, monkeypatch):
     import new_meta.core.primary_analysis_alignment as alignment
     from new_meta.schemas.risk_of_bias import StudyRoB
+    from new_meta.core.agent_base import BaseAgent
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", Mock(side_effect=ValueError("offline judgment unavailable")))
     from test_primary_analysis_alignment import stamp_fixture
     project, protocol, study, _ = stamp_fixture(tmp_path)
     unattended(project)
@@ -114,7 +116,7 @@ def _model_decisions(studies, *, same_trial=False, bad_quote=False):
     from test_primary_analysis_alignment import alignment_fixture
     from new_meta.schemas.protocol import ResearchProtocol
     # This mock chooses source rows and quotes; it never supplies a new number.
-    def respond(prompt, schema, **kwargs):
+    def respond(self, prompt, schema, **kwargs):
         import json
         request = json.loads(prompt.split("REQUEST_JSON\n", 1)[1])
         study = next(item for item in studies if item.characteristics.study_id == request["study_id"])

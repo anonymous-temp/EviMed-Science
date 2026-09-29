@@ -582,6 +582,8 @@ class PipelineRunner:
         from new_meta.engines import meta_engine as _meta_engine
         from new_meta.tools.utils import first_author_lastname as _first_author
 
+        from new_meta.core.autonomous_analysis import resolve_analysis_judgments, judgment_for_row
+        resolve_analysis_judgments(self.project, protocol, extracted_studies)
         source_gate_fingerprint = selection_gate_fingerprint(self.project)
         from new_meta.core.primary_analysis_alignment import project_is_unattended, report_unverified_results_left_out
         unattended = project_is_unattended(self.project)
@@ -647,20 +649,29 @@ class PipelineRunner:
                 annotate_source_provenance(audit_row)
                 alignment = alignment_status(self.project, protocol, study, outcome_index)
                 audit_row["alignment"] = alignment
-                if alignment["status"] == "mismatch":
+                judgment = judgment_for_row(self.project, protocol, study, outcome_index)
+                admitted_with_uncertainty = bool(judgment and judgment.get("include"))
+                if judgment:
+                    audit_row["analysis_judgment"] = judgment
+                    if not admitted_with_uncertainty:
+                        audit_row.update(decision="excluded", reason=judgment["reason"])
+                        left_out[audit_row["row_id"]] = judgment["reason"]
+                        primary_selection_audit.append(audit_row)
+                        continue
+                if alignment["status"] == "mismatch" and not admitted_with_uncertainty:
                     audit_row["decision"] = "excluded"
                     audit_row["reason"] = "primary_alignment_mismatch"
                     primary_selection_audit.append(audit_row)
                     continue
                 effect = compute_study_effect(study, outcome, protocol, self.logger, audit_row=audit_row)
                 if effect:
-                    if alignment["status"] != "match" and unattended:
+                    if alignment["status"] != "match" and unattended and not admitted_with_uncertainty:
                         # Nobody will adjudicate it: leave the row out, named, and never pool it.
                         audit_row.update({"decision": "excluded", "reason": "unverified_in_unattended_run"})
                         left_out[audit_row["row_id"]] = alignment.get("reason") or "primary_alignment_required"
                         primary_selection_audit.append(audit_row)
                         continue
-                    if alignment["status"] != "match":
+                    if alignment["status"] != "match" and not admitted_with_uncertainty:
                         audit_row.update({"decision": "needs_input", "reason": "primary_analysis_alignment_required",
                                           "requires_adjudication": True,
                                           "next_action": "Adjudicate outcome, population and contrast against current source evidence."})
@@ -680,6 +691,13 @@ class PipelineRunner:
                         rob,
                         benchmark_reference_manifest=benchmark_reference_manifest,
                     )
+                    if unattended and block_reason in {"missing_risk_of_bias_assessment", "synthetic_risk_of_bias_assessment", "empty_risk_of_bias_judgment"}:
+                        audit_row["risk_of_bias_limitation"] = block_reason
+                        block_reason = ""
+                    if admitted_with_uncertainty:
+                        # Source support was checked against the preserved source;
+                        # its independent verification remains unknown in the audit.
+                        block_reason = ""
                     if block_reason:
                         audit_row["decision"] = "excluded"
                         audit_row["reason"] = block_reason
@@ -691,7 +709,8 @@ class PipelineRunner:
                     audit_row["effect"] = _meta_engine._to_original(effect.yi, protocol.effect_measure, effect.vi)
                     audit_row["se"] = effect.se
                     study_candidates.append((rank, study, outcome, effect, audit_row["row_id"]))
-                    verified_trial_candidates.append((audit_row["row_id"], outcome.primary_analysis_alignment.assessment))
+                    if not admitted_with_uncertainty:
+                        verified_trial_candidates.append((audit_row["row_id"], outcome.primary_analysis_alignment.assessment))
                 else:
                     unresolved_reported_precision = (
                         alignment["status"] == "match"
@@ -777,7 +796,8 @@ class PipelineRunner:
             duplicate_conflicts = set()
             for study, outcome, effect, row_id in primary_candidates:
                 index = int(row_id.rsplit(":", 1)[1])
-                fingerprint = (selection_input_fingerprint(study, index), outcome.primary_analysis_alignment.proof_id)
+                fingerprint = (selection_input_fingerprint(study, index),
+                               outcome.primary_analysis_alignment.proof_id if outcome.primary_analysis_alignment else None)
                 if row_id in by_row and by_row[row_id][0] != fingerprint:
                     duplicate_conflicts.add(row_id)
                 else:
@@ -816,6 +836,19 @@ class PipelineRunner:
                     row["decision"] = "excluded"
                     row["reason"] = invalid_effect_reasons[row.get("study_id")]
                     row["in_final_primary_analysis"] = False
+        missing_rob = [row["row_id"] for row in primary_selection_audit
+                       if row.get("in_final_primary_analysis") and row.get("risk_of_bias_scope") == "missing"]
+        self.project.clear_warnings(code="risk_of_bias_unavailable")
+        if missing_rob:
+            self.project.add_warning("synthesis", "Risk of bias could not be assessed for " + ", ".join(missing_rob)
+                                    + "; their estimates are retained with unknown risk of bias.",
+                                    code="risk_of_bias_unavailable", context={"rows": missing_rob})
+        if unattended:
+            for row in primary_selection_audit:
+                if row.get("decision") == "needs_input":
+                    row.update(decision="excluded", requires_adjudication=False, in_final_primary_analysis=False)
+                    row.pop("next_action", None)
+                    left_out[row["row_id"]] = row["reason"]
         report_unverified_results_left_out(self.project, left_out)
         unresolved = [row for row in primary_selection_audit if row.get("decision") == "needs_input"]
         self.project.save_json("effect_selection_audit.json", primary_selection_audit, subdir="analysis")
