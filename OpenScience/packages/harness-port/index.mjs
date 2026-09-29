@@ -651,7 +651,7 @@ export function onPreStep(ctx, fn, classify) {
       const decision = admission.allow ? await next() : { kind: 'reject' }
       if (decision?.kind === 'enter') {
         const entered = messages.length ? { ...decision, messages: [...(decision.messages ?? []), ...messages] } : decision
-        if (admission.allow && admission.onEntered) {
+        if (admission.allow && admission.onEntered && !payload.signal?.aborted) {
           try { await admission.onEntered() } catch (error) { console.error(`evimed: step-entry observation failed: ${errorMessage(error)}`) }
         }
         return entered

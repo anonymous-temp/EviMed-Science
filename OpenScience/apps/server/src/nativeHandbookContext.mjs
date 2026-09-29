@@ -68,6 +68,10 @@ export class NativeHandbookContext {
 
   /** Freeze before forwarding, never write to a shared session context file. */
   async prepare(project, request) {
+    // A steer continues the current turn's method. Reclassifying a short
+    // correction here could inject another capability's handbook into it.
+    // The next queued turn gets its own snapshot in the ordinary path.
+    if (request?.mode === "steer") return null;
     if (!validSession(request?.sessionId) || !validRequestId(request?.requestId)) return null;
     if (!await this.allowed(project, request.sessionId)) return null;
     const fingerprint = digest(JSON.stringify(request));
