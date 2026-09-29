@@ -206,12 +206,12 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, authorizeMutation = null,
   agentRuns = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -244,6 +244,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         code: typeof error?.code === "string" ? error.code : "run_correction_observe_failed",
         detail: "runtime-ui",
       }).catch(() => {});
+    }
+  }
+  /** Freeze supplemental context without changing the native request or refusing research. */
+  async function prepareNativeContext(project, payload) {
+    if (!preparePrompt) return;
+    try { await preparePrompt(project, payload?.args?.request); }
+    catch (error) {
+      await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
     }
   }
   async function authorizePromptSession(project, payload) {
@@ -488,7 +497,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let workspaceBody = null;
     let promptBody = null;
     let modelBody = null;
-    if (method === "session/prompt" && (authorizePrompt || agentRuns)) {
+    if (method === "session/prompt" && (authorizePrompt || agentRuns || preparePrompt)) {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
@@ -587,6 +596,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
+        await prepareNativeContext(project, promptBody?.payload);
         await recordSteer(project, promptBody?.payload);
         return forward();
       };
@@ -658,7 +668,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         // The mux calls `observe` inside the prompt's admission, right before
         // the frame goes upstream — the same point the HTTP path counts at.
         const observe = async (endpoint, payload = null) => {
-          if (endpoint === "session/prompt") await recordSteer(project, payload);
+          if (endpoint === "session/prompt") {
+            await prepareNativeContext(project, payload);
+            await recordSteer(project, payload);
+          }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe });
       } catch (error) {
