@@ -3779,3 +3779,68 @@ test("concurrent explicit and idle stops close one captured runtime only once", 
   await Promise.all([manager.stop(owned), manager.stopIdleRuntime(owned)]);
   assert.equal(closed, 1);
 });
+
+test("failed provider close blocks replacement until that captured runtime is cleaned", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  let fails = true, starts = 0;
+  runtime.close = async () => { if (fails) throw new Error("Unconfirmed close"); };
+  manager.startKernel = async () => { starts += 1; return fakeRuntime(owned.id, owned.workspaceDir); };
+  await assert.rejects(manager.endBoundedRuntime(owned, "episode-one", "old-generation"), /Unconfirmed close/);
+  await assert.rejects(manager.start(owned), { code: "runtime_cleanup_required" });
+  assert.equal(starts, 0);
+  fails = false;
+  assert.equal(await manager.endBoundedRuntime(owned, "episode-one", "old-generation"), true);
+  await manager.start(owned);
+  assert.equal(starts, 1);
+});
+
+test("a stale token refresh failure never removes a replacement runtime", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  const monitor = { timer: null };
+  runtime.workloadTokenFile = "test-token-file";
+  manager.evimedWorkloadRefreshTimers.set(manager.key(owned), monitor);
+  let rejectWrite, enteredWrite;
+  const entered = new Promise(resolve => { enteredWrite = resolve; });
+  manager.provider.writeWorkloadToken = async () => { enteredWrite(); await new Promise((_resolve, reject) => { rejectWrite = reject; }); };
+  const refreshing = manager.refreshEviMedRuntimeToken(owned, monitor);
+  await entered;
+  await manager.endBoundedRuntime(owned, "episode-one", "old-generation");
+  const newer = { ...fakeRuntime(owned.id, owned.workspaceDir), modelGatewayTokenJti: "new-generation" };
+  manager.runtimes.set(manager.key(owned), newer);
+  rejectWrite(new Error("Old renewal failed"));
+  await refreshing;
+  assert.equal(manager.runtimes.get(manager.key(owned)), newer);
+});
+
+test("idle no-op and a wrong-generation stop never swallow an explicit stop", async t => {
+  for (const first of ["idle", "wrong-generation"]) {
+    const { manager, owned, runtime } = await stopFixture(t);
+    let closed = 0;
+    runtime.close = async () => { closed += 1; };
+    manager.runtimeActivity.set(manager.key(owned), { activeProxies: 1 });
+    await Promise.all([first === "idle" ? manager.stopIdleRuntime(owned) : manager.stop(owned, { expectedGeneration: "wrong" }), manager.stop(owned)]);
+    assert.equal(closed, 1, first);
+  }
+});
+
+test("an in-flight start finishing during admission cleanup is still stopped", async t => {
+  const { manager, owned } = await stopFixture(t);
+  manager.runtimes.clear();
+  let resolveStart, resolveCleanup, enteredCleanup;
+  const cleanupEntered = new Promise(resolve => { enteredCleanup = resolve; });
+  const pending = new Promise(resolve => { resolveStart = resolve; });
+  manager.starts.set(manager.key(owned), pending);
+  manager.pluginService = { clearPromptAdmissions: async () => { enteredCleanup(); await new Promise(resolve => { resolveCleanup = resolve; }); } };
+  const stopped = manager.stop(owned);
+  await cleanupEntered;
+  let closed = 0;
+  const runtime = { ...fakeRuntime(owned.id, owned.workspaceDir), close: async () => { closed += 1; } };
+  manager.runtimes.set(manager.key(owned), runtime);
+  resolveStart(runtime); manager.starts.delete(manager.key(owned));
+  await sleep(1);
+  manager.pluginService = null;
+  resolveCleanup(); await stopped;
+  for (let count = 0; count < 30 && closed === 0; count += 1) await sleep(1);
+  assert.equal(closed, 1);
+  assert.equal(manager.runtimes.size, 0);
+});
