@@ -54,6 +54,41 @@ def test_unchanged_old_primary_file_is_not_copied_as_a_failed_retries_partial_re
     assert not any(path.endswith("mr_results.csv") for path in copied)
 
 
+@pytest.mark.parametrize("fresh_rows", [None, "empty", "populated"])
+def test_row_snapshots_and_variant_n_belong_to_current_attempt(tmp_path, monkeypatch, fresh_rows):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+
+    raw = tmp_path / "raw"; raw.mkdir()
+    rows_header = "SNP,beta.exposure,se.exposure,pval.exposure,samplesize.exposure,samplesize.outcome\n"
+    for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+        (raw / name).write_text(rows_header + "rs1,0.2,0.01,1e-9,123,456\n")
+
+    def failed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+        if fresh_rows is not None:
+            for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+                (output / name).write_text(rows_header + ("rs2,0.3,0.01,1e-9,789,987\n" if fresh_rows == "populated" else ""))
+        return False
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 8
+    assert result.analysis_status == "partial"
+    if fresh_rows is None:
+        assert result.variant_sample_sizes == {}
+    else:
+        observed = result.variant_sample_sizes["exposure"]
+        assert observed["rows"] == (1 if fresh_rows == "populated" else 0)
+        assert observed["maximum"] == (789 if fresh_rows == "populated" else None)
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert any(path.endswith("mr_results.csv") for path in copied)
+    for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+        assert any(path.endswith(name) for path in copied) == (fresh_rows is not None)
+    assert (raw / "harmonised-rows.csv").exists()
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError

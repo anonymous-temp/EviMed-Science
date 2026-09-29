@@ -174,3 +174,44 @@ def test_zero_iv_catalogue_projection_preserves_stage_and_does_not_claim_indepen
     assert summary["selection"]["stage"] == "candidates_before_clumping"
     assert summary["selection"]["ldChecked"] is False
     assert summary["source_accessions"] == ["GCST000001", "GCST000002"]
+
+
+@pytest.mark.parametrize(("name", "body", "expected"), [
+    ("mr_results.csv", "method,nsnp,b,se,pval,or,ci_lower,ci_upper\nIVW,8,0.4,0.1,0.001,1.49,1.23,1.81\n",
+     {"ci_lower": "1.23", "ci_upper": "1.81"}),
+    ("mrpresso.csv", "global_p,n_outliers,outlier_snps,n_distributions,outlier_resolution,raw_beta,raw_se,raw_p,corrected_beta,corrected_se,corrected_p,corrected_or,corrected_ci_lower,corrected_ci_upper,distortion_coefficient,distortion_p,corrected_reason\n<0.001,1,rs123,1000,0.008,0.4,0.1,0.001,0.3,0.08,0.002,1.35,1.15,1.58,25,<0.001,PRIVATE_DIAGNOSTIC\n",
+     {"global_p": "<0.001", "n_outliers": "1", "outlier_snps": "rs123", "raw_beta": "0.4", "corrected_ci_lower": "1.15", "distortion_p": "<0.001"}),
+    ("radial.csv", "global_q_pval,n_outliers\n0.002,2\n",
+     {"global_q_pval": "0.002", "n_outliers": "2"}),
+    ("steiger.csv", "status,reason,n_variants,correct_causal_direction,steiger_pval,snp_r2.exposure,snp_r2.outcome\ncomputed,PRIVATE_DIAGNOSTIC,8,TRUE,0.004,0.12,0.03\n",
+     {"status": "computed", "n_variants": "8", "correct_causal_direction": "TRUE", "steiger_pval": "0.004", "snp_r2.exposure": "0.12", "snp_r2.outcome": "0.03"}),
+    ("conmix.csv", "estimate,ci_lower,ci_upper,n_intervals,pval\n0.3,0.1,0.5,2,0.003\n",
+     {"estimate": "0.3", "ci_lower": "0.1", "ci_upper": "0.5", "n_intervals": "2", "pval": "0.003"}),
+])
+def test_public_partial_preserves_current_r_statistical_columns(directories, tmp_path, name, body, expected):
+    import csv
+
+    stage, _, source, _ = directories
+    (stage / "analysis-data/pair" / name).write_text(body)
+    output = tmp_path / "public"; output.mkdir()
+    with inputs.directory_fd(output) as target:
+        artifacts, _ = jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_interpretation_failed", {})
+    assert artifacts
+    published = (output / "pair-001" / name).read_text()
+    row = next(csv.DictReader(io.StringIO(published)))
+    assert expected.items() <= row.items()
+    assert "PRIVATE_" not in published
+    assert "reason" not in row and "corrected_reason" not in row
+
+
+@pytest.mark.parametrize(("name", "body"), [
+    ("mrpresso.csv", "global_p,n_outliers\n<PRIVATE_DETAIL,0\n"),
+    ("mrpresso.csv", "global_p,n_outliers\n<1.1,0\n"),
+    ("mrpresso.csv", "global_p,n_outliers,outlier_snps\n0.01,1,PRIVATE_DETAIL\n"),
+    ("radial.csv", "global_q_pval,n_outliers\n-0.2,0\n"),
+    ("steiger.csv", "status,correct_causal_direction,steiger_pval\nPRIVATE_DETAIL,TRUE,0.01\n"),
+    ("steiger.csv", "status,correct_causal_direction,steiger_pval\ncomputed,PRIVATE_DETAIL,0.01\n"),
+])
+def test_public_partial_rejects_invalid_closed_statistical_fields(name, body):
+    with pytest.raises(ValueError):
+        jobs._scientific_rows(body.encode(), name)
