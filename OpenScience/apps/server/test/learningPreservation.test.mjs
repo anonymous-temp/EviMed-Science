@@ -134,3 +134,20 @@ test("the learning project is made on first use, as the learning runtime makes i
   assert.deepEqual(await ensureLearningProject(store, { id: "u1" }), { id: LEARNING_PROJECT_ID });
   assert.deepEqual(made, [`${LEARNING_PROJECT_ID}:EviMed 学习`], "once");
 });
+
+test("a handbook source survives owned project deletion but cannot borrow another project's archive", async (t) => {
+  const { resolveLessonSourceRun } = await import("../src/learningPreservation.mjs");
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-handbook-source-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = await projectAt(root, "gone");
+  const learningProject = await projectAt(root, LEARNING_PROJECT_ID);
+  const jobs = client([{ id: "j", kind: "distill", status: "queued", projectId: "gone", payload: { runId: "source-run" } }]);
+  await preserveProjectLessons({ client: jobs, userId: "u1", project: source, learningProject,
+    runs: [{ id: "source-run", effectiveAgentId: "meta-analysis" }] });
+  const store = { userById: async (id) => id === "u1" ? { id } : null,
+    requireProject: async (_user, id) => { if (id === LEARNING_PROJECT_ID) return learningProject; throw Object.assign(new Error("gone"), { status: 404 }); } };
+  const agentRuns = { list: async () => [] };
+  assert.equal((await resolveLessonSourceRun(store, agentRuns, "u1", "gone", "source-run")).effectiveAgentId, "meta-analysis");
+  assert.equal(await resolveLessonSourceRun(store, agentRuns, "u1", "other", "source-run"), null);
+  assert.equal(await resolveLessonSourceRun(store, agentRuns, "foreign", "gone", "source-run"), null);
+});
