@@ -149,3 +149,22 @@ test("MR full and delta images install the same pinned PLINK executable", async 
   assert.match(delta, /apt-get install -y --no-install-recommends plink1\.9=%s/);
   assert.match(delta, /plink1\.9 --version/);
 });
+
+test("a release's configured profiles are honored while an explicit operator override wins", async () => {
+  const source = await code("host-release-switch.sh");
+  const line = source.split("\n").find(value => value.startsWith("export COMPOSE_PROFILES="));
+  assert.ok(line);
+  const directory = await mkdtemp(path.join(tmpdir(), "release-profiles-"));
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(path.join(directory, "OpenScience/deploy/web"), { recursive: true });
+  const envFile = path.join(directory, "OpenScience/deploy/web/.env");
+  try {
+    await writeFile(envFile, "COMPOSE_PROFILES=backup,monitoring,receipt,web-search,tooluniverse\n");
+    const probe = async (profiles = "") => (await run("bash", ["-c", `${line}\nprintf '%s' "$COMPOSE_PROFILES"`],
+      { env: { ...process.env, REL: directory, COMPOSE_PROFILES: profiles } })).stdout;
+    assert.equal(await probe(), "backup,monitoring,receipt,web-search,tooluniverse");
+    assert.equal(await probe("web-search"), "web-search");
+    await writeFile(envFile, "UNRELATED_SETTING=1\n");
+    assert.equal(await probe(), "backup,monitoring,receipt,web-search");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
