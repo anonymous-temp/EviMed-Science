@@ -3804,10 +3804,13 @@ test("a stale token refresh failure never removes a replacement runtime", async 
   manager.provider.writeWorkloadToken = async () => { enteredWrite(); await new Promise((_resolve, reject) => { rejectWrite = reject; }); };
   const refreshing = manager.refreshEviMedRuntimeToken(owned, monitor);
   await entered;
-  await manager.endBoundedRuntime(owned, "episode-one", "old-generation");
+  const stopping = manager.endBoundedRuntime(owned, "episode-one", "old-generation");
+  await sleep(1);
+  assert.ok(manager.runtimeStops.has(manager.key(owned)), "replacement waits for the pending credential write");
+  rejectWrite(new Error("Old renewal failed"));
+  await stopping;
   const newer = { ...fakeRuntime(owned.id, owned.workspaceDir), modelGatewayTokenJti: "new-generation" };
   manager.runtimes.set(manager.key(owned), newer);
-  rejectWrite(new Error("Old renewal failed"));
   await refreshing;
   assert.equal(manager.runtimes.get(manager.key(owned)), newer);
 });
@@ -3843,4 +3846,18 @@ test("an in-flight start finishing during admission cleanup is still stopped", a
   for (let count = 0; count < 30 && closed === 0; count += 1) await sleep(1);
   assert.equal(closed, 1);
   assert.equal(manager.runtimes.size, 0);
+});
+
+
+test("failed cleanup callbacks do not recursively wait for their own bounded stop", async t => {
+  const { manager, owned, runtime } = await stopFixture(t);
+  let calls = 0;
+  manager.onRuntimeStop = async () => { calls += 1; assert.equal(await manager.endBoundedRuntime(owned, "episode-one"), false); };
+  runtime.close = async () => { throw new Error("Unconfirmed provider close"); };
+  await assert.rejects(manager.endBoundedRuntime(owned, "episode-one", "old-generation"), /Unconfirmed/);
+  assert.equal(calls, 1);
+  assert.equal(await manager.endBoundedRuntime(owned, "episode-one", null), false, "unknown explicit generations cannot reclaim");
+  runtime.close = async () => {};
+  await manager.endBoundedRuntime(owned, "episode-one", "old-generation");
+  assert.equal(calls, 1, "terminal callback stays single-shot during cleanup retry");
 });

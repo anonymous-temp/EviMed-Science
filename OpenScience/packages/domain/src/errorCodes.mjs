@@ -762,6 +762,7 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'usage_budget_exceeded',
   'runtime_reserved_for_autopilot',
   'runtime_busy',
+  'runtime_cleanup_required',
   'runtime_limit_exceeded',
   'agent_run_active',
   'agent_run_limit_reached',
@@ -1150,6 +1151,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     '这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。'
     + '等这一轮结束后即可继续，或在“主动研究”里先暂停它。',
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
+  runtime_cleanup_required: '上一次任务的运行环境尚未关闭，清理完成后可继续研究。',
   runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
@@ -1378,6 +1380,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // action is to wait or to raise the ceiling, not to retry immediately.
   runtime_reserved_for_autopilot: 'capped',
   runtime_busy: 'capped',
+  runtime_cleanup_required: 'capped',
   runtime_limit_exceeded: 'capped',
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',

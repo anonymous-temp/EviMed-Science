@@ -3185,6 +3185,8 @@ export class RuntimeManager {
       agentbay: (manager) => new AgentBayRuntimeProvider(manager, { client: agentbayClient ?? createAgentBayClient(config) }),
     });
     this.runtimes = new Map();
+    this.runtimeStops = new Map();
+    this.failedRuntimeStops = new Map();
     // Which learned methods the last launch of each project mounted, by
     // project key. Read by the observation producer, which otherwise knows only
     // about approved methods and would record nothing for a candidate on trial
@@ -3532,6 +3534,8 @@ export class RuntimeManager {
   }
 
   assertInteractiveRuntimeAvailable(project) {
+    if (this.runtimeStops.has(this.key(project))) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
+    if (this.failedRuntimeStops.has(this.key(project))) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
     if (this.boundedRuntimeScope(project)) {
       throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
     }
@@ -3539,7 +3543,8 @@ export class RuntimeManager {
 
   async reserveBoundedRuntimeSession(project, budgetScope) {
     const key = this.key(project);
-    if (this.runtimes.has(key) || this.starts.has(key) || this.pendingModelGatewayScopes.has(key)) {
+    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
+    if (this.runtimes.has(key) || this.starts.has(key) || this.runtimeStops.has(key) || this.pendingModelGatewayScopes.has(key)) {
       throw new HttpError(409, "runtime_busy", "The project runtime is already in use; proactive research will retry later.");
     }
     const scope = {
@@ -3560,12 +3565,25 @@ export class RuntimeManager {
     }
   }
 
-  async endBoundedRuntime(project, runId) {
-    const scope = this.boundedRuntimeScope(project);
-    if (scope?.runId !== runId) return false;
+  /** The captured cleanup identity, including a provider close not yet confirmed. */
+  boundedRuntimeCleanupTarget(project) {
+    const key = this.key(project);
+    const live = this.runtimes.get(key);
+    const failed = this.failedRuntimeStops.get(key);
+    const runtime = live ?? failed?.runtime;
+    return runtime?.modelGatewayScope ? { runId: runtime.modelGatewayScope.runId,
+      generation: live ? this.runtimeGeneration(project) : failed?.generation ?? null } : null;
+  }
+
+  async endBoundedRuntime(project, runId, expectedGeneration = null) {
+    // Two-argument legacy callers retain their scope check. A fenced caller
+    // must never turn an unknown generation into permission to stop anything.
+    if (arguments.length >= 3 && (typeof expectedGeneration !== "string" || !expectedGeneration)) return false;
+    const target = this.boundedRuntimeCleanupTarget(project);
+    const scope = target ?? this.boundedRuntimeScope(project);
+    if (scope?.runId !== runId || (expectedGeneration && target?.generation !== expectedGeneration)) return false;
     this.pendingModelGatewayScopes.delete(this.key(project));
-    await this.stop(project);
-    return true;
+    return (await this.stop(project, { expectedGeneration })) !== false;
   }
 
   /**
@@ -3583,13 +3601,25 @@ export class RuntimeManager {
    *   60 s. A caller that is not speculative joining the start lifts it.
    */
   async start(project, options = {}) {
+    const key = this.key(project);
+    // Never retain a database admission connection while a shutdown needs one.
+    for (let pending; (pending = this.runtimeStops.get(key));) {
+      try { await pending; }
+      catch (error) {
+        if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs a confirmed cleanup before replacement.");
+        throw error;
+      }
+    }
+    await this.runtimeQuotaStops.get(key);
+    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs a confirmed cleanup before replacement.");
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
   /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean }} [options] */
   async startAdmitted(project, { opening = false, speculative = false } = {}) {
     const key = this.key(project);
-    await this.runtimeQuotaStops.get(key);
+    if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
+    if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
       // Opening the interactive workspace is not permission to interrupt a
@@ -4600,6 +4630,11 @@ export class RuntimeManager {
   }
 
   async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
+    if (this.runtimeStops.has(this.key(project))) {
+      const error = new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
+      error.definitivelyRejected = true;
+      throw error;
+    }
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -5038,14 +5073,16 @@ export class RuntimeManager {
     }
   }
 
+  runtimeKeys() { return new Set([...this.runtimes.keys(), ...this.starts.keys(), ...this.runtimeStops.keys(), ...this.failedRuntimeStops.keys()]); }
+
   runtimeCount() {
-    return this.runtimes.size + this.starts.size;
+    return this.runtimeKeys().size;
   }
 
   /** Running and starting runtimes of the platform's own background projects. */
   backgroundRuntimeCount() {
     const background = (/** @type {string} */ key) => isInternalProject(key.slice(key.indexOf(":") + 1));
-    return [...this.runtimes.keys(), ...this.starts.keys()].filter(background).length;
+    return [...this.runtimeKeys()].filter(background).length;
   }
 
   runtimeCountForUser(userId) {
@@ -5055,18 +5092,11 @@ export class RuntimeManager {
     // be why they cannot open a second project. The global ceiling still
     // counts them.
     const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !isInternalProject(key.slice(prefix.length));
-    let count = 0;
-    for (const key of this.runtimes.keys()) {
-      if (counted(key)) count++;
-    }
-    for (const key of this.starts.keys()) {
-      if (counted(key)) count++;
-    }
-    return count;
+    return [...this.runtimeKeys()].filter(counted).length;
   }
 
   async pluginRuntimeBusy(project) {
-    if (this.starts.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
+    if (this.starts.has(this.key(project)) || this.runtimeStops.has(this.key(project)) || this.failedRuntimeStops.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) return false;
     const value = await this.callKernel(runtime, project, "evimedPlugins/status", {}, AbortSignal.timeout(10000));
@@ -5131,59 +5161,86 @@ export class RuntimeManager {
     return this.start(project);
   }
 
-  async stop(project) {
+  /** Serialize shutdowns through the actual provider close. Callers freeze
+   * their own target, so a later queued stop never takes over a replacement.
+   * @param {any} project @param {()=>Promise<any>} operation */
+  async withRuntimeStop(project, operation) {
     const key = this.key(project);
-    const pending = this.starts.get(key);
-    if (pending) {
-      pending
-        .then((runtime) => {
-          if (this.runtimes.get(key) === runtime) {
-            void this.stop(project).catch(() => {});
-          }
-        })
-        .catch(() => {});
+    const previous = this.runtimeStops.get(key);
+    const stopping = Promise.resolve(previous).catch(() => {}).then(operation);
+    this.runtimeStops.set(key, stopping);
+    try { return await stopping; }
+    finally { if (this.runtimeStops.get(key) === stopping) this.runtimeStops.delete(key); }
+  }
+
+  /** Close the captured provider, remembering an unconfirmed close for retry.
+   * Failure records become visible only after the terminal callback, so that
+   * callback cannot recursively wait for this very shutdown.
+   * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation */
+  async closeCapturedRuntime(project, runtime, status, generation) {
+    const key = this.key(project);
+    if (this.failedRuntimeStops.get(key)?.runtime === runtime) this.failedRuntimeStops.delete(key);
+    let failure = null;
+    try { await runtime.close(); await this.pluginService?.clearPromptAdmissions(project); }
+    catch (error) { failure = error; }
+    await this.notifyRuntimeStop(project, runtime, status);
+    if (failure) {
+      if (!this.runtimes.has(key)) this.failedRuntimeStops.set(key, { runtime, generation });
+      await appendRuntimeEvent(project, "cleanup_failed", { kind: runtime.kind, error: "runtime_cleanup_required" }, this.config);
+      throw failure;
     }
-    const runtime = this.runtimes.get(key);
-    if (!runtime) {
-      await this.runtimeQuotaStops.get(key);
-      await this.pluginService?.clearPromptAdmissions(project);
-      return;
+  }
+
+  /** @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null}} [options] */
+  async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null } = {}) {
+    const key = this.key(project);
+    const requested = this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
+    const generation = this.runtimes.has(key) ? this.runtimeGeneration(project) : this.failedRuntimeStops.get(key)?.generation ?? null;
+    if ((expectedGeneration && generation !== expectedGeneration) || (guard && !guard())) return false;
+    const pendingStart = requested ? null : this.starts.get(key);
+    if (pendingStart) {
+      void pendingStart.then(async runtime => {
+        // Queue behind this stop, even when start settles while admission
+        // cleanup is awaiting its connection. Preserve that exact identity.
+        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime });
+      }).catch(() => {});
     }
-    // Before the delete: `sessionTranscript` resolves the runtime through this
-    // map, so a reader one line further down already has nothing to read.
-    await this.notifyRuntimeStopping(project);
-    this.runtimes.delete(key);
-    this.deactivateModelGatewayRuntime(runtime);
-    this.clearIdleTimer(key);
-    this.clearQuotaMonitor(key);
-    this.clearEviMedWorkloadRefresh(key);
-    this.runtimeActivity.delete(key);
-    runtime.closedByManager = true;
-    try {
-      await runtime.close();
-      await this.pluginService?.clearPromptAdmissions(project);
-    } finally {
-      await this.notifyRuntimeStop(project, runtime, "canceled");
-    }
-    await appendRuntimeEvent(project, "stopped", {
-      kind: runtime.kind,
-      sandboxMode: runtime.sandboxMode ?? "mock",
-      pid: runtime.pid,
-      containerName: runtime.containerName ?? null,
-    }, this.config);
-    await recordRuntimeState(project, "stopped", {
-      running: false,
-      kind: runtime.kind,
-      startedAt: runtime.startedAt,
-      pid: runtime.pid,
-      exitedAt: runtime.exitedAt,
-      sandboxMode: runtime.sandboxMode ?? "mock",
-      networkMode: runtime.networkMode ?? null,
-      containerName: runtime.containerName ?? null,
+    return this.withRuntimeStop(project, async () => {
+      const current = () => this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
+      if (!requested) {
+        await this.pluginService?.clearPromptAdmissions(project);
+        return false;
+      }
+      if (current() !== requested || (guard && !guard())) return false;
+      await this.notifyRuntimeStopping(project);
+      // A token write must settle before its files can belong to a replacement.
+      await requested.workloadWritePending?.catch(() => {});
+      if (current() !== requested || (guard && !guard())
+        || (expectedGeneration && (this.runtimes.has(key) ? this.runtimeGeneration(project) : this.failedRuntimeStops.get(key)?.generation) !== expectedGeneration)) return false;
+      this.runtimes.delete(key);
+      this.deactivateModelGatewayRuntime(requested);
+      this.clearIdleTimer(key);
+      this.clearQuotaMonitor(key);
+      this.clearEviMedWorkloadRefresh(key);
+      this.runtimeActivity.delete(key);
+      requested.closedByManager = true;
+      await this.closeCapturedRuntime(project, requested, terminalStatus, generation);
+      await appendRuntimeEvent(project, failureCode ? "workload_token_refresh_failed" : "stopped", {
+        kind: requested.kind, sandboxMode: requested.sandboxMode ?? "mock", pid: requested.pid,
+        containerName: requested.containerName ?? null, ...(failureCode ? { error: failureCode } : {}),
+      }, this.config);
+      await recordRuntimeState(project, terminalStatus === "failed" ? "failed" : "stopped", {
+        running: false, kind: requested.kind, startedAt: requested.startedAt, pid: requested.pid,
+        exitedAt: requested.exitedAt, sandboxMode: requested.sandboxMode ?? "mock",
+        networkMode: requested.networkMode ?? null, containerName: requested.containerName ?? null,
+        ...(failureCode ? { error: failureCode } : {}),
+      });
+      return true;
     });
   }
 
   async closeAll() {
+    await Promise.allSettled([...this.runtimeStops.values()]);
     for (const key of this.runtimeActivity.keys()) this.clearIdleTimer(key);
     this.runtimeActivity.clear();
     for (const key of this.runtimeQuotaMonitors.keys()) this.clearQuotaMonitor(key);
@@ -5195,9 +5252,10 @@ export class RuntimeManager {
     this.runtimeActivity.clear();
     for (const key of this.runtimeQuotaMonitors.keys()) this.clearQuotaMonitor(key);
     for (const key of this.evimedWorkloadRefreshTimers.keys()) this.clearEviMedWorkloadRefresh(key);
-    const runtimes = [...this.runtimes.values()];
+    const runtimes = [...new Set([...this.runtimes.values(), ...[...this.failedRuntimeStops.values()].map(value => value.runtime)])];
     await Promise.allSettled(runtimes.map((runtime) => this.notifyRuntimeStopping(runtime.project)));
     this.runtimes.clear();
+    this.failedRuntimeStops.clear();
     for (const runtime of runtimes) {
       runtime.closedByManager = true;
       this.deactivateModelGatewayRuntime(runtime);
@@ -5853,57 +5911,26 @@ export class RuntimeManager {
   async refreshEviMedRuntimeToken(project, monitor) {
     const key = this.key(project);
     const runtime = this.runtimes.get(key);
-    if (
-      !runtime ||
-      !runtime.workloadTokenFile ||
-      this.evimedWorkloadRefreshTimers.get(key) !== monitor
-    ) return false;
+    const current = () => this.runtimes.get(key) === runtime && this.evimedWorkloadRefreshTimers.get(key) === monitor;
+    if (!runtime?.workloadTokenFile || !current() || this.runtimeStops.has(key)) return false;
+    const writing = Promise.resolve().then(() => this.provider.writeWorkloadToken(project, runtime));
+    runtime.workloadWritePending = writing;
     try {
-      await this.provider.writeWorkloadToken(project, runtime);
-      await appendRuntimeEvent(project, "workload_token_refreshed", {
-        kind: runtime.kind,
-        sandboxMode: runtime.sandboxMode,
-      }, this.config);
+      try { await writing; }
+      finally { if (runtime.workloadWritePending === writing) delete runtime.workloadWritePending; }
+      if (!current()) return false;
+      await appendRuntimeEvent(project, "workload_token_refreshed", { kind: runtime.kind, sandboxMode: runtime.sandboxMode }, this.config);
       return true;
     } catch (error) {
-      // A remote runtime's renewal goes through the session's file API, which
-      // can fail for a moment; its token outlives two renewals (900 s against
-      // 300 s), so a failure that the next attempt can still cover is waited
-      // out rather than ending the run.
+      if (!current()) return false;
       if (this.provider.tolerateTokenRefreshFailure?.(runtime)) {
         await appendRuntimeEvent(project, "workload_token_refresh_failed", {
-          kind: runtime.kind,
-          sandboxMode: runtime.sandboxMode,
-          error: typeof error?.code === "string" ? error.code : "runtime_workload_token_refresh_failed",
-          stopping: false,
+          kind: runtime.kind, sandboxMode: runtime.sandboxMode,
+          error: typeof error?.code === "string" ? error.code : "runtime_workload_token_refresh_failed", stopping: false,
         }, this.config);
         return true;
       }
-      await this.notifyRuntimeStopping(project);
-      this.runtimes.delete(key);
-      this.clearIdleTimer(key);
-      this.clearQuotaMonitor(key);
-      this.clearEviMedWorkloadRefresh(key);
-      this.runtimeActivity.delete(key);
-      runtime.closedByManager = true;
-      await runtime.close().catch(() => {});
-      await this.notifyRuntimeStop(project, runtime, "failed");
-      await appendRuntimeEvent(project, "workload_token_refresh_failed", {
-        kind: runtime.kind,
-        sandboxMode: runtime.sandboxMode,
-        error: "runtime_workload_token_refresh_failed",
-      }, this.config);
-      await recordRuntimeState(project, "failed", {
-        running: false,
-        kind: runtime.kind,
-        startedAt: runtime.startedAt,
-        pid: runtime.pid,
-        exitedAt: runtime.exitedAt,
-        sandboxMode: runtime.sandboxMode,
-        networkMode: runtime.networkMode,
-        containerName: runtime.containerName,
-        error: "runtime_workload_token_refresh_failed",
-      });
+      await this.stop(project, { terminalStatus: "failed", failureCode: "runtime_workload_token_refresh_failed", guard: current });
       return false;
     }
   }
@@ -6095,52 +6122,35 @@ export class RuntimeManager {
    */
   async stopIdleRuntime(project, { event = "idle_timeout", evenIfConnected = false } = {}) {
     const key = this.key(project);
-    const activity = this.runtimeActivity.get(key);
-    const openConnections = activity?.activeProxies ?? 0;
-    if (openConnections > 0 && !evenIfConnected) {
-      this.scheduleIdleStop(project);
-      return;
-    }
+    const openConnections = this.runtimeActivity.get(key)?.activeProxies ?? 0;
+    if (openConnections > 0 && !evenIfConnected) { this.scheduleIdleStop(project); return false; }
     const runtime = this.runtimes.get(key);
-    if (!runtime) {
+    if (!runtime) { this.clearIdleTimer(key); this.runtimeActivity.delete(key); return false; }
+    const generation = this.runtimeGeneration(project);
+    return this.withRuntimeStop(project, async () => {
+      if (this.runtimes.get(key) !== runtime) return false;
+      await this.notifyRuntimeStopping(project);
+      await runtime.workloadWritePending?.catch(() => {});
+      if (this.runtimes.get(key) !== runtime) return false;
+      this.runtimes.delete(key);
+      this.deactivateModelGatewayRuntime(runtime);
       this.clearIdleTimer(key);
+      this.clearQuotaMonitor(key);
+      this.clearEviMedWorkloadRefresh(key);
       this.runtimeActivity.delete(key);
-      return;
-    }
-    await this.notifyRuntimeStopping(project);
-    this.runtimes.delete(key);
-    this.deactivateModelGatewayRuntime(runtime);
-    this.clearIdleTimer(key);
-    this.clearQuotaMonitor(key);
-    this.runtimeActivity.delete(key);
-    runtime.closedByManager = true;
-    try {
-      await runtime.close();
-      await this.pluginService?.clearPromptAdmissions(project);
-    } finally {
-      await this.notifyRuntimeStop(project, runtime, "canceled");
-    }
-    await appendRuntimeEvent(project, event, {
-      kind: runtime.kind,
-      sandboxMode: runtime.sandboxMode ?? "mock",
-      networkMode: runtime.networkMode ?? null,
-      pid: runtime.pid,
-      containerName: runtime.containerName ?? null,
-      idleTimeoutMs: Number(this.config.runtimeIdleTimeoutMs),
-      // A stop that closed a tab's connection says so: that tab is the one
-      // that will next show 连接中断.
-      ...(openConnections > 0 ? { openConnections } : {}),
-    }, this.config);
-    await recordRuntimeState(project, event, {
-      running: false,
-      kind: runtime.kind,
-      startedAt: runtime.startedAt,
-      pid: runtime.pid,
-      exitedAt: runtime.exitedAt ?? new Date().toISOString(),
-      sandboxMode: runtime.sandboxMode ?? "mock",
-      networkMode: runtime.networkMode ?? null,
-      containerName: runtime.containerName ?? null,
-      skillsCopied: runtime.skillsCopied,
+      runtime.closedByManager = true;
+      await this.closeCapturedRuntime(project, runtime, "canceled", generation);
+      await appendRuntimeEvent(project, event, {
+        kind: runtime.kind, sandboxMode: runtime.sandboxMode ?? "mock", networkMode: runtime.networkMode ?? null,
+        pid: runtime.pid, containerName: runtime.containerName ?? null, idleTimeoutMs: Number(this.config.runtimeIdleTimeoutMs),
+        ...(openConnections > 0 ? { openConnections } : {}),
+      }, this.config);
+      await recordRuntimeState(project, event, {
+        running: false, kind: runtime.kind, startedAt: runtime.startedAt, pid: runtime.pid,
+        exitedAt: runtime.exitedAt ?? new Date().toISOString(), sandboxMode: runtime.sandboxMode ?? "mock",
+        networkMode: runtime.networkMode ?? null, containerName: runtime.containerName ?? null, skillsCopied: runtime.skillsCopied,
+      });
+      return true;
     });
   }
 
@@ -6312,21 +6322,22 @@ export class RuntimeManager {
     const key = this.key(project);
     const pending = this.runtimeQuotaStops.get(key);
     if (pending) return pending;
-    const stopping = (async () => {
-      const runtime = this.runtimes.get(key);
-      if (!runtime) return false;
+    const runtime = this.runtimes.get(key);
+    if (!runtime) return false;
+    const generation = this.runtimeGeneration(project);
+    const stopping = this.withRuntimeStop(project, async () => {
+      if (this.runtimes.get(key) !== runtime) return false;
       await this.notifyRuntimeStopping(project);
+      await runtime.workloadWritePending?.catch(() => {});
+      if (this.runtimes.get(key) !== runtime) return false;
       this.runtimes.delete(key);
       this.deactivateModelGatewayRuntime(runtime);
       this.clearIdleTimer(key);
       this.clearQuotaMonitor(key);
+      this.clearEviMedWorkloadRefresh(key);
       this.runtimeActivity.delete(key);
       runtime.closedByManager = true;
-      try {
-        await runtime.close();
-      } finally {
-        await this.notifyRuntimeStop(project, runtime, "failed");
-      }
+      await this.closeCapturedRuntime(project, runtime, "failed", generation);
       await appendRuntimeEvent(project, event, {
         kind: runtime.kind,
         sandboxMode: runtime.sandboxMode ?? "mock",
@@ -6351,7 +6362,7 @@ export class RuntimeManager {
         error,
       });
       return true;
-    })();
+    });
     this.runtimeQuotaStops.set(key, stopping);
     try {
       return await stopping;
