@@ -328,3 +328,32 @@ def test_pairwise_manuscript_keeps_analysis_assumptions_in_readable_prose():
     assert "Trial identity remains uncertain for S1" in rendered
     assert "Risk of bias is unknown for S1" in rendered
     assert "analysis_assumptions" not in rendered
+
+
+def test_live_ma001_numeric_replay_changes_only_the_primary_method_label():
+    import json
+    from pathlib import Path
+    from new_meta.engines.complex_rct import run_complex_rct
+    fixture = json.loads((Path(__file__).parent / "fixtures" / "ma001_complex_rct_numeric_inputs.json").read_text())
+    result = run_complex_rct(fixture["records"])
+    assert result.estimator == "DESIGN_AWARE_REML"
+    for field, expected in fixture["expected"].items():
+        assert getattr(result, field) == expected
+
+
+def test_known_registration_overlap_cannot_be_overridden_by_model_publication_ids(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments
+    from test_primary_analysis_alignment import SOURCE, assessment_payload
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    for study in studies:
+        # Two reports name the same registration; a differing publication ID
+        # cannot turn them into independent trials.
+        record_checked_alignments(project, protocol, study,
+            [assessment_payload(source_outcome=study.outcomes[0], contrast="uncertain")],
+            source_text=SOURCE, issue_histories={0: ([], True)})
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == 1
+    assert sum(row["in_final_primary_analysis"] for row in audit) == 1
