@@ -47,3 +47,14 @@ test('missing optional traceability files produce one proportionate notice', () 
   assert.equal(result.ok, true)
   assert.equal(result.issues.length, 1)
 })
+
+test('native receipts require no fabricated specialist job id', () => {
+  const stamp = { sha256: 'a'.repeat(64), path: 'analysis.py' }
+  const execution = { script: stamp, inputs: [{ ...stamp, path: 'data.csv' }], argv: ['python', 'analysis.py'],
+    versions: { interpreter: 'Python 3.12', libraries: {} }, exitCode: 0,
+    startedAt: '2026-09-29T00:00:00Z', endedAt: '2026-09-29T00:01:00Z', sourcesUnchanged: true,
+    output: { observedWrite: true, observation: 'created' } }
+  const result = verdict({ 'analysis-results.json': results([{ id: 'mean', status: 'complete', estimate: 2 }]),
+    'analysis-run.json': JSON.stringify({ schemaVersion: 1, executions: [execution] }), 'analysis.py': 'print(2)' })
+  assert.deepEqual(result.issues, [])
+})
