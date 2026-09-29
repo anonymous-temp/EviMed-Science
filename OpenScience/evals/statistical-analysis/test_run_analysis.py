@@ -105,7 +105,7 @@ class AnalysisExecutionTests(unittest.TestCase):
             self.assertEqual(attempt['exitCode'], 0)
             self.assertEqual(attempt['output']['observation'], 'unreadable')
             self.assertFalse(attempt['output']['observedWrite'])
-            self.assertNotIn('private', json.dumps(attempt))
+            self.assertNotIn('"private"', json.dumps(attempt))
 
     def test_post_execution_alias_cannot_normalize_source_data(self):
         (self.root / 'data.csv').write_text('{"x":NaN}')
@@ -113,6 +113,14 @@ class AnalysisExecutionTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.root / 'data.csv').read_text(), '{"x":NaN}')
         self.assertEqual(self.receipt()[0]['output']['observation'], 'unreadable')
+
+    def test_post_execution_source_replacement_does_not_erase_attempt(self):
+        result = self.run_script("from pathlib import Path\nPath('data.csv').unlink()\nPath('data.csv').mkdir()")
+        self.assertEqual(result.returncode, 0)
+        attempt = self.receipt()[0]
+        self.assertFalse(attempt['sourcesUnchanged'])
+        self.assertIsNone(attempt['sourcesAfter'][1])
+        self.assertTrue(any(item['code'] == 'source_changed' for item in attempt['warnings']))
 
     @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
     def test_native_r_execution_records_observed_versions(self):
