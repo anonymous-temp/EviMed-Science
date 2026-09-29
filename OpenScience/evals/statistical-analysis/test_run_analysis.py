@@ -141,6 +141,44 @@ class AnalysisExecutionTests(unittest.TestCase):
         self.assertTrue(self.receipt()[1]['sourcesUnchanged'])
         self.assertTrue(self.receipt()[1]['warnings'])
 
+    def test_raw_history_alias_cannot_replace_previous_result_backup(self):
+        self.run_script("from pathlib import Path\nPath('analysis-results.json').write_text('{\"estimate\":42}')")
+        before = (self.root / 'analysis-results.json').read_bytes()
+        source = "from pathlib import Path\nbackup = max(Path('.analysis-provenance').glob('*-previous-results.json'), key=lambda p: p.stat().st_mtime_ns)\nattempt = backup.name.removesuffix('-previous-results.json')\n(backup.parent / (attempt + '-results.raw.json')).symlink_to(backup.name)\nPath('analysis-results.json').write_text('{\"estimate\":NaN}')\nraise RuntimeError('optional method failed')"
+        result = self.run_script(source)
+        self.assertNotEqual(result.returncode, 0)
+        retained = self.receipt()[1]['output']['beforeArtifact']
+        retained_bytes = (self.root / retained['path']).read_bytes()
+        self.assertEqual(retained_bytes, before)
+        self.assertEqual(hashlib.sha256(retained_bytes).hexdigest(), retained['sha256'])
+        self.assertTrue(self.receipt()[1]['warnings'])
+
+    def test_self_linked_paths_preserve_a_safe_attempt_record(self):
+        for filename in ('data.csv', 'analysis-results.json', 'analysis-run.json'):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as directory:
+                previous_root = self.root
+                try:
+                    self.root = Path(directory)
+                    (self.root / 'data.csv').write_text('x\n1\n2\n')
+                    source = f"from pathlib import Path\np=Path({filename!r})\np.unlink(missing_ok=True)\np.symlink_to(p.name)"
+                    result = self.run_script(source)
+                    self.assertNotIn('Traceback', result.stderr)
+                    summary = json.loads(result.stdout)
+                    attempt = json.loads((self.root / summary['receipt']).read_text())['executions'][0]
+                    self.assertEqual(attempt['exitCode'], 0)
+                    self.assertTrue(attempt['warnings'])
+                    if filename != 'data.csv':
+                        self.assertEqual((self.root / 'data.csv').read_text(), 'x\n1\n2\n')
+                finally:
+                    self.root = previous_root
+
+    def test_preexisting_self_links_are_refused_without_tracebacks(self):
+        (self.root / 'loop').symlink_to('loop')
+        for option in ('--input', '--results', '--receipt'):
+            result = self.run_script('print(1)', option, 'loop')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn('Traceback', result.stderr)
+
     @unittest.skipUnless(shutil.which('Rscript'), 'Native R is unavailable')
     def test_native_r_execution_records_observed_versions(self):
         (self.root / 'analysis.R').write_text("cat('{\"analyses\":[{\"estimate\":2}]}', file='analysis-results.json')")

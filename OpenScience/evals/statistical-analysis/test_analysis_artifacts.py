@@ -83,3 +83,13 @@ def test_briefs_keep_goldens_outside_model_input():
             assert fixture['source'].endswith('.csv')
         assert 'expected.json' not in json.dumps(brief['inputs'])
         assert 'reference_values' not in json.dumps(brief['inputs'])
+
+
+def test_dataset_and_adapted_code_licenses_are_distinguished():
+    source = json.loads((HERE / 'fixtures/source-manifest.json').read_text())['sources'][0]
+    assert source['license'] == 'CC-BY-4.0'
+    assert source['originalSource'] == 'https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic'
+    assert source['adaptedReferenceLicense'] == 'BSD-3-Clause'
+    attribution = (HERE / 'fixtures/THIRD_PARTY_LICENSES.txt').read_text()
+    assert 'CC BY 4.0' in attribution
+    assert 'https://creativecommons.org/licenses/by/4.0/' in attribution

@@ -60,3 +60,33 @@ test('native receipts require no fabricated specialist job id', () => {
     'analysis-run.json': JSON.stringify({ schemaVersion: 1, executions: [execution] }), 'analysis.py': 'print(2)' })
   assert.deepEqual(result.issues, [])
 })
+
+test('malformed primitive fields are advisory instead of invoking object coercion', () => {
+  const malformed = { toString: null }
+  const inputs = [
+    { 'analysis-results.json': results([{ id: malformed, status: 'complete', estimate: 2 }]) },
+    { 'analysis-run.json': JSON.stringify({ executions: [{ script: { path: 'analysis.py', sha256: malformed }, inputs: [] }] }) },
+    { 'analysis-run.json': JSON.stringify({ executions: [{ argv: ['python', 'analysis.py'], versions: { interpreter: '3.12', libraries: {} }, exitCode: 0, startedAt: malformed, endedAt: malformed }] }) },
+  ]
+  for (const files of inputs) {
+    const result = verdict(files)
+    assert.equal(result.ok, true)
+    assert.ok(result.issues.length > 0)
+    assert.ok(result.issues.every((issue) => issue.severity === 'advisory'))
+  }
+})
+
+test('invalid provided interval bounds are notices while absent intervals remain valid', () => {
+  const result = verdict({ 'analysis-results.json': '{"analyses":[{"id":"descriptive","status":"complete","estimate":2},{"id":"null-bound","status":"complete","estimate":2,"interval":{"lower":null,"upper":3}},{"id":"overflow-bound","status":"complete","estimate":2,"interval":{"lower":1,"upper":1e400}}]}' })
+  assert.equal(result.ok, true)
+  for (const id of ['null-bound', 'overflow-bound']) assert.ok(result.issues.some((issue) => issue.check === 'statistical-finite-results' && issue.message.startsWith(id)))
+  assert.ok(!result.issues.some((issue) => issue.message.startsWith('descriptive')))
+})
+
+test('literal null receipt is a shape notice distinct from an absent or unparsable receipt', () => {
+  for (const raw of ['null', '{broken']) {
+    const result = verdict({ 'analysis-run.json': raw })
+    assert.equal(result.ok, true)
+    assert.ok(result.issues.some((issue) => issue.check === 'statistical-execution-provenance'))
+  }
+})
