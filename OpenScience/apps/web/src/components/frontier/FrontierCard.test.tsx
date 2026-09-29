@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/Toaster";
 import { FrontierCard } from "./FrontierCard";
 import { frontierItem } from "./__fixtures__/frontierItems";
 
-const client = vi.hoisted(() => ({ fetchFrontierAbstractZh: vi.fn(), fetchFrontierItem: vi.fn() }));
+const client = vi.hoisted(() => ({ fetchFrontierAbstractZh: vi.fn(), fetchFrontierItem: vi.fn(), addFrontierFollow: vi.fn() }));
 vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/frontierClient")>()),
   ...client,
@@ -163,7 +163,7 @@ describe("its actions", () => {
     const item = frontierItem();
     const handlers = renderCard(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    expect((await screen.findAllByRole("menuitem")).map((entry) => entry.textContent)).toEqual(["详情", "存入知识库", "复制为 Markdown", "不感兴趣"]);
+    expect((await screen.findAllByRole("menuitem")).map((entry) => entry.textContent)).toEqual(expect.arrayContaining(["详情", "存入知识库", "复制为 Markdown", "不感兴趣", `关注 ${item.source.name}`, `屏蔽 ${item.source.name}`]));
     await userEvent.click(screen.getByRole("menuitem", { name: "存入知识库" }));
     expect(handlers.onSave).toHaveBeenCalledWith(item);
     await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
@@ -249,4 +249,16 @@ describe("「⋯ › 详情」", () => {
     expect(within(details).queryByRole("heading", { name: "中文摘要" })).not.toBeInTheDocument();
     expect(client.fetchFrontierAbstractZh).not.toHaveBeenCalled();
   });
+});
+
+
+it("follows a card's structured source identity without invoking hide or external navigation", async () => {
+  client.addFrontierFollow.mockResolvedValue({ id: "9", kind: "source", key: "nejm", label: "NEJM", muted: false });
+  const item = frontierItem();
+  const handlers = renderCard(item);
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: `关注 ${item.source.name}` }));
+  expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: item.source.id, label: item.source.name, muted: false });
+  expect(handlers.onHide).not.toHaveBeenCalled();
+  expect(await screen.findByText("已关注")).toBeInTheDocument();
 });

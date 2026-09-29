@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { FrontierItem } from "@/lib/frontierClient";
+import { addFrontierFollow, frontierErrorMessage, type FrontierFollow, type FrontierItem } from "@/lib/frontierClient";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
@@ -91,11 +91,21 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
       toast.error("没有复制成功");
     }
   };
+  const follow = async (kind: FrontierFollow["kind"], key: string, label: string, muted = false) => {
+    try { await addFrontierFollow({ kind, key, label, muted }); toast.success(muted ? "已屏蔽" : "已关注"); }
+    catch (error) { toast.error(frontierErrorMessage(error)); }
+  };
   const more: MenuEntry[] = [
     { label: "详情", onSelect: () => setDetails(true) },
     ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
+    "separator",
+    { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
+    { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
+    ...(item.event ? [{ label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
+    ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
+    ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),
   ];
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(researchDraft(item)) } });
   const reports: MenuEntry[] = [

@@ -171,6 +171,8 @@ export interface FrontierItemDetail extends FrontierItem {
 }
 
 export interface FrontierItemsQuery {
+  /** A follow owned by the authenticated reader; never an arbitrary account id. */
+  follow?: string | null;
   view?: FrontierView;
   by?: FrontierAxis;
   lane?: string | null;
@@ -870,6 +872,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   params.set("by", query.by ?? "timeline");
   if (query.lane) params.set("lane", query.lane);
   if (query.specialty) params.set("specialty", query.specialty);
+  if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);
   const q = query.q?.trim();
   if (q) params.set("q", q.slice(0, 200));
@@ -934,6 +937,8 @@ function parseFollow(value: unknown): FrontierFollow | null {
   return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true } : null;
 }
 
+export const FRONTIER_FOLLOWS_CHANGED = "evimed:frontier-follows-changed";
+
 export async function listFrontierFollows(): Promise<FrontierFollow[]> {
   const raw = record(await productRequest<unknown>("/frontier/follows"));
   return (Array.isArray(raw?.follows) ? raw.follows : []).map(parseFollow).filter((follow): follow is FrontierFollow => follow !== null);
@@ -945,11 +950,13 @@ export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; k
     kind: input.kind, key: input.key, label: input.label, muted: input.muted === true,
   }))?.follow);
   if (!follow) throw new WebApiError("The frontier follow was malformed.", { status: 502 });
+  window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
   return follow;
 }
 
 export async function removeFrontierFollow(followId: string): Promise<void> {
   await productRequest<unknown>(`/frontier/follows/${id(followId)}`, "DELETE");
+  window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
 }
 
 /**

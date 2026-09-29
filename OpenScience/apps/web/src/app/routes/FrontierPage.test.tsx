@@ -161,7 +161,7 @@ describe("the page and its views", () => {
     expect(screen.queryByText(/每天替你读/)).not.toBeInTheDocument();
     expect(title.closest("header")?.querySelector("p")).toBeNull();
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["精选", "热榜", "日报", "全部", "与我相关"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["精选", "热榜", "日报", "全部", "与我相关", "关注"]);
     expect(screen.getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", screen.getByRole("tab", { name: "精选" }).id);
     expect(lastFeedQuery()).toMatchObject({ view: "selected", q: null, lane: null, starred: false });

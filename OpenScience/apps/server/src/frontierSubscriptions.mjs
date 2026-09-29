@@ -15,8 +15,8 @@ export function frontierFollowPredicate(follow, param) {
   if (follow.kind === "drug") return `${param(follow.key)} = ANY(i.entity_keys)`;
   if (follow.kind === "event") {
     const key = param(follow.key);
-    return `i.event_id IN (SELECT id FROM evimed_frontier.events WHERE public_id = ${key}
-      UNION SELECT event_id FROM evimed_frontier.event_aliases WHERE public_id = ${key})`;
+    return `coalesce(i.event_id IN (SELECT id FROM evimed_frontier.events WHERE public_id = ${key}
+      UNION SELECT event_id FROM evimed_frontier.event_aliases WHERE public_id = ${key}), false)`;
   }
   if (follow.kind === "topic") {
     const query = tsqueryLiteral(follow.key);
@@ -37,6 +37,20 @@ export class FrontierSubscriptions {
   async drugKey(key) {
     const glossary = await this.glossary.current();
     return glossary.entityKey("drug", key.startsWith("drug:") ? key.slice(5) : key)?.slice(5) ?? key;
+  }
+
+  /** Recheck current mutes when cached recommendations are served.
+   * @param {string} userId @param {string[]} publicIds */
+  async mutedPublicIds(userId, publicIds) {
+    if (!publicIds.length) return new Set();
+    const { muted } = await this.read(userId);
+    if (!muted.length) return new Set();
+    const values = /** @type {any[]} */ ([publicIds]);
+    const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+    const clauses = muted.map((follow) => `(${frontierFollowPredicate(follow, param)})`);
+    const result = await this.database.query(`SELECT i.public_id FROM evimed_frontier.items i
+      WHERE i.public_id=ANY($1::text[]) AND (${clauses.join(" OR ")})`, values);
+    return new Set(result.rows.map((/** @type {any} */ row) => String(row.public_id)));
   }
 
   /** @param {string} userId @param {string | null} [selectedId] */
