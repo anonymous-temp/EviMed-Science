@@ -577,6 +577,8 @@ export interface WebMemoryUsage {
 }
 
 export interface WebMemoryProfile {
+  /** The authenticated recipient/owner, separate from imported issuer provenance. */
+  holder?: { id: string; name: string };
   records: WebStructuredMemory[];
   groups: Record<WebStructuredMemoryKind, WebStructuredMemory[]>;
   /** Memories in force, run summaries not included. */

@@ -204,7 +204,10 @@ export function MemoryHubPage() {
   return (
     <PageShell
       title="记忆胶囊"
-      actions={<MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />}
+      actions={<>
+        {data?.profile.holder && <span aria-label="记忆持有人" className="text-caption text-text-3">{data.profile.holder.name || data.profile.holder.id}</span>}
+        <MemoryControls onReset={reload} onShare={() => setDrawer("share")} onForgotten={() => setDrawer("forgotten")} />
+      </>}
     >
       {/* 「成长」: the one chart, above the list it counts, once there is a line. */}
       <CapsuleGrowth growth={data?.growth} className="mb-6" />

@@ -172,6 +172,7 @@ export function createMemoryRoutes({
       const ids = profile.records.map((/** @type {any} */ record) => record.id);
       sendJson(res, 200, { data: {
         ...profile,
+        holder: { id: String(ctx.user.id), name: String(ctx.user.name ?? ctx.user.id) },
         // What each memory came out of, and how often it has been used: the
         // two things every row on the page says, resolved here rather than by
         // the page, which would otherwise need the whole account to say them.
