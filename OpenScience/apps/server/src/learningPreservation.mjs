@@ -127,7 +127,7 @@ export async function preserveProjectLessons({ client, userId, project, learning
       const run = byId.get(runId);
       if (run) {
         await writeFileAtomicNoFollow(learningProject.rootDir, lessonRunPath(learningProject, runId),
-          `${JSON.stringify(lessonRunRecord(run))}\n`, { encoding: "utf8", mode: 0o600 });
+          `${JSON.stringify({ ...lessonRunRecord(run), sourceProjectId: String(project.id) })}\n`, { encoding: "utf8", mode: 0o600 });
       }
       preserved.add(runId);
     }
@@ -156,4 +156,30 @@ export async function archivedLessonRun(learningProject, runId) {
   } catch {
     return null;
   }
+}
+
+/** Resolve a lesson's live or preserved source within the account that owns it.
+ * @param {any} store @param {any} agentRuns @param {string} userId @param {string} projectId @param {string} runId */
+export async function resolveLessonSourceRun(store, agentRuns, userId, projectId, runId) {
+  const user = await store.userById(userId);
+  if (!user || !projectId || !runId) return null;
+  try {
+    const project = await store.requireProject(user, projectId);
+    return (await agentRuns.list(project)).find((run) => run.id === runId)
+      ?? (project.id === LEARNING_PROJECT_ID ? archivedLessonRun(project, runId) : null);
+  } catch (error) { if (error?.status !== 404) throw error; }
+  let learningProject;
+  try { learningProject = await store.requireProject(user, LEARNING_PROJECT_ID); }
+  catch (error) { if (error?.status === 404) return null; throw error; }
+  const archived = await archivedLessonRun(learningProject, runId);
+  if (!archived) return null;
+  if (archived.sourceProjectId) return archived.sourceProjectId === projectId ? archived : null;
+  // Older copies predate sourceProjectId. Their moved job retains the same
+  // owner, original project and run identity, so it supplies the missing bond.
+  if (!store.database) return null;
+  const linked = await store.database.query(`SELECT 1 FROM evimed_product.jobs
+    WHERE user_id=$1 AND project_id=$2 AND kind='distill'
+      AND payload->>'sourceProjectId'=$3 AND payload->>'runId'=$4 LIMIT 1`,
+  [userId, LEARNING_PROJECT_ID, projectId, runId]);
+  return linked.rows.length ? archived : null;
 }

@@ -25,10 +25,12 @@ import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvalua
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { HandbookConsolidation } from "./handbookConsolidation.mjs";
+import { createOwnedResearchContext } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { runMethodObservations } from "./methodObservations.mjs";
+import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
-import { archivedLessonRun, ensureLearningProject, preserveProjectLessons } from "./learningPreservation.mjs";
+import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
@@ -2348,6 +2350,17 @@ export function createWebApiApp(overrides = {}) {
           // It runs inside the transcript write on purpose: it needs the same
           // sessions, and both must finish before the run's container is let go.
           await recordMethodUse({ project, run, sessions });
+          if (learningService && config.learningEnabled && !evaluationRun && !isInternalProject(project.id)) {
+            const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
+            if (!state.learning && !state.trial) {
+              await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
+                run, projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+              }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
+              }));
+            }
+          }
         } catch (error) {
           await securityAudit(config, "run.transcript.persist", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -2530,6 +2543,11 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  const prepareOwnedResearchContext = createOwnedResearchContext({
+    learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
+    paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
+    audit: (event, status, detail) => securityAudit(config, event, status, detail),
+  });
   if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
     config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,
     registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
@@ -2568,7 +2586,14 @@ export function createWebApiApp(overrides = {}) {
         return user ? store.requireProject(user, projectId) : null;
       },
     });
+    const handbookConsolidation = agentRegistry.then((registry) => new HandbookConsolidation({
+      learning: learningService, jobs: productJobs, registry,
+      resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
+      enabled: async (userId, projectId) => config.learningEnabled
+        && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
+    }));
     const consolidation = new MethodConsolidation({
+      handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
       learning: learningService, jobs: productJobs,
@@ -2671,6 +2696,9 @@ export function createWebApiApp(overrides = {}) {
       maintain: async () => {
         await store.loadUsers();
         for (const user of [...store.users.values()]) {
+          await handbookConsolidation.then((handbooks) => handbooks.reconcile(user.id)).catch((error) => securityAudit(config, "handbook.reconcile", "failed", {
+            userId: user.id, code: typeof error?.code === "string" ? error.code : "handbook_reconcile_unavailable",
+          }));
           // One project's unreadable directory must not stop the sweep: the
           // point of a retention policy is that it runs, and a policy that
           // stops at the first awkward project is a policy that protects the
@@ -2895,7 +2923,7 @@ export function createWebApiApp(overrides = {}) {
               // outcome than an episode that did not run.
               throw memoryRecallRejection(error);
             }
-            const prepared = await prepareResearchContext(project, binding, config, {
+            const prepared = await prepareOwnedResearchContext(project, binding, {
               query: episode.prompt,
               memories,
               specialists: [],
@@ -2906,7 +2934,7 @@ export function createWebApiApp(overrides = {}) {
                 skill: selected.skill,
                 companionSkills: selected.companionSkills,
               },
-            });
+            }, dispatchedRun);
             // What the episode was handed, in its ledger entry as a chat run's
             // is (2026-09-26 audit, M-8): the memory file and the usage
             // counter proved the recall happened while the ledger said nothing.
@@ -3231,11 +3259,11 @@ export function createWebApiApp(overrides = {}) {
         let memories = [];
         try { memories = await memorySubstrate.recall(user.id, brief, { projectId: project.id, sessionId: session.id }); }
         catch (error) { throw memoryRecallRejection(error); }
-        const prepared = await prepareResearchContext(project, binding, config, {
+        const prepared = await prepareOwnedResearchContext(project, binding, {
           query: brief, memories, specialists: [],
           routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
             skill: selected.skill, companionSkills: selected.companionSkills },
-        });
+        }, dispatchedRun);
         // Recorded like a chat run's recall, for the reason the episode's is.
         if (prepared.memories.length > 0) {
           await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
@@ -3441,7 +3469,7 @@ export function createWebApiApp(overrides = {}) {
       } catch (error) {
         throw memoryRecallRejection(error);
       }
-      const prepared = await prepareResearchContext(project, session, config, {
+      const prepared = await prepareOwnedResearchContext(project, session, {
         query: text,
         memories,
         specialists: routableAgents,
@@ -3450,7 +3478,7 @@ export function createWebApiApp(overrides = {}) {
           ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
             skill: routed.skill, companionSkills: routed.companionSkills }
           : null,
-      });
+      }, dispatchedRun);
       if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
         await agentRuns.recordLearning(project, dispatchedRun.id, {
           ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
@@ -4387,7 +4415,7 @@ export function createWebApiApp(overrides = {}) {
           const answerPackage = !contextSpecialist && !routedSpecialist && session.mode === "open-domain"
             ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID)
             : null;
-          const prepared = await prepareResearchContext(ctx.project, session, config, {
+          const prepared = await prepareOwnedResearchContext(ctx.project, session, {
             query: text,
             memories,
             specialists: session.mode === "open-domain" ? routableAgents : [],
@@ -4403,7 +4431,7 @@ export function createWebApiApp(overrides = {}) {
                   companionSkills: contextSpecialist.companionSkills,
                 }
               : routedSpecialist,
-          });
+          }, dispatchedRun);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used

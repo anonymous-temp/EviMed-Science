@@ -3273,7 +3273,7 @@ export class RuntimeManager {
    * previous arm.
    *
    * @param {any} project
-   * @returns {Promise<{ directory: string, count: number, bytes: number,
+   * @returns {Promise<{ directory: string, count: number, bytes: number, promptBytes: number,
    *   learned: {id: string, name: string, digest: string, trial?: boolean}[],
    *   capsule: {id: string, directoryName: string, capsuleId: string, factKind: string, content: string}[] }>}
    */
@@ -3649,6 +3649,7 @@ export class RuntimeManager {
       const mock = await startMockDshRuntime();
       const runtime = {
         kind: "mock",
+        mountedMethodPromptBytes: 0,
         url: mock.url,
         close: mock.close,
         // The mock authenticates exactly as the real 0.1.2 kernel does,
@@ -3924,6 +3925,7 @@ export class RuntimeManager {
       agentSkillsCopied,
       agentsGenerated,
       capsuleMethodsMounted,
+      mountedMethodPromptBytes: mountedMethods.promptBytes,
       workloadTokenFile: mcpSync.workloadTokenFile,
       workloadTokenRefreshMs: mcpSync.workloadTokenRefreshMs,
       modelGatewayToken: modelGatewaySync.token,
