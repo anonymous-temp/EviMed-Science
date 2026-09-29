@@ -17,6 +17,8 @@
  * @module accountUsageRuns
  */
 
+import { runUsageKeys } from "./runUsage.mjs";
+
 /** @param {number} value */
 function money(value) {
   return Math.round((Number(value) || 0) * 1e6) / 1e6;
@@ -38,14 +40,17 @@ function titleOf(run) {
  * @returns {{ items: Array<{ runId: string, projectId: string, title: string | null, at: string | null, calls: number, cost: number, inputTokens: number, outputTokens: number }>, other: { calls: number, cost: number } }}
  */
 export function accountUsageRuns(groups, runs) {
-  /** @type {Map<string, { run: any, projectId: string, internal: boolean }>} */
+  /** @type {Map<string, { run: any, projectId: string, internal: boolean } | null>} */
   const byKey = new Map();
   for (const entry of runs) {
     const run = entry?.run;
     if (!run?.id) continue;
-    for (const key of [run.id, run.dispatchId]) {
-      if (typeof key === "string" && key && !byKey.has(key)) {
+    for (const key of runUsageKeys(run)) {
+      if (!byKey.has(key)) {
         byKey.set(key, { run, projectId: entry.projectId, internal: entry.internal === true });
+      } else if (byKey.get(key)?.run.id !== run.id) {
+        // Conflicting owners stay in Other; list order is not attribution.
+        byKey.set(key, null);
       }
     }
   }

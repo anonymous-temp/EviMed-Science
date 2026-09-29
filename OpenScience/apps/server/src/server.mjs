@@ -136,7 +136,9 @@ import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUp
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
-  verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
+  autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
+import { runUsageKeys } from "./runUsage.mjs";
+import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
@@ -778,7 +780,7 @@ function memoryRecallRejection(error) {
 export const RUN_USAGE_START_SLACK_MS = 10 * 60_000;
 
 export function runUsageFrom(summaries, run) {
-  const parts = [summaries.get(run.id), run.dispatchId && run.dispatchId !== run.id ? summaries.get(run.dispatchId) : null].filter(Boolean);
+  const parts = runUsageKeys(run).map(id => summaries.get(id)).filter(Boolean);
   if (parts.length === 0) return null;
   const started = Date.parse(run.startedAt ?? run.createdAt ?? "");
   const firsts = parts.map((part) => Date.parse(part.firstRequestAt ?? "")).filter(Number.isFinite);
@@ -1735,7 +1737,7 @@ export function createWebApiApp(overrides = {}) {
       // Settled spend at the moment the run ended, under both of its ids: a
       // bounded runtime's calls carry its dispatch id, everything else the run's.
       const spent = usageLedger
-        ? await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean))
+        ? await usageLedger.summaryRuns(project.userId, runUsageKeys(run))
         : null;
       const read = await readRunStateProjection(project, project.workspaceDir, run);
       const evidence = read.state === "read" ? read.projection?.evidence?.byStatus ?? {} : {};
@@ -1770,7 +1772,7 @@ export function createWebApiApp(overrides = {}) {
     const user = await store.userById(userId);
     if (!user) return "kernel";
     const run = (await agentRuns.list(await store.requireProject(user, projectId)))
-      .find((item) => item.id === runId || item.dispatchId === runId);
+      .find((item) => runUsageKeys(item).includes(runId));
     if (!run) return "kernel";
     const purpose = usagePurposeOfRun(run);
     runPurposes.set(key, purpose);
@@ -2059,7 +2061,7 @@ export function createWebApiApp(overrides = {}) {
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
     // What the run has spent so far, for its progress aggregate (C5).
     readRunUsage: async (project, run) => (usageLedger
-      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
+      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, runUsageKeys(run)), run)
       : null),
     // rt: asked right before the delivery gate reads a run's files, so a
     // remote runtime's host copy is brought up to date first (plan §3.1 #4).
@@ -2157,45 +2159,40 @@ export function createWebApiApp(overrides = {}) {
       // An independent verification is not an episode: it owns its own bounded
       // runtime scope and folds into one claim, not into a digest fold.
       //
-      // It is identified by its dispatch id, which is the one thing about the
-      // run the dispatch layer cannot rewrite. The route reason cannot be used:
-      // `AgentRunStore.dispatch` replaces the caller's value with
-      // "session-binding" for every specialist-mode session, so keying on it
-      // meant this whole fold never ran. The id is a reserved shape
-      // (`episode-<32 hex>-v<n>`) that `/runs` refuses from a client, and
-      // `recordVerification` still requires the named episode to hold a claim
-      // carrying exactly this verification id, which is the ownership evidence.
+      // Reserved verifier IDs survive retries; the logical ID belongs to the
+      // claim and budget, while the actual attempt owns its scratch directory.
       const verifiedEpisodeId = autopilotService ? verificationEpisodeId(run.dispatchId) : null;
       if (verifiedEpisodeId) {
-        const verdict = await readVerificationVerdict(project, run);
-        const spent = usageLedger ? await usageLedger.summaryRun(project.userId, run.dispatchId).catch(() => null) : null;
-        await autopilotService.recordVerification(project.userId, {
-          episodeId: verifiedEpisodeId, verificationId: run.dispatchId, runId: run.id,
-          costCny: spent?.actualCost ?? 0,
-          // Whether the separation was a fence or only a prompt. The scratch
-          // workspace reaches the container on the direct path and not through
-          // the privileged controller, whose start payload carries only
-          // `{userId, projectId, activeWorkspace}` — so this deployment's mode
-          // is what decides, and the tier a claim may reach follows it.
-          isolated: config.runtimeControllerMode !== "socket",
-          ...verdict,
-        }).catch(error => securityAudit(config, "autopilot.verification.record", "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code : "autopilot_verification_failed",
-        }));
-        if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
-          await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.runtime.release", "failed", {
+        const verificationId = autopilotLogicalDispatchId(run.dispatchId);
+        if (isUnsentAutopilotLeaseLoss(run)) {
+          await autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId });
+        } else {
+          const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
+          const verdict = await readVerificationVerdict(project, run);
+          const spent = usageLedger ? await usageLedger.summaryRun(project.userId, verificationId).catch(() => null) : null;
+          await autopilotService.recordVerification(project.userId, {
+            episodeId: verifiedEpisodeId, verificationId, runId: run.id,
+            costCny: spent?.actualCost ?? 0,
+            isolated: config.runtimeControllerMode !== "socket",
+            ...verdict,
+          }).catch(error => securityAudit(config, "autopilot.verification.record", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
-            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+            code: typeof error?.code === "string" ? error.code : "autopilot_verification_failed",
+          }));
+          let released = !cleanupTarget;
+          if (cleanupTarget?.runId === verificationId) {
+            released = await runtimeManager.endBoundedRuntime(project, verificationId, cleanupTarget.generation).catch(error => {
+              return securityAudit(config, "autopilot.runtime.release", "failed", {
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+              }).then(() => false);
+            });
+          }
+          if (released) await discardVerificationScratch(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
           }));
         }
-        // Last, and only after the verdict is in the claim: the scratch the run
-        // was given exists to be thrown away, and it is inside the tree the
-        // project's quota measures.
-        await discardVerificationScratch(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
-        }));
       }
       const autopilotOwned = await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
@@ -2245,6 +2242,8 @@ export function createWebApiApp(overrides = {}) {
         await credits.service.settleRun({
           userId: project.userId, projectId: project.id, runId: run.id,
           dispatchId: run.dispatchId ?? null,
+          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          effectiveRouteReason: run.effectiveRouteReason,
           capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
           subject: run.title ?? run.question ?? null,
         });
@@ -2743,6 +2742,37 @@ export function createWebApiApp(overrides = {}) {
     });
   }
   if (autopilotService && config.autopilotEnabled) {
+    const assertAutopilotDispatchAllowed = async (input, user) => {
+      try { await input.assertDispatchAllowed?.(); }
+      catch (error) {
+        // This guard runs before the prompt, so its rejection cannot be an
+        // unknown running turn or a scientific failure.
+        error.definitivelyRejected = true;
+        if (["autopilot_paused", "autopilot_stopped"].includes(error?.code) && !input.verificationId) {
+          await autopilotService.markEpisodeCanceled(user.id, input.episodeId).catch((failure) => securityAudit(config, "autopilot.start.cancel", "failed", {
+            userId: user.id, projectId: input.projectId, code: failure?.code ?? "autopilot_cancellation_unrecorded",
+          }));
+        }
+        throw error;
+      }
+    };
+    const checkAutopilotBalance = async (input, user, selected) => {
+      const record = async (result) => autopilotService.recordBalanceCheck(user.id, input.episodeId, {
+        ...result, capabilityId: selected.id, checkedAt: new Date().toISOString(),
+      }, input.verificationId ? { verificationId: input.verificationId } : {}).catch((error) => securityAudit(config, "autopilot.balance.record", "failed", {
+        userId: user.id, projectId: input.projectId, code: typeof error?.code === "string" ? error.code : "autopilot_balance_unrecorded",
+      }));
+      let permission;
+      try {
+        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id) : { allowed: true, reason: "not_enabled" };
+      } catch (error) {
+        await record({ allowed: false, reason: typeof error?.code === "string" ? error.code : "balance_check_unavailable" });
+        throw error;
+      }
+      await record(permission);
+      // A pause or lease change during the balance request cannot start work.
+      await assertAutopilotDispatchAllowed(input, user);
+    };
     autopilotWorker = new AutopilotWorker({
       jobs: productJobs,
     service: autopilotService,
@@ -2798,6 +2828,9 @@ export function createWebApiApp(overrides = {}) {
       const user = await store.userById(verification.userId);
       if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
       const project = await store.requireProject(user, verification.projectId);
+      const previous = await inspectAutopilotDispatch({ service: autopilotService, agentRuns }, project, verification);
+      if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
+      const dispatchId = verification.dispatchId ?? verification.verificationId;
       const agenda = await autopilotService.get(user.id, verification.agendaId);
       const brief = verificationBrief(verification);
       const prompt = verificationPrompt(brief);
@@ -2816,7 +2849,13 @@ export function createWebApiApp(overrides = {}) {
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-      const scoped = verificationRunProject(project, verification.verificationId);
+      await checkAutopilotBalance(verification, user, selected);
+      await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, verification, previous.unsent);
+      if (previous.unsent) await discardVerificationScratch(project, previous.unsent.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
+        userId: project.userId, projectId: project.id, runId: previous.unsent.id,
+        code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
+      }));
+      const scoped = verificationRunProject(project, dispatchId);
       await withProjectStorageMutation(project, async () => {
         // `docker run --mount type=bind` refuses a source that does not exist,
         // so the directory is made before the runtime is reserved.
@@ -2834,26 +2873,27 @@ export function createWebApiApp(overrides = {}) {
       // agenda actually hits -- the project's runtime busy with something else,
       // the project over its storage quota -- are raised by this call, and a
       // handler that started after it swept nothing on exactly those.
+      let cleanupTarget = null;
       try {
         const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, {
           runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
         });
+        cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(scoped);
         await researchSessions.put(scoped, session.id, {
           mode: "specialist", agentId: selected.id, agentVersion: selected.version,
         });
         const run = await agentRuns.dispatch(scoped, {
           sessionId: session.id,
-          dispatchId: verification.verificationId,
+          dispatchId,
           question: prompt,
           effectiveAgentId: selected.id,
           effectiveAgentVersion: selected.version,
           effectiveRuntimeAgent: selected.runtimeAgent,
-          // Recorded only if the session is not specialist-bound; the dispatch
-          // layer substitutes "session-binding" for one that is. Nothing reads
-          // it back — the completion fold identifies a verification by its
-          // dispatch id — but the caller still says what it dispatched.
+          // Binding fixes capability identity while preserving this verified
+          // control-plane dispatch reason.
           effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
+          await assertAutopilotDispatchAllowed(verification, user);
           const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
             query: prompt, memories: [], specialists: [],
             routedSpecialist: {
@@ -2865,6 +2905,7 @@ export function createWebApiApp(overrides = {}) {
             secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
             runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
           });
+          await assertAutopilotDispatchAllowed(verification, user);
           return runtimeManager.dispatchPrompt(scoped, session.id, {
             // The question first: the kernel names a session after the start
             // of its first message, and a marker first named it
@@ -2878,13 +2919,22 @@ export function createWebApiApp(overrides = {}) {
         });
         return { runId: run.id, sessionId: session.id };
       } catch (error) {
-        await runtimeManager.endBoundedRuntime(scoped, verification.verificationId).catch(() => {});
+        // A lost lease has no authority to stop or clean the next owner's work.
+        if (error?.code === "product_job_lease_lost") throw error;
+        const existing = (await agentRuns.list(project)).find(run => run.dispatchId === dispatchId);
+        if (existing && !(existing.dispatchStatus === "rejected" && ["autopilot_paused", "autopilot_stopped"].includes(existing.errorCode))) {
+          return { runId: existing.id, sessionId: existing.sessionId };
+        }
+        let released = !cleanupTarget;
+        if (cleanupTarget?.runId === verification.verificationId) {
+          released = await runtimeManager.endBoundedRuntime(scoped, verification.verificationId, cleanupTarget.generation);
+        }
         // A dispatch that failed leaves the same directory behind as one that
         // ran, and no completion fold is ever called for it. The dispatch
         // failure is the one that travels; this one is recorded, because a
         // scratch directory nobody removed is invisible until the quota walk
         // trips over it.
-        await discardVerificationScratch(project, verification.verificationId)
+        if (released) await discardVerificationScratch(project, dispatchId)
           .catch(scratchError => securityAudit(config, "autopilot.verification.scratch", "failed", {
             userId: project.userId, projectId: project.id,
             code: typeof scratchError?.code === "string" ? scratchError.code : "verification_scratch_remove_failed",
@@ -2896,6 +2946,9 @@ export function createWebApiApp(overrides = {}) {
         const user = await store.userById(episode.userId);
         if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
         const project = await store.requireProject(user, episode.projectId);
+        const previous = await inspectAutopilotDispatch({ service: autopilotService, agentRuns }, project, episode);
+        if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
+        const dispatchId = episode.dispatchId ?? episode.episodeId;
         const agenda = await autopilotService.get(user.id, episode.agendaId);
         if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
           dailyLimit: Number(agenda.payload.dailyBudgetCny) || 0,
@@ -2907,6 +2960,8 @@ export function createWebApiApp(overrides = {}) {
         // here and ran adverse-event analysis instead.
         const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
+        await checkAutopilotBalance(episode, user, selected);
+        await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
         const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
         const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
         const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
@@ -2915,13 +2970,16 @@ export function createWebApiApp(overrides = {}) {
           weeklyLimit,
           runLimit: Number(episode.budgetCny),
         });
+        const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
+        const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
+          ? runtimeManager.endBoundedRuntime(project, episode.episodeId, cleanupTarget.generation) : false;
         try {
           await researchSessions.put(project, session.id, {
             mode: "specialist", agentId: selected.id, agentVersion: selected.version,
           });
           const run = await agentRuns.dispatch(project, {
             sessionId: session.id,
-            dispatchId: episode.dispatchId,
+            dispatchId,
             question: episode.prompt,
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
@@ -2929,9 +2987,17 @@ export function createWebApiApp(overrides = {}) {
             effectiveRouteReason: `autopilot:${episode.taskType}`,
             ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
+            // Record the attempt before checking the lease: a refusal now has
+            // durable proof of no prompt for the next owner to reclaim.
+            if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
             } catch (error) {
+              if (["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+                await autopilotService.markEpisodeCanceled(user.id, episode.episodeId);
+                error.definitivelyRejected = true;
+                throw error;
+              }
               await autopilotService.queueDispatchedCancellation(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
               throw error;
             }
@@ -2967,6 +3033,7 @@ export function createWebApiApp(overrides = {}) {
               runId: episode.episodeId, dailyLimit,
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
+            if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             return runtimeManager.dispatchPrompt(project, session.id, {
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
@@ -2980,7 +3047,12 @@ export function createWebApiApp(overrides = {}) {
           }
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
-          const existing = (await agentRuns.list(project)).find((run) => run.dispatchId === episode.dispatchId);
+          if (error?.code === "product_job_lease_lost") throw error;
+          if (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+            await releaseOwnRuntime();
+            throw error;
+          }
+          const existing = (await agentRuns.list(project)).find((run) => run.dispatchId === dispatchId);
           if (existing) {
             if (existing.status !== "running") return { runId: existing.id, sessionId: session.id };
             const currentEpisode = await autopilotService.getEpisode(user.id, episode.episodeId).catch(() => null);
@@ -2997,7 +3069,7 @@ export function createWebApiApp(overrides = {}) {
                 return { runId: existing.id, sessionId: session.id };
               } catch (queueError) {
                 let releaseError = null;
-                try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+                try { await releaseOwnRuntime(); }
                 catch (failure) { releaseError = failure; }
                 const failures = [bindingError, queueError, releaseError].filter(Boolean);
                 const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot run identity could not be persisted."));
@@ -3007,7 +3079,7 @@ export function createWebApiApp(overrides = {}) {
             }
           }
           let releaseError = null;
-          try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+          try { await releaseOwnRuntime(); }
           catch (failure) { releaseError = failure; }
           if (releaseError) {
             const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError([error, releaseError], "Autopilot initialization and runtime release failed."));
@@ -4196,7 +4268,7 @@ export function createWebApiApp(overrides = {}) {
         // A ledger that cannot be read leaves the runs without the field
         // rather than the list without its runs.
         if (usageLedger && runs.length > 0) {
-          const summaries = await usageLedger.summaryRuns(ctx.project.userId, runs.flatMap((run) => [run.id, run.dispatchId]).filter(Boolean))
+          const summaries = await usageLedger.summaryRuns(ctx.project.userId, [...new Set(runs.flatMap(runUsageKeys))])
             .catch(() => null);
           if (summaries) runs = runs.map((run) => { const usage = runUsageFrom(summaries, run); return usage ? { ...run, usage } : run; });
         }
@@ -5143,7 +5215,7 @@ export function createWebApiApp(overrides = {}) {
         // Under both ids a run's calls can carry: its own, which the gateway
         // stamps on an interactive run's calls, and its dispatch id, which a
         // bounded runtime (autopilot, verification) was minted for.
-        const summaries = await Promise.all([...new Set([run.id, run.dispatchId].filter(Boolean))]
+        const summaries = await Promise.all([...new Set(runUsageKeys(run))]
           .map((id) => usageLedger.summaryRun(ctx.project.userId, id)));
         const total = (field) => summaries.reduce((sum, item) => sum + (Number(item[field]) || 0), 0);
         const models = [...new Set(summaries.map((item) => item.modelId).filter(Boolean))];

@@ -794,7 +794,7 @@ const REPORT = "reports/evidence.md";
 const REPORT_BODY = "REPORT-BODY-NO-VERIFIER-MAY-SEE";
 
 /** The agenda, episode and digest one queued verification points at. */
-function verificationFixtureRows() {
+function verificationFixtureRows(episodeStart = false) {
   const claim = {
     id: "claim-one", statement: "SGLT2 抑制剂降低心衰再入院 12%。", type: "direct", tier: "gated",
     sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" },
@@ -806,11 +806,11 @@ function verificationFixtureRows() {
     // ships: an episode is allowed to spend the whole night's allowance.
     documentRow("agenda", "agenda-verify", { title: "心衰证据追踪", topics: ["heart failure"], taskTypes: ["literature-sentinel"],
       dailyBudgetCny: 8, weeklyBudgetCny: 80, maxEpisodeCny: 8, enabled: true, status: "active", outcomes: [] }),
-    documentRow("episode", EPISODE_ID, { agendaId: "agenda-verify", status: "merged", runId: "run-episode",
-      digestId: "digest-verify", budgetCny: 6, verificationBudgetCny: 0.67, claims: [claim] }),
+    documentRow("episode", EPISODE_ID, { agendaId: "agenda-verify", status: episodeStart ? "queued" : "merged", runId: episodeStart ? null : "run-episode",
+      digestId: episodeStart ? null : "digest-verify", budgetCny: 6, verificationBudgetCny: 0.67, claims: [claim] }),
     documentRow("digest", "digest-verify", { agendaId: "agenda-verify", date: "2026-09-06", costCny: 3,
       headlines: [], leads: [claim], decisions: [] }),
-  ];
+  ].map(row => ({ ...row, project_id: PROJECT_ID }));
 }
 
 test("a verification runs in a workspace that does not contain the report it is checking", async (t) => {
@@ -1803,7 +1803,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   const { app } = fixture;
   await app.geo.worker.close();
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
   const recalled = [{ id: "record:pref-1", content: "结论先行，再列证据。", memoryType: "structured", kind: "preference", scope: "user",
     updatedAt: "2026-09-25T00:00:00Z" }];
   app.memorySubstrate.recall = async () => recalled;
@@ -1871,7 +1871,7 @@ test("proactive episodes and verifiers check balance and renewed permission befo
   const fixture = await composedApp(t, { autopilotEnabled: true, evimedCreditsEnabled: true,
     evimedCreditsUrl: "", evimedCreditsBalanceUrl: "", modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   const { app } = fixture;
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
   let balance, reserved = 0, permissions = 0;
   const checked = [];
   EvimedCreditsService.prototype.assertBalanceForStart = async function (_userId, capabilityId) {
@@ -1895,13 +1895,145 @@ test("proactive episodes and verifiers check balance and renewed permission befo
   }
   assert.equal(checked.length, 2);
   for (const [method, input] of [["dispatchEpisode", episode], ["dispatchVerification", verification]]) {
+    const before = reserved;
     balance = { allowed: true, reason: "unavailable" };
     await assert.rejects(app.autopilotWorker[method]({ ...input, assertDispatchAllowed: async () => {
       throw Object.assign(new Error("Paused while checking balance"), { code: "autopilot_paused" });
     } }), { code: "autopilot_paused" });
-    assert.equal(reserved, 0, "a pause during the balance check cannot reserve a runtime");
+    assert.equal(reserved, before, "a pause during the balance check cannot reserve a runtime");
     await assert.rejects(app.autopilotWorker[method](input), { code: "reservation_probe" });
   }
   assert.equal(reserved, 2, "unknown balance retains the existing admission policy");
   assert.ok(permissions >= 2);
+});
+
+test("a pause after proactive admission rejects an unsent turn and releases only its own runtime", async t => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  let prompts = 0, released = 0, activeScope = EPISODE_ID;
+  app.memorySubstrate.recall = async () => [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-unsent", kernel: "dsh" });
+  app.runtimeManager.boundedRuntimeScope = () => ({ runId: activeScope });
+  app.runtimeManager.boundedRuntimeCleanupTarget = () => ({ runId: activeScope, generation: "generation-one" });
+  app.runtimeManager.endBoundedRuntime = async (_project, id) => { assert.equal(id, EPISODE_ID); released += 1; };
+  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
+  app.agentRuns.dispatch = async (_project, input, sendPrompt) => {
+    await sendPrompt({ sessionId: input.sessionId }, { id: "run-unsent", kernelRequestIds: [] });
+    return { id: "run-unsent", status: "running" };
+  };
+  for (const stage of [2, 3]) {
+    for (const row of verificationFixtureRows(true)) {
+      if (row.id === EPISODE_ID) { row.payload.status = "queued"; delete row.payload.runId; delete row.payload.sessionId; }
+      fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+    }
+    let checks = 0;
+    await assert.rejects(app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
+      episodeId: EPISODE_ID, dispatchId: EPISODE_ID, taskType: "literature-sentinel", budgetCny: 2, prompt: "Read prior research.",
+      assertDispatchAllowed: async () => { if (++checks === stage) throw Object.assign(new Error("Paused"), { code: "autopilot_paused" }); },
+    }), error => error.code === "autopilot_paused" && error.definitivelyRejected === true);
+    assert.equal(prompts, 0);
+    assert.equal((await app.autopilotService.getEpisode(USER_ID, EPISODE_ID)).payload.status, "canceled");
+    activeScope = "another-workflow";
+  }
+  assert.equal(released, 1, "the second rejection must not release a newer workflow's runtime");
+});
+
+for (const lossStage of [2, 3]) test(`the next proactive owner reclaims a proven-unsent generation after lease loss at stage ${lossStage}`, async t => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  await app.autopilotWorker.close();
+  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  let reservations = 0, prompts = 0, closes = 0, target = null;
+  // The composition pool covers product rows; use the real file-backed
+  // research-session store for this full dispatch-ledger exercise.
+  app.researchSessions.stateStore = null;
+  app.runtimeManager.sessionMessages = async () => [];
+  app.memorySubstrate.recall = async () => [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async () => {
+    reservations += 1;
+    target = { runId: EPISODE_ID, generation: `generation-${reservations}` };
+    return { id: `session-attempt-${reservations}`, kernel: "dsh" };
+  };
+  app.runtimeManager.boundedRuntimeCleanupTarget = () => target;
+  app.runtimeManager.endBoundedRuntime = async (_project, logical, generation) => {
+    assert.equal(logical, EPISODE_ID); assert.equal(generation, "generation-1");
+    if (target?.generation !== generation) return false;
+    closes += 1; target = null; return true;
+  };
+  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
+  const input = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
+    dispatchId: EPISODE_ID, taskType: "literature-sentinel", budgetCny: 2, prompt: "Read prior research." };
+  let checks = 0;
+  await assert.rejects(app.autopilotWorker.dispatchEpisode({ ...input, assertDispatchAllowed: async () => {
+    if (++checks === lossStage) throw Object.assign(new Error("Lease lost before prompt"), { code: "product_job_lease_lost" });
+  } }), error => error.code === "product_job_lease_lost" && error.definitivelyRejected === true);
+  assert.equal(prompts, 0); assert.equal(closes, 0, "the expired owner has no cleanup authority");
+  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
+  const old = (await app.agentRuns.list(project))[0];
+  assert.equal(old.dispatchStatus, "rejected"); assert.equal(old.errorCode, "product_job_lease_lost");
+  assert.equal((await app.autopilotService.getEpisode(USER_ID, EPISODE_ID)).payload.status, "queued");
+  const sent = await app.autopilotWorker.dispatchEpisode({ ...input, dispatchId: `${EPISODE_ID}-a2`, assertDispatchAllowed: async () => {} });
+  assert.notEqual(sent.runId, old.id); assert.equal(prompts, 1); assert.equal(closes, 1); assert.equal(reservations, 2);
+  const latest = (await app.agentRuns.list(project)).find(run => run.id === sent.runId);
+  assert.equal(latest.dispatchId, `${EPISODE_ID}-a2`);
+  assert.equal(latest.effectiveRouteReason, "autopilot:literature-sentinel");
+  // An accepted execution is replayed before another balance check or runtime reservation.
+  app.autopilotService.recordBalanceCheck = async () => { throw new Error("No second balance request"); };
+  assert.deepEqual(await app.autopilotWorker.dispatchEpisode({ ...input, dispatchId: `${EPISODE_ID}-a3` }), sent);
+  assert.equal(prompts, 1); assert.equal(reservations, 2);
+});
+
+for (const lossStage of [2, 3]) test(`verifier takeover at stage ${lossStage} keeps logical cost and cleans only its attempt workspaces`, async t => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  await app.autopilotWorker.close();
+  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
+  app.researchSessions.stateStore = null;
+  app.runtimeManager.sessionMessages = async () => [];
+  let target = null, reservations = 0, prompts = 0, closed = [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async (_project, scope) => {
+    reservations += 1; target = { runId: scope.runId, generation: `verify-generation-${reservations}` };
+    return { id: `verify-session-${reservations}`, kernel: "dsh" };
+  };
+  app.runtimeManager.boundedRuntimeCleanupTarget = () => target;
+  app.runtimeManager.endBoundedRuntime = async (_project, logical, generation) => {
+    assert.equal(logical, VERIFICATION_ID);
+    if (target?.generation !== generation) return false;
+    closed.push(generation); target = null; return true;
+  };
+  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
+  const usageKeys = [];
+  app.usageLedger.summaryRun = async (_user, id) => { usageKeys.push(id); return { actualCost: id === VERIFICATION_ID ? 0.45 : 0 }; };
+  const input = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
+    digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one", statement: "A preserved finding.",
+    sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT, budgetCny: 0.67 };
+  let checks = 0;
+  await assert.rejects(app.autopilotWorker.dispatchVerification({ ...input, assertDispatchAllowed: async () => {
+    if (++checks === lossStage) throw Object.assign(new Error("Lease lost before prompt"), { code: "product_job_lease_lost" });
+  } }), { code: "product_job_lease_lost" });
+  assert.equal(prompts, 0); assert.deepEqual(closed, []);
+  let episode = await app.autopilotService.getEpisode(USER_ID, EPISODE_ID);
+  assert.equal(episode.payload.claims[0].verification.status, "queued");
+  assert.equal(episode.payload.unsentAttempts.length, 1);
+  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
+  const prior = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
+  const attemptId = `${VERIFICATION_ID}-a2`;
+  const scratch = path.join(project.baseDir, verificationWorkspacePath(attemptId));
+  const other = path.join(project.baseDir, verificationWorkspacePath(`${EPISODE_ID}-v2`));
+  await mkdir(other, { recursive: true });
+  const sent = await app.autopilotWorker.dispatchVerification({ ...input, dispatchId: attemptId, assertDispatchAllowed: async () => {} });
+  assert.equal(prompts, 1); assert.deepEqual(closed, ["verify-generation-1"]);
+  await assert.rejects(stat(prior), { code: "ENOENT" });
+  await writeFile(path.join(scratch, "verification.json"), JSON.stringify({ schemaVersion: 1, verdict: "stands", numbersReproduced: true,
+    recomputed: { measure: "risk-ratio", value: "0.74" }, checkedSources: ["doi:10.1000/one"], reason: "The source supports the effect." }));
+  await app.agentRuns.finishInternal({ ...project, workspaceDir: scratch }, sent.runId, { status: "succeeded", artifacts: ["verification.json"] });
+  episode = await app.autopilotService.getEpisode(USER_ID, EPISODE_ID);
+  assert.equal(episode.payload.claims[0].verification.id, VERIFICATION_ID);
+  assert.equal(episode.payload.claims[0].verification.runId, sent.runId);
+  assert.equal(episode.payload.claims[0].verification.status, "recorded");
+  assert.equal(episode.payload.claims[0].tier, "reproduced");
+  assert.ok(usageKeys.includes(VERIFICATION_ID)); assert.equal(usageKeys.includes(attemptId), false);
+  assert.deepEqual(closed, ["verify-generation-1", "verify-generation-2"]);
+  await assert.rejects(stat(scratch), { code: "ENOENT" });
+  assert.ok((await stat(other)).isDirectory());
 });

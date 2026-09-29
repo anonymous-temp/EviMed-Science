@@ -13,6 +13,21 @@ const run = (id, extra = {}) => ({
   id, dispatchId: null, title: null, question: null, startedAt: "2026-09-20T02:00:00.000Z", createdAt: "2026-09-20T02:00:00.000Z", ...extra,
 });
 
+test("logical autopilot spend belongs to the sent attempt regardless of ledger order", () => {
+  const logical = `episode-${"b".repeat(32)}`;
+  const old = { run: run("old", { dispatchId: logical, effectiveRouteReason: "autopilot:research", status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" }), projectId: "p" };
+  const sent = { run: run("sent", { dispatchId: `${logical}-a2`, effectiveRouteReason: "autopilot:research", status: "succeeded" }), projectId: "p" };
+  const groups = [{ runId: logical, cost: 1.6, calls: 4 }, { runId: "sent", cost: 0.4, calls: 1 }];
+  for (const runs of [[old, sent], [sent, old], [sent]]) {
+    const result = accountUsageRuns(groups, runs);
+    assert.deepEqual(result.items.map(item => [item.runId, item.cost, item.calls]), [["sent", 2, 5]]);
+    assert.equal(result.other.cost, 0);
+  }
+  assert.equal(accountUsageRuns(groups, [old]).other.cost, 2);
+  const duplicate = { ...sent, run: { ...sent.run, id: "another-sent", dispatchId: `${logical}-a3` } };
+  assert.equal(accountUsageRuns(groups, [sent, duplicate]).other.cost, 1.6, "conflicting ownership is not guessed from array order");
+});
+
 test("a run's calls under its own id and its dispatch id are one row, titled as the conversation is", () => {
   const { items, other } = accountUsageRuns([
     { runId: "run-1", calls: 60, cost: 3.2, inputTokens: 900_000, outputTokens: 20_000, firstAt: "2026-09-22T01:00:00.000Z" },
@@ -131,4 +146,44 @@ test("without the durable ledger there is no run attribution, and the month is a
     assert.deepEqual(data.other, { calls: 0, cost: 0 });
     assert.ok(Date.parse(data.since) > 0);
   });
+});
+
+test("run list and usage HTTP queries retrieve the logical attempt scope and enforce project access", async () => {
+  const logical = `episode-${"c".repeat(32)}`;
+  const queried = [];
+  const ledger = {
+    health: async () => ({ ok: true }),
+    reconcileExpiredReservations: async () => ({ reconciled: 0, remaining: 0, failedAccounts: 0 }),
+    assertWithinLimits: async () => ({ allowed: true }),
+    summaryRuns: async (_user, ids) => {
+      queried.push(ids);
+      return new Map(ids.filter(id => id === logical).map(id => [id, { costCny: 1.6, requests: 4 }]));
+    },
+    summaryRun: async (_user, id) => {
+      queried.push([id]);
+      return { actualCost: id === logical ? 1.6 : 0, settledCalls: id === logical ? 4 : 0, currency: "CNY" };
+    },
+  };
+  await withAccount(async ({ app, base, cookie }) => {
+    const user = await app.store.userById("alice");
+    const project = await app.store.requireProject(user, "default");
+    await mkdir(project.metaDir, { recursive: true });
+    await writeFile(path.join(project.metaDir, "runs.jsonl"), `${JSON.stringify({
+      event: "started", id: "run-attempt", dispatchId: `${logical}-a2`, sessionId: "session-attempt", mode: "open-domain",
+      effectiveRouteReason: "autopilot:research", question: "Study update", createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(), agentId: null, agentVersion: null, runtimeAgent: null, model: "deepseek/deepseek-v4-flash",
+    })}\n`);
+    const headers = { Cookie: cookie };
+    const usage = await fetch(`${base}/api/runs/run-attempt/usage`, { headers });
+    assert.equal(usage.status, 200, await usage.clone().text());
+    assert.equal((await usage.json()).data.cost, 1.6);
+    const listed = await fetch(`${base}/api/agent-runs`, { headers });
+    assert.equal(listed.status, 200);
+    const payload = await listed.json();
+    const rows = payload.data?.runs ?? payload.data;
+    assert.equal(rows.find(item => item.id === "run-attempt").usage.costCny, 1.6);
+    assert.ok(queried.some(ids => ids.includes(logical)));
+    assert.equal((await fetch(`${base}/api/runs/run-attempt/usage`)).status, 401);
+    assert.equal((await fetch(`${base}/api/runs/absent/usage`, { headers })).status, 404);
+  }, ledger);
 });

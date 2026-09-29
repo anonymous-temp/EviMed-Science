@@ -152,7 +152,7 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending"].includes(code)) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending", "runtime_cleanup_required"].includes(code)) {
         await holdsLease();
         const retry = job.attempts < Number(job.maxAttempts ?? 3);
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))

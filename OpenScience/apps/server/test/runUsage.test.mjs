@@ -4,6 +4,21 @@ import test from "node:test";
 
 import { runUsageFrom } from "../src/server.mjs";
 
+test("only the sent autopilot attempt owns its logical budget usage", () => {
+  for (const suffix of ["", "-v1"]) {
+    const logical = `episode-${"a".repeat(32)}${suffix}`;
+    const summaries = new Map([[logical, { requests: 4, costCny: 1.6 }], ["new", { requests: 1, costCny: 0.4 }], ["old", { requests: 1, costCny: 0.1 }]]);
+    const owner = { id: "new", dispatchId: `${logical}-a2`, effectiveRouteReason: "autopilot:research", status: "succeeded" };
+    const old = { ...owner, id: "old", dispatchId: logical, status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" };
+    assert.equal(runUsageFrom(summaries, owner).costCny, 2);
+    assert.equal(runUsageFrom(summaries, old).costCny, 0.1);
+    assert.equal(runUsageFrom(summaries, { ...owner, id: "missing", dispatchId: logical }).costCny, 1.6);
+  }
+  const logical = `episode-${"a".repeat(32)}`;
+  assert.equal(runUsageFrom(new Map([[logical, { costCny: 1 }]]), { id: "ordinary", dispatchId: `${logical}-a2` }), null,
+    "an ordinary caller cannot borrow an autopilot logical scope");
+});
+
 test("a run's usage is read under its own id and, for a bounded run, its dispatch id, and added", () => {
   const summaries = new Map([
     ["run_1", { requests: 3, inputTokens: 1000, cachedInputTokens: 600, outputTokens: 90, costCny: 0.012 }],

@@ -48,6 +48,7 @@ import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission }
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
+import { runUsageKeys } from "./runUsage.mjs";
 import { migrateEvimedCredits } from "./evimedCreditsPersistence.mjs";
 
 /**
@@ -220,6 +221,7 @@ export class EvimedCreditsService {
    * notice. The verdict is the returned status.
    *
    * @param {{ userId: string, projectId?: string | null, runId: string, dispatchId?: string | null,
+   *   status?: string, dispatchStatus?: string | null, errorCode?: string | null, effectiveRouteReason?: string | null,
    *   capabilityId?: string | null, subject?: string | null }} run
    * @returns {Promise<{ status: string, credits?: number, reason?: string, duplicate?: boolean, errorCode?: string | null }>}
    */
@@ -232,10 +234,8 @@ export class EvimedCreditsService {
     try {
       const userId = productId(run.userId, "user");
       const runId = productId(run.runId, "run");
-      const ids = [runId, run.dispatchId ? productId(run.dispatchId, "run") : null].filter(
-        (/** @type {string | null} */ id) => typeof id === "string",
-      );
-      const costCny = await this.#costOf(userId, /** @type {string[]} */ ([...new Set(ids)]));
+      const ids = runUsageKeys({ ...run, id: runId }).map(id => productId(id, "run"));
+      const costCny = await this.#costOf(userId, ids);
       const credits = creditsForCost(costCny, this.rate);
       const memo = settlementMemo({ capabilityId: run.capabilityId ?? null, subject: run.subject ?? null });
       const opened = await this.#open({
@@ -496,4 +496,3 @@ export class EvimedCreditsService {
     return { allowed: true, balance: balance.balance, estimate };
   }
 }
-

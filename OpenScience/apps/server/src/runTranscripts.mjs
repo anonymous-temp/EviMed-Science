@@ -32,6 +32,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { runOwnsRuntimeScope } from "./runUsage.mjs";
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -314,7 +315,7 @@ export function runsToReadBeforeStop(runs, { boundedRunId = null, captured = () 
   return (runs ?? []).filter((run) => {
     if (!run?.id) return false;
     if (run.status === "running") return true;
-    return Boolean(boundedRunId) && run.dispatchId === boundedRunId && !run.transcript && !captured(String(run.id));
+    return runOwnsRuntimeScope(run, boundedRunId) && !run.transcript && !captured(String(run.id));
   });
 }
 

@@ -298,10 +298,26 @@ test("a new owner gets a distinct dispatch attempt while keeping the episode bil
   assert.equal(dispatched.previousRunId,"old-run");
 });
 
-test("waiting for an earlier dispatch to settle spends no scientific failure or cancellation", async () => {
-  const f = fixture({dispatchError:Object.assign(new Error("Earlier dispatch pending"),{code:"autopilot_dispatch_pending"})});
+for (const code of ["autopilot_dispatch_pending", "runtime_cleanup_required"]) test(`waiting for ${code} spends no scientific failure or cancellation`, async () => {
+  const f = fixture({dispatchError:Object.assign(new Error("Earlier dispatch pending"),{code})});
   f.service.recordResourceDeferral=async(...args)=>f.calls.push({method:"resourceDeferred",args});
   await f.worker.tick();
   assert.equal(f.calls.some(call=>call.method==="failed"||call.method==="cancelDispatched"),false);
   assert.equal(f.calls.find(call=>call.method==="jobFail").args[4].retry,true);
+});
+
+test("an unconfirmed provider close during takeover defers the job without a scientific failure", async () => {
+  const { reclaimUnsentAutopilotRuntime } = await import("../src/autopilotDispatchRecovery.mjs");
+  const f = fixture();
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  f.service.recordUnsentAttempt = async () => {};
+  const manager = { boundedRuntimeCleanupTarget: () => ({ runId: "episode-one", generation: "old-generation" }),
+    endBoundedRuntime: async () => { throw Object.assign(new Error("Provider did not confirm close"), { code: "runtime_cleanup_failed" }); } };
+  f.worker.dispatchEpisode = input => reclaimUnsentAutopilotRuntime({ service: f.service, runtimeManager: manager },
+    { id: "project-one", userId: "user-one" }, input,
+    { id: "old", dispatchId: "episode-one", status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => call.method === "failed" || call.method === "cancelDispatched"), false);
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[2].code, "runtime_cleanup_required");
+  assert.equal(f.calls.find(call => call.method === "jobFail").args[4].retry, true);
 });
