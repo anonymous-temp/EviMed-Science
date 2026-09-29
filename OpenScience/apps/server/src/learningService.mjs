@@ -82,8 +82,7 @@ export const LEARNED_METHOD_RECORD_TYPE = "learned-method";
  * It is about how to pass EviMed's checks, which is the capability's handbook
  * (the L2 loop, spec §19.17), not how this person works. Both methods the loop
  * learnt in production were of this kind and sat in the researcher's own list
- * as 「我的做法」 (audit 2026-09-26, L-G3). The L2 store and its pull-request
- * producer do not exist yet, so such a lesson is kept here, under its own
+ * as 「我的做法」 (audit 2026-09-26, L-G3). Such a lesson stays under its own
  * record type: never listed as the researcher's or exported in a pack. The
  * handbook loop applies it as a separate owner-scoped capability supplement.
  */
@@ -340,12 +339,7 @@ export class LearningService {
   }
 
   /**
-   * Keep a lesson the platform's reviewer taught, outside the researcher's
-   * library (`HANDBOOK_CANDIDATE_RECORD_TYPE`).
-   *
-   * One record per capability and method name. The consumer applies it to a
-   * separate supplement; personal method lists, mounts and exports never read
-   * this row. Prior digest dispositions survive later candidate revisions.
+   * Recheck a handbook with the same body, dependency and provenance rules as a method.
    * @param {string} userId
    * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
    */
@@ -366,7 +360,8 @@ export class LearningService {
     }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest, retryOf ?? null]))}`, projectId: null, transactionClient });
   }
 
-  /** @param {string} userId @param {any} input */
+  /** One record per capability and name, separate from personal methods. Prior digest outcomes are preserved.
+   * @param {string} userId @param {any} input */
   async recordHandbookCandidate(userId, input) {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
     const name = String(input.frontmatter?.name ?? "");
@@ -479,7 +474,7 @@ export class LearningService {
   /** @param {string} userId @param {string} methodId */
   async getMethod(userId, methodId) {
     const document = await this.documents.get(userId, "method", productId(methodId, "method"));
-    if (!document) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+    if (!isLearnedMethod(document)) throw new HttpError(404, "method_not_found", "The method is unavailable.");
     return document;
   }
 
