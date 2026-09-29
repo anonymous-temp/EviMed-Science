@@ -243,3 +243,30 @@ def test_the_keyless_overlay_takes_the_key_out_of_every_adapter_and_needs_the_le
         assert environment["EVIMED_ENGINE_MODEL_GATEWAY"] == "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}"
         assert environment["EVIMED_ENGINE_MODEL_TOKEN_URL"].endswith("/internal/engines/v1/model-token}")
     assert "OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED" in base["services"]["open-science-web"]["environment"]
+
+
+def test_job_policy_is_signed_forwarded_and_overrides_container_defaults(tmp_path, monkeypatch):
+    context = {"v": 1, "sessionId": "s-low", "callId": "call-1", "rootCallId": "call-1",
+               "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "low"}
+    sent = []
+    def opener(request, timeout=None):
+        sent.append(json.loads(request.data))
+        return _Answer({"data": {"token": JOB_TOKEN, "baseUrl": GATEWAY,
+                                "modelPolicy": {"reasoningEffort": "low", "source": "session", "sessionId": "s-low"}}})
+    credential = engine_model.request_credential(url=TOKEN_URL, secret="s" * 40, workload_token="w.t.v",
+        kind="peer-review", job_id="review-20260929-policy", execution_context=context, opener=opener)
+    assert sent[0]["executionContext"] == context
+    module, _, _, _ = _load_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    for name, value in credential.items(): monkeypatch.setenv(name, value)
+    child = module._child_environment()
+    assert child["LLM_REASONING_EFFORT"] == "low"
+    assert child["LLM_ENABLE_THINKING"] == "true"
+    assert child["LLM_API_KEY"] == JOB_TOKEN
+    assert "LLM_API_KEY_FILE" not in child
+
+
+def test_off_is_a_valid_job_policy_without_forcing_thinking():
+    env = engine_model.child_environment(JOB_TOKEN, GATEWAY, {"reasoningEffort": "off", "source": "session"})
+    assert env["LLM_REASONING_EFFORT"] == "off"
+    assert env["LLM_ENABLE_THINKING"] == "false"
