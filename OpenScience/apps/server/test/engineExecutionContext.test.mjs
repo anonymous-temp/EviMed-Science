@@ -35,3 +35,25 @@ test('model selection accessor uses the native projection envelope without wakin
   };
   assert.deepEqual(await manager.sessionModelSelection(project, 's-low'), expected);
 });
+
+test('a fresh native child is bound by its real catalogue id before event tracking catches up', async () => {
+  const project = { id: 'p', userId: 'u' };
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => [{ id: 'run-root', sessionId: 'root-1' }], runIdForSession: () => null },
+    runtimeManager: {
+      subagentCatalogue: async (actualProject, rootId) => {
+        assert.equal(actualProject, project);
+        assert.equal(rootId, 'root-1');
+        return [{ id: 'child-1', createdAt: 1790564989642, mode: 'one-shot', label: 'Research' }];
+      },
+      sessionModelSelection: async (_project, id) => {
+        assert.equal(id, 'child-1');
+        return { lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'off' } };
+      },
+    },
+  });
+  assert.deepEqual(await resolve({ userId: 'u', projectId: 'p' }, ctx('child-1', 'off')),
+    { runId: 'run-root', sessionId: 'child-1', reasoningEffort: 'off' });
+});
