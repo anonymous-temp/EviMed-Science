@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_READ_WHATS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
-  vcrDominatedScenarios, vcrMetricFamilies, vcrReadiness, vcrRouteOptions,
+  vcrDominatedScenarios, vcrReadiness, vcrRouteOptions,
 } from "../src/vcrService.mjs";
 import { VCR_COUNT_KEYS, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_TABS, intendedUseCeiling, missingModelEvidence } from "@evimed/domain";
 
@@ -155,18 +155,4 @@ test("readiness is red only for this module's own invariants; a missing engine i
   assert.equal(ready.status, "ok");
   assert.deepEqual(ready.warnings, ["vcr_engine_not_composed", "vcr_data_plane_not_configured"]);
   assert.equal(ready.warning, "vcr_engine_not_composed");
-});
-
-test("the metric families count what the module did, and nothing about a study", () => {
-  const families = vcrMetricFamilies({ metrics: () => ({ studiesCreated: 2, reads: 9, writes: 4, writeIssues: 1, notFound: 3 }) });
-  assert.deepEqual(families.map((family) => [family.name, family.value]), [
-    ["evimed_vcr_studies_created_total", 2],
-    ["evimed_vcr_runtime_reads_total", 9],
-    ["evimed_vcr_runtime_writes_total", 4],
-    ["evimed_vcr_runtime_write_issues_total", 1],
-    ["evimed_vcr_study_not_found_total", 3],
-  ]);
-  assert.ok(families.every((family) => family.type === "counter" && family.help));
-  // A service with no counters yet reports zeroes rather than throwing.
-  assert.ok(vcrMetricFamilies(null).every((family) => family.value === 0));
 });

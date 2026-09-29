@@ -1,11 +1,18 @@
 import { Link } from "react-router";
 import { ArrowLeft, CircleCheck, CircleDashed } from "lucide-react";
+import { VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
 import { getVcrExport } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
+
+/** A run file's address: every segment of its path encoded, so a name can never climb out of the run. */
+export function runFilePath(runId: string, path: string): string {
+  const segments = path.split("/").filter((segment) => segment && segment !== "." && segment !== "..");
+  return `/app/runs/${encodeURIComponent(runId)}/files/${segments.map(encodeURIComponent).join("/")}`;
+}
 
 /**
  * The study package, read on the page rather than downloaded first.
@@ -19,6 +26,9 @@ import { VcrTabSkeleton } from "./VcrStates";
  * analysis. **未复核 is printed rather than hidden** — an export is never
  * blocked for want of a review, and a package that stayed quiet about it
  * would be claiming a standing it has not got.
+ *
+ * Without sections it is the cover and the file, and nothing else: a reader
+ * with no rendered body has no numbers to click, so it promises none (CW-16).
  */
 export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: string; exportId: string; onBack: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:export:${exportId}`, () => getVcrExport(studyId, exportId));
@@ -26,9 +36,8 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const deliverable = state.data;
   const sections = deliverable.document?.sections ?? [];
-  const file = deliverable.runId && deliverable.path
-    ? `/app/runs/${encodeURIComponent(deliverable.runId)}/files/${deliverable.path}`
-    : null;
+  const file = deliverable.runId && deliverable.path ? runFilePath(deliverable.runId, deliverable.path) : null;
+  const kind = (VCR_EXPORT_KIND_LABELS_ZH as Record<string, string>)[deliverable.kind] ?? "研究包";
 
   return (
     <article data-vcr-package="" className="pt-2">
@@ -37,14 +46,17 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
         返回研究
       </Button>
 
-      <div className="grid gap-10 xl:grid-cols-[minmax(0,45rem)_minmax(0,14rem)]">
+      <div className={cn("grid gap-10", sections.length > 0 && "xl:grid-cols-[minmax(0,45rem)_minmax(0,14rem)]")}>
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2">
-            <Tag tone="accent">研究包</Tag>
+            <Tag tone="accent">{kind}</Tag>
             {deliverable.draft && <Tag>草稿</Tag>}
           </p>
           <h2 className="mt-3 text-doc-title font-semibold text-text">{deliverable.title}</h2>
           {deliverable.meta && <p className="mt-1.5 text-caption tabular-nums text-text-3">{deliverable.meta}</p>}
+          {file && (
+            <Link to={file} data-vcr-package-file="" className="mt-3 inline-block text-ui text-link hover:underline">打开完整{kind}</Link>
+          )}
 
           {deliverable.document?.status && deliverable.document.status.length > 0 && (
             <dl className="mt-6 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>div]:bg-surface">
@@ -62,12 +74,6 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
                 </div>
               ))}
             </dl>
-          )}
-
-          {sections.length === 0 && (
-            <p className="mt-6 text-ui text-text-2">
-              研究包的正文在交付文件里。点开任何一个数字，都会回到产生它的那次运行。
-            </p>
           )}
 
           {sections.map((section) => (
@@ -113,24 +119,23 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
           ))}
         </div>
 
-        <nav aria-label="研究包目录" className="hidden xl:block">
-          <div className="sticky top-6">
-            <p className="text-caption text-text-3">目录</p>
-            <ol className="mt-2 flex flex-col gap-1.5">
-              {sections.map((section) => (
-                <li key={section.id}>
-                  <a href={`#vcr-package-${section.id}`} className="flex gap-2 text-ui text-text-2 hover:text-text">
-                    {section.number && <span className="shrink-0 tabular-nums text-text-3">{section.number}</span>}
-                    <span className="min-w-0">{section.title}</span>
-                  </a>
-                </li>
-              ))}
-            </ol>
-            {file && (
-              <Link to={file} className="mt-4 inline-block text-ui text-link hover:underline">打开完整研究包</Link>
-            )}
-          </div>
-        </nav>
+        {sections.length > 0 && (
+          <nav aria-label="研究包目录" className="hidden xl:block">
+            <div className="sticky top-6">
+              <p className="text-caption text-text-3">目录</p>
+              <ol className="mt-2 flex flex-col gap-1.5">
+                {sections.map((section) => (
+                  <li key={section.id}>
+                    <a href={`#vcr-package-${section.id}`} className="flex gap-2 text-ui text-text-2 hover:text-text">
+                      {section.number && <span className="shrink-0 tabular-nums text-text-3">{section.number}</span>}
+                      <span className="min-w-0">{section.title}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </nav>
+        )}
       </div>
     </article>
   );

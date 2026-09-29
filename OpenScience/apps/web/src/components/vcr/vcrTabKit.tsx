@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { isVcrMissing, isVcrOff } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
@@ -61,6 +61,35 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
 /** A route that did not answer, with 重试. */
 export function VcrTabError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return <LoadError message={message} onRetry={onRetry} />;
+}
+
+/**
+ * A tab that receives a shape it cannot read shows an error card inside the
+ * tab — the other six tabs, the header and the rail stay where they are —
+ * never a route-level crash (contract 2026-09-29 §5). The readers make a
+ * malformed payload unlikely; this is what makes it survivable when one
+ * happens anyway.
+ */
+export class VcrTabBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: unknown, info: ErrorInfo) {
+    // Traceable, never swallowed (principle 19): the console keeps the cause.
+    console.error("VcrTabBoundary", error, info.componentStack);
+  }
+
+  override render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div data-vcr-tab-error="">
+        <LoadError message="这一页的内容暂时读不出来，其余页签不受影响。" onRetry={() => this.setState({ failed: false })} />
+      </div>
+    );
+  }
 }
 
 /**

@@ -1,0 +1,507 @@
+{
+  "view": "matching",
+  "available": true,
+  "headline": "6 人已评估，2 人全部满足，2 人至少有 1 条未知或待复评。",
+  "partner": {
+    "name": null,
+    "candidates": 6,
+    "tier": "T0",
+    "snapshotAt": null
+  },
+  "direction": "trial_to_patient",
+  "funnel": [
+    {
+      "key": "candidates",
+      "label": "已评估",
+      "count": 6,
+      "note": null,
+      "tone": "neutral"
+    },
+    {
+      "key": "insufficient",
+      "label": "可能符合 · 待补证",
+      "count": 2,
+      "note": null,
+      "tone": "attention"
+    },
+    {
+      "key": "eligible",
+      "label": "符合",
+      "count": 2,
+      "note": null,
+      "tone": "accent"
+    },
+    {
+      "key": "ineligible",
+      "label": "不符合",
+      "count": 2,
+      "note": null,
+      "tone": "neutral"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "P-0201",
+      "referralId": "ref_seed_3",
+      "summary": "6 条满足 · 0 条未知 · 0 条待复评",
+      "site": "中心 01",
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    },
+    {
+      "id": "P-0207",
+      "referralId": "ref_seed_4",
+      "summary": "6 条满足 · 0 条未知 · 0 条待复评",
+      "site": "中心 01",
+      "eligibility": "eligible",
+      "open": [],
+      "priority": null
+    },
+    {
+      "id": "P-0192",
+      "referralId": "ref_seed_1",
+      "summary": "4 条满足 · 1 条未知 · 1 条待复评",
+      "site": "中心 01",
+      "eligibility": "insufficient_evidence",
+      "open": [
+        {
+          "code": "E1",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E2",
+          "state": "pending_recheck",
+          "note": "10 月 18 日 复评"
+        }
+      ],
+      "priority": {
+        "label": "临床优先级（不是获益概率）",
+        "score": 0.8,
+        "rationale": "ECOG 1，一线含铂后进展"
+      }
+    },
+    {
+      "id": "P-0233",
+      "referralId": "ref_seed_2",
+      "summary": "3 条满足 · 3 条未知 · 0 条待复评",
+      "site": null,
+      "eligibility": "insufficient_evidence",
+      "open": [
+        {
+          "code": "I2",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E1",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E3",
+          "state": "unknown",
+          "note": null
+        }
+      ],
+      "priority": null
+    }
+  ],
+  "selected": {
+    "candidate": {
+      "id": "P-0192",
+      "referralId": "ref_seed_1",
+      "summary": "4 条满足 · 1 条未知 · 1 条待复评",
+      "site": "中心 01",
+      "eligibility": "insufficient_evidence",
+      "open": [
+        {
+          "code": "E1",
+          "state": "unknown",
+          "note": null
+        },
+        {
+          "code": "E2",
+          "state": "pending_recheck",
+          "note": "10 月 18 日 复评"
+        }
+      ],
+      "priority": {
+        "label": "临床优先级（不是获益概率）",
+        "score": 0.8,
+        "rationale": "ECOG 1，一线含铂后进展"
+      }
+    },
+    "facts": [
+      {
+        "label": "临床资格",
+        "value": "证据不足",
+        "tone": "attention"
+      },
+      {
+        "label": "满足",
+        "value": "4",
+        "tone": "neutral"
+      },
+      {
+        "label": "未知",
+        "value": "1",
+        "tone": "attention"
+      },
+      {
+        "label": "待复评",
+        "value": "1",
+        "tone": "neutral"
+      },
+      {
+        "label": "评估时点",
+        "value": "今天",
+        "tone": "neutral"
+      }
+    ],
+    "criteria": [
+      {
+        "code": "I1",
+        "kind": "inclusion",
+        "text": "年龄 ≥ 18 岁",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "age = 63 year",
+          "source": "数据快照字段「age」",
+          "at": "8 月 14 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "code": "I2",
+        "kind": "inclusion",
+        "text": "ECOG 体能评分 0–1（近 4 周内）",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "ecog = 1",
+          "source": "数据快照字段「ecog」",
+          "at": "9 月 10 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "code": "I3",
+        "kind": "inclusion",
+        "text": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "first_line_platinum = true",
+          "source": "数据快照字段「first_line_platinum」",
+          "at": "1 月 5 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "code": "E1",
+        "kind": "exclusion",
+        "text": "活动性脑转移",
+        "state": "unknown",
+        "applicable": true,
+        "evidence": null,
+        "request": "申请近 4 周头颅 MRI",
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "code": "E2",
+        "kind": "exclusion",
+        "text": "末次免疫治疗距今不足 28 天",
+        "state": "pending_recheck",
+        "applicable": true,
+        "evidence": {
+          "quote": "last_immunotherapy = 2026-09-20T00:00:00.000Z",
+          "source": "数据快照字段「last_immunotherapy」",
+          "at": "9 月 20 日"
+        },
+        "request": "末次免疫治疗日期",
+        "requestNote": "10 月 18 日 起可复评",
+        "decidedBy": "code",
+        "overridden": false
+      },
+      {
+        "code": "E3",
+        "kind": "exclusion",
+        "text": "妊娠或哺乳期",
+        "state": "satisfied",
+        "applicable": true,
+        "evidence": {
+          "quote": "pregnancy = false",
+          "source": "数据快照字段「pregnancy」",
+          "at": "9 月 1 日"
+        },
+        "request": null,
+        "requestNote": null,
+        "decidedBy": "code",
+        "overridden": false
+      }
+    ],
+    "verdict": {
+      "text": "不能判为符合：排除标准 E1 未知",
+      "note": "E2 待复评"
+    },
+    "canContact": true,
+    "referralId": "ref_seed_1",
+    "referralState": "contactable",
+    "priority": {
+      "label": "临床优先级（不是获益概率）",
+      "score": 0.8,
+      "rationale": "ECOG 1，一线含铂后进展"
+    },
+    "reviewedBy": null
+  },
+  "gaps": [
+    {
+      "code": "E1",
+      "label": "合并症",
+      "detail": "活动性脑转移",
+      "count": 2
+    },
+    {
+      "code": "I2",
+      "label": "体能状态",
+      "detail": "ECOG 体能评分 0–1（近 4 周内）",
+      "count": 1
+    },
+    {
+      "code": "E3",
+      "label": "妊娠",
+      "detail": "妊娠或哺乳期",
+      "count": 1
+    }
+  ],
+  "pendingReview": null,
+  "ledger": [
+    {
+      "state": "candidate",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "needs_evidence",
+      "count": 1,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "contactable",
+      "count": 1,
+      "note": null,
+      "waiting": true
+    },
+    {
+      "state": "contacted",
+      "count": 1,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "interested",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "referred",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "site_responded",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "screening",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "enrolled",
+      "count": 1,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "screen_failed",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    },
+    {
+      "state": "withdrawn",
+      "count": 0,
+      "note": null,
+      "waiting": false
+    }
+  ],
+  "forecast": {
+    "target": null,
+    "xLabels": [],
+    "actual": [],
+    "median": [],
+    "band": [],
+    "markers": [],
+    "rows": [
+      {
+        "key": "last_patient_in_months",
+        "label": "末例入组",
+        "value": {
+          "value": 14.2,
+          "text": null,
+          "unit": "个月",
+          "source": "predicted",
+          "interval": {
+            "kind": "prediction",
+            "low": 12.1,
+            "high": 17.3,
+            "level": 80
+          },
+          "mcse": 0.06,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "末例入组",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.06"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_12",
+              "tab": "matching"
+            }
+          }
+        },
+        "note": null,
+        "lead": true
+      },
+      {
+        "key": "probability_by_2027-12-15",
+        "label": "2027-12-15 前完成的概率",
+        "value": {
+          "value": 61,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": null,
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "2027-12-15 前完成的概率",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_12",
+              "tab": "matching"
+            }
+          }
+        },
+        "note": null,
+        "lead": false
+      }
+    ],
+    "basis": [
+      "2 个中心",
+      "已入组 1 例"
+    ],
+    "at": "今天 10:31"
+  },
+  "sites": [
+    {
+      "id": "ste_01",
+      "name": "中心 01",
+      "place": "北京",
+      "state": "已启动",
+      "stateNote": "7 月 15 日",
+      "capacity": "剩余 4 个名额",
+      "competing": "1 项",
+      "referred": 0,
+      "waiting": 1,
+      "enrolled": 1,
+      "checkedAt": "9 月 20 日",
+      "alert": null,
+      "needs": [],
+      "contacts": 0
+    },
+    {
+      "id": "ste_07",
+      "name": "中心 07",
+      "place": "北京",
+      "state": "未启动",
+      "stateNote": null,
+      "capacity": null,
+      "competing": "1 项",
+      "referred": 0,
+      "waiting": 0,
+      "enrolled": 0,
+      "checkedAt": null,
+      "alert": "资料还没有核实过",
+      "needs": [],
+      "contacts": 0
+    }
+  ],
+  "followup": [
+    {
+      "id": "fup_1",
+      "label": "研究专属随访",
+      "kind": "研究专属随访",
+      "detail": "P-0207",
+      "at": "9 月 21 日"
+    }
+  ],
+  "protocol": {
+    "version": 1,
+    "title": "EV-201 方案 v1"
+  },
+  "abilities": {
+    "contact": true
+  },
+  "counts": {
+    "realPatients": 6,
+    "events": null,
+    "effectiveSampleSize": null,
+    "generatedRecords": null,
+    "scope": null
+  }
+}

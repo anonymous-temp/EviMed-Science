@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { CircleCheck } from "lucide-react";
+import { VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_TWIN_LABELS_ZH } from "@evimed/domain";
 import { getVcrModels, type VcrModelCard, type VcrModelTier } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Card } from "@/components/ui/Card";
@@ -7,10 +9,27 @@ import { DataTable } from "@/components/ui/DataTable";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { useVcrLoad, VcrFacts, VcrSection, VcrTabError } from "./vcrTabKit";
-import { VcrTabSkeleton } from "./VcrStates";
-import { modelRiskLabel, modelTierLabel, numberText, intendedUseLabel } from "./vcrText";
+import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
+import { intendedUseLabel, modelRiskLabel, modelTierLabel, numberText } from "./vcrText";
+import { vcrTabPath } from "./vcrTabs";
 
 type Filter = "all" | VcrModelTier | "methods";
+
+/** An endpoint key as a reader says it: 「事件时间」, never `time_to_event`. */
+const endpointLabel = (endpoint: string | null | undefined): string | null =>
+  endpoint ? (VCR_ENDPOINT_TYPE_LABELS_ZH as Record<string, string>)[endpoint] ?? endpoint : null;
+
+/**
+ * The name a model's output has earned. `baseline_conditioned_prediction` is
+ * a label of its own — 「基线条件化预测」 — and never 「不适用」: it is what a
+ * one-shot prediction from baseline is honestly called (plan §5.2).
+ */
+export function twinLabelOf(model: Pick<VcrModelCard, "twin" | "twinLabel">): string | null {
+  if (model.twinLabel) return model.twinLabel;
+  return model.twin ? (VCR_TWIN_LABELS_ZH as Record<string, string>)[model.twin] ?? null : null;
+}
+
+const VALIDATION_WORD = { passed: "通过", partial: "部分", none: "无" } as const;
 
 /**
  * 模型与方法: the library both studies draw on, and what each model's output
@@ -28,7 +47,11 @@ export function VcrModelsPanel() {
   const [openId, setOpenId] = useState<string | null>(null);
   const { state, reload } = useVcrLoad("vcr:models", () => getVcrModels());
   if (state.kind === "loading") return <VcrTabSkeleton />;
-  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
+  if (state.kind === "error") {
+    return state.off
+      ? <p className="py-12 text-center text-ui text-text-3">{VCR_OFF_SENTENCE}</p>
+      : <VcrTabError message={state.message} onRetry={reload} />;
+  }
   const data = state.data;
   const models = filter === "all" || filter === "methods" ? data.models : data.models.filter((model) => model.tier === filter);
   const selected = data.models.find((model) => model.id === openId) ?? data.models[0] ?? null;
@@ -37,6 +60,12 @@ export function VcrModelsPanel() {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
       <div className="flex flex-col gap-4">
+        {data.engineMismatch && data.engineMismatch.length > 0 && (
+          <p data-vcr-engine-mismatch="" className="text-caption text-text-3">
+            {`计算引擎与方法目录不一致：${data.engineMismatch.join("；")}`}
+          </p>
+        )}
+
         <FilterChips
           label="模型与方法"
           value={filter}
@@ -77,7 +106,7 @@ export function VcrModelsPanel() {
                   </span>
                   <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
                     {model.sources && <span>{model.sources}</span>}
-                    {model.endpoint && <span>{model.endpoint}</span>}
+                    {endpointLabel(model.endpoint) && <span>{endpointLabel(model.endpoint)}</span>}
                     <span>{`模型风险 ${modelRiskLabel(model.risk)}`}</span>
                     {model.numeric && (
                       <span className="inline-flex items-center gap-1 text-ok">
@@ -114,12 +143,13 @@ export function VcrModelsPanel() {
               ]}
               rows={data.methods}
               rowKey={(row) => row.id}
+              rowAttrs={(row) => ({ "data-vcr-method": row.id })}
             />
           </VcrSection>
         )}
 
         {data.ladder && data.ladder.length > 0 && (
-          <VcrSection title="可信度要求（按用途）" meta="证据不够时，结果的预期用途自动降一级">
+          <VcrSection title="可信度要求（按用途）">
             <DataTable
               label="可信度要求"
               minWidth="min-w-[36rem]"
@@ -140,11 +170,14 @@ export function VcrModelsPanel() {
   );
 }
 
+/** A model's card (plan §8.2): what it is, where it holds, what backs it, and what it may be called. */
 function ModelDetail({ model }: { model: VcrModelCard }) {
+  const twin = twinLabelOf(model);
+  const text = (value: string | null | undefined) => (value ? [value] : []);
   return (
     <Card
       header={(
-        <div>
+        <div data-vcr-model-card={model.id}>
           <h2 className="text-section font-semibold text-text">{model.name}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-1.5">
             <Tag>{`可信度层级 · ${modelTierLabel(model.tier)}`}</Tag>
@@ -156,28 +189,52 @@ function ModelDetail({ model }: { model: VcrModelCard }) {
     >
       <VcrFacts
         rows={[
-          ...(model.scope ? [{ label: "适用人群", value: model.scope }] : []),
-          ...(model.endpoint ? [{ label: "终点", value: model.endpoint }] : []),
-          ...(model.timeRange ? [{ label: "时间范围", value: model.timeRange }] : []),
-          ...(model.inputRange ? [{ label: "输入范围", value: model.inputRange }] : []),
-          ...(model.sources ? [{ label: "来源", value: model.sources }] : []),
-          ...(model.uncertainty ? [{ label: "不确定性", value: model.uncertainty }] : []),
+          ...text(model.family).map((value) => ({ label: "类型", value })),
+          ...text(model.version).map((value) => ({ label: "版本", value })),
+          ...text(model.provider).map((value) => ({ label: "提供方", value })),
+          ...text(model.interface).map((value) => ({ label: "执行接口", value })),
+          ...text(model.scope).map((value) => ({ label: "适用人群", value })),
+          ...text(model.region).map((value) => ({ label: "适用地区", value })),
+          ...text(endpointLabel(model.endpoint)).map((value) => ({ label: "终点", value })),
+          ...text(model.timeRange).map((value) => ({ label: "时间范围", value })),
+          ...text(model.inputRange).map((value) => ({ label: "输入范围", value })),
+          ...(model.inputs && model.inputs.length > 0 ? [{ label: "输入", value: model.inputs.join("、") }] : []),
+          ...text(model.outputs).map((value) => ({ label: "输出", value })),
+          ...text(model.missingData).map((value) => ({ label: "缺失数据", value })),
+          ...text(model.sources).map((value) => ({ label: "来源", value })),
+          ...text(model.uncertainty).map((value) => ({ label: "不确定性", value })),
+          ...text(model.retirement).map((value) => ({ label: "退役规则", value })),
         ]}
       />
 
+      {twin && (
+        <p data-vcr-twin={model.twin ?? ""} className="mt-4 flex flex-wrap items-center gap-2 rounded bg-surface-1 px-3 py-2 text-caption text-text-2">
+          <Tag tone={model.twin === "digital_twin" ? "accent" : "neutral"}>{twin}</Tag>
+          {model.twinReason && <span className="text-text-3">{model.twinReason}</span>}
+        </p>
+      )}
+
       {model.validation && model.validation.length > 0 && (
-        <VcrSection title="验证表" className="mt-6">
-          <ul className="flex flex-col gap-2">
-            {model.validation.map((row) => (
-              <li key={row.label} className="flex flex-wrap items-baseline gap-2">
-                <span className="w-24 shrink-0 text-caption text-text-3">{row.label}</span>
-                <Tag tone={row.state === "passed" ? "neutral" : row.state === "partial" ? "warn" : "neutral"} className={cn(row.state === "passed" && "bg-ok-soft text-ok")}>
-                  {row.state === "passed" ? "通过" : row.state === "partial" ? "部分" : "无"}
-                </Tag>
-                {row.detail && <span className="min-w-0 flex-1 text-caption text-text-2">{row.detail}</span>}
-              </li>
-            ))}
-          </ul>
+        <VcrSection title="验证" className="mt-6">
+          <DataTable
+            label={`${model.name} 的验证`}
+            minWidth="min-w-0"
+            columns={[
+              { key: "label", header: "项目", rowHeader: true, cell: (row) => row.label },
+              {
+                key: "state",
+                header: "结果",
+                cell: (row) => (
+                  <Tag tone={row.state === "partial" ? "warn" : "neutral"} className={cn(row.state === "passed" && "bg-ok-soft text-ok")}>
+                    {VALIDATION_WORD[row.state] ?? VALIDATION_WORD.none}
+                  </Tag>
+                ),
+              },
+              { key: "detail", header: "说明", isEmpty: (row) => !row.detail, cell: (row) => <span className="text-text-2">{row.detail ?? "—"}</span> },
+            ]}
+            rows={model.validation}
+            rowKey={(row) => row.label}
+          />
         </VcrSection>
       )}
 
@@ -189,17 +246,20 @@ function ModelDetail({ model }: { model: VcrModelCard }) {
         </VcrSection>
       )}
 
-      {model.twin && (
-        <p className="mt-6 flex flex-wrap items-center gap-2 rounded bg-surface-1 px-3 py-2 text-caption text-text-2">
-          <Tag>{model.twin === "digital_twin" ? "数字孪生" : "不适用"}</Tag>
-          <span>“数字孪生”标签</span>
-          {model.twinReason && <span className="text-text-3">{model.twinReason}</span>}
-        </p>
+      {model.missingEvidence && model.missingEvidence.length > 0 && (
+        <VcrSection title="还缺的证据" className="mt-6">
+          <ul data-vcr-missing-evidence="" className="flex flex-wrap gap-1.5">
+            {model.missingEvidence.map((item) => <li key={item}><Tag tone="warn">{item}</Tag></li>)}
+          </ul>
+        </VcrSection>
       )}
 
       {model.usedBy && model.usedBy.length > 0 && (
-        <p className="mt-3 text-caption text-text-3">
-          {`被 ${numberText(model.usedBy.length, 0)} 个研究使用 · ${model.usedBy.map((user) => user.label).join(" · ")}`}
+        <p className="mt-6 flex flex-wrap gap-x-2 gap-y-1 text-caption text-text-3">
+          <span>{`被 ${numberText(model.usedBy.length, 0)} 个研究使用`}</span>
+          {model.usedBy.map((user) => (
+            <Link key={user.id} to={vcrTabPath(user.id, "overview")} className="text-link hover:underline">{user.label}</Link>
+          ))}
         </p>
       )}
     </Card>

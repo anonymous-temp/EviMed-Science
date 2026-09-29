@@ -26,10 +26,26 @@
  *    `@evimed/domain`'s `vcrVocabulary.mjs`, which the schema CHECKs, the
  *    routes, the runtime gateway and the engine all read. A second copy is
  *    the one that drifts.
+ *  - **The server presents the pages** (`apps/server/src/vcrViews*.mjs`); the
+ *    types below are what it sends, the readers are total over what it might
+ *    send (a missing list is an empty one, a missing value reads as 「—」), and
+ *    every write body is built by `vcrBodies.ts`, which is exactly the routes'
+ *    allow-lists. The shared fixtures under `apps/server/test/fixtures/
+ *    vcr-views/` are the same bytes the server tests compare against.
  */
 import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
+import {
+  assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, memberBody, reviewBody, runBody,
+  studyCreateBody, studyPatchBody,
+  type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrJobBody,
+  type VcrMemberBody, type VcrPatchBody, type VcrReviewBody,
+} from "./vcrBodies";
+
+export type {
+  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrJobBody, VcrMemberBody, VcrPatchBody, VcrReviewBody,
+} from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
 
@@ -76,6 +92,14 @@ export type VcrCountKey =
   | "priorEffectiveSampleSize" | "reconstructedPseudoPatients";
 
 /* --------------------------------------------------------------------- shapes */
+
+/**
+ * The page contract (contract 2026-09-29 §5). The server presents exactly
+ * these shapes (`apps/server/src/vcrViews*.mjs`), the shared fixtures under
+ * `apps/server/test/fixtures/vcr-views/` are what it sends, and the readers
+ * below are what the pages read — a change here is a change to a fixture and to
+ * the presenter, in one commit.
+ */
 
 /** A named interval. A page never writes a bare 「区间」 (plan §9.6). */
 export interface VcrInterval {
@@ -130,7 +154,7 @@ export interface VcrValue {
   /** Monte-Carlo standard error. Every simulated measure carries one (§4). */
   mcse?: number | null;
   review?: VcrReviewState | null;
-  /** How many decimals to print; the value's own precision when absent. */
+  /** How many decimals to print; derived from the value's own error when absent. */
   precision?: number | null;
   /** Why there is no number: a missing reason or a not-estimable rule. */
   reason?: string | null;
@@ -197,6 +221,21 @@ export interface VcrAttention {
   action?: { label: string; tab?: VcrTabKey | null; ref?: VcrRef | null } | null;
 }
 
+/** Why a block of results is on screen greyed (plan §6.3). */
+export interface VcrStaleNote {
+  /** 「假设卡已变更」. */
+  reason: string | null;
+  /** Whether a recomputation is actually queued: the bar says 「排队重算中」 only then. */
+  queued: boolean;
+  since?: string | null;
+}
+
+/** 部分结果: what a run that did not finish did keep. */
+export interface VcrPartial {
+  done: string;
+  missing: string;
+}
+
 /** One row of the home list (`GET /api/vcr/studies`). */
 export interface VcrStudySummary {
   id: string;
@@ -243,18 +282,31 @@ export interface VcrHome {
   reviews?: VcrReviewNote[];
 }
 
-/** One deliverable of a study. */
+/** One section of a package as a document. */
+export interface VcrPackageSection {
+  id: string;
+  /** 「1」「3」 — the section's own number in the document. */
+  number?: string | null;
+  title: string;
+  body?: string | null;
+  facts?: Array<{ label: string; value: string }>;
+  table?: { columns: string[]; rows: string[][] } | null;
+  note?: string | null;
+}
+
+/** One deliverable of a study, and — when it is opened — the package as a document. */
 export interface VcrDeliverable {
   id: string;
   kind: VcrExportKind;
   title: string;
-  /** 「今天 14:32 · PDF · 42 页」. */
+  /** 「今天 14:32 · 已生成」. */
   meta?: string | null;
   /** 「草稿」 when it is not final. */
   draft?: boolean;
   /** The run's file, when there is one to open. */
   runId?: string | null;
   path?: string | null;
+  state?: "queued" | "running" | "ready" | "failed";
   /**
    * The package as a document, when the control plane renders one for reading
    * in place (plan §8.3). Without it the reader shows the cover alone and
@@ -263,16 +315,7 @@ export interface VcrDeliverable {
   document?: {
     /** The cover block: intended use, each review, outcome sealing. */
     status?: Array<{ label: string; value: string; state?: "ok" | "attention" | "neutral"; note?: string | null }>;
-    sections?: Array<{
-      id: string;
-      /** 「1」「3」 — the section's own number in the document. */
-      number?: string | null;
-      title: string;
-      body?: string | null;
-      facts?: Array<{ label: string; value: string }>;
-      table?: { columns: string[]; rows: string[][] } | null;
-      note?: string | null;
-    }>;
+    sections?: VcrPackageSection[];
   } | null;
 }
 
@@ -291,11 +334,13 @@ export interface VcrDesign {
   /** 「B」. */
   code: string;
   name: string;
-  /** Dominated by another design: drawn hatched and grey, with no numbers. */
+  /** Dominated by another design on the team's own goal: drawn hatched and grey, with no numbers. */
   dominated?: boolean;
+  /** The letter of the design that beats it. */
   dominatedBy?: string | null;
-  /** Ours / the chosen one: the brand blue. The rest are greys. */
+  /** Chosen by a recorded decision — never by the platform. The brand blue. */
   chosen?: boolean;
+  /** The reason a design is dominated, from the server's rule. */
   note?: string | null;
   measures: Record<string, VcrValue>;
 }
@@ -309,6 +354,42 @@ export interface VcrOverview {
   attention: VcrAttention[];
   changes: VcrChange[];
   deliverables: VcrDeliverable[];
+}
+
+/** The compute budget, in the unit the platform meters: CPU seconds. */
+export interface VcrBudget {
+  limitSeconds: number;
+  usedSeconds: number;
+  committedSeconds: number;
+  remainingSeconds: number;
+  /** Jobs waiting on a budget confirmation — the second human stop. */
+  awaitingBudget: number;
+}
+
+/** Everything a job says about itself. */
+export interface VcrJob {
+  id: string;
+  kind: string;
+  /** 「方案的模拟运行」. */
+  label: string;
+  state: VcrJobState;
+  progress?: { done: number; total: number } | null;
+  /** What the job may spend; a job waiting on budget says what it would need. */
+  cpuSecondsLimit?: number | null;
+  cpuSecondsUsed?: number | null;
+  seed?: number | null;
+  replicates?: number | null;
+  error?: { code: string | null; message: string | null; partial?: boolean } | null;
+  updatedAt?: string | null;
+  cancelable?: boolean;
+}
+
+/** The highest use this study's results may carry, and why (plan §8.2, §10.2). */
+export interface VcrCeiling {
+  ceiling: VcrIntendedUse;
+  requested: VcrIntendedUse;
+  withinCeiling: boolean;
+  reasons: Array<{ code: string; detail: string }>;
 }
 
 /** One study (`GET /api/vcr/studies/:id`). */
@@ -325,10 +406,10 @@ export interface VcrStudy {
   sessionId: string | null;
   /** What this reader may do here (`VCR_ROLE_ABILITIES`); the routes check for themselves. */
   abilities: string[];
-  /** The compute budget, when one is set. */
-  budget: { limitCny: number; spentCny: number; pendingCny?: number | null } | null;
-  /** The run the page's numbers came from. */
-  run: { id: string; label: string; at?: string | null } | null;
+  /** The compute budget, when the module meters one. */
+  budget: VcrBudget | null;
+  jobs: VcrJob[];
+  ceiling: VcrCeiling | null;
   overview: VcrOverview;
   updatedAt?: string | null;
   createdAt?: string | null;
@@ -374,14 +455,33 @@ export interface VcrProfileRow {
   theirs: VcrValue;
   /** Standardized difference; above `VCR_SMD_FLOOR` the row is flagged. */
   smd: number | null;
+  /** Before weighting, when the row is a balance table. */
+  smdBefore?: number | null;
   flagged?: boolean;
   note?: string | null;
 }
 
+/** The quality report that travels with a synthetic population: values, never a verdict (plan §5.1). */
+export interface VcrQualityReport {
+  /** 「合成 · 探索性」. */
+  tag: string;
+  groups: Array<{ key: string; label: string; rows: Array<{ key: string; label: string; value: VcrValue }> }>;
+  trainingRecords: number | null;
+  copies: number | null;
+}
+
 export interface VcrPopulationTab {
-  /** 「人群 v3（方案 v2）」 and the versions it can be compared against. */
+  /** 「人群 v3（方案 v2）」. */
   version: string | null;
-  versions?: Array<{ id: string; label: string; stale?: boolean }>;
+  /** 「真实队列」. */
+  kind?: string | null;
+  versions: Array<{ id: string; label: string; stale?: boolean; counts?: VcrCounts | null }>;
+  /** Two versions side by side: counts and composition, as each stored them. */
+  versionCompare: {
+    left: { label: string; at: string | null; counts: VcrCounts | null };
+    right: { label: string; at: string | null; counts: VcrCounts | null };
+    rows: Array<{ key: string; label: string; left: VcrValue | null; right: VcrValue | null }>;
+  } | null;
   definition: {
     timeZero?: string | null;
     evidenceWindow?: string | null;
@@ -398,9 +498,12 @@ export interface VcrPopulationTab {
   unknownReasons: Array<{ key: string; label: string; detail?: string | null; count: number | null }>;
   /** 「最卡人的三条」. */
   blockers: Array<{ code: string; label: string; text: string; tone?: "attention" | "neutral" }>;
+  quality: VcrQualityReport | null;
   counts: VcrCounts | null;
   conclusion?: VcrConclusion | null;
   headline?: string | null;
+  stale: VcrStaleNote | null;
+  partial: VcrPartial | null;
 }
 
 /** A model's card (plan §8.2). */
@@ -414,15 +517,27 @@ export interface VcrModelCard {
   /** The highest intended use this model's tier can carry. */
   useCeiling: VcrIntendedUse;
   scope?: string | null;
+  /** The regional population, said on its own line (plan §8.2). */
+  region?: string | null;
   endpoint?: string | null;
   timeRange?: string | null;
   inputRange?: string | null;
   sources?: string | null;
+  provider?: string | null;
+  interface?: string | null;
+  inputs?: string[];
+  outputs?: string | null;
+  missingData?: string | null;
+  retirement?: string | null;
   /** `digital_twin` only with all four pieces of evidence (`twinLabel`). */
   twin?: "digital_twin" | "baseline_conditioned_prediction" | null;
+  /** The label the model has earned, in words. */
+  twinLabel?: string | null;
   twinReason?: string | null;
   validation?: Array<{ label: string; state: "passed" | "none" | "partial"; detail?: string | null }>;
   limits?: string[];
+  /** The evidence its declared risk still lacks. */
+  missingEvidence?: string[];
   usedBy?: Array<{ id: string; label: string }>;
   /** Numerical test cases, as 「12 / 12 通过」. */
   numeric?: { passed: number; total: number } | null;
@@ -438,18 +553,24 @@ export interface VcrSeries {
   /** Our arm / chosen scenario is the brand blue; the rest are greys. */
   ours?: boolean;
   points: Array<{ x: number; y: number | null; low?: number | null; high?: number | null }>;
-  /** The band's own name, when it has one: 「80% 预测区间」. */
+  /** The band's own name, when it has one: 「预测区间」. */
   bandKind?: VcrIntervalKind | null;
+  /** The band's level, when the run says one: 80 for an 80% prediction interval. */
+  bandLevel?: number | null;
   /** The line's end label: 「试验 −1.4%」. */
   endLabel?: string | null;
   endNote?: string | null;
   /** Thin individual trajectories drawn behind the mean. */
   individuals?: Array<Array<{ x: number; y: number | null }>>;
   dashed?: boolean;
+  /** Periods nobody could observe, shaded apart from the rest. */
+  unobserved?: Array<{ from: number; to: number }>;
 }
 
 export interface VcrPatientsTab {
   model: VcrModelCard | null;
+  /** The label the model's output has earned: never 「数字孪生」 by default. */
+  twin: { label: string; reason: string | null } | null;
   headline?: string | null;
   /** The main chart: one series per scenario. */
   trajectories: { xLabel?: string | null; yLabel?: string | null; ticks?: string[]; series: VcrSeries[] } | null;
@@ -473,9 +594,16 @@ export interface VcrPatientsTab {
     series?: VcrSeries[];
     footnote?: string | null;
   }>;
-  /** 「哪些假设影响最大」. */
-  sensitivity: { measure?: string | null; rows: Array<{ label: string; range?: string | null; low: number; high: number }> } | null;
+  /** 「哪些假设影响最大」; `base` is the model's own value at default parameters. */
+  sensitivity: {
+    measure?: string | null;
+    base?: VcrValue | null;
+    rows: Array<{ label: string; range?: string | null; low: number; high: number }>;
+  } | null;
   counts: VcrCounts | null;
+  stale: VcrStaleNote | null;
+  partial: VcrPartial | null;
+  sets?: Array<{ id: string; label: string; stale?: boolean }>;
 }
 
 /** One comparator route and its state. */
@@ -498,6 +626,17 @@ export interface VcrCurve {
   /** Numbers at risk under the plot. */
   atRisk?: Array<{ x: number; n: number }>;
   pooled?: boolean;
+  dashed?: boolean;
+  bandKind?: VcrIntervalKind | null;
+  bandLevel?: number | null;
+}
+
+/** One of the ten FDA comparability dimensions (plan §5.3). */
+export interface VcrDimension {
+  key: string;
+  label: string;
+  state: "exact" | "approximate" | "not_simulable" | "unknown";
+  reason?: string | null;
 }
 
 export interface VcrComparatorTab {
@@ -515,11 +654,28 @@ export interface VcrComparatorTab {
   estimand?: { rows: Array<{ label: string; value: string }>; note?: string | null; source?: VcrValueSource | null; review?: VcrReviewState | null } | null;
   comparability: VcrProfileRow[];
   comparabilityNote?: string | null;
+  /** The ten comparability dimensions, each with its state. */
+  dimensions: VcrDimension[];
+  /** Weight and overlap diagnostics of a weighted comparison. */
+  diagnostics: Array<{ key: string; label: string; value: VcrValue }>;
   /** 「不可估计」 — the gaps, and what each one would answer. */
-  gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null } | null;
+  gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
   /** 「本页结论：有限制地估计 · AI 设定 · 未复核」. */
-  verdict?: { conclusion: VcrConclusion; review: VcrReviewState; reviewed?: boolean } | null;
+  verdict?: { conclusion: VcrConclusion | null; review: VcrReviewState; reviewed?: boolean } | null;
+  stale: VcrStaleNote | null;
+  partial: VcrPartial | null;
+}
+
+/** A frozen forecast, registered before the outcome it predicts (plan §5.4, AC-23). */
+export interface VcrForecast {
+  id: string;
+  label: string;
+  version: number;
+  hash: string;
+  frozenAt: string | null;
+  comparedAt: string | null;
+  lines: Array<{ key: string; label: string; predicted: string; actual: string | null }>;
 }
 
 export interface VcrTrialTab {
@@ -544,22 +700,41 @@ export interface VcrTrialTab {
   } | null;
   footnotes?: string[];
   /** Power against the true effect. */
-  powerCurve: { xLabel?: string | null; yLabel?: string | null; series: VcrSeries[]; markers?: Array<{ x: number; label: string; kind?: "assumed" | "null" }>; prior?: Array<{ x: number; y: number }> } | null;
+  powerCurve: { xLabel?: string | null; yLabel?: string | null; /** The axis is a probability shown as a percentage: `%`. */ unit?: string | null; series: VcrSeries[]; markers?: Array<{ x: number; label: string; kind?: "assumed" | "null" }>; prior?: Array<{ x: number; y: number }> } | null;
   /** The reader's own comparison goal; the platform never picks a design. */
-  decision: { goal?: string | null; chosen?: string | null; options: Array<{ id: string; label: string; disabled?: boolean }>; note?: string | null } | null;
+  decision: {
+    goal?: string | null;
+    chosen?: string | null;
+    chosenLabel?: string | null;
+    rationale?: string | null;
+    recordedAt?: string | null;
+    options: Array<{ id: string; label: string; name?: string | null; disabled?: boolean }>;
+    note?: string | null;
+  } | null;
   /** 「运行记录」. */
   runRecord: Array<{ key: string; title: string; detail?: string | null; ok?: boolean }>;
+  /** The forecast registry. */
+  forecasts: VcrForecast[];
+  /** The milestone timeline: when each design would reach its landmarks. */
+  milestones: Array<{ design: string; name: string; items: Array<{ key: string; label: string; value: VcrValue }> }>;
   counts: VcrCounts | null;
+  stale: VcrStaleNote | null;
+  partial: VcrPartial | null;
 }
 
 /** One candidate in the matching list. */
 export interface VcrCandidate {
+  /** The subject's own key; also what `?candidate=` names. */
   id: string;
+  /** The referral this person has, when there is one: what 「确认后联系」 confirms. */
+  referralId?: string | null;
   summary: string;
   site?: string | null;
   eligibility: VcrEligibility;
   /** The rules still open on this person: 「E3 未知」「E5 待复评 10月6日」. */
   open: Array<{ code: string; state: VcrCriterionState; note?: string | null }>;
+  /** The model's ranking hint, carried with its own label and never as a probability of benefit. */
+  priority?: { label: string; score: number | null; rationale: string | null } | null;
 }
 
 /** One rule judged against one candidate. */
@@ -568,16 +743,23 @@ export interface VcrCriterionJudgement {
   kind: "inclusion" | "exclusion";
   text: string;
   state: VcrCriterionState;
+  /** 不适用 is its own field, never folded into 未知. */
+  applicable?: boolean;
   /** The patient's own sentence, and where it is from. */
   evidence?: { quote: string; source?: string | null; at?: string | null } | null;
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
   requestNote?: string | null;
+  decidedBy?: string | null;
+  overridden?: boolean;
 }
 
 export interface VcrMatchingTab {
   /** The sub-tab the payload is for. */
   view: "matching" | "referral" | "sites" | "followup";
+  /** False when the package is not composed here; the tab says so and nothing else waits. */
+  available?: boolean;
+  unavailable?: { code: string; message: string } | null;
   headline?: string | null;
   partner?: { name?: string | null; candidates?: number | null; tier?: VcrDataTier | null; snapshotAt?: string | null } | null;
   /** 「给试验找患者 | 给患者找试验」. */
@@ -593,9 +775,15 @@ export interface VcrMatchingTab {
     verdict?: { text: string; note?: string | null } | null;
     /** The only human stop in the module (plan §10.1). */
     canContact?: boolean;
+    referralId?: string | null;
+    referralState?: VcrReferralState | null;
+    priority?: VcrCandidate["priority"];
+    reviewedBy?: string | null;
   } | null;
   /** The main gaps across the undecidable ones. */
   gaps: Array<{ code: string; label: string; detail?: string | null; count: number | null }>;
+  /** Excluded on a model's word alone: they wait here for a person (plan §7.1). */
+  pendingReview?: { count: number; subjects: string[] } | null;
   /** The referral ledger, one entry per state. */
   ledger?: Array<{ state: VcrReferralState; count: number | null; note?: string | null; waiting?: boolean }>;
   /** Predicted against actual enrolment. */
@@ -608,11 +796,16 @@ export interface VcrMatchingTab {
     markers?: Array<{ x: number; label: string }>;
     rows?: VcrMetric[];
     basis?: string[];
+    at?: string | null;
   } | null;
+  protocol?: { version: number; title: string | null } | null;
+  abilities?: { contact: boolean };
   sites?: Array<{
     id: string; name: string; place?: string | null; state: string; stateNote?: string | null;
     capacity?: string | null; competing?: string | null; referred?: number | null;
     waiting?: number | null; enrolled?: number | null; checkedAt?: string | null; alert?: string | null;
+    /** What the site still lacks to take referrals, and how many contacts it has (plan §7.2). */
+    needs?: string[]; contacts?: number;
   }>;
   followup?: Array<{ id: string; label: string; kind: string; detail?: string | null; at?: string | null }>;
   counts: VcrCounts | null;
@@ -621,12 +814,25 @@ export interface VcrMatchingTab {
 /** One assumption card (plan §6.1). */
 export interface VcrAssumption {
   id: string;
+  /** The card's own key: what a new version is written under. */
+  key: string;
   name: string;
   value: VcrValue;
   /** 「7 项 · 预测区间 3.0–5.6」. */
   summary?: string | null;
-  key?: boolean;
+  /** One of the assumptions the study's designs rest on. */
+  isKey?: boolean;
   version?: number | null;
+  /** 「外部证据」 — the five kinds of source, apart from the nine value sources. */
+  sourceType?: string | null;
+  sourceKind?: string | null;
+  /** Who the value was measured on, and how the study differs. */
+  applicability?: string | null;
+  sensitivity?: string | null;
+  /** Who countersigned which version, and when. */
+  review?: { by?: string | null; at?: string | null; version?: number | null; kind?: string | null } | null;
+  /** What an edit starts from. */
+  edit?: { pointValue: number | null; unit?: string | null; note?: string | null; endpoint?: string | null; applicability?: Record<string, unknown> } | null;
   /** The card's full detail, on the card the reader opened. */
   detail?: {
     subtitle?: string | null;
@@ -651,11 +857,12 @@ export interface VcrAssumption {
   } | null;
 }
 
-/** One precedent trial (plan §6.4). */
+/** One precedent trial (plan §6.4): planned and actual apart, the raw text beside the normalised value. */
 export interface VcrPrecedent {
   id: string;
   registryId: string;
   registry?: string | null;
+  title?: string | null;
   population?: string | null;
   design?: string | null;
   planned?: number | null;
@@ -665,6 +872,13 @@ export interface VcrPrecedent {
   actualMonths?: number | null;
   perSitePerMonth?: number | null;
   usedFor?: string | null;
+  countries?: string[];
+  eligibilityText?: string | null;
+  interventions?: string[];
+  endpoints?: string[];
+  hasResults?: boolean;
+  enrollmentKind?: string | null;
+  source?: string | null;
 }
 
 export interface VcrDataTab {
@@ -678,31 +892,30 @@ export interface VcrDataTab {
   precedentSources?: string | null;
   precedentNote?: string | null;
   /** Data snapshots and their quality, at T1 and above. */
-  snapshots?: Array<{ id: string; label: string; at?: string | null; rows?: number | null; quality?: Array<{ label: string; value: string; passed?: boolean }> }>;
-  counts?: VcrCounts | null;
-}
-
-/** Everything a job says about itself. */
-export interface VcrJob {
-  id: string;
-  kind: string;
-  state: VcrJobState;
-  progress?: { done: number; total: number } | null;
-  cpuSeconds?: number | null;
-  seed?: number | null;
-  replicates?: number | null;
-  error?: string | null;
-  /** A job waiting on a budget confirmation says what it would cost. */
-  estimateCny?: number | null;
+  snapshots: Array<{ id: string; label: string; at?: string | null; rows?: number | null; quality?: Array<{ label: string; value: string; passed?: boolean }> }>;
+  decisions?: Array<{ id: string; at: string | null; text: string }>;
+  /** Said only where the evidence side is not composed: an empty list must not read as 「没有证据」. */
+  evidenceNote?: string | null;
 }
 
 /** The cross-study model library (`GET /api/vcr/models`). */
 export interface VcrModels {
   models: VcrModelCard[];
   /** The method packages, which are not models. */
-  methods: Array<{ id: string; name: string; version?: string | null; endpoints?: string | null; numeric?: string | null; usedIn?: string | null }>;
+  methods: Array<{ id: string; name: string; /** The engine's own method id. */ method?: string; version?: string | null; endpoints?: string | null; numeric?: string | null; usedIn?: string | null }>;
   /** The credibility ladder: what each model risk needs, and what it may claim. */
   ladder?: Array<{ risk: VcrModelRisk; needs: string; ceiling: VcrIntendedUse; count?: number | null }>;
+  engineAvailable?: boolean;
+  engineMismatch?: string[] | null;
+}
+
+/** The precedent search's answer (`GET /api/vcr/precedents`). */
+export interface VcrPrecedents {
+  /** False when the library is not composed here: `message` says so, and the table must not read as 「没有先例」. */
+  available: boolean;
+  message: string | null;
+  precedents: VcrPrecedent[];
+  sources?: string | null;
 }
 
 /* ------------------------------------------------------------------- readers */
@@ -713,12 +926,26 @@ const VALUE_SOURCES: ReadonlySet<string> = new Set([
 const INTERVAL_KINDS: ReadonlySet<string> = new Set(["confidence", "credible", "prediction", "monte_carlo"]);
 const REVIEW_STATES: ReadonlySet<string> = new Set(["ai_set", "reviewed", "changed_after_review"]);
 
+type Loose = Record<string, unknown>;
+
 function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
+}
+
+function obj(value: unknown): Loose {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Loose : {};
+}
+
+function arr(value: unknown): Loose[] {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") as Loose[] : [];
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 /** An interval, or nothing. An interval without a name is not an interval. */
@@ -753,7 +980,7 @@ export function readVcrValue(raw: unknown): VcrValue {
     precision: finite(value.precision),
     reason: text(value.reason),
     stale: value.stale === true,
-    detail,
+    detail: detail ? { ...detail, fields: arr(detail.fields) as unknown as Array<{ label: string; value: string }> } : null,
   };
 }
 
@@ -774,8 +1001,19 @@ export function readVcrCounts(raw: unknown): VcrCounts | null {
   };
 }
 
+function readStale(raw: unknown): VcrStaleNote | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  return { reason: text(value.reason), queued: value.queued === true, since: text(value.since) };
+}
+
+function readPartial(raw: unknown): VcrPartial | null {
+  const value = obj(raw);
+  return text(value.done) || text(value.missing) ? { done: text(value.done) ?? "", missing: text(value.missing) ?? "" } : null;
+}
+
 function readMetric(raw: unknown): VcrMetric {
-  const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const value = obj(raw);
   return {
     key: text(value.key) ?? "",
     label: text(value.label) ?? "",
@@ -786,8 +1024,8 @@ function readMetric(raw: unknown): VcrMetric {
 }
 
 function readDesign(raw: unknown): VcrDesign {
-  const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
-  const measures = value.measures && typeof value.measures === "object" ? value.measures as Record<string, unknown> : {};
+  const value = obj(raw);
+  const measures = obj(value.measures);
   return {
     id: text(value.id) ?? "",
     code: text(value.code) ?? "",
@@ -800,37 +1038,306 @@ function readDesign(raw: unknown): VcrDesign {
   };
 }
 
+function readAttention(raw: unknown): VcrAttention[] {
+  return arr(raw).filter((item) => typeof item.text === "string") as unknown as VcrAttention[];
+}
+
 function readOverview(raw: unknown): VcrOverview {
-  const value = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const value = obj(raw);
   return {
     headline: text(value.headline),
-    metrics: (Array.isArray(value.metrics) ? value.metrics : []).map(readMetric),
+    metrics: arr(value.metrics).map(readMetric),
     counts: readVcrCounts(value.counts),
-    designs: (Array.isArray(value.designs) ? value.designs : []).map(readDesign),
-    attention: (Array.isArray(value.attention) ? value.attention : []).filter((item) => item && typeof item.text === "string"),
-    changes: (Array.isArray(value.changes) ? value.changes : []).filter((item) => item && typeof item.text === "string"),
-    deliverables: (Array.isArray(value.deliverables) ? value.deliverables : []).filter((item) => item && typeof item.title === "string"),
+    designs: arr(value.designs).map(readDesign),
+    attention: readAttention(value.attention),
+    changes: arr(value.changes).filter((item) => typeof item.text === "string") as unknown as VcrChange[],
+    deliverables: arr(value.deliverables).filter((item) => typeof item.title === "string") as unknown as VcrDeliverable[],
   };
 }
 
-function readStudy(raw: VcrStudy): VcrStudy {
+function readSteps(raw: unknown): VcrSteps {
+  return raw && typeof raw === "object" ? raw as VcrSteps : {};
+}
+
+export function readVcrStudy(raw: unknown): VcrStudy {
+  const value = obj(raw);
   return {
-    ...raw,
-    steps: raw?.steps && typeof raw.steps === "object" ? raw.steps : {},
-    abilities: Array.isArray(raw?.abilities) ? raw.abilities : [],
-    budget: raw?.budget ?? null,
-    run: raw?.run ?? null,
-    sessionId: text(raw?.sessionId),
-    overview: readOverview(raw?.overview),
+    ...(value as unknown as VcrStudy),
+    steps: readSteps(value.steps),
+    abilities: strings(value.abilities),
+    budget: value.budget && typeof value.budget === "object" ? value.budget as VcrBudget : null,
+    jobs: arr(value.jobs) as unknown as VcrJob[],
+    ceiling: value.ceiling && typeof value.ceiling === "object"
+      ? { ...(value.ceiling as VcrCeiling), reasons: arr(obj(value.ceiling).reasons) as unknown as VcrCeiling["reasons"] } : null,
+    sessionId: text(value.sessionId),
+    overview: readOverview(value.overview),
   };
 }
 
-function readSummary(raw: VcrStudySummary): VcrStudySummary {
+export function readVcrSummary(raw: unknown): VcrStudySummary {
+  const value = obj(raw);
   return {
-    ...raw,
-    steps: raw?.steps && typeof raw.steps === "object" ? raw.steps : {},
-    conclusion: raw?.conclusion ?? null,
-    attention: Array.isArray(raw?.attention) ? raw.attention : [],
+    ...(value as unknown as VcrStudySummary),
+    steps: readSteps(value.steps),
+    conclusion: value.conclusion && typeof value.conclusion === "object" ? value.conclusion as VcrStudySummary["conclusion"] : null,
+    attention: readAttention(value.attention),
+  };
+}
+
+export function readVcrHome(raw: unknown): VcrHome {
+  const value = obj(raw);
+  return {
+    studies: arr(value.studies).map(readVcrSummary),
+    ...(Array.isArray(value.todos) ? { todos: arr(value.todos) as unknown as VcrRecruitTodo[] } : {}),
+    ...(Array.isArray(value.reviews) ? { reviews: arr(value.reviews) as unknown as VcrReviewNote[] } : {}),
+  };
+}
+
+function readProfileRow(raw: unknown): VcrProfileRow {
+  const value = obj(raw);
+  return {
+    key: text(value.key) ?? "",
+    label: text(value.label) ?? "",
+    ours: readVcrValue(value.ours),
+    theirs: readVcrValue(value.theirs),
+    smd: finite(value.smd),
+    smdBefore: finite(value.smdBefore),
+    flagged: value.flagged === true,
+    note: text(value.note),
+  };
+}
+
+function readSeries(raw: unknown): VcrSeries[] {
+  return arr(raw).map((item) => ({ ...(item as unknown as VcrSeries), points: arr(item.points) as unknown as VcrSeries["points"] }));
+}
+
+function readCurves(raw: unknown): VcrCurve[] {
+  return arr(raw).map((item) => ({ ...(item as unknown as VcrCurve), points: arr(item.points) as unknown as VcrCurve["points"] }));
+}
+
+export function readVcrModelCard(raw: unknown): VcrModelCard {
+  const value = obj(raw);
+  return {
+    ...(value as unknown as VcrModelCard),
+    inputs: strings(value.inputs),
+    validation: arr(value.validation) as unknown as VcrModelCard["validation"],
+    limits: strings(value.limits),
+    missingEvidence: strings(value.missingEvidence),
+    usedBy: arr(value.usedBy) as unknown as VcrModelCard["usedBy"],
+  };
+}
+
+export function readVcrPopulation(raw: unknown): VcrPopulationTab {
+  const value = obj(raw);
+  const compare = obj(value.versionCompare);
+  const quality = obj(value.quality);
+  return {
+    ...(value as unknown as VcrPopulationTab),
+    versions: arr(value.versions).map((item) => ({ ...(item as unknown as VcrPopulationTab["versions"][number]), counts: readVcrCounts(item.counts) })),
+    versionCompare: Object.keys(compare).length ? {
+      left: { label: text(obj(compare.left).label) ?? "", at: text(obj(compare.left).at), counts: readVcrCounts(obj(compare.left).counts) },
+      right: { label: text(obj(compare.right).label) ?? "", at: text(obj(compare.right).at), counts: readVcrCounts(obj(compare.right).counts) },
+      rows: arr(compare.rows).map((row) => ({
+        key: text(row.key) ?? "", label: text(row.label) ?? "",
+        left: row.left ? readVcrValue(row.left) : null, right: row.right ? readVcrValue(row.right) : null,
+      })),
+    } : null,
+    criteria: arr(value.criteria) as unknown as VcrCriterion[],
+    attrition: arr(value.attrition) as unknown as VcrAttritionStep[],
+    outcome: value.outcome && typeof value.outcome === "object" ? value.outcome as VcrPopulationTab["outcome"] : null,
+    profile: arr(value.profile).map(readProfileRow),
+    unknownReasons: arr(value.unknownReasons) as unknown as VcrPopulationTab["unknownReasons"],
+    blockers: arr(value.blockers) as unknown as VcrPopulationTab["blockers"],
+    quality: Object.keys(quality).length ? {
+      tag: text(quality.tag) ?? "",
+      groups: arr(quality.groups).map((group) => ({
+        key: text(group.key) ?? "", label: text(group.label) ?? "",
+        rows: arr(group.rows).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+      })),
+      trainingRecords: finite(quality.trainingRecords),
+      copies: finite(quality.copies),
+    } : null,
+    counts: readVcrCounts(value.counts),
+    stale: readStale(value.stale),
+    partial: readPartial(value.partial),
+  };
+}
+
+export function readVcrPatients(raw: unknown): VcrPatientsTab {
+  const value = obj(raw);
+  const trajectories = obj(value.trajectories);
+  const example = obj(value.example);
+  const sensitivity = obj(value.sensitivity);
+  return {
+    ...(value as unknown as VcrPatientsTab),
+    model: value.model ? readVcrModelCard(value.model) : null,
+    twin: value.twin && typeof value.twin === "object" ? value.twin as VcrPatientsTab["twin"] : null,
+    trajectories: Object.keys(trajectories).length ? {
+      xLabel: text(trajectories.xLabel), yLabel: text(trajectories.yLabel), ticks: strings(trajectories.ticks), series: readSeries(trajectories.series),
+    } : null,
+    example: Object.keys(example).length ? {
+      ...(example as unknown as NonNullable<VcrPatientsTab["example"]>),
+      baseline: arr(example.baseline) as unknown as NonNullable<VcrPatientsTab["example"]>["baseline"],
+      scenarios: example.scenarios && typeof example.scenarios === "object"
+        ? { ...(example.scenarios as Loose), series: readSeries(obj(example.scenarios).series) } as NonNullable<VcrPatientsTab["example"]>["scenarios"] : null,
+    } : null,
+    panels: arr(value.panels).map((panel) => ({
+      ...(panel as unknown as VcrPatientsTab["panels"][number]),
+      rows: arr(panel.rows).map((row) => ({ label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+      series: readSeries(panel.series),
+    })),
+    sensitivity: Object.keys(sensitivity).length ? {
+      measure: text(sensitivity.measure),
+      base: sensitivity.base ? readVcrValue(sensitivity.base) : null,
+      rows: arr(sensitivity.rows) as unknown as NonNullable<VcrPatientsTab["sensitivity"]>["rows"],
+    } : null,
+    counts: readVcrCounts(value.counts),
+    stale: readStale(value.stale),
+    partial: readPartial(value.partial),
+    sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
+  };
+}
+
+export function readVcrComparator(raw: unknown): VcrComparatorTab {
+  const value = obj(raw);
+  const rmst = obj(value.rmst);
+  const gaps = obj(value.gaps);
+  const verdict = obj(value.verdict);
+  return {
+    ...(value as unknown as VcrComparatorTab),
+    routes: arr(value.routes) as unknown as VcrRoute[],
+    curves: readCurves(value.curves),
+    rmst: Object.keys(rmst).length ? { value: readVcrValue(rmst.value), tau: finite(rmst.tau), label: text(rmst.label) } : null,
+    median: value.median ? readVcrValue(value.median) : null,
+    qc: arr(value.qc) as unknown as VcrComparatorTab["qc"],
+    methods: arr(value.methods) as unknown as VcrComparatorTab["methods"],
+    e10: arr(value.e10) as unknown as VcrComparatorTab["e10"],
+    estimand: value.estimand && typeof value.estimand === "object"
+      ? { ...(value.estimand as Loose), rows: arr(obj(value.estimand).rows) } as VcrComparatorTab["estimand"] : null,
+    comparability: arr(value.comparability).map(readProfileRow),
+    dimensions: arr(value.dimensions) as unknown as VcrDimension[],
+    diagnostics: arr(value.diagnostics).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+    gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
+    counts: readVcrCounts(value.counts),
+    verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,
+    stale: readStale(value.stale),
+    partial: readPartial(value.partial),
+  };
+}
+
+export function readVcrTrial(raw: unknown): VcrTrialTab {
+  const value = obj(raw);
+  const power = obj(value.powerCurve);
+  const grid = obj(value.grid);
+  const decision = obj(value.decision);
+  return {
+    ...(value as unknown as VcrTrialTab),
+    ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
+    designs: arr(value.designs).map(readDesign),
+    columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
+    grid: Object.keys(grid).length ? {
+      ...(grid as Loose), columns: arr(grid.columns),
+      rows: arr(grid.rows).map((row) => ({ ...(row as Loose), cells: arr(row.cells) })),
+    } as VcrTrialTab["grid"] : null,
+    footnotes: strings(value.footnotes),
+    powerCurve: Object.keys(power).length ? { ...(power as Loose), series: readSeries(power.series), markers: arr(power.markers), prior: arr(power.prior) } as VcrTrialTab["powerCurve"] : null,
+    decision: Object.keys(decision).length ? { ...(decision as Loose), options: arr(decision.options) } as VcrTrialTab["decision"] : null,
+    runRecord: arr(value.runRecord) as unknown as VcrTrialTab["runRecord"],
+    forecasts: arr(value.forecasts).map((row) => ({ ...(row as unknown as VcrForecast), lines: arr(row.lines) as unknown as VcrForecast["lines"] })),
+    milestones: arr(value.milestones).map((row) => ({
+      design: text(row.design) ?? "", name: text(row.name) ?? "",
+      items: arr(row.items).map((item) => ({ key: text(item.key) ?? "", label: text(item.label) ?? "", value: readVcrValue(item.value) })),
+    })),
+    counts: readVcrCounts(value.counts),
+    stale: readStale(value.stale),
+    partial: readPartial(value.partial),
+  };
+}
+
+export function readVcrMatching(raw: unknown): VcrMatchingTab {
+  const value = obj(raw);
+  const selected = obj(value.selected);
+  const forecast = obj(value.forecast);
+  return {
+    ...(value as unknown as VcrMatchingTab),
+    view: (["matching", "referral", "sites", "followup"].includes(String(value.view)) ? value.view : "matching") as VcrMatchingTab["view"],
+    unavailable: value.unavailable && typeof value.unavailable === "object" ? value.unavailable as VcrMatchingTab["unavailable"] : null,
+    funnel: arr(value.funnel) as unknown as VcrMatchingTab["funnel"],
+    candidates: arr(value.candidates).map((item) => ({ ...(item as unknown as VcrCandidate), open: arr(item.open) as unknown as VcrCandidate["open"] })),
+    selected: Object.keys(selected).length && selected.candidate ? {
+      ...(selected as unknown as NonNullable<VcrMatchingTab["selected"]>),
+      candidate: { ...(selected.candidate as unknown as VcrCandidate), open: arr(obj(selected.candidate).open) as unknown as VcrCandidate["open"] },
+      facts: arr(selected.facts) as unknown as NonNullable<VcrMatchingTab["selected"]>["facts"],
+      criteria: arr(selected.criteria) as unknown as VcrCriterionJudgement[],
+    } : null,
+    gaps: arr(value.gaps) as unknown as VcrMatchingTab["gaps"],
+    pendingReview: value.pendingReview && typeof value.pendingReview === "object" ? value.pendingReview as VcrMatchingTab["pendingReview"] : null,
+    ledger: arr(value.ledger) as unknown as VcrMatchingTab["ledger"],
+    forecast: Object.keys(forecast).length ? {
+      ...(forecast as Loose),
+      rows: arr(forecast.rows).map(readMetric), basis: strings(forecast.basis),
+      xLabels: strings(forecast.xLabels), actual: arr(forecast.actual), median: arr(forecast.median), band: arr(forecast.band), markers: arr(forecast.markers),
+    } as VcrMatchingTab["forecast"] : null,
+    sites: arr(value.sites) as unknown as VcrMatchingTab["sites"],
+    followup: arr(value.followup) as unknown as VcrMatchingTab["followup"],
+    counts: readVcrCounts(value.counts),
+  };
+}
+
+export function readVcrData(raw: unknown): VcrDataTab {
+  const value = obj(raw);
+  return {
+    ...(value as unknown as VcrDataTab),
+    status: arr(value.status) as unknown as VcrDataTab["status"],
+    assumptions: arr(value.assumptions).map((card) => ({
+      ...(card as unknown as VcrAssumption),
+      value: readVcrValue(card.value),
+      detail: card.detail && typeof card.detail === "object" ? {
+        ...(card.detail as Loose), stats: arr(obj(card.detail).stats), forest: arr(obj(card.detail).forest),
+        usedBy: arr(obj(card.detail).usedBy), versions: arr(obj(card.detail).versions),
+      } as VcrAssumption["detail"] : null,
+    })),
+    precedents: arr(value.precedents) as unknown as VcrPrecedent[],
+    snapshots: arr(value.snapshots).map((snapshot) => ({ ...(snapshot as unknown as VcrDataTab["snapshots"][number]), quality: arr(snapshot.quality) as unknown as NonNullable<VcrDataTab["snapshots"][number]["quality"]> })),
+    decisions: arr(value.decisions) as unknown as VcrDataTab["decisions"],
+    evidenceNote: text(value.evidenceNote),
+  };
+}
+
+export function readVcrModels(raw: unknown): VcrModels {
+  const value = obj(raw);
+  return {
+    ...(value as unknown as VcrModels),
+    models: arr(value.models).map(readVcrModelCard),
+    methods: arr(value.methods) as unknown as VcrModels["methods"],
+    ladder: arr(value.ladder) as unknown as VcrModels["ladder"],
+    engineMismatch: Array.isArray(value.engineMismatch) ? strings(value.engineMismatch) : null,
+  };
+}
+
+export function readVcrPrecedents(raw: unknown): VcrPrecedents {
+  const value = obj(raw);
+  return {
+    available: value.available !== false,
+    message: text(value.message),
+    precedents: arr(value.precedents) as unknown as VcrPrecedent[],
+    sources: text(value.sources),
+  };
+}
+
+export function readVcrDeliverable(raw: unknown): VcrDeliverable {
+  const value = obj(raw);
+  const document = obj(value.document);
+  return {
+    ...(value as unknown as VcrDeliverable),
+    document: Object.keys(document).length ? {
+      status: arr(document.status) as unknown as NonNullable<VcrDeliverable["document"]>["status"],
+      sections: arr(document.sections).map((section) => ({
+        ...(section as unknown as VcrPackageSection), facts: arr(section.facts) as unknown as VcrPackageSection["facts"],
+        table: section.table && typeof section.table === "object"
+          ? { columns: strings(obj(section.table).columns), rows: (Array.isArray(obj(section.table).rows) ? obj(section.table).rows as unknown[] : []).map((row) => strings(row)) } : null,
+      })),
+    } : null,
   };
 }
 
@@ -850,25 +1357,20 @@ const study = (studyId: string) => `/vcr/studies/${id(studyId)}`;
 /* -------------------------------------------------------------------- routes */
 
 export async function getVcrHome(): Promise<VcrHome> {
-  const data = await productRequest<VcrHome>("/vcr/studies");
-  return {
-    studies: (Array.isArray(data?.studies) ? data.studies : []).map(readSummary),
-    ...(Array.isArray(data?.todos) ? { todos: data.todos } : {}),
-    ...(Array.isArray(data?.reviews) ? { reviews: data.reviews } : {}),
-  };
+  return readVcrHome(await productRequest<unknown>("/vcr/studies"));
 }
 
 /** 「新建研究」 and the four action cards: the study, its project and its conversation. */
-export function createVcrStudy(input: { name?: string; action?: VcrAction; intendedUse?: VcrIntendedUse; tier?: VcrDataTier } = {}) {
-  return productRequest<{ id: string; projectId: string; sessionId: string }>("/vcr/studies", "POST", input);
+export function createVcrStudy(input: VcrCreateBody = {}) {
+  return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/vcr/studies", "POST", studyCreateBody(input));
 }
 
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {
-  return readStudy(await productRequest<VcrStudy>(study(studyId)));
+  return readVcrStudy(await productRequest<unknown>(study(studyId)));
 }
 
-export function patchVcrStudy(studyId: string, input: { name?: string; intendedUse?: VcrIntendedUse; status?: VcrStudyStatus; budgetCny?: number }) {
-  return productRequest<unknown>(study(studyId), "PATCH", input);
+export function patchVcrStudy(studyId: string, input: VcrPatchBody) {
+  return productRequest<unknown>(study(studyId), "PATCH", studyPatchBody(input));
 }
 
 export function deleteVcrStudy(studyId: string) {
@@ -881,27 +1383,24 @@ export function getVcrTab<T>(studyId: string, tab: Exclude<VcrTabKey, "overview"
   return productRequest<T>(`${study(studyId)}/${tab}${search ? `?${search}` : ""}`);
 }
 
-export const getVcrPopulation = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrPopulationTab>(studyId, "population", query);
-export const getVcrPatients = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrPatientsTab>(studyId, "patients", query);
-export const getVcrComparator = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrComparatorTab>(studyId, "comparator", query);
-export const getVcrTrial = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrTrialTab>(studyId, "trial", query);
-export const getVcrMatching = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrMatchingTab>(studyId, "matching", query);
-export const getVcrData = (studyId: string, query?: Record<string, string>) =>
-  getVcrTab<VcrDataTab>(studyId, "data", query);
+const tabReader = <T>(tab: Exclude<VcrTabKey, "overview">, read: (raw: unknown) => T) =>
+  async (studyId: string, query?: Record<string, string>): Promise<T> => read(await getVcrTab<unknown>(studyId, tab, query));
+
+export const getVcrPopulation = tabReader("population", readVcrPopulation);
+export const getVcrPatients = tabReader("patients", readVcrPatients);
+export const getVcrComparator = tabReader("comparator", readVcrComparator);
+export const getVcrTrial = tabReader("trial", readVcrTrial);
+export const getVcrMatching = tabReader("matching", readVcrMatching);
+export const getVcrData = tabReader("data", readVcrData);
 
 /** 「让 AI 做」: dispatches one step now, in the study's own conversation. */
 export function runVcrStep(studyId: string, step: VcrStepKey) {
-  return productRequest<{ sessionId: string; runId?: string | null }>(`${study(studyId)}/run`, "POST", { step });
+  return productRequest<VcrRunAnswer>(`${study(studyId)}/run`, "POST", runBody(step));
 }
 
 /** A deterministic computation, queued directly (contract §3.1, §4). */
-export function queueVcrJob(studyId: string, input: { kind: string; scenario?: unknown; seed?: number; replicates?: number }) {
-  return productRequest<VcrJob>(`${study(studyId)}/jobs`, "POST", input);
+export function queueVcrJob(studyId: string, input: VcrJobBody) {
+  return productRequest<VcrJob>(`${study(studyId)}/jobs`, "POST", jobBody(input));
 }
 
 export function getVcrJob(studyId: string, jobId: string) {
@@ -909,59 +1408,76 @@ export function getVcrJob(studyId: string, jobId: string) {
 }
 
 export function cancelVcrJob(studyId: string, jobId: string) {
-  return productRequest<VcrJob>(`${study(studyId)}/jobs/${id(jobId)}/cancel`, "POST", {});
+  return productRequest<VcrJob>(`${study(studyId)}/jobs/${id(jobId)}/cancel`, "POST", cancelBody());
 }
 
-/** The second of the three human stops: more compute than the study's budget. */
-export function confirmVcrBudget(studyId: string, input: { limitCny: number }) {
-  return productRequest<unknown>(`${study(studyId)}/budget`, "POST", input);
+/**
+ * The second of the three human stops: more compute than the study's budget.
+ * `{ jobId }` releases one waiting job; `{ cpuSeconds }` adds that much CPU
+ * time and releases everything that was waiting on it.
+ */
+export function confirmVcrBudget(studyId: string, input: VcrBudgetBody) {
+  return productRequest<{ released: unknown[]; budget: VcrBudget | null }>(`${study(studyId)}/budget`, "POST", budgetBody(input));
 }
 
 /** A new version of one assumption card; downstream results go stale by lineage. */
-export function saveVcrAssumption(studyId: string, input: { id?: string; name?: string; value?: unknown; note?: string }) {
-  return productRequest<VcrAssumption>(`${study(studyId)}/assumptions`, "POST", input);
+export function saveVcrAssumption(studyId: string, input: VcrAssumptionBody) {
+  return productRequest<{ id: string; key: string; version: number }>(`${study(studyId)}/assumptions`, "POST", assumptionBody(input));
 }
 
-/** 「签注复核」: a countersignature on one version, never a gate (plan §10.2). */
-export function signVcrReview(studyId: string, input: { kind: VcrReviewKind; subject: string; version?: string; note?: string }) {
-  return productRequest<unknown>(`${study(studyId)}/reviews`, "POST", input);
+/** 「签注复核」: a countersignature on named versions, never a gate (plan §10.2). */
+export function signVcrReview(studyId: string, input: VcrReviewBody) {
+  return productRequest<unknown>(`${study(studyId)}/reviews`, "POST", reviewBody(input));
 }
 
 /** 「写入决策记录」: the reader's comparison goal and the design they chose. */
-export function recordVcrDecision(studyId: string, input: { goal?: string; chosen?: string; note?: string }) {
-  return productRequest<unknown>(`${study(studyId)}/decisions`, "POST", input);
+export function recordVcrDecision(studyId: string, input: VcrDecisionBody) {
+  return productRequest<unknown>(`${study(studyId)}/decisions`, "POST", decisionBody(input));
 }
 
+/** 「导出」: the package is a run in the study's conversation; a deferred run answers `runId: null`. */
 export function exportVcrStudy(studyId: string, kind: VcrExportKind) {
-  return productRequest<{ id?: string; sessionId?: string | null; runId?: string | null }>(`${study(studyId)}/export`, "POST", { kind });
+  return productRequest<VcrRunAnswer>(`${study(studyId)}/export`, "POST", exportBody(kind));
 }
 
-export function getVcrExport(studyId: string, exportId: string) {
-  return productRequest<VcrDeliverable>(`${study(studyId)}/export/${id(exportId)}`);
+export async function getVcrExport(studyId: string, exportId: string): Promise<VcrDeliverable> {
+  return readVcrDeliverable(await productRequest<unknown>(`${study(studyId)}/export/${id(exportId)}`));
 }
 
-export function getVcrModels() {
-  return productRequest<VcrModels>("/vcr/models");
+export async function getVcrModels(): Promise<VcrModels> {
+  return readVcrModels(await productRequest<unknown>("/vcr/models"));
 }
 
-export function getVcrPrecedents(query: { q?: string; limit?: number } = {}) {
+/** The precedent library: `q` is the server's own query word. */
+export async function getVcrPrecedents(query: { q?: string; limit?: number } = {}): Promise<VcrPrecedents> {
   const search = new URLSearchParams();
   if (query.q) search.set("q", query.q);
   if (query.limit) search.set("limit", String(query.limit));
   const suffix = search.toString();
-  return productRequest<{ precedents: VcrPrecedent[]; sources?: string | null }>(`/vcr/precedents${suffix ? `?${suffix}` : ""}`);
+  return readVcrPrecedents(await productRequest<unknown>(`/vcr/precedents${suffix ? `?${suffix}` : ""}`));
 }
 
-export function setVcrMembers(studyId: string, input: { userId: string; role: VcrMemberRole | null }) {
-  return productRequest<unknown>(`${study(studyId)}/members`, "POST", input);
+export function setVcrMembers(studyId: string, input: VcrMemberBody) {
+  return productRequest<unknown>(`${study(studyId)}/members`, "POST", memberBody(input));
 }
 
 /**
  * The first of the three human stops: a coordinator confirms, person by
- * person, before anyone outside the platform is contacted (plan §10.1).
+ * person, before anyone outside the platform is contacted (plan §10.1). The id
+ * is the person's referral, not the candidate's key.
  */
-export function contactVcrReferral(studyId: string, referralId: string, input: { reason?: string } = {}) {
-  return productRequest<unknown>(`${study(studyId)}/referrals/${id(referralId)}/contact`, "POST", input);
+export function contactVcrReferral(studyId: string, referralId: string, input: VcrContactBody = {}) {
+  return productRequest<unknown>(`${study(studyId)}/referrals/${id(referralId)}/contact`, "POST", contactBody(input));
+}
+
+/** What 「让 AI 做」 and an export answer: the conversation, and the run — or the sentence that it is queued behind another. */
+export interface VcrRunAnswer {
+  sessionId?: string | null;
+  runId?: string | null;
+  /** Set when the run could not start now and waits for the one before it. */
+  deferred?: string | null;
+  /** The package row of an export. */
+  export?: { id?: string } | null;
 }
 
 /* -------------------------------------------------------------------- feature */

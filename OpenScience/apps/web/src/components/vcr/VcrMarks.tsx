@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { Tag } from "@/components/ui/Tag";
+import { Drawer } from "@/components/ui/Drawer";
+import { Tag, tagClasses } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
-import type { VcrConclusion, VcrDataTier, VcrIntendedUse, VcrReviewState, VcrValueSource } from "@/lib/vcrClient";
+import type { VcrCeiling, VcrConclusion, VcrDataTier, VcrIntendedUse, VcrReviewState, VcrValueSource } from "@/lib/vcrClient";
 import { conclusionLabel, reviewLabel, sourceLabel, tierLabel, intendedUseLabel } from "./vcrText";
 
 /**
@@ -128,12 +129,57 @@ export function ConclusionChip({ state, className }: { state: VcrConclusion | nu
   );
 }
 
-/** The two tags in a study page's header: the data tier and the intended use. */
-export function StudyTags({ tier, intendedUse }: { tier: VcrDataTier; intendedUse: VcrIntendedUse }) {
+/**
+ * The two tags in a study page's header: the data tier and the intended use.
+ *
+ * The intended use is what the results may actually carry, not what was asked
+ * for (plan §8.2, §10.2). When the models or the review behind them cannot
+ * support the use the study asked for, the tag says both — 「指定研究分析 →
+ * 研究设计支持」 — and opens the reasons; a tag that printed the request alone
+ * would claim a standing the results have not got.
+ */
+export function StudyTags({ tier, intendedUse, ceiling }: {
+  tier: VcrDataTier;
+  intendedUse: VcrIntendedUse;
+  ceiling?: VcrCeiling | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const downgraded = ceiling && !ceiling.withinCeiling ? ceiling : null;
   return (
     <>
       <Tag>{tierLabel(tier)}</Tag>
-      <Tag>{intendedUseLabel(intendedUse)}</Tag>
+      {downgraded ? (
+        <button
+          type="button"
+          data-vcr-ceiling="downgraded"
+          aria-haspopup="dialog"
+          onClick={() => setOpen(true)}
+          className={tagClasses({ tone: "warn" })}
+        >
+          {`${intendedUseLabel(downgraded.requested)} → ${intendedUseLabel(downgraded.ceiling)}`}
+        </button>
+      ) : (
+        <Tag>{intendedUseLabel(intendedUse)}</Tag>
+      )}
+      {open && downgraded && (
+        <Drawer title="预期用途" onClose={() => setOpen(false)} widthClassName="max-w-md">
+          <dl data-vcr-ceiling-reasons="" className="divide-y divide-faint">
+            <div className="flex items-baseline justify-between gap-4 py-2">
+              <dt className="text-caption text-text-3">研究设定的用途</dt>
+              <dd className="text-ui text-text">{intendedUseLabel(downgraded.requested)}</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4 py-2">
+              <dt className="text-caption text-text-3">结果能承载的最高用途</dt>
+              <dd className="text-ui font-medium text-text">{intendedUseLabel(downgraded.ceiling)}</dd>
+            </div>
+          </dl>
+          {downgraded.reasons.length > 0 && (
+            <ul className="mt-4 flex list-disc flex-col gap-1.5 pl-4 text-ui text-text-2">
+              {downgraded.reasons.map((reason) => <li key={`${reason.code}:${reason.detail}`}>{reason.detail}</li>)}
+            </ul>
+          )}
+        </Drawer>
+      )}
     </>
   );
 }

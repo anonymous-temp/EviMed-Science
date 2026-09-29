@@ -35,14 +35,21 @@
  */
 
 import {
-  VCR_COMPARABILITY_DIMENSIONS, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_E10_CONDITIONS,
-  VCR_ENGINE_METHODS, VCR_INTENDED_USES, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_STEPS, VCR_STEP_CAPABILITIES,
-  VCR_TABS, intendedUseCeiling, reviewStateFor, useWithin,
+  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_STEPS,
+  VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode } from "./vcrStore.mjs";
+import { VCR_DEFAULT_STUDY_NAME } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
+import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import {
+  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, presentTodos, useCeilingOf,
+} from "./vcrViews.mjs";
+import {
+  presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
+} from "./vcrViewsTabs.mjs";
+import { numeric } from "./vcrViewsKit.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
 
@@ -72,6 +79,20 @@ const object = (value) => (value && typeof value === "object" && !Array.isArray(
 const list = (value) => (Array.isArray(value) ? value : []);
 /** @param {number} status @param {string} code @param {string} message */
 const failure = (status, code, message) => new HttpError(status, code, message);
+
+/**
+ * The query a route was asked with, as plain strings: a `URLSearchParams`
+ * (what the route hands over) or an object (what a test does).
+ * @param {URLSearchParams | Record<string, any> | null | undefined} query
+ * @returns {Record<string, string>}
+ */
+function queryOf(query) {
+  /** @type {Record<string, string>} */
+  const asked = {};
+  const entries = query instanceof URLSearchParams ? [...query] : Object.entries(query ?? {});
+  for (const [key, value] of entries.slice(0, 20)) if (value != null) asked[String(key)] = String(value);
+  return asked;
+}
 
 /**
  * Whether this account sees the module at all: on, and either open to every
@@ -235,18 +256,26 @@ export class VcrService {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
-   *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any }} options
+   *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
+   *   matchStore?: any, evidenceStore?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
-    access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null }) {
+    access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
+    matchStore = null, evidenceStore = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
     this.engine = engine;
     this.now = now;
     this.metricName = metricName;
-    /** The packages that are not this one's, read at request time. */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal };
+    /**
+     * The packages that are not this one's, read at request time. `matchStore`
+     * and `evidenceStore` are the matching and evidence packages' own stores:
+     * the pages read rows from them directly, because the seams above them
+     * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
+     * not for a page.
+     */
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -280,43 +309,51 @@ export class VcrService {
 
   // --- the home list --------------------------------------------------------------
 
-  /** `GET /api/vcr/studies`. @param {{ id: string }} user */
+  /**
+   * `GET /api/vcr/studies`: the home list, in the browser's own shape
+   * (`VcrHome`). 招募待办 is present only for an account that may contact
+   * patients in at least one study; the routes check each write for themselves,
+   * so this is presentation.
+   * @param {{ id: string }} user
+   */
   async listStudies(user) {
+    const now = this.now();
     const studies = await this.store.listStudies(String(user.id));
-    const rows = await Promise.all(studies.map(async (study) => {
-      const [results, stale, jobs, budget] = await Promise.all([
+    const groups = await Promise.all(studies.map(async (study) => {
+      const [results, allResults, stale, jobs, assumptions, scenarios, comparators, reviews, roles, grid, decisions] = await Promise.all([
         this.store.results(study.id),
+        this.store.allResults(study.id),
         this.store.staleMarks(study.id),
         this.store.jobs(study.id, 20),
-        this.packages.jobs?.budgetOf ? this.packages.jobs.budgetOf(study.id).catch(() => null) : null,
+        this.store.assumptions(study.id),
+        this.store.trialScenarios(study.id, 60),
+        this.store.comparatorDesigns(study.id, 20),
+        this.store.reviews(study.id),
+        this.#rolesOf(study, user),
+        this.store.latestDesignGrid(study.id),
+        this.store.decisions(study.id),
       ]);
-      const headline = results.find((result) => result.kind === "trial_scenario") ?? results[0] ?? null;
-      const attention = [
-        ...(stale.length ? [{ kind: "stale", count: stale.length, text: `${stale.length} 项结果已过期` }] : []),
-        ...(jobs.some((job) => job.state === "awaiting_budget")
-          ? [{ kind: "budget_confirm", count: jobs.filter((job) => job.state === "awaiting_budget").length, text: "有计算等待预算确认" }] : []),
-        ...(results.some((result) => result.conclusion === "not_estimable")
-          ? [{ kind: "not_estimable", count: results.filter((result) => result.conclusion === "not_estimable").length, text: "有结论为不可估计" }] : []),
-      ];
-      return {
-        id: study.id, projectId: study.projectId, name: study.name, question: study.question,
-        dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status,
-        steps: study.steps,
-        progress: this.#progress(study),
-        headline: headline ? {
-          kind: headline.kind, conclusion: headline.conclusion, counts: vcrCountBand(headline.counts),
-          measures: headline.measures.slice(0, 3), intendedUse: headline.intendedUse,
-        } : null,
-        attention,
-        runningJobs: jobs.filter((job) => ["queued", "running"].includes(job.state)).length,
-        budget,
-        createdAt: study.createdAt, updatedAt: study.updatedAt,
-      };
+      const summary = presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions, now });
+      return { study, summary, reviews, roles };
     }));
-    return { studies: rows, dataTiers: [...VCR_DATA_TIERS], intendedUses: [...VCR_INTENDED_USES] };
+    const recruiting = groups.filter((group) => group.roles.some((/** @type {string} */ role) => roleAllows(role, "contact_patients")));
+    /** @type {Record<string, any>} */
+    const home = { studies: groups.map((group) => group.summary) };
+    const matchStore = this.packages.matchStore;
+    if (matchStore && recruiting.length) {
+      const todos = presentTodos(await Promise.all(recruiting.map(async (group) => ({
+        study: group.study,
+        referrals: await matchStore.listReferrals({ studyId: group.study.id, limit: 500 }).catch(() => []),
+        sites: await matchStore.listSites(group.study.id).catch(() => []),
+      }))), now);
+      if (todos.length) home.todos = todos;
+    }
+    const reviews = presentReviewNotes(groups.map((group) => ({ study: group.study, reviews: group.reviews })), now);
+    if (reviews.length) home.reviews = reviews;
+    return home;
   }
 
-  /** The seven-step rail, as the page draws it. @param {any} study */
+  /** The seven-step rail, row-level. @param {any} study */
   #progress(study) {
     return VCR_STEPS.map((step) => ({
       step,
@@ -325,6 +362,16 @@ export class VcrService {
       capability: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES)[step],
       note: study.steps?.[step]?.note ?? null,
     }));
+  }
+
+  /**
+   * The roles an account holds in one study; the owner is a `lead` even when
+   * no membership row says so.
+   * @param {any} study @param {{ id: string }} user
+   */
+  async #rolesOf(study, user) {
+    const roles = await this.store.rolesOf?.(study.id, String(user.id)) ?? [];
+    return roles.length ? roles : (study.userId === String(user.id) ? ["lead"] : []);
   }
 
   // --- creation, settings, deletion ------------------------------------------------
@@ -378,12 +425,22 @@ export class VcrService {
 
   // --- the study page --------------------------------------------------------------
 
-  /** `GET /api/vcr/studies/:id`. @param {{ id: string }} user @param {string} id */
+  /**
+   * `GET /api/vcr/studies/:id`: the header, the seven-step rail and the
+   * overview, in the browser's own shape (`VcrStudy`).
+   * @param {{ id: string }} user @param {string} id
+   */
   async studyView(user, id) {
-    return this.studyViewOf(await this.requireStudy(user, id));
+    const study = await this.requireStudy(user, id);
+    return presentStudy(await this.#bundle(study, user));
   }
 
-  /** @param {any} study */
+  /**
+   * The row-level view of a study — every result with its stale mark, the
+   * review records, the use ceiling — for tests and tools that want the rows
+   * rather than the page. The browser reads {@link studyView}.
+   * @param {any} study
+   */
   async studyViewOf(study) {
     const [definition, results, stale, reviews, jobs, budget, assumptions, members, exports] = await Promise.all([
       this.store.latestDefinition(study.id),
@@ -423,36 +480,12 @@ export class VcrService {
   }
 
   /**
-   * The highest use this study's results can be labelled with, and why. The
-   * weakest model decides (§8.2); an unreviewed study cannot claim
-   * `specified_analysis` or above (§10.2, AC-21).
+   * The highest use this study's results can be labelled with, and why — the
+   * one implementation lives with the presenter (`useCeilingOf`).
    * @param {any} study @param {any[]} results
    */
   async #useCeiling(study, results) {
-    /** @type {string[]} */
-    const tiers = [];
-    for (const result of results) {
-      for (const model of [...list(object(result.diagnostics).modelsUsed), ...list(object(result.useDowngrade).models)]) {
-        const tier = String(object(model).tier ?? "");
-        if (tier) tiers.push(tier);
-      }
-    }
-    const modelCeiling = intendedUseCeiling(tiers);
-    const reviews = await this.store.reviews(study.id);
-    const reviewed = reviews.length > 0;
-    // 「导出不因为未复核而被拦，但未复核的研究包不能标『指定研究分析』及以上」.
-    const reviewCeiling = reviewed ? "submission_preparation" : "design_support";
-    const ceiling = useWithin(modelCeiling, reviewCeiling) ? modelCeiling : reviewCeiling;
-    return {
-      ceiling,
-      requested: study.intendedUse,
-      withinCeiling: useWithin(study.intendedUse, ceiling),
-      reasons: [
-        ...(useWithin(modelCeiling, "specified_analysis") && modelCeiling !== "submission_preparation"
-          ? [{ code: "model_tier", detail: `所用模型的层级最高支持「${modelCeiling}」` }] : []),
-        ...(reviewed ? [] : [{ code: "not_reviewed", detail: "尚无复核签注：未复核的研究包不能标「指定研究分析」及以上" }]),
-      ],
-    };
+    return useCeilingOf({ study, results, reviews: await this.store.reviews(study.id) });
   }
 
   /** @param {any[]} reviews @param {any[]} results @param {any[]} stale */
@@ -494,162 +527,237 @@ export class VcrService {
   // --- the seven tabs ----------------------------------------------------------------
 
   /**
-   * `GET /api/vcr/studies/:id/:tab`.
+   * `GET /api/vcr/studies/:id/:tab`. `query` is what the route was asked with
+   * (a `URLSearchParams` or a plain object): the matching tab's `view`,
+   * `candidate` and `direction`, the data tab's `card`.
    * @param {{ id: string }} user @param {string} id @param {string} tab
+   * @param {URLSearchParams | Record<string, any>} [query]
    */
-  async tab(user, id, tab) {
+  async tab(user, id, tab, query = {}) {
     if (!VCR_TABS.includes(tab)) throw failure(404, "vcr_tab_not_found", `tab must be one of: ${VCR_TABS.join(", ")}.`);
     const study = await this.requireStudy(user, id);
     this.counters.tabs += 1;
+    const asked = queryOf(query);
+    const bundle = await this.#bundle(study, user, tab, asked);
     switch (tab) {
-      case "overview": return this.studyViewOf(study);
-      case "population": return this.#populationTab(study);
-      case "patients": return this.#patientsTab(study);
-      case "comparator": return this.#comparatorTab(study);
-      case "trial": return this.#trialTab(study);
-      case "matching": return this.#matchingTab(study, user);
-      default: return this.#dataTab(study, user);
+      case "overview": return presentStudy(bundle);
+      case "population": return presentPopulationTab(bundle);
+      case "patients": return presentPatientsTab(bundle);
+      case "comparator": return presentComparatorTab(bundle);
+      case "trial": return presentTrialTab(bundle);
+      case "matching": return presentMatchingTab(bundle, asked);
+      default: return presentDataTab(bundle, asked);
     }
   }
 
-  /** @param {any} study */
-  async #populationTab(study) {
-    const [populations, results, stale] = await Promise.all([
-      this.store.populations(study.id), this.store.results(study.id, "population"), this.store.staleMarks(study.id),
-    ]);
-    const current = populations[0] ?? null;
-    return {
-      tab: "population", studyId: study.id, dataTier: study.dataTier,
-      current: current ? {
-        ...current,
-        node: vcrObjectNode("population", current),
-        counts: vcrCountBand(current.counts),
-        result: results.find((result) => result.id === current.resultId)
-          ? this.#resultView(/** @type {any} */ (results.find((result) => result.id === current.resultId)), stale) : null,
-      } : null,
-      versions: populations.map((population) => ({ id: population.id, version: population.version, kind: population.kind,
-        name: population.name, counts: vcrCountBand(population.counts), reviewState: population.reviewState, createdAt: population.createdAt })),
-      results: results.map((result) => this.#resultView(result, stale)),
-      dataPlane: await this.#dataPlaneNote(study),
-    };
+  /**
+   * `GET /api/vcr/studies/:id/export/:exportId`: one package for the reader.
+   * @param {{ id: string }} user @param {string} id @param {string} exportId
+   */
+  async exportView(user, id, exportId) {
+    const study = await this.requireStudy(user, id);
+    const row = await this.store.exportRow(study.id, exportId);
+    if (!row) throw failure(404, "vcr_export_not_found", "Export not found.");
+    return presentExport(row, await this.#bundle(study, user, "overview"));
   }
 
-  /** @param {any} study */
-  async #patientsTab(study) {
-    const [sets, results, stale, models] = await Promise.all([
-      this.store.patientSets(study.id), this.store.results(study.id, "patient_set"), this.store.staleMarks(study.id),
+  /**
+   * Every row a page of this study may need, read once. The presenters are
+   * pure; this is the only place a page touches a store.
+   * @param {any} study @param {{ id: string }} user @param {string} [tab] @param {Record<string, string>} [query]
+   */
+  async #bundle(study, user, tab = "overview", query = {}) {
+    const wants = tab === "overview" || tab === "trial" || tab === "comparator";
+    const [definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions, roles,
+      scenarios, comparators, populations, patientSets, grid, forecasts, models, executions, protocol] = await Promise.all([
+      this.store.latestDefinition(study.id),
+      this.store.results(study.id),
+      this.store.allResults(study.id),
+      this.store.staleMarks(study.id),
+      this.store.reviews(study.id),
+      this.store.jobs(study.id, 30),
+      this.packages.jobs?.budgetOf ? this.packages.jobs.budgetOf(study.id).catch(() => null) : null,
+      this.store.assumptions(study.id),
+      this.store.members(study.id),
+      this.store.exports(study.id),
+      this.store.decisions(study.id),
+      this.#rolesOf(study, user),
+      this.store.trialScenarios(study.id, 60),
+      this.store.comparatorDesigns(study.id, 20),
+      this.store.populations(study.id, 20),
+      this.store.patientSets(study.id, 20),
+      this.store.latestDesignGrid(study.id),
+      this.store.forecasts(study.id),
       this.store.models(study.userId),
+      this.#executions(study.id),
+      this.store.latestProtocolVersion(study.id),
     ]);
-    const current = sets[0] ?? null;
-    return {
-      tab: "patients", studyId: study.id,
-      current: current ? {
-        ...current, node: vcrObjectNode("patient_set", current), counts: vcrCountBand(current.counts),
-        model: models.find((model) => model.name === current.modelId || model.id === current.modelId) ?? null,
-      } : null,
-      versions: sets.map((set) => ({ id: set.id, version: set.version, name: set.name, twinLabel: set.twinLabel,
-        counts: vcrCountBand(set.counts), createdAt: set.createdAt })),
-      results: results.map((result) => this.#resultView(result, stale)),
-      models,
-    };
-  }
-
-  /** @param {any} study */
-  async #comparatorTab(study) {
-    const [designs, results, stale] = await Promise.all([
-      this.store.comparatorDesigns(study.id), this.store.results(study.id, "comparator"), this.store.staleMarks(study.id),
-    ]);
-    const current = designs[0] ?? null;
-    return {
-      tab: "comparator", studyId: study.id, dataTier: study.dataTier,
-      routes: vcrRouteOptions(study.dataTier),
-      comparabilityDimensions: [...VCR_COMPARABILITY_DIMENSIONS],
-      e10Conditions: [...VCR_E10_CONDITIONS],
-      current: current ? { ...current, node: vcrObjectNode("comparator", current) } : null,
-      versions: designs.map((design) => ({ id: design.id, version: design.version, route: design.route, estimand: design.estimand,
-        conclusion: design.conclusion, reviewState: design.reviewState, createdAt: design.createdAt })),
-      results: results.map((result) => this.#resultView(result, stale)),
-    };
-  }
-
-  /** @param {any} study */
-  async #trialTab(study) {
-    const [scenarios, results, stale, grid, forecasts] = await Promise.all([
-      this.store.trialScenarios(study.id), this.store.results(study.id, "trial_scenario"), this.store.staleMarks(study.id),
-      this.store.latestDesignGrid(study.id), this.store.forecasts(study.id),
-    ]);
-    const views = scenarios.map((scenario) => ({
-      ...scenario,
-      node: vcrObjectNode("trial_scenario", scenario),
-      result: (() => {
-        const result = results.find((row) => row.id === scenario.resultId);
-        return result ? this.#resultView(result, stale) : null;
-      })(),
-    }));
-    return {
-      tab: "trial", studyId: study.id,
-      scenarios: views,
-      // Dominated on every measure of the team's own comparison goal — a
-      // deterministic judgment, and the ordering is the team's, never the
-      // platform's (plan §5.4).
-      dominated: grid?.comparisonGoal ? vcrDominatedScenarios(views, grid.comparisonGoal) : [],
-      grid,
-      forecasts,
-      results: results.map((result) => this.#resultView(result, stale)),
-    };
-  }
-
-  /** @param {any} study @param {{ id: string }} user */
-  async #matchingTab(study, user) {
-    const matching = this.packages.matching;
-    if (matching?.tab) return { tab: "matching", studyId: study.id, ...(await matching.tab(study, user)) };
-    const protocol = await this.store.latestProtocolVersion(study.id);
-    return {
-      tab: "matching", studyId: study.id, protocol,
-      available: false,
-      unavailable: { code: "vcr_matching_unavailable", message: "匹配与招募在本部署尚未接入；其余步骤照常。" },
+    /** @type {Record<string, any>} */
+    const bundle = {
+      now: this.now(), study, definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions,
+      roles, scenarios, comparators, comparator: comparators[0] ?? null, populations, patientSets, grid, forecasts, models,
+      executions, protocol, seal: vcrSealState(study),
+      forecastResults: allResults.filter((result) => result.kind === "accrual_forecast"),
       criteria: protocol ? await this.store.criteria(protocol.id) : [],
     };
-  }
-
-  /** @param {any} study @param {{ id: string }} user */
-  async #dataTab(study, user) {
-    const [assumptions, definition, seal] = await Promise.all([
-      this.store.assumptions(study.id), this.store.latestDefinition(study.id), Promise.resolve(vcrSealState(study)),
-    ]);
-    const dataPlane = this.packages.dataPlane?.tab ? await this.packages.dataPlane.tab(study, user).catch(() => null) : null;
-    const evidence = this.packages.evidence?.tab ? await this.packages.evidence.tab(study, user).catch(() => null) : null;
-    return {
-      tab: "data", studyId: study.id, dataTier: study.dataTier,
-      definition, assumptions, seal,
-      minCellSize: VCR_MIN_CELL_SIZE,
-      data: dataPlane ?? { available: false, code: "vcr_data_plane_unavailable",
-        message: this.config.vcrDataPlaneDir ? "数据平面尚未接入本部署。" : "本部署未配置数据平面目录：T0 档以外的数据接入暂不可用。" },
-      evidence: evidence ?? { available: false, code: "vcr_evidence_unavailable", message: "证据参数化在本部署尚未接入；假设卡仍可手工登记。" },
-    };
-  }
-
-  /** @param {any} study */
-  async #dataPlaneNote(study) {
-    if (!this.packages.dataPlane?.note) {
-      return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面尚未接入本部署。" };
+    if (tab === "data" || wants) {
+      bundle.edges = await this.store.edges(study.id);
+      /** @type {Array<[string, any[]]>} */
+      const versions = await Promise.all(assumptions.map(async (/** @type {any} */ card) =>
+        /** @type {[string, any[]]} */ ([card.key, await this.store.assumptionVersions(study.id, card.key)])));
+      bundle.assumptionVersions = new Map(versions);
     }
-    return this.packages.dataPlane.note(study).catch(() => ({ available: false, code: "vcr_data_plane_unavailable" }));
+    // The overview drills into a card's quotation, so it reads the extracted
+    // values too; only the data tab asks the data plane.
+    if (tab === "data" || tab === "overview") bundle.evidence = await this.#evidence(study);
+    if (tab === "data") bundle.dataPlane = await this.#dataPlane(study, user);
+    if (tab === "matching") bundle.match = await this.#match(study, query);
+    return bundle;
+  }
+
+  /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */
+  async #executions(studyId) {
+    const rows = await this.store.rows(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, cpu_seconds, finished_at
+      FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]);
+    return new Map(rows.map((row) => [String(row.id), {
+      id: String(row.id), jobId: String(row.job_id), method: String(row.method), methodVersion: String(row.method_version ?? ""),
+      scenarioHash: String(row.scenario_hash ?? ""), seed: row.seed == null ? null : Number(row.seed),
+      replicates: row.replicates == null ? null : Number(row.replicates), cpuSeconds: numeric(row.cpu_seconds),
+      finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+    }]));
+  }
+
+  /**
+   * The evidence half of the data tab: the precedents this study pulled in and
+   * the extracted values behind its cards. A deployment without the evidence
+   * side says so by name.
+   * @param {any} study
+   */
+  async #evidence(study) {
+    const evidenceStore = this.packages.evidenceStore;
+    if (!evidenceStore) {
+      return { available: false, code: "vcr_evidence_unavailable", message: "证据参数化在本部署尚未接入；假设卡仍可手工登记。", precedents: [], items: [] };
+    }
+    const [precedents, items] = await Promise.all([
+      evidenceStore.listPrecedents({ userId: study.userId, studyId: study.id, limit: 100 }).catch(() => []),
+      evidenceStore.listEvidenceItems({ userId: study.userId, studyId: study.id, limit: 1000 }).catch(() => []),
+    ]);
+    return { available: true, precedents, items };
+  }
+
+  /**
+   * The data plane's half of the data tab, without a path of the server: a
+   * reader needs the source and the snapshot, not where the bytes sit.
+   * @param {any} study @param {{ id: string }} user
+   */
+  async #dataPlane(study, user) {
+    const dataPlane = this.packages.dataPlane;
+    if (!dataPlane?.tab) {
+      return { available: false, code: "vcr_data_plane_unavailable",
+        message: this.config.vcrDataPlaneDir ? "数据平面尚未接入本部署。" : "本部署未配置数据平面目录：T0 档以外的数据接入暂不可用。" };
+    }
+    const tab = await dataPlane.tab(study, user).catch(() => null);
+    if (!tab) return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面暂时不可用。" };
+    if (tab.available === false) return { available: false, code: tab.unavailable?.code ?? "vcr_data_plane_unavailable", message: tab.unavailable?.message ?? "" };
+    return { available: true, sources: tab.sources ?? [], snapshots: tab.snapshots ?? [] };
+  }
+
+  /**
+   * The matching tab's rows, from package E's own store: the latest assessment
+   * of every subject, tallies over all of them (a page that counted only its
+   * first hundred would report a smaller cohort than it has), the referral
+   * ledger, the sites and the follow-up. `null` when the package is not composed.
+   * @param {any} study @param {Record<string, string>} query
+   */
+  async #match(study, query) {
+    const matchStore = this.packages.matchStore;
+    if (!matchStore) return null;
+    const protocol = await this.store.latestProtocolVersion(study.id).catch(() => null);
+    const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [];
+    const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
+      WHERE study_id = $1 ORDER BY subject_key, as_of DESC, created_at DESC`;
+    const [tallyRows, subjectRows, referrals, sites, siteFunnel, followups, gapRows, reviewRows] = await Promise.all([
+      matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l GROUP BY summary`, [study.id]).catch(() => []),
+      matchStore.rows(`SELECT * FROM (${latest}) l WHERE summary <> 'ineligible' ORDER BY subject_key LIMIT 200`, [study.id]).catch(() => []),
+      matchStore.listReferrals({ studyId: study.id, limit: 500 }).catch(() => []),
+      matchStore.listSites(study.id).catch(() => []),
+      matchStore.siteFunnel(study.id).catch(() => []),
+      matchStore.listFollowupEpisodes({ studyId: study.id }).catch(() => []),
+      matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
+        WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, [study.id]).catch(() => []),
+      // Excluded on a model's word alone: they wait in 「待复核排除」, so the
+      // false-exclusion rate has a denominator (plan §7.1).
+      matchStore.rows(`SELECT l.subject_key FROM (${latest}) l WHERE l.summary = 'ineligible'
+        AND EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable AND j.state = 'not_satisfied')
+        AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
+          AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, [study.id]).catch(() => []),
+    ]);
+    const subjects = subjectRows.map((row) => ({
+      id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
+      priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
+    }));
+    const wanted = subjects.map((subject) => subject.id);
+    const openRows = wanted.length
+      ? await matchStore.rows(`SELECT j.assessment_id, j.criterion_id, j.state, j.recheck_at FROM ${VCR_SCHEMA}.criterion_judgments j
+          JOIN ${VCR_SCHEMA}.criteria c ON c.id = j.criterion_id
+          WHERE j.assessment_id = ANY($1::text[]) AND j.applicable AND j.state IN ('unknown', 'pending_recheck')
+          ORDER BY j.assessment_id, c.ordinal`, [wanted]).catch(() => [])
+      : [];
+    /** @type {Map<string, Array<{ criterionId: string, state: string, recheckAt: string | null }>>} */
+    const openByAssessment = new Map();
+    for (const row of openRows) {
+      const list_ = openByAssessment.get(String(row.assessment_id)) ?? [];
+      list_.push({ criterionId: String(row.criterion_id), state: String(row.state), recheckAt: row.recheck_at ? new Date(row.recheck_at).toISOString() : null });
+      openByAssessment.set(String(row.assessment_id), list_);
+    }
+    // The candidate the detail panel is about: the one asked for, else the first listed.
+    const order = ["eligible", "insufficient_evidence", "pending"];
+    const listed = [...subjects].sort((a, b) => order.indexOf(a.summary) - order.indexOf(b.summary)
+      || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
+    const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;
+    const selected = focus ? await matchStore.getAssessment(focus.id).catch(() => null) : null;
+    return {
+      protocol, criteria, subjects, referrals, sites, siteFunnel, followups, selected, openByAssessment,
+      tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
+      gapsByCriterion: new Map(gapRows.map((row) => [String(row.criterion_id), { unknown: Number(row.unknown) }])),
+      pendingReview: reviewRows.map((row) => String(row.subject_key)),
+      forecastResult: null,
+      snapshotAt: null,
+    };
   }
 
   // --- cross-study pages --------------------------------------------------------------
 
-  /** `GET /api/vcr/models`: the shared model and method library (plan §8.2). @param {{ id: string }} user */
+  /**
+   * `GET /api/vcr/models`: the shared model and method library (plan §8.2), in
+   * the browser's card shape — with, on each card, the studies that use it.
+   * @param {{ id: string }} user
+   */
   async modelLibrary(user) {
-    const [models, methods] = await Promise.all([this.store.models(String(user.id)), this.store.methods()]);
-    return {
-      models, methods,
-      engineAvailable: Boolean(this.engine?.configured?.()),
-      // Advisory, never a block: a catalogue row the engine does not publish
-      // is shown as 「引擎方法与目录不一致」 and the study goes on.
-      engineMismatch: this.engineMismatch,
-      intendedUses: [...VCR_INTENDED_USES],
-    };
+    const [models, methods, uses] = await Promise.all([
+      this.store.models(String(user.id)), this.store.methods(),
+      this.store.rows(`SELECT DISTINCT ps.model_id, s.id, s.name FROM ${VCR_SCHEMA}.patient_sets ps
+        JOIN ${VCR_SCHEMA}.studies s ON s.id = ps.study_id
+        WHERE s.deleted_at IS NULL AND ps.model_id IS NOT NULL
+          AND (s.user_id = $1 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id = s.id AND m.user_id = $1))
+        ORDER BY s.name LIMIT 500`, [String(user.id)]),
+    ]);
+    /** @type {Map<string, Array<{ id: string, label: string }>>} */
+    const usedBy = new Map();
+    for (const row of uses) {
+      const key = String(row.model_id);
+      const found = usedBy.get(key) ?? [];
+      found.push({ id: String(row.id), label: String(row.name) });
+      usedBy.set(key, found);
+    }
+    // A patient set names its model by catalogue name or by id.
+    for (const model of models) {
+      const byId = usedBy.get(model.id) ?? [];
+      const byName = usedBy.get(model.name) ?? [];
+      const merged = [...byId, ...byName.filter((entry) => !byId.some((other) => other.id === entry.id))];
+      if (merged.length) usedBy.set(model.id, merged);
+    }
+    return presentModels({ models, methods, usedBy, engineAvailable: Boolean(this.engine?.configured?.()), engineMismatch: this.engineMismatch });
   }
 
   /**
@@ -676,14 +784,22 @@ export class VcrService {
     return saved;
   }
 
-  /** `GET /api/vcr/precedents`: the trial-precedent search (package C's read model). @param {{ id: string }} user @param {Record<string, any>} query */
-  async precedents(user, query) {
-    const evidence = this.packages.evidence;
-    if (!evidence?.precedents) {
-      return { precedents: [], available: false, code: "vcr_evidence_unavailable",
-        message: "试验先例库在本部署尚未接入。" };
+  /**
+   * `GET /api/vcr/precedents`: the trial-precedent search over the account's
+   * library. The query is `q` (registry id or title) and `limit`; a deployment
+   * without the evidence side answers `available: false` with the sentence
+   * saying so, never an empty table that reads as 「没有先例」.
+   * @param {{ id: string }} user @param {URLSearchParams | Record<string, any>} [query]
+   */
+  async precedents(user, query = {}) {
+    const asked = queryOf(query);
+    const evidenceStore = this.packages.evidenceStore;
+    if (!evidenceStore) {
+      return presentPrecedents({ available: false, message: "试验先例库在本部署尚未接入。" });
     }
-    return { ...(await evidence.precedents(user, query)), available: true };
+    const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
+    const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
+    return presentPrecedents({ available: true, rows, sources: rows.length ? `${rows.length} 项试验先例` : null });
   }
 
   // --- the runtime's read (build contract §3.2) ------------------------------------------
@@ -856,16 +972,4 @@ export async function vcrReadiness({ config, vcr, database }) {
     engine: vcr.engine?.configured?.() ? "wired" : "missing",
     ...(warnings.length ? { warning: warnings[0], warnings } : {}),
   };
-}
-
-/** The module's metric families, for the dashboard. @param {any} service */
-export function vcrMetricFamilies(service) {
-  const counters = service?.metrics?.() ?? {};
-  return [
-    { name: "evimed_vcr_studies_created_total", type: "counter", help: "Studies created.", value: Number(counters.studiesCreated ?? 0) },
-    { name: "evimed_vcr_runtime_reads_total", type: "counter", help: "Runtime gateway reads.", value: Number(counters.reads ?? 0) },
-    { name: "evimed_vcr_runtime_writes_total", type: "counter", help: "Runtime gateway writes.", value: Number(counters.writes ?? 0) },
-    { name: "evimed_vcr_runtime_write_issues_total", type: "counter", help: "Items a runtime write refused.", value: Number(counters.writeIssues ?? 0) },
-    { name: "evimed_vcr_study_not_found_total", type: "counter", help: "Reads of a study this account cannot see.", value: Number(counters.notFound ?? 0) },
-  ];
 }

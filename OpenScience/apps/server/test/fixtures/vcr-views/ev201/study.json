@@ -1,0 +1,1507 @@
+{
+  "id": "std_1",
+  "projectId": "prj_ev201",
+  "name": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+  "question": "单臂 II 期加外部对照行不行，还是必须做随机？",
+  "tier": "T0",
+  "intendedUse": "design_support",
+  "status": "active",
+  "steps": {
+    "definition": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "研究定义 v1"
+    },
+    "evidence": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "4 张假设卡"
+    },
+    "population": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "人群 v2"
+    },
+    "patients": {
+      "status": "failed",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "这一次运行只完成了一部分"
+    },
+    "comparator": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "文献对照"
+    },
+    "trial": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "4 个方案"
+    },
+    "matching": {
+      "status": "done",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": "6 人已评估"
+    }
+  },
+  "sessionId": null,
+  "abilities": [
+    "read",
+    "write",
+    "run",
+    "export",
+    "manage_members",
+    "manage_study",
+    "manage_data",
+    "review_any",
+    "contact_patients",
+    "read_patient_level"
+  ],
+  "budget": {
+    "limitSeconds": 7200,
+    "usedSeconds": 222,
+    "committedSeconds": 600,
+    "remainingSeconds": 6378,
+    "awaitingBudget": 1
+  },
+  "jobs": [
+    {
+      "id": "job_seed_18",
+      "kind": "match_criteria",
+      "label": "逐条匹配",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 11:08",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_17",
+      "kind": "design_grid",
+      "label": "设计网格",
+      "state": "awaiting_budget",
+      "progress": null,
+      "cpuSecondsLimit": 9000,
+      "cpuSecondsUsed": 0,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 11:01",
+      "cancelable": true
+    },
+    {
+      "id": "job_seed_16",
+      "kind": "design_simulation",
+      "label": "方案的模拟运行",
+      "state": "running",
+      "progress": {
+        "done": 3,
+        "total": 10
+      },
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 30,
+      "seed": 5,
+      "replicates": 20000,
+      "error": null,
+      "updatedAt": "今天 10:54",
+      "cancelable": true
+    },
+    {
+      "id": "job_seed_15",
+      "kind": "profile_snapshot",
+      "label": "数据快照画像",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 10:47",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_14",
+      "kind": "pool_evidence",
+      "label": "合并证据",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 10:40",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_13",
+      "kind": "accrual_forecast",
+      "label": "入组预测",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 10:33",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_12",
+      "kind": "design_grid",
+      "label": "设计网格",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": 5000,
+      "error": null,
+      "updatedAt": "今天 10:26",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_11",
+      "kind": "design_simulation",
+      "label": "方案的模拟运行",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": 16000,
+      "error": null,
+      "updatedAt": "今天 10:19",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_10",
+      "kind": "accrual_forecast",
+      "label": "入组预测",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 10:12",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_9",
+      "kind": "design_simulation",
+      "label": "方案的模拟运行",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": 16000,
+      "error": null,
+      "updatedAt": "今天 10:05",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_8",
+      "kind": "accrual_forecast",
+      "label": "入组预测",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": null,
+      "error": null,
+      "updatedAt": "今天 09:58",
+      "cancelable": false
+    },
+    {
+      "id": "job_seed_7",
+      "kind": "design_simulation",
+      "label": "方案的模拟运行",
+      "state": "succeeded",
+      "progress": null,
+      "cpuSecondsLimit": 600,
+      "cpuSecondsUsed": 12,
+      "seed": 5,
+      "replicates": 16000,
+      "error": null,
+      "updatedAt": "今天 09:51",
+      "cancelable": false
+    }
+  ],
+  "ceiling": {
+    "ceiling": "design_support",
+    "requested": "design_support",
+    "withinCeiling": true,
+    "reasons": [
+      {
+        "code": "model_tier",
+        "detail": "所用模型的可信度层级最多支持「研究设计支持」"
+      }
+    ]
+  },
+  "overview": {
+    "headline": "已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据。",
+    "metrics": [
+      {
+        "key": "assumption:control_median_pfs",
+        "label": "对照组中位 PFS",
+        "lead": false,
+        "note": "7 项",
+        "value": {
+          "value": 4.1,
+          "text": null,
+          "unit": "个月",
+          "source": "aggregate",
+          "interval": {
+            "kind": "prediction",
+            "low": 3,
+            "high": 5.6,
+            "level": 80
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "assumption",
+            "title": "对照组中位 PFS",
+            "fields": [
+              {
+                "label": "合并方法",
+                "value": "随机效应（REML）"
+              },
+              {
+                "label": "I²",
+                "value": "41%"
+              },
+              {
+                "label": "纳入的研究数",
+                "value": "7"
+              }
+            ],
+            "quote": "多西他赛组中位 PFS 为 3.9 个月（95% CI 3.4–4.4）",
+            "quoteSource": "NCT09900001，第 6 页，表 2",
+            "ref": {
+              "kind": "assumption",
+              "id": "asm_1",
+              "tab": "data"
+            }
+          }
+        }
+      },
+      {
+        "key": "assumption:target_hr",
+        "label": "目标 HR",
+        "lead": false,
+        "note": "情景假设",
+        "value": {
+          "value": 0.6,
+          "text": null,
+          "unit": null,
+          "source": "assumed",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "assumption",
+            "title": "目标 HR",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "assumption",
+              "id": "asm_2",
+              "tab": "data"
+            }
+          }
+        }
+      },
+      {
+        "key": "design:A",
+        "label": "方案 A 成功把握",
+        "lead": true,
+        "note": "单臂 + 文献对照",
+        "value": {
+          "value": 58,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 57.216,
+            "high": 58.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "design.simulate v1.0.0"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              },
+              {
+                "label": "情景哈希",
+                "value": "369fdd79b239"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_1",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "design:B",
+        "label": "方案 B 成功把握",
+        "lead": false,
+        "note": "2:1 随机",
+        "value": {
+          "value": 71,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 70.216,
+            "high": 71.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "design.simulate v1.0.0"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              },
+              {
+                "label": "情景哈希",
+                "value": "d29caf5152eb"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_2",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "design:C",
+        "label": "方案 C 成功把握",
+        "lead": false,
+        "note": "1:1 随机 + 一次期中分析",
+        "value": {
+          "value": 74,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 73.216,
+            "high": 74.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "design.simulate v1.0.0"
+              },
+              {
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
+              },
+              {
+                "label": "情景哈希",
+                "value": "eac3400a03b3"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_3",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "comparator_not_estimable",
+        "label": "真实外部对照",
+        "lead": false,
+        "note": "缺 3 项数据",
+        "value": {
+          "value": null,
+          "text": "不可估计",
+          "unit": null,
+          "source": "calculated",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": "缺 3 项数据",
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "counts": {
+      "realPatients": 0,
+      "events": 138,
+      "effectiveSampleSize": null,
+      "generatedRecords": 6480000,
+      "note": "设计阶段：尚无真实患者",
+      "scope": "方案 B"
+    },
+    "designs": [
+      {
+        "id": "scn_1",
+        "code": "A",
+        "name": "单臂 + 文献对照",
+        "dominated": false,
+        "dominatedBy": null,
+        "chosen": false,
+        "note": null,
+        "measures": {
+          "sample_size": {
+            "value": 60,
+            "text": null,
+            "unit": "例",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          },
+          "power": {
+            "value": 66,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 65.216,
+              "high": 66.784,
+              "level": 95
+            },
+            "mcse": 0.4,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "功效",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.4"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "369fdd79b239"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_1",
+                "tab": "trial"
+              }
+            }
+          },
+          "assurance": {
+            "value": 58,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 57.216,
+              "high": 58.784,
+              "level": 95
+            },
+            "mcse": 0.4,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "成功把握",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.4"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "369fdd79b239"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_1",
+                "tab": "trial"
+              }
+            }
+          },
+          "expected_sample_size": {
+            "value": 60,
+            "text": null,
+            "unit": "例",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 60,
+              "high": 60,
+              "level": 95
+            },
+            "mcse": 0,
+            "review": "ai_set",
+            "precision": null,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "期望样本量",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "369fdd79b239"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_1",
+                "tab": "trial"
+              }
+            }
+          },
+          "duration_months": {
+            "value": 11.7,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 9.2,
+              "high": 15,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_4",
+                "tab": "trial"
+              }
+            }
+          },
+          "cost": {
+            "value": 1450,
+            "text": null,
+            "unit": "万元",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      },
+      {
+        "id": "scn_2",
+        "code": "B",
+        "name": "2:1 随机",
+        "dominated": false,
+        "dominatedBy": null,
+        "chosen": true,
+        "note": null,
+        "measures": {
+          "sample_size": {
+            "value": 180,
+            "text": null,
+            "unit": "例",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          },
+          "power": {
+            "value": 81,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 80.412,
+              "high": 81.588,
+              "level": 95
+            },
+            "mcse": 0.3,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "功效",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.3"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "d29caf5152eb"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_2",
+                "tab": "trial"
+              }
+            }
+          },
+          "assurance": {
+            "value": 71,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 70.216,
+              "high": 71.784,
+              "level": 95
+            },
+            "mcse": 0.4,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "成功把握",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.4"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "d29caf5152eb"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_2",
+                "tab": "trial"
+              }
+            }
+          },
+          "type_one_error": {
+            "value": 2.47,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 2.2544,
+              "high": 2.6856,
+              "level": 95
+            },
+            "mcse": 0.11,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "I 类错误",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.11"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "d29caf5152eb"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_2",
+                "tab": "trial"
+              }
+            }
+          },
+          "expected_sample_size": {
+            "value": 180,
+            "text": null,
+            "unit": "例",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 180,
+              "high": 180,
+              "level": 95
+            },
+            "mcse": 0,
+            "review": "ai_set",
+            "precision": null,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "期望样本量",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "d29caf5152eb"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_2",
+                "tab": "trial"
+              }
+            }
+          },
+          "duration_months": {
+            "value": 16.4,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 13.9,
+              "high": 19.3,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_5",
+                "tab": "trial"
+              }
+            }
+          },
+          "cost": {
+            "value": 3900,
+            "text": null,
+            "unit": "万元",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      },
+      {
+        "id": "scn_3",
+        "code": "C",
+        "name": "1:1 随机 + 一次期中分析",
+        "dominated": false,
+        "dominatedBy": null,
+        "chosen": false,
+        "note": null,
+        "measures": {
+          "sample_size": {
+            "value": 220,
+            "text": null,
+            "unit": "例",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          },
+          "power": {
+            "value": 85,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 84.412,
+              "high": 85.588,
+              "level": 95
+            },
+            "mcse": 0.3,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "功效",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.3"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "eac3400a03b3"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_3",
+                "tab": "trial"
+              }
+            }
+          },
+          "assurance": {
+            "value": 74,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 73.216,
+              "high": 74.784,
+              "level": 95
+            },
+            "mcse": 0.4,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "成功把握",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.4"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "eac3400a03b3"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_3",
+                "tab": "trial"
+              }
+            }
+          },
+          "type_one_error": {
+            "value": 2.51,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 2.2944,
+              "high": 2.7256,
+              "level": 95
+            },
+            "mcse": 0.11,
+            "review": "ai_set",
+            "precision": 1,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "I 类错误",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.11"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "eac3400a03b3"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_3",
+                "tab": "trial"
+              }
+            }
+          },
+          "expected_sample_size": {
+            "value": 204,
+            "text": null,
+            "unit": "例",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 201.844,
+              "high": 206.156,
+              "level": 95
+            },
+            "mcse": 1.1,
+            "review": "ai_set",
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "期望样本量",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "design.simulate v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "16,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "1.1"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "eac3400a03b3"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_3",
+                "tab": "trial"
+              }
+            }
+          },
+          "duration_months": {
+            "value": 19.6,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 16.7,
+              "high": 23.2,
+              "level": 80
+            },
+            "mcse": 0.05,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "末例入组",
+              "fields": [
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.05"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_6",
+                "tab": "trial"
+              }
+            }
+          },
+          "cost": {
+            "value": 4600,
+            "text": null,
+            "unit": "万元",
+            "source": "assumed",
+            "interval": null,
+            "mcse": null,
+            "review": null,
+            "precision": 0,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      },
+      {
+        "id": "scn_4",
+        "code": "D",
+        "name": "1:1 随机 无期中",
+        "dominated": true,
+        "dominatedBy": "C",
+        "chosen": false,
+        "note": "在比较目标的全部指标上都不优于 C",
+        "measures": {}
+      }
+    ],
+    "attention": [
+      {
+        "kind": "ai_set",
+        "tone": "attention",
+        "tab": "data",
+        "text": "2 条关键假设由 AI 设定",
+        "items": [
+          "对照组中位 PFS",
+          "目标 HR"
+        ],
+        "action": {
+          "label": "去复核",
+          "tab": "data"
+        }
+      },
+      {
+        "kind": "not_estimable",
+        "tone": "attention",
+        "tab": "comparator",
+        "text": "真实外部对照不可估计，缺 3 项数据",
+        "items": [
+          "同期治疗记录",
+          "结局评估频率",
+          "ECOG 缺失 38%"
+        ],
+        "action": {
+          "label": "查看缺口",
+          "tab": "comparator"
+        }
+      },
+      {
+        "kind": "stale",
+        "tone": "stale",
+        "text": "1 个结果已过期：入排条件已变更"
+      },
+      {
+        "kind": "budget_confirm",
+        "tone": "attention",
+        "text": "1 项计算在等你确认计算预算"
+      },
+      {
+        "kind": "step_failed",
+        "tone": "attention",
+        "tab": null,
+        "text": "「患者」这一步没有做完，已算出的部分保留"
+      }
+    ],
+    "changes": [
+      {
+        "id": "result:res_7",
+        "at": "今天 10:52",
+        "text": "匹配评估的结果已更新（v1）",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "result:res_8",
+        "at": "今天 10:45",
+        "text": "数据快照画像的结果已更新（v1）",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "result:res_9",
+        "at": "今天 10:38",
+        "text": "证据合并的结果已更新（v1）",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "export:exp_1",
+        "at": "今天 09:14",
+        "text": "CDE 沟通交流资料包已请求",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "decision:dec_1",
+        "at": "今天 09:07",
+        "text": "写入决策记录：在成功把握尽量高、样本量尽量少的目标下选哪个方案",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "export:exp_2",
+        "at": "今天 09:07",
+        "text": "研究包已生成",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "assumption:asm_3",
+        "at": "昨天 09:28",
+        "text": "假设卡「脱落率」v1",
+        "by": null,
+        "state": null
+      },
+      {
+        "id": "assumption:asm_4",
+        "at": "昨天 09:21",
+        "text": "假设卡「对照组 ORR」v1",
+        "by": null,
+        "state": "reviewed"
+      }
+    ],
+    "deliverables": [
+      {
+        "id": "exp_1",
+        "kind": "cde_communication_pack",
+        "title": "CDE 沟通交流资料包 v1",
+        "meta": "今天 09:14 · 排队中",
+        "draft": true,
+        "runId": null,
+        "path": null
+      },
+      {
+        "id": "exp_2",
+        "kind": "study_package",
+        "title": "研究包 v1",
+        "meta": "今天 09:07 · 已生成",
+        "draft": false,
+        "runId": "run_12",
+        "path": "package.pdf"
+      }
+    ]
+  },
+  "updatedAt": "今天 09:09",
+  "createdAt": "2026-09-27T01:07:00.000Z"
+}

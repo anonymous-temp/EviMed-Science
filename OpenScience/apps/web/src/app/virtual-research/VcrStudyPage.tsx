@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { MessageSquare, MoreHorizontal, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
+  cancelVcrJob,
   deleteVcrStudy,
   exportVcrStudy,
   getVcrStudy,
@@ -10,11 +11,13 @@ import {
   isVcrOff,
   patchVcrStudy,
   useVcrFeature,
+  type VcrExportKind,
+  type VcrJob,
   type VcrStudy,
   type VcrTabKey,
 } from "@/lib/vcrClient";
-import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -26,9 +29,11 @@ import { ProgressRail, type RailState, type RailStep } from "@/components/ui/Pro
 import { Tabs } from "@/components/ui/Tabs";
 import { StudyTags } from "@/components/vcr/VcrMarks";
 import { VcrOffPage, VcrStudySkeleton } from "@/components/vcr/VcrStates";
-import { VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
+import { cpuTimeText, jobsAwaitingBudget, VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
 import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
 import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
+import { useVcrRun } from "@/components/vcr/useVcrRun";
+import { VcrTabBoundary } from "@/components/vcr/vcrTabKit";
 import { OverviewTab } from "@/components/vcr/tabs/OverviewTab";
 import { PopulationTab } from "@/components/vcr/tabs/PopulationTab";
 import { PatientsTab } from "@/components/vcr/tabs/PatientsTab";
@@ -36,8 +41,8 @@ import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
-import { stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
-import { resolveVcrTab, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { jobStateLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
+import { resolveVcrTab, VCR_HOME_PATH, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
 
 type TabComponent = ComponentType<{ studyId: string; study: VcrStudy }>;
 
@@ -51,12 +56,16 @@ const TABS: Record<VcrTabKey, TabComponent> = {
   data: DataTab,
 };
 
+/** What the page holds, and for which study: an answer for another id is not this page's. */
 type Loaded =
   | { kind: "loading" }
-  | { kind: "off" }
-  | { kind: "missing" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; study: VcrStudy };
+  | { kind: "off"; id: string }
+  | { kind: "missing"; id: string }
+  | { kind: "error"; id: string; message: string }
+  | { kind: "ready"; id: string; study: VcrStudy };
+
+/** The job states the 「运行」 strip shows: what is going on now, and what did not finish. */
+const LIVE_JOB_STATES: ReadonlySet<VcrJob["state"]> = new Set(["queued", "running", "awaiting_budget", "failed"]);
 
 /**
  * One study, on the wide column a data page needs.
@@ -72,20 +81,22 @@ type Loaded =
  * the page itself is the structured cards — an assumption, a criterion, a
  * decision — and each edit makes a new version, which is what marks the
  * results downstream of it stale.
+ *
+ * Hidden knowledge:
+ *  - **An answer belongs to the id it was asked for.** Moving from one study
+ *    to another shows the skeleton, never the previous study's header under
+ *    the new address.
+ *  - **Each tab is behind its own boundary** (contract §5): a tab that cannot
+ *    read its payload shows an error card inside the tab, and the header, the
+ *    rail and the other six tabs stay.
  */
 export function VcrStudyPage() {
   const { studyId = "", tab: tabParam } = useParams();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
   const feature = useVcrFeature();
-  const openConversation = useOpenVcrConversation();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [budgetOpen, setBudgetOpen] = useState(false);
   const { tab, moved } = resolveVcrTab(tabParam);
-  const packageId = params.get("package");
 
   useEffect(() => {
     // An address that named a step is rewritten to the tab that holds it, in
@@ -97,92 +108,111 @@ export function VcrStudyPage() {
     if (feature === "loading" || feature === "off") return undefined;
     let live = true;
     void getVcrStudy(studyId).then(
-      (study) => { if (live) setLoaded({ kind: "ready", study }); },
+      (study) => { if (live) setLoaded({ kind: "ready", id: studyId, study }); },
       (error: unknown) => {
         if (!live) return;
-        if (isVcrOff(error)) setLoaded({ kind: "off" });
-        else if (isVcrMissing(error)) setLoaded({ kind: "missing" });
-        else setLoaded({ kind: "error", message: webErrorMessage(error, { fallback: "研究暂时无法读取。" }) });
+        if (isVcrOff(error)) setLoaded({ kind: "off", id: studyId });
+        else if (isVcrMissing(error)) setLoaded({ kind: "missing", id: studyId });
+        else setLoaded({ kind: "error", id: studyId, message: webErrorMessage(error, { fallback: "研究暂时无法读取。" }) });
       },
     );
     return () => { live = false; };
   }, [feature, studyId, reloads]);
 
   const reload = useCallback(() => setReloads((value) => value + 1), []);
+  const shown: Loaded = loaded.kind !== "loading" && loaded.id !== studyId ? { kind: "loading" } : loaded;
 
-  if (feature === "off" || loaded.kind === "off") return <VcrOffPage />;
-  if (loaded.kind === "missing") {
+  if (feature === "off" || shown.kind === "off") return <VcrOffPage />;
+  if (shown.kind === "missing") {
     return (
       <PageShell title="虚拟临研" width="wide">
         <EmptyState
           icon={UsersRound}
           title="这个研究不存在或已删除。"
-          action={<Button variant="secondary" onClick={() => navigate("/app/virtual-research")}>回到研究列表</Button>}
+          action={<Button variant="secondary" onClick={() => navigate(VCR_HOME_PATH)}>回到研究列表</Button>}
         />
       </PageShell>
     );
   }
-  if (loaded.kind !== "ready") {
+  if (shown.kind !== "ready") {
     return (
       <PageShell title="虚拟临研" width="wide">
-        {loaded.kind === "error" ? <LoadError message={loaded.message} onRetry={reload} /> : <VcrStudySkeleton />}
+        {shown.kind === "error" ? <LoadError message={shown.message} onRetry={reload} /> : <VcrStudySkeleton />}
       </PageShell>
     );
   }
+  // Keyed by the study: the menu's dialogs and the run guard never outlive it.
+  return <StudyView key={studyId} studyId={studyId} study={shown.study} tab={tab} reload={reload} />;
+}
 
-  const study = loaded.study;
+function StudyView({ studyId, study, tab, reload }: { studyId: string; study: VcrStudy; tab: VcrTabKey; reload: () => void }) {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const openConversation = useOpenVcrConversation();
+  const { run, busy: running } = useVcrRun(study);
+  const [opening, setOpening] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const holding = useRef(false);
+  const packageId = params.get("package");
   const Tab = TABS[tab];
 
-  /** An action that ends in the study's own conversation. */
-  const act = (key: string, work: () => Promise<{ sessionId?: string | null } | void>, failure: string) => {
-    if (busy) return;
-    setBusy(key);
-    void work()
-      .then((result) => openConversation({ projectId: study.projectId, sessionId: result?.sessionId ?? study.sessionId }))
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure })))
-      .finally(() => setBusy(null));
+  /** One write at a time (CW-18): a second click while the first is in flight does nothing. */
+  const once = (work: () => Promise<unknown>) => {
+    if (holding.current) return;
+    holding.current = true;
+    void work().finally(() => { holding.current = false; });
+  };
+
+  const exportAs = (kind: VcrExportKind, failure: string) => {
+    // A deferred export stays on the page with its sentence; the overview's
+    // deliverables are re-read so the queued package is listed.
+    void run(() => exportVcrStudy(studyId, kind), failure, reload);
   };
 
   const paused = study.status === "paused";
   const menu: MenuEntry[] = [
-    { label: "导出研究包", onSelect: () => act("study_package", () => exportVcrStudy(studyId, "study_package"), "研究包暂时无法导出，请稍后重试。") },
-    { label: "导出 CDE 沟通交流资料包", onSelect: () => act("cde", () => exportVcrStudy(studyId, "cde_communication_pack"), "资料包暂时无法导出，请稍后重试。") },
+    { label: "导出研究包", disabled: running, onSelect: () => exportAs("study_package", "研究包暂时无法导出，请稍后重试。") },
+    { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
     { label: "设定计算预算", onSelect: () => setBudgetOpen(true) },
     {
       label: paused ? "继续" : "暂停",
-      onSelect: () => {
-        void patchVcrStudy(studyId, { status: paused ? "active" : "paused" })
-          .then(() => { toast.success(paused ? "已继续。" : "已暂停，排队中的计算停下了。"); reload(); })
-          .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究状态无法修改，请稍后重试。" })));
-      },
+      onSelect: () => once(() => patchVcrStudy(studyId, { status: paused ? "active" : "paused" })
+        .then(() => { toast.success(paused ? "已继续。" : "已暂停。"); reload(); })
+        .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究状态无法修改，请稍后重试。" })))),
     },
     "separator",
     { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) },
   ];
 
-  const remove = () => {
-    setConfirmDelete(false);
-    void deleteVcrStudy(studyId)
+  const remove = () => once(() => {
+    setDeleting(true);
+    return deleteVcrStudy(studyId)
       .then(() => {
-        // The control-plane project went with it: the sidebar's list is re-read.
-        void useProjectStore.getState().load();
-        navigate("/app/virtual-research", { replace: true });
+        toast.success("研究已从虚拟临研移除。");
+        navigate(VCR_HOME_PATH, { replace: true });
       })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究无法删除，请稍后重试。" })));
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "研究无法删除，请稍后重试。" })))
+      .finally(() => { setDeleting(false); setConfirmDelete(false); });
+  });
+
+  const openStudyConversation = () => {
+    if (opening) return;
+    setOpening(true);
+    void openConversation({ projectId: study.projectId, sessionId: study.sessionId })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" })))
+      .finally(() => setOpening(false));
   };
 
   return (
     <PageShell
       title={study.name}
       width="wide"
-      meta={<StudyTags tier={study.tier} intendedUse={study.intendedUse} />}
+      meta={<StudyTags tier={study.tier} intendedUse={study.intendedUse} ceiling={study.ceiling} />}
       actions={(
         <>
-          <Button
-            variant="secondary"
-            loading={busy === "conversation"}
-            onClick={() => act("conversation", async () => ({ sessionId: study.sessionId }), "对话暂时无法打开，请稍后重试。")}
-          >
+          <Button variant="secondary" loading={opening} onClick={openStudyConversation}>
             <MessageSquare size={16} aria-hidden="true" />
             对话
           </Button>
@@ -193,6 +223,8 @@ export function VcrStudyPage() {
       )}
     >
       <ProgressRail label="七步进度" steps={railSteps(study, studyId)} className="mb-6" />
+
+      <JobStrip studyId={studyId} study={study} onBudget={() => setBudgetOpen(true)} onChanged={reload} />
 
       {packageId ? (
         <VcrPackageReader
@@ -211,7 +243,9 @@ export function VcrStudyPage() {
             className="gap-4 overflow-x-auto sm:gap-6 [&>button]:shrink-0"
           />
           <div id="vcr-tab-panel" role="tabpanel" aria-labelledby={`vcr-tab-panel-tab-${tab}`} className="pt-6">
-            <Tab studyId={studyId} study={study} />
+            <VcrTabBoundary key={tab}>
+              <Tab studyId={studyId} study={study} />
+            </VcrTabBoundary>
           </div>
         </>
       )}
@@ -220,6 +254,7 @@ export function VcrStudyPage() {
         <VcrBudgetDialog
           studyId={studyId}
           budget={study.budget}
+          jobs={study.jobs}
           onClose={() => setBudgetOpen(false)}
           onSaved={() => { setBudgetOpen(false); reload(); }}
         />
@@ -228,13 +263,84 @@ export function VcrStudyPage() {
       {confirmDelete && (
         <ConfirmDialog
           title={`删除“${study.name}”？`}
-          body="这个研究的对话、文件、假设卡、人群版本和运行结果会一起删除，不能恢复。已经导出的研究包不会被撤回。"
-          confirmLabel="删除"
+          body="研究会从虚拟临研移除；项目里的对话和文件仍在。"
+          confirmLabel={deleting ? "正在删除" : "删除"}
           onConfirm={remove}
           onCancel={() => setConfirmDelete(false)}
         />
       )}
     </PageShell>
+  );
+}
+
+/**
+ * 「运行」: the computations queued, running, waiting on a budget confirmation
+ * or not finished (plan §3.6 — the run state is one of the three, and is said
+ * apart from the conclusion and the review).
+ *
+ * The line above the jobs is the second human stop made visible: a job past
+ * the budget waits for the lead, and the page says so where the lead is
+ * looking rather than only in the header's menu.
+ */
+function JobStrip({ studyId, study, onBudget, onChanged }: {
+  studyId: string;
+  study: VcrStudy;
+  onBudget: () => void;
+  onChanged: () => void;
+}) {
+  const [canceling, setCanceling] = useState<string | null>(null);
+  const holding = useRef(false);
+  const jobs = study.jobs.filter((job) => LIVE_JOB_STATES.has(job.state));
+  const waiting = jobsAwaitingBudget(study.jobs);
+  const awaiting = study.budget?.awaitingBudget ?? 0;
+  if (jobs.length === 0 && awaiting <= 0) return null;
+  const mayCancel = study.abilities.includes("run");
+
+  const cancel = (job: VcrJob) => {
+    if (holding.current) return;
+    holding.current = true;
+    setCanceling(job.id);
+    void cancelVcrJob(studyId, job.id)
+      .then(() => { toast.success("已取消。"); onChanged(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这项计算暂时无法取消，请稍后重试。" })))
+      .finally(() => { holding.current = false; setCanceling(null); });
+  };
+
+  return (
+    <section data-vcr-jobs="" aria-labelledby="vcr-jobs-title" className="mb-6 rounded-card border border-border bg-surface px-4 py-3">
+      <h2 id="vcr-jobs-title" className="text-caption text-text-3">运行</h2>
+      {awaiting > 0 && (
+        <p data-vcr-budget-wait="" className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-ui text-warn-strong">
+          <span className="min-w-0 flex-1">
+            {`有 ${numberText(awaiting, 0)} 项计算等待预算确认${waiting.seconds > 0 ? ` · 需 ${cpuTimeText(waiting.seconds)} CPU 时间` : ""}`}
+          </span>
+          <Button size="sm" onClick={onBudget}>确认预算</Button>
+        </p>
+      )}
+      {jobs.length > 0 && (
+        <ul className="mt-1 divide-y divide-faint">
+          {jobs.map((job) => (
+            <li key={job.id} data-vcr-job={job.id} data-vcr-job-state={job.state} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+              <span className="min-w-0 flex-1 truncate text-ui text-text">{job.label}</span>
+              {job.progress && job.progress.total > 0 && (
+                <span className="text-caption tabular-nums text-text-3">{`${numberText(job.progress.done, 0)} / ${numberText(job.progress.total, 0)}`}</span>
+              )}
+              <span className={cn("text-caption", job.state === "failed" ? "text-danger-strong" : job.state === "awaiting_budget" ? "text-warn-strong" : "text-text-3")}>
+                {jobStateLabel(job.state)}
+              </span>
+              {job.state === "failed" && job.error?.message && (
+                <span className="w-full text-caption text-text-2">{job.error.message}</span>
+              )}
+              {job.cancelable && mayCancel && (
+                <Button size="sm" variant="text" loading={canceling === job.id} disabled={canceling !== null} onClick={() => cancel(job)}>
+                  取消
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

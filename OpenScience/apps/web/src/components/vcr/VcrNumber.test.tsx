@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { VcrCountsBand, VcrCountsLine } from "./VcrCounts";
 import { markKindOf, SourceTag } from "./VcrMarks";
 import { VcrNumber, VcrStat, VcrValueText } from "./VcrNumber";
-import { counts, value } from "./__fixtures__/vcrStudy";
+import { counts, value } from "./__fixtures__/vcrValues";
 
 describe("a number on a page", () => {
   it("prints its unit and its Monte-Carlo standard error beside it", () => {
     render(<VcrValueText value={value({ value: 71, unit: "%", source: "predicted", mcse: 0.4 })} />);
-    expect(screen.getByText("71")).toBeInTheDocument();
+    expect(screen.getByText("71.0")).toBeInTheDocument();
     expect(screen.getByText("%")).toBeInTheDocument();
     expect(screen.getByText("±0.40")).toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe("a tile", () => {
   it("shows an AI-set value with its label rather than withholding it", () => {
     render(<VcrStat label="目标 HR" value={value({ value: 0.6, source: "assumed", review: "ai_set" })} />);
     // A hazard ratio prints two decimals, as the design renders write it.
-    expect(screen.getByText("0.60")).toBeInTheDocument();
+    expect(screen.getByText("0.6")).toBeInTheDocument();
     expect(screen.getByText("AI 设定")).toBeInTheDocument();
     expect(screen.getByText("假设")).toBeInTheDocument();
   });

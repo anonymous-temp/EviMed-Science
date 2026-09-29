@@ -81,18 +81,43 @@ export const modelRiskLabel = table<VcrModelRisk>(VCR_MODEL_RISK_LABELS_ZH);
 /** The em-free stand-in for a number nobody measured. */
 export const NO_VALUE = "—";
 
-/** How many decimals a value prints with when it does not say. */
-function decimalsOf(value: number, precision: number | null | undefined): number {
-  if (typeof precision === "number" && Number.isFinite(precision)) return Math.max(0, Math.min(6, Math.round(precision)));
-  if (Number.isInteger(value)) return 0;
-  return Math.abs(value) >= 10 ? 1 : Math.abs(value) >= 1 ? 1 : 2;
+/**
+ * The decimals that keep `digits` significant digits of a positive error term:
+ * 0.0031 keeps four for two digits and three for one. The same rule the server
+ * uses (`decimalsFor` in `vcrViewsKit.mjs`), so a value the server rounded to
+ * its own error is never re-rounded here to something else.
+ */
+export function decimalsForError(error: number, digits: number): number {
+  if (!(error > 0) || !Number.isFinite(error)) return 0;
+  return Math.max(0, Math.min(8, digits - 1 - Math.floor(Math.log10(error))));
+}
+
+/**
+ * How many decimals a value prints with, and whether a zero that only the rule
+ * wrote may be dropped.
+ *
+ * In order: the value's own `precision` (the server rounded it to its error);
+ * the decimal place of its Monte-Carlo error's first significant digit; and
+ * failing both, its magnitude — whole numbers as they are, ratios to two
+ * decimals (1.04, 1.96), two significant digits below one (0.0031). Only the
+ * magnitude rule drops a trailing zero (5.9, not 5.90): nothing said the second
+ * decimal meant anything.
+ */
+function decimalsOf(value: number, precision: number | null | undefined, mcse?: number | null): { decimals: number; trim: boolean } {
+  if (typeof precision === "number" && Number.isFinite(precision)) return { decimals: Math.max(0, Math.min(8, Math.round(precision))), trim: false };
+  if (typeof mcse === "number" && Number.isFinite(mcse) && mcse > 0) return { decimals: Math.min(6, decimalsForError(mcse, 1)), trim: false };
+  const magnitude = Math.abs(value);
+  if (Number.isInteger(value) || magnitude >= 100) return { decimals: 0, trim: true };
+  if (magnitude >= 10) return { decimals: 1, trim: true };
+  if (magnitude >= 1) return { decimals: 2, trim: true };
+  return { decimals: Math.max(2, Math.min(6, decimalsForError(magnitude || 1, 2))), trim: true };
 }
 
 /** A number with thousands separators, in the value's own precision. */
-export function numberText(value: number | null | undefined, precision?: number | null): string {
+export function numberText(value: number | null | undefined, precision?: number | null, mcse?: number | null): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return NO_VALUE;
-  const decimals = decimalsOf(value, precision);
-  return value.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  const { decimals, trim } = decimalsOf(value, precision, mcse);
+  return value.toLocaleString("zh-CN", { minimumFractionDigits: trim ? 0 : decimals, maximumFractionDigits: decimals });
 }
 
 /**
@@ -116,9 +141,17 @@ export function countText(value: number | null | undefined): string {
  * the two when the caller does not say. 「3–5.6」 reads as two different kinds
  * of number inside one interval; the mockups write 「3.0–5.6」 for that reason.
  */
+/** The decimals a stored number actually has (up to six), so 3.6 and 4.65 share two. */
+function significantDecimals(value: number): number {
+  const [, fraction = ""] = String(Math.round(value * 1e6) / 1e6).split(".");
+  return Math.min(6, fraction.length);
+}
+
 export function rangeText(low: number | null | undefined, high: number | null | undefined, precision?: number | null): string {
   const ends = [low, high].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  const shared = precision ?? (ends.length ? Math.max(...ends.map((value) => decimalsOf(value, null))) : null);
+  // Both ends take the decimals the finer of the two needs, whole numbers
+  // apart: 3.0–5.6, never 3–5.6.
+  const shared = precision ?? (ends.length ? Math.max(...ends.map((value) => significantDecimals(value))) : null);
   const a = typeof low === "number" && Number.isFinite(low) ? numberText(low, shared) : null;
   const b = typeof high === "number" && Number.isFinite(high) ? numberText(high, shared) : null;
   if (a === null && b === null) return "";
@@ -141,15 +174,21 @@ export function intervalText(interval: VcrInterval | null | undefined, precision
   return `${level}${name} ${range}`;
 }
 
-/** 「±0.4」 — the Monte-Carlo standard error every simulated measure carries. */
+/**
+ * 「±0.31」 — the Monte-Carlo standard error every simulated measure carries,
+ * to two significant digits (±0.0031, ±0.40, ±1.0): an error is stated with
+ * less precision than a value, and a third digit of it would be noise.
+ */
 export function mcseText(mcse: number | null | undefined): string {
-  return typeof mcse === "number" && Number.isFinite(mcse) ? `±${numberText(mcse, mcse < 1 ? 2 : 1)}` : "";
+  if (typeof mcse !== "number" || !Number.isFinite(mcse)) return "";
+  const decimals = decimalsForError(mcse, 2);
+  return `±${mcse.toLocaleString("zh-CN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
 /** The number itself, or the word that stands in its place. */
 export function valueText(value: VcrValue | null | undefined): string {
   if (!value) return NO_VALUE;
-  if (typeof value.value === "number" && Number.isFinite(value.value)) return numberText(value.value, value.precision);
+  if (typeof value.value === "number" && Number.isFinite(value.value)) return numberText(value.value, value.precision, value.mcse);
   return value.text ?? NO_VALUE;
 }
 
@@ -175,8 +214,15 @@ export function valueSentence(value: VcrValue | null | undefined): string {
   ].filter(Boolean).join("，");
 }
 
-/** The sentence a stale result carries (plan §9.6). The numbers stay on screen. */
+/**
+ * The sentence a stale result carries (plan §9.6). The numbers stay on screen.
+ * 「排队重算中」 is said only when a recomputation is actually queued: a
+ * light result recomputes at once and a heavy one may wait for a person, and a
+ * sentence that promised a queue that does not exist would be a false one.
+ */
 export const STALE_SENTENCE = "输入已变更，排队重算中";
+export const STALE_SENTENCE_NOT_QUEUED = "输入已变更，这些数字可能已过期";
+export const staleSentence = (queued: boolean | null | undefined) => (queued ? STALE_SENTENCE : STALE_SENTENCE_NOT_QUEUED);
 
 /** What a step produces, for a tab that has nothing yet. */
 export const VCR_STEP_EMPTY: Readonly<Record<VcrStepKey, string>> = Object.freeze({

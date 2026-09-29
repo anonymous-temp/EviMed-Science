@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { CircleCheck, CircleHelp, CircleX, Clock, TriangleAlert } from "lucide-react";
+import { useRef, useState } from "react";
+import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
 import {
   contactVcrReferral,
   getVcrMatching,
+  recordVcrDecision,
   type VcrCandidate,
+  type VcrCriterionJudgement,
   type VcrCriterionState,
   type VcrMatchingTab as MatchingData,
   type VcrStudy,
@@ -25,9 +27,10 @@ import { SourceTag } from "../VcrMarks";
 import { VcrStat, VcrStatNote } from "../VcrNumber";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
-import { criterionStateLabel, numberText, referralStateLabel } from "../vcrText";
+import { criterionStateLabel, intervalLabel, numberText, referralStateLabel } from "../vcrText";
 
 type View = "matching" | "referral" | "sites" | "followup";
+type Direction = NonNullable<MatchingData["direction"]>;
 
 const VIEWS: ReadonlyArray<{ value: View; label: string }> = Object.freeze([
   { value: "matching", label: "匹配" },
@@ -35,6 +38,18 @@ const VIEWS: ReadonlyArray<{ value: View; label: string }> = Object.freeze([
   { value: "sites", label: "中心" },
   { value: "followup", label: "随访" },
 ]);
+
+const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.freeze([
+  { value: "trial_to_patient", label: "给试验找患者" },
+  { value: "patient_to_trial", label: "给患者找试验" },
+]);
+
+/**
+ * What the model's ranking hint is called wherever it appears. It orders a
+ * coordinator's work; it is not a chance of benefit, and no number of it is
+ * printed that could be read as one.
+ */
+const PRIORITY_LABEL = "临床优先级（不是获益概率）";
 
 const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
   satisfied: CircleCheck,
@@ -52,42 +67,78 @@ const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
  * outside the platform that cannot be undone; the platform has the reason and
  * the missing evidence ready, and stops there.
  *
- * Eligibility is three-valued and stays three-valued: 未知 is never folded
- * into 不符合. A candidate the platform cannot judge is a request for one
- * piece of evidence, and the column that says which piece is what makes the
- * list actionable rather than a ranking.
+ * Hidden knowledge:
+ *  - Eligibility is three-valued and stays three-valued: 未知 is never folded
+ *    into 不符合, and a rule that does not apply to a person is 「不适用」, never
+ *    未知 (plan §7.1).
+ *  - **The confirmation names the referral, not the person's key.** The route
+ *    takes the referral id the server attached to the selected candidate; a
+ *    subject key sent there is a 404 (review UI-2).
+ *  - Picking a candidate re-reads the tab for that person (`?candidate=`), and
+ *    the page keeps the rest of the tab on screen while it does.
+ *  - When the recruiting side is not composed on this deployment the payload
+ *    says so (`available: false`), and that sentence is all the tab shows.
  */
 export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const [view, setView] = useState<View>("matching");
-  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}`, () => getVcrMatching(studyId, { view }));
-  const header = (
-    <VcrToolbar>
-      <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={setView} options={[...VIEWS]} />
+  const [direction, setDirection] = useState<Direction>("trial_to_patient");
+  const [candidate, setCandidate] = useState<string | null>(null);
+  const { state, reload } = useVcrLoad(`${studyId}:matching:${view}:${direction}`, () => getVcrMatching(studyId, {
+    view, direction, ...(view === "matching" && candidate ? { candidate } : {}),
+  }));
+  const pick = (id: string) => {
+    setCandidate(id);
+    // Same key, a new round: the tab stays on screen while the person loads.
+    reload();
+  };
+  const switchView = (next: View) => { setView(next); setCandidate(null); };
+  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); };
+
+  const toolbar = (summary?: string) => (
+    <VcrToolbar summary={summary}>
+      <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={switchView} options={[...VIEWS]} />
+      {view === "matching" && (
+        <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />
+      )}
     </VcrToolbar>
   );
-  if (state.kind === "loading") return <div className="flex flex-col gap-6">{header}<VcrTabSkeleton /></div>;
-  if (state.kind === "error") return <div className="flex flex-col gap-6">{header}<VcrTabError message={state.message} onRetry={reload} /></div>;
+  if (state.kind === "loading") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabSkeleton /></div>;
+  if (state.kind === "error") return <div className="flex flex-col gap-6">{toolbar()}<VcrTabError message={state.message} onRetry={reload} /></div>;
   const data = state.data;
+  if (data.available === false) {
+    return (
+      <p data-vcr-matching-unavailable="" className="py-12 text-center text-ui text-text-3">
+        {data.unavailable?.message ?? "匹配与招募在本部署尚未接入。"}
+      </p>
+    );
+  }
   // Every sub-view counts: a referral ledger with no candidate list is a
   // study whose matching has already run, and offering 「让 AI 做」 there
   // would ask for work that is done.
-  const nothing = data.candidates.length === 0 && !data.forecast
+  const nothing = data.candidates.length === 0 && !data.forecast && !data.pendingReview
     && (data.ledger ?? []).length === 0 && (data.sites ?? []).length === 0 && (data.followup ?? []).length === 0;
   if (nothing) {
     return (
       <div className="flex flex-col gap-6">
-        {header}
+        {toolbar()}
         <VcrStepPending studyId={studyId} study={study} step="matching" />
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-6">
-      <VcrToolbar summary={partnerLine(data)}>
-        <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={setView} options={[...VIEWS]} />
-      </VcrToolbar>
+      {toolbar(partnerLine(data))}
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
-      {view === "matching" && <MatchingView studyId={studyId} data={data} onDone={reload} />}
+      {view === "matching" && (
+        <MatchingView
+          studyId={studyId}
+          data={data}
+          abilities={study.abilities}
+          picked={candidate}
+          onPick={pick}
+          onDone={reload}
+        />
+      )}
       {view === "referral" && <ReferralView data={data} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
@@ -104,18 +155,63 @@ function partnerLine(data: MatchingData): string {
   ].filter(Boolean).join(" · ");
 }
 
-function MatchingView({ studyId, data, onDone }: { studyId: string; data: MatchingData; onDone: () => void }) {
-  const [confirming, setConfirming] = useState<VcrCandidate | null>(null);
-  const [busy, setBusy] = useState(false);
+/** The rules a request for evidence is about: what is unknown, and what waits on a named document. */
+function evidenceNeeds(criteria: readonly VcrCriterionJudgement[]): VcrCriterionJudgement[] {
+  return criteria.filter((row) => row.applicable !== false
+    && (row.state === "unknown" || (row.state === "pending_recheck" && Boolean(row.request))));
+}
+
+function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
+  studyId: string;
+  data: MatchingData;
+  abilities: readonly string[];
+  /** The candidate asked for; the detail may still be the previous one while it loads. */
+  picked: string | null;
+  onPick: (id: string) => void;
+  onDone: () => void;
+}) {
+  const [confirming, setConfirming] = useState<{ subject: string; referralId: string } | null>(null);
+  const [busy, setBusy] = useState<"contact" | "evidence" | null>(null);
+  const holding = useRef(false);
   const selected = data.selected;
+  const current = picked ?? selected?.candidate.id ?? null;
+  const needs = selected ? evidenceNeeds(selected.criteria) : [];
+  const referralId = selected?.referralId ?? null;
+  // The one human stop (plan §10.1): the server says whether this referral is
+  // at a state a coordinator may confirm, and the reader's own roles say
+  // whether they are the one who may.
+  const mayContact = Boolean(selected?.canContact === true && referralId && abilities.includes("contact_patients"));
+
+  /** One write at a time (CW-18): a second press while the first is in flight does nothing. */
+  const once = (key: "contact" | "evidence", work: () => Promise<unknown>) => {
+    if (holding.current) return;
+    holding.current = true;
+    setBusy(key);
+    void work().finally(() => { holding.current = false; setBusy(null); });
+  };
 
   const contact = () => {
     if (!confirming) return;
-    setBusy(true);
-    void contactVcrReferral(studyId, confirming.id)
+    const target = confirming;
+    once("contact", () => contactVcrReferral(studyId, target.referralId)
       .then(() => { toast.success("已记录联系确认。"); onDone(); })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "联系确认暂时无法记录，请稍后重试。" })))
-      .finally(() => { setBusy(false); setConfirming(null); });
+      .finally(() => setConfirming(null)));
+  };
+
+  // 请求补证 is recorded as a decision: what was asked for, about whom and on
+  // which rules, in the study's own decision record.
+  const requestEvidence = () => {
+    if (!selected || needs.length === 0) return;
+    const subject = selected.candidate.id;
+    const requests = needs.map((row) => `${row.code} ${row.request ?? criterionStateLabel(row.state)}${row.requestNote ? `（${row.requestNote}）` : ""}`).join("；");
+    once("evidence", () => recordVcrDecision(studyId, {
+      question: `请求补证 ${subject}：${requests}`.slice(0, 500),
+      chosen: { kind: "evidence_request", subject, criteria: needs.map((row) => row.code) },
+      rationale: requests,
+    })
+      .then(() => { toast.success("已记录补证请求。"); onDone(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "补证请求暂时无法记录，请稍后重试。" }))));
   };
 
   return (
@@ -144,25 +240,8 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
           <Card title={referralStateLabel("candidate")}>
             <ul className="flex flex-col gap-1">
               {data.candidates.map((candidate) => (
-                <li
-                  key={candidate.id}
-                  data-vcr-candidate={candidate.id}
-                  className={cn("rounded px-2.5 py-2", selected?.candidate.id === candidate.id && "bg-accent-soft")}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 truncate text-ui font-medium text-text">{candidate.id}</span>
-                    {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
-                  </div>
-                  <p className="truncate text-caption text-text-2">{candidate.summary}</p>
-                  {candidate.open.length > 0 && (
-                    <p className="mt-1 flex flex-wrap gap-1">
-                      {candidate.open.map((open) => (
-                        <Tag key={open.code} tone="warn">
-                          {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}
-                        </Tag>
-                      ))}
-                    </p>
-                  )}
+                <li key={candidate.id}>
+                  <CandidateButton candidate={candidate} current={current === candidate.id} onPick={() => onPick(candidate.id)} />
                 </li>
               ))}
             </ul>
@@ -184,6 +263,23 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
               </ul>
             </Card>
           )}
+
+          {data.pendingReview && data.pendingReview.count > 0 && (
+            // Excluded on a model's word alone: they wait here for a person,
+            // and are never counted as 不符合 until one has looked (plan §7.1).
+            <Card
+              header={(
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="text-ui font-semibold text-text">待复核排除</h2>
+                  <span className="text-caption tabular-nums text-text-3">{`${numberText(data.pendingReview.count, 0)} 人`}</span>
+                </div>
+              )}
+            >
+              <ul data-vcr-pending-review="" className="flex flex-wrap gap-1.5">
+                {data.pendingReview.subjects.map((subject) => <li key={subject}><Tag>{subject}</Tag></li>)}
+              </ul>
+            </Card>
+          )}
         </div>
 
         {selected && (
@@ -192,6 +288,7 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 className="text-section font-semibold text-text">{selected.candidate.id}</h2>
                 <span className="min-w-0 flex-1 text-ui text-text-2">{selected.candidate.summary}</span>
+                {selected.referralState && <Tag>{referralStateLabel(selected.referralState)}</Tag>}
               </div>
             )}
           >
@@ -212,22 +309,7 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
               columns={[
                 { key: "code", header: "编号", rowHeader: true, width: "w-16", cell: (row) => <span className="tabular-nums text-text-3">{row.code}</span> },
                 { key: "text", header: "方案原文", cell: (row) => <span className="text-text">{row.text}</span> },
-                {
-                  key: "state",
-                  header: "状态",
-                  width: "w-24",
-                  cell: (row) => {
-                    const Icon = STATE_ICON[row.state];
-                    return (
-                      <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap",
-                        row.state === "satisfied" ? "text-ok" : row.state === "not_satisfied" ? "text-danger-strong" : "text-warn-strong")}
-                      >
-                        <Icon size={16} aria-hidden="true" />
-                        {criterionStateLabel(row.state)}
-                      </span>
-                    );
-                  },
-                },
+                { key: "state", header: "状态", width: "w-24", cell: (row) => <CriterionState row={row} /> },
                 {
                   key: "evidence",
                   header: "患者证据",
@@ -245,7 +327,7 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
                   isEmpty: (row) => !row.request,
                   cell: (row) => row.request ? (
                     <span className="block">
-                      <span className="block text-link">{row.request}</span>
+                      <span className="block text-text">{row.request}</span>
                       {row.requestNote && <span className="block text-caption text-text-3">{row.requestNote}</span>}
                     </span>
                   ) : <span className="text-text-3">—</span>,
@@ -253,7 +335,10 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
               ]}
               rows={selected.criteria}
               rowKey={(row) => row.code}
-              rowAttrs={(row) => ({ "data-vcr-criterion": row.code, "data-vcr-criterion-state": row.state })}
+              rowAttrs={(row) => ({
+                "data-vcr-criterion": row.code,
+                "data-vcr-criterion-state": row.applicable === false ? "not_applicable" : row.state,
+              })}
             />
 
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-3">
@@ -264,10 +349,22 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}
-              <Button variant="secondary">请求补证</Button>
+              <Button
+                variant="secondary"
+                loading={busy === "evidence"}
+                disabled={needs.length === 0 || busy !== null || !abilities.includes("write")}
+                onClick={requestEvidence}
+              >
+                请求补证
+              </Button>
               {/* The one human stop: contacting a person is outside the
                   platform and cannot be undone (plan §10.1). */}
-              <Button disabled={selected.canContact === false} onClick={() => setConfirming(selected.candidate)}>确认后联系</Button>
+              <Button
+                disabled={!mayContact || busy !== null}
+                onClick={() => { if (mayContact && referralId) setConfirming({ subject: selected.candidate.id, referralId }); }}
+              >
+                确认后联系
+              </Button>
             </div>
           </Card>
         )}
@@ -275,18 +372,78 @@ function MatchingView({ studyId, data, onDone }: { studyId: string; data: Matchi
 
       {confirming && (
         <ConfirmDialog
-          title={`确认联系 ${confirming.id}？`}
-          body="联系真实患者是平台之外、不可撤回的动作。确认后会记录是谁在什么时候确认的，并把联系理由和待补证据交给协调员。"
-          confirmLabel={busy ? "正在确认" : "确认联系"}
+          title={`确认联系 ${confirming.subject}？`}
+          body="联系真实患者是平台之外、不可撤回的动作。确认后会记录是谁在什么时候确认的。"
+          confirmLabel={busy === "contact" ? "正在确认" : "确认联系"}
           onConfirm={contact}
-          onCancel={() => setConfirming(null)}
+          onCancel={() => { if (busy !== "contact") setConfirming(null); }}
         />
       )}
     </>
   );
 }
 
+/** One person in the list: a button that opens their rule-by-rule judgement. */
+function CandidateButton({ candidate, current, onPick }: { candidate: VcrCandidate; current: boolean; onPick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-vcr-candidate={candidate.id}
+      aria-current={current ? "true" : undefined}
+      onClick={onPick}
+      className={cn("w-full rounded px-2.5 py-2 text-left hover:bg-surface-1", current && "bg-accent-soft hover:bg-accent-soft")}
+    >
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-ui font-medium text-text">{candidate.id}</span>
+        {candidate.site && <span className="shrink-0 text-caption text-text-3">{candidate.site}</span>}
+      </span>
+      <span className="block truncate text-caption text-text-2">{candidate.summary}</span>
+      {candidate.open.length > 0 && (
+        <span className="mt-1 flex flex-wrap gap-1">
+          {candidate.open.map((open) => (
+            <Tag key={open.code} tone="warn">
+              {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}
+            </Tag>
+          ))}
+        </span>
+      )}
+      {candidate.priority && (
+        <span data-vcr-priority="" className="mt-1 block text-caption text-text-3">
+          {candidate.priority.rationale ? `${PRIORITY_LABEL} · ${candidate.priority.rationale}` : PRIORITY_LABEL}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** A rule's state for one person — or 「不适用」, which is its own mark and never 未知. */
+function CriterionState({ row }: { row: VcrCriterionJudgement }) {
+  if (row.applicable === false) {
+    return (
+      <span data-vcr-not-applicable="" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-3">
+        <CircleMinus size={16} aria-hidden="true" />
+        不适用
+      </span>
+    );
+  }
+  const Icon = STATE_ICON[row.state] ?? CircleHelp;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap",
+      row.state === "satisfied" ? "text-ok" : row.state === "not_satisfied" ? "text-danger-strong" : "text-warn-strong")}
+    >
+      <Icon size={16} aria-hidden="true" />
+      {criterionStateLabel(row.state)}
+    </span>
+  );
+}
+
 function ReferralView({ data }: { data: MatchingData }) {
+  const forecast = data.forecast;
+  // The band's own level, from the forecast's own rows: 「80% 预测区间」 is
+  // written only when the data says 80.
+  const level = forecast?.rows?.map((row) => row.value.interval).find((interval) => interval?.kind === "prediction")?.level ?? null;
+  const bandName = `${level != null ? `${numberText(level, 0)}% ` : ""}${intervalLabel("prediction")}`;
+  const drawable = Boolean(forecast && ((forecast.actual ?? []).length || (forecast.median ?? []).length || (forecast.band ?? []).length));
   return (
     <>
       {data.ledger && data.ledger.length > 0 && (
@@ -305,31 +462,33 @@ function ReferralView({ data }: { data: MatchingData }) {
         </VcrSection>
       )}
 
-      {data.forecast && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <ChartCard
-            title="入组预测与实际"
-            legend={(
-              <>
-                <SourceTag source="observed" />
-                <span className="text-caption text-text-3">实际入组</span>
-                <SourceTag source="predicted" />
-                <span className="text-caption text-text-3">预测中位与 80% 预测区间</span>
-              </>
-            )}
-            footnote="实际入组是观察值，预测中位与区间是模型输出，两者是不同种类的数。"
-          >
-            <VcrForecastChart
-              target={data.forecast.target}
-              actual={data.forecast.actual}
-              median={data.forecast.median}
-              band={data.forecast.band}
-              markers={data.forecast.markers}
-              xLabels={data.forecast.xLabels}
-            />
-          </ChartCard>
-          <div className="flex flex-col gap-4">
-            {(data.forecast.rows ?? []).map((metric) => (
+      {forecast && (
+        <div className={cn("grid gap-4", drawable && "xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>
+          {drawable && (
+            <ChartCard
+              title="入组预测与实际"
+              legend={(
+                <>
+                  <SourceTag source="observed" />
+                  <span className="text-caption text-text-3">实际入组</span>
+                  <SourceTag source="predicted" />
+                  <span className="text-caption text-text-3">{`预测中位与${bandName}`}</span>
+                </>
+              )}
+              footnote={`实际入组是观察值，预测中位与${intervalLabel("prediction")}是模型输出，两者是不同种类的数。`}
+            >
+              <VcrForecastChart
+                target={forecast.target}
+                actual={forecast.actual}
+                median={forecast.median}
+                band={forecast.band}
+                markers={forecast.markers}
+                xLabels={forecast.xLabels}
+              />
+            </ChartCard>
+          )}
+          <div className={cn("grid gap-4", !drawable && "sm:grid-cols-2 lg:grid-cols-3")}>
+            {(forecast.rows ?? []).map((metric) => (
               <VcrStat
                 key={metric.key}
                 label={metric.label}
@@ -338,10 +497,10 @@ function ReferralView({ data }: { data: MatchingData }) {
                 className="rounded-card border border-border bg-surface"
               />
             ))}
-            {data.forecast.basis && data.forecast.basis.length > 0 && (
+            {forecast.basis && forecast.basis.length > 0 && (
               <Card title="预测依据">
                 <ul className="flex flex-col gap-1 text-caption text-text-2">
-                  {data.forecast.basis.map((line) => <li key={line}>{line}</li>)}
+                  {forecast.basis.map((line) => <li key={line}>{line}</li>)}
                 </ul>
               </Card>
             )}
@@ -354,6 +513,7 @@ function ReferralView({ data }: { data: MatchingData }) {
 
 function SitesView({ data }: { data: MatchingData }) {
   const sites = data.sites ?? [];
+  if (sites.length === 0) return <p className="py-12 text-center text-ui text-text-3">还没有中心资料。</p>;
   return (
     <VcrSection title="中心" meta={`${sites.length} 个`}>
       <DataTable

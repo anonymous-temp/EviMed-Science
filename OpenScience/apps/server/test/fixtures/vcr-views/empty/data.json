@@ -1,0 +1,17 @@
+{
+  "headline": null,
+  "status": [
+    {
+      "label": "患者级数据",
+      "value": "未接入"
+    }
+  ],
+  "assumptions": [],
+  "selectedId": null,
+  "precedents": [],
+  "precedentSources": null,
+  "precedentNote": null,
+  "snapshots": [],
+  "decisions": [],
+  "evidenceNote": null
+}

@@ -1,14 +1,12 @@
-import { useState, type ReactNode } from "react";
-import { CircleDashed, History, UsersRound } from "lucide-react";
-import { webErrorMessage } from "@/lib/apiClient";
-import { runVcrStep, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
-import { toast } from "@/lib/toast";
+import type { ReactNode } from "react";
+import { CircleDashed, History, TriangleAlert, UsersRound } from "lucide-react";
+import { runVcrStep, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
-import { useOpenVcrConversation } from "./useOpenVcrConversation";
-import { STALE_SENTENCE, VCR_STEP_EMPTY, VCR_STEP_WAITING } from "./vcrText";
+import { useVcrRun } from "./useVcrRun";
+import { staleSentence, stepLabel, VCR_STEP_EMPTY, VCR_STEP_WAITING } from "./vcrText";
 
 /**
  * The states every 「虚拟临研」 surface shares.
@@ -103,11 +101,10 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
  * What a tab shows while it has nothing to show. A step being worked on says
  * so in one quiet line; a step that has not run offers 「让 AI 做」, which
  * starts it in the study's own conversation — the study page never grows a
- * second composer (plan §9.5).
+ * second composer (plan §9.5). A step that failed with nothing to show says
+ * so, and offers to go on from where it stopped rather than to begin again.
  */
 export function VcrStepPending({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
-  const open = useOpenVcrConversation();
-  const [busy, setBusy] = useState(false);
   const state = study.steps[step];
   if (state?.status === "running" || state?.status === "queued") {
     return (
@@ -117,44 +114,83 @@ export function VcrStepPending({ studyId, study, step }: { studyId: string; stud
       </p>
     );
   }
+  if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
   if (state?.status === "none" && state.requested === true) {
     return <p data-vcr-step-waiting={step} className="py-12 text-center text-ui text-text-3">{VCR_STEP_WAITING[step]}</p>;
   }
-  const run = () => {
-    setBusy(true);
-    void runVcrStep(studyId, step)
-      .then((result) => open({ projectId: study.projectId, sessionId: result?.sessionId ?? study.sessionId }))
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一步无法开始，请稍后重试。" })))
-      .finally(() => setBusy(false));
-  };
+  return <VcrStepAsk studyId={studyId} study={study} step={step} />;
+}
+
+/** 「让 AI 做」: one sentence about the step and the button that starts it. */
+function VcrStepAsk({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
+  const { run, busy } = useVcrRun(study);
   return (
     <div data-vcr-step-empty={step} className="flex flex-col items-center gap-4 py-12 text-center">
       <p className="max-w-measure text-ui text-text-2">{VCR_STEP_EMPTY[step]}</p>
-      <Button onClick={run} loading={busy}>让 AI 做</Button>
+      <Button onClick={() => run(() => runVcrStep(studyId, step), "这一步无法开始，请稍后重试。")} loading={busy}>让 AI 做</Button>
     </div>
+  );
+}
+
+/**
+ * 「这一步未完成」: a step whose run did not finish. A failed step is never
+ * drawn as one that has not started (plan §9.6): it says it did not finish,
+ * what it kept, and offers to go on from the checkpoint — a retry that begins
+ * from nothing would throw away what was already computed (principle 19).
+ * `partial` is the run's own account of what is on screen and what is not.
+ */
+export function VcrStepFailed({ studyId, study, step, partial }: {
+  studyId: string;
+  study: VcrStudy;
+  step: VcrStepKey;
+  partial?: VcrPartial | null;
+}) {
+  const { run, busy } = useVcrRun(study);
+  const note = study.steps[step]?.note;
+  return (
+    <section data-vcr-step-failed={step} role="status" className="rounded-card border border-border bg-surface p-4">
+      <h3 className="flex items-center gap-2 text-section font-semibold text-text">
+        <TriangleAlert size={20} aria-hidden="true" className="text-warn" />
+        这一步未完成
+        <span className="text-ui font-normal text-text-3">{stepLabel(step)}</span>
+      </h3>
+      {note && <p className="mt-1 text-ui text-text-2">{note}</p>}
+      {partial && <PartialResultNote done={partial.done} missing={partial.missing} className="mt-3" />}
+      <div className="mt-3">
+        <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
+          从检查点续跑
+        </Button>
+      </div>
+    </section>
   );
 }
 
 /**
  * 「输入已变更，排队重算中」 — the pale bar over a result whose inputs moved
  * under it. Its numbers are still true of the inputs they were computed from,
- * which is why they are still on screen.
+ * which is why they are still on screen. It says 「排队重算中」 only when a
+ * recomputation is actually queued.
  */
-export function StaleBar({ reason, className }: { reason?: string | null; className?: string }) {
+export function StaleBar({ reason, queued = false, className }: { reason?: string | null; queued?: boolean; className?: string }) {
   return (
     <p data-vcr-stale="" className={cn("flex items-center gap-2 rounded bg-surface-2 px-2 py-1 text-caption text-text-3", className)}>
       <History size={16} aria-hidden="true" />
-      <span>{reason ? `${reason} · ${STALE_SENTENCE}` : STALE_SENTENCE}</span>
+      <span>{reason ? `${reason} · ${staleSentence(queued)}` : staleSentence(queued)}</span>
     </p>
   );
 }
 
-/** A stale result: the bar, then the result itself in the secondary colour. */
-export function Stale({ stale, reason, children }: { stale: boolean; reason?: string | null; children: ReactNode }) {
-  if (!stale) return <>{children}</>;
+/**
+ * A stale block of results: the bar, then the results themselves in the
+ * secondary colour. Every result block of every tab is wrapped in one, driven
+ * by the payload's own `stale` note — a stale number that was merely dimmed,
+ * with no bar to say why, was the defect this replaces.
+ */
+export function Stale({ note, children }: { note: VcrStaleNote | null | undefined; children: ReactNode }) {
+  if (!note) return <>{children}</>;
   return (
     <div data-vcr-stale-block="">
-      <StaleBar reason={reason} className="mb-3" />
+      <StaleBar reason={note.reason} queued={note.queued} className="mb-3" />
       <div className="text-text-2 opacity-disabled">{children}</div>
     </div>
   );

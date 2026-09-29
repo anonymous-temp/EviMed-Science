@@ -12,7 +12,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VcrJobs } from "../src/vcrJobs.mjs";
 import { VcrService, VCR_READ_WHATS, seedVcrCatalogue } from "../src/vcrService.mjs";
-import { VCR_MIN_CELL_SIZE, VCR_TABS } from "@evimed/domain";
+import { VCR_TABS } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -104,74 +104,76 @@ test("a study's reader is its owner or a member; anyone else sees nothing", opti
   assert.equal(await store.studyByControlProject("stranger", study.projectId), null);
 });
 
-test("the study list carries the seven-step rail and what needs attention", options, async () => {
+test("the study list is the browser's own row: the seven steps, a tier, a conclusion, what needs attention", options, async () => {
   const { study } = await furnish("list");
   const listed = await service.listStudies({ id: study.userId });
   const row = listed.studies.find((entry) => entry.id === study.id);
   assert.ok(row);
-  assert.equal(row.progress.length, 7);
-  assert.deepEqual(row.progress.map((entry) => entry.step), [...["definition", "evidence", "population", "patients", "comparator", "trial", "matching"]]);
-  assert.equal(row.headline.kind, "trial_scenario");
-  assert.equal(row.headline.counts.realPatients, null, "nothing counted at T0 — null, never 0");
-  assert.deepEqual(row.attention, [], "a study with nothing wrong says nothing");
+  assert.equal(row.tier, "T0", "the page's word is `tier`, not the row's `dataTier`");
+  assert.equal(Object.keys(row.steps).length, 7);
+  assert.deepEqual(Object.keys(row.steps), ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"]);
+  assert.match(String(row.conclusion?.text), /功效|方案|已算出/, "a conclusion rendered from the study's own result");
+  assert.equal(row.conclusion.state, "estimable");
+  assert.equal(typeof row.updatedAt, "string");
+  assert.ok(row.attention.every((entry) => entry.kind !== "stale"), "nothing stale yet");
 
   await store.markStale(study.id, ["result:res_x@1"], "assumption_changed", {});
   const again = await service.listStudies({ id: study.userId });
   const marked = again.studies.find((entry) => entry.id === study.id);
-  assert.deepEqual(marked.attention.map((entry) => entry.kind), ["stale"]);
-  assert.match(marked.attention[0].text, /1 项结果已过期/);
+  assert.ok(marked.attention.some((entry) => entry.kind === "stale"));
+  assert.match(marked.attention.find((entry) => entry.kind === "stale").text, /1 个结果已过期：假设卡已变更/);
 });
 
-test("every one of the seven tabs answers, and each says plainly what is not composed here", options, async () => {
+test("every one of the seven tabs answers the page shape, and says plainly what is not composed here", options, async () => {
   const { study } = await furnish("tabs");
   for (const tab of VCR_TABS) {
     const view = await service.tab({ id: study.userId }, study.id, tab);
     assert.ok(view, tab);
-    if (tab !== "overview") assert.equal(view.tab, tab);
   }
   await assert.rejects(service.tab({ id: study.userId }, study.id, "everything"),
     (/** @type {any} */ error) => error.code === "vcr_tab_not_found");
 
   const population = await service.tab({ id: study.userId }, study.id, "population");
-  assert.equal(population.current.kind, "literature");
-  assert.equal(population.current.waterfall[0].unknown, 12, "「无法判断」 is its own column");
-  assert.equal(population.dataPlane.available, false, "no data plane composed, said by name");
+  assert.deepEqual(population.criteria.map((row) => row.code), ["I1"], "the protocol's rule, numbered");
+  assert.equal(population.attrition[0].unknown, 12, "「无法判断」 is its own column");
+  assert.equal(population.stale, null);
 
   const comparator = await service.tab({ id: study.userId }, study.id, "comparator");
   assert.equal(comparator.routes.length, 5);
-  assert.deepEqual(comparator.routes.filter((route) => route.available).map((route) => route.route),
-    ["literature_control", "model_comparator", "hybrid_control"]);
-  assert.equal(comparator.comparabilityDimensions.length, 10);
-  assert.equal(comparator.e10Conditions.length, 4);
+  assert.deepEqual(comparator.routes.filter((route) => route.state === "not_applicable").map((route) => route.route),
+    ["prognostic_adjustment", "external_control"], "the routes the data tier cannot reach say so");
+  assert.equal(comparator.dimensions.length, 10);
 
   const matching = await service.tab({ id: study.userId }, study.id, "matching");
   assert.equal(matching.available, false);
   assert.equal(matching.unavailable.code, "vcr_matching_unavailable");
-  assert.equal(matching.criteria.length, 1, "what this module does hold is still served");
 
   const data = await service.tab({ id: study.userId }, study.id, "data");
-  assert.equal(data.minCellSize, VCR_MIN_CELL_SIZE);
   assert.equal(data.assumptions.length, 1);
-  assert.equal(data.evidence.available, false);
-  assert.equal(data.seal.required, false, "an exploratory study seals nothing");
+  assert.equal(data.assumptions[0].key, "control_median_pfs");
+  assert.match(String(data.evidenceNote), /证据参数化在本部署尚未接入/, "an empty card list must not read as 「没有证据」");
+  assert.equal("root" in data, false, "no server path leaves through a page");
 });
 
 test("the overview carries the counts, the results with their staleness, and the use ceiling", options, async () => {
   const { study, result } = await furnish("overview");
   const view = await service.studyView({ id: study.userId }, study.id);
-  assert.equal(view.conclusion, "estimable");
-  assert.deepEqual(Object.keys(view.counts).sort(), ["effectiveSampleSize", "events", "generatedRecords", "realPatients"]);
-  assert.equal(view.results.length, 1);
-  assert.equal(view.results[0].stale, null);
-  assert.equal(view.intendedUseCeiling.ceiling, "design_support", "nobody has reviewed it yet");
-  assert.equal(view.engineAvailable, false);
+  assert.equal(view.tier, "T0");
+  assert.deepEqual(Object.keys(view.overview.counts).slice(0, 4), ["realPatients", "events", "effectiveSampleSize", "generatedRecords"]);
+  assert.equal(view.overview.counts.events, 138);
+  assert.equal(view.ceiling.ceiling, "design_support", "nobody has reviewed it yet");
+  assert.equal(view.ceiling.withinCeiling, true);
   assert.equal(view.budget.limitSeconds, 100_000);
-  assert.equal(view.tabs.length, 7);
+  assert.deepEqual(view.abilities.includes("run"), true, "the owner is a lead");
+  assert.ok(view.abilities.includes("manage_members"));
 
   await store.markStale(study.id, [`result:${result.id}@${result.version}`], "source_corrected", { source: "snp_1" });
   const stale = await service.studyView({ id: study.userId }, study.id);
-  assert.equal(stale.results[0].stale.reason, "source_corrected");
-  assert.equal(stale.results[0].measures[0].value, 0.712, "a stale result keeps its numbers");
+  assert.ok(stale.overview.attention.some((entry) => entry.kind === "stale" && /源数据已更正/.test(entry.text)));
+  // A stale result keeps its numbers (the row-level view carries the mark, the page's design values carry `stale`).
+  const raw = await service.studyViewOf(await store.studyById(study.id));
+  assert.equal(raw.results[0].stale.reason, "source_corrected");
+  assert.equal(raw.results[0].measures[0].value, 0.712, "a stale result keeps its numbers");
 });
 
 test("every runtime read answers, and the ones whose package is absent say so by name", options, async () => {
@@ -201,7 +203,9 @@ test("the model library answers from the seeded catalogue, and a study may take 
   const library = await service.modelLibrary({ id: study.userId });
   assert.ok(library.methods.length >= 20, "every engine method is in the catalogue");
   assert.equal(library.models.filter((model) => model.tier === "scenario").length, 3);
-  assert.deepEqual(library.models.find((model) => model.name === "reference-time-to-event").missingEvidence, []);
+  const reference = library.models.find((model) => model.name === "事件时间终点参考仿真器");
+  assert.deepEqual(reference.missingEvidence, []);
+  assert.equal(reference.twinLabel, "基线条件化预测", "the label a model has earned, never 数字孪生 by default");
 
   const adopted = await service.adoptModel({ id: study.userId }, {
     studyId: study.id, name: "ev201-control-weibull", version: "1.0.0",
@@ -210,9 +214,9 @@ test("the model library answers from the seeded catalogue, and a study may take 
   });
   assert.equal(adopted.tier, "literature");
   const after = await service.modelLibrary({ id: study.userId });
-  const fitted = after.models.find((model) => model.name === "ev201-control-weibull");
+  const fitted = after.models.find((model) => model.version === "1.0.0" && model.tier === "literature");
   assert.equal(fitted.useCeiling, "design_support", "a literature model carries design support and no more");
-  assert.match(String(fitted.applicability.population), /KEYNOTE-010、OAK/, "its range is written from the trials it was fitted on");
+  assert.match(String(fitted.scope), /KEYNOTE-010、OAK/, "its range is written from the trials it was fitted on");
 });
 
 test("deleting a study hides it from 虚拟临研 and keeps what it recorded", options, async () => {

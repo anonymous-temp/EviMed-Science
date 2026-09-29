@@ -143,7 +143,7 @@ export function VcrHomePage() {
             : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
               : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
                 : listing.home.studies.length === 0
-                  ? <EmptyState icon={UsersRound} title="还没有研究" description="从上面四个动作里挑一个开始，或者直接新建研究。" />
+                  ? <EmptyState icon={UsersRound} title="还没有研究" />
                   : <Studies home={listing.home} />}
       </div>
     </PageShell>

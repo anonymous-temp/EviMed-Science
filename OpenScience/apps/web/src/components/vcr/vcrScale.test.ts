@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandPath, linePath, niceStep, posX, posY, scaleOf, share, stepPath } from "./vcrScale";
+import { bandPath, linePath, niceStep, posX, posY, scaleOf, share, spanRect, stepPath } from "./vcrScale";
 
 describe("a scale over values", () => {
   it("rounds its ends outwards and steps on 1, 2 or 5", () => {
@@ -67,6 +67,28 @@ describe("a series' path", () => {
     const band = bandPath([{ x: 0, y: null, low: 1, high: 9 }, { x: 10, y: null, low: 2, high: 8 }], x, y);
     expect(band.endsWith("Z")).toBe(true);
     expect(bandPath([{ x: 0, y: null, low: 1, high: 9 }], x, y)).toBe("");
+  });
+});
+
+describe("a span of the x axis", () => {
+  const x = scaleOf([0, 12], [0, 12])!;
+
+  it("becomes a rectangle inside the plot, whichever end comes first", () => {
+    const rect = spanRect(9, 3, x);
+    expect(rect).not.toBeNull();
+    expect(rect!.x).toBe(posX(3, x));
+    expect(rect!.x + rect!.width).toBeCloseTo(posX(9, x), 5);
+  });
+
+  it("is clamped to the plot rather than drawn past its edge", () => {
+    const rect = spanRect(-5, 30, x);
+    expect(rect).toEqual({ x: 0, width: 100 });
+  });
+
+  it("is nothing when it is empty or its ends are not numbers", () => {
+    expect(spanRect(4, 4, x)).toBeNull();
+    expect(spanRect(null, 4, x)).toBeNull();
+    expect(spanRect(Number.NaN, 4, x)).toBeNull();
   });
 });
 

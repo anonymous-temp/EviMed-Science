@@ -1,18 +1,32 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import type { VcrCurve, VcrSeries } from "@/lib/vcrClient";
-import { markKindOf, seriesColor } from "./VcrMarks";
-import { bandPath, linePath, posX, posY, scaleOf, stepPath, type Point, type VcrScale } from "./vcrScale";
+import { Tag } from "@/components/ui/Tag";
+import type { VcrCurve, VcrIntervalKind, VcrSeries, VcrValueSource } from "@/lib/vcrClient";
+import { markKindOf, SeriesLegend, seriesColor } from "./VcrMarks";
+import { intervalLabel } from "./vcrText";
+import { bandPath, linePath, posX, posY, scaleOf, spanRect, stepPath, type Point, type VcrScale } from "./vcrScale";
 
 /**
  * The time-series charts of 「虚拟临研」, and the one rule they all obey.
  *
- * **The source decides the shape** (plan §9.6): an observation is a solid line
- * with solid dots, a literature aggregate or a curve reconstructed out of a
- * published figure is dashed, a model's output is a light band. A
- * reconstructed Kaplan-Meier is therefore dashed on every chart in the
- * module, always — it may never be drawn as a curve somebody measured. Our
- * own arm is the brand blue; every comparator is a grey, darkest first, so a
+ * **The source decides the shape** (plan §8.3, §9.6), for a trajectory and a
+ * survival curve alike:
+ *
+ *  - an observation (and the three things derived from one) is the only solid
+ *    line — the one mark that means somebody measured a real person;
+ *  - a literature aggregate or a curve reconstructed out of a published figure
+ *    is dashed. A reconstructed Kaplan-Meier is dashed on every chart in the
+ *    module, always, even after it passed its quality control;
+ *  - a model's prediction or a synthetic record is a thin dashed mean inside
+ *    its light band — a distribution a model generated is never drawn as a KM
+ *    somebody observed, and a line alone would hide the spread that is the
+ *    model's whole answer;
+ *  - an assumption is dashed and carries 「假设」 in the legend.
+ *
+ * A band is drawn only when it has a name (`bandKind`): an interval without a
+ * name is not an interval (plan §9.6), and the legend takes that name from
+ * the data rather than writing 「80% 预测区间」 whatever the data say. Our own
+ * arm is the brand blue; every comparator is a grey, darkest first, so a
  * reader finds their own arm without reading a legend.
  *
  * Geometry: the plot is `viewBox="0 0 100 100"` with `preserveAspectRatio
@@ -21,6 +35,86 @@ import { bandPath, linePath, posX, posY, scaleOf, stepPath, type Point, type Vcr
  * (`vcrScale.ts`). No chart library: none of this needs one, and the bundle
  * every page loads is the price of pretending otherwise.
  */
+
+/** How a line of a given source is drawn. */
+export interface VcrStroke {
+  /** `undefined` is solid. */
+  dash: string | undefined;
+  width: number;
+  /** Whether the light band behind it belongs to the mark. */
+  band: boolean;
+}
+
+/**
+ * The stroke a source demands (plan §9.6). Solid is earned: only the
+ * observed family gets it, and the server's `dashed` can only take it away.
+ */
+export function strokeOf(series: { source: VcrValueSource | null | undefined; dashed?: boolean; ours?: boolean }): VcrStroke {
+  const kind = markKindOf(series.source);
+  if (kind === "solid") return { dash: series.dashed ? "4 3" : undefined, width: series.ours ? 2.2 : 1.6, band: false };
+  if (kind === "dashed") return { dash: "4 3", width: series.ours ? 2 : 1.6, band: false };
+  if (kind === "band") return { dash: "3 2", width: series.ours ? 1.6 : 1.2, band: true };
+  return { dash: "6 3", width: 1.4, band: false };
+}
+
+/** A band's own name, from the data: 「预测区间」, 「80% 预测区间」 when the level is sent. */
+export function bandName(kind: VcrIntervalKind | null | undefined, level?: number | null): string {
+  const name = intervalLabel(kind);
+  if (!name) return "";
+  return typeof level === "number" && Number.isFinite(level) ? `${level}% ${name}` : name;
+}
+
+/** The server may say what level a band is; the page never assumes one. */
+function bandLevelOf(series: object): number | null {
+  const level = (series as { bandLevel?: unknown }).bandLevel;
+  return typeof level === "number" && Number.isFinite(level) ? level : null;
+}
+
+/**
+ * A chart's legend, from its series: each one in its own colour and mark, an
+ * assumption tagged 「假设」, then — once per name — the bands the chart
+ * actually draws, and the unobserved periods when there are any.
+ */
+export function VcrSeriesLegend({ series }: {
+  /** Trajectories and survival curves alike: what the legend reads is their common part. */
+  series: ReadonlyArray<Pick<VcrSeries, "key" | "label" | "source" | "ours" | "points"> & Partial<Pick<VcrSeries, "bandKind" | "unobserved">>>;
+}) {
+  const bands = new Map<string, boolean>();
+  for (const line of series) {
+    if (!line.bandKind || !line.points.some((point) => typeof point.low === "number" && typeof point.high === "number")) continue;
+    const name = bandName(line.bandKind, bandLevelOf(line));
+    if (name) bands.set(name, bands.get(name) === true || Boolean(line.ours));
+  }
+  const unobserved = series.some((line) => (line.unobserved ?? []).length > 0);
+  return (
+    <>
+      {series.map((line, index) => (
+        <span key={line.key} data-vcr-legend={line.key}>
+          <SeriesLegend label={line.label} source={line.source} ours={line.ours} tone={((index % 3) + 1) as 1 | 2 | 3}>
+            {markKindOf(line.source) === "assumed" && <Tag>假设</Tag>}
+          </SeriesLegend>
+        </span>
+      ))}
+      {[...bands].map(([name, ours]) => (
+        <span key={`band-${name}`} data-vcr-legend-band={name} className="inline-flex items-center gap-1.5 text-caption text-text-2">
+          <span
+            aria-hidden="true"
+            data-forced-colors="preserve"
+            className="inline-block h-2.5 w-4 rounded-tag"
+            style={{ background: ours ? "var(--chart-own)" : "var(--chart-rival-2)", opacity: 0.28 }}
+          />
+          {name}
+        </span>
+      ))}
+      {unobserved && (
+        <span data-vcr-legend-unobserved="" className="inline-flex items-center gap-1.5 text-caption text-text-2">
+          <span aria-hidden="true" data-forced-colors="preserve" className="inline-block h-2.5 w-4 rounded-tag bg-surface-2" />
+          未观察时段
+        </span>
+      )}
+    </>
+  );
+}
 
 /** The plot's frame: y ticks and their gridlines, x labels, and the SVG itself. */
 export function VcrPlot({
@@ -103,15 +197,10 @@ export function VcrPlot({
   );
 }
 
-/** The stroke a source demands: solid for an observation, dashed for anything reconstructed or pooled. */
-function strokeOf(series: { source: VcrSeries["source"]; dashed?: boolean }): string | undefined {
-  return series.dashed || markKindOf(series.source) === "dashed" ? "4 3" : undefined;
-}
-
 /**
- * Mean lines with their prediction bands, and — when the server sends them —
- * the thin individual trajectories behind. The band is named in the legend
- * (「80% 预测区间」), never as a bare 「区间」.
+ * Mean lines with their bands, the thin individual trajectories behind them
+ * when the server sends them, and — shaded apart from the rest — the periods
+ * nobody could observe (plan §5.2).
  */
 export function VcrTrajectoryChart({
   series,
@@ -132,7 +221,10 @@ export function VcrTrajectoryChart({
   height?: number;
   className?: string;
 }) {
-  const xs = series.flatMap((line) => line.points.map((point) => point.x));
+  const xs = series.flatMap((line) => [
+    ...line.points.map((point) => point.x),
+    ...(line.individuals ?? []).flatMap((trace) => trace.map((point) => point.x)),
+  ]);
   const ys = series.flatMap((line) => [
     ...line.points.map((point) => point.y),
     ...line.points.map((point) => point.low ?? null),
@@ -142,6 +234,8 @@ export function VcrTrajectoryChart({
   const x = scaleOf(xs);
   const y = scaleOf(ys, domain);
   if (!x || !y) return <ChartBlank height={height} />;
+  const spans = series.flatMap((line) => (line.unobserved ?? []).map((span) => spanRect(span.from, span.to, x)))
+    .filter((rect): rect is { x: number; width: number } => rect !== null);
   return (
     <VcrPlot x={x} y={y} xLabels={xLabels} xLabel={xLabel} yLabel={yLabel} formatY={formatY} height={height} className={className}
       overlay={(
@@ -164,13 +258,26 @@ export function VcrTrajectoryChart({
         </>
       )}
     >
+      {spans.map((rect, index) => (
+        <rect
+          key={`unobserved-${index}`}
+          data-vcr-unobserved=""
+          x={rect.x}
+          y={0}
+          width={rect.width}
+          height={100}
+          className="text-surface-2"
+          fill="currentColor"
+        />
+      ))}
       {series.map((line, index) => {
         const color = seriesColor(Boolean(line.ours), index);
+        const stroke = strokeOf(line);
+        // A band is drawn only with its name; an unnamed spread is not an interval.
+        const band = line.bandKind ? bandPath(line.points as Point[], x, y) : "";
         return (
-          <g key={line.key} data-vcr-series={line.key} data-vcr-series-source={line.source}>
-            {bandPath(line.points as Point[], x, y) && (
-              <path d={bandPath(line.points as Point[], x, y)} fill={color} opacity={0.16} data-vcr-band={line.bandKind ?? "prediction"} />
-            )}
+          <g key={line.key} data-vcr-series={line.key} data-vcr-series-source={line.source} data-vcr-mark={markKindOf(line.source)}>
+            {band && <path d={band} fill={color} opacity={0.16} data-vcr-band={line.bandKind ?? ""} />}
             {(line.individuals ?? []).map((trace, traceIndex) => (
               <path
                 key={`trace-${traceIndex}`}
@@ -183,11 +290,12 @@ export function VcrTrajectoryChart({
               />
             ))}
             <path
+              data-vcr-series-line={line.key}
               d={linePath(line.points as Point[], x, y)}
               fill="none"
               stroke={color}
-              strokeWidth={line.ours ? 2.2 : 1.6}
-              strokeDasharray={strokeOf(line)}
+              strokeWidth={stroke.width}
+              strokeDasharray={stroke.dash}
               strokeLinecap="round"
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
@@ -200,8 +308,10 @@ export function VcrTrajectoryChart({
 }
 
 /**
- * Kaplan-Meier curves. Every curve is a step function, and a reconstructed one
- * is dashed — the module's single hardest visual rule (plan §3.5).
+ * Kaplan-Meier curves. Every curve is a step function, and its source decides
+ * its stroke like every other series here: a reconstructed curve is dashed —
+ * the module's single hardest visual rule (plan §3.5) — and a curve a model
+ * predicted is a thin dashed step inside its band, never a KM.
  *
  * The numbers at risk go under the plot, because a survival curve without them
  * is a picture whose tail nobody can weigh.
@@ -273,20 +383,28 @@ export function VcrSurvivalChart({
         )}
         {curves.map((curve, index) => {
           const color = seriesColor(Boolean(curve.ours), index);
+          const stroke = strokeOf(curve);
+          const kind = markKindOf(curve.source);
+          const bandKind = (curve as VcrCurve & { bandKind?: VcrIntervalKind | null }).bandKind ?? null;
+          const band = stroke.band && bandKind ? bandPath(curve.points as Point[], x, y, { step: true }) : "";
           return (
-            <path
-              key={curve.key}
-              data-vcr-curve={curve.key}
-              data-vcr-curve-source={curve.source}
-              d={stepPath(curve.points as Point[], x, y)}
-              fill="none"
-              stroke={color}
-              strokeWidth={curve.pooled || curve.ours ? 2 : 1.3}
-              // A reconstructed curve is dashed wherever it is drawn: it was
-              // digitised out of a figure, not measured.
-              strokeDasharray={markKindOf(curve.source) === "dashed" ? (curve.pooled ? "5 3" : "3 3") : undefined}
-              vectorEffect="non-scaling-stroke"
-            />
+            <g key={curve.key}>
+              {band && <path d={band} fill={color} opacity={0.16} data-vcr-band={bandKind ?? ""} />}
+              <path
+                data-vcr-curve={curve.key}
+                data-vcr-curve-source={curve.source}
+                data-vcr-mark={kind}
+                d={stepPath(curve.points as Point[], x, y)}
+                fill="none"
+                stroke={color}
+                strokeWidth={curve.pooled || curve.ours ? Math.max(stroke.width, 2) : Math.min(stroke.width, 1.3)}
+                // A reconstructed curve is dashed wherever it is drawn: it was
+                // digitised out of a figure, not measured. The pooled one gets
+                // the longer dash so the two stay apart.
+                strokeDasharray={kind === "dashed" ? (curve.pooled ? "5 3" : "3 3") : stroke.dash}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
           );
         })}
       </VcrPlot>
@@ -310,10 +428,10 @@ export function VcrSurvivalChart({
 }
 
 /**
- * Predicted enrolment against actual: the median as a line, the 80%
- * prediction band behind it, and what has actually happened so far as a
- * solid line that stops at today. The two are different kinds of number and
- * are drawn as different kinds of mark.
+ * Predicted enrolment against actual: the median as a thin dashed line inside
+ * its prediction band, and what has actually happened so far as the one solid
+ * line, stopping at today. The two are different kinds of number and are
+ * drawn as different kinds of mark (the rule at the top of this file).
  */
 export function VcrForecastChart({
   target,
@@ -391,10 +509,12 @@ export function VcrForecastChart({
       {median.length > 1 && (
         <path
           data-vcr-series="median"
+          data-vcr-series-source="predicted"
           d={linePath(median as Point[], x, y)}
           fill="none"
           stroke="var(--chart-own)"
-          strokeWidth={1.6}
+          strokeWidth={strokeOf({ source: "predicted", ours: true }).width}
+          strokeDasharray={strokeOf({ source: "predicted", ours: true }).dash}
           vectorEffect="non-scaling-stroke"
         />
       )}

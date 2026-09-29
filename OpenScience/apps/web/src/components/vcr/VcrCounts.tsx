@@ -27,8 +27,15 @@ function shown(counts: VcrCounts): VcrCountKey[] {
   return [...FIXED, ...OPTIONAL.filter((key) => typeof counts[key] === "number" && Number.isFinite(counts[key] as number))];
 }
 
-export function VcrCountsBand({ counts, className }: { counts: VcrCounts | null | undefined; className?: string }) {
-  if (!counts) return null;
+/** No run has counted anything yet: every column reads 「—」, and the band says why. */
+const NOT_RUN: VcrCounts = Object.freeze({
+  realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: null, note: "尚无运行", scope: null,
+});
+
+export function VcrCountsBand({ counts: given, className }: { counts: VcrCounts | null | undefined; className?: string }) {
+  // The four are fixed on 人群, 对照 and 试验: a band that vanished when the
+  // counts were missing would read as a page that had no sample size at all.
+  const counts = given ?? NOT_RUN;
   const keys = shown(counts);
   return (
     <section
@@ -68,8 +75,8 @@ export function VcrCountsBand({ counts, className }: { counts: VcrCounts | null 
 }
 
 /** The same four as one compact line, for a card that has no room for the band. */
-export function VcrCountsLine({ counts, className }: { counts: VcrCounts | null | undefined; className?: string }) {
-  if (!counts) return null;
+export function VcrCountsLine({ counts: given, className }: { counts: VcrCounts | null | undefined; className?: string }) {
+  const counts = given ?? NOT_RUN;
   return (
     <p data-vcr-counts-line="" className={cn("flex flex-wrap items-baseline gap-x-4 gap-y-1 text-caption text-text-3", className)}>
       {shown(counts).map((key) => (

@@ -1,0 +1,118 @@
+{
+  "headline": null,
+  "routes": [
+    {
+      "route": "prognostic_adjustment",
+      "state": "not_applicable",
+      "reason": "需要 T3 随机试验个体数据",
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "external_control",
+      "state": "not_applicable",
+      "reason": "需要 T2 完整治疗与纵向结局",
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "literature_control",
+      "state": "design_only",
+      "reason": null,
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "model_comparator",
+      "state": "scenario",
+      "reason": null,
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "hybrid_control",
+      "state": "design_only",
+      "reason": null,
+      "note": null,
+      "selected": false
+    }
+  ],
+  "curves": [],
+  "rmst": null,
+  "median": null,
+  "qc": [],
+  "methods": [],
+  "e10": [],
+  "estimand": null,
+  "comparability": [],
+  "comparabilityNote": null,
+  "dimensions": [
+    {
+      "key": "time_period",
+      "label": "时期",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "geography",
+      "label": "地域",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "diagnosis",
+      "label": "诊断",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "prognostic_factors",
+      "label": "预后因素",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "treatment",
+      "label": "治疗",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "other_treatment_related",
+      "label": "其他与治疗相关的因素",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "follow_up",
+      "label": "随访",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "intercurrent_events",
+      "label": "伴随事件",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "outcome_definition",
+      "label": "结局定义与评估",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "missing_data",
+      "label": "缺失数据",
+      "state": "unknown",
+      "reason": null
+    }
+  ],
+  "diagnostics": [],
+  "gaps": null,
+  "counts": null,
+  "verdict": null,
+  "at": null,
+  "stale": null,
+  "partial": null
+}

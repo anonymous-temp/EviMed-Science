@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
+import { Link, useInRouterContext, useParams } from "react-router";
 import { cn } from "@/lib/cn";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatTile } from "@/components/ui/StatTile";
-import type { VcrValue } from "@/lib/vcrClient";
+import type { VcrValue, VcrValueDetail } from "@/lib/vcrClient";
 import { ReviewChip, SourceTag } from "./VcrMarks";
 import { intervalText, isPlaceholder, mcseText, sourceLabel, valueSentence, valueText } from "./vcrText";
+import { vcrTabPath } from "./vcrTabs";
 
 /**
  * A number on a 「虚拟临研」 page.
@@ -78,6 +80,7 @@ export function VcrNumber({ value, label, className, children }: {
 /** Where a number came from, opened beside the page it was read on. */
 export function VcrValueDrawer({ label, value, onClose }: { label: string; value: VcrValue; onClose: () => void }) {
   const detail = value.detail;
+  const routed = useInRouterContext();
   const interval = intervalText(value.interval, value.precision);
   return (
     <Drawer title={label} onClose={onClose} widthClassName="max-w-md">
@@ -114,8 +117,25 @@ export function VcrValueDrawer({ label, value, onClose }: { label: string; value
             {detail.quoteSource && <figcaption className="mt-2 text-caption text-text-3">{`— ${detail.quoteSource}`}</figcaption>}
           </figure>
         )}
+
+        {routed && detail?.ref && <VcrRefLink refTarget={detail.ref} kind={detail.kind} onNavigate={onClose} />}
       </div>
     </Drawer>
+  );
+}
+
+/**
+ * 「到那张假设卡」 / 「到那次运行的页面」: where the whole thing is read. Only
+ * inside a study's address, where there is a tab to go to.
+ */
+function VcrRefLink({ refTarget, kind, onNavigate }: { refTarget: NonNullable<VcrValueDetail["ref"]>; kind: VcrValueDetail["kind"]; onNavigate: () => void }) {
+  const { studyId } = useParams();
+  if (!studyId || !refTarget.tab) return null;
+  const search = refTarget.kind === "assumption" ? `?card=${encodeURIComponent(refTarget.id)}` : "";
+  return (
+    <Link data-vcr-ref="" to={`${vcrTabPath(studyId, refTarget.tab)}${search}`} onClick={onNavigate} className="text-ui text-link hover:underline">
+      {refTarget.kind === "assumption" ? "到那张假设卡" : kind === "run" ? "到这次运行的结果页" : "到它所在的页签"}
+    </Link>
   );
 }
 

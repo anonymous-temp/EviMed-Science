@@ -147,6 +147,18 @@ export function bandPath(points: readonly Point[], x: VcrScale, y: VcrScale, { s
   return `${draw(top, true)} ${draw(bottom, false)} Z`;
 }
 
+/**
+ * A span of the x axis as a rectangle in the box — a period nobody observed,
+ * say. Clamped to the plot, and nothing at all when the span is empty or its
+ * ends are not numbers: a shaded strip nobody asked for reads as data.
+ */
+export function spanRect(from: number | null | undefined, to: number | null | undefined, x: VcrScale): { x: number; width: number } | null {
+  if (!finite(from) || !finite(to)) return null;
+  const left = Math.max(0, Math.min(100, posX(Math.min(from, to), x)));
+  const right = Math.max(0, Math.min(100, posX(Math.max(from, to), x)));
+  return right > left ? { x: left, width: round(right - left) } : null;
+}
+
 /** The share of a whole, clamped, for a stacked bar. A zero whole is no share. */
 export function share(value: number | null | undefined, total: number | null | undefined): number {
   if (!finite(value) || !finite(total) || total <= 0) return 0;

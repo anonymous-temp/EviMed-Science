@@ -19,6 +19,7 @@ import {
   numberText,
   reviewLabel,
   sourceLabel,
+  staleSentence,
   valueSentence,
   valueText,
 } from "./vcrText";
@@ -108,6 +109,63 @@ describe("the whole value as one sentence", () => {
     const sentence = valueSentence({ value: 71, source: "predicted", stale: true });
     expect(sentence).toContain("71");
     expect(sentence).toContain("已过期");
+  });
+});
+
+// Numbers are printed to the precision they deserve (CW-14): a hazard ratio of
+// 1.04 is 1.04 and never 1.0, and a Monte-Carlo error to two significant
+// digits — the value to the decimal place of the error's first one.
+describe("a number's precision", () => {
+  it("keeps two decimals on a ratio and never rounds 1.04 to 1.0 or 1.96 to 2.0", () => {
+    expect(numberText(1.04)).toBe("1.04");
+    expect(numberText(1.96)).toBe("1.96");
+    expect(numberText(0.6)).toBe("0.6");
+  });
+
+  it("keeps two significant digits below one: 0.0031 stays 0.0031", () => {
+    expect(numberText(0.0031)).toBe("0.0031");
+    expect(numberText(0.31)).toBe("0.31");
+  });
+
+  it("drops a zero the rule wrote and nobody measured: 5.9 is 5.9, not 5.90", () => {
+    expect(numberText(5.9)).toBe("5.9");
+    expect(numberText(4.1)).toBe("4.1");
+    expect(numberText(180)).toBe("180");
+    expect(numberText(71.25)).toBe("71.3");
+  });
+
+  it("writes a Monte-Carlo error to two significant digits", () => {
+    expect(mcseText(0.0031)).toBe("±0.0031");
+    expect(mcseText(0.4)).toBe("±0.40");
+    expect(mcseText(0.31)).toBe("±0.31");
+    expect(mcseText(1.04)).toBe("±1.0");
+    expect(mcseText(13.4)).toBe("±13");
+  });
+
+  // power 0.712 ± 0.0031 → the value to the third decimal, the error to the fourth.
+  it("prints a value to the decimal place of its own error's first digit", () => {
+    const power = { value: 0.712, mcse: 0.0031, source: "predicted" as const };
+    expect(valueText(power)).toBe("0.712");
+    expect(mcseText(power.mcse)).toBe("±0.0031");
+    expect(valueText({ value: 71.2345, mcse: 0.31, source: "predicted" })).toBe("71.2");
+  });
+
+  it("honours the precision the server sent, zeros included", () => {
+    expect(valueText({ value: 72, precision: 1, source: "predicted" })).toBe("72.0");
+    expect(valueText({ value: 0.5, precision: 3, source: "predicted" })).toBe("0.500");
+  });
+
+  it("prints both ends of an interval to the same decimals", () => {
+    expect(intervalText({ kind: "prediction", low: 3, high: 5.6 })).toBe("预测区间 3.0–5.6");
+    expect(intervalText({ kind: "confidence", low: 5.6, high: 6.25, level: 95 })).toBe("95% 置信区间 5.60–6.25");
+  });
+});
+
+describe("a stale sentence", () => {
+  it("promises a queue only when one exists", () => {
+    expect(staleSentence(true)).toBe("输入已变更，排队重算中");
+    expect(staleSentence(false)).not.toContain("排队重算中");
+    expect(staleSentence(undefined)).not.toContain("排队重算中");
   });
 });
 

@@ -1,0 +1,441 @@
+{
+  "model": {
+    "id": "mdl_1",
+    "name": "二线 NSCLC 多西他赛组 PFS · Weibull",
+    "family": "拟合预测",
+    "version": "1.2",
+    "tier": "literature",
+    "risk": "low",
+    "useCeiling": "design_support",
+    "scope": "二线 NSCLC，多西他赛单药",
+    "region": "含中国人群的研究",
+    "endpoint": "time_to_event",
+    "timeRange": null,
+    "inputRange": null,
+    "sources": "来源 3 项：NCT09900001、NCT09900002、CTR20990001",
+    "provider": "研究 EV-201",
+    "interface": "vcr-engine patients.time_to_event",
+    "inputs": [
+      "中位 PFS",
+      "形状参数"
+    ],
+    "outputs": "对照组个体 PFS 的推演",
+    "missingData": "缺项不插补。",
+    "retirement": "来源试验更新时复核。",
+    "twin": "baseline_conditioned_prediction",
+    "twinLabel": "基线条件化预测",
+    "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
+    "validation": [
+      {
+        "label": "外部验证",
+        "state": "none",
+        "detail": null
+      },
+      {
+        "label": "内部验证",
+        "state": "passed",
+        "detail": "重建 QC 通过"
+      },
+      {
+        "label": "代码核对",
+        "state": "passed",
+        "detail": "对照解析解"
+      }
+    ],
+    "limits": [
+      "未做外部验证",
+      "无更新机制"
+    ],
+    "missingEvidence": [
+      "代码核对",
+      "种子可复现",
+      "输入可追溯",
+      "敏感性分析"
+    ],
+    "usedBy": [],
+    "numeric": null,
+    "uncertainty": null
+  },
+  "twin": {
+    "label": "基线条件化预测",
+    "reason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录"
+  },
+  "headline": "按文献模型推演：试验情景的中位 PFS 长于对照情景。",
+  "trajectories": {
+    "xLabel": "月",
+    "yLabel": "PFS 概率",
+    "ticks": [
+      "0",
+      "6",
+      "12"
+    ],
+    "series": [
+      {
+        "key": "treatment",
+        "label": "试验情景",
+        "source": "predicted",
+        "ours": true,
+        "pooled": false,
+        "points": [
+          {
+            "x": 0,
+            "y": 1,
+            "low": 1,
+            "high": 1
+          },
+          {
+            "x": 6,
+            "y": 0.62,
+            "low": 0.5,
+            "high": 0.72
+          },
+          {
+            "x": 12,
+            "y": 0.41,
+            "low": 0.28,
+            "high": 0.52
+          }
+        ],
+        "bandKind": "prediction",
+        "bandLevel": 80,
+        "endLabel": "试验",
+        "endNote": null,
+        "atRisk": [],
+        "individuals": [],
+        "dashed": false,
+        "unobserved": []
+      },
+      {
+        "key": "control",
+        "label": "对照情景",
+        "source": "predicted",
+        "ours": false,
+        "pooled": false,
+        "points": [
+          {
+            "x": 0,
+            "y": 1,
+            "low": 1,
+            "high": 1
+          },
+          {
+            "x": 6,
+            "y": 0.4,
+            "low": 0.3,
+            "high": 0.5
+          },
+          {
+            "x": 12,
+            "y": 0.18,
+            "low": 0.1,
+            "high": 0.26
+          }
+        ],
+        "bandKind": "prediction",
+        "bandLevel": 80,
+        "endLabel": "对照",
+        "endNote": null,
+        "atRisk": [],
+        "individuals": [],
+        "dashed": false,
+        "unobserved": []
+      }
+    ]
+  },
+  "example": {
+    "id": "VP-0412",
+    "source": "synthetic",
+    "origin": "批量合成（人群 v2）· 种子已记录",
+    "baseline": [
+      {
+        "label": "年龄",
+        "value": "62 岁",
+        "source": "synthetic"
+      },
+      {
+        "label": "ECOG",
+        "value": "1",
+        "source": "synthetic"
+      }
+    ],
+    "inScope": {
+      "ok": true,
+      "text": "在模型适用范围内"
+    },
+    "scenarios": {
+      "note": null,
+      "series": [
+        {
+          "key": "as_control",
+          "label": "对照假设",
+          "source": "predicted",
+          "ours": false,
+          "pooled": false,
+          "points": [
+            {
+              "x": 0,
+              "y": 1,
+              "low": null,
+              "high": null
+            },
+            {
+              "x": 6,
+              "y": 0.4,
+              "low": null,
+              "high": null
+            },
+            {
+              "x": 12,
+              "y": 0.18,
+              "low": null,
+              "high": null
+            }
+          ],
+          "bandKind": null,
+          "bandLevel": null,
+          "endLabel": null,
+          "endNote": null,
+          "atRisk": [],
+          "individuals": [],
+          "dashed": false,
+          "unobserved": []
+        },
+        {
+          "key": "as_treatment",
+          "label": "试验假设",
+          "source": "predicted",
+          "ours": true,
+          "pooled": false,
+          "points": [
+            {
+              "x": 0,
+              "y": 1,
+              "low": null,
+              "high": null
+            },
+            {
+              "x": 6,
+              "y": 0.62,
+              "low": null,
+              "high": null
+            },
+            {
+              "x": 12,
+              "y": 0.41,
+              "low": null,
+              "high": null
+            }
+          ],
+          "bandKind": null,
+          "bandLevel": null,
+          "endLabel": null,
+          "endNote": null,
+          "atRisk": [],
+          "individuals": [],
+          "dashed": false,
+          "unobserved": []
+        }
+      ],
+      "difference": "12 个月生存概率相差 0.23"
+    },
+    "note": null
+  },
+  "panels": [
+    {
+      "key": "run_measures",
+      "title": "这次运行的结果",
+      "kind": "binary",
+      "note": "模型预测，非观察",
+      "rows": [
+        {
+          "label": "生成记录数",
+          "value": {
+            "value": 2000,
+            "text": null,
+            "unit": null,
+            "source": "synthetic",
+            "interval": null,
+            "mcse": null,
+            "review": "ai_set",
+            "precision": null,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "生成记录数",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "patients.time_to_event v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "2,000"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "c6a7ebf1df7f"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_10",
+                "tab": "patients"
+              }
+            }
+          }
+        },
+        {
+          "label": "对照组中位 PFS",
+          "value": {
+            "value": 4.1,
+            "text": null,
+            "unit": "个月",
+            "source": "predicted",
+            "interval": {
+              "kind": "monte_carlo",
+              "low": 3.9824,
+              "high": 4.2176,
+              "level": 95
+            },
+            "mcse": 0.06,
+            "review": "ai_set",
+            "precision": 2,
+            "reason": null,
+            "stale": false,
+            "detail": {
+              "kind": "run",
+              "title": "对照组中位 PFS",
+              "fields": [
+                {
+                  "label": "方法",
+                  "value": "patients.time_to_event v1.0.0"
+                },
+                {
+                  "label": "种子",
+                  "value": "5"
+                },
+                {
+                  "label": "重复次数",
+                  "value": "2,000"
+                },
+                {
+                  "label": "蒙特卡洛标准误",
+                  "value": "0.06"
+                },
+                {
+                  "label": "计算用时",
+                  "value": "12 秒"
+                },
+                {
+                  "label": "情景哈希",
+                  "value": "c6a7ebf1df7f"
+                }
+              ],
+              "quote": null,
+              "quoteSource": null,
+              "ref": {
+                "kind": "result",
+                "id": "res_10",
+                "tab": "patients"
+              }
+            }
+          }
+        }
+      ],
+      "series": [],
+      "footnote": null
+    },
+    {
+      "key": "rescue",
+      "title": "12 个月内需要补救治疗",
+      "kind": "binary",
+      "note": "模型预测，非观察",
+      "rows": [
+        {
+          "label": "对照情景",
+          "value": {
+            "value": 24,
+            "text": null,
+            "unit": "%",
+            "source": "predicted",
+            "interval": {
+              "kind": "prediction",
+              "low": 13,
+              "high": 39,
+              "level": 80
+            },
+            "mcse": null,
+            "review": "ai_set",
+            "precision": null,
+            "reason": null,
+            "stale": false,
+            "detail": null
+          }
+        }
+      ],
+      "series": [],
+      "footnote": null
+    }
+  ],
+  "sensitivity": {
+    "measure": "试验情景 12 个月 PFS 概率",
+    "base": {
+      "value": 0.41,
+      "text": null,
+      "unit": null,
+      "source": "predicted",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+    },
+    "rows": [
+      {
+        "label": "目标 HR",
+        "range": "0.50～0.75",
+        "low": 0.33,
+        "high": 0.49
+      },
+      {
+        "label": "对照组中位 PFS",
+        "range": "3.0～5.6 个月",
+        "low": 0.36,
+        "high": 0.47
+      }
+    ]
+  },
+  "counts": {
+    "realPatients": 0,
+    "events": 1210,
+    "effectiveSampleSize": null,
+    "generatedRecords": 2000,
+    "note": "设计阶段：尚无真实患者",
+    "scope": "2000 名虚拟患者"
+  },
+  "stale": null,
+  "partial": {
+    "done": "已算完 1,200 / 2,000 次重复的结果",
+    "missing": "其余重复没有做完，可以从检查点续跑"
+  },
+  "sets": [
+    {
+      "id": "pts_1",
+      "label": "虚拟患者集 v1",
+      "stale": false
+    }
+  ]
+}

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/components/ui/Tooltip";
-import type { VcrAttritionStep, VcrDesign, VcrProfileRow } from "@/lib/vcrClient";
+import type { VcrAttritionStep, VcrDesign, VcrProfileRow, VcrValue } from "@/lib/vcrClient";
 import { seriesColor } from "./VcrMarks";
-import { numberText } from "./vcrText";
+import { VcrNumber } from "./VcrNumber";
+import { intervalText, mcseText, numberText, rangeText, valueText } from "./vcrText";
 import { fixedScale, posX, scaleOf, share } from "./vcrScale";
 
 /**
@@ -176,25 +177,34 @@ export function VcrWeightHistogram({
 }
 
 /**
- * 「哪些假设影响最大」: each assumption's range, drawn either side of the
- * result it is measured against. Ordered by width, widest first — that order
- * is the chart's whole finding.
+ * 「哪些假设影响最大」: each assumption's range, drawn about the result it is
+ * measured against, in the order the result lists them — widest first is the
+ * chart's whole finding, and it is the server's to say.
+ *
+ * The reference line is the model's own output at its default parameters,
+ * sent with the result (`base`). The page never makes one up: without a base
+ * there is no line and no 「基准」 — the average of the bars' midpoints is not
+ * a base case, it is a number nobody computed (plan §8.3).
  */
 export function VcrTornadoChart({
   rows,
-  centre,
+  centre = null,
+  centreLabel,
   formatValue = (value: number) => numberText(value),
   className,
 }: {
   rows: ReadonlyArray<{ label: string; range?: string | null; low: number; high: number }>;
-  /** The value the bars are measured against. */
-  centre: number;
+  /** The base case the bars are measured against, when the result sent one. */
+  centre?: number | null;
+  /** The base case as a drillable number, printed under the bars. */
+  centreLabel?: ReactNode;
   formatValue?: (value: number) => string;
   className?: string;
 }) {
-  const scale = scaleOf([centre, ...rows.flatMap((row) => [row.low, row.high])]);
+  const base = typeof centre === "number" && Number.isFinite(centre) ? centre : null;
+  const scale = scaleOf([base, ...rows.flatMap((row) => [row.low, row.high])]);
   if (!scale || rows.length === 0) return null;
-  const middle = posX(centre, scale);
+  const middle = base !== null ? posX(base, scale) : null;
   return (
     <div data-vcr-tornado="" className={className}>
       <ol className="flex flex-col gap-3">
@@ -208,7 +218,7 @@ export function VcrTornadoChart({
                 {row.range && <p className="truncate text-meta tabular-nums text-text-3">{row.range}</p>}
               </div>
               <div className="relative h-5">
-                <span className="absolute inset-y-0 w-px bg-border-control" style={{ left: `${middle}%` }} />
+                {middle !== null && <span data-vcr-tornado-base="" className="absolute inset-y-0 w-px bg-border-control" style={{ left: `${middle}%` }} />}
                 <span
                   role="img"
                   aria-label={`${row.label}：${formatValue(row.low)} 到 ${formatValue(row.high)}`}
@@ -223,7 +233,12 @@ export function VcrTornadoChart({
           );
         })}
       </ol>
-      <p className="mt-2 text-caption tabular-nums text-text-3">{`基准 ${formatValue(centre)}`}</p>
+      {base !== null && (
+        <p className="mt-2 flex items-baseline gap-1.5 text-caption tabular-nums text-text-3">
+          基准
+          <span className="text-text-2">{centreLabel ?? formatValue(base)}</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -294,10 +309,18 @@ export function VcrForestPlot({
                 <ForestMark row={row} scale={scale} centre={pooled?.value ?? null} formatValue={formatValue} />
               </td>
               <td className="py-1.5 pl-2 text-right tabular-nums text-text">
-                {row.value != null ? formatValue(row.value) : "—"}
-                {row.low != null && row.high != null && (
-                  <span className="ml-1 text-text-3">{`(${formatValue(row.low)}–${formatValue(row.high)})`}</span>
-                )}
+                {row.prediction
+                  // The column is headed 置信区间; the prediction row is a
+                  // different claim — about the next study — and says so.
+                  ? <span data-vcr-forest-pi="">{`预测区间 ${rangeText(row.low, row.high)}`}</span>
+                  : (
+                    <>
+                      {row.value != null ? formatValue(row.value) : "—"}
+                      {row.low != null && row.high != null && (
+                        <span className="ml-1 text-text-3">{`(${formatValue(row.low)}–${formatValue(row.high)})`}</span>
+                      )}
+                    </>
+                  )}
               </td>
               <td className="py-1.5 pl-2 text-right tabular-nums text-text-3">
                 {row.weight != null ? `${numberText(row.weight, 1)}%` : ""}
@@ -349,11 +372,32 @@ function ForestMark({ row, scale, centre, formatValue }: {
   );
 }
 
+/** A number and its unit as a label prints them: 「71.0%」, 「3,900 万元」. */
+function withUnit(value: VcrValue | null | undefined): string {
+  const text = valueText(value);
+  if (!value?.unit || text === "—") return text;
+  return value.unit === "%" ? `${text}%` : `${text} ${value.unit}`;
+}
+
+/** An axis tick in the measure's own unit: a percentage says so, a duration leaves it to the axis title. */
+function tickFormat(unit: string | null | undefined): (value: number) => string {
+  return unit === "%" ? (value) => `${numberText(value)}%` : (value) => numberText(value);
+}
+
 /**
  * The designs as a trade-off: how long against how likely, with cost as the
- * bubble's area. A design another dominates is hatched grey and carries no
- * numbers — it was not a candidate, and printing its figures would invite a
- * comparison that is already settled.
+ * bubble's area.
+ *
+ *  - **The server sends what to print.** A measure arrives in its own unit
+ *    (成功把握 71 with unit 「%」), so the axis and the labels print it as it
+ *    is — the page never guesses that a number at most 1 was a proportion.
+ *  - Every simulated number keeps its Monte-Carlo error, here too, and the
+ *    cost keeps its 「万元」 (plan §4 step 6).
+ *  - **The brand is a recorded decision** (`chosen`), never the page's own
+ *    pick: until somebody writes one, every design is a grey.
+ *  - A design another dominates carries no numbers. When it has no position
+ *    it is named under the plot with the design that beats it, rather than
+ *    being left out without a word.
  */
 export function VcrTradeoffScatter({
   designs,
@@ -363,8 +407,6 @@ export function VcrTradeoffScatter({
   xLabel,
   yLabel,
   sizeLabel,
-  formatX = (value: number) => numberText(value),
-  formatY = (value: number) => numberText(value),
   height = 300,
   className,
 }: {
@@ -375,16 +417,17 @@ export function VcrTradeoffScatter({
   xLabel?: string;
   yLabel?: string;
   sizeLabel?: string;
-  formatX?: (value: number) => string;
-  formatY?: (value: number) => string;
   height?: number;
   className?: string;
 }) {
   const at = (design: VcrDesign, key: string) => design.measures[key]?.value ?? null;
   const points = designs.filter((design) => at(design, xKey) != null && at(design, yKey) != null);
+  const unplaced = designs.filter((design) => design.dominated && !points.includes(design));
   const x = scaleOf(points.map((design) => at(design, xKey)));
   const y = scaleOf(points.map((design) => at(design, yKey)));
   if (!x || !y || points.length === 0) return null;
+  const formatX = tickFormat(points[0].measures[xKey]?.unit);
+  const formatY = tickFormat(points[0].measures[yKey]?.unit);
   const sizes = sizeKey ? points.map((design) => at(design, sizeKey) ?? 0) : [];
   const biggest = Math.max(...sizes, 1);
   const radius = (design: VcrDesign) => {
@@ -413,7 +456,13 @@ export function VcrTradeoffScatter({
           const top = 100 - posX(at(design, yKey) as number, y);
           const size = radius(design) * 2;
           return (
-            <span key={design.id} data-vcr-scatter-point={design.code} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${left}%`, top: `${top}%` }}>
+            <span
+              key={design.id}
+              data-vcr-scatter-point={design.code}
+              data-vcr-chosen={design.chosen ? "" : undefined}
+              className="absolute -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${left}%`, top: `${top}%` }}
+            >
               <span
                 aria-hidden="true"
                 data-forced-colors="preserve"
@@ -431,26 +480,30 @@ export function VcrTradeoffScatter({
         {points.map((design) => {
           const left = posX(at(design, xKey) as number, x);
           const top = 100 - posX(at(design, yKey) as number, y);
+          const measure = design.measures[yKey];
+          const cost = sizeKey ? design.measures[sizeKey] : null;
+          const mcse = mcseText(measure?.mcse);
           return (
             <span
               key={`label-${design.id}`}
+              data-vcr-scatter-label={design.code}
               className="absolute max-w-48 -translate-x-1/2 whitespace-nowrap text-center text-caption"
               style={{ left: `${left}%`, top: `calc(${top}% + ${radius(design) * 2 + 8}px)` }}
             >
               <span className={cn("block font-medium", design.dominated ? "text-text-3" : design.chosen ? "text-accent-strong" : "text-text-2")}>
-                {`${design.code} ${design.name}`}
+                {design.name || design.code}
               </span>
-              {!design.dominated && (
-                <span className="block tabular-nums text-text-3">
-                  {[
-                    formatY(at(design, yKey) as number),
-                    sizeKey && at(design, sizeKey) != null ? `${numberText(at(design, sizeKey) as number, 0)}` : null,
-                  ].filter(Boolean).join(" · ")}
-                </span>
-              )}
-              {design.dominated && design.dominatedBy && (
-                <span className="block text-text-3">{`被 ${design.dominatedBy} 占优`}</span>
-              )}
+              {design.dominated
+                ? <span className="block text-text-3">{design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}</span>
+                : (
+                  <span className="block tabular-nums text-text-3">
+                    <VcrNumber value={measure} label={`${design.name || design.code} ${yLabel ?? ""}`.trim()}>
+                      {withUnit(measure)}
+                      {mcse && <span className="ml-1">{mcse}</span>}
+                    </VcrNumber>
+                    {cost && cost.value != null && <span>{` · ${withUnit(cost)}`}</span>}
+                  </span>
+                )}
             </span>
           );
         })}
@@ -460,6 +513,15 @@ export function VcrTradeoffScatter({
         {xLabel && <span>{xLabel}</span>}
         {sizeLabel && <span>{sizeLabel}</span>}
       </p>
+      {unplaced.length > 0 && (
+        <ul className="ml-10 mt-2 flex flex-col gap-1 text-caption text-text-3">
+          {unplaced.map((design) => (
+            <li key={design.id} data-vcr-scatter-dominated={design.code}>
+              {`${design.name || design.code} · ${design.dominatedBy ? `被 ${design.dominatedBy} 占优` : "被占优"}`}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -472,6 +534,84 @@ function ScatterAxis({ scale, format }: { scale: NonNullable<ReturnType<typeof s
           {format(tick)}
         </span>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 里程碑: when each design would reach its landmarks — the last patient in,
+ * above all — as a point inside its named prediction interval, one row per
+ * design on one shared time axis (plan §5.4). Every mark is a model's
+ * prediction, so every mark is a band; the chosen design, and only a chosen
+ * one, is the brand.
+ */
+export function VcrMilestoneTimeline({
+  milestones,
+  chosen = [],
+  axisLabel = "月",
+  className,
+}: {
+  milestones: ReadonlyArray<{ design: string; name: string; items: ReadonlyArray<{ key: string; label: string; value: VcrValue }> }>;
+  /** The codes of the designs a recorded decision chose. */
+  chosen?: readonly string[];
+  axisLabel?: string;
+  className?: string;
+}) {
+  const ends = milestones.flatMap((row) => row.items.flatMap((item) => [item.value.value, item.value.interval?.low ?? null, item.value.interval?.high ?? null]));
+  const scale = scaleOf([0, ...ends]);
+  if (!scale || milestones.every((row) => row.items.length === 0)) return null;
+  return (
+    <div data-vcr-milestones="" className={className}>
+      <ol className="flex flex-col gap-3">
+        {milestones.map((row, index) => row.items.map((item) => {
+          const value = item.value;
+          const ours = chosen.includes(row.design);
+          const color = seriesColor(ours, index);
+          const at = typeof value.value === "number" ? posX(value.value, scale) : null;
+          const low = value.interval?.low ?? null;
+          const high = value.interval?.high ?? null;
+          const from = typeof low === "number" ? posX(low, scale) : at;
+          const to = typeof high === "number" ? posX(high, scale) : at;
+          const interval = intervalText(value.interval, value.precision);
+          return (
+            <li key={`${row.design}-${item.key}`} data-vcr-milestone={row.design} className="grid grid-cols-[10rem_1fr_9rem] items-center gap-3">
+              <div className="min-w-0">
+                <p className={cn("truncate text-caption", ours ? "font-medium text-accent-strong" : "text-text-2")}>{row.name || row.design}</p>
+                <p className="truncate text-meta text-text-3">{item.label}</p>
+              </div>
+              <span
+                role="img"
+                aria-label={`${row.name || row.design} ${item.label}：${valueText(value)}${value.unit ?? ""}${interval ? `，${interval}` : ""}`}
+                data-forced-colors="preserve"
+                className="relative block h-4"
+              >
+                <span className="absolute inset-x-0 top-2 h-px bg-border" />
+                {from != null && to != null && to > from && (
+                  <span className="absolute top-1 h-2 rounded-full" style={{ left: `${from}%`, width: `${to - from}%`, background: color, opacity: 0.28 }} />
+                )}
+                {at != null && (
+                  <span className="absolute top-0.5 h-3 w-3 -translate-x-1/2 rounded-full" style={{ left: `${at}%`, background: color }} />
+                )}
+              </span>
+              <div className="min-w-0 text-right">
+                <p className="text-caption tabular-nums text-text"><VcrNumber value={value} label={`${row.name || row.design} ${item.label}`} /></p>
+                {interval && <p className="truncate text-meta tabular-nums text-text-3">{interval}</p>}
+              </div>
+            </li>
+          );
+        }))}
+      </ol>
+      <div className="relative mt-1 grid grid-cols-[10rem_1fr_9rem] gap-3">
+        <span />
+        <span className="relative block h-5">
+          {scale.ticks.map((tick) => (
+            <span key={tick} className="absolute -translate-x-1/2 text-meta tabular-nums text-text-3" style={{ left: `${posX(tick, scale)}%` }}>
+              {numberText(tick)}
+            </span>
+          ))}
+        </span>
+        <span className="text-right text-meta text-text-3">{axisLabel}</span>
+      </div>
     </div>
   );
 }

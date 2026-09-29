@@ -103,6 +103,32 @@ it("opens the whole row: it goes where the notice points and marks it read on th
   expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
 });
 
+// A 虚拟临研 notice names `<studyId>[/<tab>]` (vcrNotify.mjs). The study page
+// has exactly those two segments: anything longer, or anything that is not an
+// id, is not an address and must not become a link (CW-13).
+it("opens a 虚拟临研 notice on its study's tab, and nothing that is not one", async () => {
+  const notice = (id: string, title: string, sourceId: string): api.InboxItem => ({
+    ...review, id, noticeType: "notify", title, body: "", severity: "attention",
+    source: { type: "vcr", id: sourceId }, actions: [{ id: "open", label: "打开", style: "primary" }], readAt: at(1),
+  });
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [
+      notice("vcr", "EV-201：P-0192 等 1 人可以联系", "std_1/matching"),
+      notice("vcr-study", "EV-201：研究包完成", "std_1"),
+      notice("vcr-deep", "一条多了一段路径的通知", "std_1/matching/ref_seed_1"),
+      notice("vcr-climb", "一条想跳出研究页的通知", "../../admin"),
+    ],
+    nextCursor: null,
+  });
+  open();
+  expect(await screen.findByRole("link", { name: "EV-201：P-0192 等 1 人可以联系" })).toHaveAttribute("href", "/app/virtual-research/std_1/matching");
+  expect(screen.getByRole("link", { name: "EV-201：研究包完成" })).toHaveAttribute("href", "/app/virtual-research/std_1");
+  expect(screen.queryByRole("link", { name: "一条多了一段路径的通知" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "一条想跳出研究页的通知" })).toBeNull();
+  await userEvent.click(screen.getByRole("link", { name: "EV-201：P-0192 等 1 人可以联系" }));
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/virtual-research/std_1/matching");
+});
+
 it("opens a digest, the frontier daily and a memory where each lives, without deciding anything", async () => {
   vi.mocked(api.listInbox).mockResolvedValue({
     items: [

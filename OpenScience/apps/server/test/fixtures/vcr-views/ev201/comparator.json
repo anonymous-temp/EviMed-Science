@@ -1,0 +1,581 @@
+{
+  "headline": "文献对照：有限制地估计，12 个月 RMST 5.9 个月。",
+  "routes": [
+    {
+      "route": "prognostic_adjustment",
+      "state": "not_applicable",
+      "reason": "需要 T3 随机试验个体数据",
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "external_control",
+      "state": "not_estimable",
+      "reason": "缺 3 项数据，见下方清单",
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "literature_control",
+      "state": "limited",
+      "reason": null,
+      "note": null,
+      "selected": true
+    },
+    {
+      "route": "model_comparator",
+      "state": "scenario",
+      "reason": null,
+      "note": null,
+      "selected": false
+    },
+    {
+      "route": "hybrid_control",
+      "state": "design_only",
+      "reason": null,
+      "note": null,
+      "selected": false
+    }
+  ],
+  "curves": [
+    {
+      "key": "s1",
+      "label": "研究 1 · 2021",
+      "source": "reconstructed",
+      "ours": false,
+      "pooled": false,
+      "points": [
+        {
+          "x": 0,
+          "y": 1,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 6,
+          "y": 0.42,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 12,
+          "y": 0.2,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 24,
+          "y": 0.05,
+          "low": null,
+          "high": null
+        }
+      ],
+      "bandKind": null,
+      "bandLevel": null,
+      "endLabel": null,
+      "endNote": null,
+      "atRisk": [
+        {
+          "x": 0,
+          "n": 287
+        },
+        {
+          "x": 6,
+          "n": 99
+        },
+        {
+          "x": 12,
+          "n": 60
+        }
+      ],
+      "individuals": [],
+      "dashed": false,
+      "unobserved": []
+    },
+    {
+      "key": "pooled",
+      "label": "合并估计",
+      "source": "reconstructed",
+      "ours": false,
+      "pooled": true,
+      "points": [
+        {
+          "x": 0,
+          "y": 1,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 6,
+          "y": 0.4,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 12,
+          "y": 0.18,
+          "low": null,
+          "high": null
+        },
+        {
+          "x": 24,
+          "y": 0.04,
+          "low": null,
+          "high": null
+        }
+      ],
+      "bandKind": null,
+      "bandLevel": null,
+      "endLabel": null,
+      "endNote": null,
+      "atRisk": [],
+      "individuals": [],
+      "dashed": false,
+      "unobserved": []
+    }
+  ],
+  "rmst": {
+    "value": {
+      "value": 5.9,
+      "text": null,
+      "unit": "个月",
+      "source": "reconstructed",
+      "interval": {
+        "kind": "confidence",
+        "low": 5.6,
+        "high": 6.2,
+        "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": {
+        "kind": "run",
+        "title": "对照组 RMST",
+        "fields": [
+          {
+            "label": "方法",
+            "value": "evidence.reconstruct_km v1.0.0"
+          },
+          {
+            "label": "种子",
+            "value": "5"
+          },
+          {
+            "label": "计算用时",
+            "value": "12 秒"
+          },
+          {
+            "label": "情景哈希",
+            "value": "4c790cf26d1a"
+          }
+        ],
+        "quote": null,
+        "quoteSource": null,
+        "ref": {
+          "kind": "result",
+          "id": "res_11",
+          "tab": "comparator"
+        }
+      }
+    },
+    "tau": 12,
+    "label": "τ = 12 个月"
+  },
+  "median": {
+    "value": 4.1,
+    "text": null,
+    "unit": "个月",
+    "source": "reconstructed",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": {
+      "kind": "run",
+      "title": "中位生存时间",
+      "fields": [
+        {
+          "label": "方法",
+          "value": "evidence.reconstruct_km v1.0.0"
+        },
+        {
+          "label": "种子",
+          "value": "5"
+        },
+        {
+          "label": "计算用时",
+          "value": "12 秒"
+        },
+        {
+          "label": "情景哈希",
+          "value": "4c790cf26d1a"
+        }
+      ],
+      "quote": null,
+      "quoteSource": null,
+      "ref": {
+        "kind": "result",
+        "id": "res_11",
+        "tab": "comparator"
+      }
+    }
+  },
+  "qc": [
+    {
+      "key": "atRisk",
+      "label": "各时点风险人数",
+      "value": "最大差 2 人",
+      "threshold": null,
+      "passed": true
+    },
+    {
+      "key": "events",
+      "label": "总事件数",
+      "value": "1.8%",
+      "threshold": null,
+      "passed": true
+    },
+    {
+      "key": "median",
+      "label": "中位数",
+      "value": "2.4%",
+      "threshold": null,
+      "passed": true
+    }
+  ],
+  "methods": [
+    {
+      "label": "evidence.reconstruct_km",
+      "version": "v1.0.0",
+      "note": null,
+      "passed": true
+    }
+  ],
+  "e10": [
+    {
+      "key": "effect_large",
+      "label": "效应远大于自然变异",
+      "state": "partial",
+      "note": "目标 HR 0.60"
+    },
+    {
+      "key": "objective_endpoint",
+      "label": "终点客观",
+      "state": "met",
+      "note": null
+    },
+    {
+      "key": "predictable_course",
+      "label": "病程可预测",
+      "state": "met",
+      "note": null
+    },
+    {
+      "key": "prognostic_factors_known",
+      "label": "预后因素已知可得",
+      "state": "doubtful",
+      "note": "免疫治疗暴露不同"
+    }
+  ],
+  "estimand": {
+    "rows": [
+      {
+        "label": "估计目标",
+        "value": "对试验人群（ATT）"
+      },
+      {
+        "label": "目标试验的人群",
+        "value": "二线 NSCLC，多西他赛单药"
+      },
+      {
+        "label": "处理策略",
+        "value": "EV-201 单药 vs 多西他赛"
+      }
+    ],
+    "note": "文献对照的估计落在来源试验人群；与本研究人群的可比性见右。",
+    "source": "assumed",
+    "review": "ai_set"
+  },
+  "comparability": [
+    {
+      "key": "ECOG 0–1",
+      "label": "ECOG 0–1",
+      "ours": {
+        "value": null,
+        "text": "—",
+        "unit": null,
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "theirs": {
+        "value": null,
+        "text": "—",
+        "unit": null,
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "smd": 0.09,
+      "smdBefore": 0.24,
+      "flagged": false,
+      "note": null
+    },
+    {
+      "key": "既往免疫治疗",
+      "label": "既往免疫治疗",
+      "ours": {
+        "value": null,
+        "text": "—",
+        "unit": null,
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "theirs": {
+        "value": null,
+        "text": "—",
+        "unit": null,
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "smd": 0.31,
+      "smdBefore": 0.42,
+      "flagged": true,
+      "note": null
+    }
+  ],
+  "comparabilityNote": "标准化差异是加权之后的；界值 0.1。",
+  "dimensions": [
+    {
+      "key": "time_period",
+      "label": "时期",
+      "state": "approximate",
+      "reason": "来源试验早于 2020 年"
+    },
+    {
+      "key": "geography",
+      "label": "地域",
+      "state": "exact",
+      "reason": null
+    },
+    {
+      "key": "diagnosis",
+      "label": "诊断",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "prognostic_factors",
+      "label": "预后因素",
+      "state": "approximate",
+      "reason": "ECOG 分布不同"
+    },
+    {
+      "key": "treatment",
+      "label": "治疗",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "other_treatment_related",
+      "label": "其他与治疗相关的因素",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "follow_up",
+      "label": "随访",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "intercurrent_events",
+      "label": "伴随事件",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "outcome_definition",
+      "label": "结局定义与评估",
+      "state": "unknown",
+      "reason": null
+    },
+    {
+      "key": "missing_data",
+      "label": "缺失数据",
+      "state": "unknown",
+      "reason": null
+    }
+  ],
+  "diagnostics": [
+    {
+      "key": "ess",
+      "label": "有效样本量",
+      "value": {
+        "value": 412.5,
+        "text": null,
+        "unit": "例",
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    {
+      "key": "max",
+      "label": "最大权重",
+      "value": {
+        "value": 6.2,
+        "text": null,
+        "unit": null,
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    {
+      "key": "cv",
+      "label": "权重变异系数",
+      "value": {
+        "value": 0.8,
+        "text": null,
+        "unit": null,
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    {
+      "key": "top1",
+      "label": "前 1% 权重占比",
+      "value": {
+        "value": 7,
+        "text": null,
+        "unit": "%",
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    {
+      "key": "overlap",
+      "label": "重叠系数",
+      "value": {
+        "value": 0.82,
+        "text": null,
+        "unit": null,
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    },
+    {
+      "key": "outside",
+      "label": "共同支持域外的比例",
+      "value": {
+        "value": 3,
+        "text": null,
+        "unit": "%",
+        "source": "calculated",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      }
+    }
+  ],
+  "gaps": {
+    "title": "真实外部对照：不可估计",
+    "needs": "需要 T2 完整治疗与纵向结局",
+    "items": [
+      {
+        "title": "同期治疗记录",
+        "detail": "后续治疗线：合作方只有入组前资料",
+        "answers": "换药按治疗策略处理，伴随事件与试验一致"
+      },
+      {
+        "title": "结局评估频率",
+        "detail": "影像随访间隔：常规诊疗无固定间隔",
+        "answers": "校正评估时点偏倚"
+      },
+      {
+        "title": "ECOG 缺失 38%",
+        "detail": "关键预后因素，缺失多于可插补的范围",
+        "answers": "把 ECOG 纳入熵平衡"
+      }
+    ],
+    "conclusion": null,
+    "rule": "加权后有效样本量低于下限"
+  },
+  "counts": {
+    "realPatients": 0,
+    "events": 812,
+    "effectiveSampleSize": null,
+    "generatedRecords": 0,
+    "reconstructedPseudoPatients": 801,
+    "note": "设计阶段：尚无真实患者",
+    "scope": null
+  },
+  "verdict": {
+    "conclusion": "limited",
+    "review": "ai_set",
+    "reviewed": false
+  },
+  "at": "昨天 09:14",
+  "stale": null,
+  "partial": null
+}
