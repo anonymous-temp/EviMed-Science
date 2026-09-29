@@ -35,5 +35,15 @@ class ToolUniverseBridgeTests(unittest.TestCase):
             self.assertNotIn("private-token", json.dumps(reply))
 
 
+    def test_unavailable_optional_source_is_a_named_tool_error_not_empty_research(self):
+        with patch.object(bridge, "call_gateway", side_effect=bridge.GatewayUnavailable("tooluniverse_upstream_unavailable")):
+            called = bridge.handle_request({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "list_tools"}})
+            self.assertTrue(called["result"]["isError"])
+            self.assertEqual(called["result"]["structuredContent"]["errorCode"], "tooluniverse_upstream_unavailable")
+            listed = bridge.handle_request({"jsonrpc": "2.0", "id": 5, "method": "tools/list"})
+            self.assertIn("error", listed)
+            self.assertNotIn("result", listed)
+
+
 if __name__ == "__main__":
     unittest.main()
