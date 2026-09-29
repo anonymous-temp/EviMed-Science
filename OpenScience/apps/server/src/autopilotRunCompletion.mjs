@@ -1,3 +1,5 @@
+import { safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
+
 /** Complete only the durable episode that owns this terminal research run.
  * Other bounded workflows share the runtime manager but not its release authority.
  * @param {{service:any,runtimeManager:any,usageLedger:any,readDelta:(project:any,run:any)=>Promise<any>,audit:(event:string,error:any)=>Promise<void>}} dependencies
@@ -21,8 +23,9 @@ export async function completeOwnedAutopilotRun({ service, runtimeManager, usage
   const delta = await readDelta(project, run);
   const usage = usageLedger ? await usageLedger.summaryRun(project.userId, episode.id).catch(() => null) : null;
   await service.completeRun(project.userId, {
-    projectId: project.id, runId: run.id, episodeId: episode.id, sessionId: run.sessionId,
-    status: run.status, ...delta, artifacts: run.artifacts ?? [], costCny: usage?.actualCost ?? 0,
+    ...delta, projectId: project.id, runId: run.id, episodeId: episode.id, sessionId: run.sessionId,
+    status: run.status, artifacts: run.artifacts ?? [], unverifiedArtifacts: run.unverifiedArtifacts ?? [],
+    artifactRefs: safeAutopilotArtifactRefs(project.id, run), costCny: usage?.actualCost ?? 0,
   }).catch(error => audit("autopilot.run.complete", error));
 
   // Read after completion: a late callback must not release a newer workflow.

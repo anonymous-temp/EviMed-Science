@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
   STOPPING_RULES, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
-import { loadAutopilotProgress, renderAutopilotProgress } from "./autopilotProgress.mjs";
+import { loadAutopilotProgress, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 import { HttpError } from "./security.mjs";
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -594,7 +594,7 @@ export class AutopilotService {
   }
 
   /** Fold an ordinary AgentRun terminal result back into the proactive ledger.
-   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],costCny?:number}} input */
+   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],unverifiedArtifacts?:string[],artifactRefs?:any[],costCny?:number}} input */
   async completeRun(userId, input) {
     let episode = await this.episodeForRun(userId, input.projectId, input.runId);
     if (!episode && input.episodeId) {
@@ -651,6 +651,8 @@ export class AutopilotService {
         digestId: `digest-${hash(`${episode.id}:${input.runId}`).slice(0, 32)}`,
         date: this.now().toISOString().slice(0, 10),
         claims: acceptedClaims,
+        artifactRefs: safeAutopilotArtifactRefs(input.projectId, { id: input.runId, sessionId: input.sessionId ?? episode.payload.sessionId,
+          artifacts: input.artifacts, unverifiedArtifacts: input.unverifiedArtifacts }),
         rejectedClaims,
         deltaErrorCode: input.deltaErrorCode ?? (succeeded && input.deltaSchemaVersion !== 1 ? "agenda_delta_schema_invalid" : null),
         costCny: Number(input.costCny) || 0,
@@ -677,7 +679,7 @@ export class AutopilotService {
     });
     const digest = await this.createDigest(userId, agenda.id, {
       digestId: completion.digestId, date: completion.date, episodeIds: [episode.id],
-      costCny: completion.costCny, claims: completion.claims,
+      costCny: completion.costCny, claims: completion.claims, artifactRefs: completion.artifactRefs ?? [],
     });
     // Before the episode leaves `verifying`: an enqueue that fails here leaves
     // the fold replayable, and `reconcileStopWork` runs it again. Enqueueing
@@ -688,7 +690,7 @@ export class AutopilotService {
       await this.documents.put(userId, "episode", latest.id, {
         ...latest.payload,
         status: completion.outcomeStatus === "succeeded" ? "merged" : completion.outcomeStatus,
-        claims: completion.claims, rejectedClaims: completion.rejectedClaims,
+        claims: completion.claims, artifactRefs: completion.artifactRefs ?? [], rejectedClaims: completion.rejectedClaims,
         deltaErrorCode: completion.deltaErrorCode, costCny: completion.costCny,
         digestId: digest.id, completion: null, updatedAt: this.now().toISOString(),
       }, { expectedRevision: latest.revision, projectId: latest.projectId }).catch((error) => {
@@ -1120,6 +1122,8 @@ export class AutopilotService {
     try {
       digest = await this.documents.put(userId, "digest", digestId, {
         schemaVersion: 1, agendaId: agenda.id, date: text(input.date, "digest date", 10),
+        artifactRefs: (Array.isArray(input.artifactRefs) ? input.artifactRefs : []).filter(ref => ref?.projectId === agenda.projectId).slice(0, 24)
+          .flatMap(ref => safeAutopilotArtifactRefs(agenda.projectId, { id: ref.runId, sessionId: ref.sessionId, artifacts: [ref.path] })),
         episodeIds: listOfText(input.episodeIds, "episode ids"), costCny: budget(input.costCny, "digest cost", { allowZero: true }),
         headlines, leads, decisions: [], openedAt: null, createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
       }, { expectedRevision: 0, projectId: agenda.projectId });
