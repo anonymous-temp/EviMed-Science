@@ -43,7 +43,9 @@ otherwise one variant per 10,000 kb window (stricter than r² < 0.001 clumping,
 but no LD was measured — say so), and the outcome's rows for the same variants;
 a variant missing from the outcome is dropped, never proxied. Report both
 accessions and PubMed ids, and the ancestry and sample size as the catalogue
-states them (`mendelian-randomization-open-sources.json`), the selection method
+states them (`mendelian-randomization-open-sources.json`; `sampleMetadata` has
+the sample size and case-control design as numbers, and `sampleSize` says which
+rows took the study total because the file has no per-variant n), the selection method
 and counts (`instrument-selection.json`), and the variants unavailable in the
 outcome. On every path, `harmonisation.json` in the analysis data gives the
 instruments retained, dropped as palindromic-ambiguous and missing from the
@@ -108,6 +110,30 @@ limitations, and STROBE-MR-aligned discussion. Write
 `mendelian-randomization-run.json` with the terminal job state and exact returned
 artifacts. Every number must match the managed analysis output. For local inputs, also preserve `mendelian-randomization-inputs.json` and the returned standard input CSV artifacts. The manifest binds original relative paths, byte counts, SHA-256 digests, actual mappings and supplied clumping provenance; retain it without adding repository IDs, years, or absolute host paths.
 
+Numbers in prose and tables are the engine's display strings. Each record that
+carries a statistic has a `display` beside its raw values, rendered to one
+convention: ratios (OR, ROR, PRR, EBGM) and their intervals to two decimals, p
+values to two or three decimals and `<0.001`, with genetic studies writing
+smaller p values as 3.5×10⁻¹¹, other estimates to three significant figures,
+percentages to two, counts with thousands separators. Write those strings as
+they are; the raw values are for machines and replay. A number the engine does
+not display is written to the same convention, never with more digits.
+In `mendelian-randomization-run.json` each result has `display` (instruments
+and F statistics, Steiger, MR-PRESSO, Radial MR, contamination mixture), and
+each entry of `mr_results`, `heterogeneity` and `pleiotropy` has its own.
+
+Direction and outliers. `display.steiger.status` is `computed`,
+`not_computable` or `failed`; when the test was not computed, say that
+direction was not tested and why, from its `reason`. The test approximates each
+variant's r² from its p-value and sample size and treats both traits as
+quantitative; for a case-control outcome (`case_control_study` in the outcome
+metadata) say that this is the observed-scale approximation. `display.mr_presso`
+gives the global test, the variants the outlier test removed, the
+outlier-corrected estimate and the distortion test: report the corrected
+estimate beside the IVW estimate, or its `reason` when there is none. An
+`outlier_resolution` above 0.05 means the simulation could not resolve the
+outlier threshold for this many variants: say the outlier set is unstable.
+
 For paired local inputs with a declared-preclumped exposure, preserve the
 returned `analysis-data/<pair>/replay/` package in full: its complete manifest,
 exact input CSVs, options and seed, observed R/package versions, `run.R` and
@@ -129,7 +155,8 @@ sizes with intervals, multiplicity, missing data, sensitivity analyses) and
 produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files, so a number typed from
-memory, or rounded differently from the output, comes back as a finding.
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
 
 ## Before delivering: two fixed steps
 

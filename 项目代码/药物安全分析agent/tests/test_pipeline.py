@@ -186,6 +186,20 @@ async def test_full_run_numbers_match_known_panel():
     assert any(s == "interpret" and status == "finished" for s, status, _ in stages)
 
 
+async def test_the_faers_release_the_counts_came_from_is_recorded():
+    """openFDA's meta.last_updated is the data date of a live analysis (READUS-PV 5b)."""
+    client = StubOpenFDA()
+    client.releases_used = {"2026-07-30"}
+    result = await _pipeline(client, top_pt_count=0).run("Atorvastatin", ["肌痛"])
+    assert result.openfda_last_updated == ["2026-07-30"]
+    assert not any("多个 FAERS 数据版本" in note for note in result.degradation_notes)
+
+    client.releases_used = {"2026-04-28", "2026-07-30"}
+    mixed = await _pipeline(client, top_pt_count=0).run("Atorvastatin", ["肌痛"])
+    assert mixed.openfda_last_updated == ["2026-04-28", "2026-07-30"]
+    assert any("2026-04-28、2026-07-30" in note for note in mixed.degradation_notes)
+
+
 async def test_alias_variants_collapse_after_meddra_normalization():
     pipeline = _pipeline(StubOpenFDA(), top_pt_count=0)
 

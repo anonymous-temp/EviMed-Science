@@ -10,10 +10,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from safety_agent.evidence.label_check import LabelCheckReport
 from safety_agent.evidence.models import EvidenceLayerResult
+from safety_agent import number_display as shown
 
 
 class CountBucket(BaseModel):
@@ -77,6 +78,32 @@ class SignalRow(BaseModel):
     expected_count: float | None = None
     gps_prior_id: str | None = None
 
+    @computed_field
+    @property
+    def display(self) -> dict[str, str | None]:
+        """What a report states for this row (safety_agent.number_display).
+
+        The raw values stay for machines; the report-writing model copies these.
+        IC025 and EB05 share their estimate's decimals, and gain one where a
+        bound that excludes the null would otherwise round onto it.
+        """
+        ror = shown.interval(self.ror, self.ror_ci95_lower, self.ror_ci95_upper, kind="ratio")
+        prr = shown.interval(self.prr, self.prr_ci95_lower, self.prr_ci95_upper, kind="ratio")
+        ic = shown.interval(self.ic, self.ic025, None, kind="estimate")
+        ebgm = shown.interval(self.ebgm, self.eb05, None, kind="ratio")
+        return {
+            "a": shown.count(self.a), "b": shown.count(self.b), "c": shown.count(self.c),
+            "d": shown.count(self.d), "n": shown.count(self.n),
+            "ror": ror["estimate"], "ror_ci95_lower": ror["lower"], "ror_ci95_upper": ror["upper"],
+            "ror_ci95": ror["interval"],
+            "prr": prr["estimate"], "prr_ci95_lower": prr["lower"], "prr_ci95_upper": prr["upper"],
+            "prr_ci95": prr["interval"],
+            "chi2": shown.estimate(self.chi2),
+            "ic": ic["estimate"], "ic025": ic["lower"],
+            "ebgm": ebgm["estimate"], "eb05": ebgm["lower"],
+            "expected_count": shown.estimate(self.expected_count),
+        }
+
 
 class FocusAdrInterpretation(BaseModel):
     reaction: str
@@ -135,6 +162,9 @@ class AnalysisResult(BaseModel):
     snapshot_sha256: str | None = None
     snapshot_extracted_at: str | None = None
     snapshot_deduplication: str | None = None
+    #: The openFDA FAERS release(s) the live counts came from: each answer's
+    #: meta.last_updated. One date unless a release check failed mid-cache.
+    openfda_last_updated: list[str] = Field(default_factory=list)
     statistics_version: str = "gps-v2"
     gps_prior_fitted: bool = False
     gps_prior_id: str | None = None

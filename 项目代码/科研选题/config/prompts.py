@@ -595,7 +595,7 @@ M6_RESEARCH_AGENDA_PROMPT = """你是一位资深临床研究设计师和科研�
 
 ## 证据基础
 - 文献总量: {evidence_count}篇
-- 临床研究占比: {clinical_ratio:.1%}
+- 临床研究占比: {clinical_ratio}
 
 ## 突破机会
 {opportunities}

@@ -3,8 +3,10 @@
 Properties:
 - exponential backoff with jitter on HTTP 429 / 5xx / transport errors
   (Retry-After honored when present), then a typed exception;
-- two-level cache (memory + disk, default 24 h TTL) keyed by endpoint +
-  canonical params, so repeated count queries cost no network calls;
+- two-level cache (memory + disk) keyed by endpoint + canonical params, so
+  repeated count queries cost no network calls. FAERS event answers are kept
+  for a quarterly release cycle and count only while openFDA still serves the
+  release they came from (``meta.last_updated``); labels keep the default TTL;
 - 404 NOT_FOUND maps to :class:`NoResults` — "zero matching reports" is a
   first-class outcome, not an error;
 - responses are parsed defensively (``.get`` chains + explicit shape
@@ -84,6 +86,7 @@ class OpenFDAClient:
         *,
         api_key: str | None = None,
         cache: TwoLevelCache | None = None,
+        event_ttl_seconds: float | None = None,
         timeout: float = 30.0,
         max_retries: int = 4,
         backoff_initial: float = 0.5,
@@ -94,6 +97,17 @@ class OpenFDAClient:
         if max_retries < 1:
             raise OpenFDAError("max_retries must be >= 1")
         self._cache = cache
+        self._event_ttl = event_ttl_seconds
+        # openFDA replaces FAERS quarterly and every answer names its release
+        # in meta.last_updated. A cached count from a superseded release is
+        # stale however young it is, and one analysis must not mix releases:
+        # the first event query asks openFDA which release it serves, and a
+        # cached event answer counts only if it came from that release. When
+        # that question cannot be answered, the entry's TTL is the only bound.
+        self._release: str | None = None
+        self._release_checked = False
+        #: The FAERS releases the event answers of this client came from.
+        self.releases_used: set[str] = set()
         self._max_retries = max_retries
         self._backoff_initial = backoff_initial
         self._backoff_cap = backoff_cap
@@ -118,6 +132,7 @@ class OpenFDAClient:
             max_memory_entries=settings.cache_max_memory_entries,
         )
         api_key = settings.openfda_api_key.get_secret_value() or None
+        overrides.setdefault("event_ttl_seconds", settings.cache_faers_ttl_seconds)
         return cls(settings.openfda_base_url, api_key=api_key, cache=cache, **overrides)
 
     async def aclose(self) -> None:
@@ -230,18 +245,41 @@ class OpenFDAClient:
 
     # -- transport with retry/backoff/cache --------------------------------
 
+    async def data_release(self) -> str | None:
+        """The FAERS release openFDA serves now (meta.last_updated), asked once, uncached."""
+        if not self._release_checked:
+            self._release_checked = True
+            try:
+                self._release = _last_updated(await self._get(EVENT_ENDPOINT, {"limit": 1}))
+            except OpenFDAError as exc:
+                logger.warning("openFDA did not say which FAERS release it serves: %s", exc)
+        return self._release
+
     async def _get_cached(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         key_parts = [endpoint] + [f"{k}={params[k]}" for k in sorted(params)]
         cache_key = TwoLevelCache.make_key(*key_parts)
+        event = endpoint == EVENT_ENDPOINT
+        release = await self.data_release() if event and self._cache is not None and self._cache.enabled else None
         if self._cache is not None:
             cached = self._cache.get(cache_key)
-            if cached is not None:
+            if cached is not None and (release is None or _last_updated(cached) == release):
                 logger.debug("cache hit for %s", endpoint)
+                self._note_release(endpoint, cached)
                 return cached
+            if cached is not None:
+                logger.info("cached %s answer is from a superseded FAERS release; refetching", endpoint)
+                self._cache.discard(cache_key)
         payload = await self._get(endpoint, params)
         if self._cache is not None:
-            self._cache.set(cache_key, payload)
+            self._cache.set(cache_key, payload, ttl_seconds=self._event_ttl if event else None)
+        self._note_release(endpoint, payload)
         return payload
+
+    def _note_release(self, endpoint: str, payload: dict[str, Any]) -> None:
+        if endpoint == EVENT_ENDPOINT:
+            released = _last_updated(payload)
+            if released:
+                self.releases_used.add(released)
 
     async def _get(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         last_error: Exception | None = None
@@ -337,6 +375,13 @@ class OpenFDAClient:
         results = meta.get("results") if isinstance(meta, dict) else None
         total = results.get("total") if isinstance(results, dict) else None
         return total if isinstance(total, int) and total >= 0 else 0
+
+
+def _last_updated(payload: Any) -> str | None:
+    """The data release an openFDA answer came from: its meta.last_updated date."""
+    meta = payload.get("meta") if isinstance(payload, dict) else None
+    value = meta.get("last_updated") if isinstance(meta, dict) else None
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _parse_retry_after(value: str | None) -> float | None:

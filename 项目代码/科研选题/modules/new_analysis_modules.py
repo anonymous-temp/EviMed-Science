@@ -12,6 +12,8 @@ import threading
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from collections import Counter, defaultdict
+
+from utils import number_display as shown
 import networkx as nx
 
 # matplotlib 全局线程锁：并行模块执行时序列化图表创建，防止 plt 全局状态污染
@@ -916,7 +918,9 @@ class M2_ResearchEcosystemModule(BaseAnalysisModule):
                      for u, v, d in G.edges(data=True)],
             "density": round(density, 3),
             "communities": communities,
-            "centrality": centrality
+            "centrality": centrality,
+            # What a report states for the raw centralities above.
+            "display": {"centrality": {term: shown.estimate(value) for term, value in centrality.items()}},
         }
 
     async def _generate_ecosystem_analysis(self, author_counts, journal_counts, keyword_network, evidence_stats, query_context, hotspot_counts=None, stream_callback=None) -> Dict:
@@ -2238,7 +2242,7 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             query_context=query_context,
             opportunities=opportunities_text,
             evidence_count=evidence_stats.evidence_count,
-            clinical_ratio=evidence_stats.clinical_ratio
+            clinical_ratio=shown.percent(evidence_stats.clinical_ratio * 100)
         )
 
         logger.info(f"[M6] Prompt已构建，长度: {len(prompt)} 字符")

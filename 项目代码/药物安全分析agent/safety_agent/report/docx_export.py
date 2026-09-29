@@ -17,7 +17,7 @@ from pathlib import Path
 
 from safety_agent.analysis.models import AnalysisResult, CountBucket
 from safety_agent.core.logging import get_logger
-from safety_agent.report.markdown import _f, _int
+from safety_agent.report.markdown import _int
 
 logger = get_logger(__name__)
 
@@ -177,15 +177,16 @@ def _docx_signals(document, result: AnalysisResult) -> None:
         cell.text = text
     for row in result.signals:
         cells = table.add_row().cells
+        shown = row.display
         values = [
             row.reaction,
             "指定" if row.source == "user-specified" else "top",
-            _int(row.a),
-            f"{_f(row.ror)} [{_f(row.ror_ci95_lower)}, {_f(row.ror_ci95_upper)}]",
-            _f(row.prr),
-            _f(row.chi2),
-            f"{_f(row.ic)} ({_f(row.ic025)})",
-            f"{_f(row.ebgm)} ({_f(row.eb05)})",
+            shown["a"],
+            f"{shown['ror']} [{shown['ror_ci95_lower']}, {shown['ror_ci95_upper']}]",
+            shown["prr"],
+            shown["chi2"],
+            f"{shown['ic']} ({shown['ic025']})",
+            f"{shown['ebgm']} ({shown['eb05']})",
             "是" if row.is_signal else "否",
         ]
         for cell, text in zip(cells, values, strict=True):

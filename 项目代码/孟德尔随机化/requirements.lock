@@ -148,7 +148,9 @@ python-dotenv==1.2.2
 pytz==2026.4
     # via pandas
 pyyaml==6.0.3
-    # via uvicorn
+    # via
+    #   -r 项目代码/孟德尔随机化/requirements.txt
+    #   uvicorn
 reportlab==5.0.0
     # via -r 项目代码/孟德尔随机化/requirements.txt
 requests==2.34.2

@@ -31,7 +31,13 @@ It does not estimate clinical efficacy, treatment effects, or evidence certainty
 
 Write `bibliometric-analysis-report.md` with scope, search strategy, corpus,
 methods, trends, networks, topic evolution, frontiers, limits, and links to the
-managed figures and tables. Write `bibliometric-analysis-run.json` with the
+managed figures and tables. This engine rounds its measures where it computes
+them, and its own `report.md` renders them to the display convention every
+engine report shares (other estimates to three significant figures, p values to
+two or three decimals and `<0.001`, percentages to two significant figures,
+counts with thousands separators): write numbers as rendered there, and any
+other number to the same convention, never with more digits. Write
+`bibliometric-analysis-run.json` with the
 terminal job state, corpus count, query, and exact returned artifacts.
 
 ## Method priors
@@ -44,7 +50,8 @@ sizes with intervals, multiplicity, missing data, sensitivity analyses) and
 produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files, so a number typed from
-memory, or rounded differently from the output, comes back as a finding.
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
 
 ## Before delivering: two fixed steps
 

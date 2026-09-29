@@ -9,8 +9,10 @@ Rendering rules:
 - every number is taken verbatim from AnalysisResult (openFDA + signals
   layers); the renderer never recomputes anything;
 - the markdown table and the CSV export are built from the same SignalRow
-  list with the same formatters (markdown shows a summarized view, the
-  CSV carries full precision), so the two can never disagree;
+  list: the table shows each row's display strings (SignalRow.display, the
+  convention in safety_agent.number_display), the CSV carries the raw values
+  at full precision and the same display strings in its *_display columns,
+  so the two can never disagree;
 - when the run degraded (no LLM), the narrative sections are replaced by
   an explicit methodology note instead of being silently omitted.
 """
@@ -95,6 +97,8 @@ def signal_provenance(result: AnalysisResult) -> dict[str, str]:
         "snapshot_id": result.snapshot_id or "",
         "snapshot_sha256": result.snapshot_sha256 or "",
         "extracted_at": result.snapshot_extracted_at or "",
+        # The FAERS release the live counts came from (openFDA meta.last_updated).
+        "openfda_last_updated": ",".join(result.openfda_last_updated),
         "suspect_binding": result.suspect_binding,
         "study_date_from": result.study_date_from or "",
         "study_date_to": result.study_date_to or "",
@@ -112,9 +116,10 @@ def signal_table_csv(result: AnalysisResult) -> str:
     writer.writerow(
         ["# " + "; ".join(f"{key}={value}" for key, value in provenance.items())]
     )
-    writer.writerow(_SIGNAL_HEADERS)
+    writer.writerow(_SIGNAL_HEADERS + [header for header, _ in _DISPLAY_COLUMNS])
     for row in result.signals:
-        writer.writerow(_signal_row_cells(row))
+        shown = row.display
+        writer.writerow(_signal_row_cells(row) + [shown[key] or "" for _, key in _DISPLAY_COLUMNS])
     return buf.getvalue()
 
 
@@ -232,6 +237,14 @@ _SIGNAL_HEADERS = [
     "chi2", "IC", "IC025", "EBGM", "EB05", "expected_count",
     "haldane_anscombe_applied", "gps_prior_id", "is_signal",
 ]
+#: What a report states for each raw column above: (header, SignalRow.display key).
+_DISPLAY_COLUMNS = [
+    ("ROR_display", "ror"), ("ROR_CI_display", "ror_ci95"),
+    ("PRR_display", "prr"), ("PRR_CI_display", "prr_ci95"),
+    ("chi2_display", "chi2"), ("IC_display", "ic"), ("IC025_display", "ic025"),
+    ("EBGM_display", "ebgm"), ("EB05_display", "eb05"),
+    ("expected_count_display", "expected_count"),
+]
 
 
 def _section_signals(add, result: AnalysisResult) -> None:
@@ -246,13 +259,14 @@ def _section_signals(add, result: AnalysisResult) -> None:
     add("| ADR (PT) | 来源 | a | ROR [95%CI] | PRR [95%CI] | χ² | IC (IC025) | EBGM (EB05) | 信号 |")
     add("|---|---|---|---|---|---|---|---|---|")
     for row in result.signals:
+        shown = row.display
         add(
             f"| {row.reaction} | {'指定' if row.source == 'user-specified' else 'top'} "
-            f"| {_int(row.a)} "
-            f"| {_f(row.ror)} [{_f(row.ror_ci95_lower)}, {_f(row.ror_ci95_upper)}] "
-            f"| {_f(row.prr)} [{_f(row.prr_ci95_lower)}, {_f(row.prr_ci95_upper)}] "
-            f"| {_f(row.chi2)} | {_f(row.ic)} ({_f(row.ic025)}) "
-            f"| {_f(row.ebgm)} ({_f(row.eb05)}) "
+            f"| {shown['a']} "
+            f"| {shown['ror']} [{shown['ror_ci95_lower']}, {shown['ror_ci95_upper']}] "
+            f"| {shown['prr']} [{shown['prr_ci95_lower']}, {shown['prr_ci95_upper']}] "
+            f"| {shown['chi2']} | {shown['ic']} ({shown['ic025']}) "
+            f"| {shown['ebgm']} ({shown['eb05']}) "
             f"| {'**是**' if row.is_signal else '否'} |"
         )
     add("")
@@ -404,6 +418,9 @@ def _section_appendix(add, result: AnalysisResult) -> None:
         add(f"| {label} | `{url}` |")
     add("")
     add(f"检索日期:{result.generated_at.astimezone(timezone.utc):%Y-%m-%d}")
+    if result.data_source == "openfda_live" and result.openfda_last_updated:
+        add("")
+        add(f"openFDA FAERS 数据版本(数据更新日期):{'、'.join(result.openfda_last_updated)}")
     add("")
 
 
@@ -411,15 +428,15 @@ def _section_appendix(add, result: AnalysisResult) -> None:
 
 
 def _signal_row_cells(row: SignalRow) -> list[str]:
-    """One signal row as strings — shared by the markdown table and the CSV."""
+    """One signal row's raw values as CSV cells, at full precision."""
     return [
         row.reaction,
         row.source,
         _int(row.a), _int(row.b), _int(row.c), _int(row.d), _int(row.n),
-        _f(row.ror), _f(row.ror_ci95_lower), _f(row.ror_ci95_upper),
-        _f(row.prr), _f(row.prr_ci95_lower), _f(row.prr_ci95_upper),
-        _f(row.chi2), _f(row.ic), _f(row.ic025), _f(row.ebgm), _f(row.eb05),
-        _f(row.expected_count) if row.expected_count is not None else "",
+        _raw(row.ror), _raw(row.ror_ci95_lower), _raw(row.ror_ci95_upper),
+        _raw(row.prr), _raw(row.prr_ci95_lower), _raw(row.prr_ci95_upper),
+        _raw(row.chi2), _raw(row.ic), _raw(row.ic025), _raw(row.ebgm), _raw(row.eb05),
+        _raw(row.expected_count) if row.expected_count is not None else "",
         "yes" if row.haldane_anscombe_applied else "no",
         row.gps_prior_id or "",
         "yes" if row.is_signal else "no",
@@ -447,8 +464,9 @@ def _degradation_reason(result: AnalysisResult) -> str:
     return "LLM 调用失败"
 
 
-def _f(value: float) -> str:
-    return f"{value:.3f}"
+def _raw(value: float) -> str:
+    """A machine value: the shortest string that reads back as the same float."""
+    return repr(float(value))
 
 
 def _int(value: float) -> str:

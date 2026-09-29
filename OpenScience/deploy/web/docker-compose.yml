@@ -1404,7 +1404,12 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
-      CACHE_DIR: /tmp/openfda-cache
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
+      # openFDA answers, kept per FAERS data release (the client refetches
+      # anything cached from a superseded quarter): on its own volume, so a
+      # release no longer throws them away with the container's tmpfs.
+      CACHE_DIR: /var/cache/evimed-openfda
       # The engine's openFDA client (safety_agent.core.config) reads it; the
       # same host variable the gateway reads, so one key lifts both from the
       # anonymous 1,000 requests a day. Empty means anonymous, as before.
@@ -1413,6 +1418,7 @@ services:
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
     volumes:
       - open-science-data:/data
+      - evimed-openfda-cache:/var/cache/evimed-openfda
       - type: bind
         source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
         target: /run/secrets/deepseek-api-key
@@ -1667,6 +1673,9 @@ volumes:
   # The MR engine's GWAS Catalog scan cache (EVIMED_MR_OPEN_CACHE_DIR): public
   # summary statistics only, rebuildable, kept across releases.
   evimed-mr-open-cache:
+  # The drug-safety engine's openFDA answers (CACHE_DIR), per FAERS release;
+  # public data, rebuildable, kept across releases.
+  evimed-openfda-cache:
   evimed-openviking-data:
   evimed-openviking-secrets:
   open-science-data:

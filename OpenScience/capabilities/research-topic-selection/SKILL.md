@@ -164,9 +164,11 @@ sentence depends on it should not be in the table.
 
 Every number the report states has one of three origins, and the sentence it is
 in says which. A published figure carries the `[n]` of the work it comes from in
-the same sentence. A figure from the specialist job is copied from the job's own
-output files at the precision you state it — never re-derived or re-rounded by
-hand. A design choice or projection (a window, a sample size, an event-count
+the same sentence. A figure from the specialist job is copied as the display
+string beside it in the job's own output files (`display` in
+`evidence-stats.json`, and beside the M2 keyword centralities) — never
+re-derived by hand; rounding is checked, not forbidden. A design choice or
+projection (a window, a sample size, an event-count
 estimate) is stated as the proposal's own, with its inputs. The independent
 review traces every uncited result to the job's outputs, and each one it cannot
 find is a finding you answer.

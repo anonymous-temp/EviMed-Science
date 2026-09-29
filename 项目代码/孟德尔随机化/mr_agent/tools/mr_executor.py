@@ -20,6 +20,7 @@ from mr_agent.models import (
     DataSource,
     HeterogeneityResult,
     MRAnalysisResult,
+    MRPressoCorrection,
     MRResult,
     PleiotopyResult,
 )
@@ -406,6 +407,7 @@ def _parse_results(
         raw_data_path=output_dir,
     )
     _parse_summary(result, output_dir)
+    _parse_f_statistics(result, output_dir)
     _parse_mr_csv(result, output_dir)
     _parse_het_csv(result, output_dir)
     _parse_plt_csv(result, output_dir)
@@ -561,38 +563,103 @@ def _parse_plt_csv(result: MRAnalysisResult, output_dir: Path) -> None:
 
 
 def _parse_steiger_csv(result: MRAnalysisResult, output_dir: Path) -> None:
-    """Parse Steiger directionality test CSV."""
+    """Parse the Steiger directionality test, or the reason it was not computed."""
     csv_path = output_dir / "steiger.csv"
     if not csv_path.exists():
         return
-    df = pd.read_csv(csv_path)
-    if len(df) > 0:
-        row = df.iloc[0]
-        raw = row.get("correct_causal_direction")
-        if raw is not None:
-            result.steiger_correct = str(raw).upper() == "TRUE"
-        pval = safe_float(row.get("steiger_pval"))
-        if pval is not None:
-            result.steiger_pval = pval
+    df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    if len(df) == 0:
+        return
+    row = df.iloc[0]
+    status = str(row.get("status", "") or "").strip()
+    if status in {"computed", "not_computable", "failed"}:
+        result.steiger_status = status
+        reason = str(row.get("reason", "") or "").strip()
+        result.steiger_reason = "" if reason == "NA" else reason
+    raw = row.get("correct_causal_direction")
+    if isinstance(raw, (bool,)) or str(raw).upper() in {"TRUE", "FALSE"}:
+        result.steiger_correct = str(raw).upper() == "TRUE"
+        # A file from before the status column was written holds a verdict.
+        if result.steiger_status == "not_run":
+            result.steiger_status = "computed"
+    result.steiger_pval = safe_float(row.get("steiger_pval"))
+    result.steiger_r2_exposure = safe_float(row.get("snp_r2.exposure"))
+    result.steiger_r2_outcome = safe_float(row.get("snp_r2.outcome"))
+
+
+def _bounded_probability(raw) -> tuple[float | None, str]:
+    """A permutation p value: exact, or a strict upper bound such as "<0.001"."""
+    bounded = isinstance(raw, str) and raw.strip().startswith("<")
+    value = safe_float(raw.strip()[1:].strip() if bounded else raw)
+    if value is None or not 0 <= value <= 1 or (bounded and value == 0):
+        return None, "="
+    return value, "<" if bounded else "="
 
 
 def _parse_presso_csv(result: MRAnalysisResult, output_dir: Path) -> None:
-    """Parse MR-PRESSO results CSV."""
+    """Parse MR-PRESSO: global test, outliers, and the outlier-corrected estimate."""
     csv_path = output_dir / "mrpresso.csv"
     if not csv_path.exists():
         return
-    df = pd.read_csv(csv_path)
-    if len(df) > 0:
-        row = df.iloc[0]
-        raw_p = row.get("global_p")
-        bounded = isinstance(raw_p, str) and raw_p.strip().startswith("<")
-        global_p = safe_float(raw_p.strip()[1:].strip() if bounded else raw_p)
-        if global_p is not None and 0 <= global_p <= 1 and (not bounded or global_p > 0):
-            result.presso_global_pval = global_p
-            result.presso_global_pval_relation = "<" if bounded else "="
-        n_out = safe_int(row.get("n_outliers"))
-        if n_out is not None:
-            result.presso_n_outliers = n_out
+    df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    if len(df) == 0:
+        return
+    row = df.iloc[0]
+    global_p, relation = _bounded_probability(row.get("global_p"))
+    if global_p is not None:
+        result.presso_global_pval = global_p
+        result.presso_global_pval_relation = relation
+    n_out = safe_int(row.get("n_outliers"))
+    if n_out is not None:
+        result.presso_n_outliers = n_out
+    if "corrected_reason" not in row:
+        return  # written before the corrected estimate was kept
+    distortion_p, distortion_relation = _bounded_probability(row.get("distortion_p"))
+    snps = [snp for snp in str(row.get("outlier_snps") or "").split(";") if snp.strip()]
+    result.presso_correction = MRPressoCorrection(
+        n_distributions=safe_int(row.get("n_distributions")),
+        outlier_resolution=safe_float(row.get("outlier_resolution")),
+        outlier_snps=[snp.strip() for snp in snps],
+        beta=safe_float(row.get("corrected_beta")),
+        se=safe_float(row.get("corrected_se")),
+        pval=safe_float(row.get("corrected_p")),
+        or_value=safe_float(row.get("corrected_or")),
+        ci_lower=safe_float(row.get("corrected_ci_lower")),
+        ci_upper=safe_float(row.get("corrected_ci_upper")),
+        distortion_coefficient=safe_float(row.get("distortion_coefficient")),
+        distortion_pval=distortion_p,
+        distortion_pval_relation=distortion_relation,
+        reason=str(row.get("corrected_reason") or "").strip(),
+    )
+
+
+def _parse_f_statistics(result: MRAnalysisResult, output_dir: Path) -> None:
+    """Summarise per-instrument F statistics: count, spread, and the weakest and strongest variant."""
+    csv_path = output_dir / "f_statistics.csv"
+    if not csv_path.exists():
+        return
+    try:
+        df = pd.read_csv(csv_path)
+    except (OSError, ValueError):
+        return
+    if "f_statistic" not in df.columns:
+        return
+    values = pd.to_numeric(df["f_statistic"], errors="coerce")
+    rows = df.assign(f_statistic=values).dropna(subset=["f_statistic"])
+    if rows.empty:
+        return
+    weakest = rows.loc[rows["f_statistic"].idxmin()]
+    strongest = rows.loc[rows["f_statistic"].idxmax()]
+    result.instrument_strength = {
+        "n": int(len(rows)),
+        "mean": float(rows["f_statistic"].mean()),
+        "median": float(rows["f_statistic"].median()),
+        "min": float(weakest["f_statistic"]),
+        "min_snp": str(weakest.get("snp", "")),
+        "max": float(strongest["f_statistic"]),
+        "max_snp": str(strongest.get("snp", "")),
+        "below_10": int((rows["f_statistic"] < 10).sum()),
+    }
 
 
 def _collect_plots(result: MRAnalysisResult, output_dir: Path) -> None:
@@ -852,11 +919,27 @@ def _parse_single_pval_csv(
 def _parse_radial_csv(result: MRAnalysisResult, output_dir: Path) -> None:
     """Parse Radial MR results CSV."""
     _parse_single_pval_csv(result, output_dir, "radial.csv", "global_q_pval", "radial_pval")
+    row = _first_row(output_dir / "radial.csv")
+    if row is not None:
+        result.radial_n_outliers = safe_int(row.get("n_outliers"))
 
 
 def _parse_conmix_csv(result: MRAnalysisResult, output_dir: Path) -> None:
     """Parse Contamination Mixture results CSV."""
     _parse_single_pval_csv(result, output_dir, "conmix.csv", "pval", "conmix_pval")
+    row = _first_row(output_dir / "conmix.csv")
+    if row is not None:
+        result.conmix_estimate = safe_float(row.get("estimate"))
+        result.conmix_ci_lower = safe_float(row.get("ci_lower"))
+        result.conmix_ci_upper = safe_float(row.get("ci_upper"))
+        result.conmix_n_intervals = safe_int(row.get("n_intervals"))
+
+
+def _first_row(csv_path: Path):
+    if not csv_path.exists():
+        return None
+    df = pd.read_csv(csv_path)
+    return df.iloc[0] if len(df) > 0 else None
 
 
 def run_summary_forest(

@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from bibliometric import number_display as shown
+
 logger = logging.getLogger(__name__)
 
 # 国家名称英译中字典
@@ -68,7 +70,9 @@ def _df_to_table(
         for col in columns:
             val = row.get(col, "")
             if isinstance(val, float):
-                vals.append(f"{val:.3f}")
+                # The display convention every engine's report shares
+                # (bibliometric.number_display): three significant figures.
+                vals.append(shown.estimate(val) or "")
             else:
                 s = str(val).replace("|", "\\|").replace("\n", " ")
                 vals.append(s)

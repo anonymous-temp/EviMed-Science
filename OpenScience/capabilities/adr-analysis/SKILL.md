@@ -84,6 +84,19 @@ convert any disproportionality metric into incidence, relative risk, or causal
 probability, and do not combine metrics from incompatible databases as though
 they shared one denominator.
 
+Numbers in prose and tables are the engine's display strings. `signals.csv`
+carries each raw value at full precision and, in its `*_display` columns, what
+a report states: ratios (ROR, PRR, EBGM) and their intervals to two decimals,
+chi-square, IC and the expected count to three significant figures, counts with
+thousands separators, with IC025 and EB05 at their estimate's decimals. Write
+those strings as they are; the raw values are for machines. A number the engine
+does not display is written to the same convention, never with more digits.
+`signal-provenance.json` states how every derived column is computed
+(`formulas`: the expected count is (a+b)(a+c)/N on the uncorrected cells):
+state the method from it and never reconstruct one. For a live openFDA run,
+`openfda_last_updated` is the FAERS release the counts came from; report it as
+the data date beside the retrieval date.
+
 ## Method priors
 
 The statistics are the engine's; the reading of them is yours, and two shipped
@@ -94,7 +107,8 @@ sizes with intervals, multiplicity, missing data, sensitivity analyses) and
 produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files, so a number typed from
-memory, or rounded differently from the output, comes back as a finding.
+memory comes back as a finding. Write each result from the display value the
+engine record gives; rounding is checked, not forbidden.
 
 ## Before delivering: two fixed steps
 

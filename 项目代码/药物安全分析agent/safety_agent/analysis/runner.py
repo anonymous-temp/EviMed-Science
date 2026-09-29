@@ -17,10 +17,12 @@ import asyncio
 import json
 from pathlib import Path
 
+from safety_agent import number_display
 from safety_agent.analysis.models import AnalysisResult
 from safety_agent.core.config import get_settings
 from safety_agent.core.logging import configure_logging, get_logger
 from safety_agent.report.docx_export import export_docx, export_pdf
+from safety_agent.signals.disproportionality import FORMULAS
 from safety_agent.report.markdown import (
     render_markdown,
     signal_provenance,
@@ -177,7 +179,12 @@ def write_artifacts(
     provenance_path = outdir / "signal-provenance.json"
     provenance_path.write_text(
         json.dumps(
-            {**signal_provenance(result), "modules": module_ledger(result)},
+            {
+                **signal_provenance(result),
+                "modules": module_ledger(result),
+                "formulas": FORMULAS,
+                "display_convention": number_display.CONVENTION,
+            },
             ensure_ascii=False,
             indent=2,
         ),

@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # Two-level response cache
     cache_dir: Path = Path(".cache/openfda")
     cache_ttl_hours: float = Field(default=24.0, ge=0.0)
+    #: FAERS event answers are kept for one release cycle: openFDA publishes
+    #: FAERS quarterly (open.fda.gov/apis/drug/event, "Frequency of updates:
+    #: Quarterly"), and a cached answer whose release has been superseded is
+    #: refetched whatever its age. 2208 h is 92 days.
+    cache_faers_ttl_hours: float = Field(default=2208.0, ge=0.0)
     cache_max_memory_entries: int = Field(default=2048, ge=1, le=100_000)
 
     # Java WebSocket backend (P5)
@@ -127,6 +132,10 @@ class Settings(BaseSettings):
     @property
     def cache_ttl_seconds(self) -> float:
         return self.cache_ttl_hours * 3600.0
+
+    @property
+    def cache_faers_ttl_seconds(self) -> float:
+        return self.cache_faers_ttl_hours * 3600.0
 
     @property
     def resolved_evimed_evidence_search_key(self) -> SecretStr:

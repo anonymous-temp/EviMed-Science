@@ -145,6 +145,7 @@
         "snapshot_sha256",
         "snapshot_extracted_at",
         "snapshot_deduplication",
+        "openfda_last_updated",
         "statistics_version",
         "gps_prior_fitted",
         "gps_prior_id",
