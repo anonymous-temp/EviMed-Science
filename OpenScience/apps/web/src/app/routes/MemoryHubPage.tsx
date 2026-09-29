@@ -24,6 +24,7 @@ import { MethodRow, methodLine } from "@/components/capsule/MethodRow";
 import { ReceivedShelf } from "@/components/capsule/ReceivedShelf";
 import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { MemoryControls } from "@/components/memory/MemoryControls";
+import { LearningOverview } from "@/components/memory/LearningOverview";
 import { useMemoryWritePrompt } from "@/components/memory/useMemoryWritePrompt";
 import { CapsuleTransferPanel } from "./CapsuleTransferPanel";
 
@@ -68,7 +69,9 @@ function matches(text: string, query: string) {
  * appear on hover, the rest is in the row's 「⋯」. Received capsules are inside
  * 分享与导入; forgotten ones inside 已忘记的内容, each with 恢复.
  *
- * Above the list, once the capsule has a history of two weeks, one line of how
+ * The account-wide learning outcomes reflect the owner's 2026-09-29 request
+ * for visible applied improvements. Separately, once the capsule has two weeks of history,
+ * one line shows how
  * much it has come to hold (`CapsuleGrowth`, 2026-09-28): the owner's timeline
  * of growth, as the sentence it proves and at most three moments — not the
  * back-office stream 「最近变化」 was, and not a tile of counts.
@@ -205,6 +208,7 @@ export function MemoryHubPage() {
     >
       {/* 「成长」: the one chart, above the list it counts, once there is a line. */}
       <CapsuleGrowth growth={data?.growth} className="mb-6" />
+      <LearningOverview summary={data?.methods?.summary} onViewMethods={() => chooseFilter("methods")} />
       {/* One row; on a phone the search box takes its own line rather than
           squeezing the filters out of sight. */}
       <div className="flex flex-wrap items-center justify-between gap-2">

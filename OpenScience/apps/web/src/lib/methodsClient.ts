@@ -47,11 +47,21 @@ export function methodTitle(method: Pick<WebMethod, "title" | "name">): string {
   return method.title || method.name;
 }
 
+/** Account-wide outcomes from the durable learning ledger, independent of pagination. */
+export interface LearningSummary {
+  methods: Record<string, number>;
+  uses: Record<string, number>;
+  lessons: { byTrigger: Record<string, number>; succeeded: number; failed: number };
+  results: Record<string, number>;
+  handbookCandidates: number;
+  spend24hCny: number | null;
+}
+
 export function listMethods(status?: string, cursor?: string | null) {
   const params = new URLSearchParams({ limit: "50" });
   if (status) params.set("status", status);
   if (cursor) params.set("cursor", cursor);
-  return productRequest<{ items: WebMethod[]; nextCursor: string | null }>(`/methods?${params}`);
+  return productRequest<{ items: WebMethod[]; nextCursor: string | null; summary?: LearningSummary | null }>(`/methods?${params}`);
 }
 
 /**
