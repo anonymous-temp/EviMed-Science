@@ -1,0 +1,2506 @@
+{
+  "at": "2026-09-29",
+  "transport": "Deployed ProtectedFetcher on the Beijing host, existing honest identity and protected HTTPS relay; robots and challenges enforced. No database or service configuration writes.",
+  "rows": [
+    {
+      "id": "ema-public-consultations",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.707910+00:00",
+      "outcome": "ok",
+      "entries": 9,
+      "samples": [
+        {
+          "title": "Draft guideline on the clinical requirements for medicines intended for the treatment of sickle cell disease",
+          "url": "https://www.ema.europa.eu/en/documents/scientific-guideline/draft-guideline-clinical-requirements-medicines-intended-treatment-sickle-cell-disease_en.pdf"
+        },
+        {
+          "title": "Draft guideline on the clinical requirements for medicines intended for the treatment of thalassaemia",
+          "url": "https://www.ema.europa.eu/en/documents/scientific-guideline/draft-guideline-clinical-requirements-medicines-intended-treatment-thalassaemia_en.pdf"
+        }
+      ],
+      "seconds": 2.09,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.ema.europa.eu/en/public-consultations.xml",
+          "status": 200,
+          "sha256": "9a7a03d468f5e42e12ec752fc1ce4c08e4ae0d7225f68c47b23846159db4c686",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "ema-public-consultations-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "j-2515-446x",
+      "access": "crossref-issn",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.703319+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "samples": [],
+      "seconds": 2.14,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://api.crossref.org/journals/2515-446X/works?filter=from-created-date:2026-09-22,type:journal-article&sort=created&order=desc&cursor=*&select=DOI,title,created,published,type,update-to,abstract,author,container-title&rows=100",
+          "status": 200,
+          "sha256": "b057219f9b26c515f4fd142293923aee20766ba07fda3805ef6baa28bb42bf44",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "file": "j-2515-446x-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ema-committee-agendas",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.708536+00:00",
+      "outcome": "ok",
+      "entries": 14,
+      "samples": [
+        {
+          "title": "Agenda - Management Board meeting: 30 September 2026",
+          "url": "https://www.ema.europa.eu/en/documents/agenda/agenda-management-board-meeting-30-september-2026_en.pdf"
+        },
+        {
+          "title": "Agenda of the PRAC meeting 28 September - 1 October 2026",
+          "url": "https://www.ema.europa.eu/en/documents/agenda/agenda-prac-meeting-28-september-1-october-2026_en.pdf"
+        }
+      ],
+      "seconds": 3.5,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.ema.europa.eu/en/agendas-and-minutes.xml",
+          "status": 200,
+          "sha256": "fd81665641591ae8cafc8c3a3a55224c292381050a099f38366fc7939a0281a8",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "ema-committee-agendas-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ecdc-publications",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:25.802229+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Haemophilus influenzae disease - Annual Epidemiological Report for 2024",
+          "url": "https://www.ecdc.europa.eu/en/publications-data/haemophilus-influenzae-disease-annual-epidemiological-report-2024"
+        },
+        {
+          "title": "Prevention, testing and treatment services for migrant populations in relation to HIV, tuberculosis, viral hepatitis and sexually transmitted infections",
+          "url": "https://www.ecdc.europa.eu/en/publications-data/prevention-testing-and-treatment-services-migrant-populations-relation-hiv"
+        }
+      ],
+      "seconds": 2.41,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.ecdc.europa.eu/en/taxonomy/term/1244/feed",
+          "status": 200,
+          "sha256": "fe01d2d67496880ff0fc47729dda1ed0d671a2ea38fada7c0df6ae1d057c5c53",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "ecdc-publications-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "hk-govt-press-releases",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:25.846693+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "samples": [
+        {
+          "title": "DH reminds public that injection procedures should only be administered by registered medical practitioners or registered dentists",
+          "url": "https://www.info.gov.hk/gia/general/202609/29/P2026092900775.htm"
+        },
+        {
+          "title": "Pest Control Steering Committee reviews progress of anti-mosquito and anti-rodent work implemented by departments (with photo)",
+          "url": "https://www.info.gov.hk/gia/general/202609/29/P2026092900742.htm"
+        }
+      ],
+      "seconds": 4.88,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.info.gov.hk/gia/rss/general_en.xml",
+          "status": 200,
+          "sha256": "62c944bd9e277b4f01b89a45598469b38bf8250d68761addce43e7e1064b6957",
+          "headers": {
+            "content-type": "application/xml"
+          },
+          "file": "hk-govt-press-releases-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "drug-hunter",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:30.728889+00:00",
+      "outcome": "ok",
+      "entries": 280,
+      "samples": [
+        {
+          "title": "Can Oral Small Molecules Challenge IL-17 Biologics?",
+          "url": "https://drughunter.com/articles/can-oral-small-molecules-challenge-il-17-biologics"
+        },
+        {
+          "title": "Chemical Rewiring of Biological Circuits for Cancer Therapy",
+          "url": "https://drughunter.com/articles/chemical-rewiring-of-biological-circuits-for-cancer-therapy"
+        }
+      ],
+      "seconds": 2.31,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://drughunter.com/rss.xml",
+          "status": 200,
+          "sha256": "6025b6b6f760b569a122b767dfc107f504731899160a6154b9a3af0de016e3c0",
+          "headers": {
+            "content-type": "application/atom+xml; charset=utf-8"
+          },
+          "file": "drug-hunter-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "swissmedic-safety-of-medicines",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:28.214628+00:00",
+      "outcome": "ok",
+      "entries": 15,
+      "samples": [
+        {
+          "title": "DHPC – Clozapin",
+          "url": "https://www.swissmedic.ch/swissmedic/en/home/humanarzneimittel/market-surveillance/health-professional-communication--hpc-/dhpc-clozapin.html"
+        },
+        {
+          "title": "DHPC – Remsima® (Infliximab)",
+          "url": "https://www.swissmedic.ch/swissmedic/en/home/humanarzneimittel/market-surveillance/health-professional-communication--hpc-/dhpc-remsima-infliximab.html"
+        }
+      ],
+      "seconds": 5.53,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://fetchrss.com/feed/1krK9gCei6k61uFpqa4i4DRa.rss",
+          "status": 200,
+          "sha256": "1f14eedb8a44a91f1b1deae6b41dbef9f42b36b4476cc8f85b327bd254a24039",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "swissmedic-safety-of-medicines-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "biocentury",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:33.040651+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 2.06,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "prnewswire-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:33.745673+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "samples": [
+        {
+          "title": "Protecting Access to Care at Home: Special Needs Law Month Highlights Home and Community-Based Services",
+          "url": "https://www.prnewswire.com/news-releases/protecting-access-to-care-at-home-special-needs-law-month-highlights-home-and-community-based-services-302892720.html"
+        },
+        {
+          "title": "From NFL Training Camps to Special Olympics: How Chartwells Higher Education Feeds Champions",
+          "url": "https://www.prnewswire.com/news-releases/from-nfl-training-camps-to-special-olympics-how-chartwells-higher-education-feeds-champions-302891174.html"
+        }
+      ],
+      "seconds": 1.95,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.prnewswire.com/rss/health-latest-news/health-latest-news-list.rss",
+          "status": 200,
+          "sha256": "50c4f4f34b8ca871a5410d8dc608afc445468a7c02f40f357707abe1ae1b574b",
+          "headers": {
+            "content-type": "application/xml"
+          },
+          "file": "prnewswire-health-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "moderna-news",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:35.103703+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_generic",
+      "status": null,
+      "seconds": 2.66,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "campbell-collaboration",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:35.699645+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Meet Our New Editors – July 2026",
+          "url": "https://www.campbellcollaboration.org/2026/07/__trashed/"
+        },
+        {
+          "title": "Call for Expressions of Interest: Co-chair, Education Coordinating Group",
+          "url": "https://www.campbellcollaboration.org/2026/06/call-for-expressions-of-interest-co-chair-education-coordinating-group/"
+        }
+      ],
+      "seconds": 3.52,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.campbellcollaboration.org/feed/",
+          "status": 200,
+          "sha256": "4d2a27cdd24c1e7e605967f02651a6ccb7d3f8ba5a27fd1934ecc5183194d4b7",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "campbell-collaboration-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "easl-clinical-practice-guidelines",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:39.216200+00:00",
+      "outcome": "ok",
+      "entries": 12,
+      "samples": [
+        {
+          "title": "EASL Clinical Practice Guidelines on the management of hepatitis B virus",
+          "url": "https://easl.eu/publication/cpg-hbv/"
+        },
+        {
+          "title": "EASL Clinical Practice Guidelines on vascular diseases of the liver",
+          "url": "https://easl.eu/publication/cpg-vascular-diseases/"
+        }
+      ],
+      "seconds": 5.1,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://easl.eu/publication-category/clinical-practice-guidelines/feed/",
+          "status": 200,
+          "sha256": "c7692a98a29591f71f3280d48723b20efed767bb5f47842412f16fe0e08f82b2",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "easl-clinical-practice-guidelines-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "equator-network",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:44.314469+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Online Publication School October 2026 9:30-13:30 GMT",
+          "url": "https://www.equator-network.org/2026/09/28/publication-school-october-2026/"
+        },
+        {
+          "title": "Online Publication School: 19 January – 9 February 2026, 9:30-13:30 GMT",
+          "url": "https://www.equator-network.org/2025/11/03/online-publication-school-19-january-9-february-2026-930-1330-gmt/"
+        }
+      ],
+      "seconds": 3.67,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.equator-network.org/feed/",
+          "status": 200,
+          "sha256": "5629a335abc4c217ccf717210e9946af17ec6b54bfdba27e238c6479abfb8d8d",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "equator-network-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "datamethods-forum",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:47.985369+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "samples": [
+        {
+          "title": "[DCGs] Feedback loops and circular causality",
+          "url": "https://discourse.datamethods.org/t/dcgs-feedback-loops-and-circular-causality/28867"
+        },
+        {
+          "title": "RCT & Synthetic Data Generating Processes",
+          "url": "https://discourse.datamethods.org/t/rct-synthetic-data-generating-processes/28859"
+        }
+      ],
+      "seconds": 3.71,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://discourse.datamethods.org/latest.rss",
+          "status": 200,
+          "sha256": "11a8952c212578c328c8296ccc7b9ac196ff5494fe437664284e6d754ce394dc",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "datamethods-forum-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "jama-guide-statistics-methods",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:51.695437+00:00",
+      "outcome": "ok",
+      "entries": 7,
+      "samples": [
+        {
+          "title": "Cost-Effectiveness of Smoking Cessation Interventions Integrated Into Lung Cancer Screening.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42734913/"
+        },
+        {
+          "title": "YouTube as a Reliable Source of Patient Education for Peyronie's Disease: A Quality Assessment Study.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42701662/"
+        }
+      ],
+      "seconds": 2.71,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22JAMA%20Guide%20to%20Statistics%20and%20Methods%22&datetype=edat&mindate=2026/07/31&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "04a897f44c3607f32c9f6ef169ce09a71fcc55f5293cb8931c0ca79e7fd5c7fa",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "jama-guide-statistics-methods-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7dda255c779dc056282&retstart=0&retmax=7",
+          "status": 200,
+          "sha256": "8bbd01e6eb1bd44757170785f169c18165f915a7de96ef141238d5eaa8c91386",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "jama-guide-statistics-methods-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "cdc-outbreaks-us",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:54.407535+00:00",
+      "outcome": "ok",
+      "entries": 7,
+      "samples": [
+        {
+          "title": "E. coli Outbreak linked to Raw Milk Cheese",
+          "url": "https://tools.cdc.gov/api/embed/downloader/download.asp?m=285676&c=766541"
+        },
+        {
+          "title": "Salmonella Outbreak Linked to Broccoli Sprouts",
+          "url": "https://tools.cdc.gov/api/embed/downloader/download.asp?m=285676&c=766406"
+        }
+      ],
+      "seconds": 3.24,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://tools.cdc.gov/api/v2/resources/media/285676.rss",
+          "status": 200,
+          "sha256": "b202214efccd50a97abf956e6435401ad52bb66c32806e969f82bde8173a5acd",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "cdc-outbreaks-us-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "erc-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:57.645636+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Interim Agent position in Continuous Improvement in the ERCEA Director’s Office.",
+          "url": "https://erc.europa.eu/about-erc/work-with-us/vacancies-interim-agent-position-continuous-improvement-ercea-directors"
+        },
+        {
+          "title": "Interim Agent position in the area Chemistry and Materials Science",
+          "url": "https://erc.europa.eu/about-erc/work-with-us/vacancies-interim-agent-position-area-chemistry-and-materials-science-0"
+        }
+      ],
+      "seconds": 2.28,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://erc.europa.eu/rss.xml",
+          "status": 200,
+          "sha256": "0bef86312c412768ad64a03e5a018dd4945bc20063de1883f71a04e0198006a4",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "erc-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "nature-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:59.930102+00:00",
+      "outcome": "ok",
+      "entries": 75,
+      "samples": [
+        {
+          "title": "Strange and beautiful creatures spotted on the Challenger expedition",
+          "url": "https://www.nature.com/articles/d41586-026-02972-w"
+        },
+        {
+          "title": "PhD training should encourage ethical dissent",
+          "url": "https://www.nature.com/articles/d41586-026-03053-8"
+        }
+      ],
+      "seconds": 5.7,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.nature.com/nature.rss",
+          "status": 200,
+          "sha256": "d8e36439c81c6a31e1a07081342b510b1ae32fae26afba621d38fb6d23fdd07b",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "nature-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "dailymed-label-updates",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:27.204617+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 39.19,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "undark",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:05.634567+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Podcast: Should We Put AI-Enabled Tech in Our Brains?",
+          "url": "https://undark.org/2026/09/25/podcast-neural-implants/"
+        },
+        {
+          "title": "Engineering Animals to Grow Human Organs — But Not Human Minds",
+          "url": "https://undark.org/2026/09/25/brain-trust-human-animal-chimeras/"
+        }
+      ],
+      "seconds": 2.29,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://undark.org/feed/",
+          "status": 200,
+          "sha256": "66e0f5d4fe2be0709f6e4dd8d63bf74e38cf551f892551e2fe4bcea7dbb2af9d",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "undark-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "news-medical-net",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:06.389798+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Greater variation in blood pressure associated with higher risk of death and strokes",
+          "url": "https://www.news-medical.net/news/20260929/Greater-variation-in-blood-pressure-associated-with-higher-risk-of-death-and-strokes.aspx"
+        },
+        {
+          "title": "Scientists discover how excess dietary salt drives 'lean MASH'",
+          "url": "https://www.news-medical.net/news/20260929/Scientists-discover-how-excess-dietary-salt-drives-lean-MASH.aspx"
+        }
+      ],
+      "seconds": 1.79,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.news-medical.net/syndication.axd?format=rss",
+          "status": 200,
+          "sha256": "6ad258dda97474aaac7dccc66027e5a5a14d6b24cde2f306071f873f9e686dd4",
+          "headers": {
+            "content-type": "application/rss+xml"
+          },
+          "file": "news-medical-net-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "npr-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:07.927787+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Tennessee's failed execution ignites a medical ethics debate",
+          "url": "https://www.npr.org/2026/09/28/nx-s1-5980299/tennessees-failed-execution-ignites-a-medical-ethics-debate"
+        },
+        {
+          "title": "5 tips for parents worried about their kids' screen time and online safety",
+          "url": "https://www.npr.org/2026/09/28/nx-s1-5965849/screens-teens-parents-social-media-safety"
+        }
+      ],
+      "seconds": 3.24,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://feeds.npr.org/1128/rss.xml",
+          "status": 200,
+          "sha256": "08db45dd4468d4b8644f6aa4d9d14fb5fb42776598b312883a09d6c2288b1967",
+          "headers": {
+            "content-type": "text/xml;charset=UTF-8"
+          },
+          "file": "npr-health-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "healthcare-dive",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:11.170954+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Insurers say AI could add billions in health costs. Billing companies disagree",
+          "url": "https://www.healthcaredive.com/news/insurers-say-ai-could-add-billions-in-health-costs-billing-companies-disag/831497/"
+        },
+        {
+          "title": "Healthcare workers battle persistent long COVID: study",
+          "url": "https://www.healthcaredive.com/news/healthcare-workers-battle-persistent-long-covid/831493/"
+        }
+      ],
+      "seconds": 2.38,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.healthcaredive.com/feeds/news/",
+          "status": 200,
+          "sha256": "d18b9733ed9864c4384250e3156b224b1b9994f0f94f97a58dda3da4249da02f",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "healthcare-dive-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "asco-post",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:08.183231+00:00",
+      "outcome": "too-large",
+      "detail": "content_length_over_cap",
+      "status": 200,
+      "seconds": 6.57,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "beckers-hospital-review",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:13.548712+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 1.23,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "asco-guidelines-podcast",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:37.759675+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 37.78,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "zhonghua-yixue-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:14.782373+00:00",
+      "outcome": "ok",
+      "entries": 35,
+      "samples": [
+        {
+          "title": "[The application value of neuroelectrophysiological monitoring in posterior spinal corrective surgery for patients with osteochondrodysplasia complicated by kyphoscoliosis].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42778321/"
+        },
+        {
+          "title": "[Mechanism of growth differentiation factor 15 in curcumin-induced ferroptosis in triple-negative breast cancer].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42778320/"
+        }
+      ],
+      "seconds": 1.82,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22Zhonghua%20Yi%20Xue%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate=2026/09/15&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "bb86e4c08b5685c0758eb7a1ca93ae362796e53bbc3da659fc05a17e6059f077",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "zhonghua-yixue-zazhi-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7f24ed6c832c204c468&retstart=0&retmax=35",
+          "status": 200,
+          "sha256": "7c02917af401231b6d5ccf8b9e43431ab1ebdd031a87aae333dc45d8453b09a0",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "zhonghua-yixue-zazhi-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "zhonghua-neike-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:15.534975+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "samples": [],
+      "seconds": 1.48,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22Zhonghua%20Nei%20Ke%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate=2026/09/15&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "a9be421af37441d6e33073ffb13a5a14d00b78ae952b2a580d4d9629bea96d9b",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "zhonghua-neike-zazhi-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "croi",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:14.754654+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "CROI 2027: Access, Participation, and Connection",
+          "url": "https://www.croiconference.org/croi-2027-access-participation-and-connection/?utm_source=rss&utm_medium=rss&utm_campaign=croi-2027-access-participation-and-connection"
+        },
+        {
+          "title": "Abstract and Scholarship Submission is Open",
+          "url": "https://www.croiconference.org/abstract-and-scholarship-submission-is-open-2027/?utm_source=rss&utm_medium=rss&utm_campaign=abstract-and-scholarship-submission-is-open-2027"
+        }
+      ],
+      "seconds": 2.85,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.croiconference.org/feed/",
+          "status": 200,
+          "sha256": "faf0e30997a1903933cba90c941b1a1158b44d4e99617e7ac6781c9f1f78dfa0",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "croi-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "chinagp",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:17.605034+00:00",
+      "outcome": "ok",
+      "entries": 65,
+      "samples": [
+        {
+          "title": "基于制度关键实践者视角的分级诊疗制度感知及影响因素研究#br#",
+          "url": "https://www.chinagp.net/CN/10.12114/j.issn.1007-9572.2022.00.008"
+        },
+        {
+          "title": "老年慢性病共病患者多重用药管理分析与评论",
+          "url": "https://www.chinagp.net/CN/10.12114/j.issn.1007-9572.2022.00.009"
+        }
+      ],
+      "seconds": 1.63,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.chinagp.net/CN/rss_first_1007-9572.xml",
+          "status": 200,
+          "sha256": "cbfde5fb3ca906702728291002f41b317f766143554f213319e178bbd6a1a1ef",
+          "headers": {
+            "content-type": "text/html;charset=UTF-8"
+          },
+          "file": "chinagp-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "zhonghua-zhongliu-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:16.606401+00:00",
+      "outcome": "ok",
+      "entries": 9,
+      "samples": [
+        {
+          "title": "[Research progress on interval cancer].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42779204/"
+        },
+        {
+          "title": "[A single-center retrospective study on the efficacy and safety of spatially fractionated radiation therapy in patients with advanced/recurrent metastatic malignant tumors].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42764222/"
+        }
+      ],
+      "seconds": 2.95,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22Zhonghua%20Zhong%20Liu%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate=2026/09/15&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "d671d66cc7f05922ccdf14528d607e7c536d7a7decbaa3ab619fb9cb3e9a179e",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "zhonghua-zhongliu-zazhi-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7f5d901c8ee73013ef9&retstart=0&retmax=9",
+          "status": 200,
+          "sha256": "7526256ef67908c943e3165ff8cd02e646c441b642286cf5d8cd0f50687c168b",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "zhonghua-zhongliu-zazhi-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "zhonghua-xinxueguanbing-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:17.013801+00:00",
+      "outcome": "ok",
+      "entries": 16,
+      "samples": [
+        {
+          "title": "[Genetic mechanisms and clinical significance of drug-induced long QT syndrome].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42736143/"
+        },
+        {
+          "title": "[Exercise prescription for metabolic diseases: from theory to practice].",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42736142/"
+        }
+      ],
+      "seconds": 4.19,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22Zhonghua%20Xin%20Xue%20Guan%20Bing%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate=2026/09/15&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "17d9fb66824f46237db40b756980e9b317bfc7bdaa7620336ddc2425b582b4ee",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "zhonghua-xinxueguanbing-zazhi-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7f5ec460c781704099e&retstart=0&retmax=16",
+          "status": 200,
+          "sha256": "ac90604d4ddfdfe4c99c3eb145a94477104d7f898adfdb85218ac6f5e58a20a0",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "zhonghua-xinxueguanbing-zazhi-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "cjcmm",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:19.558209+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "samples": [],
+      "seconds": 2.05,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=%22Zhongguo%20Zhong%20Yao%20Za%20Zhi%22%5Bjour%5D&datetype=edat&mindate=2026/09/15&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "4cf0cc187df78fdefea34a6aa40bf84f9202c3e8423c79e6141124c9ae6dc3ca",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "cjcmm-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "actacams",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:19.237710+00:00",
+      "outcome": "ok",
+      "entries": 1,
+      "samples": [
+        {
+          "title": "人富血小板血浆来源外泌体促进体外培养施万细胞的增殖",
+          "url": "http://journal13.magtechjournal.com/yxkxy/CN/abstract/abstract3696.shtml"
+        }
+      ],
+      "seconds": 4.9,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://journal13.magtechjournal.com/yxkxy/CN/rss_first_1000-503X.xml",
+          "status": 200,
+          "sha256": "3799002b7323255915e6a07692e4d4d4a1a3c8a8800ba2782ce84a40bc8f3cba",
+          "headers": {
+            "content-type": "application/xml;charset=UTF-8"
+          },
+          "file": "actacams-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "pubmed-target-trial-rwe",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:21.204536+00:00",
+      "outcome": "ok",
+      "entries": 65,
+      "samples": [
+        {
+          "title": "Development and validation of claims-based algorithms to identify interstitial lung disease among Japanese patients with cancer in routine clinical practice using real-world data sources.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42780550/"
+        },
+        {
+          "title": "Characterizing bleeding adverse events associated with BCR-ABL tyrosine kinase inhibitors: insights from FAERS reports.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42780512/"
+        }
+      ],
+      "seconds": 6.46,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22target%20trial%20emulation%22%5Btiab%5D%20OR%20%22emulated%20target%20trial%22%5Btiab%5D%20OR%20%22target%20trial%22%5Bti%5D%20OR%20%22real-world%20evidence%22%5Btiab%5D%20OR%20%22real-world%20data%22%5Btiab%5D)&datetype=edat&mindate=2026/09/22&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "671f81e4f73114e9130062ac759c29926c92e8e6ef63df531636386d9c9d4f22",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "pubmed-target-trial-rwe-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7f92fd295504804b361&retstart=200&retmax=65",
+          "status": 200,
+          "sha256": "372d7ab44f6d054a9f36738296b6c01a312512562c05bbaeff843d7ea93a0b21",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "pubmed-target-trial-rwe-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "pubmed-grade-certainty",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:21.605371+00:00",
+      "outcome": "ok",
+      "entries": 2,
+      "samples": [
+        {
+          "title": "The role of 6-minute walk test and pulmonary function testing in patients with post COVID-19 condition: a systematic review and meta-analysis.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42770643/"
+        },
+        {
+          "title": "Steroid-sensitive nephrotic syndrome in children: Korean Society of Pediatric Nephrology clinical practice recommendations.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42779590/"
+        }
+      ],
+      "seconds": 7.11,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=(%22GRADE%20approach%22%5Btiab%5D%20OR%20%22Grading%20of%20Recommendations%20Assessment,%20Development%20and%20Evaluation%22%5Btiab%5D%20OR%20%22certainty%20of%20evidence%22%5Btiab%5D%20OR%20%22certainty%20of%20the%20evidence%22%5Btiab%5D)&datetype=edat&mindate=2026/09/22&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "1a7aae6b0e908cf9046e8d787169909c8beb5918d4c8ff9c027e4659bb764202",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "pubmed-grade-certainty-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc7faad3d683bde090eee&retstart=200&retmax=2",
+          "status": 200,
+          "sha256": "6bc28cc329baee3086600eac0cc3ca342b93dc1aba902d98ff4ec98f02f2ea2d",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "pubmed-grade-certainty-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "biorxiv-pharmacology-toxicology",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:28.717585+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "samples": [
+        {
+          "title": "Context and exposure history shape insecticide sensitivity in Drosophila melanogaster",
+          "url": "https://www.biorxiv.org/content/10.64898/2026.09.28.753401v1"
+        },
+        {
+          "title": "Aquaporin-9 and aquaporin-10 but not aquaporin-3 confer susceptibility to dimethylarsinic acid genotoxicity in human cells",
+          "url": "https://www.biorxiv.org/content/10.64898/2026.09.20.752519v1"
+        }
+      ],
+      "seconds": 7.46,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=pharmacology_and_toxicology",
+          "status": 200,
+          "sha256": "4ad0b03445ace943fdca850c8f37e7ec04502ebad66cbc895dd5c890623c4669",
+          "headers": {
+            "content-type": "application/xml;\")"
+          },
+          "file": "biorxiv-pharmacology-toxicology-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "pubmed-llm-clinical-evaluation",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:24.136983+00:00",
+      "outcome": "ok",
+      "entries": 82,
+      "samples": [
+        {
+          "title": "Domain-Dependent Performance of Human Experts and AI Systems in Pediatric Menu Evaluation.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42797089/"
+        },
+        {
+          "title": "Quality and Readability of Four AI Chatbots Answering Search-Derived Patient Questions About Primary Aldosteronism: A Cross-Sectional Comparative Study.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42793657/"
+        }
+      ],
+      "seconds": 16.03,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=((%22large%20language%20model%22%5Btiab%5D%20OR%20%22large%20language%20models%22%5Btiab%5D%20OR%20%22generative%20artificial%20intelligence%22%5Btiab%5D%20OR%20ChatGPT%5Btiab%5D%20OR%20%22GPT-4%22%5Btiab%5D)%20AND%20(clinical%5Btiab%5D%20OR%20patient%5Btiab%5D%20OR%20patients%5Btiab%5D%20OR%20diagnosis%5Btiab%5D%20OR%20diagnostic%5Btiab%5D%20OR%20physicians%5Btiab%5D))&datetype=edat&mindate=2026/09/22&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "600961da874d2e98e5bbfd600e20e7d9a676ab41b25d6d31ad5575c48f247d2f",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "pubmed-llm-clinical-evaluation-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc800908f98e9690824be&retstart=100&retmax=82",
+          "status": 200,
+          "sha256": "c3ad2de331e6b6b057b5d17168eb197da4c3b4e4ddd1f80e9b246a6330d82646",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "pubmed-llm-clinical-evaluation-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "biorxiv-all-subjects",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:36.181652+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "samples": [
+        {
+          "title": "Integrative proteomic analysis and molecular dynamics simulations of ANKLE2 reveal mechanisms of microcephaly",
+          "url": "https://www.biorxiv.org/content/10.64898/2026.09.28.755110v1"
+        },
+        {
+          "title": "Loss of starch synthase IIa alleviates the negative impact of high temperature on rice starch during grain filling",
+          "url": "https://www.biorxiv.org/content/10.64898/2026.09.28.754565v1"
+        }
+      ],
+      "seconds": 15.14,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://connect.biorxiv.org/biorxiv_xml.php?subject=all",
+          "status": 200,
+          "sha256": "e966576cc43a78656eca9bb5801e41110c5326627538ea50a3e27a2ddb2569b6",
+          "headers": {
+            "content-type": "application/xml;\")"
+          },
+          "file": "biorxiv-all-subjects-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "arxiv-cs-cl-clinical",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:40.184806+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "samples": [
+        {
+          "title": "Rubric Rewards from Item Response Theory",
+          "url": "https://arxiv.org/abs/2609.35646"
+        },
+        {
+          "title": "Can LLMs Value the Right Evidence? Evidence-Value Misalignment in Dynamic Medical Diagnosis",
+          "url": "https://arxiv.org/abs/2609.35627"
+        }
+      ],
+      "seconds": 15.89,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://export.arxiv.org/api/query?search_query=cat:cs.CL+AND+%28abs:clinical+OR+abs:medical%29&sortBy=submittedDate&sortOrder=descending&max_results=100",
+          "status": 200,
+          "sha256": "5a3e8dd212724ad300dd331524995009eb842c9cc342b34ba5e4f48253363a5f",
+          "headers": {
+            "content-type": "application/atom+xml; charset=utf-8"
+          },
+          "file": "arxiv-cs-cl-clinical-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "pubmed-bibliometrics-medicine",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:27.681218+00:00",
+      "outcome": "ok",
+      "entries": 78,
+      "samples": [
+        {
+          "title": "From Selective Prophylaxis to Broad Infant RSV Protection: A Bibliometric Analysis and Evidence Gap Map, 1998-2025.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42803130/"
+        },
+        {
+          "title": "Fine wine, art, and medical physicist bibliometrics: Things that improve with age.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/42798164/"
+        }
+      ],
+      "seconds": 30.28,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub%20date&term=((bibliometric*%5Btiab%5D%20OR%20scientometric*%5Btiab%5D%20OR%20%22research%20trends%22%5Bti%5D%20OR%20%22global%20trends%22%5Bti%5D)%20AND%20(medicine%5Btiab%5D%20OR%20medical%5Btiab%5D%20OR%20clinical%5Btiab%5D%20OR%20health%5Btiab%5D%20OR%20disease%5Btiab%5D%20OR%20diseases%5Btiab%5D))&datetype=edat&mindate=2026/09/22&maxdate=2026/09/29&usehistory=y&retmax=0",
+          "status": 200,
+          "sha256": "45bfae235b23b783ad45890e8bb7557104804ce83d644e8f2035ac85d77f4ff6",
+          "headers": {
+            "content-type": "application/json; charset=UTF-8"
+          },
+          "file": "pubmed-bibliometrics-medicine-0.body.gz"
+        },
+        {
+          "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&query_key=1&WebEnv=MCID_6abbc801e59e24c37a0ee10b&retstart=0&retmax=78",
+          "status": 200,
+          "sha256": "1249e0057c2d9137dfd1216948b1b29529bba195c1573b6a421e82a9eaa30afa",
+          "headers": {
+            "content-type": "text/xml; charset=UTF-8"
+          },
+          "file": "pubmed-bibliometrics-medicine-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "research-square-preprints",
+      "access": "europepmc",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:57.980750+00:00",
+      "outcome": "ok",
+      "entries": 200,
+      "samples": [
+        {
+          "title": "Microbial cells reprogram energy and protein metabolism in response to plastic exposure",
+          "url": "https://doi.org/10.21203/rs.3.rs-11113079/v1"
+        },
+        {
+          "title": "Crying as the Primordial Unknown-State Emotion: An Emotional Saturation Threshold Model with Cross-Sectional Survey Validation",
+          "url": "https://doi.org/10.21203/rs.3.rs-8807024/v1"
+        }
+      ],
+      "seconds": 10.15,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22Research%20Square%22)%20AND%20FIRST_IDATE:%5B2026-09-22%20TO%202026-09-29%5D&format=json&resultType=core&pageSize=100&cursorMark=*",
+          "status": 200,
+          "sha256": "e0c65c689124a2604e7ae22856b3bc28a6a9a909c0d5aa756ad16f2c4f78dd00",
+          "headers": {
+            "content-type": "application/json;charset=UTF-8"
+          },
+          "file": "research-square-preprints-0.body.gz"
+        },
+        {
+          "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=(SRC:PPR%20AND%20PUBLISHER:%22Research%20Square%22)%20AND%20FIRST_IDATE:%5B2026-09-22%20TO%202026-09-29%5D&format=json&resultType=core&pageSize=100&cursorMark=AoIIQD1xWyg1NjUxNzk1NA%3D%3D",
+          "status": 200,
+          "sha256": "ea64ba34308148c824ea7b8b22af325906b2d4f30eb18e1bae590e471d08786e",
+          "headers": {
+            "content-type": "application/json;charset=UTF-8"
+          },
+          "file": "research-square-preprints-1.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "isrctn-registry-api",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:08.139247+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 10.27,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "openalex-medicine-newest",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:18.413925+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_openalex",
+      "status": null,
+      "seconds": 1.73,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "arxiv-eess-iv-medical-imaging",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:51.318000+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "samples": [
+        {
+          "title": "Mask2Restore: Self-Supervised Ultrasound Despeckling via Inpainting",
+          "url": "https://arxiv.org/abs/2609.32844"
+        },
+        {
+          "title": "Quantum Diffusion Models for Medical Image Analysis",
+          "url": "https://arxiv.org/abs/2609.31070"
+        }
+      ],
+      "seconds": 29.87,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://export.arxiv.org/api/query?search_query=cat:eess.IV+AND+%28abs:medical+OR+abs:clinical+OR+abs:radiology%29&sortBy=submittedDate&sortOrder=descending&max_results=100",
+          "status": 200,
+          "sha256": "125d2e628b898470ee74919c5df4c5f1ef234fe71107bf47f6f29020d58bfea2",
+          "headers": {
+            "content-type": "application/atom+xml; charset=utf-8"
+          },
+          "file": "arxiv-eess-iv-medical-imaging-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "openalex-medicine-most-cited-30d",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:20.143638+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_openalex",
+      "status": null,
+      "seconds": 1.58,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "clinphar-forum",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:21.189722+00:00",
+      "outcome": "empty",
+      "detail": "empty_body",
+      "status": 204,
+      "seconds": 1.74,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "tmtpost-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:21.721319+00:00",
+      "outcome": "ok",
+      "entries": 18,
+      "samples": [
+        {
+          "title": "8.25亿增资、8.26亿转让：迈威生物TCE管线分拆至新公司联威创元",
+          "url": "https://www.tmtpost.com/8156362.html"
+        },
+        {
+          "title": "押注固态电池设备“三年后”：金银河15亿定增卡位",
+          "url": "https://www.tmtpost.com/8156391.html"
+        }
+      ],
+      "seconds": 2.07,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.tmtpost.com/feed",
+          "status": 200,
+          "sha256": "313471e0ff832e4758be5df3b94601efe1b53f1615e46baca5b9289e754187d3",
+          "headers": {
+            "content-type": "text/xml;charset=UTF-8"
+          },
+          "file": "tmtpost-health-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "anthropic-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:22.924904+00:00",
+      "outcome": "ok",
+      "entries": 15,
+      "samples": [
+        {
+          "title": "Improving Fable 5's biology safeguards",
+          "url": "https://www.anthropic.com/news/improving-fable-5-s-biology-safeguards"
+        },
+        {
+          "title": "How Claude’s text watermark works",
+          "url": "https://www.anthropic.com/news/claude-text-watermark"
+        }
+      ],
+      "seconds": 3.07,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://raw.githubusercontent.com/taobojlen/anthropic-rss-feed/main/anthropic_news_rss.xml",
+          "status": 200,
+          "sha256": "68fb663a710891d4738a151915c0424d1867145bc35efabe05c065d447277a50",
+          "headers": {
+            "content-type": "text/plain; charset=utf-8"
+          },
+          "file": "anthropic-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "meta-newsroom-tech",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:25.993868+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "The Future Is for Everyone: Muse for Small Business",
+          "url": "https://about.fb.com/news/2026/09/introducing-muse-small-business/"
+        },
+        {
+          "title": "New Features for Meta Ray-Ban Display",
+          "url": "https://about.fb.com/news/2026/09/new-features-for-meta-ray-ban-display-navigation-hologram/"
+        }
+      ],
+      "seconds": 5.34,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://about.fb.com/news/category/technology-and-innovation/feed/",
+          "status": 200,
+          "sha256": "1ef957d5ed386694893d7d0773794e6bd42cdd17f7aaddcda366683b4dbcf2d3",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "meta-newsroom-tech-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "microsoft-research-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:23.792661+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Introducing Quine: An AI research system designed for the complexity of biology",
+          "url": "https://www.microsoft.com/en-us/research/blog/introducing-quine-an-ai-research-system-designed-for-the-complexity-of-biology/"
+        },
+        {
+          "title": "One year in: How Microsoft Research Asia – Singapore is advancing research, partnership and talent for real-world impact",
+          "url": "https://www.microsoft.com/en-us/research/blog/one-year-in-how-microsoft-research-asia-singapore-is-advancing-research-partnership-and-talent-for-real-world-impact/"
+        }
+      ],
+      "seconds": 8.1,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.microsoft.com/en-us/research/feed/",
+          "status": 200,
+          "sha256": "517e83d6cc3949195e3ed03ba722a4e8d1f1f4e975dbc4e97aa183be71f1bf3d",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "microsoft-research-blog-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "nvidia-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:31.332451+00:00",
+      "outcome": "ok",
+      "entries": 18,
+      "samples": [
+        {
+          "title": "How Open Science Can Help Researchers Prepare for the Next Pandemic",
+          "url": "https://blogs.nvidia.com/blog/open-protein-dataset/"
+        },
+        {
+          "title": "Contain the Chaos: ‘CONTROL Resonant’ Launches on GeForce NOW",
+          "url": "https://blogs.nvidia.com/blog/geforce-now-thursday-control-resonant/"
+        }
+      ],
+      "seconds": 2.29,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://blogs.nvidia.com/feed/",
+          "status": 200,
+          "sha256": "4e604fa09c82d1a319b159f55714c5714d97c9ac66100d5c8347fc3857f3c362",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "nvidia-blog-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "deepseek-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:31.897791+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "samples": [],
+      "seconds": 3.28,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://rsshub.bestblogs.dev/deepseek/news",
+          "status": 200,
+          "sha256": "9325b10fe424a01444f82eae4b44ee61f84d342544ef9bf96fa51f5a5ec72961",
+          "headers": {
+            "content-type": "application/xml; charset=utf-8"
+          },
+          "file": "deepseek-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "qwen-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:33.629684+00:00",
+      "outcome": "ok",
+      "entries": 40,
+      "samples": [
+        {
+          "title": "Qwen-Image-2.1：小模强效，创改一体",
+          "url": "https://qwen.ai/blog?id=qwen-image-2.1"
+        },
+        {
+          "title": "Qwen3.8-LiveTranslate：知其人，传其义",
+          "url": "https://qwen.ai/blog?id=qwen3.8-livetranslate"
+        }
+      ],
+      "seconds": 8.09,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://rsshub.bestblogs.dev/qwen/blog",
+          "status": 200,
+          "sha256": "9593245f0a77a19db7c54634859658228e7fa0b7ba04c3559d511e6b3ab509bc",
+          "headers": {
+            "content-type": "application/xml; charset=utf-8"
+          },
+          "file": "qwen-blog-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "the-verge-ai",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:35.178606+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Will Chinese AI companies slow down? A top House Democrat wants answers",
+          "url": "https://www.theverge.com/policy/1001767/khanna-ai-safety-china-treaty"
+        },
+        {
+          "title": "Anthropic warns of ‘catastrophic’ AI risks in its own IPO filing",
+          "url": "https://www.theverge.com/ai-artificial-intelligence/1001838/anthropic-ipo-prospectus-ai-safety-threat"
+        }
+      ],
+      "seconds": 7.51,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+          "status": 200,
+          "sha256": "5581386b0423a187a74bd1718e775d544bff269438e6f0e4567022df9dbdacbc",
+          "headers": {
+            "content-type": "application/xml; charset=UTF-8"
+          },
+          "file": "the-verge-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "arxiv-qbio-qm",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:56.079660+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "samples": [
+        {
+          "title": "An integrated geometric quantification and shape analysis framework for axillary lymph node metastasis in breast cancer patients",
+          "url": "https://arxiv.org/abs/2609.35437"
+        },
+        {
+          "title": "Uncertainty Quantification in Cardiac Model Personalisation from Ultrafast Ultrasound",
+          "url": "https://arxiv.org/abs/2609.35214"
+        }
+      ],
+      "seconds": 48.53,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://export.arxiv.org/api/query?search_query=cat:q-bio.QM&sortBy=submittedDate&sortOrder=descending&max_results=100",
+          "status": 200,
+          "sha256": "f9557c6fb27abab8bc0dbde83c716d7495badb10bf47d785081fdc18dab80358",
+          "headers": {
+            "content-type": "application/atom+xml; charset=utf-8"
+          },
+          "file": "arxiv-qbio-qm-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "wired-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:42.689683+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "OpenAI Delays Release of Latest Model Over Safety Concerns",
+          "url": "https://www.wired.com/story/openai-delays-release-of-latest-model-over-safety-concerns/"
+        },
+        {
+          "title": "Timnit Gebru Believes There Is No ‘Existential Threat’ From AI",
+          "url": "https://www.wired.com/story/the-big-interview-podcast-timnit-gebru/"
+        }
+      ],
+      "seconds": 2.13,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.wired.com/feed/tag/ai/latest/rss",
+          "status": 200,
+          "sha256": "18d8b2260127e448500f1447bb690cf0bef66c8beb5c36ea7983e20dc9ec6aad",
+          "headers": {
+            "content-type": "application/xml"
+          },
+          "file": "wired-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "techcrunch-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:44.823492+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "samples": [
+        {
+          "title": "With Dazzle, Marissa Mayer bets your camera roll has more info on your life than your inbox",
+          "url": "https://techcrunch.com/2026/09/29/with-dazzle-marissa-mayer-bets-your-camera-roll-has-more-info-on-your-life-than-your-inbox/"
+        },
+        {
+          "title": "Meta is expanding its AI agent Muse to small businesses",
+          "url": "https://techcrunch.com/2026/09/29/meta-is-expanding-its-ai-agent-muse-to-small-businesses/"
+        }
+      ],
+      "seconds": 1.73,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+          "status": 200,
+          "sha256": "014379d0cc9470096a498c28d38c4f6798730143831df7784bca5b92e34b39de",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "techcrunch-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ars-technica-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:42.583582+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "samples": [
+        {
+          "title": "Anthropic’s IPO pitch includes a warning about human extinction",
+          "url": "https://arstechnica.com/ai/2026/09/anthropics-ipo-pitch-includes-a-warning-about-human-extinction/"
+        },
+        {
+          "title": "Interview: Firefox's chief on why he hopes a redesign will help win users from Chrome",
+          "url": "https://arstechnica.com/gadgets/2026/09/mozillas-head-of-firefox-talks-product-priorities-ai-skepticism-and-browser-choice/"
+        }
+      ],
+      "seconds": 4.64,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://arstechnica.com/ai/feed/",
+          "status": 200,
+          "sha256": "88be48fcc0a3b91cd7d178d797c4eac7bb9ab55546577763c228cd235576e37c",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "ars-technica-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ieee-spectrum-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:44.615466+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "samples": [
+        {
+          "title": "How to Stop AI Agents From Secretly Collaborating",
+          "url": "https://spectrum.ieee.org/ai-agent-security"
+        },
+        {
+          "title": "Unveiling IC-STAR: Full-Flow Autonomy from Digital to Analog",
+          "url": "https://event.on24.com/wcc/r/5507421/A45CEFBA43BC7B2A43F265520AFDBA32"
+        }
+      ],
+      "seconds": 2.77,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://spectrum.ieee.org/feeds/topic/artificial-intelligence.rss",
+          "status": 200,
+          "sha256": "2d8f2558a3b97b75add274fe1e6405477086615833be33fb4cd389b6eefe67b5",
+          "headers": {
+            "content-type": "application/rss+xml; charset=utf-8"
+          },
+          "file": "ieee-spectrum-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "understanding-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:46.549766+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "samples": [
+        {
+          "title": "How a single tweet transformed the AI safety debate",
+          "url": "https://www.understandingai.org/p/how-a-single-tweet-transformed-the"
+        },
+        {
+          "title": "OpenAI spent millions to solve this famous math problem — mathematicians are furious",
+          "url": "https://www.understandingai.org/p/openai-spent-millions-to-solve-this"
+        }
+      ],
+      "seconds": 2.08,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.understandingai.org/feed",
+          "status": 200,
+          "sha256": "01d9e3fae37130f793c212e22f31a27f1f9d7cec4d23552bb972f00b5ce9f790",
+          "headers": {
+            "content-type": "application/xml; charset=utf-8"
+          },
+          "file": "understanding-ai-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "geekpark",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:47.383273+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "samples": [
+        {
+          "title": "AMD 82 亿美元收购 World Labs，买的不只是世界模型",
+          "url": "http://www.geekpark.net/news/372000"
+        },
+        {
+          "title": "Anthropic 招股书里，最耐人寻味的 7 个细节",
+          "url": "http://www.geekpark.net/news/371994"
+        }
+      ],
+      "seconds": 1.87,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.geekpark.net/rss",
+          "status": 200,
+          "sha256": "6cbaf60be8795d2390bcdd14b059c4d95355f5d429c07d7e825f73fae6dd0ab4",
+          "headers": {
+            "content-type": "application/xml; charset=utf-8;"
+          },
+          "file": "geekpark-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ithome",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:48.628048+00:00",
+      "outcome": "ok",
+      "entries": 60,
+      "samples": [
+        {
+          "title": "微软将优化 Win11 ARM 设备初次开机 OOBE 流程，厂商可延后非关键驱动和固件更新",
+          "url": "https://www.ithome.com/1/008/497.htm"
+        },
+        {
+          "title": "AOC 推出 27 英寸 2K 180Hz 显示器 Q27V6X，1299 元",
+          "url": "https://www.ithome.com/1/008/496.htm"
+        }
+      ],
+      "seconds": 1.81,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.ithome.com/rss/",
+          "status": 200,
+          "sha256": "eef9df8a9a90b9c43a0eb54e3cacd988c61886c7cec771408506a8c15e55980f",
+          "headers": {
+            "content-type": "text/xml; charset=utf-8"
+          },
+          "file": "ithome-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "xtalpi",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:49.260168+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "寻找下一个“十亿美金分子”科学创业大赛：XtalPi Science，高校年轻人的第一个创业合伙人",
+          "url": "https://www.xtalpi.com/%e5%af%bb%e6%89%be%e4%b8%8b%e4%b8%80%e4%b8%aa%e5%8d%81%e4%ba%bf%e7%be%8e%e9%87%91%e5%88%86%e5%ad%90%e7%a7%91%e5%ad%a6%e5%88%9b%e4%b8%9a%e5%a4%a7%e8%b5%9b%ef%bc%9axtalpi-science/"
+        },
+        {
+          "title": "晶泰向美国FDA提交 IND申请，AI + 机器人加速创新药物迈向临床",
+          "url": "https://www.xtalpi.com/%e6%99%b6%e6%b3%b0%e5%90%91%e7%be%8e%e5%9b%bdfda%e6%8f%90%e4%ba%a4-ind%e7%94%b3%e8%af%b7%ef%bc%8cai-%e6%9c%ba%e5%99%a8%e4%ba%ba%e5%8a%a0%e9%80%9f%e5%88%9b%e6%96%b0%e8%8d%af%e7%89%a9%e8%bf%88/"
+        }
+      ],
+      "seconds": 2.34,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.xtalpi.com/category/news/feed/",
+          "status": 200,
+          "sha256": "22a4a354fa8a4826e805f4d09ad4274e549a1b7f1e763f62214a9ec17a9f1aa7",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "xtalpi-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ai-normal-technology",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:47.227557+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "samples": [
+        {
+          "title": "AI existential risk probabilities are (still) too unreliable to inform policy",
+          "url": "https://www.normaltech.ai/p/p-doom"
+        },
+        {
+          "title": "The AI-as-Normal-Technology view of loss-of-control incidents",
+          "url": "https://www.normaltech.ai/p/the-ai-as-normal-technology-view"
+        }
+      ],
+      "seconds": 6.41,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.normaltech.ai/feed",
+          "status": 200,
+          "sha256": "424ab92fb7bbac78b703cbcf05c4c1c080bac99f436090c2adb1017dc602ecdb",
+          "headers": {
+            "content-type": "application/xml; charset=utf-8"
+          },
+          "file": "ai-normal-technology-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "zotero-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:51.600666+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "Zotero 10",
+          "url": "https://www.zotero.org/blog/zotero-10/"
+        },
+        {
+          "title": "Zotero 9",
+          "url": "https://www.zotero.org/blog/zotero-9/"
+        }
+      ],
+      "seconds": 2.92,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://www.zotero.org/blog/feed/",
+          "status": 200,
+          "sha256": "11de78a2595fdd0c492a715f2d76b67379d686988ec12fd744cf1b9394083783",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "zotero-blog-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "paperpal-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:53.653058+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "samples": [
+        {
+          "title": "We Tested Claude on 9 Research Challenges. Here’s How It Did",
+          "url": "https://paperpal.com/blog/news-updates/we-tested-claude-on-9-research-challenges"
+        },
+        {
+          "title": "How to Find and Fix PRISMA Reporting Gaps Before You Submit",
+          "url": "https://paperpal.com/blog/research-workflows/how-to-find-and-fix-prisma-reporting-gaps-before-you-submit"
+        }
+      ],
+      "seconds": 3.28,
+      "group": "p1",
+      "captures": [
+        {
+          "url": "https://paperpal.com/blog/feed",
+          "status": 200,
+          "sha256": "c6fd7f80ebe8f60592783b672d31ed011254986855aba1b4cdbe2ff014f142f3",
+          "headers": {
+            "content-type": "application/rss+xml; charset=UTF-8"
+          },
+          "file": "paperpal-blog-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "google-labs-notebooklm",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:50.441162+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.35,
+      "group": "p1",
+      "captures": []
+    },
+    {
+      "id": "fda-novel-drug-approvals",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.484040+00:00",
+      "outcome": "readable",
+      "seconds": 3.11,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/drugs/novel-drug-approvals-fda/novel-drug-approvals-2026",
+          "status": 200,
+          "sha256": "d48e3b2981a41af0db1af2700119623324596458bb6699c1866f640b428dc0de",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-novel-drug-approvals-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-guidance-documents",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.616776+00:00",
+      "outcome": "readable",
+      "seconds": 32.81,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents",
+          "status": 200,
+          "sha256": "2bb3f15dc2e521d8f496ef697a5336148cb400a15068d399b11281dadd75116c",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-guidance-documents-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-advisory-committee-calendar",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.616933+00:00",
+      "outcome": "readable",
+      "seconds": 62.93,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/advisory-committees/advisory-committee-calendar",
+          "status": 200,
+          "sha256": "444f4f5bb25880d735e198842a7a256e575a7b4ae09ff0f7eb4ef2d6fc684e85",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-advisory-committee-calendar-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-cber-whats-new",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:41.423257+00:00",
+      "outcome": "readable",
+      "seconds": 90.42,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/vaccines-blood-biologics/news-events-biologics/whats-new-biologics",
+          "status": 200,
+          "sha256": "ed77fdaf78c0f6c1d9d92f2425f3a0e69a18141f83206a3603f2c9cb744e5c26",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-cber-whats-new-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "cms-newsroom",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:11.841064+00:00",
+      "outcome": "readable",
+      "seconds": 5.47,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.cms.gov/about-cms/contact/newsroom",
+          "status": 200,
+          "sha256": "ff8b40111e3cf1b9b7dea33b3744528ea18226e82dacc5ac6f59efdc5b8903d5",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "cms-newsroom-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "nice-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:17.309428+00:00",
+      "outcome": "readable",
+      "seconds": 3.03,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.nice.org.uk/news",
+          "status": 200,
+          "sha256": "9b6675fd7ebdd60e6387903745e02c3e831635d1b6004e7378262ab35333cfae",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "nice-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "health-canada-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:20.344168+00:00",
+      "outcome": "readable",
+      "seconds": 7.49,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.canada.ca/en/health-canada/news.html",
+          "status": 200,
+          "sha256": "8274a513363dc68de81701d7d429dcd10bdb5f71f10772fadc02584754a4b470",
+          "headers": {
+            "content-type": "text/html;charset=utf-8"
+          },
+          "file": "health-canada-news-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-cdrh-news-events",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:17:11.545703+00:00",
+      "outcome": "readable",
+      "seconds": 90.35,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/medical-devices/medical-devices-news-and-events",
+          "status": 200,
+          "sha256": "6f56efea00b6d34f64ecb23190723f4a1b70df50dc6cd2227518393bc9e18c1e",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-cdrh-news-events-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "taiwan-fda-announcements",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:41.896513+00:00",
+      "outcome": "readable",
+      "seconds": 6.67,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov.tw/TC/news.aspx?cid=3",
+          "status": 200,
+          "sha256": "32cdfe9f4a1ce522811779bf839148602fac708071d4ae57991d3bda540dd026",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "taiwan-fda-announcements-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "tga-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:27.832931+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 37.5,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "fda-drug-safety-communications",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:48.564762+00:00",
+      "outcome": "readable",
+      "seconds": 57.86,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/drugs/drug-safety-and-availability/drug-safety-communications",
+          "status": 200,
+          "sha256": "3bf40aeb990687207182de471a7e9f0e80f35535b551c64d2f1c3c7b68dd4214",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-drug-safety-communications-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-aems-potential-signals",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:19:05.337953+00:00",
+      "outcome": "readable",
+      "seconds": 66.1,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/drugs/fda-adverse-event-monitoring-system-aems/new-safety-information-or-potential-signals-serious-risks-identified-fda-adverse-event-monitoring",
+          "status": 200,
+          "sha256": "69ee08758aea5b5581cfa4e382fd2ff5b8145476f37aede92b35598fbe1869e4",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-aems-potential-signals-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-srlc-safety-labeling-changes",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:11.434942+00:00",
+      "outcome": "readable",
+      "seconds": 2.58,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.accessdata.fda.gov/scripts/cder/safetylabelingchanges/",
+          "status": 200,
+          "sha256": "b44925fd85933b075bea85955625a9b6df0111d1281784845ee5fdb688ae68b5",
+          "headers": {
+            "content-type": "text/html;charset=UTF-8"
+          },
+          "file": "fda-srlc-safety-labeling-changes-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "health-canada-recalls-health-products",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:14.014857+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 2.03,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "health-canada-infowatch",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:16.045556+00:00",
+      "outcome": "readable",
+      "seconds": 4.97,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.canada.ca/en/health-canada/services/drugs-health-products/medeffect-canada/health-product-infowatch.html",
+          "status": 200,
+          "sha256": "f3b90e06e534ac97beb742e2c19ea5a2f99e42ed6a57a0e9612830f1e67b191d",
+          "headers": {
+            "content-type": "text/html;charset=utf-8"
+          },
+          "file": "health-canada-infowatch-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "tga-safety-alerts",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:21.016945+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 0.0,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "ismp-canada-safety-bulletins",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:21.017210+00:00",
+      "outcome": "challenge",
+      "detail": "cloudflare",
+      "status": 403,
+      "seconds": 2.61,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "pbac-outcomes-australia",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:23.624972+00:00",
+      "outcome": "readable",
+      "seconds": 3.77,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.pbs.gov.au/industry/listing/elements/pbac-meetings/pbac-outcomes",
+          "status": 200,
+          "sha256": "b89d3307a9183f5b38d63d57525911b8f274341765b6a8647935320ae150a5a0",
+          "headers": {
+            "content-type": "text/html;charset=utf-8"
+          },
+          "file": "pbac-outcomes-australia-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "european-pharmaceutical-review",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:27.393032+00:00",
+      "outcome": "readable",
+      "seconds": 3.35,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.europeanpharmaceuticalreview.com/?feed=rss2",
+          "status": 200,
+          "sha256": "d71cd150cfe8af9c6c1f616ffba79e20ed4a9fbdd94ce842e88244852287769e",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "european-pharmaceutical-review-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "fda-ai-enabled-device-list",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:11.589488+00:00",
+      "outcome": "readable",
+      "seconds": 271.42,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/medical-devices/artificial-intelligence-enabled-medical-devices/list-artificial-intelligence-enabled-medical-devices",
+          "status": 200,
+          "sha256": "8d058a2fb503e036c267e9b4d69b2571cb41619b9b62347658e8b97a937b4622",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-ai-enabled-device-list-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "cochrane-clinical-answers",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:30.745103+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 12.74,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "nice-published-guidance",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:43.008699+00:00",
+      "outcome": "readable",
+      "seconds": 2.64,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.nice.org.uk/guidance/published",
+          "status": 200,
+          "sha256": "7a8ff14dba0a1711434788896dc25810682a8c97ecd70f61e2b12c6adfa9c56b",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "nice-published-guidance-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "nice-in-consultation",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:43.484830+00:00",
+      "outcome": "readable",
+      "seconds": 2.73,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.nice.org.uk/guidance/inconsultation",
+          "status": 200,
+          "sha256": "3b3c03475706e7862e81247f861870a913a605f4756f3b92e10d3e1a4ee6ad40",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "nice-in-consultation-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "nice-news-05",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:45.654979+00:00",
+      "outcome": "readable",
+      "seconds": 2.15,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.nice.org.uk/news/articles",
+          "status": 200,
+          "sha256": "377d255fa3281980a8326f82d63ce5611b974296240842a4d0b23c3035297e73",
+          "headers": {
+            "content-type": "text/html; charset=utf-8"
+          },
+          "file": "nice-news-05-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "cdc-han",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:46.214020+00:00",
+      "outcome": "readable",
+      "seconds": 9.07,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.cdc.gov/han/php/notices/index.html",
+          "status": 200,
+          "sha256": "e48cafe949338750a3a1b53799b601578e23dd54797e52b05ec0a08364bb927e",
+          "headers": {
+            "content-type": "text/html"
+          },
+          "file": "cdc-han-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "ddw",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:47.806919+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.0,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "mit-jameel-clinic",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:57.811388+00:00",
+      "outcome": "challenge",
+      "detail": "cloudflare",
+      "status": 403,
+      "seconds": 1.75,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "icpe-pharmacoepi",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:55.288190+00:00",
+      "outcome": "readable",
+      "seconds": 4.59,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.pharmacoepi.org/meetings/",
+          "status": 200,
+          "sha256": "9a6965046c9df033e136d62964f020396978e62f2fbba10b271d5dae2879fc6d",
+          "headers": {
+            "content-type": "text/html;charset=UTF-8"
+          },
+          "file": "icpe-pharmacoepi-0.body.gz"
+        }
+      ]
+    },
+    {
+      "id": "mayo-clinic-platform",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:59.558711+00:00",
+      "outcome": "blocked",
+      "detail": "http_403",
+      "status": 403,
+      "seconds": 2.52,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "scite-blog",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:21:02.082613+00:00",
+      "outcome": "blocked",
+      "detail": "http_403",
+      "status": 403,
+      "seconds": 1.61,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "openevidence-announcements",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:59.875259+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.01,
+      "group": "relay-page",
+      "captures": []
+    },
+    {
+      "id": "fda-aems-quarterly-data-files",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:19:46.420452+00:00",
+      "outcome": "readable",
+      "seconds": 85.69,
+      "group": "relay-page",
+      "captures": [
+        {
+          "url": "https://www.fda.gov/drugs/fda-adverse-event-monitoring-system-aems/fda-adverse-event-monitoring-system-aems-latest-quarterly-data-files",
+          "status": 200,
+          "sha256": "d728b5c0e84e608be2c4008be118eb9a1dc5fb596cce80fcda5fc47d31d739a1",
+          "headers": {
+            "content-type": "text/html; charset=UTF-8"
+          },
+          "file": "fda-aems-quarterly-data-files-0.body.gz"
+        }
+      ]
+    }
+  ]
+}

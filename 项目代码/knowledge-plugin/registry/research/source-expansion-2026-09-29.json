@@ -1,0 +1,1005 @@
+{
+  "at": "2026-09-29",
+  "evidence": "tests/fixtures/source-expansion-20260929/provenance.json",
+  "rows": [
+    {
+      "id": "ema-public-consultations",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.707910+00:00",
+      "outcome": "ok",
+      "entries": 9,
+      "seconds": 2.09,
+      "group": "p1"
+    },
+    {
+      "id": "j-2515-446x",
+      "access": "crossref-issn",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.703319+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "seconds": 2.14,
+      "group": "p1"
+    },
+    {
+      "id": "ema-committee-agendas",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:23.708536+00:00",
+      "outcome": "ok",
+      "entries": 14,
+      "seconds": 3.5,
+      "group": "p1"
+    },
+    {
+      "id": "ecdc-publications",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:25.802229+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.41,
+      "group": "p1"
+    },
+    {
+      "id": "hk-govt-press-releases",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:25.846693+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "seconds": 4.88,
+      "group": "p1"
+    },
+    {
+      "id": "drug-hunter",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:30.728889+00:00",
+      "outcome": "ok",
+      "entries": 280,
+      "seconds": 2.31,
+      "group": "p1"
+    },
+    {
+      "id": "swissmedic-safety-of-medicines",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:28.214628+00:00",
+      "outcome": "ok",
+      "entries": 15,
+      "seconds": 5.53,
+      "group": "p1"
+    },
+    {
+      "id": "biocentury",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:33.040651+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 2.06,
+      "group": "p1"
+    },
+    {
+      "id": "prnewswire-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:33.745673+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "seconds": 1.95,
+      "group": "p1"
+    },
+    {
+      "id": "moderna-news",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:35.103703+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_generic",
+      "status": null,
+      "seconds": 2.66,
+      "group": "p1"
+    },
+    {
+      "id": "campbell-collaboration",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:35.699645+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 3.52,
+      "group": "p1"
+    },
+    {
+      "id": "easl-clinical-practice-guidelines",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:39.216200+00:00",
+      "outcome": "ok",
+      "entries": 12,
+      "seconds": 5.1,
+      "group": "p1"
+    },
+    {
+      "id": "equator-network",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:44.314469+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 3.67,
+      "group": "p1"
+    },
+    {
+      "id": "datamethods-forum",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:47.985369+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "seconds": 3.71,
+      "group": "p1"
+    },
+    {
+      "id": "jama-guide-statistics-methods",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:51.695437+00:00",
+      "outcome": "ok",
+      "entries": 7,
+      "seconds": 2.71,
+      "group": "p1"
+    },
+    {
+      "id": "cdc-outbreaks-us",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:54.407535+00:00",
+      "outcome": "ok",
+      "entries": 7,
+      "seconds": 3.24,
+      "group": "p1"
+    },
+    {
+      "id": "erc-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:57.645636+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.28,
+      "group": "p1"
+    },
+    {
+      "id": "nature-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:59.930102+00:00",
+      "outcome": "ok",
+      "entries": 75,
+      "seconds": 5.7,
+      "group": "p1"
+    },
+    {
+      "id": "dailymed-label-updates",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:27.204617+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 39.19,
+      "group": "p1"
+    },
+    {
+      "id": "undark",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:05.634567+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.29,
+      "group": "p1"
+    },
+    {
+      "id": "news-medical-net",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:06.389798+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 1.79,
+      "group": "p1"
+    },
+    {
+      "id": "npr-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:07.927787+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 3.24,
+      "group": "p1"
+    },
+    {
+      "id": "healthcare-dive",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:11.170954+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.38,
+      "group": "p1"
+    },
+    {
+      "id": "asco-post",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:08.183231+00:00",
+      "outcome": "too-large",
+      "detail": "content_length_over_cap",
+      "status": 200,
+      "seconds": 6.57,
+      "group": "p1"
+    },
+    {
+      "id": "beckers-hospital-review",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:13.548712+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 1.23,
+      "group": "p1"
+    },
+    {
+      "id": "asco-guidelines-podcast",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:14:37.759675+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 37.78,
+      "group": "p1"
+    },
+    {
+      "id": "zhonghua-yixue-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:14.782373+00:00",
+      "outcome": "ok",
+      "entries": 35,
+      "seconds": 1.82,
+      "group": "p1"
+    },
+    {
+      "id": "zhonghua-neike-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:15.534975+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "seconds": 1.48,
+      "group": "p1"
+    },
+    {
+      "id": "croi",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:14.754654+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.85,
+      "group": "p1"
+    },
+    {
+      "id": "chinagp",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:17.605034+00:00",
+      "outcome": "ok",
+      "entries": 65,
+      "seconds": 1.63,
+      "group": "p1"
+    },
+    {
+      "id": "zhonghua-zhongliu-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:16.606401+00:00",
+      "outcome": "ok",
+      "entries": 9,
+      "seconds": 2.95,
+      "group": "p1"
+    },
+    {
+      "id": "zhonghua-xinxueguanbing-zazhi",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:17.013801+00:00",
+      "outcome": "ok",
+      "entries": 16,
+      "seconds": 4.19,
+      "group": "p1"
+    },
+    {
+      "id": "cjcmm",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:19.558209+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "seconds": 2.05,
+      "group": "p1"
+    },
+    {
+      "id": "actacams",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:19.237710+00:00",
+      "outcome": "ok",
+      "entries": 1,
+      "seconds": 4.9,
+      "group": "p1"
+    },
+    {
+      "id": "pubmed-target-trial-rwe",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:21.204536+00:00",
+      "outcome": "ok",
+      "entries": 65,
+      "seconds": 6.46,
+      "group": "p1"
+    },
+    {
+      "id": "pubmed-grade-certainty",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:21.605371+00:00",
+      "outcome": "ok",
+      "entries": 2,
+      "seconds": 7.11,
+      "group": "p1"
+    },
+    {
+      "id": "biorxiv-pharmacology-toxicology",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:28.717585+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "seconds": 7.46,
+      "group": "p1"
+    },
+    {
+      "id": "pubmed-llm-clinical-evaluation",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:24.136983+00:00",
+      "outcome": "ok",
+      "entries": 82,
+      "seconds": 16.03,
+      "group": "p1"
+    },
+    {
+      "id": "biorxiv-all-subjects",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:36.181652+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "seconds": 15.14,
+      "group": "p1"
+    },
+    {
+      "id": "arxiv-cs-cl-clinical",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:40.184806+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "seconds": 15.89,
+      "group": "p1"
+    },
+    {
+      "id": "pubmed-bibliometrics-medicine",
+      "access": "eutils-query",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:27.681218+00:00",
+      "outcome": "ok",
+      "entries": 78,
+      "seconds": 30.28,
+      "group": "p1"
+    },
+    {
+      "id": "research-square-preprints",
+      "access": "europepmc",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:57.980750+00:00",
+      "outcome": "ok",
+      "entries": 200,
+      "seconds": 10.15,
+      "group": "p1"
+    },
+    {
+      "id": "isrctn-registry-api",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:08.139247+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 10.27,
+      "group": "p1"
+    },
+    {
+      "id": "openalex-medicine-newest",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:18.413925+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_openalex",
+      "status": null,
+      "seconds": 1.73,
+      "group": "p1"
+    },
+    {
+      "id": "arxiv-eess-iv-medical-imaging",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:51.318000+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "seconds": 29.87,
+      "group": "p1"
+    },
+    {
+      "id": "openalex-medicine-most-cited-30d",
+      "access": "json-api",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:20.143638+00:00",
+      "outcome": "parse-error",
+      "detail": "json_api_family_unmapped_openalex",
+      "status": null,
+      "seconds": 1.58,
+      "group": "p1"
+    },
+    {
+      "id": "clinphar-forum",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:21.189722+00:00",
+      "outcome": "empty",
+      "detail": "empty_body",
+      "status": 204,
+      "seconds": 1.74,
+      "group": "p1"
+    },
+    {
+      "id": "tmtpost-health",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:21.721319+00:00",
+      "outcome": "ok",
+      "entries": 18,
+      "seconds": 2.07,
+      "group": "p1"
+    },
+    {
+      "id": "anthropic-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:22.924904+00:00",
+      "outcome": "ok",
+      "entries": 15,
+      "seconds": 3.07,
+      "group": "p1"
+    },
+    {
+      "id": "meta-newsroom-tech",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:25.993868+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 5.34,
+      "group": "p1"
+    },
+    {
+      "id": "microsoft-research-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:23.792661+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 8.1,
+      "group": "p1"
+    },
+    {
+      "id": "nvidia-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:31.332451+00:00",
+      "outcome": "ok",
+      "entries": 18,
+      "seconds": 2.29,
+      "group": "p1"
+    },
+    {
+      "id": "deepseek-news",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:31.897791+00:00",
+      "outcome": "empty",
+      "entries": 0,
+      "seconds": 3.28,
+      "group": "p1"
+    },
+    {
+      "id": "qwen-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:33.629684+00:00",
+      "outcome": "ok",
+      "entries": 40,
+      "seconds": 8.09,
+      "group": "p1"
+    },
+    {
+      "id": "the-verge-ai",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:35.178606+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 7.51,
+      "group": "p1"
+    },
+    {
+      "id": "arxiv-qbio-qm",
+      "access": "atom",
+      "egress": "direct",
+      "at": "2026-09-29T14:15:56.079660+00:00",
+      "outcome": "ok",
+      "entries": 100,
+      "seconds": 48.53,
+      "group": "p1"
+    },
+    {
+      "id": "wired-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:42.689683+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.13,
+      "group": "p1"
+    },
+    {
+      "id": "techcrunch-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:44.823492+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "seconds": 1.73,
+      "group": "p1"
+    },
+    {
+      "id": "ars-technica-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:42.583582+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "seconds": 4.64,
+      "group": "p1"
+    },
+    {
+      "id": "ieee-spectrum-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:44.615466+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "seconds": 2.77,
+      "group": "p1"
+    },
+    {
+      "id": "understanding-ai",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:46.549766+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "seconds": 2.08,
+      "group": "p1"
+    },
+    {
+      "id": "geekpark",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:47.383273+00:00",
+      "outcome": "ok",
+      "entries": 30,
+      "seconds": 1.87,
+      "group": "p1"
+    },
+    {
+      "id": "ithome",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:48.628048+00:00",
+      "outcome": "ok",
+      "entries": 60,
+      "seconds": 1.81,
+      "group": "p1"
+    },
+    {
+      "id": "xtalpi",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:49.260168+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.34,
+      "group": "p1"
+    },
+    {
+      "id": "ai-normal-technology",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:47.227557+00:00",
+      "outcome": "ok",
+      "entries": 20,
+      "seconds": 6.41,
+      "group": "p1"
+    },
+    {
+      "id": "zotero-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:51.600666+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 2.92,
+      "group": "p1"
+    },
+    {
+      "id": "paperpal-blog",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:53.653058+00:00",
+      "outcome": "ok",
+      "entries": 10,
+      "seconds": 3.28,
+      "group": "p1"
+    },
+    {
+      "id": "google-labs-notebooklm",
+      "access": "rss",
+      "egress": "direct",
+      "at": "2026-09-29T14:16:50.441162+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.35,
+      "group": "p1"
+    },
+    {
+      "id": "fda-novel-drug-approvals",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.484040+00:00",
+      "outcome": "readable",
+      "seconds": 3.11,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-guidance-documents",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.616776+00:00",
+      "outcome": "readable",
+      "seconds": 32.81,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-advisory-committee-calendar",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:08.616933+00:00",
+      "outcome": "readable",
+      "seconds": 62.93,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-cber-whats-new",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:41.423257+00:00",
+      "outcome": "readable",
+      "seconds": 90.42,
+      "group": "relay-page"
+    },
+    {
+      "id": "cms-newsroom",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:11.841064+00:00",
+      "outcome": "readable",
+      "seconds": 5.47,
+      "group": "relay-page"
+    },
+    {
+      "id": "nice-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:17.309428+00:00",
+      "outcome": "readable",
+      "seconds": 3.03,
+      "group": "relay-page"
+    },
+    {
+      "id": "health-canada-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:20.344168+00:00",
+      "outcome": "readable",
+      "seconds": 7.49,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-cdrh-news-events",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:17:11.545703+00:00",
+      "outcome": "readable",
+      "seconds": 90.35,
+      "group": "relay-page"
+    },
+    {
+      "id": "taiwan-fda-announcements",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:41.896513+00:00",
+      "outcome": "readable",
+      "seconds": 6.67,
+      "group": "relay-page"
+    },
+    {
+      "id": "tga-news",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:27.832931+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 37.5,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-drug-safety-communications",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:18:48.564762+00:00",
+      "outcome": "readable",
+      "seconds": 57.86,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-aems-potential-signals",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:19:05.337953+00:00",
+      "outcome": "readable",
+      "seconds": 66.1,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-srlc-safety-labeling-changes",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:11.434942+00:00",
+      "outcome": "readable",
+      "seconds": 2.58,
+      "group": "relay-page"
+    },
+    {
+      "id": "health-canada-recalls-health-products",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:14.014857+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_disallow",
+      "status": null,
+      "seconds": 2.03,
+      "group": "relay-page"
+    },
+    {
+      "id": "health-canada-infowatch",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:16.045556+00:00",
+      "outcome": "readable",
+      "seconds": 4.97,
+      "group": "relay-page"
+    },
+    {
+      "id": "tga-safety-alerts",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:21.016945+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 0.0,
+      "group": "relay-page"
+    },
+    {
+      "id": "ismp-canada-safety-bulletins",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:21.017210+00:00",
+      "outcome": "challenge",
+      "detail": "cloudflare",
+      "status": 403,
+      "seconds": 2.61,
+      "group": "relay-page"
+    },
+    {
+      "id": "pbac-outcomes-australia",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:23.624972+00:00",
+      "outcome": "readable",
+      "seconds": 3.77,
+      "group": "relay-page"
+    },
+    {
+      "id": "european-pharmaceutical-review",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:27.393032+00:00",
+      "outcome": "readable",
+      "seconds": 3.35,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-ai-enabled-device-list",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:16:11.589488+00:00",
+      "outcome": "readable",
+      "seconds": 271.42,
+      "group": "relay-page"
+    },
+    {
+      "id": "cochrane-clinical-answers",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:30.745103+00:00",
+      "outcome": "timeout",
+      "detail": "timeout",
+      "status": null,
+      "seconds": 12.74,
+      "group": "relay-page"
+    },
+    {
+      "id": "nice-published-guidance",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:43.008699+00:00",
+      "outcome": "readable",
+      "seconds": 2.64,
+      "group": "relay-page"
+    },
+    {
+      "id": "nice-in-consultation",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:43.484830+00:00",
+      "outcome": "readable",
+      "seconds": 2.73,
+      "group": "relay-page"
+    },
+    {
+      "id": "nice-news-05",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:45.654979+00:00",
+      "outcome": "readable",
+      "seconds": 2.15,
+      "group": "relay-page"
+    },
+    {
+      "id": "cdc-han",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:46.214020+00:00",
+      "outcome": "readable",
+      "seconds": 9.07,
+      "group": "relay-page"
+    },
+    {
+      "id": "ddw",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:47.806919+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.0,
+      "group": "relay-page"
+    },
+    {
+      "id": "mit-jameel-clinic",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:57.811388+00:00",
+      "outcome": "challenge",
+      "detail": "cloudflare",
+      "status": 403,
+      "seconds": 1.75,
+      "group": "relay-page"
+    },
+    {
+      "id": "icpe-pharmacoepi",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:55.288190+00:00",
+      "outcome": "readable",
+      "seconds": 4.59,
+      "group": "relay-page"
+    },
+    {
+      "id": "mayo-clinic-platform",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:59.558711+00:00",
+      "outcome": "blocked",
+      "detail": "http_403",
+      "status": 403,
+      "seconds": 2.52,
+      "group": "relay-page"
+    },
+    {
+      "id": "scite-blog",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:21:02.082613+00:00",
+      "outcome": "blocked",
+      "detail": "http_403",
+      "status": 403,
+      "seconds": 1.61,
+      "group": "relay-page"
+    },
+    {
+      "id": "openevidence-announcements",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:20:59.875259+00:00",
+      "outcome": "robots-denied",
+      "detail": "robots_unreachable",
+      "status": null,
+      "seconds": 10.01,
+      "group": "relay-page"
+    },
+    {
+      "id": "fda-aems-quarterly-data-files",
+      "access": "html-list",
+      "egress": "relay",
+      "at": "2026-09-29T14:19:46.420452+00:00",
+      "outcome": "readable",
+      "seconds": 85.69,
+      "group": "relay-page"
+    }
+  ]
+}
