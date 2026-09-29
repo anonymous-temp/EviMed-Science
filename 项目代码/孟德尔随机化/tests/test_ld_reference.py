@@ -129,3 +129,12 @@ def test_version_output_has_a_bound(tmp_path):
     root, binary, _ = panel(tmp_path)
     binary.write_text("#!/bin/sh\nprintf 'PLINK v1.90\\n'\ni=0; while [ $i -lt 1000 ]; do printf 'xxxxxxxxxx'; i=$((i+1)); done\n")
     assert ld.load_reference(ld.resolve_population({}, ["EUR"]), root, binary)[0] is None
+
+
+def test_system_binary_symlink_resolves_to_a_frozen_observed_executable(tmp_path):
+    root, binary, _ = panel(tmp_path)
+    alias = tmp_path / "plink-alias"
+    alias.symlink_to(binary)
+    reference, reason = ld.load_reference(ld.resolve_population({}, ["EUR"]), root, alias)
+    assert reference is not None, reason
+    assert reference.plink == str(binary.resolve())
