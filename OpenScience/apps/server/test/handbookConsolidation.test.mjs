@@ -94,3 +94,37 @@ test("a bounded backlog scan queues old candidates once and records exhausted jo
   assert.equal(f.queued.length, 1);
   assert.equal(f.queued[0].payload.candidateId, old.id);
 });
+
+test("a CAS rollback restores prior handbook bytes without inheriting another version's outcome evidence", async () => {
+  const f = fixture();
+  await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry });
+  const first = await loop.run({ job: f.queued[0] });
+  const before = await f.documents.get("alice", "method", first.handbookId);
+  await f.learning.recordHandbookCandidate("alice", f.input({ body: `${before.payload.body}\nA revision to undo.` }));
+  await loop.run({ job: f.queued[1] });
+  const current = await f.documents.get("alice", "method", first.handbookId);
+  const restored = await loop.rollback("alice", current.id, { expectedRevision: current.revision, targetRevision: before.revision });
+  assert.equal(restored.payload.body, before.payload.body);
+  assert.equal(restored.payload.version, 3);
+  assert.equal(restored.payload.verification, "unmeasured");
+  assert.deepEqual(restored.payload.observations, []);
+  await assert.rejects(loop.rollback("bob", current.id, { expectedRevision: restored.revision, targetRevision: before.revision }), { code: "handbook_unavailable" });
+});
+
+test("a baseline changed during evaluation gets one fresh digest-bound retry", async () => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry });
+  const first = await loop.run({ job: f.queued[0] });
+  await f.learning.recordHandbookCandidate("alice", f.input({ body: `${f.input().body}\nNew candidate.` }));
+  loop.evaluate = async ({ binding }) => {
+    const current = await f.documents.get("alice", "method", first.handbookId);
+    await f.documents.put("alice", "method", current.id, current.payload, { expectedRevision: current.revision, telemetry: true });
+    return { ...binding, verdict: "better", report: "reports/mock.json" };
+  };
+  assert.equal((await loop.run({ job: f.queued[1] })).disposition, "stale");
+  assert.equal(f.queued.length, 3);
+  assert.equal(f.queued[2].payload.retryOf, f.queued[1].id);
+  assert.equal((await loop.run({ job: f.queued[2] })).disposition, "stale");
+  assert.equal(f.queued.length, 3, "one bounded retry, never an autonomous paid loop");
+});
