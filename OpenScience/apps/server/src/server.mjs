@@ -174,6 +174,7 @@ import { tickParse as tickGeoParse } from "./geoJudge.mjs";
 import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
 import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
 import { GeoMarketStore } from "./geoMarketStore.mjs";
+import { GeoMarketOperations } from "./geoMarketOperations.mjs";
 import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
   marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, resolveUnknownOrder as resolveGeoUnknownOrder, setBudget as setGeoBudget,
   tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
@@ -3134,10 +3135,17 @@ export function createWebApiApp(overrides = {}) {
     const running = /** @type {GeoOrchestrator} */ (orchestrator);
     geoParts.orchestrator = running;
     geoParts.exporter = { export: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ kind) => running.requestExport(user, project, kind) };
+    const marketOperations = new GeoMarketOperations({ database: productDatabase, ready: () => marketDeps.store.ready(), timeZone: geoTimeZone });
     geoParts.market = {
+      orders: (/** @type {Record<string,string>} */ input) => marketOperations.orders(input),
+      topups: (/** @type {Record<string,string>} */ input) => marketOperations.topups(input),
+      settlement: (/** @type {Record<string,string>} */ input) => marketOperations.settlement(input),
       configured: () => marketClient.configured === true,
       balance: () => marketClient.balance(),
-      status: () => geoMarketStatus(marketDeps),
+      status: async () => {
+        const [status, counts] = await Promise.all([geoMarketStatus(marketDeps), marketOperations.counts()]);
+        return { ...status, ...marketOperations.periodDefaults(), operationsAvailable: true, counts, problemOrders: counts.problemOrders };
+      },
       setBudget: (/** @type {any} */ user, /** @type {any} */ project, /** @type {{ totalCny: number, dailyCny: number }} */ budget) =>
         setGeoBudget(marketDeps, { userId: String(user.id), geoProjectId: project.id, ...budget }),
       cancelOrder: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ orderId) =>

@@ -1231,10 +1231,14 @@ export class GeoService {
   /**
    * `GET /api/geo/market` (operators): the platform's balance as the market
    * last read it, open top-up requests and the last reconciliation.
-   * @param {{ balance?: () => Promise<any> } | null} market
+   * @param {{ balance?: () => Promise<any>, status?: () => Promise<any> } | null} market
    */
   async market(market) {
     await this.ready();
+    if (market?.status) {
+      const status = await market.status();
+      return { ...status, reconciliation: status.lastReconciliation ?? null };
+    }
     const [topups, reconciliation] = await Promise.all([
       this.store.query(`SELECT * FROM evimed_geo.topups ORDER BY requested_at DESC LIMIT 20`),
       this.store.query(`SELECT * FROM evimed_geo.reconciliations ORDER BY day DESC LIMIT 1`),
@@ -1243,6 +1247,7 @@ export class GeoService {
     try { balance = market?.balance ? await market.balance() : null; } catch { balance = null; }
     const last = reconciliation.rows[0];
     return {
+      operationsAvailable: false,
       configured: geoMarketConfigured(this.config),
       balance,
       balanceCapCny: this.config.mediaMarketBalanceCapCny ?? null,

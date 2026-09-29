@@ -18,6 +18,8 @@ vi.mock("@/components/settings/WebErrorsCard", () => ({ WebErrorsCard: () => nul
 vi.mock("@/components/settings/WebSecurityCard", () => ({ WebSecurityCard: () => null }));
 vi.mock("@/components/settings/WebTasksCard", () => ({ WebTasksCard: () => null }));
 
+vi.mock("@/components/settings/GeoMarketCard", () => ({ GeoMarketCard: () => <div>GEO 投放</div> }));
+
 beforeEach(() => {
   vi.clearAllMocks();
   setWebProjectId("alpha");
@@ -37,6 +39,7 @@ describe("运维: the deployment's console and the project's plugins", () => {
     api.fetchWebMe.mockResolvedValue({ project: { id: "alpha" } });
     render(<OpsPage />);
     expect(screen.getByText("部署就绪检查")).toBeInTheDocument();
+    expect(screen.getByText("GEO 投放")).toBeInTheDocument();
     expect(await screen.findByText("Plugin project: alpha")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("停止或重启会中断进行中的研究");
   });

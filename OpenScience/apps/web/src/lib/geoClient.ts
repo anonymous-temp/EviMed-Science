@@ -699,3 +699,55 @@ export function useGeoFeature(): GeoFeature {
   }, []);
   return feature;
 }
+
+/** Operator-only marketplace reads; all amounts are CNY and remain distinct flows. */
+export interface GeoMarketOverview {
+  operationsAvailable: boolean;
+  configured: boolean;
+  balance: { money: number; powerCount?: number | null } | null;
+  balanceError?: string | null;
+  counts?: { unknownOrders: number; problemOrders: number; requestedTopups: number };
+  timeZone?: string;
+  currentMonth?: string;
+  stopNewOrders?: { stopped: boolean };
+  reconciliation?: { day: string; diff: number | null; status: string | null } | null;
+}
+export interface GeoMarketOrder {
+  id: string; state: GeoOrderState; geoProjectId: string; projectLabel: string | null;
+  articleTitle: string | null; mediaName: string | null; mediaDomain: string | null;
+  vendorOrderNid: string | null; priceCny: number | null; reserveCny: number | null; settledCny: number | null;
+  canResolve: boolean; canMarkLost: boolean; stateReason: string | null; refundSeenAt: string | null;
+}
+export interface GeoMarketTopup {
+  id: string; amountCny: number | null; status: "requested" | "confirmed" | "cancelled";
+  requestedAt: string; confirmedAt: string | null; note: string | null;
+}
+export interface GeoMarketPage<T> { items: T[]; total: number; nextCursor: string | null }
+export interface GeoMonthlySettlement {
+  period: { month: string; timeZone: string; startAt: string; endAt: string; generatedAt: string };
+  summary: { settledCny: number; refundedCny: number; netSettledCny: number; reservedDuringPeriodCny: number;
+    releasedDuringPeriodCny: number; topupRequestedCny: number; topupConfirmedCny: number; adjustmentCny: number;
+    budgetChangeCount: number; entryCount: number };
+  entries: Array<{ id: string; kind: string; amountCny: number; createdAt: string; note: string | null; geoProjectId: string | null; orderId: string | null }>;
+  nextCursor: string | null;
+  reconciliations: Array<{ day: string; balance: number | null; diff: number | null; status: string | null; observedAt: string; clearedAt: string | null }>;
+}
+function marketQuery(values: Record<string, string | number | null | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) if (value != null) query.set(key, String(value));
+  return query.size ? `?${query}` : "";
+}
+export const fetchGeoMarket = () => productRequest<GeoMarketOverview>("/geo/market");
+export const listGeoMarketOrders = (query: { view: "unknown" | "problems"; cursor?: string | null; limit?: number }) =>
+  productRequest<GeoMarketPage<GeoMarketOrder>>(`/geo/market/orders${marketQuery(query)}`);
+export const listGeoMarketTopups = (query: { status?: "requested" | "all"; cursor?: string | null; limit?: number }) =>
+  productRequest<GeoMarketPage<GeoMarketTopup>>(`/geo/market/topups${marketQuery(query)}`);
+export const fetchGeoMonthlySettlement = (query: { month: string; cursor?: string | null; limit?: number }) =>
+  productRequest<GeoMonthlySettlement>(`/geo/market/settlement${marketQuery(query)}`);
+export const confirmGeoMarketTopup = (topupId: string) =>
+  productRequest<{ id: string; status: "confirmed" | "awaiting_balance" }>(`/geo/market/topups/${id(topupId)}/confirm`, "POST", {});
+export const resolveGeoMarketOrder = (orderId: string, input: { created: boolean; vendorOrderNid?: string }) =>
+  productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/resolve`, "POST", input);
+export const markGeoMarketOrderLost = (orderId: string, reason: string) =>
+  productRequest<{ id: string; state: GeoOrderState }>(`/geo/market/orders/${id(orderId)}/lost`, "POST", { reason });
+export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: boolean; day?: string }>("/geo/market/clear-stop", "POST", { note });

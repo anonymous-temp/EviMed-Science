@@ -29,14 +29,15 @@ describe("GEO market operations", () => {
     render(<GeoMarketCard />);
     expect(await screen.findByText("未配置投放连接")).toBeInTheDocument();
     expect(await screen.findByText("试验研究")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "核对订单" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "核对订单" }));
+    expect(screen.getByRole("button", { name: "已找到订单" })).toBeDisabled();
     expect(api.resolveGeoMarketOrder).not.toHaveBeenCalled();
     expect(api.confirmGeoMarketTopup).not.toHaveBeenCalled();
     expect(api.clearGeoMarketStop).not.toHaveBeenCalled();
   });
 
   it("keeps an unverified top-up pending after a confirmation attempt", async () => {
-    api.confirmGeoMarketTopup.mockResolvedValue({ confirmed: false, reason: "awaiting_balance" });
+    api.confirmGeoMarketTopup.mockResolvedValue({ id: "t1", status: "awaiting_balance" });
     render(<GeoMarketCard />);
     fireEvent.click(await screen.findByRole("tab", { name: /充值记录/ }));
     fireEvent.click(await screen.findByRole("button", { name: "核对到账" }));
@@ -45,7 +46,7 @@ describe("GEO market operations", () => {
   });
 
   it("resolves an unknown order with its exact vendor identifier and never writes it off", async () => {
-    api.resolveGeoMarketOrder.mockResolvedValue({ resolved: true });
+    api.resolveGeoMarketOrder.mockResolvedValue({ id: "o1", state: "submitted" });
     render(<GeoMarketCard />);
     fireEvent.click(await screen.findByRole("button", { name: "核对订单" }));
     fireEvent.change(screen.getByLabelText("平台订单号"), { target: { value: "000123" } });
@@ -74,4 +75,59 @@ describe("GEO market operations", () => {
     expect(await screen.findByText("试验研究")).toBeInTheDocument();
     expect(api.listGeoMarketOrders).toHaveBeenCalledTimes(2);
   });
+});
+
+it("requires a reason and a deliberate confirmation before recording a loss", async () => {
+  api.listGeoMarketOrders.mockResolvedValue({ items: [{ ...order, state: "problem", canResolve: false, canMarkLost: true, vendorOrderNid: "000123" }], total: 1, nextCursor: null });
+  api.markGeoMarketOrderLost.mockResolvedValue({ id: "o1", state: "lost" });
+  render(<GeoMarketCard />);
+  fireEvent.click(await screen.findByRole("tab", { name: /问题订单/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "记为损失" }));
+  expect(screen.getByRole("button", { name: "确认记损" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("损失原因"), { target: { value: "已确认无法退款" } });
+  fireEvent.click(screen.getByRole("button", { name: "确认记损" }));
+  expect(api.markGeoMarketOrderLost).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "确认" }));
+  await waitFor(() => expect(api.markGeoMarketOrderLost).toHaveBeenCalledWith("o1", "已确认无法退款"));
+});
+
+it("does not clear a reconciliation stop when its page is merely viewed", async () => {
+  api.fetchGeoMarket.mockResolvedValue({ ...overview, stopNewOrders: { stopped: true } });
+  api.clearGeoMarketStop.mockResolvedValue({ cleared: true });
+  render(<GeoMarketCard />);
+  fireEvent.click(await screen.findByRole("button", { name: "恢复新订单" }));
+  expect(api.clearGeoMarketStop).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "确认" }));
+  await waitFor(() => expect(api.clearGeoMarketStop).toHaveBeenCalledTimes(1));
+});
+
+it("resets the cursor when the operator switches lists", async () => {
+  api.listGeoMarketOrders.mockResolvedValue({ items: [order], total: 2, nextCursor: "page-two" });
+  render(<GeoMarketCard />);
+  fireEvent.click(await screen.findByRole("button", { name: "下一页" }));
+  await waitFor(() => expect(api.listGeoMarketOrders).toHaveBeenLastCalledWith({ view: "unknown", cursor: "page-two", limit: 50 }));
+  fireEvent.click(screen.getByRole("tab", { name: /问题订单/ }));
+  await waitFor(() => expect(api.listGeoMarketOrders).toHaveBeenLastCalledWith({ view: "problems", cursor: null, limit: 50 }));
+});
+
+it("does not claim an unknown order was resolved when its transition did not take effect", async () => {
+  api.resolveGeoMarketOrder.mockResolvedValue({ id: "o1", state: "unknown" });
+  render(<GeoMarketCard />);
+  fireEvent.click(await screen.findByRole("button", { name: "核对订单" }));
+  fireEvent.change(screen.getByLabelText("平台订单号"), { target: { value: "000123" } });
+  fireEvent.click(screen.getByRole("button", { name: "已找到订单" }));
+  expect(await screen.findByText("状态尚未更新，请重新核对。")).toBeInTheDocument();
+  expect(screen.queryByText("订单已核对")).not.toBeInTheDocument();
+});
+
+it("closes the previous order editor on pagination so offscreen orders cannot be changed", async () => {
+  api.listGeoMarketOrders.mockResolvedValueOnce({ items: [order], total: 2, nextCursor: "page-two" })
+    .mockResolvedValueOnce({ items: [{ ...order, id: "o2", articleTitle: "第二项研究" }], total: 2, nextCursor: null });
+  render(<GeoMarketCard />);
+  fireEvent.click(await screen.findByRole("button", { name: "核对订单" }));
+  expect(screen.getByLabelText("平台订单号")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(await screen.findByText("第二项研究")).toBeInTheDocument();
+  expect(screen.queryByLabelText("平台订单号")).not.toBeInTheDocument();
+  expect(api.resolveGeoMarketOrder).not.toHaveBeenCalled();
 });

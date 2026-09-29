@@ -552,7 +552,7 @@ test("deleting a GEO project hides it from 循证 GEO and leaves its control-pla
 test("the marketplace account is an operator's: others get 403, top-ups are confirmed through the market or 503", options, async () => {
   refused(await call("GET", "/api/geo/market"), 403, "geo_operator_required");
   const market = (await call("GET", "/api/geo/market", { user: OPS })).payload.data;
-  assert.deepEqual(Object.keys(market).sort(), ["balance", "balanceCapCny", "configured", "reconciliation", "topups"]);
+  assert.deepEqual(Object.keys(market).sort(), ["balance", "balanceCapCny", "configured", "operationsAvailable", "reconciliation", "topups"]);
   assert.deepEqual([market.configured, market.balance, market.balanceCapCny], [false, null, null]);
   const topup = `t-${run}`;
   refused(await call("POST", `/api/geo/market/topups/${topup}/confirm`, { user: OPS, body: {} }), 404, "geo_topup_not_found");
@@ -611,4 +611,34 @@ test("a rival's mention rate over full measurements is a series of its own; the 
   assert.deepEqual(diagnosis.round.linklessEngines, ["qianwen"]);
   const p4 = diagnosis.byPool.find((/** @type {any} */ row) => row.pool === "P4");
   assert.equal(p4.mainIssue, null, "not being named on a risk question is the aim, not an issue (G19)");
+});
+
+test("composed marketplace read hooks expose local records over guarded HTTP without a configured vendor", options, async () => {
+  const { GeoMarketOperations } = await import("../src/geoMarketOperations.mjs");
+  const { GeoMarketStore } = await import("../src/geoMarketStore.mjs");
+  const { marketStatus } = await import("../src/geoMarket.mjs");
+  const marketStore = new GeoMarketStore(database);
+  const reads = new GeoMarketOperations({ database, ready: () => marketStore.ready(), timeZone: "Asia/Shanghai" });
+  const market = { configured: false, balance: () => assert.fail("an unconfigured vendor must not be called") };
+  const previous = hooks.market;
+  hooks.market = {
+    status: async () => ({ ...await marketStatus({ store: marketStore, market, config }),
+      operationsAvailable: true, ...reads.periodDefaults(), counts: await reads.counts() }),
+    orders: (input) => reads.orders(input), topups: (input) => reads.topups(input), settlement: (input) => reads.settlement(input),
+  };
+  try {
+    const overview = await call("GET", "/api/geo/market", { user: OPS });
+    assert.equal(overview.status, 200);
+    assert.equal(overview.payload.data.operationsAvailable, true);
+    assert.equal(overview.payload.data.configured, false);
+    for (const route of ["orders?view=unknown", "topups?status=all", "settlement?month=2026-09"]) {
+      const res = await call("GET", `/api/geo/market/${route}`, { user: OPS });
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      const refused = await call("GET", `/api/geo/market/${route}`, { user: ALICE });
+      assert.equal(refused.status, 403);
+    }
+    for (const query of ["month=2026-13", "month=2026-09&month=2026-10", "unrecognized=true"]) {
+      assert.equal((await call("GET", `/api/geo/market/settlement?${query}`, { user: OPS })).status, 400);
+    }
+  } finally { hooks.market = previous; }
 });

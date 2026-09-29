@@ -7,6 +7,7 @@ import { WebAuditCard } from "@/components/settings/WebAuditCard";
 import { WebErrorsCard } from "@/components/settings/WebErrorsCard";
 import { WebSecurityCard } from "@/components/settings/WebSecurityCard";
 import { WebTasksCard } from "@/components/settings/WebTasksCard";
+import { GeoMarketCard } from "@/components/settings/GeoMarketCard";
 
 /**
  * 「运维」 in 设置: the deployment's console, offered only to an operator
@@ -49,6 +50,7 @@ export function OpsPage() {
       <WebAuditCard key={`audit-${projectId}`} />
       <WebErrorsCard key={`errors-${projectId}`} />
       <WebSecurityCard key={`security-${projectId}`} />
+      <GeoMarketCard />
       <PluginsCard projectId={projectId} />
     </div>
   );

@@ -11,7 +11,7 @@ let db, isolated, reads;
 before(async () => {
   if (!url) return;
   isolated = await createGeoTestDatabase(url, "geoops");
-  db = new ControlPlaneDatabase({ databaseUrl: isolated.url });
+  db = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   const store = new GeoMarketStore(db);
   await store.ready();
   reads = new GeoMarketOperations({ database: db, ready: () => store.ready(), timeZone: "Asia/Shanghai" });
@@ -74,6 +74,9 @@ test("operations pages retain missing metadata and distinguish unknown from vend
   await db.query(`INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state,vendor_order_nid,created_at)
     VALUES('u','u','removed','unknown',NULL,'2026-09-01'),('p','u','removed','problem','000123','2026-09-02'),
     ('r','u','removed','rejected','000124','2026-09-03'),('n','u','removed','cancelled',NULL,'2026-09-04')`);
+  await db.query(`INSERT INTO evimed_geo.order_events(id,order_id,at,from_state,to_state,detail) VALUES
+    ('e1','p','2026-09-02T01:00:00Z','submitted','problem','{"reason":"text_changed"}'),
+    ('e2','p','2026-09-03T01:00:00Z','problem','problem','{"reason":"annotation","phase":"refund_seen"}')`);
   const unknown = await reads.orders({ view: "unknown" });
   assert.equal(unknown.total, 1);
   assert.equal(unknown.items[0].canResolve, true);
@@ -84,6 +87,8 @@ test("operations pages retain missing metadata and distinguish unknown from vend
   assert.equal(problems.items[0].canMarkLost, true);
   const rest = await reads.orders({ view: "problems", limit: "1", cursor: problems.nextCursor });
   assert.equal(rest.items[0].id, "p");
+  assert.equal(rest.items[0].stateReason, "text_changed");
+  assert.equal(rest.items[0].refundSeenAt, "2026-09-03T01:00:00.000Z");
   assert.equal(rest.nextCursor, null);
   assert.deepEqual(await reads.counts(), { unknownOrders: 1, problemOrders: 2, requestedTopups: 0 });
 });
@@ -107,4 +112,6 @@ test("invalid filters fail before touching the database", async () => {
   await assert.rejects(guarded.orders({ view: "all" }), { code: "geo_payload_invalid" });
   await assert.rejects(guarded.topups({ limit: "201" }), { code: "geo_payload_invalid" });
   await assert.rejects(guarded.orders({ cursor: "broken" }), { code: "geo_payload_invalid" });
+  const cursor = Buffer.from(JSON.stringify({ v: 1, scope: "orders:unknown", id: "x", at: "0000-01-01T00:00:00.000000Z" })).toString("base64url");
+  await assert.rejects(guarded.orders({ cursor }), { code: "geo_payload_invalid" });
 });
