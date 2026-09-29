@@ -380,8 +380,9 @@ test("the ToolUniverse row appears only when a sidecar URL is configured", () =>
 
   const with_ = renderProfilePatch({ ...input, toolUniverseUrl: "http://tooluniverse:8080/mcp" });
   assert.match(with_, /id: mcp-tooluniverse/);
-  assert.match(with_, /transport: streamable-http/);
-  assert.match(with_, /url: 'http:\/\/tooluniverse:8080\/mcp'/);
+  assert.doesNotMatch(with_, /transport: streamable-http/);
+  assert.match(with_, /tooluniverse_bridge\.py/);
+  assert.match(with_, /EVIMED_TOOLUNIVERSE_GATEWAY_URL: 'http:\/\/tooluniverse:8080\/mcp'/);
   assert.match(with_, /serverName: 'tooluniverse'/);
 
   // The severities differ on purpose: a run cannot do its work without the
@@ -399,7 +400,7 @@ test("the ToolUniverse row appears only when a sidecar URL is configured", () =>
   assert.equal(new Set(names).size, names.length, `server names must be distinct: ${names.join(", ")}`);
 });
 
-test("the ToolUniverse row carries no credential, because the sidecar holds them", () => {
+test("the ToolUniverse row carries only the workload credential file, never the sidecar credential", () => {
   // The whole reason this is a sidecar rather than an install into the runtime
   // image: ToolUniverse's tools read keys from their own environment, and this
   // container is built to hold none. A header or env carrying one here would
@@ -408,8 +409,9 @@ test("the ToolUniverse row carries no credential, because the sidecar holds them
   const sidecarRow = patch.slice(patch.indexOf("id: mcp-tooluniverse"), patch.indexOf("id: evimed-seam-probe"));
 
   assert.doesNotMatch(sidecarRow, /headers:/);
-  assert.doesNotMatch(sidecarRow, /env:/);
-  for (const secretish of ["API_KEY", "TOKEN", "SECRET", "JWT", "Bearer"]) {
+  assert.match(sidecarRow, /EVIMED_WORKLOAD_TOKEN_FILE:/);
+  assert.doesNotMatch(sidecarRow, /TOOLUNIVERSE_API_TOKEN/);
+  for (const secretish of ["API_KEY", "SECRET", "JWT", "Bearer"]) {
     assert.ok(!sidecarRow.includes(secretish), `${secretish} must not appear in the sidecar row`);
   }
 });
@@ -430,11 +432,11 @@ test("a hostile ToolUniverse URL becomes a quoted scalar, never YAML structure",
   for (const hostile of ["!!js process.env.SECRET", "http://x/' \n- id: approval #"]) {
     const patch = renderProfilePatch({ ...input, toolUniverseUrl: hostile.replace(/[\r\n]/g, "") });
     const row = patch.slice(patch.indexOf("id: mcp-tooluniverse"), patch.indexOf("id: evimed-seam-probe"));
-    const urlLine = row.split("\n").find((line) => line.trim().startsWith("url:"));
+    const urlLine = row.split("\n").find((line) => line.trim().startsWith("EVIMED_TOOLUNIVERSE_GATEWAY_URL:"));
     assert.ok(urlLine, "the row must still carry a url");
     // One line, and its value is a quoted scalar: no `!!js` tag survives as a
     // tag, and no injected key becomes a sibling row.
-    assert.match(urlLine, /^\s+url: ['"]/, `must be quoted: ${urlLine}`);
+    assert.match(urlLine, /^\s+EVIMED_TOOLUNIVERSE_GATEWAY_URL: ['"]/, `must be quoted: ${urlLine}`);
     assert.ok(!/^\s+url: !!js/.test(urlLine), `must not emit an expression tag: ${urlLine}`);
   }
 });
