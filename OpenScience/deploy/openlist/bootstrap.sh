@@ -13,7 +13,10 @@ case "$password" in
 esac
 [ "${#password}" -ge 24 ] || { echo "OpenList administrator secret is too short" >&2; exit 1; }
 
-/opt/openlist/openlist admin set "$password" --data /opt/openlist/data >/tmp/openlist-admin-set.log 2>&1
+# `--` ends the options: a base64url secret starts with "-" one time in 64,
+# and OpenList then reads it as an unknown flag and exits 1 with its message
+# in the log below (CI docker-hosted, 2026-09-29).
+/opt/openlist/openlist admin set --data /opt/openlist/data -- "$password" >/tmp/openlist-admin-set.log 2>&1
 unset password
 output="$(/opt/openlist/openlist admin token --data /opt/openlist/data 2>/tmp/openlist-admin-token.log)"
 chown -R 1001:1001 /opt/openlist/data
