@@ -6,6 +6,8 @@ It never accepts a shell command or a caller-supplied absolute output path.
 """
 from __future__ import annotations
 
+from new_meta.core import engine_model
+
 import base64
 import hashlib
 import hmac
@@ -23,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from fastapi import APIRouter, HTTPException, Security, status
+from fastapi import Header, APIRouter, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -553,6 +555,12 @@ def _workspace_input(workspace: Path, value: str | None, *, directory: bool, suf
 
 
 def _model_ready() -> bool:
+    if engine_model.enabled():
+        try:
+            engine_model.token_url()
+            return os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
+        except engine_model.EngineModelUnavailable:
+            return False
     try:
         _load_api_key_file()
     except (OSError, UnicodeDecodeError, RuntimeError):
@@ -584,7 +592,8 @@ def _load_api_key_file() -> None:
     os.environ["LLM_API_KEY"] = value
 
 
-def call(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
+def call(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None,
+         workload_token: str | None = None, execution_context: dict | None = None) -> dict[str, Any]:
     action = arguments.get("action")
     if action == "capabilities":
         if not _model_ready():
@@ -596,20 +605,22 @@ def call(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | Non
             "sources": [{"id": "metaagent:service", "source": "MetaAgent", "retrievedAt": _now()}],
         }
     if action == "start":
-        return _start(arguments, workspace, owner)
+        return _start(arguments, workspace, owner, workload_token, execution_context)
     if action == "status":
         return _status(arguments, workspace)
     return _error("meta_action_invalid", "Unsupported MetaAgent action.")
 
 
-def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
+def _start(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None,
+           workload_token: str | None = None, execution_context: dict | None = None) -> dict[str, Any]:
     # One start at a time per adapter process: deciding "is this request
     # already running?" and launching its worker must not interleave.
     with _START_LOCK:
-        return _start_locked(arguments, workspace, owner)
+        return _start_locked(arguments, workspace, owner, workload_token, execution_context)
 
 
-def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None) -> dict[str, Any]:
+def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, str] | None = None,
+                  workload_token: str | None = None, execution_context: dict | None = None) -> dict[str, Any]:
     topic = str(arguments.get("topic") or "").strip()
     if not topic:
         return _error("meta_topic_required", "A concrete meta-analysis topic is required.")
@@ -661,6 +672,14 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
             return _resume_job(path, state)
     job_id = f"meta-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
+    model_credentials = {}
+    if engine_model.enabled():
+        try:
+            model_credentials = engine_model.request_credential(
+                url=engine_model.token_url(), secret=_read_signing_secret(), workload_token=workload_token,
+                kind="meta-analysis", job_id=job_id, execution_context=execution_context)
+        except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
+            return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta job.", True)
     run_root = workspace / "meta-analysis-runs"
     _ensure_managed_directory(workspace, run_root)
     _ensure_managed_directory(workspace, run_root / ".jobs")
@@ -682,6 +701,8 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         "workspace": str(workspace),
         "outputRoot": str(output_root),
         "requestDigest": digest,
+        **({"modelRoute": "gateway"} if model_credentials else {}),
+        **({"modelPolicy": json.loads(model_credentials[engine_model.POLICY_ENV])} if engine_model.POLICY_ENV in model_credentials else {}),
         # Whose spend this job is, from the token that admitted it: the usage
         # report at the end names the account and project, and by then the
         # token is long expired.
@@ -691,7 +712,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         "artifacts": [],
     }
     _atomic_json(state_path, state)
-    failure = _launch_worker(state_path, state)
+    failure = _launch_worker(state_path, state, model_credentials=model_credentials)
     if failure is not None:
         return failure
     starts = _record_start_request(state_path, "started")
@@ -705,13 +726,13 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
     }
 
 
-def _launch_worker(state_path: Path, state: dict[str, Any]) -> dict[str, Any] | None:
+def _launch_worker(state_path: Path, state: dict[str, Any], *, model_credentials: dict[str, str] | None = None) -> dict[str, Any] | None:
     job_id = str(state["jobId"])
     try:
         worker = subprocess.Popen(
             [sys.executable, "-m", "new_meta.evimed_adapter", "--run-job", str(state_path)],
             cwd=str(Path(__file__).resolve().parents[1]),
-            env=dict(os.environ),
+            env={**os.environ, **(model_credentials or {})},
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1108,6 +1129,8 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
     manifest carries every attempt of a resumed job, so only the share not yet
     reported is sent, and the outcome goes to the job log.
     """
+    if state.get("modelRoute") == "gateway":
+        return  # Each request was already reserved and settled by the gateway.
     owner = state.get("owner")
     manifest_path = project / "llm_usage_manifest.json" if project is not None else None
     if not isinstance(owner, dict) or manifest_path is None or not manifest_path.is_file():
@@ -1154,9 +1177,19 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
 
 
 def run_job(state_file: str) -> int:
-    _load_api_key_file()
     state_path = Path(state_file).resolve()
     state = _read_state(state_path)
+    if state.get("modelRoute") == "gateway":
+        token = os.environ.pop(engine_model.TOKEN_ENV, "")
+        base_url = os.environ.pop(engine_model.BASE_URL_ENV, "")
+        policy_raw = os.environ.pop(engine_model.POLICY_ENV, "")
+        if not token or not base_url:
+            raise RuntimeError("The Meta job's model credential is unavailable.")
+        os.environ.pop("LLM_API_KEY_FILE", None)
+        os.environ.update(engine_model.child_environment(token, base_url,
+            json.loads(policy_raw) if policy_raw else state.get("modelPolicy")))
+    else:
+        _load_api_key_file()
     workspace = Path(state["workspace"]).resolve()
     output_root = Path(state["outputRoot"]).resolve()
     if output_root != workspace and workspace not in output_root.parents:
@@ -1288,10 +1321,17 @@ def create_evimed_adapter_router(data_root: str | Path | None = None) -> APIRout
     def meta_analysis(
         request: EviMedMetaRequest,
         claims: dict[str, Any] = Security(_authorized_claims),
+        bearer: HTTPAuthorizationCredentials | None = Security(_BEARER),
+        execution_header: str | None = Header(default=None, alias="X-EviMed-Execution-Context"),
     ) -> dict[str, Any]:
+        try:
+            execution_context = engine_model.context_header(execution_header)
+        except engine_model.EngineModelUnavailable as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         workspace = workspace_for_claims(claims, data_root)
         return call(request.model_dump(exclude_none=True), workspace,
-                    {"userId": claims["userId"], "projectId": claims["projectId"]})
+                    {"userId": claims["userId"], "projectId": claims["projectId"]},
+                    bearer.credentials if bearer is not None else None, execution_context)
 
     return router
 

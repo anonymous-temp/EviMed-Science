@@ -1470,7 +1470,7 @@ def _adapter_timeout_seconds(arguments, name=None):
     return max(configured, min(wait_seconds + 5, STATUS_WAIT_MAX_SECONDS + 5))
 
 
-def _adapter_call(name, arguments):
+def _adapter_call(name, arguments, execution_context=None):
     env_name = ADAPTER_ENV[name]
     url = os.environ.get(env_name, "").strip()
     if not url:
@@ -1514,6 +1514,8 @@ def _adapter_call(name, arguments):
         "accept": "application/json",
         "Authorization": "Bearer %s" % workload_token,
     }
+    if execution_context is not None:
+        headers["X-EviMed-Execution-Context"] = json.dumps(execution_context, separators=(",", ":"))
     request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     timeout = _adapter_timeout_seconds(arguments, name)
     try:
@@ -1709,7 +1711,19 @@ def _managed_status_with_wait(status_call, arguments):
 
 
 def call_tool(name, arguments):
-    return _with_source_types(name, _dispatch(name, arguments))
+    execution_context = None
+    if isinstance(arguments, dict) and "__evimed_execution_context" in arguments:
+        arguments = dict(arguments)
+        from execution_context import validate_context
+        try:
+            execution_context = validate_context(arguments.pop("__evimed_execution_context"))
+            if name not in {"meta_analysis", *specialist_jobs.SPECS}:
+                raise ValueError("execution context is only supported for engine tools")
+        except ValueError:
+            return failure("engine_execution_context_invalid", "The engine execution context is invalid.", False)
+    result = (_dispatch(name, arguments, execution_context=execution_context) if execution_context is not None
+              else _dispatch(name, arguments))
+    return _with_source_types(name, result)
 
 
 def _with_source_types(name, result):
@@ -1744,7 +1758,7 @@ def _with_source_types(name, result):
     return result
 
 
-def _dispatch(name, arguments):
+def _dispatch(name, arguments, execution_context=None):
     # Refused here as well as hidden from the catalog. A model that remembers a
     # tool from an earlier session, or a caller that hard-codes a name, must get
     # the deployment's answer rather than reach an adapter the deployment turned
@@ -2183,7 +2197,8 @@ def _dispatch(name, arguments):
                 lambda value: specialist_jobs.status_job(name, value), arguments
             )
         return specialist_jobs.call(name, arguments)
-    return _adapter_call(name, arguments)
+    return (_adapter_call(name, arguments, execution_context=execution_context) if execution_context is not None
+            else _adapter_call(name, arguments))
 
 
 MAX_LABEL_TEXT_CHARS = 30_000

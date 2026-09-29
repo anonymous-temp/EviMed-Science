@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from fastapi import Body, FastAPI, HTTPException, Security
+from fastapi import Header, Body, FastAPI, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .mr_job_store import MRJobStore
@@ -676,6 +676,7 @@ def _start(
     job_credentials: dict[str, str] | None = None,
     owner: dict[str, str] | None = None,
     workload_token: str | None = None,
+    execution_context: dict | None = None,
 ) -> dict[str, Any]:
     if not _model_ready():
         return _error(
@@ -736,6 +737,7 @@ def _start(
                 workload_token=workload_token,
                 kind=_kind(),
                 job_id=job_id,
+                execution_context=execution_context,
             )
         except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError) as error:
             return _error(
@@ -807,6 +809,7 @@ def _start(
         **({"requestSha256": request_sha256} if queue_record is None and request_sha256 else {}),
         # How the engine reaches the model; never the credential itself.
         **({"modelRoute": "gateway"} if model_credentials else {}),
+        **({"modelPolicy": json.loads(model_credentials[engine_model.POLICY_ENV])} if engine_model.POLICY_ENV in model_credentials else {}),
         "createdAt": _now(),
         "updatedAt": _now(),
         "artifacts": [],
@@ -1007,6 +1010,7 @@ def call(
     job_credentials: dict[str, str] | None = None,
     owner: dict[str, str] | None = None,
     workload_token: str | None = None,
+    execution_context: dict | None = None,
 ) -> dict[str, Any]:
     action = arguments["action"]
     if action == "capabilities":
@@ -1061,7 +1065,7 @@ def call(
             )
         return result
     if action == "start":
-        return _start(arguments, workspace, job_credentials, owner, workload_token)
+        return _start(arguments, workspace, job_credentials, owner, workload_token, execution_context)
     deadline = time.monotonic() + int(arguments.get("waitSeconds", 0))
     while True:
         result = _status(arguments, workspace)
@@ -1078,6 +1082,7 @@ def _child_environment() -> dict[str, str]:
     environment.pop("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", None)
     gateway_token = environment.pop(engine_model.TOKEN_ENV, "")
     gateway_base = environment.pop(engine_model.BASE_URL_ENV, "")
+    policy_raw = environment.pop(engine_model.POLICY_ENV, "")
     # A credential resolved for this job at submission arrives prefixed in the
     # worker's own environment; the engine sees it under the name it expects,
     # in place of whatever this container was started with.
@@ -1088,7 +1093,7 @@ def _child_environment() -> dict[str, str]:
         # The job was admitted through the gateway: its own credential, and
         # not so much as the path of a provider key.
         environment.pop("LLM_API_KEY_FILE", None)
-        environment.update(engine_model.child_environment(gateway_token, gateway_base))
+        environment.update(engine_model.child_environment(gateway_token, gateway_base, json.loads(policy_raw) if policy_raw else None))
     else:
         api_key = _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
         environment.update({
@@ -1100,8 +1105,8 @@ def _child_environment() -> dict[str, str]:
         "DEEPSEEK_PRO_MODEL": "deepseek-flash",
         "DEEPSEEK_FLASH_MODEL": "deepseek-flash",
         "LLM_MODEL": "deepseek-flash",
-        "LLM_ENABLE_THINKING": "true",
-        "LLM_REASONING_EFFORT": "high",
+        "LLM_ENABLE_THINKING": environment.get("LLM_ENABLE_THINKING", "true"),
+        "LLM_REASONING_EFFORT": environment.get("LLM_REASONING_EFFORT", "high"),
         "LLM_MAX_CONCURRENT": "2",
         "MAX_CONCURRENT_REVIEWS": "1",
         "MAX_CONCURRENT_REVIEWS_V2": "1",
@@ -1606,9 +1611,13 @@ def _create_app() -> FastAPI:
         arguments: dict[str, Any] = Body(...),
         claims: dict[str, Any] = Security(_authorized_claims),
         bearer: HTTPAuthorizationCredentials | None = Security(HTTPBearer(auto_error=False)),
+        execution_header: str | None = Header(default=None, alias="X-EviMed-Execution-Context"),
     ) -> dict[str, Any]:
         try:
+            execution_context = engine_model.context_header(execution_header)
             validated = _validated_arguments(arguments)
+        except engine_model.EngineModelUnavailable as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except MRInputSupportUnavailable as exc:
             return _error(exc.code, str(exc), True)
         except ValueError as exc:
@@ -1630,6 +1639,7 @@ def _create_app() -> FastAPI:
             job_credentials,
             {"userId": claims["userId"], "projectId": claims["projectId"]},
             bearer.credentials if bearer is not None and validated.get("action") == "start" else None,
+            execution_context,
         )
 
     instance.add_api_route(spec["endpoint"], specialist_call, methods=["POST"])
