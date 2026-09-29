@@ -85,3 +85,16 @@ test("URL-bearing fulltext tools and hidden URL parameters cannot bypass the pub
   }
   assert.equal(f.calls.length, 0);
 });
+
+test("the actual application routes the bridge through workload authentication", async t => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { createWebApiApp } = await import("../src/server.mjs");
+  const dataDir = await mkdtemp("/tmp/evimed-tooluniverse-app-");
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "" });
+  t.after(async () => { await app.close(); await rm(dataDir, { recursive: true, force: true }); });
+  const address = await app.listen(0, "127.0.0.1");
+  const response = await fetch(`http://127.0.0.1:${address.port}${TOOL_UNIVERSE_GATEWAY_PATH}`, {
+    method: "POST", headers: { authorization: "Bearer invalid", "content-type": "application/json" }, body: JSON.stringify({ method: "tools/list" }) });
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).code, "evimed_workload_token_invalid");
+});
