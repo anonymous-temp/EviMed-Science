@@ -195,8 +195,8 @@ def test_nothing_verified_is_an_evidence_gap_only_when_nobody_can_adjudicate() -
 
     assert compiled_synthesis_falls_back_to_narrative(Phase(), unattended=True)
     assert not compiled_synthesis_falls_back_to_narrative(Phase(), unattended=False)
-    Phase.error_code = "method_execution_blocked"  # an integrity failure is not evidence
-    assert not compiled_synthesis_falls_back_to_narrative(Phase(), unattended=True)
+    Phase.error_code = "method_execution_blocked"  # unsupported calculation retains the source report
+    assert compiled_synthesis_falls_back_to_narrative(Phase(), unattended=True)
 
 
 def test_the_compiled_route_writes_the_narrative_report_before_it_could_stop() -> None:

@@ -177,8 +177,13 @@ def original_project_topic(project):
 
 def unverified_scope_receipt(topic, protocol, error):
     """Record unavailable scope checking without inventing an assessment."""
+    phase = getattr(error, "phase", None)
+    diagnostics = getattr(phase, "data", None) or getattr(error, "scope_check_data", {})
     return {"schema_version": 1, "status": "unverified", "assessor": "unavailable",
             "topic_sha256": digest(topic), "protocol_sha256": protocol_hash(protocol),
+            "original_question": topic,
+            **{key: diagnostics[key] for key in ("scope_check_attempts", "scope_check_attempts_omitted")
+               if key in diagnostics},
             "reason": "Independent scope checking could not complete; the executable model proposal is retained.",
             "error_type": type(error).__name__, "deviations": []}
 

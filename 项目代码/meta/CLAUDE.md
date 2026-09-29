@@ -79,3 +79,12 @@ All settings via `.env` file or environment variables (`config.py`). Key variabl
 - `engines/meta_engine.py`: Core pooling functions (`fixed_effect`, `random_effects_dl/reml/hksj`)
 - `engines/influence.py`: Cook's D, DFBETAS, p-curve, Paule-Mandel τ²
 - `tools/multi_search.py`: Semantic Scholar, OpenAlex, citation chaining (not yet wired into main pipeline)
+
+
+## Autonomous partial delivery (2026-09-29)
+
+- Hosted unattended runs continue with usable screening/extraction subsets. Keep unresolved source records and failed model attempts as limitations; never clear a useful manuscript because another record did not complete.
+- Methodological and publication-readiness findings do not require human adjudication or discard the package. Use the existing model client to select defensible source rows and state assumptions. Unsupported individual calculations produce a narrative/partial report.
+- Model selection is separate from verification: preserve original rows, numbers, proofs and unknown statuses. `core/autonomous_analysis.py` records bounded source-supported choices, binds them to the protocol, row, source and full publication catalogue, and prevents duplicate publication contributions. Deterministic engines still require valid numeric inputs and dependency metadata.
+- Missing risk-of-bias assessment is reported as unknown; it does not erase a supported estimate. Both pairwise and compiled manuscripts show partial-coverage and analysis-assumption limitations in readable prose.
+- Preserve actual estimator semantics: complex RCT primary synthesis is `DESIGN_AWARE_REML` with a normal-Wald interval; HKSJ is its separately labelled sensitivity result.

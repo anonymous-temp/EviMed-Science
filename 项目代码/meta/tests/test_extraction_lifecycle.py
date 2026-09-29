@@ -224,7 +224,7 @@ def test_unattended_run_excludes_an_unusable_source_and_extracts_the_rest(tmp_pa
     require_complete_extraction(project, results, [papers[1]])
 
 
-def test_unattended_run_still_stops_on_a_failure_of_the_run_itself(tmp_path, monkeypatch):
+def test_unattended_run_preserves_valid_subset_after_one_provider_failure(tmp_path, monkeypatch):
     project = Project("provider failure", output_dir=tmp_path)
     _screened(project, "S1", "S2")
     agent = DataExtractionAgent()
@@ -238,9 +238,12 @@ def test_unattended_run_still_stops_on_a_failure_of_the_run_itself(tmp_path, mon
     monkeypatch.setattr(agent, "call_llm_structured", llm)
     papers = [{"pmid": "S1", "fulltext_source": "pdf"}, {"pmid": "S2", "fulltext_source": "pdf"}]
     parsed = {"S1": {"full_text": "S1 full article"}, "S2": {"full_text": "S2 full article"}}
-    with pytest.raises(ExtractionIncomplete) as caught:
-        agent.run(papers, parsed, protocol(), project, unattended=True)
-    assert caught.value.phase.retryable
+    monkeypatch.setattr(agent, "_verify_alignment", lambda row, *args: row)
+    results = agent.run(papers, parsed, protocol(), project, unattended=True)
+    assert [row.characteristics.study_id for row in results] == ["S1"]
+    status = project.load_json("extraction_status.json", subdir="extraction")
+    assert status["status"] == "succeeded" and status["data"]["completion"] == "partial"
+    assert status["retryable"] and status["data"]["failures"][0]["study_id"] == "S2"
     assert agent.excluded_ids == set()
     screening = project.load_json("full_text_screening.json", subdir="screening")
     assert all(row["decision"] == "include" for row in screening)
