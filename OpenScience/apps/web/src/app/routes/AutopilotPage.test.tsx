@@ -50,6 +50,7 @@ function render(page = "/app/autopilot") {
         <Route path="/app/autopilot" element={<><AutopilotPage /><LocationProbe /></>} />
         <Route path="/app/chat/:sessionId" element={<LocationProbe />} />
         <Route path="/app/runs" element={<LocationProbe />} />
+        <Route path="/app/runs/:runId/files/*" element={<LocationProbe />} />
         <Route path="/app/inbox" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
@@ -284,4 +285,32 @@ describe("AutopilotPage", () => {
     expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+  it("opens only recorded artifact references and never labels unisolated findings reproduced", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [episode("episode-one", `${year}-09-06`, "merged", { sessionId: "ses-one", artifactRefs: [
+      { projectId: "project-one", runId: "run-episode-one", sessionId: "ses-one", path: "reports/analysis.csv" },
+      { projectId: "other-project", runId: "run-episode-one", sessionId: "ses-one", path: "private.csv" },
+      { projectId: "project-one", runId: "run-episode-one", sessionId: "ses-one", path: "../secret.csv" },
+    ], claims: [{ id: "c", statement: "Retained finding", tier: "reproduced", verification: { status: "recorded", reproductionMatched: true, isolationEnforced: false } }] })], nextCursor: null });
+    render(); await openMenu(); await userEvent.click(await screen.findByRole("menuitem", { name: "历史" }));
+    const dialog = await screen.findByRole("dialog", { name: "心衰证据追踪" });
+    const artifact = within(dialog).getByRole("link", { name: "analysis.csv" });
+    expect(artifact).toHaveAttribute("href", "/app/runs/run-episode-one/files/reports/analysis.csv");
+    expect(within(dialog).queryByRole("link", { name: "private.csv" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("link", { name: "secret.csv" })).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("Retained finding");
+    expect(dialog).not.toHaveTextContent("已复现");
+    await userEvent.click(artifact);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/runs/run-episode-one/files/reports/analysis.csv");
+  });
+
+  it("keeps prior findings visible when files are unavailable and marks a resource wait separately", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [episode("waiting", `${year}-09-07`, "queued", { runId: null, resourceDeferrals: { episode: { code: "credits_exhausted", status: "waiting" } } }),
+      episode("episode-one", `${year}-09-06`, "merged", { sessionId: "ses-one", artifactRefs: [], claims: [{ id: "c", statement: "A previous result remains", tier: "gated" }] })], nextCursor: null });
+    render(); await openMenu(); await userEvent.click(await screen.findByRole("menuitem", { name: "历史" }));
+    const dialog = await screen.findByRole("dialog", { name: "心衰证据追踪" });
+    expect(dialog).toHaveTextContent("等待余额");
+    expect(dialog).toHaveTextContent("A previous result remains");
+    expect(dialog).toHaveTextContent("成果文件暂不可用");
+  });
+
 });
