@@ -481,6 +481,26 @@ services:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
+      # 「虚拟临研」 (vcrService.mjs, build plan 2026-09-28). Value-less, same
+      # rule: unset keeps config.mjs's defaults — the module off, open to
+      # operators once on, no engine composed and no data plane, which is
+      # the state in which every tier above T0 says so rather than guessing.
+      OPEN_SCIENCE_VCR_ENABLED:
+      OPEN_SCIENCE_VCR_AUDIENCE:
+      OPEN_SCIENCE_VCR_PREVIEW_USERS:
+      OPEN_SCIENCE_VCR_POLL_MS:
+      OPEN_SCIENCE_VCR_LEASE_MS:
+      OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY:
+      OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
+      OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_ENGINE_TOKEN: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN-}
+      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY-}
+      OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
+      OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
+      OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
+      # The data plane's own directory: patient-level rows live here and
+      # nowhere a runtime is mounted (plan §8.1). The volume is bound below.
+      OPEN_SCIENCE_VCR_DATA_PLANE_DIR: ${OPEN_SCIENCE_VCR_DATA_PLANE_DIR-}
       OPEN_SCIENCE_MEDIA_MARKET_URL:
       OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: /run/secrets/media-market-api-key
       OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS:
@@ -1033,6 +1053,77 @@ services:
     networks:
       - default
       - runtime-internal
+    restart: unless-stopped
+
+  # 「虚拟临研」's deterministic statistics and simulation engine (plan §11.4).
+  # Not a specialist agent: it holds no model client and no gateway, it reads
+  # only the snapshot files a job names, and it answers a job protocol the
+  # control plane and the engine both validate against `@evimed/domain`'s
+  # `vcrEngineJob.mjs`. It is the one image in this stack that may never call
+  # out — the whole point of it is that numbers come from code with a version.
+  evimed-vcr-engine:
+    image: ${EVIMED_VCR_ENGINE_IMAGE:-evimed-vcr-engine:1.0.0}
+    build:
+      context: ../../../项目代码/vcr-engine
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        CRAN_SNAPSHOT_DATE: ${OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE:-2026-09-28}
+        # Passed even though the Dockerfile derives a default from the snapshot
+        # date: a build arg a Dockerfile declares and compose never passes is a
+        # lever that looks configurable and is not (`audit:hosted-compliance`).
+        CRAN_MIRROR: ${OPEN_SCIENCE_VCR_CRAN_MIRROR:-https://packagemanager.posit.co/cran/${OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE:-2026-09-28}}
+    environment:
+      # The token the control plane presents, and the key its results are
+      # signed with. Both empty is a valid local configuration: the client then
+      # records `signed: false` on the execution rather than refusing it.
+      EVIMED_VCR_ENGINE_TOKEN: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN-}
+      EVIMED_VCR_ENGINE_RECEIPT_KEY: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY-}
+      # One job at a time on the shared host, and a CPU ceiling per job: this
+      # box is four cores shared with other products (plan §11.4). A design
+      # grid waits for a compute node of its own; the interface does not change
+      # when it gets one.
+      EVIMED_VCR_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:-1}
+      EVIMED_VCR_JOB_CPU_SECONDS: ${OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:-600}
+    volumes:
+      # Read-only, and only the data plane: the engine reads the snapshot a job
+      # names and nothing else. It is deliberately not given `open-science-data`
+      # — the volume every specialist engine mounts whole — because patient
+      # rows are the thing that must not be one path traversal away from a
+      # container that also holds a workspace (plan §8.1, attachment E §2.4).
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:-/var/lib/evimed/vcr-data-plane}
+        target: /data-plane
+        read_only: true
+      - evimed-vcr-jobs:/jobs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPEN_SCIENCE_VCR_ENGINE_CPUS:-2}"
+          memory: ${OPEN_SCIENCE_VCR_ENGINE_MEMORY:-4g}
     restart: unless-stopped
 
   evimed-mr-agent:
@@ -1646,6 +1737,7 @@ services:
 #
 # Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
+  evimed-vcr-jobs:
   evimed-postgres-data:
   # The MR engine's GWAS Catalog scan cache (EVIMED_MR_OPEN_CACHE_DIR): public
   # summary statistics only, rebuildable, kept across releases.

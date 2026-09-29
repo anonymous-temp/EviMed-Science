@@ -428,6 +428,90 @@ function geoSettings(overrides) {
  *
  * @param {Record<string, any>} overrides
  */
+/**
+ * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
+ * account like 「循证 GEO」 and 「前沿动态」 before it.
+ *
+ * Hidden knowledge: the two ceilings here are not opinions, they are the
+ * shared host (plan §11.4). The box this runs on is four cores shared with
+ * other products, so the engine runs at a global concurrency of one and every
+ * job carries a CPU-second ceiling; a design grid only opens once the engine
+ * moves to a compute node of its own, and the interface does not change when
+ * it does. `vcrEngineUrl` unset means the engine is not composed: the steps
+ * that need it answer 「暂不可用」 and every other step and the conversation
+ * carry on (plan §10.5).
+ *
+ * @param {Record<string, any>} overrides
+ */
+function vcrSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  /** @param {string} key @param {string} name */
+  const origin = (key, name) => {
+    const value = String(read(key, name, "") ?? "").trim();
+    if (!value) return "";
+    let parsed = null;
+    try { parsed = new URL(value); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error(`${name} must be an http(s) origin with an optional path and no credentials.`);
+    }
+    return value.replace(/\/$/, "");
+  };
+  const audience = String(read("vcrAudience", "OPEN_SCIENCE_VCR_AUDIENCE", "operators")).trim().toLowerCase();
+  if (!["all", "operators"].includes(audience)) {
+    throw new Error(`OPEN_SCIENCE_VCR_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
+  }
+  const budgetValue = read("vcrDailyBudgetCny", "OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY", 20);
+  const budget = Number(budgetValue);
+  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
+    throw new Error(`OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  return {
+    vcrEnabled: overrides.vcrEnabled ?? boolEnv("OPEN_SCIENCE_VCR_ENABLED", false),
+    vcrAudience: audience,
+    // Accounts that see the module under `operators` without being operators.
+    vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
+    vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
+    vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
+    // The module's own model money per day (purpose `vcr`), like frontier and GEO.
+    vcrDailyBudgetCny: budget,
+    // The deterministic engine. Unset = not composed; the steps that need it say so.
+    vcrEngineUrl: origin("vcrEngineUrl", "OPEN_SCIENCE_VCR_ENGINE_URL"),
+    vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
+    // The engine's own credentials. Without the receipt key the client accepts
+    // an unsigned result and records `signed: false` on the execution rather
+    // than refusing it: a deployment running the engine beside the control
+    // plane on one host has nothing to forge, and a study that says its result
+    // is unsigned is more useful than a study that cannot run.
+    vcrEngineToken: String(read("vcrEngineToken", "OPEN_SCIENCE_VCR_ENGINE_TOKEN", "") ?? "").trim(),
+    vcrEngineReceiptKey: String(read("vcrEngineReceiptKey", "OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY", "") ?? "").trim(),
+    // One at a time on the shared host (plan §11.4).
+    vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
+    // Every job's own CPU ceiling; over it, the job stops at a checkpoint.
+    vcrJobCpuSeconds: integer("vcrJobCpuSeconds", "OPEN_SCIENCE_VCR_JOB_CPU_SECONDS", 600, 10, 86_400),
+    // A study's compute budget in CPU-seconds; over it the run stops for one
+    // confirmation (plan §10.1, the second of the three human stops).
+    vcrStudyCpuBudget: integer("vcrStudyCpuBudget", "OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET", 7_200, 60, 10_000_000),
+    // The data plane's own directory: patient-level rows, never mounted into a
+    // runtime (plan §8.1). Empty = the data plane is not configured and every
+    // tier above T0 answers that it is unavailable.
+    vcrDataPlaneDir: String(read("vcrDataPlaneDir", "OPEN_SCIENCE_VCR_DATA_PLANE_DIR", "") ?? "").trim(),
+  };
+}
+
 function reviewSettings(overrides) {
   /** @param {string} key @param {string} name @param {unknown} fallback */
   const read = (key, name, fallback) => {
@@ -1975,6 +2059,8 @@ export function loadConfig(overrides = {}) {
     ...frontierSettings(overrides),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
+    // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
+    ...vcrSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),
     // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---

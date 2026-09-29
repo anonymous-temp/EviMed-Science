@@ -28,7 +28,7 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
  *  platform parsing and judging measured answers on its own schedule, held by
  *  the module's own daily budget. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo"]);
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**

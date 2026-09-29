@@ -305,6 +305,11 @@ test("specialty agent catalog requires authentication and exposes only public me
       "peer-review",
       "research-grant-development",
       "research-topic-selection",
+      "vcr-analysis",
+      "vcr-evidence",
+      "vcr-matching",
+      "vcr-package",
+      "vcr-protocol",
     ]);
     assert.equal(body.data[0].title, "Drug Safety Analysis");
     assert.deepEqual(body.data[0].estimatedMinutes, [20, 40]);

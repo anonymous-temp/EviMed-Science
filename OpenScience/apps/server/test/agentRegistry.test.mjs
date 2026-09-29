@@ -53,16 +53,18 @@ const officialCapabilityRoot = path.resolve(
 test("the public registry excludes internal pipelines while trusted lookup retains them", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
   const ids = registry.list().map((agent) => agent.id);
-  // Nineteen: the four 「循证 GEO」 capabilities are public (a session is bound
-  // to one by id) and hidden from the lists by display.listed, not by visibility.
-  assert.equal(ids.length, 19);
-  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer"]) {
+  // Twenty-four: the four 「循证 GEO」 capabilities and the five 「虚拟临研」 ones
+  // are public (a session is bound to one by id) and hidden from the lists by
+  // display.listed, not by visibility.
+  assert.equal(ids.length, 24);
+  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer",
+    "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-matching", "vcr-package"]) {
     assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
   }
   assert.equal(ids.includes("source-understanding"), false);
   assert.equal(registry.get("source-understanding").visibility, "internal");
   assert.ok(registry.getPackage("source-understanding"));
-  assert.equal(registry.list({ includeInternal: true }).length, 22);
+  assert.equal(registry.list({ includeInternal: true }).length, 27);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {

@@ -35,7 +35,11 @@ test("no contract quietly requires more files than the baseline records", async 
   const found = await manifests();
   assert.ok(found.length >= 10, `only ${found.length} manifests read — the walk found nothing`);
 
-  let checked = 0;
+  // Distinct kinds, not produces-entries: a kind may be produced by more than
+  // one capability (「虚拟临研」's study package is written by three of them,
+  // each owning part of it), and counting entries would make that read as a
+  // short walk forever.
+  const checkedKinds = new Set();
   const grew = [];
   const unrecorded = [];
   for (const [name, manifest] of found) {
@@ -47,7 +51,7 @@ test("no contract quietly requires more files than the baseline records", async 
         unrecorded.push(`${name} -> ${kind}`);
         continue;
       }
-      checked += 1;
+      checkedKinds.add(kind);
       if (required.length > recorded.requiredCount) {
         grew.push(`${kind}: ${recorded.requiredCount} recorded, ${required.length} declared`);
       }
@@ -62,8 +66,8 @@ test("no contract quietly requires more files than the baseline records", async 
     }
   }
   assert.deepEqual(unrecorded, [], "a contract with no baseline entry can grow without anyone seeing it");
-  assert.equal(checked, Object.keys(baseline.contracts).length,
-    `${checked} contracts checked against ${Object.keys(baseline.contracts).length} recorded — the walk is short`);
+  assert.deepEqual([...checkedKinds].sort(), Object.keys(baseline.contracts).sort(),
+    "every recorded contract is walked and every walked contract is recorded — a short walk reports a clean tree");
   assert.deepEqual(
     grew, [],
     "A required output was added without moving the baseline. Ship it as `required: false` first, "
