@@ -1160,3 +1160,27 @@ test("episode and digest keep authorized artifact references without raising cla
   assert.equal(saved.payload.claims[0].tier, "gated");
   assert.equal(digest.payload.leads[0].tier, "gated");
 });
+
+test("a concurrent new follow-up cannot prevent the frozen episode from consuming its original question once", async () => {
+  const { service, documents } = fixture(); let agenda = await service.create("user-one", agendaInput);
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const original = {digestId:"d",claimId:"c",note:"Original question",at:"2026-09-06T00:00:00Z"};
+  agenda = await documents.put("user-one","agenda",agenda.id,{...agenda.payload,followUps:[original]},{expectedRevision:agenda.revision,projectId:agenda.projectId});
+  const put = documents.put.bind(documents); let raced = false;
+  documents.put = async (...args) => {
+    const result = await put(...args);
+    if (args[1] === "episode" && !raced) {
+      raced = true;
+      const latest = await service.get("user-one",agenda.id);
+      await put("user-one","agenda",agenda.id,{...latest.payload,followUps:[original,{...original,claimId:"later",note:"Later question"}]},{expectedRevision:latest.revision,projectId:agenda.projectId});
+    }
+    return result;
+  };
+  const first = await service.schedule("user-one",agenda.id,{date:"2026-09-06"});
+  const saved = await service.get("user-one",agenda.id);
+  assert.equal(saved.payload.followUps[0].consumedBy,first.episode.id);
+  assert.equal(saved.payload.followUps[1].consumedBy,undefined);
+  const next = await service.schedule("user-one",agenda.id,{date:"2026-09-07"});
+  assert.doesNotMatch(next.episode.payload.prompt,/Original question/);
+  assert.match(next.episode.payload.prompt,/Later question/);
+});
