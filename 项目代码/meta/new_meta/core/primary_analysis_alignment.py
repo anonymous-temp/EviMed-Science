@@ -705,7 +705,8 @@ def cached_alignment_is_current(project) -> bool:
                 return False
             if row_id in binding["selected_row_ids"] and status["status"] != "match":
                 return False
-        if any(row_id not in binding["proofs"] for row_id in binding["selected_row_ids"]):
+        from new_meta.core.autonomous_analysis import row_is_admitted, judgment_for_row
+        if any(not row_is_admitted(project, protocol, *current[row_id]) for row_id in binding["selected_row_ids"]):
             return False
         for study in studies:
             candidate_ids = {f"{study.characteristics.pmid or study.characteristics.study_id}:{index}" for index in range(len(study.outcomes))}
@@ -718,7 +719,8 @@ def cached_alignment_is_current(project) -> bool:
         from new_meta.schemas.method_policy import ReviewFamily
         if infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT:
             candidates = [(row_id, current[row_id][0].outcomes[current[row_id][1]].primary_analysis_alignment.assessment)
-                          for row_id in binding["selected_row_ids"]]
+                          for row_id in binding["selected_row_ids"]
+                          if not (judgment_for_row(project, protocol, *current[row_id]) or {}).get("include")]
             if project_trial_unit_issues(project, candidates):
                 return False
         effects = project.load_json("effect_sizes.json", subdir="analysis")
@@ -831,6 +833,12 @@ def unattended_unverified_results(project, protocol, result_ids) -> dict[str, st
         row = rows.get(result_id)
         if row is None:
             left_out[result_id] = "source_row_not_extracted"
+            continue
+        from new_meta.core.autonomous_analysis import judgment_for_row
+        judgment = judgment_for_row(project, protocol, *row)
+        if judgment is not None:
+            if not judgment.get("include"):
+                left_out[result_id] = judgment["reason"]
             continue
         verdict = alignment_status(project, protocol, *row)
         if verdict["status"] != "match":
@@ -971,13 +979,17 @@ def require_method_source_alignment(project, plan, result_ids, *, entities):
         for result_id in result_ids:
             row = rows.get(result_id)
             verdict = alignment_status(project, protocol, *row) if row else {"status": "unknown", "reason": "source_row_required"}
-            if verdict["status"] == "match" and (result_id not in selected_entities or not
+            from new_meta.core.autonomous_analysis import row_is_admitted, judgment_for_row
+            admitted = row is not None and row_is_admitted(project, protocol, *row)
+            judgment = judgment_for_row(project, protocol, *row) if row else None
+            if admitted and (result_id not in selected_entities or not
                     current_extraction_matches_result(*row, protocol, selected_entities[result_id])):
                 verdict = {"status": "unknown", "reason": "ledger_extraction_refresh_required"}
+                admitted = False
             row_id = f"{row[0].characteristics.pmid or row[0].characteristics.study_id}:{row[1]}" if row else result_id
-            if verdict["status"] != "match":
+            if not admitted:
                 unresolved.append({"row_id": row_id, "result_id": result_id, "alignment": verdict})
-            else:
+            elif not (judgment and judgment.get("include")):
                 candidates.append((row_id, row[0].outcomes[row[1]].primary_analysis_alignment.assessment))
         if not unresolved and plan.family is ReviewFamily.INTERVENTION_RCT:
             unresolved.extend(project_trial_unit_issues(project, candidates))
@@ -1022,12 +1034,14 @@ def require_current_compiled_alignment(project):
             valid = valid and binding.get("source_rows_sha256") == digest([study.model_dump(mode="json") for study in studies])
             protocol = ResearchProtocol.model_validate(protocol_data)
             rows = {result_entity_id(study, index): (study, index) for study in studies for index in range(len(study.outcomes))}
-            valid = valid and all(result_id in rows and alignment_status(project, protocol, *rows[result_id])["status"] == "match"
+            from new_meta.core.autonomous_analysis import row_is_admitted, judgment_for_row
+            valid = valid and all(result_id in rows and row_is_admitted(project, protocol, *rows[result_id])
                                   for result_id in execution.input_result_ids)
             from new_meta.schemas.method_policy import ReviewFamily
             if valid and plan.family is ReviewFamily.INTERVENTION_RCT:
                 candidates = [(f"{rows[key][0].characteristics.pmid or rows[key][0].characteristics.study_id}:{rows[key][1]}",
-                    rows[key][0].outcomes[rows[key][1]].primary_analysis_alignment.assessment) for key in execution.input_result_ids]
+                    rows[key][0].outcomes[rows[key][1]].primary_analysis_alignment.assessment) for key in execution.input_result_ids
+                    if not (judgment_for_row(project, protocol, *rows[key]) or {}).get("include")]
                 valid = not project_trial_unit_issues(project, candidates)
         else:
             valid = False
@@ -1066,6 +1080,7 @@ def primary_effect_identity(outcome, effect):
 
 def selection_gate_fingerprint(project):
     return digest({
+        "autonomous_analysis": project.load_json("autonomous_analysis.json", subdir="analysis"),
         "study_rob": project.load_json("rob_results.json", subdir="risk_of_bias"),
         "result_rob": project.load_json("rob_result_assessments.json", subdir="risk_of_bias"),
         "rob_adjudications": project.load_json("rob_adjudications.json", subdir="risk_of_bias"),

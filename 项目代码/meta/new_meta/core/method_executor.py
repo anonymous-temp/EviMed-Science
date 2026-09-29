@@ -240,10 +240,13 @@ class MethodExecutor:
                 "result_id(s) not found in evidence ledger: " + ", ".join(missing)
             )
         entities = [current[result_id] for result_id in requested]
+        from new_meta.core.autonomous_analysis import admitted_result_ids
+        model_selected = admitted_result_ids(project)
         inadmissible = [
             item.entity_id
             for item in entities
             if item.evidence_state not in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}
+            and item.entity_id not in model_selected
         ]
         if inadmissible:
             raise MethodExecutionBlocked(

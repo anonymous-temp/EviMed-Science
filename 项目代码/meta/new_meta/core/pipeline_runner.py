@@ -277,6 +277,13 @@ class PipelineRunner:
             raise FileNotFoundError("analysis/method_plan.json is required")
         plan = MethodPlan.model_validate(plan_payload)
         executor = MethodExecutor()
+        from new_meta.core.autonomous_analysis import resolve_analysis_judgments, judgment_for_row
+        from new_meta.schemas.study import ExtractedStudy
+        from new_meta.core.primary_analysis_alignment import project_is_unattended
+        source_studies = [ExtractedStudy.model_validate(item) for item in
+                          self.project.load_json("all_extractions.json", subdir="extraction") or []]
+        if source_studies and project_is_unattended(self.project):
+            resolve_analysis_judgments(self.project, self.project_protocol(), source_studies)
         try:
             result_ids = executor.eligible_project_result_ids(
                 plan,
@@ -366,6 +373,9 @@ class PipelineRunner:
         for result_id in ([] if direct_ipd else result_ids):
             source_row = source_rows.get(result_id)
             verdict = alignment_status(self.project, alignment_protocol, *source_row) if source_row else {"status": "unknown"}
+            judgment = judgment_for_row(self.project, alignment_protocol, *source_row) if source_row else None
+            if judgment and judgment.get("include"):
+                continue
             if verdict["status"] == "mismatch":
                 return self._method_synthesis_blocked(
                     f"Selected result {result_id} does not match the review outcome, population or contrast.",
@@ -379,6 +389,8 @@ class PipelineRunner:
             trial_candidates = []
             for result_id in result_ids:
                 study, index = source_rows[result_id]
+                if (judgment_for_row(self.project, alignment_protocol, study, index) or {}).get("include"):
+                    continue
                 trial_candidates.append((f"{study.characteristics.pmid or study.characteristics.study_id}:{index}",
                                          study.outcomes[index].primary_analysis_alignment.assessment))
             unresolved.extend(project_trial_unit_issues(self.project, trial_candidates, assumed=assumed_trials))

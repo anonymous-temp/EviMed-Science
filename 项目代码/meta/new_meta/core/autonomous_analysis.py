@@ -193,3 +193,18 @@ def resolve_analysis_judgments(project, protocol, studies):
         details = [f"{row_id}: {row['rationale']} {' '.join(row['assumptions'])}" for row_id, row in admitted.items()]
         project.add_warning("synthesis", "Model-selected estimates retain incomplete independent verification. "
                             + " ".join(details), code="analysis_assumptions", context={"rows": admitted})
+
+
+def admitted_result_ids(project):
+    """Current model-selected rows; their ledger evidence state is left unchanged."""
+    from new_meta.schemas.protocol import ResearchProtocol
+    from new_meta.schemas.study import ExtractedStudy
+    from new_meta.core.extraction_ledger import result_entity_id
+    protocol_data = project.load_json("protocol.json")
+    if not protocol_data or not project_is_unattended(project):
+        return set()
+    protocol = ResearchProtocol.model_validate(protocol_data)
+    studies = [ExtractedStudy.model_validate(row) for row in
+               project.load_json("all_extractions.json", subdir="extraction") or []]
+    return {result_entity_id(study, index) for study in studies for index in range(len(study.outcomes))
+            if (judgment_for_row(project, protocol, study, index) or {}).get("include") is True}

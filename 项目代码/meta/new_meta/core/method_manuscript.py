@@ -128,6 +128,11 @@ def build_method_manuscript(
         raise ValueError(
             f"method manuscript renderer is not implemented for {envelope.family.value}"
         )
+    limitations = [row["message"] for row in facts.get("pipeline_warnings", [])
+                   if row.get("code") in {"analysis_assumptions", "partial_screening", "partial_extraction",
+                                           "risk_of_bias_unavailable", "protocol_scope_unverified"}]
+    if limitations:
+        manuscript += "\n\n## Evidence limitations\n\n" + "\n\n".join(limitations) + "\n"
     validation = _validate_method_manuscript(
         manuscript,
         envelope=envelope,
