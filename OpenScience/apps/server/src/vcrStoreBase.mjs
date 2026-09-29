@@ -25,6 +25,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 import { VCR_SCHEMA, migrateVcr } from "./vcrPersistence.mjs";
 
@@ -137,17 +139,59 @@ export class VcrStoreBase {
 }
 
 /**
+ * What a deletion leaves outside the database, collected before the rows go:
+ * the data plane's files the study's snapshots and analysis tables name
+ * (relative to the plane's root), and the engine's job directories.
+ * @typedef {{ locations: string[], engineJobIds: string[] }} VcrArtifacts
+ */
+
+/** @returns {VcrArtifacts} */
+const noArtifacts = () => ({ locations: [], engineJobIds: [] });
+
+/**
+ * The files and engine jobs that belong to some studies (and, for an account,
+ * the account's own sources), read in the deleting transaction so that what is
+ * removed afterwards is exactly what the rows named — nothing is guessed from
+ * a directory listing.
+ * @param {any} client @param {readonly string[]} studyIds @param {string | null} [userId] the account, when its study-less sources go too
+ * @returns {Promise<VcrArtifacts>}
+ */
+async function collectArtifacts(client, studyIds, userId = null) {
+  if (!studyIds.length && !userId) return noArtifacts();
+  const snapshots = await client.query(
+    `SELECT location FROM ${VCR_SCHEMA}.snapshots
+      WHERE study_id = ANY($1::text[]) OR ($2::text IS NOT NULL AND source_id IN (SELECT id FROM ${VCR_SCHEMA}.sources WHERE user_id = $2))`,
+    [[...studyIds], userId]);
+  const tables = await client.query(`SELECT location FROM ${VCR_SCHEMA}.analysis_tables WHERE study_id = ANY($1::text[])`, [[...studyIds]]);
+  const jobs = await client.query(
+    `SELECT COALESCE(NULLIF(checkpoint ->> 'engineJobId', ''), id) AS engine_job_id FROM ${VCR_SCHEMA}.jobs WHERE study_id = ANY($1::text[])`,
+    [[...studyIds]]);
+  const locations = [...snapshots.rows, ...tables.rows]
+    // A snapshot of several files keeps one path per line.
+    .flatMap((row) => String(row.location ?? "").split("\n"))
+    .map((location) => location.trim())
+    .filter(Boolean);
+  return {
+    locations: [...new Set(locations)],
+    engineJobIds: [...new Set(jobs.rows.map((row) => String(row.engine_job_id)).filter(Boolean))],
+  };
+}
+
+/**
  * Remove every row of a study, in the caller's transaction. Audit rows stay:
- * they outlive the object they describe, like the GEO ledger does.
+ * they outlive the object they describe, like the GEO ledger does. Answers
+ * what the study left outside the database (`artifacts`); the caller removes
+ * it with `removeVcrArtifacts` once the transaction has committed.
  * @param {any} client @param {string} studyId
  */
 export async function deleteVcrStudyRows(client, studyId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
-  if (!exists.rowCount) return { deleted: false };
+  if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
+  const artifacts = await collectArtifacts(client, [studyId]);
   await client.query(`UPDATE ${VCR_SCHEMA}.audit SET study_id = study_id WHERE study_id = $1`, [studyId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
-  return { deleted: true };
+  return { deleted: true, artifacts };
 }
 
 /**
@@ -160,26 +204,87 @@ export async function deleteVcrStudyRows(client, studyId) {
 export async function deleteVcrProjectRows(client, userId, projectId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
-  if (!exists.rowCount) return { deleted: false, studyId: null };
+  if (!exists.rowCount) return { deleted: false, studyId: null, artifacts: noArtifacts() };
   const found = await client.query(
     `SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1 AND project_id = $2`, [userId, projectId]);
   const studyId = found.rows[0]?.id ?? null;
-  if (!studyId) return { deleted: false, studyId: null };
+  if (!studyId) return { deleted: false, studyId: null, artifacts: noArtifacts() };
+  const artifacts = await collectArtifacts(client, [studyId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
-  return { deleted: true, studyId };
+  return { deleted: true, studyId, artifacts };
 }
 
 /**
- * Remove every row of an account's studies, in the caller's transaction.
+ * Remove every row of an account's studies, in the caller's transaction — and
+ * every row that names the account in a study that is not its own: its
+ * memberships and the grants made out to it. Those used to outlive the account
+ * (review 2026-09-29, CS-43): a deleted account's roles stayed in every study
+ * it had been invited to, and a grant naming it stayed live for whoever next
+ * held the id. Audit rows stay.
  * @param {any} client @param {string} userId
  */
 export async function deleteVcrUserRows(client, userId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
-  if (!exists.rowCount) return { deleted: false };
+  if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
+  const owned = await client.query(`SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
+  const artifacts = await collectArtifacts(client, owned.rows.map((row) => String(row.id)), userId);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.members WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.grants WHERE grantee = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.sources WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.precedents WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.models WHERE user_id = $1`, [userId]);
-  return { deleted: true };
+  return { deleted: true, artifacts };
+}
+
+/**
+ * Remove what a committed deletion left outside the database: the data plane's
+ * files, and the engine's job directories through its own `DELETE /jobs/:id`.
+ * Best effort and never throwing — the rows are already gone, so a file that
+ * cannot be removed is reported (`report(code)`) for an operator to sweep, not
+ * raised as a failed deletion the researcher would retry into nothing. A
+ * location that resolves outside the plane's root, or through a symlinked
+ * directory, is refused by the same check the plane applies to a read.
+ *
+ * @param {{ dataPlaneDir?: string, artifacts?: VcrArtifacts | null, engineRemove?: ((jobId: string) => Promise<void>) | null,
+ *   report?: (code: string) => void }} input
+ * @returns {Promise<{ files: number, engineJobs: number }>}
+ */
+export async function removeVcrArtifacts({ dataPlaneDir = "", artifacts = null, engineRemove = null, report = () => {} }) {
+  let files = 0;
+  let engineJobs = 0;
+  const root = String(dataPlaneDir ?? "").trim() ? path.resolve(String(dataPlaneDir)) : "";
+  if (root && artifacts?.locations.length) {
+    const realRoot = await fs.realpath(root).catch(() => null);
+    for (const location of artifacts.locations) {
+      try {
+        const target = path.resolve(root, location);
+        if (!realRoot || path.isAbsolute(location) || (target !== root && !target.startsWith(`${root}${path.sep}`))) {
+          report("vcr_artifact_outside_plane");
+          continue;
+        }
+        const parent = await fs.realpath(path.dirname(target)).catch(() => null);
+        if (!parent) continue;
+        if (parent !== realRoot && !parent.startsWith(`${realRoot}${path.sep}`)) {
+          report("vcr_artifact_outside_plane");
+          continue;
+        }
+        await fs.rm(target, { force: true });
+        files += 1;
+        // Directories a study made are left empty: take the empty ones, up to the root.
+        for (let directory = path.dirname(target); directory !== root && directory.startsWith(`${root}${path.sep}`); directory = path.dirname(directory)) {
+          try { await fs.rmdir(directory); } catch { break; }
+        }
+      } catch {
+        report("vcr_artifact_remove_failed");
+      }
+    }
+  }
+  if (engineRemove) {
+    for (const jobId of artifacts?.engineJobIds ?? []) {
+      try { await engineRemove(jobId); engineJobs += 1; } catch { report("vcr_engine_job_remove_failed"); }
+    }
+  }
+  return { files, engineJobs };
 }

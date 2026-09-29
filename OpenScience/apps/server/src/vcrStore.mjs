@@ -39,10 +39,11 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_REVIEW_KINDS, VCR_STALE_REASONS, VCR_STEPS,
-  VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, lineageNode, missingModelEvidence, useWithin,
+  VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STALE_REASONS, VCR_STEPS,
+  VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, lineageNode, missingModelEvidence, roleAllows, useWithin,
 } from "@evimed/domain";
 
+import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 
@@ -75,6 +76,14 @@ export const VCR_OBJECT_NODE_KINDS = Object.freeze({
 
 /** The name a new study and its control-plane project carry before the AI names them. */
 export const VCR_DEFAULT_STUDY_NAME = "新虚拟临研研究";
+
+/**
+ * The roles whose holder may see a study at all. Derived from the domain's
+ * ability table, never listed again: a `site` account holds only referral
+ * abilities, so it is a member of the study without the study being one of the
+ * pages it may read (build contract §3.1 of the repair: per-operation reads).
+ */
+export const VCR_READING_ROLES = Object.freeze(VCR_MEMBER_ROLES.filter((role) => roleAllows(role, "read")));
 
 /** A study's step record, all seven present. @param {unknown} value */
 export function normalizedVcrSteps(value) {
@@ -261,19 +270,42 @@ export class VcrStore extends VcrStoreBase {
     return vcrStudyFromRow(row);
   }
 
-  /** Every study the account may see, newest first. @param {string} userId */
+  /**
+   * Every study the account may read, newest first: its own, and those where a
+   * role that carries `read` was given to it. A member who holds only
+   * referral abilities (`site`) has the study's referrals and nothing else, so
+   * the study's name, question and headline are not in its list.
+   * @param {string} userId
+   */
   async listStudies(userId) {
     const rows = await this.rows(`SELECT s.* FROM ${VCR_SCHEMA}.studies s
       WHERE s.deleted_at IS NULL
-        AND (s.user_id = $1 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id = s.id AND m.user_id = $1))
-      ORDER BY s.updated_at DESC LIMIT 500`, [String(userId)]);
+        AND (s.user_id = $1 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m
+          WHERE m.study_id = s.id AND m.user_id = $1 AND m.role = ANY($2::text[])))
+      ORDER BY s.updated_at DESC LIMIT 500`, [String(userId), [...VCR_READING_ROLES]]);
     return rows.map(vcrStudyFromRow);
   }
 
-  /** Every active study, for the orchestrator's tick. @param {number} limit */
+  /** Where the last tick stopped: studies are walked in id order, a page at a time, and the walk wraps. */
+  #activeCursor = "";
+
+  /**
+   * The next page of active studies, for the orchestrator's tick.
+   *
+   * A tick that always took the first 200 by `updated_at` starved every study
+   * after the 200th: an advance that changes nothing does not touch
+   * `updated_at`, so the same 200 came back every time (review 2026-09-29,
+   * CS-42). The walk is by id — stable while studies come and go — from where
+   * the last call stopped; a short page means the end was reached, and the next
+   * call starts again from the beginning, so every active study is visited
+   * within ceil(N / limit) ticks.
+   * @param {number} limit
+   */
   async activeStudies(limit = 200) {
+    const size = Math.max(1, Math.min(1_000, Number(limit) || 200));
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.studies
-      WHERE deleted_at IS NULL AND status = 'active' ORDER BY updated_at ASC LIMIT $1`, [limit]);
+      WHERE deleted_at IS NULL AND status = 'active' AND id > $1 ORDER BY id ASC LIMIT $2`, [this.#activeCursor, size]);
+    this.#activeCursor = rows.length < size ? "" : String(rows[rows.length - 1].id);
     return rows.map(vcrStudyFromRow);
   }
 
@@ -1030,16 +1062,57 @@ export class VcrStore extends VcrStoreBase {
     }));
   }
 
-  /** @param {Record<string, any>} input */
+  /**
+   * One model row, in one of two scopes that never meet.
+   *
+   * **Platform rows** (no `userId`) are what the catalogue seeds, and only they
+   * are upserted — the seed is the one writer of a platform model.
+   * **User-owned rows** are insert-only within their owner: the same
+   * `(owner, name, version)` again, or a name and version the platform already
+   * holds, is `409 vcr_model_exists` and nothing is written or handed back.
+   * Until 2026-09-29 the upsert was keyed on `(name, version)` alone, so any
+   * account adopting a model called `reference-binary 1.0.0` rewrote the
+   * platform's card and evidence for every reader (CS-3).
+   *
+   * **The evidence a user-owned row lists is a declaration, not a
+   * certificate.** What certifies a model for its risk is
+   * `missingModelEvidence` reading `evidence`, and a run — or any caller — that
+   * could write that list could lift its own model's ceiling. So the list a
+   * caller supplies is kept under `validation.declaredEvidence`, where a page
+   * can show it as claimed, and `evidence` stays empty until something that
+   * verified it writes it.
+   * @param {Record<string, any>} input
+   */
   async saveModel(input) {
-    const row = await this.one(`INSERT INTO ${VCR_SCHEMA}.models (id, user_id, study_id, name, version, tier, risk, endpoint_type, card,
-        applicability, validation, evidence)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::text[])
-      ON CONFLICT (name, version) DO UPDATE SET card = EXCLUDED.card, applicability = EXCLUDED.applicability,
-        validation = EXCLUDED.validation, evidence = EXCLUDED.evidence RETURNING *`,
-    [vcrId("model"), input.userId ?? null, input.studyId ?? null, String(input.name), String(input.version), String(input.tier),
+    const owner = input.userId == null ? null : String(input.userId);
+    const evidence = list(input.evidence).map(String);
+    const validation = object(input.validation);
+    const values = [vcrId("model"), owner, input.studyId ?? null, String(input.name), String(input.version), String(input.tier),
       String(input.risk ?? "none"), input.endpointType ?? null, JSON.stringify(input.card ?? {}),
-      JSON.stringify(input.applicability ?? {}), JSON.stringify(input.validation ?? {}), list(input.evidence).map(String)]);
+      JSON.stringify(input.applicability ?? {}),
+      JSON.stringify(owner === null ? validation : { ...validation, declaredEvidence: evidence }),
+      owner === null ? evidence : []];
+    const columns = `(id, user_id, study_id, name, version, tier, risk, endpoint_type, card, applicability, validation, evidence)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::text[])`;
+    let row;
+    if (owner === null) {
+      row = await this.one(`INSERT INTO ${VCR_SCHEMA}.models ${columns}
+        ON CONFLICT ((COALESCE(user_id, '')), name, version) DO UPDATE SET card = EXCLUDED.card,
+          applicability = EXCLUDED.applicability, validation = EXCLUDED.validation, evidence = EXCLUDED.evidence RETURNING *`, values);
+    } else {
+      const exists = () => new HttpError(409, "vcr_model_exists", "已经有同名同版本的模型：请换一个名字或版本号。");
+      row = await this.transaction(async (client) => {
+        const taken = await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.models
+          WHERE name = $1 AND version = $2 AND (user_id IS NULL OR user_id = $3)`, [values[3], values[4], owner]);
+        if (taken.rowCount) throw exists();
+        try {
+          return (await client.query(`INSERT INTO ${VCR_SCHEMA}.models ${columns} RETURNING *`, values)).rows[0];
+        } catch (error) {
+          if (/** @type {any} */ (error)?.code === "23505") throw exists();
+          throw error;
+        }
+      });
+    }
     return row ? { id: String(row.id), name: String(row.name), version: String(row.version), tier: String(row.tier) } : null;
   }
 

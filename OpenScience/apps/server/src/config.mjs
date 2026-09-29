@@ -411,6 +411,9 @@ function geoSettings(overrides) {
   };
 }
 
+/** The shortest an engine secret may be, in bytes; the engine refuses the same files below it (contract §3.5). */
+export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
+
 /**
  * The independent reviewer (plan 2026-09-22, tiered review): a model of
  * another family than the kernel's, called by the control plane on a
@@ -474,11 +477,36 @@ function vcrSettings(overrides) {
   if (!["all", "operators"].includes(audience)) {
     throw new Error(`OPEN_SCIENCE_VCR_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
   }
-  const budgetValue = read("vcrDailyBudgetCny", "OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY", 20);
-  const budget = Number(budgetValue);
-  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
-    throw new Error(`OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
-  }
+  /**
+   * One of the engine's two shared secrets, read the way the platform reads its
+   * other key files: a file named by `<NAME>_FILE`, opened without following a
+   * symlink, no wider than owner and group (the engine container reads the same
+   * file through its group). There is no value-in-the-environment form: the
+   * token and the receipt key are the only thing that makes a result the
+   * engine's, and an environment is what a process listing and a crash report
+   * carry. An `overrides` value exists for tests alone.
+   * @param {string} valueKey @param {string} fileKey @param {string} fileEnv @param {string} code
+   * @returns {{ value: string, error: string | null }}
+   */
+  const engineSecret = (valueKey, fileKey, fileEnv, code) => {
+    if (Object.hasOwn(overrides, valueKey)) return { value: String(overrides[valueKey] ?? "").trim(), error: null };
+    const file = String(overrides[fileKey] ?? process.env[fileEnv] ?? "").trim();
+    if (!file) return { value: "", error: null };
+    if (!path.isAbsolute(file)) throw new Error(`${fileEnv} must be an absolute path.`);
+    const loaded = readSecretFile(file, code, { allowGroupRead: true });
+    // Compose binds /dev/null where a deployment has no engine: that is no
+    // secret, not a broken one (the same reading the other optional keys get).
+    if (loaded.error === `${code}_file_not_regular`) return { value: "", error: null };
+    if (loaded.error) return { value: "", error: loaded.error };
+    const value = loaded.value.trim();
+    // 32 bytes is the floor the engine itself enforces on the same files.
+    return Buffer.byteLength(value, "utf8") >= VCR_ENGINE_SECRET_MIN_BYTES
+      ? { value, error: null } : { value: "", error: `${code}_file_short` };
+  };
+  const engineToken = engineSecret("vcrEngineToken", "vcrEngineTokenFile", "OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE", "vcr_engine_token");
+  const engineReceiptKey = engineSecret("vcrEngineReceiptKey", "vcrEngineReceiptKeyFile",
+    "OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE", "vcr_engine_receipt_key");
+  const engineUrl = origin("vcrEngineUrl", "OPEN_SCIENCE_VCR_ENGINE_URL");
   return {
     vcrEnabled: overrides.vcrEnabled ?? boolEnv("OPEN_SCIENCE_VCR_ENABLED", false),
     vcrAudience: audience,
@@ -486,18 +514,22 @@ function vcrSettings(overrides) {
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
-    // The module's own model money per day (purpose `vcr`), like frontier and GEO.
-    vcrDailyBudgetCny: budget,
     // The deterministic engine. Unset = not composed; the steps that need it say so.
-    vcrEngineUrl: origin("vcrEngineUrl", "OPEN_SCIENCE_VCR_ENGINE_URL"),
+    vcrEngineUrl: engineUrl,
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-    // The engine's own credentials. Without the receipt key the client accepts
-    // an unsigned result and records `signed: false` on the execution rather
-    // than refusing it: a deployment running the engine beside the control
-    // plane on one host has nothing to forge, and a study that says its result
-    // is unsigned is more useful than a study that cannot run.
-    vcrEngineToken: String(read("vcrEngineToken", "OPEN_SCIENCE_VCR_ENGINE_TOKEN", "") ?? "").trim(),
-    vcrEngineReceiptKey: String(read("vcrEngineReceiptKey", "OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY", "") ?? "").trim(),
+    // The engine's two secrets, read from the files the deployment mounts
+    // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
+    // the control plane presents and the key its results are signed with. With
+    // the URL set and either one missing, unreadable or under 32 bytes the
+    // module says the engine is unconfigured and no client is made: an engine
+    // that would take unauthenticated calls, or whose results could not be
+    // told from a forgery, is worse than the step saying 「暂不可用」.
+    // The `…Error` fields carry why, for readiness (never the secret).
+    vcrEngineToken: engineToken.value,
+    vcrEngineTokenError: engineToken.error,
+    vcrEngineReceiptKey: engineReceiptKey.value,
+    vcrEngineReceiptKeyError: engineReceiptKey.error,
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && Boolean(engineReceiptKey.value),
     // One at a time on the shared host (plan §11.4).
     vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
     // Every job's own CPU ceiling; over it, the job stops at a checkpoint.

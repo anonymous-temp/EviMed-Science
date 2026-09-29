@@ -12,7 +12,7 @@ import {
   VCR_REFERRAL_TRANSITIONS, VCR_RISK_APPETITE_QUANTILES, VCR_SITE_VERIFICATION_STALE_DAYS,
   VCR_TRIAL_RESTRICTED_FIELDS, accrualBacktestSlices, accrualForecastScenario, accrualPosterior,
   backtestAccrualCoverage, candidateReferrals, decideContactApproval, decideReferralTransition,
-  deriveFromExit, followupFidelityFindings, partnerDataUseAllowed, postExitEpisode, readAccrualForecast,
+  deriveFromExit, followupFidelityFindings, isSiteScopedRole, partnerDataUseAllowed, postExitEpisode, readAccrualForecast,
   referralFunnel, requestAccrualForecast, screenFailuresByCriterion, siteProfileStatus, trialPeriodEpisode,
   wilsonInterval,
 } from "../src/vcrRecruit.mjs";
@@ -71,14 +71,59 @@ test("AC-18 no referral may enter a contact state without a named per-person con
 test("AC-18 a role that may not contact patients is refused before the approval is even looked at", () => {
   assert.equal(roleAllows("site", "contact_patients"), false);
   assert.equal(roleAllows("site", "write_referrals"), true);
+  // A site on its own referral: the site scope passes, the contact stop does not.
   const refused = decideReferralTransition({
-    referral: candidate({ state: "contactable", contactApprovedBy: "coordinator-li" }), to: "contacted", role: "site",
+    referral: candidate({ state: "contactable", contactApprovedBy: "coordinator-li", siteId: "ste-1" }), to: "contacted",
+    role: "site", actorSiteId: "ste-1",
   });
   assert.equal(refused.code, "vcr_contact_role_forbidden");
   const viewer = decideReferralTransition({ referral: candidate(), to: "contactable", role: "viewer" });
   assert.equal(viewer.code, "vcr_referral_role_forbidden");
   for (const role of ["recruiter", "lead"]) {
     assert.equal(roleAllows(role, "contact_patients"), true, role);
+  }
+});
+
+test("CS-29 a request cannot name the person who approved: the stop reads the stored row and only the stored row", () => {
+  // The whole of the old hole: a patch carrying `contactApprovedBy` satisfied
+  // the check, so anyone could pass the stop as anybody.
+  const forged = decideReferralTransition({
+    referral: candidate({ state: "contactable" }), to: "contacted", role: "recruiter", patch: { contactApprovedBy: "coordinator-li" },
+  });
+  assert.equal(forged.ok, false);
+  assert.equal(forged.code, "vcr_contact_not_approved");
+  // And where a move is allowed, the approver is not carried into what the store writes.
+  const allowed = decideReferralTransition({
+    referral: candidate({ state: "contactable", contactApprovedBy: "coordinator-li" }), to: "contacted", role: "recruiter",
+    patch: { contactApprovedBy: "someone-else", screenFailReason: "kept" },
+  });
+  assert.equal(allowed.ok, true);
+  assert.deepEqual(allowed.patch, { screenFailReason: "kept" });
+});
+
+test("CS-30 the study lead moves the ledger through the contact states; a site moves only its own site's referrals", () => {
+  assert.equal(roleAllows("lead", "write_referrals"), false, "the lead holds no write_referrals: contact_patients is what carries it");
+  for (const to of ["contactable", "contacted"]) {
+    const from = to === "contactable" ? "candidate" : "contactable";
+    const decision = decideReferralTransition({
+      referral: candidate({ state: from, contactApprovedBy: "lead-1" }), to, role: "lead",
+    });
+    assert.equal(decision.ok, true, `lead: ${from} → ${to}`);
+  }
+  assert.equal(isSiteScopedRole("site"), true);
+  for (const role of ["lead", "recruiter", "viewer", "data_manager", "clinical_reviewer"]) assert.equal(isSiteScopedRole(role), false, role);
+
+  const own = candidate({ state: "site_responded", siteId: "ste-1" });
+  assert.equal(decideReferralTransition({ referral: own, to: "screening", role: "site", actorSiteId: "ste-1" }).ok, true);
+  for (const [label, input] of /** @type {[string, any][]} */ ([
+    ["another site's referral", { referral: candidate({ state: "site_responded", siteId: "ste-2" }), actorSiteId: "ste-1" }],
+    ["a referral with no site", { referral: candidate({ state: "site_responded" }), actorSiteId: "ste-1" }],
+    ["a site account with no site of its own", { referral: own, actorSiteId: null }],
+    ["moving a referral to another site", { referral: own, actorSiteId: "ste-1", patch: { siteId: "ste-2" } }],
+  ])) {
+    const refused = decideReferralTransition({ to: "screening", role: "site", ...input });
+    assert.equal(refused.code, "vcr_referral_role_forbidden", label);
+    assert.match(refused.message, /本中心/, label);
   }
 });
 
@@ -89,6 +134,11 @@ test("AC-18 contact confirmation is per person: a list is refused and an anonymo
   assert.equal(decideContactApproval({ referralId: "ref-1", approvedBy: "coordinator-li", role: "site" }).code, "vcr_contact_role_forbidden");
   const ok = decideContactApproval({ referralId: "ref-1", approvedBy: " coordinator-li ", role: "recruiter" });
   assert.deepEqual(ok, { ok: true, referralId: "ref-1", approvedBy: "coordinator-li" });
+  // A person holding several roles is judged on the union: the role that
+  // carries the ability decides, whichever order they are listed in.
+  assert.equal(decideContactApproval({ referralId: "ref-1", approvedBy: "li", role: ["site", "viewer"] }).code, "vcr_contact_role_forbidden");
+  assert.equal(decideContactApproval({ referralId: "ref-1", approvedBy: "li", role: ["viewer", "lead"] }).ok, true);
+  assert.equal(decideContactApproval({ referralId: "ref-1", approvedBy: "li", role: [] }).code, "vcr_contact_role_forbidden");
 });
 
 test("AC-18 candidates are generated as candidates: nothing that runs unattended enters a contact state", () => {

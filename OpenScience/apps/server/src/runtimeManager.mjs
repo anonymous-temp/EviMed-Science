@@ -1726,9 +1726,14 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // can only refuse is not offered. The other four still work — the study, its
   // evidence and its registry records are the control plane's, not the
   // engine's (plan §10.5).
+  // "Without the engine" is the composed engine (URL and both secrets), not the
+  // URL alone: with the URL set and a secret missing no client is made
+  // (`vcrEngineStatus`), and a tool offered against an engine that will refuse
+  // every call is the same refusal one step later.
+  const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
     ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]
-    : String(config.vcrEngineUrl ?? "").trim() ? [] : ["vcr_simulate", "evidence_pool"];
+    : vcrEngineComposed ? [] : ["vcr_simulate", "evidence_pool"];
   if (vcrDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
   }

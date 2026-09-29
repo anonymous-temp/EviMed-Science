@@ -31,8 +31,15 @@
  * @module vcrMatchStore
  */
 
+import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+
+/** The states a referral is created in. Anything else has to be reached by a transition a person made. */
+const VCR_REFERRAL_ENTRY_STATES = Object.freeze(["candidate", "needs_evidence"]);
+
+/** The states before contact, the only ones a per-person confirmation may be recorded in. */
+const VCR_REFERRAL_APPROVABLE_STATES = Object.freeze(["candidate", "needs_evidence", "contactable"]);
 
 /** @param {any} row */
 const criterionOf = (row) => (row ? {
@@ -309,9 +316,23 @@ export class VcrMatchStore extends VcrStoreBase {
 
   // --------------------------------------------------------------- sites
 
-  /** @param {{ site: any, userId: string }} input */
+  /**
+   * A site profile of one study. A site always belongs to a study: the
+   * `study_id IS NULL` rows the old list included were readable by every
+   * account, and the `ON CONFLICT (id)` update let any account overwrite
+   * another's site by naming its id (review 2026-09-29, CS-35). Now the id is
+   * only ever updated inside the study that holds it, and only by the account
+   * that owns that study; naming a site of another study, or a study that is not
+   * the caller's, answers `null`, the same as one that does not exist.
+   * @param {{ site: any, userId: string }} input
+   */
   async upsertSite({ site, userId }) {
+    const studyId = String(site?.studyId ?? "").trim();
+    if (!studyId) throw new TypeError("A site belongs to a study: site.studyId is required.");
     return this.transaction(async (client) => {
+      const owned = await client.query(
+        `SELECT 1 FROM ${VCR_SCHEMA}.studies WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, [studyId, userId]);
+      if (!owned.rowCount) return null;
       const id = site?.id ?? vcrId("site");
       const result = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.sites
@@ -321,23 +342,25 @@ export class VcrMatchStore extends VcrStoreBase {
            name = EXCLUDED.name, capability = EXCLUDED.capability, capacity = EXCLUDED.capacity,
            competing = EXCLUDED.competing, contacts = EXCLUDED.contacts, activated_on = EXCLUDED.activated_on,
            accrual_prior = EXCLUDED.accrual_prior, verified_at = EXCLUDED.verified_at, updated_at = now()
+         WHERE ${VCR_SCHEMA}.sites.study_id = EXCLUDED.study_id
          RETURNING *`,
-        [id, site?.studyId ?? null, userId, String(site?.name ?? ""),
+        [id, studyId, userId, String(site?.name ?? ""),
           JSON.stringify(site?.capability ?? {}), JSON.stringify(site?.capacity ?? {}),
           JSON.stringify(site?.competing ?? []), JSON.stringify(site?.contacts ?? []),
           site?.activatedOn ?? null, JSON.stringify(site?.accrualPrior ?? {}), site?.verifiedAt ?? null]);
+      if (!result.rows[0]) return null;
       await this.audit({
-        client, studyId: site?.studyId ?? null, userId, actor: "control-plane",
+        client, studyId, userId, actor: "control-plane",
         action: "vcr.site.upsert", object: id, detail: { name: site?.name ?? "" },
       });
       return siteOf(result.rows[0]);
     });
   }
 
-  /** @param {string} studyId */
+  /** The sites of one study, and no other. @param {string} studyId */
   async listSites(studyId) {
     const rows = await this.rows(
-      `SELECT * FROM ${VCR_SCHEMA}.sites WHERE study_id = $1 OR study_id IS NULL ORDER BY name`, [studyId]);
+      `SELECT * FROM ${VCR_SCHEMA}.sites WHERE study_id = $1 ORDER BY name`, [studyId]);
     return rows.map(siteOf);
   }
 
@@ -348,20 +371,42 @@ export class VcrMatchStore extends VcrStoreBase {
 
   // ----------------------------------------------------------- referrals
 
-  /** @param {{ referral: any, userId: string }} input */
+  /**
+   * A new referral, always at the start of the ledger.
+   *
+   * The state is `candidate` or `needs_evidence` and nothing else: what the
+   * caller says is honoured only when it is one of those two. A referral is
+   * created from an assessment by the control plane, and a contact state is
+   * reached only by the transition a coordinator makes (AC-18) — an insert
+   * that could name `contacted` would be a way around that stop. A subject with
+   * a live referral in the study gets that one back, unchanged in state; only
+   * `screen_failed` is terminal, so a second attempt after one is a new row.
+   * The site and the assessment it names must belong to the same study.
+   * @param {{ referral: any, userId: string }} input
+   */
   async createReferral({ referral, userId }) {
+    const state = VCR_REFERRAL_ENTRY_STATES.includes(referral?.state) ? referral.state : "candidate";
     return this.transaction(async (client) => {
       const id = referral?.id ?? vcrId("referral");
+      if (referral.siteId) {
+        const site = await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.sites WHERE id = $1 AND study_id = $2`, [referral.siteId, referral.studyId]);
+        if (!site.rowCount) throw new HttpError(400, "vcr_payload_invalid", "The referral's site is not a site of this study.");
+      }
+      if (referral.assessmentId) {
+        const assessment = await client.query(
+          `SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE id = $1 AND study_id = $2`, [referral.assessmentId, referral.studyId]);
+        if (!assessment.rowCount) throw new HttpError(400, "vcr_payload_invalid", "The referral's assessment is not an assessment of this study.");
+      }
       const result = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.referrals (id, study_id, assessment_id, site_id, user_id, subject_key, state)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (study_id, subject_key) DO UPDATE SET
+         ON CONFLICT (study_id, subject_key) WHERE state <> 'screen_failed' DO UPDATE SET
            assessment_id = COALESCE(EXCLUDED.assessment_id, ${VCR_SCHEMA}.referrals.assessment_id),
            site_id = COALESCE(EXCLUDED.site_id, ${VCR_SCHEMA}.referrals.site_id),
            updated_at = now()
          RETURNING *`,
         [id, referral.studyId, referral.assessmentId ?? null, referral.siteId ?? null, userId,
-          referral.subjectKey, referral.state ?? "candidate"]);
+          referral.subjectKey, state]);
       const row = result.rows[0];
       if (row.id === id) {
         await client.query(
@@ -403,75 +448,117 @@ export class VcrMatchStore extends VcrStoreBase {
   }
 
   /**
-   * Move a referral, with the decision made on the locked row.
+   * Move a referral of one study, with the decision made on the locked row.
    *
    * `guard(referral)` returns `{ ok: true, patch? }` or `{ ok: false, code,
    * message }`. It runs after the row is locked and before anything is written,
    * which is what makes the contact gate hold against two coordinators clicking
-   * at once.
+   * at once. The row is found by `(id, study_id)`: an id from another study is
+   * not found, whoever asks.
    *
-   * @param {{ referralId: string, to: string, actor: string, userId: string, note?: string,
+   * **This never writes who approved a contact.** `contact_approved_by` is
+   * written by `approveContact` alone, from a session's user id; a patch that
+   * carried it (the guard's, or a caller's) would let anyone name an approver
+   * for a stop they never made (review 2026-09-29, CS-29). Pass `client` to run
+   * inside the caller's transaction — the contact route does, so the approval,
+   * the move and their events commit together or not at all.
+   *
+   * @param {{ referralId: string, studyId: string, to: string, actor: string, userId: string, note?: string, client?: any,
    *   guard: (referral: any) => { ok: boolean, code?: string, message?: string, patch?: Record<string, any> } }} input
    */
-  async transitionReferral({ referralId, to, actor, userId, note = "", guard }) {
-    return this.transaction(async (client) => {
-      const locked = await client.query(`SELECT * FROM ${VCR_SCHEMA}.referrals WHERE id = $1 FOR UPDATE`, [referralId]);
+  async transitionReferral({ referralId, studyId, to, actor, userId, note = "", guard, client = null }) {
+    if (!studyId) throw new TypeError("A referral is moved inside its study: studyId is required.");
+    const work = async (/** @type {any} */ c) => {
+      const locked = await c.query(`SELECT * FROM ${VCR_SCHEMA}.referrals WHERE id = $1 AND study_id = $2 FOR UPDATE`, [referralId, studyId]);
       const current = referralOf(locked.rows[0]);
       if (!current) return { ok: false, code: "vcr_referral_not_found", message: "找不到这条转诊记录。" };
-      const decision = guard(current);
-      if (!decision?.ok) {
+      /** @type {(code: string | undefined, message: string | undefined) => Promise<any>} */
+      const refuse = async (code, message) => {
         await this.audit({
-          client, studyId: current.studyId, userId, actor, action: "vcr.referral.transition",
-          object: referralId, outcome: "refused", reason: decision?.code ?? "refused",
+          client: c, studyId: current.studyId, userId, actor, action: "vcr.referral.transition",
+          object: referralId, outcome: "refused", reason: code ?? "refused",
           detail: { from: current.state, to },
         });
-        return { ok: false, code: decision?.code ?? "vcr_referral_transition_refused", message: decision?.message ?? "", referral: current };
-      }
+        return { ok: false, code: code ?? "vcr_referral_transition_refused", message: message ?? "", referral: current };
+      };
+      const decision = guard(current);
+      if (!decision?.ok) return refuse(decision?.code, decision?.message);
       const patch = decision.patch ?? {};
-      const result = await client.query(
+      // A patch may name a site and a criterion, and each must be this
+      // study's: the columns are foreign keys, which only prove the row exists.
+      if (patch.siteId) {
+        const site = await c.query(`SELECT 1 FROM ${VCR_SCHEMA}.sites WHERE id = $1 AND study_id = $2`, [patch.siteId, studyId]);
+        if (!site.rowCount) return refuse("vcr_site_not_found", "这个中心不属于本研究。");
+      }
+      if (patch.screenFailCriterionId) {
+        const criterion = await c.query(`SELECT 1 FROM ${VCR_SCHEMA}.criteria WHERE id = $1 AND study_id = $2`, [patch.screenFailCriterionId, studyId]);
+        if (!criterion.rowCount) return refuse("vcr_screen_failure_needs_criterion", "筛选失败必须挂到本研究具体的入排条件上。");
+      }
+      const result = await c.query(
         `UPDATE ${VCR_SCHEMA}.referrals SET
-           state = $2,
-           site_id = COALESCE($3, site_id),
-           contact_approved_by = COALESCE($4, contact_approved_by),
-           contact_approved_at = CASE WHEN $4 IS NULL THEN contact_approved_at ELSE now() END,
+           state = $3,
+           site_id = COALESCE($4, site_id),
            screen_fail_criterion_id = COALESCE($5, screen_fail_criterion_id),
            screen_fail_reason = COALESCE($6, screen_fail_reason),
            enrolled_on = COALESCE($7, enrolled_on),
            updated_at = now()
-         WHERE id = $1 RETURNING *`,
-        [referralId, to, patch.siteId ?? null, patch.contactApprovedBy ?? null,
+         WHERE id = $1 AND study_id = $2 RETURNING *`,
+        [referralId, studyId, to, patch.siteId ?? null,
           patch.screenFailCriterionId ?? null, patch.screenFailReason ?? null, patch.enrolledOn ?? null]);
-      await client.query(
-        `INSERT INTO ${VCR_SCHEMA}.referral_events (id, referral_id, user_id, from_state, to_state, actor, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      // `clock_timestamp()`, not the column's `now()`: two moves in one
+      // transaction (a confirmation carries a candidate through 「可联系」 to
+      // 「已联系」) would share the transaction's time and the ledger would list
+      // them in id order, which is random.
+      await c.query(
+        `INSERT INTO ${VCR_SCHEMA}.referral_events (id, referral_id, user_id, from_state, to_state, actor, note, occurred_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp())`,
         [vcrId("event"), referralId, userId, current.state, to, actor, note]);
       await this.audit({
-        client, studyId: current.studyId, userId, actor, action: "vcr.referral.transition",
+        client: c, studyId: current.studyId, userId, actor, action: "vcr.referral.transition",
         object: referralId, detail: { from: current.state, to },
       });
       return { ok: true, referral: referralOf(result.rows[0]) };
-    });
+    };
+    return client ? work(client) : this.transaction(work);
   }
 
   /**
    * The per-person contact confirmation (plan §10.1, AC-18). Kept apart from
    * the transition so the approval is its own audited act with its own
    * timestamp and its own name on it.
-   * @param {{ referralId: string, approvedBy: string, userId: string, note?: string }} input
+   *
+   * Scoped to one study, guarded by state and idempotent. A referral of another
+   * study is not found (`null`); one that is past the pre-contact states and has
+   * no approval on it is refused — an approval recorded on a withdrawn or
+   * failed referral would be a name on nothing; one that already carries an
+   * approval is returned as it is, so a double click, a retry and a second
+   * coordinator neither move the timestamp nor replace the first name.
+   *
+   * @param {{ referralId: string, studyId: string, approvedBy: string, userId: string, note?: string, client?: any }} input
+   * @returns {Promise<ReturnType<typeof referralOf> | null>}
    */
-  async approveContact({ referralId, approvedBy, userId, note = "" }) {
-    return this.transaction(async (client) => {
-      const result = await client.query(
-        `UPDATE ${VCR_SCHEMA}.referrals SET contact_approved_by = $2, contact_approved_at = now(), updated_at = now()
-          WHERE id = $1 RETURNING *`, [referralId, approvedBy]);
-      if (!result.rowCount) return null;
-      const row = result.rows[0];
+  async approveContact({ referralId, studyId, approvedBy, userId, note = "", client = null }) {
+    if (!studyId) throw new TypeError("A contact is approved inside its study: studyId is required.");
+    const name = String(approvedBy ?? "").trim();
+    if (!name) throw new TypeError("A contact approval carries the approver's name.");
+    const work = async (/** @type {any} */ c) => {
+      const locked = (await c.query(
+        `SELECT * FROM ${VCR_SCHEMA}.referrals WHERE id = $1 AND study_id = $2 FOR UPDATE`, [referralId, studyId])).rows[0];
+      if (!locked) return null;
+      if (locked.contact_approved_by) return referralOf(locked);
+      if (!VCR_REFERRAL_APPROVABLE_STATES.includes(locked.state)) {
+        throw new HttpError(409, "vcr_referral_transition_invalid", `「${locked.state}」的转诊不能再记录联系确认。`);
+      }
+      const row = (await c.query(
+        `UPDATE ${VCR_SCHEMA}.referrals SET contact_approved_by = $3, contact_approved_at = now(), updated_at = now()
+          WHERE id = $1 AND study_id = $2 RETURNING *`, [referralId, studyId, name])).rows[0];
       await this.audit({
-        client, studyId: row.study_id, userId, actor: approvedBy,
+        client: c, studyId, userId, actor: name,
         action: "vcr.referral.contact_approved", object: referralId, detail: { note },
       });
       return referralOf(row);
-    });
+    };
+    return client ? work(client) : this.transaction(work);
   }
 
   /** Screen failures grouped by the criterion they were hung on (plan §7.2). */

@@ -26,7 +26,13 @@ test("the schema is one idempotent, additive script", () => {
   const creates = [...sql.matchAll(/CREATE (TABLE|INDEX|SCHEMA)( UNIQUE)?/g)].length;
   const guarded = [...sql.matchAll(/CREATE (?:TABLE|INDEX|SCHEMA) IF NOT EXISTS/g)].length;
   assert.equal(creates, guarded, "every statement is IF NOT EXISTS, so a second start is a no-op");
-  assert.ok(!/DROP |ALTER TABLE [a-z_.]+ DROP/i.test(sql), "the migration never drops anything");
+  // A constraint may be replaced — `DROP CONSTRAINT IF EXISTS` followed by its
+  // new definition is how a rule tightens on a database that already has the
+  // table — but a table, a column, an index or the schema is never dropped.
+  const withoutConstraintSwaps = sql.replace(/DROP CONSTRAINT IF EXISTS [a-z_]+/gi, "");
+  assert.ok(!/DROP (TABLE|SCHEMA|INDEX|COLUMN)|ALTER TABLE [a-z_.]+ DROP (?!CONSTRAINT)/i.test(withoutConstraintSwaps),
+    "the migration never drops a table, a column, an index or the schema");
+  assert.ok(!/DROP (TABLE|SCHEMA)/i.test(sql), "and never a table or the schema, however it is spelled");
 });
 
 test("patient-level rows have no home in this schema", () => {

@@ -116,6 +116,33 @@ while IFS='|' read -r service variable fallback agent extra; do
   echo "${service}: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))$([ "$agent_lock$adapter_lock" != 00 ] && echo ' lock installed')"
 done <<< "$ENGINES"
 
+# The 虚拟临研 compute engine (项目代码/vcr-engine) is its own image too, and only
+# exists on a host that runs the `vcr` profile: skipped where its image is not
+# on the host. What a delta replaces is its R sources, its service and its
+# tests over /opt/vcr-engine; a changed package lock (the R packages and the R
+# version) or requirements file is a full build, refused by name — the R
+# library is the expensive layer and the reason the numerics are pinned. The
+# build's own self-check runs again, so an R source that disagrees with the
+# domain snapshot fails the delta here and not in front of a study.
+vcr_base=$(current_image EVIMED_VCR_ENGINE_IMAGE evimed-vcr-engine:1.0.0)
+if docker image inspect "$vcr_base" > /dev/null 2>&1; then
+  same_requirements "$vcr_base" /opt/vcr-engine/R/package-lock.json 项目代码/vcr-engine/R/package-lock.json \
+    || { echo "evimed-vcr-engine: R/package-lock.json differs from the running image's; build it in full"; exit 1; }
+  same_requirements "$vcr_base" /tmp/requirements.txt 项目代码/vcr-engine/requirements.txt \
+    || { echo "evimed-vcr-engine: requirements.txt differs from the running image's; build it in full"; exit 1; }
+  vcr_target=$(next_tag "$vcr_base")
+  {
+    printf 'FROM %s\n' "$vcr_base"
+    printf 'COPY R/ /opt/vcr-engine/R/\nCOPY service/ /opt/vcr-engine/service/\nCOPY tests/ /opt/vcr-engine/tests/\nCOPY README.md /opt/vcr-engine/\n'
+    printf 'RUN Rscript -e %s\n' "'.libPaths(c(Sys.getenv(\"R_LIBS_SITE\"), .libPaths())); source(\"/opt/vcr-engine/R/engine.R\"); vcr_engine_load(\"/opt/vcr-engine\"); h <- vcr_engine_health(); if (!isTRUE(h\$ok)) stop(\"engine self-check failed\")'"
+  } > /tmp/engine-delta-evimed-vcr-engine.Dockerfile
+  docker build -q -f /tmp/engine-delta-evimed-vcr-engine.Dockerfile -t "$vcr_target" 项目代码/vcr-engine > /dev/null
+  set_env EVIMED_VCR_ENGINE_IMAGE "$vcr_target"
+  echo "evimed-vcr-engine: ${vcr_base} -> ${vcr_target} ($(docker image inspect -f '{{.Id}}' "$vcr_target" | cut -c1-19))"
+else
+  echo "evimed-vcr-engine: ${vcr_base} is not on this host; skipped (the vcr profile is not running here)"
+fi
+
 # The MetaAgent is its own image (项目代码/meta, Dockerfile.evimed): only its
 # package is replaced.
 base=$(current_image EVIMED_META_AGENT_IMAGE evimed-meta-agent:0.9.0)

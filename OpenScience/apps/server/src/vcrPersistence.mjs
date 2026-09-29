@@ -472,9 +472,15 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.models (
   validation     jsonb NOT NULL DEFAULT '{}'::jsonb,
   evidence       text[] NOT NULL DEFAULT '{}',
   retired_at     timestamptz,
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (name, version)
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- One model per owner, name and version; the platform's own rows (user_id NULL)
+-- are their own scope. The table used to say UNIQUE (name, version), which made
+-- every account's model collide with — and rewrite — every other's.
+ALTER TABLE evimed_vcr.models DROP CONSTRAINT IF EXISTS models_name_version_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_models_owner_name_version
+  ON evimed_vcr.models ((COALESCE(user_id, '')), name, version);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.methods (
   id             text PRIMARY KEY,
@@ -662,10 +668,30 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.referrals (
   screen_fail_reason text,
   enrolled_on    date,
   created_at     timestamptz NOT NULL DEFAULT now(),
-  updated_at     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (study_id, subject_key)
+  updated_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS vcr_referrals_state_idx ON evimed_vcr.referrals (study_id, state, updated_at DESC);
+
+-- One live referral per subject and study. screen_failed is terminal and a
+-- second attempt on the same protocol is a NEW referral (plan §7.2), so the
+-- funnel's denominators stay countable: the old table-level UNIQUE turned that
+-- second attempt into an overwrite of the failed one.
+ALTER TABLE evimed_vcr.referrals DROP CONSTRAINT IF EXISTS referrals_study_id_subject_key_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_referrals_live_subject
+  ON evimed_vcr.referrals (study_id, subject_key) WHERE state <> 'screen_failed';
+
+-- The first human stop, held by the schema as well as by the policy (plan
+-- §10.1, AC-18): a referral at or past 'contacted' has a named approver. NOT
+-- VALID so a database that predates it migrates; every new write is checked.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                  WHERE conname = 'vcr_referrals_contact_needs_approval' AND conrelid = 'evimed_vcr.referrals'::regclass) THEN
+    ALTER TABLE evimed_vcr.referrals ADD CONSTRAINT vcr_referrals_contact_needs_approval
+      CHECK (state NOT IN ${inList(VCR_REFERRAL_STATES.slice(VCR_REFERRAL_STATES.indexOf("contacted"), VCR_REFERRAL_STATES.indexOf("screen_failed") + 1))}
+        OR contact_approved_by IS NOT NULL) NOT VALID;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.referral_events (
   id          text PRIMARY KEY,

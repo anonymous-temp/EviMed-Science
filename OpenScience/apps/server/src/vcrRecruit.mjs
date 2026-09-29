@@ -95,21 +95,49 @@ export const VCR_RECRUIT_REFUSALS = Object.freeze([
 const refuse = (code, message, detail = {}) => ({ ok: /** @type {false} */ (false), code, message, ...detail });
 
 /**
+ * A role that holds referral abilities and nothing wider: it sees and moves the
+ * referrals of its own site and no others. Derived from the domain's ability
+ * table (the `site` role today), never named here.
+ * @param {string} role
+ */
+export function isSiteScopedRole(role) {
+  return roleAllows(role, "read_referrals") && !roleAllows(role, "read");
+}
+
+/**
  * May this referral move to `to`, and what else does the move need?
  *
  * This is the whole policy, as a pure function, so the same decision can be
  * taken by a route, by a worker, and by a test without a database. The store
  * runs it again on the locked row.
  *
- * @param {{ referral: any, to: string, role: string, patch?: Record<string, any> }} input
+ * - **Who may write the ledger.** A role with `write_referrals` (the
+ *   coordinator, the site) or with `contact_patients` (the coordinator and the
+ *   study lead): the lead used to be refused every move, including the ones
+ *   into the contact states it alone may authorize (CS-30).
+ * - **A site moves its own referrals.** A site-scoped role needs the id of the
+ *   site the actor belongs to (`actorSiteId`, from the membership) and the
+ *   referral's `siteId` must be it; it may not re-home a referral either.
+ * - **The contact stop reads the row, never the request.** Whether a person
+ *   approved is `referral.contactApprovedBy` as stored. A `patch` that named an
+ *   approver used to satisfy the check, so any caller could pass the stop
+ *   (CS-29); it is not read here, and the store does not write it.
+ *
+ * @param {{ referral: any, to: string, role: string, patch?: Record<string, any>, actorSiteId?: string | null }} input
  * @returns {{ ok: true, patch: Record<string, any>, notices: string[] } | VcrRefusal}
  */
-export function decideReferralTransition({ referral, to, role, patch = {} }) {
+export function decideReferralTransition({ referral, to, role, patch = {}, actorSiteId = null }) {
   if (!VCR_REFERRAL_STATES.includes(to)) {
     return refuse("vcr_referral_state_unknown", `未知的转诊状态「${to}」。`);
   }
-  if (!roleAllows(role, "write_referrals")) {
+  if (!roleAllows(role, "write_referrals") && !roleAllows(role, "contact_patients")) {
     return refuse("vcr_referral_role_forbidden", "当前角色不能改动转诊台账。");
+  }
+  if (isSiteScopedRole(role)) {
+    const own = String(actorSiteId ?? "");
+    if (!own || String(referral?.siteId ?? "") !== own || (patch.siteId != null && String(patch.siteId) !== own)) {
+      return refuse("vcr_referral_role_forbidden", "中心只能改动本中心的转诊。");
+    }
   }
   const from = String(referral?.state ?? "candidate");
   const allowed = VCR_REFERRAL_TRANSITIONS[/** @type {keyof typeof VCR_REFERRAL_TRANSITIONS} */ (from)] ?? [];
@@ -124,8 +152,7 @@ export function decideReferralTransition({ referral, to, role, patch = {} }) {
     if (!roleAllows(role, "contact_patients")) {
       return refuse("vcr_contact_role_forbidden", "当前角色不能联系患者；需要协调员或研究负责人确认。");
     }
-    const approvedBy = patch.contactApprovedBy ?? referral?.contactApprovedBy;
-    if (!approvedBy) {
+    if (!referral?.contactApprovedBy) {
       return refuse("vcr_contact_not_approved",
         "联系患者前必须由协调员逐人确认；这条转诊还没有确认人。");
     }
@@ -144,7 +171,10 @@ export function decideReferralTransition({ referral, to, role, patch = {} }) {
     // missing document is what the call is for.
     notices.push("该候选还有未知的入排条件，联系前请确认要补的证据。");
   }
-  return { ok: true, patch, notices };
+  // The patch carries what the move records and never who approved a contact.
+  const recorded = { ...patch };
+  delete recorded.contactApprovedBy;
+  return { ok: true, patch: recorded, notices };
 }
 
 /**
@@ -152,8 +182,12 @@ export function decideReferralTransition({ referral, to, role, patch = {} }) {
  *
  * It takes a single referral id and refuses anything iterable. A batch
  * approval is not a stricter version of this check, it is the absence of it:
- * the point of the stop is that a person looked at this person.
- * @param {{ referralId: unknown, approvedBy: string, role: string }} input
+ * the point of the stop is that a person looked at this person. `role` is the
+ * role the approver holds, or every role they hold — the union decides, so a
+ * lead who is also a site member is judged on the role that carries the
+ * ability. `approvedBy` is the session's account id, set by the caller from
+ * the session and never from the request body.
+ * @param {{ referralId: unknown, approvedBy: string, role: string | readonly string[] }} input
  */
 export function decideContactApproval({ referralId, approvedBy, role }) {
   if (Array.isArray(referralId)) {
@@ -162,7 +196,8 @@ export function decideContactApproval({ referralId, approvedBy, role }) {
   if (typeof referralId !== "string" || !referralId.trim()) {
     return refuse("vcr_referral_state_unknown", "缺少要确认的转诊记录。");
   }
-  if (!roleAllows(role, "contact_patients")) {
+  const held = typeof role === "string" ? [role] : [...(role ?? [])];
+  if (!held.some((each) => roleAllows(each, "contact_patients"))) {
     return refuse("vcr_contact_role_forbidden", "当前角色不能确认联系患者。");
   }
   if (typeof approvedBy !== "string" || !approvedBy.trim()) {

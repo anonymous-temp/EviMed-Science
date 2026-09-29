@@ -41,7 +41,7 @@ import {
 /** The five kinds, by the key each notice is counted under. */
 export const VCR_NOTICE_KINDS = VCR_NOTIFICATION_KINDS;
 
-const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80}){0,2}$/;
+const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80})?$/;
 
 /**
  * Where a 「虚拟临研」 notice opens, as an app path, or null for a source id
