@@ -26,19 +26,19 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
- * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any,
+ * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, handbooks?: any,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null }) {
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null }) {
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
     try {
       const url = new URL(req.url, "http://evimed.local");
       const action = url.pathname.slice(CAPSULE_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || url.search || !["recall", "note", "session"].includes(action)) {
+      if (req.method !== "POST" || url.search || !["recall", "note", "session", "handbook-context", "handbook-attached"].includes(action)) {
         throw new HttpError(404, "not_found", "Capsule operation not found.");
       }
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
@@ -56,6 +56,8 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
       const allowed = action === "recall" ? ["query", "factKinds", "since", "scope"]
+        : action === "handbook-context" ? ["sessionId", "inputs"]
+          : action === "handbook-attached" ? ["sessionId", "receipts"]
         : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];
       if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((field) => !allowed.includes(field))) {
         throw new HttpError(400, "capsule_payload_invalid", "Unsupported memory fields.");
@@ -65,6 +67,12 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
       const project = await store.requireProject(currentUser, identity.projectId);
+      if (action === "handbook-context" || action === "handbook-attached") {
+        if (!handbooks) { sendJson(res, 200, action === "handbook-context" ? { contexts: [] } : { attached: [] }); return; }
+        const answer = action === "handbook-context" ? await handbooks.read(project, body) : await handbooks.acknowledge(project, body);
+        sendJson(res, 200, answer);
+        return;
+      }
       if (action === "session") {
         if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
