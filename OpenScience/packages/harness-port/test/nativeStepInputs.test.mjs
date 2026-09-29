@@ -34,7 +34,7 @@ test('a context acknowledgement happens only for an entering decision and reject
 test('a step canceled while the downstream decision settles never acknowledges attachment', async () => {
   /** @type {any} */ let handler
   let acknowledged = 0
-  const controller = new AbortController()
+  const controller = new globalThis.AbortController()
   const agent = { id: 'agent', session: { id: 'session' }, inject: () => {} }
   onPreStep({ on: (/** @type {string} */ _event, /** @type {any} */ fn) => { handler = fn; return () => {} } }, async () => {
     injectContext(agent, 'Optional supplement', 'evimed-capsule')
