@@ -13,7 +13,7 @@ const driver = fileURLToPath(new URL("../../../scripts/ops/capability-acceptance
 const originalRun = { id: "run-fixture", sessionId: "real-session", status: "running", effectiveAgentId: "meta-analysis", startedAt: "2026-09-29T01:00:00Z", artifacts: [] };
 async function fixture(fn) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "evimed-acceptance-driver-"));
-  const requests = []; let current = { ...originalRun }; let pollFailure = false;
+  const requests = []; let current = { ...originalRun }; let pollFailure = false; let pollTransport = null;
   const server = createServer(async (request, response) => {
     let raw = ""; for await (const chunk of request) raw += chunk;
     requests.push({ method: request.method, url: request.url, body: raw ? JSON.parse(raw) : null });
@@ -22,6 +22,10 @@ async function fixture(fn) {
     else if (request.url === "/api/projects") data = [{ id: "shared" }];
     else if (request.url === "/api/agents") data = [{ id: "meta-analysis", version: "1", runtimeAgent: "meta" }];
     else if (request.url === "/api/agent-runs") {
+      if (pollTransport && requests.filter((item) => item.url === "/api/agent-runs").length > 1) {
+        if (pollTransport === "disconnect") request.socket.destroy();
+        return;
+      }
       if (pollFailure && requests.filter((item) => item.url === "/api/agent-runs").length > 1) status = 503;
       else data = [current, { id: "another-run", status: "running", sessionId: "another-session" }];
     } else if (request.url?.startsWith("/api/research-sessions/")) data = {};
@@ -47,7 +51,7 @@ async function fixture(fn) {
   const records = async () => Promise.all((await fs.readdir(path.join(root, "evals/fixture/results"))).sort().map(async (name) => ({
     directory: path.join(root, "evals/fixture/results", name), record: JSON.parse(await fs.readFile(path.join(root, "evals/fixture/results", name, "run.json"), "utf8")),
   })));
-  try { await fn({ root, run, records, requests, setRun: (value) => { current = value; }, failPolls: () => { pollFailure = true; } }); }
+  try { await fn({ root, run, records, requests, setRun: (value) => { current = value; }, failPolls: () => { pollFailure = true; }, transport: (mode) => { pollTransport = mode; } }); }
   finally { await new Promise((resolve) => server.close(resolve)); await fs.rm(root, { recursive: true, force: true }); }
 }
 
@@ -87,4 +91,28 @@ for (const status of ["succeeded", "failed", "canceled"]) test(`attached ${statu
   assert.equal(record.observation.status, "terminal");
   assert.equal(record.outcome.finishedAt, "2026-09-29T01:10:00Z");
   assert.equal(await fs.readFile(path.join(directory, "deliverable/partial/report.md"), "utf8"), "Preserved useful partial results.");
+}));
+
+for (const mode of ["disconnect", "hang"]) test(`a ${mode} during polling consumes only the observation deadline`, async () => fixture(async (f) => {
+  f.transport(mode);
+  const result = await f.run({ timeout: 40 });
+  assert.equal(result.code, 3);
+  assert.equal(f.requests.some((request) => /stop_runtime|cancel|\/dispatch$/.test(request.url)), false);
+  const [{ record }] = await f.records();
+  assert.equal(record.runId, "run-fixture");
+  assert.equal(record.observation.status, "pending");
+  assert.equal(record.observation.reason, "poll_unavailable");
+}));
+
+test("a pending observation can be resumed to a terminal one without replacing either record or starting another run", async () => fixture(async (f) => {
+  const pending = await f.run();
+  assert.equal(pending.code, 3);
+  f.setRun({ ...originalRun, status: "succeeded", finishedAt: "2026-09-29T02:00:00Z", durationMs: 3600000 });
+  const completed = await f.run();
+  assert.equal(completed.code, 0);
+  const records = await f.records();
+  assert.equal(records.length, 2);
+  assert.deepEqual(records.map(({ record }) => record.runId), ["run-fixture", "run-fixture"]);
+  assert.deepEqual(new Set(records.map(({ record }) => record.observation.status)), new Set(["pending", "terminal"]));
+  assert.equal(f.requests.some((request) => /stop_runtime|cancel|\/dispatch$/.test(request.url)), false);
 }));
