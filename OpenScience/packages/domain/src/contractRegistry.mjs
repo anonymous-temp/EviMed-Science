@@ -548,6 +548,8 @@ function structuredOutputIssues(input) {
         { severity: 'advisory', path, check: 'structured-output' }))
       continue
     }
+    // Native execution has its own provenance contributor, not a specialist job.
+    if (input.contractKind === 'statistical-analysis-package' && path === 'analysis-run.json') continue
     if (!path.endsWith('-run.json')) continue
     const receipt = json(input, path)
     if (!isRecord(receipt)) {

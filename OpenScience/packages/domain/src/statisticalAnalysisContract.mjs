@@ -17,13 +17,13 @@ export function statisticalAnalysisFindings(input) {
   /** @type {import('./contractRegistry.mjs').GateIssue[]} */
   const issues = []
   const metrics = { statisticalComplete: 0, statisticalPartial: 0, statisticalUnsupported: 0, statisticalExecutions: 0 }
-  /** @param {string} check @param {string} path @param {string} message */
-  const notice = (check, path, message) => issues.push({ code: 'statistical_analysis_notice', severity: 'advisory', check, path, message })
+  /** @param {import('./contractRegistry.mjs').GateIssue[]} target @param {string} check @param {string} path @param {string} message */
+  const notice = (target, check, path, message) => target.push({ code: 'statistical_analysis_notice', severity: 'advisory', check, path, message })
   /** @param {string} path @param {string} check @returns {any} */
   const read = (path, check) => {
     if (!input.files.has(path)) return null
     try { return JSON.parse(input.files.get(path) ?? '') }
-    catch { notice(check, path, `${path} cannot be read as JSON; retain the readable results.`); return null }
+    catch { notice(issues, check, path, `${path} cannot be read as JSON; retain the readable results.`); return undefined }
   }
   const shape = 'statistical-results-shape'
   const provenance = 'statistical-execution-provenance'
@@ -31,53 +31,53 @@ export function statisticalAnalysisFindings(input) {
   const receiptPath = 'analysis-run.json'
   const results = read(resultPath, shape)
   if (input.files.has(resultPath) && (!record(results) || !Array.isArray(results.analyses) || !results.analyses.length)) {
-    if (results !== null) notice(shape, resultPath, 'Results should carry a nonempty analyses array; preserve other artifacts.')
+    if (results !== undefined) notice(issues, 'statistical-results-shape', resultPath, 'Results should carry a nonempty analyses array; preserve other artifacts.')
   } else if (results) {
     for (const analysis of results.analyses) {
-      if (!record(analysis)) { notice(shape, resultPath, 'An analysis entry is not an object.'); continue }
+      if (!record(analysis)) { notice(issues, 'statistical-results-shape', resultPath, 'An analysis entry is not an object.'); continue }
       const id = String(analysis.id ?? 'unnamed')
       if (analysis.status === 'complete') metrics.statisticalComplete += 1
       else if (analysis.status === 'unsupported') metrics.statisticalUnsupported += 1
       else metrics.statisticalPartial += 1
       if (analysis.status === 'complete' && Object.hasOwn(analysis, 'estimate') && !finite(analysis.estimate)) {
-        notice('statistical-finite-results', resultPath, `${id}: the complete estimate is not finite; describe the affected calculation as unavailable.`)
+        notice(issues, 'statistical-finite-results', resultPath, `${id}: the complete estimate is not finite; describe the affected calculation as unavailable.`)
       }
       if (record(analysis.interval) && finite(analysis.interval.lower) && finite(analysis.interval.upper) && analysis.interval.lower > analysis.interval.upper) {
-        notice(shape, resultPath, `${id}: interval lower bound exceeds its upper bound.`)
+        notice(issues, 'statistical-results-shape', resultPath, `${id}: interval lower bound exceeds its upper bound.`)
       }
       if (analysis.pValue != null && (!finite(analysis.pValue) || analysis.pValue < 0 || analysis.pValue > 1)) {
-        notice(shape, resultPath, `${id}: pValue is outside the finite range [0, 1].`)
+        notice(issues, 'statistical-results-shape', resultPath, `${id}: pValue is outside the finite range [0, 1].`)
       }
       const counts = record(analysis.n) ? Object.values(analysis.n) : analysis.n == null ? [] : [analysis.n]
-      if (counts.some((n) => !finite(n) || n < 0)) notice(shape, resultPath, `${id}: sample counts must be nonnegative finite numbers.`)
+      if (counts.some((n) => !finite(n) || n < 0)) notice(issues, 'statistical-results-shape', resultPath, `${id}: sample counts must be nonnegative finite numbers.`)
     }
   }
   const receipt = read(receiptPath, provenance)
   if (receipt != null) {
     if (!record(receipt) || !Array.isArray(receipt.executions) || !receipt.executions.length) {
-      notice(provenance, receiptPath, 'The receipt has no execution records.')
+      notice(issues, 'statistical-execution-provenance', receiptPath, 'The receipt has no execution records.')
     } else {
       metrics.statisticalExecutions = receipt.executions.length
       for (const execution of receipt.executions) {
-        if (!record(execution)) { notice(provenance, receiptPath, 'An execution record is not an object.'); continue }
+        if (!record(execution)) { notice(issues, 'statistical-execution-provenance', receiptPath, 'An execution record is not an object.'); continue }
         if (!fingerprint(execution.script) || !Array.isArray(execution.inputs) || !execution.inputs.length || execution.inputs.some((entry) => !fingerprint(entry))) {
-          notice(provenance, receiptPath, 'An execution lacks real source/script SHA-256 fingerprints and paths.')
+          notice(issues, 'statistical-execution-provenance', receiptPath, 'An execution lacks real source/script SHA-256 fingerprints and paths.')
         }
         if (record(execution.script) && typeof execution.script.path === 'string' && !input.files.has(execution.script.path)) {
-          notice(provenance, receiptPath, `The linked script ${execution.script.path} is not included in the package.`)
+          notice(issues, 'statistical-execution-provenance', receiptPath, `The linked script ${execution.script.path} is not included in the package.`)
         }
         if (!Array.isArray(execution.argv) || !execution.argv.length || execution.argv.some((value) => typeof value !== 'string') || !record(execution.versions) || !execution.versions.interpreter || !record(execution.versions.libraries) || !Number.isInteger(execution.exitCode) || !Number.isFinite(Date.parse(execution.startedAt)) || !Number.isFinite(Date.parse(execution.endedAt))) {
-          notice(provenance, receiptPath, 'An execution lacks command, observed versions, timestamps or exit status.')
+          notice(issues, 'statistical-execution-provenance', receiptPath, 'An execution lacks command, observed versions, timestamps or exit status.')
         }
         if (execution.sourcesUnchanged === false || execution.exitCode !== 0 || !record(execution.output) || execution.output.observedWrite !== true) {
-          notice(provenance, receiptPath, 'This attempt failed, changed its sources, or did not observe a results write; earlier valid results remain available.')
+          notice(issues, 'statistical-execution-provenance', receiptPath, 'This attempt failed, changed its sources, or did not observe a results write; earlier valid results remain available.')
         }
       }
     }
   }
   const missing = [resultPath, receiptPath].filter((path) => !input.files.has(path))
   if (missing.length && (input.files.has('statistical-report.md') || input.files.has(resultPath))) {
-    notice(provenance, receiptPath, `Optional traceability is incomplete (${missing.join(', ')}); native execution and partial results remain deliverable.`)
+    notice(issues, 'statistical-execution-provenance', receiptPath, `Optional traceability is incomplete (${missing.join(', ')}); native execution and partial results remain deliverable.`)
   }
   return { issues, metrics }
 }
