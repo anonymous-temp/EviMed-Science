@@ -135,6 +135,7 @@ def test_current_summary_and_nested_selection_records_are_independently_fresh(tm
 @pytest.mark.parametrize("fresh_error", [False, True])
 def test_previous_error_does_not_label_or_raise_from_this_attempt(tmp_path, monkeypatch, primary, fresh_error):
     from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
 
     (tmp_path / "mr_error.json").write_text('{"code":"opengwas_auth_failed","error":"Old attempt"}')
 
@@ -149,6 +150,9 @@ def test_previous_error_does_not_label_or_raise_from_this_attempt(tmp_path, monk
     result = mr_executor.run_mr_analysis("x", "y", tmp_path)
     assert result.analysis_error_code == ("no_instruments" if fresh_error else "analysis_failed")
     assert bool(result.mr_results) == primary
+    target = tmp_path / "published"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=tmp_path), [result], include_reports=False)
+    assert any(path.endswith("mr_error.json") for path in copied) == fresh_error
 
 
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])

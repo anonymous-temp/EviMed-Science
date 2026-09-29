@@ -112,6 +112,14 @@ def test_partial_result_keeps_the_fixed_engines_original_error_code(tmp_path, mo
     assert "PRIVATE_PROVIDER_SECRET" not in message
 
 
+@pytest.mark.parametrize("secret", ["mr_analysis_synthetic_secret", "synthetic_private_credential_123456"])
+def test_error_code_field_cannot_echo_a_provider_credential(tmp_path, monkeypatch, secret):
+    service, _, _, _ = setup_mr(tmp_path, monkeypatch)
+    code, message = service._mr_runner_failure({"errorCode": secret}, [secret.encode()])
+    assert code is None
+    assert secret not in message
+
+
 def test_diagnostic_directory_refuses_existing_or_symlink_destination(tmp_path, monkeypatch):
     service, client, secret, workspace = setup_mr(tmp_path, monkeypatch)
     write_sources(workspace, "rs101")

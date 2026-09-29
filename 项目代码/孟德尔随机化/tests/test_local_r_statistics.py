@@ -16,6 +16,26 @@ from r_scripts.templates import (
 )
 
 
+def test_mvmr_template_labels_actual_mv_multiple_schema_for_shared_parser(tmp_path):
+    from mr_agent.tools import mr_executor
+    from evimed_mr_job import _scientific_rows
+
+    script = mr_executor._build_mvmr_script(["x1", "x2"], "y", tmp_path, "")
+    export = script.split("# MVMR-IVW\n", 1)[1].split("# MVMR sensitivity", 1)[0]
+    # TwoSampleMR mv_multiple() returns these fields, without a method column.
+    run_r(f'output_dir <- "{tmp_path}"\nmvdat <- list()\n' + '''
+mv_multiple <- function(dat) list(result=data.frame(
+    id.exposure=c("x1", "x2"), id.outcome=c("y", "y"), outcome=c("Outcome", "Outcome"),
+    nsnp=c(8,8), b=c(0.3,0.2), se=c(0.04,0.03), pval=c(0.001,0.002),
+    expname=c("Exposure one", "Exposure two")))
+''' + export, tmp_path)
+    parsed = mr_executor._parse_results("x1+x2", "y", tmp_path)
+    assert [row.beta for row in parsed.mr_results] == [0.3, 0.2]
+    assert {row.method for row in parsed.mr_results} == {"Multivariable IVW"}
+    body, count = _scientific_rows((tmp_path / "mr_results.csv").read_bytes(), "mr_results.csv")
+    assert count == 2 and b"Multivariable IVW" in body
+
+
 def run_r(script, tmp_path):
     if shutil.which("Rscript") is None:
         pytest.skip("Rscript is unavailable on this test host")
