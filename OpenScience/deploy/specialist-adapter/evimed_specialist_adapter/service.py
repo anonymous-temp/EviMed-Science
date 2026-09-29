@@ -972,11 +972,16 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             # engine's own code from the run. The cleanup note goes in the text.
             if cleanup:
                 message = f"{message} Cleanup: {cleanup.get('message') or cleanup.get('code') or 'incomplete'}."
-            return _error(
+            failure = _error(
                 state.get("errorCode") or "specialist_execution_failed",
                 message,
                 bool(state.get("retryable")),
             )
+            if state.get("partialScientificReceipt") and state.get("artifacts"):
+                failure["artifacts"] = state["artifacts"]
+                failure["warnings"] = ["Partial scientific outputs from an incomplete MR job; uncomputed or skipped modules are not negative findings."]
+                failure["next_actions"] = ["Preserve the published numerical/source projections and report only their stated available scope."]
+            return failure
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
@@ -1243,7 +1248,7 @@ def _run_isolated_mr(
             finishedAt=_now(),
             updatedAt=_now(),
             returnCode=outcome["returnCode"],
-            artifacts=outcome["artifacts"] if success else [],
+            artifacts=outcome["artifacts"] if success or outcome.get("partialScientificReceipt") else [],
             retryable=outcome["returnCode"] in {75, 137, 143},
             **({"usage": usage} if usage else {}),
         )
@@ -1258,6 +1263,8 @@ def _run_isolated_mr(
                 state.pop("auditReceipt", None)
                 raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
+            if outcome.get("partialScientificReceipt"):
+                state["partialScientificReceipt"] = outcome["partialScientificReceipt"]
             code, message = _mr_runner_failure(result, jobs.sensitive_values(environment))
             if code:
                 state["errorCode"] = code

@@ -400,6 +400,106 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> tuple[list[
     return artifacts, receipts
 
 
+def _scientific_rows(body: bytes, name: str) -> tuple[bytes, int]:
+    """Project complete numerical rows; an unfinished primary row is never an estimate."""
+    variants = name in {"selected-source-rows.csv", "harmonised-rows.csv", "open-exposure.csv", "open-outcome.csv"}
+    allowed = (_NUMERIC_COLUMNS | {"samplesize", "samplesize.exposure", "samplesize.outcome", "beta.exposure", "beta.outcome",
+                                  "se.exposure", "se.outcome", "pval.exposure", "pval.outcome", "eaf", "pval", "f_statistic"})
+    reader = csv.DictReader(io.StringIO(body.decode("utf-8")), strict=True)
+    headers = reader.fieldnames or []
+    if not headers or len(headers) != len(set(headers)) or len(headers) > 128:
+        raise ValueError("invalid columns")
+    selected = [key for key in headers if key in allowed or key in {"SNP", "snp", "method"}]
+    required = {"method", "nsnp", "b", "se", "pval"} if name == "mr_results.csv" else set()
+    if required - set(headers) or not set(selected) & allowed:
+        raise ValueError("incomplete numerical module")
+    result = io.StringIO(newline="")
+    writer = csv.DictWriter(result, fieldnames=selected, lineterminator="\n"); writer.writeheader()
+    count = 0
+    for row in reader:
+        if count >= 5000 or None in row or any(row.get(key) is None for key in headers):
+            raise ValueError("incomplete rows")
+        projected = {}
+        for key in selected:
+            value = row[key].strip()
+            if key == "method":
+                if value not in _METHODS:
+                    raise ValueError("unknown method")
+            elif key in {"SNP", "snp"}:
+                if not re.fullmatch(r"rs[0-9]{1,16}", value):
+                    raise ValueError("unsafe variant identifier")
+            elif value in {"", "NA", "NaN"}:
+                if key in required:
+                    raise ValueError("incomplete primary statistic")
+            elif len(value) > 40 or not math.isfinite(float(value)):
+                raise ValueError("invalid number")
+            elif key in {"se", "nsnp"} and float(value) <= 0 or key in {"pval", "Q_pval"} and not 0 <= float(value) <= 1:
+                raise ValueError("invalid statistic")
+            projected[key] = value
+        writer.writerow(projected); count += 1
+    if not variants and count == 0:
+        raise ValueError("no completed statistic")
+    return result.getvalue().encode(), count
+
+
+def _publish_partial_failure(inputs, stage, output, prefix, error_code, environment, *, artifacts_safe=True):
+    """Publish only a fresh scientific projection after confirmed analysis quiescence.
+
+    Logs, exception metadata, free text, plots and diagnostic receipts never enter
+    this projection. The ordinary held-descriptor publisher still owns writes.
+    """
+    if not artifacts_safe:
+        return [], []
+    secrets = sensitive_values(environment)
+    summary = {"schema_version": 1, "status": "partial", "primary_estimate_available": False,
+               "original_error_code": error_code if isinstance(error_code, str) and _RUNNER_CODE.fullmatch(error_code) else "mr_analysis_failed",
+               "available": [], "unavailable": []}
+    try:
+        candidates = [(parts, size) for parts, size in _inventory(inputs, stage)
+                      if (len(parts) == 3 and parts[0] == "analysis-data" and parts[-1] in _NUMERIC_FILES | {"selected-source-rows.csv", "harmonised-rows.csv"})
+                      or (len(parts) == 2 and parts[0] == "inputs" and parts[-1] in {"open-exposure.csv", "open-outcome.csv"})]
+        if len(candidates) > MAX_DIAGNOSTIC_FILES or sum(size for _, size in candidates) > MAX_DIAGNOSTIC_BYTES:
+            raise ValueError("bounded projection exceeded")
+    except (OSError, ValueError, inputs.MRInputError):
+        candidates = []
+        summary["unavailable"].append("unsafe_or_oversized_source_artifacts")
+    with tempfile.TemporaryDirectory(prefix="evimed-mr-partial-") as temporary:
+        pairs = {}
+        with inputs.directory_fd(Path(temporary)) as projection:
+            for parts, size in candidates:
+                try:
+                    if size > MAX_DIAGNOSTIC_FILE_BYTES:
+                        raise ValueError("file too large")
+                    with inputs._regular_file(stage, parts) as source:
+                        before = inputs._identity(os.fstat(source))
+                        with os.fdopen(os.dup(source), "rb") as stream:
+                            body = stream.read(MAX_DIAGNOSTIC_FILE_BYTES + 1)
+                        if before != inputs._identity(os.fstat(source)) or len(body) != size or any(secret in body for secret in secrets):
+                            raise ValueError("source changed or sensitive")
+                    body, count = _scientific_rows(body, parts[-1])
+                    pair = pairs.setdefault(parts[1] if parts[0] == "analysis-data" else "source", f"pair-{len(pairs) + 1:03d}")
+                    if pair not in os.listdir(projection):
+                        os.mkdir(pair, mode=0o700, dir_fd=projection)
+                    with inputs.directory_fd(projection, (pair,)) as destination:
+                        inputs._write_new(destination, parts[-1], body)
+                    summary["available"].append({"path": f"{pair}/{parts[-1]}", "rows": count,
+                                                 "scope": "completed_numeric_module" if parts[-1] in _NUMERIC_FILES else "observed_source_or_harmonised_rows"})
+                    if parts[-1] == "mr_results.csv":
+                        summary["primary_estimate_available"] = True
+                except (OSError, ValueError, UnicodeError, csv.Error, inputs.MRInputError):
+                    summary["unavailable"].append(parts[-1])
+            if not summary["available"]:
+                return [], []
+            summary["not_computed"] = [] if summary["primary_estimate_available"] else ["causal_effect_not_available"]
+            inputs._write_new(projection, "partial-research.json", json.dumps(summary, indent=2).encode())
+            text = ("# Partial Mendelian randomization results\n\nThe job failed. These are validated numerical projections of completed files, not a completed research report.\n\n"
+                    + ("A completed primary estimate is available.\n" if summary["primary_estimate_available"] else "No completed primary causal estimate is available; source or harmonized rows do not establish a causal result.\n")
+                    + "\nUnlisted or unavailable modules were not verified as complete. Missing tests are not negative findings. Effect units, cohort overlap and analyzed ancestry proportions remain unknown unless separately documented.\n")
+            text += "\n".join(f"- [{item['path']}]({item['path']}): {item['rows']} rows, {item['scope']}" for item in summary["available"])
+            inputs._write_new(projection, "partial-research.md", text.encode())
+            return _publish(inputs, projection, output, prefix)
+
+
 @contextmanager
 def _analysis_group(credentials):
     previous = os.getegid()
@@ -652,10 +752,21 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                             except (OSError, ValueError, inputs.MRInputError):
                                 diagnostic = {"failed": True, "diagnosticOnly": True,
                                               "retentionError": "mr_failure_diagnostic_retention_failed"}
+                            partial, partial_receipts = [], []
+                            artifacts_safe = not interruption or interruption.get("errorCode") != "mr_analysis_stop_failed"
+                            if artifacts_safe:
+                                if authority["sources"]:
+                                    inputs.verify_published_inputs(authority["request"], Path(temporary), authority["sources"], output_directory_fd=stage)
+                                _target_is_current(inputs, job, workspace, output)
+                                partial, partial_receipts = _publish_partial_failure(
+                                    inputs, stage, output, job.output_root.relative_to(job.workspace), result.get("errorCode"), environment,
+                                )
+                                _target_is_current(inputs, job, workspace, output)
                             return {
                                 "returnCode": completed.returncode or 1,
                                 "result": result,
-                                "artifacts": [],
+                                "artifacts": partial,
+                                "partialScientificReceipt": {"schemaVersion": 1, "files": partial_receipts} if partial else None,
                                 "failureDiagnosticReceipt": diagnostic,
                             }
                         if authority["sources"]:

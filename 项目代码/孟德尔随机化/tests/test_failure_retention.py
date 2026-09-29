@@ -155,6 +155,5 @@ def test_incomplete_primary_csv_never_becomes_completed_partial_statistics(direc
     output = tmp_path / "public"; output.mkdir()
     with inputs.directory_fd(output) as target:
         jobs._publish_partial_failure(inputs, source, target, Path("output"), "mr_analysis_failed", {})
-    summary = json.loads((output / "partial-research.json").read_text())
-    assert summary["primary_estimate_available"] is False
+    assert not list(output.iterdir())
     assert not list(output.rglob("mr_results.csv"))
