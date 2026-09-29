@@ -200,7 +200,7 @@ export class MethodConsolidation {
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, evaluate?: ((request: any) => Promise<any>) | null,
+   *          jobs?: any, handbookConsolidation?: any, evaluate?: ((request: any) => Promise<any>) | null,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
@@ -208,7 +208,7 @@ export class MethodConsolidation {
   constructor({
     dispatch, readResult, learning, jobs = null, evaluate = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    describe = null,
+    describe = null, handbookConsolidation = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -219,6 +219,7 @@ export class MethodConsolidation {
     this.learning = learning;
     this.jobs = jobs;
     this.evaluate = evaluate;
+    this.handbookConsolidation = handbookConsolidation;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
     // happened and not a step in it.
@@ -518,18 +519,8 @@ export class MethodConsolidation {
    * @param {{job: any}} request
    */
   async optimize({ job }) {
-    const capabilityId = String(job.payload?.capabilityId ?? "");
-    if (!capabilityId) throw new HttpError(400, "consolidate_payload_invalid", "An optimize job must name a capability.");
-    // The staging directory and the pull-request generator live outside the
-    // control plane on purpose: a control plane that can open a pull request
-    // against its own capabilities is a control plane that can change what it
-    // is measured against.
-    return {
-      action: "optimize",
-      capabilityId,
-      staged: false,
-      reason: "handbook proposals are staged by scripts/dev/open-method-pr.mjs, never by the control plane",
-    };
+    if (!this.handbookConsolidation) throw new HttpError(503, "handbook_loop_unavailable", "The handbook consumer is unavailable.");
+    return this.handbookConsolidation.run({ job });
   }
 
   /**
