@@ -337,6 +337,7 @@ class MRAnalysisResult(BaseModel):
     outcome_scale: dict[str, Any] = Field(default_factory=unknown_scale)
     sample_overlap: dict[str, Any] = Field(default_factory=unknown_overlap)
     variant_sample_sizes: dict[str, Any] = Field(default_factory=dict)
+    source_variant_sample_sizes: dict[str, Any] = Field(default_factory=dict)
     sample_size_exposure: int | None = None
     sample_size_outcome: int | None = None
     exposure_metadata: dict[str, Any] = Field(default_factory=dict)

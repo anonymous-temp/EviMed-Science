@@ -1049,6 +1049,7 @@ class PaperGenerator:
                 ("Scale provenance", result.exposure_scale["status"], result.outcome_scale["status"]),
                 ("Transformation", result.exposure_scale.get("transformation") or "Unknown", result.outcome_scale.get("transformation") or "Unknown"),
                 ("Variant sample size observations", *[str(context["sample_sizes"][role]["variants"] or "Unknown") for role in ("exposure", "outcome")]),
+                ("Source sample size observations before catalogue fill", *[str(context["sample_sizes"][role]["source_variants"] or "Unknown") for role in ("exposure", "outcome")]),
                 ("Metadata attribution", *[
                     "Provided; not independently verified" if metadata.get("metadata_source") == "provided_local_data"
                     else "Recorded source metadata" for metadata in (em, om)

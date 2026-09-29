@@ -71,7 +71,7 @@ def scientific_context(result) -> dict:
         metadata = getattr(result, f"{role}_metadata") or {}
         samples[role] = {"catalogue_n": metadata.get("sample_size_total") or metadata.get("sample_size") or getattr(result, f"sample_size_{role}"),
                          "catalogue_source": metadata.get("metadata_source"),
-                         "variants": result.variant_sample_sizes.get(role), "ancestry_linkage": "unknown"}
+                         "variants": result.variant_sample_sizes.get(role), "source_variants": result.source_variant_sample_sizes.get(role), "ancestry_linkage": "unknown"}
     return {"exposure_scale": result.exposure_scale, "outcome_scale": result.outcome_scale,
             "overlap": result.sample_overlap, "sample_sizes": samples,
             "ancestry": {role: getattr(result, f"{role}_metadata").get("population") for role in ("exposure", "outcome")},

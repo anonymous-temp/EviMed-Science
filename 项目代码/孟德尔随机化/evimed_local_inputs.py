@@ -801,7 +801,7 @@ def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict
             setattr(result, f"{label}_scale", copy.deepcopy(samples.get("effectScale") or unknown_scale()))
             own_sizes = (study.get("sampleSize") or {}).get("originalVariantSampleSizes")
             if own_sizes:
-                result.variant_sample_sizes[label] = copy.deepcopy(own_sizes)
+                result.source_variant_sample_sizes[label] = copy.deepcopy(own_sizes)
             setattr(result, f"{label}_metadata", {
                 "gwas_id": study["accession"],
                 "trait": study.get("trait") or request[role],
