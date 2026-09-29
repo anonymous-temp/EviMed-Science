@@ -144,6 +144,12 @@ def resolve_analysis_judgments(project, protocol, studies):
 
     catalogue = _catalogue(studies)
     ids = {item["study_id"] for item in catalogue}
+    trial_candidates = [(f"{_study_id(study)}:{index}", outcome.primary_analysis_alignment.assessment)
+                        for study in studies for index, outcome in enumerate(study.outcomes)
+                        if outcome.primary_analysis_alignment is not None]
+    trial_issues = {}
+    for issue in project_trial_unit_issues(project, trial_candidates):
+        trial_issues.setdefault(issue["row_id"], []).append(issue)
     saved = project.load_json(FILE, subdir="analysis") or {"schema_version": 1, "rows": {}}
     current_rows = {f"{_study_id(study)}:{index}": (study, index)
                     for study in studies for index in range(len(study.outcomes))}
@@ -158,9 +164,7 @@ def resolve_analysis_judgments(project, protocol, studies):
             if judgment_for_row(project, protocol, study, index) is not None:
                 continue
             status = alignment_status(project, protocol, study, index)
-            identity_issues = (project_trial_unit_issues(project, [(f"{_study_id(study)}:{index}",
-                               outcome.primary_analysis_alignment.assessment)])
-                               if outcome.primary_analysis_alignment else [])
+            identity_issues = trial_issues.get(f"{_study_id(study)}:{index}", [])
             if status["status"] == "match" and not identity_issues:
                 continue
             source = _source(project, study, index).strip()
