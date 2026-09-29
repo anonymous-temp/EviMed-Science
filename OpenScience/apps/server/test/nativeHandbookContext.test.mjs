@@ -63,3 +63,10 @@ test("a preparation that outlives its bound cannot write an envelope later", asy
   await new Promise(resolve => setTimeout(resolve, 35));
   assert.equal((await context.read(project, { sessionId: "session", inputs: [{ requestId: "slow", textDigest: hash("slow") }] })).contexts.length, 0);
 }, { timeoutMs: 5, select: async () => { await new Promise(resolve => setTimeout(resolve, 25)); return { context: "Late", items: [] }; } }));
+
+test("a learning pause or trial beginning after preparation prevents the queued input from reading the supplement", async () => fixture(async ({ context, project }) => {
+  await context.prepare(project, request("A"));
+  context.allowed = async () => false;
+  assert.deepEqual(await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("A") }] }), { contexts: [] });
+  assert.equal(await context.prepare(project, request("B")), null);
+}));
