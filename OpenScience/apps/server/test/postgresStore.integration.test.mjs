@@ -292,6 +292,12 @@ test("PostgreSQL bootstrap applies the character floor only when creating a new 
     await app.store.loadUsers();
     const after = await admin.query("SELECT password_hash FROM evimed_control.users WHERE id = 'bootstrap-floor'");
     assert.equal(after.rows[0].password_hash, before.rows[0].password_hash, "existing passwords are not reset");
+    await app.store.createUser("remaining-user", "abc123");
+    await admin.query("DELETE FROM evimed_control.users WHERE id = 'bootstrap-floor'");
+    await admin.query("INSERT INTO evimed_control.deleted_users(id) VALUES ('bootstrap-floor')");
+    await app.store.loadUsers();
+    assert.equal((await app.store.userById("remaining-user")).id, "remaining-user",
+      "a deliberately deleted bootstrap account does not block other accounts");
   } finally {
     await app.close().catch(error => { if (error.code !== "ERR_SERVER_NOT_RUNNING") throw error; });
     await admin.query("DROP SCHEMA IF EXISTS evimed_control CASCADE");

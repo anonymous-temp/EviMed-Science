@@ -102,8 +102,9 @@ test("local auth secret tooling counts six Unicode characters and preserves the 
     await writeFile(secretFile, "六个汉字密码\n", { mode: 0o600 });
     await runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env });
     await writeFile(secretFile, "只有五个字\n", { mode: 0o600 });
-    await assert.rejects(runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env }),
+    await assert.rejects(runCommand(process.execPath, [configureLocalAuthScript, "--check", "--new-account"], { env }),
       error => /local_auth_secret_size/.test(error.stderr));
+    await runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env });
     await writeFile(secretFile, "short\n", { mode: 0o600 });
     await assert.rejects(
       runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env }),
