@@ -13,7 +13,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 
 from new_meta.core.primary_analysis_alignment import (
-    _read_scoped, alignment_status, digest, project_is_unattended, protocol_fingerprint, row_fingerprint,
+    _normalized_quote, _read_scoped, alignment_status, digest, project_is_unattended, protocol_fingerprint, row_fingerprint,
 )
 
 FILE = "autonomous_analysis.json"
@@ -80,12 +80,12 @@ def _trial_aliases(project, studies, decisions=()):
             verification = proof.assessment.verification if proof else None
             if verification is None:
                 continue
-            source = " ".join(_source(project, study, index).casefold().split())
+            source = _normalized_quote(_source(project, study, index))
             for unit in verification.trial_units:
                 if unit.role == "mentioned_only":
                     continue
                 for field in ("registry_id", "trial_name"):
-                    identity = " ".join(getattr(unit, field).casefold().split())
+                    identity = _normalized_quote(getattr(unit, field))
                     if not identity or identity not in source:
                         continue
                     key = (field, identity)
@@ -137,7 +137,7 @@ def resolve_analysis_judgments(project, protocol, studies):
     if not project_is_unattended(project):
         return
     from new_meta.core.agent_base import BaseAgent
-    from new_meta.core.extraction_verification import calculation_fields, numeric_fields, numeric_value_in_quote
+    from new_meta.core.extraction_verification import calculation_fields, numeric_fields, numeric_value_in_quote, quote_is_anchored
     from new_meta.core.llm_retry import bounded_output_call, strict_suffix
     from new_meta.core.primary_analysis_alignment import project_trial_unit_issues
     from new_meta.core.verification_outcome import left_out_reason
@@ -213,7 +213,7 @@ def resolve_analysis_judgments(project, protocol, studies):
                 fields = calculation_fields(row, protocol) or set()
                 supported = all(
                     field in judgment.numeric_quotes and judgment.numeric_quotes[field].strip()
-                    and judgment.numeric_quotes[field] in source
+                    and quote_is_anchored(judgment.numeric_quotes[field], "Model-selected source passage", source)
                     and numeric_value_in_quote(values[field], judgment.numeric_quotes[field], field)
                     for field in fields)
                 admitted = judgment.include and supported and judgment.trial_id in ids

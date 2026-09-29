@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 
 def write_partial_report(project, phase):
@@ -31,8 +32,12 @@ def write_partial_report(project, phase):
                 numbers = {key: value for key, value in outcome.items()
                            if isinstance(value, (int, float)) and not isinstance(value, bool)
                            and key not in {"source_page", "override_revision"}}
+                unusable = [key for key, value in numbers.items() if not math.isfinite(value)]
+                numbers = {key: value for key, value in numbers.items() if key not in unusable}
                 lines.append(f"- {outcome.get('outcome_name') or 'Reported outcome'}: extracted values "
                              + json.dumps(numbers, ensure_ascii=False, allow_nan=False) + ".")
+                if unusable:
+                    lines.append("  Recorded but unusable numeric fields: " + ", ".join(unusable) + ".")
             if c.get("doi"):
                 lines.extend(["", "DOI: " + c["doi"]])
             lines.append("")

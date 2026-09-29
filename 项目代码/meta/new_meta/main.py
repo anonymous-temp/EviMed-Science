@@ -1124,11 +1124,21 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
 
 
 def _admit_cli_protocol(project, protocol, **kwargs):
-    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
+    from new_meta.core.method_planning import MethodCapabilityBlockedError, ProtocolInputRequired, admit_project_protocol
     try:
         return admit_project_protocol(project, protocol, **kwargs)
     except ProtocolInputRequired as exc:
         _require_cli_method_delivery(project, exc.phase)
+    except MethodCapabilityBlockedError as exc:
+        _require_cli_capability_delivery(project, exc)
+
+
+def _require_cli_capability_delivery(project, error):
+    from new_meta.schemas.phase_result import PhaseIssue, PhaseResult
+    phase = PhaseResult(run_id=project.base_dir.name, phase="synthesis", status="blocked",
+                        summary=str(error), error_code="method_capability_blocked",
+                        issues=[PhaseIssue(code="method_capability_blocked", message=str(error), blocking=True)])
+    _require_cli_method_delivery(project, phase)
 
 
 def _require_cli_primary_selection(project, selection_result):
@@ -5289,6 +5299,12 @@ if __name__ == "__main__":
             except ReleaseBlockedError:
                 sys.exit(2)
         if isinstance(exc, MethodCapabilityBlockedError):
+            from new_meta.core.primary_analysis_alignment import project_is_unattended
+            if exc.project is not None and project_is_unattended(exc.project):
+                try:
+                    _require_cli_capability_delivery(exc.project, exc)
+                except ReleaseBlockedError:
+                    sys.exit(2)
             # A scope outside the validated capability set is a decision, not a
             # crash: write it where every other terminal state is written and
             # use the same exit code, so the caller reads a narrower capability
