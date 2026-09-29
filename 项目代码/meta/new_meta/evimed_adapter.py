@@ -641,10 +641,21 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
             active.append((path, state))
         elif state.get("status") == "running":
             _settle_orphan(path, state)
+    gateway = engine_model.enabled()
+    # Prefer a likely existing execution when minting, then compare the policy
+    # actually admitted. A missing native effort means provider/default policy,
+    # not permission to reuse a job at an arbitrary previous intensity.
+    candidate = next((state for _, state in active + jobs if _same_execution(state, digest, execution_context)), None)
+    job_id = str(candidate["jobId"]) if candidate else _new_job_id()
+    try:
+        model_credentials = _job_model_credentials(job_id, workload_token, execution_context)
+        admitted_policy = json.loads(model_credentials[engine_model.POLICY_ENV]) if gateway else None
+    except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError, KeyError, ValueError):
+        return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta job.", True)
     # The same request while its job runs is that job: a run that lost the id
     # (or asked twice) gets it back instead of paying for a second review.
     for path, state in active:
-        if _same_execution(state, digest, execution_context):
+        if _same_execution(state, digest, execution_context, admitted_policy):
             return _existing_job(path, state, "reused-running")
     limit = _positive_int_env("EVIMED_META_MAX_ACTIVE_JOBS", _DEFAULT_MAX_ACTIVE_JOBS)
     if len(active) >= limit:
@@ -660,7 +671,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
             ],
             stop_reason="Stop starting jobs until the running MetaAgent job is terminal.",
         )
-    previous = next(((path, state) for path, state in jobs if _same_execution(state, digest, execution_context)), None)
+    previous = next(((path, state) for path, state in jobs if _same_execution(state, digest, execution_context, admitted_policy)), None)
     if previous is not None:
         path, state = previous
         # A terminal decision is the answer to its request, blocked or not,
@@ -670,14 +681,18 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         if state.get("status") == "succeeded":
             return _existing_job(path, state, "reused-succeeded")
         if state.get("status") == "failed" and _resumable_project(Path(str(state.get("outputRoot") or ""))):
-            return _resume_job(path, state, workload_token=workload_token, execution_context=execution_context)
-    job_id = f"meta-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
-    model_credentials = {}
-    if engine_model.enabled():
+            if state["jobId"] != job_id:
+                try:
+                    model_credentials = _job_model_credentials(state["jobId"], workload_token, execution_context)
+                except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
+                    return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta retry.", True)
+            return _resume_job(path, state, model_credentials=model_credentials)
+    # The candidate may have been at another intensity, or have no resumable
+    # checkpoint. Its unused token must never be handed to a different job.
+    if candidate is not None:
+        job_id = _new_job_id()
         try:
-            model_credentials = engine_model.request_credential(
-                url=engine_model.token_url(), secret=_read_signing_secret(), workload_token=workload_token,
-                kind="meta-analysis", job_id=job_id, execution_context=execution_context)
+            model_credentials = _job_model_credentials(job_id, workload_token, execution_context)
         except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
             return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta job.", True)
     run_root = workspace / "meta-analysis-runs"
@@ -774,15 +789,35 @@ def _existing_job(state_path: Path, state: dict[str, Any], outcome: str) -> dict
     }
 
 
-def _same_execution(state: dict[str, Any], digest: str, context: dict | None) -> bool:
+def _new_job_id() -> str:
+    return f"meta-{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
+
+
+def _job_model_credentials(job_id: str, workload_token: str | None, context: dict | None) -> dict[str, str]:
+    if not engine_model.enabled():
+        return {}
+    return engine_model.request_credential(
+        url=engine_model.token_url(), secret=_read_signing_secret(), workload_token=workload_token,
+        kind="meta-analysis", job_id=job_id, execution_context=context)
+
+
+def _same_execution(state: dict[str, Any], digest: str, context: dict | None,
+                    admitted_policy: dict | None = None) -> bool:
     if state.get("requestDigest") != digest:
         return False
+    previous = state.get("modelPolicy") or {}
+    if admitted_policy is not None:
+        # A legacy failed checkpoint can migrate to the gateway. An already
+        # running or completed direct job is never relabelled as gateway work.
+        if not previous and state.get("status") == "failed":
+            return True
+        return previous.get("reasoningEffort") == admitted_policy["reasoningEffort"]
     selected = (context or {}).get("reasoningEffort")
-    return selected is None or (state.get("modelPolicy") or {}).get("reasoningEffort") == selected
+    return selected is None or previous.get("reasoningEffort") == selected
 
 
-def _resume_job(state_path: Path, state: dict[str, Any], *, workload_token: str | None = None,
-                execution_context: dict | None = None) -> dict[str, Any]:
+def _resume_job(state_path: Path, state: dict[str, Any], *,
+                model_credentials: dict[str, str] | None = None) -> dict[str, Any]:
     """Run a failed job again from its own checkpoint, within the attempt limit."""
     job_id = str(state.get("jobId"))
     limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
@@ -801,14 +836,9 @@ def _resume_job(state_path: Path, state: dict[str, Any], *, workload_token: str 
             artifacts=state.get("artifacts") or None,
             stop_reason="Stop retrying this request; its partial results are preserved.",
         )
-    model_credentials = {}
-    if engine_model.enabled():
-        try:
-            model_credentials = engine_model.request_credential(
-                url=engine_model.token_url(), secret=_read_signing_secret(), workload_token=workload_token,
-                kind="meta-analysis", job_id=job_id, execution_context=execution_context)
-        except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
-            return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta retry.", True)
+    if model_credentials:
+        state["modelRoute"] = "gateway"
+        state["modelPolicy"] = json.loads(model_credentials[engine_model.POLICY_ENV])
     previous_error = state.get("error")
     for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid",
                 "releaseStatus", "blockingReasons", "warningReasons", "releaseSummary",
