@@ -89,6 +89,48 @@ def test_row_snapshots_and_variant_n_belong_to_current_attempt(tmp_path, monkeyp
     assert (raw / "harmonised-rows.csv").exists()
 
 
+@pytest.mark.parametrize("fresh_summary", [False, True])
+@pytest.mark.parametrize("fresh_records", [False, True])
+def test_current_summary_and_nested_selection_records_are_independently_fresh(tmp_path, monkeypatch, fresh_summary, fresh_records):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+
+    raw = tmp_path / "raw"; raw.mkdir()
+    summary = {"n_instruments": 4, "mean_f_statistic": 44.5, "pval_threshold": 5e-6,
+               "sample_size_exposure": 12345, "sample_size_outcome": 67890,
+               "skipped_analyses": "mr_presso: package absent"}
+    records = {"instrument-selection.json": {"method": "declared_preclumped", "ld_rechecked": False},
+               "harmonisation.json": {"before": 6, "after": 4}}
+    (raw / "mr_summary.json").write_text(json.dumps({**summary, "sample_size_exposure": 999}))
+    for name in records:
+        (raw / name).write_text('{"old_attempt": true}')
+
+    def completed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,4,0.3,0.04,0.001\n")
+        if fresh_summary:
+            (output / "mr_summary.json").write_text(json.dumps(summary))
+        if fresh_records:
+            for name, value in records.items():
+                (output / name).write_text(json.dumps(value))
+        return True
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", completed)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 4
+    assert result.sample_size_exposure == (12345 if fresh_summary else None)
+    assert result.sample_size_outcome == (67890 if fresh_summary else None)
+    assert result.f_statistic_mean == (44.5 if fresh_summary else None)
+    assert result.pval_threshold == (5e-6 if fresh_summary else 5e-8)
+    assert result.skipped_analyses == (["mr_presso: package absent"] if fresh_summary else [])
+    assert result.instrument_selection == (records["instrument-selection.json"] if fresh_records else {})
+    assert result.harmonisation == (records["harmonisation.json"] if fresh_records else {})
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert any(path.endswith("mr_summary.json") for path in copied) == fresh_summary
+    for name in records:
+        assert any(path.endswith(name) for path in copied) == fresh_records
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError
