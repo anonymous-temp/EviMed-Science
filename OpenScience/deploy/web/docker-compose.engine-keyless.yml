@@ -1,4 +1,4 @@
-# Optional overlay: the five adapter-run specialist engines hold no DeepSeek key.
+# Optional overlay: all six specialist engines hold no DeepSeek key.
 #
 # Apply after docker-compose.yml once OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED
 # is true in .env (gap E4). With the lever on, every job's engine calls the
@@ -8,8 +8,6 @@
 # required here by interpolation: applied without it, compose refuses to start
 # rather than leave the engines with neither a key nor a gateway.
 #
-# The MetaAgent service is not listed: it keeps its key until it asks for a
-# per-job credential the way the shared adapter does.
 x-engine-keyless: &engine-keyless
   environment:
     EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:?the keyless overlay needs OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED=true}
@@ -20,6 +18,7 @@ x-engine-keyless: &engine-keyless
       read_only: true
 
 services:
+  evimed-meta-agent: *engine-keyless
   evimed-mr-agent: *engine-keyless
   evimed-bibliometric-agent: *engine-keyless
   evimed-research-topic-agent: *engine-keyless

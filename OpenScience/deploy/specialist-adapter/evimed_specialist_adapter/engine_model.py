@@ -54,14 +54,14 @@ class EngineModelUnavailable(RuntimeError):
 def validate_context(value):
     """Bound caller metadata; the control plane verifies the owning session."""
     fields = {"v", "sessionId", "callId", "rootCallId", "provider", "model", "reasoningEffort"}
-    if (not isinstance(value, dict) or set(value) - fields or value.get("v") != 1
+    if (not isinstance(value, dict) or set(value) - fields or type(value.get("v")) is not int or value.get("v") != 1
             or value.get("provider") != "deepseek-official"
-            or value.get("model") not in {"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"}
+            or not isinstance(value.get("model"), str) or value.get("model") not in {"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"}
             or not isinstance(value.get("sessionId"), str)
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", value["sessionId"])
             or any(not isinstance(value.get(key), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_:.-]{0,199}", value[key])
                    for key in ("callId", "rootCallId"))
-            or ("reasoningEffort" in value and value["reasoningEffort"] not in EFFORTS)):
+            or ("reasoningEffort" in value and (not isinstance(value["reasoningEffort"], str) or value["reasoningEffort"] not in EFFORTS))):
         raise EngineModelUnavailable("the engine execution context is invalid")
     return dict(value)
 
@@ -78,7 +78,7 @@ def context_header(raw):
 
 
 def model_policy(value):
-    if not isinstance(value, dict) or value.get("reasoningEffort") not in EFFORTS:
+    if not isinstance(value, dict) or not isinstance(value.get("reasoningEffort"), str) or value["reasoningEffort"] not in EFFORTS:
         raise EngineModelUnavailable("the control plane answered without a usable model policy")
     return {"reasoningEffort": value["reasoningEffort"], "source": str(value.get("source") or "deployment-default"),
             **({"sessionId": value["sessionId"]} if isinstance(value.get("sessionId"), str) else {})}

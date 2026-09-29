@@ -1599,7 +1599,7 @@ export function loadConfig(overrides = {}) {
     // read the same variable (deploy/web/docker-compose.yml), so one lever
     // moves both sides.
     engineModelGatewayEnabled:
-      overrides.engineModelGatewayEnabled ?? boolEnv("OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED", false),
+      overrides.engineModelGatewayEnabled ?? boolEnv("OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED", true),
     // Six hours: twice what the release audit allows one engine job
     // (`run_specialist_jobs.py --job-timeout-seconds`, 10800), and short enough
     // that a credential copied out of a job stops working the same day.

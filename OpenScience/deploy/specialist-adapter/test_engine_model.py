@@ -231,7 +231,8 @@ def test_the_keyless_overlay_takes_the_key_out_of_every_adapter_and_needs_the_le
     base = yaml.safe_load((root / "deploy/web/docker-compose.yml").read_text())
     adapters = {name for name, service in base["services"].items()
                 if (service.get("build") or {}).get("dockerfile") == "OpenScience/deploy/specialist-adapter/Dockerfile"}
-    assert set(overlay["services"]) == adapters and len(adapters) == 5
+    adapters.add("evimed-meta-agent")
+    assert set(overlay["services"]) == adapters and len(adapters) == 6
     for name in adapters:
         service = overlay["services"][name]
         assert service["volumes"] == [{"type": "bind", "source": "/dev/null",
@@ -240,7 +241,7 @@ def test_the_keyless_overlay_takes_the_key_out_of_every_adapter_and_needs_the_le
         # The base file routes the same lever to the adapter and names where
         # the credential is asked for.
         environment = base["services"][name]["environment"]
-        assert environment["EVIMED_ENGINE_MODEL_GATEWAY"] == "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}"
+        assert environment["EVIMED_ENGINE_MODEL_GATEWAY"] == "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}"
         assert environment["EVIMED_ENGINE_MODEL_TOKEN_URL"].endswith("/internal/engines/v1/model-token}")
     assert "OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED" in base["services"]["open-science-web"]["environment"]
 
