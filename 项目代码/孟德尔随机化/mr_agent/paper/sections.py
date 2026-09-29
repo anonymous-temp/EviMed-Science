@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from mr_agent.source_context import scientific_context_prompt
+
 import logging
 import json
 import re
@@ -220,7 +222,7 @@ def _build_results_summary(results: list[MRAnalysisResult]) -> str:
     for r in results:
         if not r.mr_results:
             continue
-        part = f"\n## {r.exposure_name} → {r.outcome_name}\n"
+        part = scientific_context_prompt(r) + f"\n## {r.exposure_name} → {r.outcome_name}\n"
         part += f"GWAS IDs: {r.exposure_id} → {r.outcome_id}\n"
         part += f"Number of IVs: {r.n_instruments}\n"
         if r.f_statistic_mean is not None:
@@ -278,6 +280,7 @@ def write_limitations(
         n_ivs=first.n_instruments, population=population,
         bidirectional=bidirectional, sensitivity=sensitivity,
     )
+    prompt += "\n".join(scientific_context_prompt(result) for result in results)
     return _generate_section(llm, prompt, max_tokens=2000, language=language)
 
 

@@ -567,6 +567,9 @@ class MRPipeline:
         result.outcome_name = out_name
         result.exposure_metadata = self._metadata_for_gwas_id(eid)
         result.outcome_metadata = self._metadata_for_gwas_id(oid)
+        from mr_agent.source_context import unknown_scale
+        result.exposure_scale = result.exposure_metadata.get("effect_scale") or unknown_scale()
+        result.outcome_scale = result.outcome_metadata.get("effect_scale") or unknown_scale()
         result.sample_size_exposure = result.exposure_metadata.get("sample_size")
         result.sample_size_outcome = result.outcome_metadata.get("sample_size")
         return result
@@ -650,6 +653,8 @@ class MRPipeline:
             n_ivs=r.n_instruments,
             f_stat=f"{r.f_statistic_mean:.2f}" if r.f_statistic_mean else "N/A",
         )
+        from mr_agent.source_context import scientific_context_prompt
+        prompt += scientific_context_prompt(r)
         lang_instr = LANGUAGE_INSTRUCTION.get(self.language, "")
         if lang_instr:
             prompt += lang_instr

@@ -927,13 +927,16 @@ def read_sample_metadata(study: CatalogStudy, http: _Http) -> dict[str, Any]:
         return {"source": study.metadata_url, "reason": f"the metadata file could not be read ({error.code})"}
     except (yaml.YAMLError, UnicodeDecodeError):
         return {"source": study.metadata_url, "reason": "the metadata file is not readable YAML"}
+    from mr_agent.source_context import repository_scale
+    scale = repository_scale(payload if isinstance(payload, dict) else {}, source=study.metadata_url)
     samples = payload.get("samples") if isinstance(payload, dict) else None
     if not isinstance(samples, list) or not samples:
-        return {"source": study.metadata_url, "reason": "the metadata file lists no samples"}
+        return {"source": study.metadata_url, "reason": "the metadata file lists no samples", "effectScale": scale}
     designs = {sample.get("case_control_study") if isinstance(sample, dict) else None for sample in samples}
     record = {
         "source": study.metadata_url,
         "samples": len(samples),
+        "effectScale": scale,
         "sampleSize": _sample_total(samples, "sample_size"),
         "caseControlStudy": designs.pop() if len(designs) == 1 and designs <= {True, False} else None,
         "caseCount": _sample_total(samples, "case_count"),
@@ -952,6 +955,8 @@ def with_study_sample_size(rows: list["Variant"], samples: dict[str, Any]) -> tu
     an n column left it empty, and the test failed. Filling a study-level value
     into each row is what TwoSampleMR's add_metadata() does for OpenGWAS.
     """
+    from mr_agent.source_context import variant_sample_summary
+    original_sizes = variant_sample_summary([row.n for row in rows], scope="selected_source_rows_before_catalogue_fill")
     total = samples.get("sampleSize")
     own = sum(1 for row in rows if row.n is not None)
     filled = [
@@ -960,6 +965,7 @@ def with_study_sample_size(rows: list["Variant"], samples: dict[str, Any]) -> tu
     ]
     return filled, {
         "rowsWithOwnSampleSize": own,
+        "originalVariantSampleSizes": original_sizes,
         "rowsGivenStudySampleSize": 0 if total is None else len(rows) - own,
         "studySampleSize": total,
     }

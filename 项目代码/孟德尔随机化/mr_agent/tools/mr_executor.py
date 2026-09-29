@@ -357,6 +357,7 @@ def run_mr_local(
     result.exposure_source_type = exposure_source.source_type
     result.outcome_source_type = outcome_source.source_type
     for label, source in (("exposure", exposure_source), ("outcome", outcome_source)):
+        setattr(result, f"{label}_scale", source.effect_scale)
         if source.is_local():
             setattr(result, f"{label}_name", source.trait_name)
             setattr(result, f"{label}_metadata", {

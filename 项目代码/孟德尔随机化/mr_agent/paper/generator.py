@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from mr_agent.source_context import scale_sentence, scientific_context
+
 import logging
 from pathlib import Path
 from typing import Callable
@@ -982,6 +984,8 @@ class PaperGenerator:
         zh = self.language == "zh"
         paragraphs: list[str] = []
         for result in results:
+            paragraphs.append(scale_sentence(result, zh=zh))
+            paragraphs.append("目录样本量与逐变异样本量属于不同观测，不能推算实际分析人群的精确血统比例。" if zh else "Catalogue and per-variant sample sizes are distinct observations; they do not establish exact analyzed ancestry proportions.")
             exp_pop = self._metadata_value(result.exposure_metadata, "population")
             out_pop = self._metadata_value(result.outcome_metadata, "population")
             heterogeneity = any(item.q_pval < 0.05 for item in result.heterogeneity)
@@ -994,7 +998,7 @@ class PaperGenerator:
                     "对未报告的结局人群不作欧洲血统推断，跨人群外推性需另行验证。"
                 )
                 paragraphs.append(
-                    ("异质性检验显著，" if heterogeneity else "未检出显著异质性，")
+                    ("异质性检验显著，" if heterogeneity else "未检出显著异质性，" if result.heterogeneity else "未完成异质性检验，")
                     + ("虽然MR-Egger截距未显著，仍不能排除平衡性或非相关多效性。"
                        if result.pleiotropy and result.pleiotropy.pval >= 0.05 else
                        "方向性多效性仍需审慎评估。")
@@ -1002,7 +1006,7 @@ class PaperGenerator:
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")
                 )
                 paragraphs.append(
-                    ("源数据无法证明暴露与结局队列完全不重叠，且运行时已标记潜在样本重叠；偏倚可能向观察性关联靠近。"
+                    ("源数据无法证明暴露与结局队列完全不重叠，且运行时已标记潜在样本重叠；重叠程度和偏倚方向尚未确定。"
                      if result.sample_overlap_warning else
                      "队列级样本重叠信息不足，不能宣称完全无重叠。")
                     + "其他限制包括GWAS数据库选择偏倚、赢家诅咒、水平多效性、"
@@ -1017,7 +1021,7 @@ class PaperGenerator:
                     "unreported ancestry is not inferred, and transportability requires external validation."
                 )
                 paragraphs.append(
-                    ("Heterogeneity was statistically significant. " if heterogeneity else "Significant heterogeneity was not detected. ")
+                    ("Heterogeneity was statistically significant. " if heterogeneity else "Significant heterogeneity was not detected. " if result.heterogeneity else "Heterogeneity was not assessed. ")
                     + ("A non-significant MR-Egger intercept does not exclude balanced or uncorrelated pleiotropy. "
                        if result.pleiotropy and result.pleiotropy.pval >= 0.05 else
                        "Directional pleiotropy remains uncertain. ")
@@ -1025,9 +1029,9 @@ class PaperGenerator:
                        if result.presso_n_outliers is not None and result.presso_global_pval is None else "")
                 )
                 paragraphs.append(
-                    ("The source data did not establish complete cohort non-overlap and the runtime flagged possible overlap; bias may move estimates toward observational associations. "
+                    ("The source data did not establish complete cohort non-overlap and the runtime flagged possible overlap; the extent and direction of bias are unestablished. "
                      if result.sample_overlap_warning else
-                     "Cohort-level overlap information was insufficient, so complete non-overlap is not claimed. ")
+                     "Cohort-level overlap information was insufficient; extent and direction of bias are unestablished, and complete non-overlap is not claimed. ")
                     + "Other limitations include GWAS selection bias, winner's curse, horizontal "
                     + "pleiotropy, linear-average effects that cannot describe thresholds, and the "
                     + ("absence of multivariable MR." if self._reverse_result(result)
@@ -1039,7 +1043,12 @@ class PaperGenerator:
         rows = ["| Characteristic | Exposure | Outcome |", "|---|---:|---:|"]
         for result in results:
             em, om = result.exposure_metadata, result.outcome_metadata
+            context = scientific_context(result)
             values = [
+                ("Exposure unit", result.exposure_scale.get("unit") or "Unknown", result.outcome_scale.get("unit") or "Unknown"),
+                ("Scale provenance", result.exposure_scale["status"], result.outcome_scale["status"]),
+                ("Transformation", result.exposure_scale.get("transformation") or "Unknown", result.outcome_scale.get("transformation") or "Unknown"),
+                ("Variant sample size observations", *[str(context["sample_sizes"][role]["variants"] or "Unknown") for role in ("exposure", "outcome")]),
                 ("Metadata attribution", *[
                     "Provided; not independently verified" if metadata.get("metadata_source") == "provided_local_data"
                     else "Recorded source metadata" for metadata in (em, om)

@@ -84,8 +84,9 @@ MR_SOURCE_SCHEMA = {
                     ),
                 },
                 "columnMapping": object_schema(
-                    {key: SHORT_STRING for key in MR_COLUMN_KEYS}, MR_COLUMN_KEYS
+                    {key: SHORT_STRING for key in (*MR_COLUMN_KEYS, "samplesize")}, MR_COLUMN_KEYS
                 ),
+                "effectScale": object_schema({key: {"type": "string", "minLength": 1, "maxLength": 1000} for key in ("unit", "transformation", "evidence")}),
                 "sampleSize": {
                     "type": "integer",
                     "minimum": 1,

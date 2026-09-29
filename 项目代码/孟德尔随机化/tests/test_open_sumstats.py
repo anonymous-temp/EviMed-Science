@@ -328,12 +328,15 @@ def test_rows_without_their_own_n_take_the_study_sample_size_from_the_metadata_f
         http=osm._Http(opener=catalogue),
     )
     exposure = pair.record["exposure"]
+    from mr_agent.source_context import unknown_scale
     assert exposure["sampleMetadata"] == {
+        "effectScale": unknown_scale(),
         "source": f"{listing}111-GCST000001-EFO_1.h.tsv.gz-meta.yaml", "samples": 2,
         "sampleSize": 166774, "caseControlStudy": True, "caseCount": None, "controlCount": None,
         "ancestrySamples": [["European"], ["South Asian"]],
     }
     assert exposure["sampleSize"] == {
+        "originalVariantSampleSizes": {"scope": "selected_source_rows_before_catalogue_fill", "rows": 4, "reported": 0, "minimum": None, "maximum": None, "complete": False},
         "rowsWithOwnSampleSize": 0, "rowsGivenStudySampleSize": 4, "studySampleSize": 166774,
     }
     assert [row.n for row in pair.exposure_rows] == [166774.0] * 4
