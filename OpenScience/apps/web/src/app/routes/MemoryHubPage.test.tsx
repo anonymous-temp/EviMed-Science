@@ -437,3 +437,13 @@ describe("记忆胶囊", () => {
     expect(title).toHaveAttribute("aria-expanded", "true");
   });
 });
+
+it("identifies the account holding the memories without relabeling an imported issuer", async () => {
+  fetchMemoryProfile.mockResolvedValue({ records: [], groups: {}, activeCount: 0, pendingCount: 0,
+    holder: { id: "alice", name: "研究员甲" } });
+  fetchMyCapsule.mockResolvedValue({ capsule: null, capsules: [], entries: [] });
+  listMethods.mockResolvedValue({ items: [], nextCursor: null });
+  fetchMemoryGrowth.mockResolvedValue(null);
+  open();
+  expect(await screen.findByLabelText("记忆持有人")).toHaveTextContent("研究员甲");
+});
