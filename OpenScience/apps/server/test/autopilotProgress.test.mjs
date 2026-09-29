@@ -48,3 +48,18 @@ test("only safe paths actually carried by the stored run become artifact referen
   assert.deepEqual(refs, [{ projectId: "p", runId: "run-1", sessionId: "session-1", path: "report.md" }, { projectId: "p", runId: "run-1", sessionId: "session-1", path: "partial/result.csv" }]);
   assert.deepEqual(safeAutopilotArtifactRefs("p", { id: "run-1", artifacts: ["report.md"] }), []);
 });
+
+test("withdrawn or superseded rejections do not become standing directions in the next brief", () => {
+  const digest = {id:"d",ownerId:"alice",projectId:"p",createdAt:"2026-09-29T00:00:00Z",payload:{agendaId:"agenda",date:"2026-09-29",leads:[{id:"c",statement:"A result"}],decisions:[
+    {action:"reject",claimId:"c",note:"Old rejection",at:"2026-09-29T01:00:00Z"}, {action:"withdraw",claimId:"c",at:"2026-09-29T02:00:00Z"},
+  ]}};
+  assert.deepEqual(buildAutopilotProgress({...input,digests:[digest]}).rejectedDirections,[]);
+  digest.payload.decisions[1].action="adopt";
+  assert.deepEqual(buildAutopilotProgress({...input,digests:[digest]}).rejectedDirections,[]);
+});
+
+test("a shortened claim is explicitly marked as truncated even when its episode fits the byte budget", () => {
+  const snapshot = buildAutopilotProgress({...input,episodes:[episode("long","2026-09-29","merged",{claims:[{id:"c",tier:"gated",statement:"Long result ".repeat(1000)}]})]});
+  assert.equal(snapshot.episodes.length,1);
+  assert.equal(snapshot.truncated,true);
+});
