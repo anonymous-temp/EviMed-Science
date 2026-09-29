@@ -169,9 +169,20 @@ def execute(args) -> int:
     if not attempt['sourcesUnchanged']:
         attempt['sourcesAfter'] = source_after
         attempt['warnings'].append({'code': 'source_changed', 'message': 'A script, input or transformation changed during execution; inspect provenance before reusing state.'})
+    try:
+        confined(root, str(receipt))
+        for protected in sources + [results]:
+            if receipt == protected or (receipt.exists() and protected.exists() and receipt.samefile(protected)):
+                raise ValueError('Receipt path aliases an analysis source or result.')
+    except (OSError, ValueError):
+        # Preserve the ledger in a fresh safe artifact, without following a
+        # receipt path the child replaced. Never overwrite the aliased input.
+        receipt = confined(root, f'.analysis-provenance/{uuid.uuid4().hex}-receipt.json')
+        output_error = True
+        attempt['warnings'].append({'code': 'receipt_path_unsafe', 'message': 'The requested receipt path became unsafe; this attempt and prior records are retained in the returned receipt path.'})
     ledger['executions'].append(attempt)
     write_bytes(root, receipt, encoded(ledger))
-    print(json.dumps({'execution': attempt['id'], 'exitCode': attempt['exitCode'], 'outputObservation': observation}))
+    print(json.dumps({'execution': attempt['id'], 'exitCode': attempt['exitCode'], 'outputObservation': observation, 'receipt': receipt.relative_to(root).as_posix()}))
     if output_error and attempt['exitCode'] == 0:
         return 2
     return attempt['exitCode'] if attempt['exitCode'] >= 0 else 128 - attempt['exitCode']
