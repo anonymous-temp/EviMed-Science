@@ -1037,6 +1037,28 @@ export function fetchFrontierDaily(day: string): Promise<FrontierDaily | null> {
   });
 }
 
+export interface FrontierWeekly extends FrontierDaily { weekStart: string; weekEnd: string }
+export interface FrontierWeeklySummary extends Omit<FrontierDailySummary, "day"> { weekStart: string; weekEnd: string }
+
+export function listFrontierWeeklies(limit = 30): Promise<FrontierWeeklySummary[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>(`/frontier/weeklies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}`));
+    return (Array.isArray(raw?.weeklies) ? raw.weeklies : []).flatMap((entry) => {
+      const row = record(entry), weekStart = text(row?.weekStart), weekEnd = text(row?.weekEnd);
+      return weekStart && weekEnd ? [{ weekStart, weekEnd, title: text(row?.title), itemCount: count(row?.itemCount), generatedAt: moment(row?.generatedAt) }] : [];
+    });
+  });
+}
+
+export function fetchFrontierWeekly(week: string): Promise<FrontierWeekly | null> {
+  return optional(async () => {
+    const raw = record(record(await productRequest<unknown>(`/frontier/weeklies/${id(week)}`))?.weekly);
+    const issue = parseDaily(raw);
+    if (!issue || !text(raw?.weekStart) || !text(raw?.weekEnd)) throw new WebApiError("The frontier weekly was malformed.", { status: 502 });
+    return { ...issue, weekStart: String(raw?.weekStart), weekEnd: String(raw?.weekEnd) };
+  });
+}
+
 /** Null where the route does not exist yet; the card then says 「还在准备」. */
 export function saveFrontierItemToLibrary(itemId: string, projectId: string): Promise<FrontierLibrarySave | null> {
   return optional(async () => {
@@ -1093,3 +1115,17 @@ export async function setFrontierDigestSwitch(enabled: boolean): Promise<boolean
 
 // In a module of their own, so the sidebar can ask without loading this one.
 export { frontierOffered, useFrontierFeature, type FrontierFeature } from "./frontierFeature";
+
+export type FrontierNotificationSwitch = "frontier" | "frontierWeekly" | "frontierSafety";
+export async function fetchFrontierNotificationSwitch(key: FrontierNotificationSwitch): Promise<boolean> {
+  const current = await productRequest<InboxPreferencesWire>("/inbox/preferences");
+  return current.switches[key] ?? current.switches.frontier !== false;
+}
+export async function setFrontierNotificationSwitch(key: FrontierNotificationSwitch, enabled: boolean): Promise<boolean> {
+  const current = await productRequest<InboxPreferencesWire>("/inbox/preferences");
+  const saved = await productRequest<InboxPreferencesWire>("/inbox/preferences", "PATCH", {
+    quietHours: current.quietHours, digestTime: current.digestTime, switches: { ...current.switches, [key]: enabled },
+    channels: current.channels, expectedRevision: current.revision,
+  });
+  return saved.switches[key] ?? saved.switches.frontier !== false;
+}

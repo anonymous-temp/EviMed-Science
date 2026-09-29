@@ -1,3 +1,4 @@
+import { frontierNoticeHref } from "@evimed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -232,8 +233,8 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // A digest is either an autopilot briefing or the frontier daily of a day;
   // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
   // under, and opens on that issue.
-  const frontierDay = item.source.type === "digest" ? /^frontier-daily:(\d{4}-\d{2}-\d{2})$/.exec(item.source.id)?.[1] : undefined;
-  if (frontierDay) return `/app/frontier?view=daily&day=${frontierDay}`;
+  const frontierHref = frontierNoticeHref(item.source);
+  if (frontierHref) return frontierHref;
   if (item.source.type === "digest") return `/app/autopilot?digest=${encodeURIComponent(item.source.id)}`;
   // A notice names a run, and a run is read in the conversation it happened in.
   // Only the ledger knows which conversation that is, so this stays the run's

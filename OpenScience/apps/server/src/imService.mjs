@@ -23,10 +23,10 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { RUN_ACTIVITY_PHASE_LABELS_ZH, capabilityTitle, errorCodeMessage } from "@evimed/domain";
+import { frontierNoticeHref, frontierNoticeTarget, RUN_ACTIVITY_PHASE_LABELS_ZH, capabilityTitle, errorCodeMessage } from "@evimed/domain";
 import { HttpError, openScopedFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
-import { runFinishedNotice } from "./notificationService.mjs";
+import { notificationSwitches, runFinishedNotice } from "./notificationService.mjs";
 import { geoNoticeHref } from "./geoNotify.mjs";
 import { IN_APP_CHANNEL, channelMessage, deliveryOutcome } from "./channels/port.mjs";
 import { ChannelRegistry, channelSwitches } from "./channels/registry.mjs";
@@ -120,8 +120,8 @@ export function noticeLink(config, item) {
   if (source?.type === "run") return runLink(config, source.id);
   // A digest is an autopilot briefing, or the 「前沿动态」 daily of a day, which
   // names itself `frontier-daily:<YYYY-MM-DD>` — the key it is pushed under.
-  const frontierDay = source?.type === "digest" ? /^frontier-daily:(\d{4}-\d{2}-\d{2})$/.exec(String(source.id))?.[1] : null;
-  if (frontierDay) return appLink(config, `/app/frontier?view=daily&day=${frontierDay}`);
+  const frontierHref = frontierNoticeHref(source);
+  if (frontierHref) return appLink(config, frontierHref);
   if (source?.type === "digest") return appLink(config, `/app/autopilot?digest=${encodeURIComponent(source.id)}`);
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
   const geoPath = source?.type === "geo" ? geoNoticeHref(source.id) : null;
@@ -298,15 +298,16 @@ export class ImService {
    *   steerRun: (input: { user: any, project: any, runId: string, text: string }) => Promise<any>,
    *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<void>,
    *   loadSdk?: () => Promise<any>, fetchImpl?: typeof fetch, classifier?: any, store?: ChannelStore,
-   *   now?: () => number, write?: (line: string) => void, pushProvider?: any }} dependencies
+   *   now?: () => number, write?: (line: string) => void, pushProvider?: any, frontierDeliveryPolicy?: ((item:any) => Promise<boolean>) | null }} dependencies
    */
   constructor({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger = null,
     dispatchRun, steerRun, audit = async () => {}, loadSdk = loadFeishuSdk, fetchImpl = globalThis.fetch,
-    classifier = null, store = null, now = Date.now, write = (line) => { process.stderr.write(line); }, pushProvider = null }) {
+    classifier = null, store = null, now = Date.now, write = (line) => { process.stderr.write(line); }, pushProvider = null, frontierDeliveryPolicy = null }) {
     this.config = config;
     this.store = store ?? new ChannelStore(database, { now: () => new Date(now()) });
     this.credentials = credentials;
     this.notifications = notifications;
+    this.frontierDeliveryPolicy = frontierDeliveryPolicy;
     this.users = users;
     this.agentRuns = agentRuns;
     this.runtimeManager = runtimeManager;
@@ -1186,9 +1187,10 @@ export class ImService {
       .filter((/** @type {string} */ id) => id !== IN_APP_CHANNEL && this.registry.isEnabled(id));
     if (!channels.length) return 0;
     if (preferences?.switches && preferences.switches[item.noticeType] === false) return 0;
-    // The frontier daily has its own switch: turned off after an issue was
-    // queued in the inbox, it is not pushed either.
-    if (item.source?.type === "digest" && String(item.source.id).startsWith("frontier-daily:") && preferences?.switches?.frontier === false) return 0;
+    const frontierTarget = frontierNoticeTarget(item.source);
+    if (frontierTarget && notificationSwitches(preferences?.switches)[frontierTarget.switch] === false) return 0;
+    if (frontierTarget && this.frontierDeliveryPolicy && !await this.frontierDeliveryPolicy(item)) return 0;
+    if (frontierTarget && frontierTarget.kind !== "daily" && !this.frontierDeliveryPolicy) return 0;
     // A run a chat started reports into that chat already; the inbox item is
     // the record, not a second buzz.
     if (item.source?.type === "run" && item.projectId && await this.store.taskForRun(item.userId, item.projectId, item.source.id)) {
@@ -1246,6 +1248,17 @@ export class ImService {
     } catch (error) {
       if (error instanceof HttpError && error.status === 404) return skip("notice-gone");
       throw error;
+    }
+    const preferences = await this.notifications.preferences(delivery.userId);
+    if (!preferences.channels.includes(delivery.channel) || preferences.switches?.[item.noticeType] === false) return skip("preferences-changed");
+    const frontierTarget = frontierNoticeTarget(item.source);
+    if (frontierTarget && notificationSwitches(preferences.switches)[frontierTarget.switch] === false) return skip("frontier-opt-out");
+    if (frontierTarget && this.frontierDeliveryPolicy && !await this.frontierDeliveryPolicy(item)) return skip("frontier-ineligible");
+    if (frontierTarget && frontierTarget.kind !== "daily" && !this.frontierDeliveryPolicy) return skip("frontier-policy-unavailable");
+    const notBefore = pushNotBefore(item, preferences, new Date(this.now()));
+    if (notBefore.getTime() > this.now()) {
+      await this.store.settleDelivery(delivery.id, this.workerId, { status: "pending", reason: "preferences-schedule", retryAt: notBefore });
+      return;
     }
     if (item.readAt) return skip("already-read");
     // A grouped item that grew again has a newer push queued; that one says
@@ -1358,17 +1371,17 @@ export class ImService {
  *   runtimeManager: any, usageLedger?: any, maxJsonBytes: number,
  *   dispatchRun: (input: any) => Promise<any>, steerRun: (input: any) => Promise<any>,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<void>,
- *   loadSdk?: () => Promise<any>, fetchImpl?: typeof fetch }} dependencies
+ *   loadSdk?: () => Promise<any>, fetchImpl?: typeof fetch, frontierDeliveryPolicy?: ((item:any) => Promise<boolean>) | null }} dependencies
  */
 export function createImModule({ config, database, credentials, notifications, users, agentRuns, runtimeManager,
-  usageLedger = null, maxJsonBytes, dispatchRun, steerRun, audit = async () => {}, loadSdk, fetchImpl }) {
+  usageLedger = null, maxJsonBytes, dispatchRun, steerRun, audit = async () => {}, loadSdk, fetchImpl, frontierDeliveryPolicy = null }) {
   const deviceTokens = database ? new DeviceTokenStore(database) : null;
   const authenticateDevice = createDeviceAuthentication({
     config, tokens: deviceTokens, userById: (id) => users.userById(id),
   });
   const service = database && credentials
     ? new ImService({ config, database, credentials, notifications, users, agentRuns, runtimeManager, usageLedger,
-      dispatchRun, steerRun, audit, loadSdk, fetchImpl })
+      dispatchRun, steerRun, audit, loadSdk, fetchImpl, frontierDeliveryPolicy })
     : null;
   // The inbox learns about channels only when the module is on: off, it
   // validates and delivers exactly what it did before (X6).

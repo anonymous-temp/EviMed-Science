@@ -15,7 +15,7 @@ export const PRODUCT_KINDS = Object.freeze([
 // operator's rebuilds. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild"]);
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -199,7 +199,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
     WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
-      AND pg_get_constraintdef(c.oid) LIKE '%frontier-rebuild%'
+      AND pg_get_constraintdef(c.oid) LIKE '%frontier-notify%'
   ) THEN
     ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
     ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check

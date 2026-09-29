@@ -958,3 +958,4 @@ export {
   standardName,
   wilsonInterval,
 } from './src/geoMetrics.mjs'
+export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';

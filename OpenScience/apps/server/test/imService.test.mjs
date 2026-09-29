@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FEISHU_UNBIND_ACTION, ImService, appLink, cardOutcome, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
+import { FEISHU_UNBIND_ACTION, createImModule, ImService, appLink, cardOutcome, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
 import { runFinishedNotice } from "../src/notificationService.mjs";
 
 test("a finished run's card is coloured by the word it says, never ⚠️ beside 已完成", () => {
@@ -306,4 +306,30 @@ test("a chat past its inbound limit is told once to slow down, and the rest of i
     assert.equal(recorded.filter((row) => row.bindingId === "chb_flood").length, 6);
     assert.equal(told().length, 2);
   } finally { await service.close(); }
+});
+
+test("queued frontier delivery rechecks channel preferences and the injected mute/withdrawal policy", async () => {
+  for (const scenario of ["opt-out", "channel-removed", "muted", "withdrawn", "missing-policy", "eligible"]) {
+    const settled = [], sent = [];
+    const item = { id: "notice", userId: "alice", count: 1, source: { type: "system", id: "frontier-safety:item1" }, noticeType: "notify", title: "Public warning", body: "FDA · 2026-09-28", severity: "safety" };
+    const preferences = { channels: scenario === "channel-removed" ? ["in-app"] : ["in-app", "feishu"], switches: { notify: true, frontierSafety: scenario !== "opt-out" } };
+    const service = new ImService({ config: { imEnabled: true, publicUrl: "https://science.example.com" }, database: null, credentials: {},
+      notifications: { get: async () => item, preferences: async () => preferences, recordChannelSent: async () => {} }, users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {},
+      classifier: {}, write: () => {}, frontierDeliveryPolicy: scenario === "missing-policy" ? null : async () => !["muted", "withdrawn"].includes(scenario),
+      store: { claimDeliveries: async () => [{ id: "delivery", userId: "alice", notificationId: "notice", channel: "feishu", bindingId: "binding", eventCount: 1, attempts: 1 }], bindingById: async () => ({ status: "active" }), settleDelivery: async (...args) => settled.push(args) },
+    });
+    service.registry = { isEnabled: () => true, get: () => ({ deliver: async (_binding, message) => { sent.push(message); return { delivered: true, messageId: "sent" }; } }) };
+    await service.processDeliveries();
+    assert.equal(sent.length, scenario === "eligible" ? 1 : 0, scenario);
+    assert.equal(settled[0][2].status, scenario === "eligible" ? "sent" : "skipped");
+    if (sent.length) assert.equal(sent[0].link, "https://science.example.com/app/frontier?item=item1");
+  }
+});
+
+test("the IM module factory forwards the frontier late-delivery policy", async () => {
+  const policy = async () => false;
+  const module = createImModule({ config: { imEnabled: false }, database: {}, credentials: {}, notifications: {}, users: {}, agentRuns: {}, runtimeManager: {},
+    maxJsonBytes: 65536, dispatchRun: async () => {}, steerRun: async () => {}, frontierDeliveryPolicy: policy });
+  assert.equal(module.service.frontierDeliveryPolicy, policy);
+  await module.service.close();
 });

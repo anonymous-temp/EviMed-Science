@@ -47,6 +47,10 @@ export const FRONTIER_COMPOSER_CADENCES = Object.freeze({
   daily: MINUTE,
   push: MINUTE,
   profiles: 5 * MINUTE,
+  weekly: MINUTE,
+  weeklyPush: MINUTE,
+  safety: 30 * SECOND,
+  notices: 10 * SECOND,
 });
 const LOOPS = Object.freeze(Object.keys(FRONTIER_COMPOSER_CADENCES));
 
@@ -58,15 +62,17 @@ function codeOf(error) {
 
 export class FrontierComposer {
   /**
-   * @param {{ events?: any, daily?: any, profiles?: any, canRun?: () => boolean, now?: () => Date,
+   * @param {{ events?: any, daily?: any, profiles?: any, weekly?: any, notifications?: any, canRun?: () => boolean, now?: () => Date,
    *           report?: (loop: string, code: string) => void, cadences?: Partial<Record<string, number>> }} dependencies
    *   `events` a `FrontierEvents`, `daily` a `FrontierDaily`, `profiles` a
    *   `FrontierProfiles`; each optional — an absent one's loops never run.
    */
-  constructor({ events = null, daily = null, profiles = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
+  constructor({ events = null, daily = null, profiles = null, weekly = null, notifications = null, canRun = () => true, now = () => new Date(), report = () => {}, cadences = {} } = {}) {
     this.events = events;
     this.daily = daily;
     this.profiles = profiles;
+    this.weekly = weekly;
+    this.notifications = notifications;
     this.canRun = canRun;
     this.now = now;
     this.report = report;
@@ -135,7 +141,15 @@ export class FrontierComposer {
       if (this.daily && this.#due("push")) failures.push(await this.#run("push", () => this.daily.pushDue()));
       return failures.find(Boolean) ?? null;
     };
-    chains.push(editorial(), issue());
+    const notifications = async () => {
+      const failures = [];
+      if (this.weekly && this.#due("weekly")) failures.push(await this.#run("weekly", () => this.weekly.runDue()));
+      if (this.notifications && this.#due("weeklyPush")) failures.push(await this.#run("weeklyPush", () => this.notifications.queueWeekly()));
+      if (this.notifications && this.#due("safety")) failures.push(await this.#run("safety", () => this.notifications.scanSafety()));
+      if (this.notifications && this.#due("notices")) failures.push(await this.#run("notices", () => this.notifications.deliverDue()));
+      return failures.find(Boolean) ?? null;
+    };
+    chains.push(editorial(), issue(), notifications());
     if (this.profiles && this.#due("profiles")) chains.push(this.#run("profiles", () => this.profiles.refreshDue()));
     const failures = await Promise.all(chains);
     const failure = failures.find(Boolean);
@@ -162,6 +176,8 @@ export class FrontierComposer {
       events: this.events?.status?.() ?? null,
       daily: this.daily?.status?.() ?? null,
       profiles: this.profiles?.status?.() ?? null,
+      weekly: this.weekly?.status?.() ?? null,
+      notifications: this.notifications?.status?.() ?? null,
     };
   }
 }

@@ -1,3 +1,5 @@
+import { WeeklyView } from "@/components/frontier/WeeklyView";
+import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
@@ -45,7 +47,7 @@ import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { stamp, type CardTag } from "@/components/frontier/frontierText";
 
-type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following";
+type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | "weekly";
 
 const VIEWS: readonly TabItem<PageView>[] = [
   { value: "selected", label: "精选" },
@@ -54,6 +56,7 @@ const VIEWS: readonly TabItem<PageView>[] = [
   { value: "all", label: "全部" },
   { value: "foryou", label: "与我相关" },
   { value: "following", label: "关注" },
+  { value: "weekly", label: "周刊" },
 ];
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
@@ -63,7 +66,7 @@ const STALE_PLUGIN = new Set(["unreachable", "degraded", "incompatible"]);
 
 /** The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did. */
 function readView(value: string | null): PageView {
-  return value === "hot" || value === "daily" || value === "all" || value === "foryou" || value === "following" ? value : "selected";
+  return value === "hot" || value === "daily" || value === "all" || value === "foryou" || value === "following" || value === "weekly" ? value : "selected";
 }
 function readKey(value: string | null, table: readonly { key: string }[]): string {
   return value && table.some((entry) => entry.key === value) ? value : "";
@@ -431,7 +434,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day and the time range belong to the view they were chosen in.
-    for (const name of ["q", "day", "window", "sort", "follow"]) updated.delete(name);
+    for (const name of ["q", "day", "week", "window", "sort", "follow", "item"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
   };
@@ -556,6 +559,10 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
             onRetry={() => setHotAttempt((value) => value + 1)}
           />
         );
+      case "weekly":
+        return <WeeklyView week={readDay(params.get("week"))} onWeek={(week) => {
+          const updated = new URLSearchParams(params); updated.set("week", week); setParams(updated);
+        }} />;
       case "daily":
         return <DailyIssue state={daily} onDay={openDay} />;
       case "foryou":
@@ -609,6 +616,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         />
       )}
     >
+      {ready && params.get("item") && <FrontierLinkedItem id={params.get("item")!} />}
       <Tabs label="视图" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
       <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${view}`} className="mt-5">
         {ready ? main : <FrontierSkeleton />}

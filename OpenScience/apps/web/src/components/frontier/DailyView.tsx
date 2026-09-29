@@ -93,11 +93,16 @@ async function copyMarkdown(markdown: string) {
  * title, so all the titles of the issue start on one line — the source's name
  * is the grey line under the summary, never a block before the title.
  */
-export function DailyIssue({ state, onDay }: { state: DailyState; onDay: (day: string) => void }) {
+export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean }) {
+  const rangeLabel = (day: string) => {
+    const last = new Date(`${day}T00:00:00Z`);
+    last.setUTCDate(last.getUTCDate() + 6);
+    return `${shortDate(day)}—${shortDate(last.toISOString().slice(0, 10))}`;
+  };
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
-  if (state.index === null) return <EmptyState icon={CalendarDays} title="暂无日报" />;
-  if (!state.issue) return <EmptyState icon={CalendarDays} title="今日日报 07:30 发布" />;
+  if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周刊" : "暂无日报"} />;
+  if (!state.issue) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周刊" : "今日日报 07:30 发布"} />;
   const issue = state.issue;
   const { previous, next } = neighbours(issue, state.index);
   const archive = state.index.slice(0, ARCHIVE_SHOWN);
@@ -105,14 +110,14 @@ export function DailyIssue({ state, onDay }: { state: DailyState; onDay: (day: s
   return (
     <article aria-labelledby="frontier-daily-title">
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{shortDate(issue.day)}</h2>
+        <h2 id="frontier-daily-title" className="text-body font-semibold leading-6 text-text">{weekly ? rangeLabel(issue.day) : shortDate(issue.day)}</h2>
         <span className="text-caption tabular-nums text-text-3">{dailyMeta(issue)}</span>
         <span className="ml-auto flex items-center gap-1">
           <Button variant="text" disabled={!issue.markdown} onClick={() => void copyMarkdown(issue.markdown)}>
             <Copy size={16} aria-hidden="true" />复制
           </Button>
           {archive.length > 0 && (
-            <Menu label="往期" items={archive.map((entry) => ({ label: shortDate(entry.day), checked: entry.day === issue.day, onSelect: () => onDay(entry.day) }))}>
+            <Menu label="往期" items={archive.map((entry) => ({ label: weekly ? rangeLabel(entry.day) : shortDate(entry.day), checked: entry.day === issue.day, onSelect: () => onDay(entry.day) }))}>
               <FilterChip menu>往期</FilterChip>
             </Menu>
           )}
@@ -122,6 +127,7 @@ export function DailyIssue({ state, onDay }: { state: DailyState; onDay: (day: s
       {issue.lead && (
         <section aria-label="头条" className="mt-5">
           <h3 className="max-w-measure-body text-title font-semibold text-text">{issue.lead.item.title}</h3>
+          <a href={issue.lead.item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "mt-1 text-caption text-accent")}>{issue.lead.item.source.name} · 原文 ↗</a>
           {(leadText || issue.lead.event) && (
             <p className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}
@@ -146,9 +152,9 @@ export function DailyIssue({ state, onDay }: { state: DailyState; onDay: (day: s
       )}
 
       {(previous || next) && (
-        <nav aria-label="日报翻页" className="mt-8 flex items-center justify-between">
-          {previous ? <Button variant="text" onClick={() => onDay(previous)}>‹ 前一日</Button> : <span />}
-          {next ? <Button variant="text" onClick={() => onDay(next)}>后一日 ›</Button> : <span />}
+        <nav aria-label={weekly ? "周刊翻页" : "日报翻页"} className="mt-8 flex items-center justify-between">
+          {previous ? <Button variant="text" onClick={() => onDay(previous)}>{weekly ? "‹ 前一期" : "‹ 前一日"}</Button> : <span />}
+          {next ? <Button variant="text" onClick={() => onDay(next)}>{weekly ? "后一期 ›" : "后一日 ›"}</Button> : <span />}
         </nav>
       )}
     </article>

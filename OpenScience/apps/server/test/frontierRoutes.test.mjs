@@ -45,6 +45,8 @@ function fixture(config, userId = "reader") {
     async deleteFollow() { return { deleted: true }; },
     async operateItem(id, action, input) { calls.push([`ops-${action}`, id, input.reason]); return { item: { id, state: action === "withdraw" ? "withdrawn" : "published" } }; },
     async setSourceEnabled(id, enabled) { return { source: { id, enabled } }; },
+    async weeklies(params) { return { weeklies: [{ weekStart: "2026-09-21", limit: params.get("limit") }] }; },
+    async weeklyIssue(user, week) { calls.push(["weekly", user.id, week]); return { weekly: { weekStart: week } }; },
     async hot(params) { calls.push(["hot", params.get("window")]); return { window: params.get("window") ?? "current", events: [] }; },
   };
   const routes = createFrontierRoutes({ store, service, config, maxJsonBytes: 65_536,
@@ -145,4 +147,14 @@ test("route labels fold ids so a dashboard row is a route", () => {
   assert.equal(frontierRoutePattern("/api/frontier/ops/sources/nejm/enabled"), "/api/frontier/ops/sources/:id/enabled");
   assert.equal(frontierRoutePattern("/api/frontier/events/e1"), "/api/frontier/events/:id");
   assert.equal(frontierRoutePattern("/api/frontier/whatever/x/y"), "/api/frontier/:route");
+});
+
+test("weekly routes use the authenticated reader and preserve the archive envelope", async () => {
+  const { routes, calls } = fixture(on, "ordinary-reader");
+  const archive = response(); await routes(request("GET", "/api/frontier/weeklies?limit=5"), archive);
+  assert.equal(archive.json().data.weeklies[0].weekStart, "2026-09-21");
+  const issue = response(); await routes(request("GET", "/api/frontier/weeklies/2026-09-21?userId=another"), issue);
+  assert.equal(issue.json().data.weekly.weekStart, "2026-09-21");
+  assert.deepEqual(calls.filter(call => Array.isArray(call)), [["weekly", "ordinary-reader", "2026-09-21"]]);
+  assert.equal(frontierRoutePattern("/api/frontier/weeklies/2026-09-21"), "/api/frontier/weeklies/:id");
 });

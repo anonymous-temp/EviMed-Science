@@ -1,3 +1,4 @@
+import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { createHash } from "node:crypto";
 import {
   FRONTIER_ACCESSES, FRONTIER_EGRESSES, FRONTIER_EVIDENCE_TYPE_LABELS_ZH, FRONTIER_HEALTH_LABELS_ZH, FRONTIER_HOT_WINDOW_HOURS,
@@ -400,7 +401,7 @@ export class FrontierService {
   /**
    * @param {{ database: any, config: Record<string, any>, vocabulary: FrontierVocabulary, ingest?: any, embedder?: any,
    *   budget?: (() => Promise<{ spentCny: number, budgetCny: number, state: string }>) | null, now?: () => Date,
-   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, profiles?: any, actions?: any }} options
+   *   dimension?: number, cacheTtlMs?: number, events?: any, daily?: any, weekly?: any, profiles?: any, actions?: any }} options
    *   The second wave's readers, each optional (a route without its module
    *   answers 404 `not_found`, which the page reads as 「还在准备」):
    *   `events` a `FrontierEvents` (hot list, event pages), `daily` a
@@ -408,7 +409,7 @@ export class FrontierService {
    *   `actions` a `FrontierActions` (存入知识库, 中文摘要).
    */
   constructor({ database, config, vocabulary, ingest = null, embedder = null, budget = null, now = () => new Date(),
-    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, profiles = null, actions = null }) {
+    dimension = 1024, cacheTtlMs = CACHE_TTL_MS, events = null, daily = null, weekly = null, profiles = null, actions = null }) {
     if (!database || !config || !vocabulary) throw new TypeError("The frontier service needs the product database, the config and the vocabulary.");
     this.database = database;
     this.config = config;
@@ -421,6 +422,7 @@ export class FrontierService {
     this.cacheTtlMs = cacheTtlMs;
     this.events = events;
     this.daily = daily;
+    this.weekly = weekly;
     this.profiles = profiles;
     this.subscriptions = new FrontierSubscriptions({ database });
     this.actions = actions;
@@ -938,6 +940,7 @@ export class FrontierService {
         forYou: personalization !== "off",
         hot: Boolean(this.events),
         daily: Boolean(this.daily),
+        weekly: Boolean(this.weekly),
       },
       versions: {
         content: String(metaNumber(read.meta[FRONTIER_META_KEYS.contentVersion])),
@@ -1303,29 +1306,49 @@ export class FrontierService {
    * record). The lead's text and the AI minute are the issue's own.
    * @param {{ id: string }} user @param {string} day
    */
-  async dailyIssue(user, day) {
-    if (!this.daily) throw failure(404, "not_found", "Frontier route not found.");
-    const issue = await this.daily.read(day);
-    if (!issue) throw failure(404, "frontier_daily_not_found", "No issue for that day.");
+  async dailyIssue(user, day) { return this.issue(user, day); }
+
+  /** @param {URLSearchParams} params */
+  async weeklies(params) {
+    if (!this.weekly) throw failure(404, "not_found", "Frontier route not found.");
+    const limit = Number(params.get("limit") || 30);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 60) throw failure(400, "frontier_query_invalid", "Invalid issue limit.");
+    return { weeklies: await this.weekly.list(limit) };
+  }
+  /** @param {{id:string}} user @param {string} week */
+  async weeklyIssue(user, week) { return this.issue(user, week, true); }
+
+  /** @param {{id:string}} user @param {string} day @param {boolean} weekly */
+  async issue(user, day, weekly = false) {
+    const producer = weekly ? this.weekly : this.daily;
+    if (!producer) throw failure(404, "not_found", "Frontier route not found.");
+    const issue = await producer.read(day);
+    if (!issue) throw failure(404, weekly ? "frontier_weekly_not_found" : "frontier_daily_not_found", "No issue for that date.");
     const sections = issue.sections.map((/** @type {any} */ section) => ({ lane: String(section?.lane ?? ""), ids: Array.isArray(section?.itemIds) ? section.itemIds.map(String) : [] }));
     const ids = [issue.lead?.itemId, ...issue.safety, ...sections.flatMap((section) => section.ids)].filter((id) => typeof id === "string");
     const items = await this.hydrate(user, { publicIds: [...new Set(ids)] });
+    if (weekly) {
+      const muted = await this.subscriptions.mutedPublicIds(user.id, [...items.keys()]);
+      for (const [id, item] of items) if (muted.has(id) || item.state.hidden || !["passed", "repaired"].includes(item.verification)) items.delete(id);
+    }
     const leadItem = issue.lead?.itemId ? items.get(String(issue.lead.itemId)) : null;
-    const leadText = typeof issue.lead?.text === "string" ? issue.lead.text : null;
+    const leadText = weekly ? leadItem?.summary ?? null : typeof issue.lead?.text === "string" ? issue.lead.text : null;
     const shownSections = sections.map((section) => ({ lane: section.lane, laneLabel: this.vocabulary.lanes[section.lane] ?? section.lane,
       items: section.ids.flatMap((id) => (items.has(id) ? [items.get(id)] : [])) })).filter((section) => section.items.length);
     const safety = issue.safety.flatMap((/** @type {unknown} */ id) => (items.has(String(id)) ? [items.get(String(id))] : []));
     const shown = [leadItem, ...safety, ...shownSections.flatMap((section) => section.items)].filter(Boolean);
     const line = (/** @type {any} */ item) => ({ id: item.id, title_zh: item.titleZh, title_raw: item.titleRaw, summary_zh: item.summary,
       source_name: item.source.name, canonical_url: item.url });
-    const markdown = frontierDailyMarkdown({
+    const markdownInput = {
       day: issue.day, window: { start: new Date(issue.windowStart), end: new Date(issue.windowEnd) },
-      timeZone: this.daily.timeZone || this.config.frontierTimeZone || "Asia/Shanghai",
+      timeZone: producer.timeZone || this.config.frontierTimeZone || "Asia/Shanghai",
       lead: leadItem ? line(leadItem) : null, leadText, safety: safety.map(line),
       sections: shownSections.map((section) => ({ lane: section.lane, rows: section.items.map(line) })), aiMinute: issue.aiMinute,
-    });
+    };
+    const markdown = weekly ? frontierWeeklyMarkdown({ ...markdownInput, weekStart: issue.weekStart }) : frontierDailyMarkdown(markdownInput);
     return {
-      daily: {
+      [weekly ? "weekly" : "daily"]: {
+        ...(weekly ? { weekStart: issue.weekStart, weekEnd: issue.weekEnd, previousWeek: issue.previousDay, nextWeek: issue.nextDay } : {}),
         day: issue.day, windowStart: issue.windowStart, windowEnd: issue.windowEnd, generatedAt: issue.generatedAt,
         lead: leadItem ? {
           item: leadItem, text: leadText,
@@ -1679,6 +1702,12 @@ export function frontierMetricFamilies(enabled, snapshot) {
   const composer = snapshot.composer;
   if (composer) {
     const daily = composer.daily ?? {};
+    for (const name of ["weekly", "notifications"]) {
+      const component = composer[name];
+      add(`${name}_available`, "Whether frontier background delivery is composed and available.", "gauge", [{ value: component?.available ? 1 : 0 }]);
+      add(`${name}_total`, "Frontier background outcomes since this process started.", "counter",
+        Object.entries(component?.counters ?? {}).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
+    }
     // 07:45 without an issue (plan §10.5.8): the alert reads this gauge.
     add("daily_missing", "Whether today's daily issue is missing past its alert time (1 = missing).", "gauge", [{ value: daily.missing ? 1 : 0 }]);
     add("daily_last_generated_timestamp_seconds", "When the latest daily issue was written (0 = none in this process's view).", "gauge",

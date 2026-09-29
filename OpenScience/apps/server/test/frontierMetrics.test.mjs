@@ -55,3 +55,11 @@ test("every open_science_frontier_plugin_* family an alert names is one the modu
   assert.equal(rule?.expr, "open_science_frontier_plugin_model_calls_24h > 50");
   assert.equal(rule?.labels?.severity, "warning");
 });
+
+test("weekly and notification metrics distinguish unavailable delivery and scan gaps", () => {
+  const view = snapshot(null);
+  view.composer = { weekly: { available: true, counters: { issues: 2, empty: 1, failures: 0 } }, notifications: { available: false, counters: { queued: 3, delivered: 1, skipped: 1, failed: 1, scanGaps: 2 } } };
+  const families = frontierMetricFamilies(true, view);
+  assert.deepEqual(family(families, "open_science_frontier_notifications_available").series, [{ value: 0 }]);
+  assert.ok(family(families, "open_science_frontier_notifications_total").series.some(row => row.labels.outcome === "scanGaps" && row.value === 2));
+});

@@ -365,6 +365,18 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.dailies (
   finalized_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE TABLE IF NOT EXISTS evimed_frontier.weeklies (
+  week_start date PRIMARY KEY,
+  window_start timestamptz(3) NOT NULL,
+  window_end timestamptz(3) NOT NULL,
+  lead jsonb NOT NULL,
+  sections jsonb NOT NULL,
+  safety jsonb NOT NULL,
+  markdown text NOT NULL,
+  item_ids bigint[] NOT NULL,
+  generated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS evimed_frontier.item_changes (
   seq        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   item_id    bigint NOT NULL,

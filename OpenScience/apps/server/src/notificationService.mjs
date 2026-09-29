@@ -99,7 +99,8 @@ function inboxProjectScope(value) {
  * the inbox began with, and those three plus `frontier` — the 「前沿动态」
  * daily (build spec D.3, on unless turned off).
  */
-export const NOTIFICATION_SWITCH_KEY_SETS = Object.freeze(["notify,question,review", "frontier,notify,question,review"]);
+export const NOTIFICATION_SWITCH_KEY_SETS = Object.freeze(Array.from({ length: 8 }, (_, mask) =>
+  ["notify", "question", "review", ...["frontier", "frontierWeekly", "frontierSafety"].filter((_key, index) => mask & (1 << index))].sort().join(",")));
 
 /**
  * An account's switches as every reader of them sees them: a row written
@@ -109,7 +110,9 @@ export const NOTIFICATION_SWITCH_KEY_SETS = Object.freeze(["notify,question,revi
  */
 export function notificationSwitches(value) {
   const switches = value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {};
-  return { ...switches, frontier: switches.frontier !== false };
+  return { ...switches, frontier: switches.frontier !== false,
+    frontierWeekly: switches.frontierWeekly ?? switches.frontier !== false,
+    frontierSafety: switches.frontierSafety ?? switches.frontier !== false };
 }
 
 function validTime(value, name) {
@@ -693,8 +696,7 @@ export class NotificationService {
     if (!channels) throw new HttpError(400, "notification_preferences_invalid", "This deployment supports in-app delivery only.");
     await migrateNotifications(this.database);
     const result = await this.database.query(`UPDATE evimed_inbox.preferences SET quiet_start=$3,quiet_end=$4,digest_time=$5,
-      switches=CASE WHEN $6::jsonb ? 'frontier' THEN $6::jsonb
-        ELSE $6::jsonb || jsonb_build_object('frontier', coalesce((switches->>'frontier')::boolean, true)) END,
+      switches=switches || $6::jsonb,
       channels=$7::jsonb,revision=revision+1,updated_at=clock_timestamp()
       WHERE user_id=$1 AND revision=$2 RETURNING *`, [productId(userId, "user"), expectedRevision,
       validTime(input.quietHours.start, "quiet start"), validTime(input.quietHours.end, "quiet end"),

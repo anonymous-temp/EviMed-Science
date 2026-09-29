@@ -8,7 +8,7 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
   useFrontierFeature: () => feature.value,
 }));
 vi.mock("./FeishuRows", () => ({ FeishuPushRow: () => <div>飞书推送行</div> }));
-vi.mock("./FrontierDigestRow", () => ({ FrontierDigestRow: ({ feature: offered }: { feature: string }) => (offered === "on" ? <div>前沿日报行</div> : null) }));
+vi.mock("./FrontierDigestRow", () => ({ FrontierDigestRow: ({ feature: offered, label = "前沿日报" }: { feature: string; label?: string }) => (offered === "on" ? <div>{label}行</div> : null) }));
 
 describe("通知", () => {
   beforeEach(() => { feature.value = "on"; });
@@ -18,6 +18,8 @@ describe("通知", () => {
     expect(screen.getByRole("heading", { name: "通知" })).toBeInTheDocument();
     expect(screen.getByText("飞书推送行")).toBeInTheDocument();
     expect(screen.getByText("前沿日报行")).toBeInTheDocument();
+    expect(screen.getByText("前沿周刊行")).toBeInTheDocument();
+    expect(screen.getByText("相关安全警示行")).toBeInTheDocument();
     for (const gone of [/站内通知/, /始终开启/, /手机通知/, /暂不可用/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
   });
 
@@ -25,6 +27,8 @@ describe("通知", () => {
     render(<NotificationsSection imEnabled={false} />);
     expect(screen.queryByText("飞书推送行")).not.toBeInTheDocument();
     expect(screen.getByText("前沿日报行")).toBeInTheDocument();
+    expect(screen.getByText("前沿周刊行")).toBeInTheDocument();
+    expect(screen.getByText("相关安全警示行")).toBeInTheDocument();
   });
 
   it("says one line where there is nothing to set", () => {

@@ -21,6 +21,8 @@ export function NotificationsSection({ imEnabled }: { imEnabled: boolean }) {
     <Panel title="通知">
       {imEnabled && <FeishuPushRow />}
       <FrontierDigestRow feature={frontier} />
+      <FrontierDigestRow feature={frontier} switchKey="frontierWeekly" label="前沿周刊" />
+      <FrontierDigestRow feature={frontier} switchKey="frontierSafety" label="相关安全警示" />
     </Panel>
   );
 }

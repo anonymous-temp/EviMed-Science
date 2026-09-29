@@ -26,6 +26,9 @@ const client = vi.hoisted(() => ({
   fetchFrontierHotBoard: vi.fn(),
   listFrontierDailies: vi.fn(),
   fetchFrontierDaily: vi.fn(),
+  fetchFrontierItem: vi.fn(),
+  listFrontierWeeklies: vi.fn(),
+  fetchFrontierWeekly: vi.fn(),
   fetchFrontierSources: vi.fn(),
   starFrontierItem: vi.fn(),
   unstarFrontierItem: vi.fn(),
@@ -161,7 +164,7 @@ describe("the page and its views", () => {
     expect(screen.queryByText(/每天替你读/)).not.toBeInTheDocument();
     expect(title.closest("header")?.querySelector("p")).toBeNull();
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["精选", "热榜", "日报", "全部", "与我相关", "关注"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["精选", "热榜", "日报", "全部", "与我相关", "关注", "周刊"]);
     expect(screen.getByRole("tab", { name: "精选" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", screen.getByRole("tab", { name: "精选" }).id);
     expect(lastFeedQuery()).toMatchObject({ view: "selected", q: null, lane: null, starred: false });
@@ -765,4 +768,20 @@ it("selects a saved topic into the URL without using private memory", async () =
   await user.click(await screen.findByRole("button", { name: "肥胖研究" }));
   expect(location()).toContain("follow=7");
   expect(client.fetchFrontierForYou).not.toHaveBeenCalled();
+});
+
+it("a safety deep link loads its item while the ordinary feed remains usable", async () => {
+  const linked = frontierItem({ id: "linked", title: "指定安全公告" }); client.fetchFrontierItem.mockResolvedValue(linked);
+  renderPage("/app/frontier?item=linked"); await screen.findByText("指定安全公告");
+  expect(client.fetchFrontierItem).toHaveBeenCalledWith("linked"); expect(client.listFrontierItems).toHaveBeenCalled();
+});
+it("an absent linked item does not hide the ordinary feed", async () => {
+  client.fetchFrontierItem.mockRejectedValue(new WebApiError("gone", { status: 404, code: "frontier_item_not_found" }));
+  renderPage("/app/frontier?item=gone"); await waitFor(() => expect(client.fetchFrontierItem).toHaveBeenCalledWith("gone"));
+  await screen.findByRole("button", { name: "重试" }); expect(screen.getByRole("tab", { name: "全部" })).toBeEnabled();
+});
+it("weekly selection is restored from the URL and an empty archive stays in its own view", async () => {
+  client.listFrontierWeeklies.mockResolvedValue([]); client.fetchFrontierWeekly.mockResolvedValue(null);
+  renderPage("/app/frontier?view=weekly&week=2026-09-21"); await screen.findByText("暂无周刊");
+  expect(client.fetchFrontierWeekly).toHaveBeenCalledWith("2026-09-21"); expect(screen.getByRole("tab", { name: "周刊" })).toHaveAttribute("aria-selected", "true");
 });

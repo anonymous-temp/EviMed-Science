@@ -240,13 +240,13 @@ test("the push under the operators audience reaches operators and the preview li
 
 test("the notification switch: frontier reads on by default, a page that sends three switches keeps it, four set it, others are refused", options, async () => {
   const fresh = await notifications.preferences(users.reader);
-  assert.deepEqual(fresh.switches, { notify: true, question: true, review: true, frontier: true });
+  assert.deepEqual(fresh.switches, { notify: true, question: true, review: true, frontier: true, frontierWeekly: true, frontierSafety: true });
   const off = await notifications.updatePreferences(users.reader, { quietHours: fresh.quietHours, digestTime: "08:00",
     switches: { notify: true, question: true, review: true, frontier: false }, channels: ["in-app"] }, fresh.revision);
   assert.equal(off.switches.frontier, false);
   const kept = await notifications.updatePreferences(users.reader, { quietHours: fresh.quietHours, digestTime: "08:30",
     switches: { notify: true, question: false, review: true }, channels: ["in-app"] }, off.revision);
-  assert.deepEqual(kept.switches, { notify: true, question: false, review: true, frontier: false }, "an older page keeps what it did not send");
+  assert.deepEqual(kept.switches, { notify: true, question: false, review: true, frontier: false, frontierWeekly: false, frontierSafety: false }, "an older page keeps what it did not send");
   await assert.rejects(notifications.updatePreferences(users.reader, { quietHours: fresh.quietHours, digestTime: "08:30",
     switches: { notify: true, question: true, review: true, frontier: "yes" }, channels: ["in-app"] }, kept.revision), { code: "notification_preferences_invalid" });
   await assert.rejects(notifications.updatePreferences(users.reader, { quietHours: fresh.quietHours, digestTime: "08:30",
