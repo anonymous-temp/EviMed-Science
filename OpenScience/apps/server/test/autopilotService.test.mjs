@@ -1145,3 +1145,18 @@ test("balance receipts preserve disabled and unknown meanings and resource delay
   assert.equal(saved.payload.balanceChecks.episode.reason, "sufficient");
   await assert.rejects(service.recordBalanceCheck("other-user", episode.id, { allowed: true }), { code: "autopilot_episode_not_found" });
 });
+
+test("episode and digest keep authorized artifact references without raising claim tiers", async () => {
+  const { service } = fixture(); let agenda = await service.create("user-one", agendaInput);
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  await service.markEpisodeDispatched("user-one", episode.id, { runId: "run-result", sessionId: "session-result" });
+  const ref = { projectId: agenda.projectId, runId: "run-result", sessionId: "session-result", path: "reports/result.md" };
+  const digest = await service.completeRun("user-one", { projectId: agenda.projectId, runId: "run-result", sessionId: "session-result", status: "succeeded",
+    deltaSchemaVersion: 1, artifacts: [ref.path], artifactRefs: [ref, { ...ref, projectId: "foreign" }], claims: [{ id: "claim", type: "direct", tier: "unverified", statement: "A finding", sources: ["doi:10.1000/test"], provenance: { episodeId: episode.id, artifact: ref.path } }] });
+  const saved = await service.getEpisode("user-one", episode.id);
+  assert.deepEqual(saved.payload.artifactRefs, [ref]);
+  assert.deepEqual(digest.payload.artifactRefs, [ref]);
+  assert.equal(saved.payload.claims[0].tier, "gated");
+  assert.equal(digest.payload.leads[0].tier, "gated");
+});

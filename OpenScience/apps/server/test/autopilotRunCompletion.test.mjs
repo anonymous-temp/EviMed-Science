@@ -97,3 +97,13 @@ test("an independent verification run is not an episode result and cannot be fol
     assert.deepEqual(f.calls, [], "a verification run must not reach the episode fold, the usage scope or the runtime release");
   }
 });
+
+test("completion preserves safe stored-run artifacts and never accepts an artifact URL supplied by the delta", async () => {
+  const f = fixture();
+  f.run.artifacts = ["reports/result.md", "scripts/reproduce.py", "../secret", "https://invented.test/output"];
+  f.run.unverifiedArtifacts = ["data/partial.csv"];
+  f.dependencies.readDelta = async () => ({ deltaSchemaVersion: 1, claims: [], artifactRefs: [{ projectId: "other", runId: "fake", sessionId: "fake", path: "fake.md" }] });
+  await completeOwnedAutopilotRun(f.dependencies, f.project, f.run);
+  const completed = f.calls.find(call => call[0] === "complete")[1];
+  assert.deepEqual(completed.artifactRefs, ["reports/result.md", "scripts/reproduce.py", "data/partial.csv"].map(path => ({ projectId: f.project.id, runId: f.run.id, sessionId: f.run.sessionId, path })));
+});
