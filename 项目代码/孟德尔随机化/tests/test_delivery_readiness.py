@@ -41,6 +41,19 @@ def test_half_written_primary_csv_does_not_fabricate_zero_effect_or_null_p_value
     assert result.module_status["primaryEstimate"]["status"] == "unavailable"
 
 
+def test_unchanged_old_primary_file_is_not_copied_as_a_failed_retries_partial_result(tmp_path, monkeypatch):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+    raw = tmp_path / "raw"; raw.mkdir()
+    (raw / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+    monkeypatch.setattr(mr_executor, "_execute_r_script", lambda *args: False)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results == []
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert not any(path.endswith("mr_results.csv") for path in copied)
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError
