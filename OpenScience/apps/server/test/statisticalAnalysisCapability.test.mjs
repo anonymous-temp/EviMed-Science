@@ -43,3 +43,14 @@ test('scoping keeps its optional partial report under the existing contract', as
     files: new Map([['research-portfolio.md', 'The dataset supports a descriptive comparison. Literature access was unavailable.']]) });
   assert.equal(gate.ok, true);
 });
+
+test('the actual hosted registry loads both optional-output analysis capabilities', async () => {
+  const { loadAgentRegistry } = await import('../src/agentRegistry.mjs');
+  const registry = await loadAgentRegistry({ packageDirs: [path.join(root, 'runtime/skills/evimed')], capabilityDirs: [path.join(root, 'capabilities')] });
+  for (const name of ['statistical-analysis', 'dataset-research-scoping']) {
+    const agent = registry.get(name);
+    assert.ok(agent, name);
+    assert.equal(agent.completionChecks.includes('requiredOutputsExist'), false);
+    assert.equal(agent.outputs.some((output) => output.required), false);
+  }
+});
