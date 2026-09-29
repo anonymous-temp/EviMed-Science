@@ -437,3 +437,18 @@ def test_partial_report_keeps_finite_evidence_when_one_numeric_value_is_unusable
     draft = project.get_path("draft.md", subdir="manuscript").read_text()
     assert "effect_size" in draft and "unusable" in draft
     assert "0.53" in draft
+
+
+def test_two_verified_publications_of_one_trial_receive_one_automatic_contribution(tmp_path, monkeypatch):
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments
+    from test_primary_analysis_alignment import SOURCE, assessment_payload
+    project, protocol, studies = _uncertain_pairwise(tmp_path)
+    for study in studies:
+        record_checked_alignments(project, protocol, study, [assessment_payload(source_outcome=study.outcomes[0])],
+                                  source_text=SOURCE, issue_histories={0: ([], True)})
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    monkeypatch.setattr(BaseAgent, "call_llm_structured", _model_decisions(studies))
+    effects, audit = PipelineRunner(project).compute_primary_effect_selection(protocol=protocol, extracted_studies=studies)
+    assert len(effects) == sum(row["in_final_primary_analysis"] for row in audit) == 1
+    assert any(row.get("reason") == "overlapping_trial_publication" for row in audit)
