@@ -16,6 +16,8 @@ from test_complex_rct_engine import _records as complex_records
 from test_dose_response_engine import _records as dose_records
 from test_ipd_engine import _continuous_studies
 from test_prediction_performance_engine import _corpus_records
+from test_prediction_calibration_engine import _records as oe_records
+from test_prediction_calibration_slope_engine import _records as slope_records
 
 
 def effects(n=3):
@@ -185,3 +187,62 @@ def test_optimizer_fallback_reaches_pairwise_decision_and_manuscript(monkeypatch
     text = WritingAgent(lang="en")._model_decision_paragraph({"model_decision": decision})
     assert "REML optimization failed" in text
     assert "DerSimonian-Laird" in text
+
+
+@pytest.mark.parametrize("records,prefix", [(oe_records, "VALMETA_OE"), (slope_records, "CALIBRATION_SLOPE")])
+def test_each_calibration_metric_retains_real_hk_inference_across_tau_fallback(monkeypatch, records, prefix):
+    rows, fixture = records()
+    result = run_prediction_performance(rows)
+    assert result.ci_lower == pytest.approx(fixture["expected"]["ci_lower"], abs=fixture["expected"]["tolerance"])
+    assert result.ci_upper == pytest.approx(fixture["expected"]["ci_upper"], abs=fixture["expected"]["tolerance"])
+    assert result.executed_method.ci_method == "hksj_t"
+    monkeypatch.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+    fallback = run_prediction_performance(rows)
+    assert fallback.estimator == f"{prefix}_DL_HKSJ"
+    assert fallback.executed_method.tau_estimation_converged is False
+    assert fallback.executed_method.ci_method == "hksj_t"
+
+
+@pytest.mark.parametrize("family,engine,rows", [
+    ("intervention_rct", run_complex_rct, complex_records),
+    ("intervention_nrsi", run_adjusted_effects, adjusted_records),
+    ("prognostic_factor", run_adjusted_effects, adjusted_records),
+])
+@pytest.mark.parametrize("lang", ["en", "zh"])
+def test_full_method_report_discloses_dl_fallback_without_losing_estimates(monkeypatch, family, engine, rows, lang):
+    from new_meta.core import method_manuscript
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    monkeypatch.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+    result = engine(rows())
+    envelope = envelope_for(result, family)
+    renderer_name = {"intervention_rct": "complex_rct", "intervention_nrsi": "nrsi", "prognostic_factor": "prognostic"}[family]
+    renderer = getattr(method_manuscript, f"_render_{renderer_name}_{lang}")
+    protocol = ResearchProtocol(research_question="Association", pico=PICO(population="Adults", intervention="X", comparator="Y", outcome_primary="Outcome"))
+    report = renderer(protocol=protocol, studies=[], rob_results=[], prisma={}, search_query="", certainty={}, envelope=envelope)
+    assert ("REML optimization failed" if lang == "en" else "REML优化失败") in report
+    assert "DerSimonian-Laird" in report
+    assert f"{result.pooled_effect:.2f}" in report
+    assert "The REML estimate of tau-squared" not in report
+    assert "REML估计τ²" not in report
+
+
+def test_no_new_delivery_gate_for_a_disclosed_optimizer_fallback(monkeypatch):
+    monkeypatch.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+    result = run_adjusted_effects(adjusted_records())
+    envelope = envelope_for(result, "intervention_nrsi")
+    assert envelope.execution_converged is True  # The closed-form fallback delivered a valid result.
+    assert envelope.executed_method.tau_estimation_converged is False  # The requested REML optimizer did not converge.
+    assert envelope.primary_estimates[0].estimate == result.pooled_effect
+
+
+def test_existing_method_language_check_accepts_dl_only_when_execution_records_it():
+    from new_meta.core.method_manuscript import _validate_method_manuscript
+    result = run_adjusted_effects(adjusted_records())
+    envelope = envelope_for(result, "intervention_nrsi")
+    manuscript = "DerSimonian-Laird tau estimation for the HKSJ sensitivity."
+    report = _validate_method_manuscript(manuscript, envelope=envelope, method_input_audit={}, method_certainty={}, lang="en")
+    assert not any("DerSimonian-Laird" in issue.get("items", []) for issue in report["issues"])
+    legacy = envelope.model_copy(deep=True)
+    legacy.engine_payload["sensitivity"]["HKSJ"].pop("executed_method")
+    unknown = _validate_method_manuscript(manuscript, envelope=legacy, method_input_audit={}, method_certainty={}, lang="en")
+    assert any("DerSimonian-Laird" in issue.get("items", []) for issue in unknown["issues"])
