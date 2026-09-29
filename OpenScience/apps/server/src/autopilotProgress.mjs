@@ -1,7 +1,8 @@
 /** Bounded prior observations for the next authorized research episode. */
+import { standingVerdict } from "@evimed/domain";
+
 export const AUTOPILOT_PROGRESS_MAX_BYTES = 12_288;
 const MAX_EPISODES = 8;
-const cut = (value, max = 500) => typeof value === "string" ? value.slice(0, max) : "";
 const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value);
 const safePath = value => typeof value === "string" && value.length > 0 && value.length <= 1024
   && !value.startsWith("/") && !value.includes("\\") && !/^[a-z][a-z\d+.-]*:/i.test(value)
@@ -27,6 +28,11 @@ export function renderAutopilotProgress(snapshot) {
 export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, episodes, digests, maxBytes = AUTOPILOT_PROGRESS_MAX_BYTES, moreAvailable = false }) {
   const snapshot = { schemaVersion: 1, asOf, agendaId: agenda.id, projectId: agenda.projectId,
     episodes: [], followUps: [], rejectedDirections: [], truncated: Boolean(moreAvailable) };
+  const cut = (value, max = 500) => {
+    if (typeof value !== "string") return "";
+    if (value.length > max) snapshot.truncated = true;
+    return value.slice(0, max);
+  };
   const beforeNow = value => { const time = Date.parse(String(value ?? "")); return Number.isFinite(time) && time <= Date.parse(asOf); };
   const owns = row => row?.ownerId === userId && row.projectId === agenda.projectId && row.payload?.agendaId === agenda.id
     && beforeNow(row.createdAt ?? row.payload.createdAt ?? `${row.payload.date}T00:00:00Z`);
@@ -41,7 +47,9 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
   const ownedDigests = digests.filter(row => owns(row) && row.payload.date <= date && !(row.payload.episodeIds ?? []).includes(episodeId));
   for (const row of ownedDigests.slice(0, 8)) {
     const claims = [...(row.payload.headlines ?? []), ...(row.payload.leads ?? [])];
-    for (const decision of (row.payload.decisions ?? []).filter(item => item.action === "reject" && beforeNow(item.at)).slice(-5)) {
+    const decisions = (row.payload.decisions ?? []).filter(item => beforeNow(item.at));
+    const standing = [...new Set(decisions.map(item => String(item.claimId ?? "")))].map(id => standingVerdict(decisions, id)).filter(item => item?.action === "reject");
+    for (const decision of standing.slice(-5)) {
       if (snapshot.rejectedDirections.length >= 5) { snapshot.truncated = true; break; }
       add(snapshot.rejectedDirections, { digestId: row.id, claimId: cut(decision.claimId, 160),
         statement: cut(claims.find(claim => claim.id === decision.claimId)?.statement), note: cut(decision.note), at: decision.at });
