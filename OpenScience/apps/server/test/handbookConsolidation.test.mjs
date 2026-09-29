@@ -144,3 +144,15 @@ test("legacy candidates missing target metadata derive it from the stored source
   await loop.reconcile("alice");
   assert.equal(f.queued.length, 1);
 });
+
+test("an explicitly configured evaluation records its actual in-progress state", async () => {
+  const f = fixture(); const candidate = await f.learning.recordHandbookCandidate("alice", f.input());
+  const loop = new HandbookConsolidation({ ...f, registry, evaluate: async ({ binding }) => {
+    const during = await f.documents.get("alice", "method", candidate.id);
+    assert.equal(during.payload.dispositions[candidate.payload.contentDigest].disposition, "evaluating");
+    return { ...binding, verdict: "non_inferior", report: "reports/measured.json" };
+  } });
+  const result = await loop.run({ job: f.queued[0] });
+  assert.equal(result.verification, "evaluated");
+  assert.equal(result.evaluation.verdict, "non_inferior");
+});
