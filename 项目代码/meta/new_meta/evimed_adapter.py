@@ -1209,7 +1209,16 @@ def run_job(state_file: str) -> int:
         key=lambda entry: entry.stat().st_mtime_ns,
         reverse=True,
     )
-    if completed.returncode not in {0, 2} or not projects:
+    latest = projects[0].resolve() if projects else None
+    readable_draft = False
+    if latest is not None and output_root in latest.parents:
+        draft = latest / "manuscript" / "draft.md"
+        try:
+            readable_draft = latest in draft.resolve().parents and bool(draft.read_text(encoding="utf-8").strip())
+        except (OSError, UnicodeError):
+            readable_draft = False
+    partial_completion = completed.returncode not in {0, 2} and readable_draft
+    if (completed.returncode not in {0, 2} and not partial_completion) or not projects:
         latest = projects[0].resolve() if projects else None
         inside = latest if latest is not None and output_root in latest.parents else None
         state.update({
@@ -1236,6 +1245,15 @@ def run_job(state_file: str) -> int:
         release = json.loads(release_file.read_text(encoding="utf-8")) if release_file.is_file() else {}
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         pass
+    if partial_completion:
+        release = {**release, "status": "ready_with_warnings", "deliverable": True,
+                   "summary": "The process ended after writing a readable manuscript; completed evidence is retained and later work remains incomplete.",
+                   "warning_codes": [*(release.get("warning_codes") or []), "partial_process_completion"],
+                   "next_actions": []}
+        state.update(completion="partial", verification="unverified")
+        draft = project / "manuscript" / "draft.md"
+        with draft.open("a", encoding="utf-8") as output:
+            output.write("\n\n## Completion limitations\n\n" + release["summary"] + "\n")
     state.update({
         "status": "succeeded",
         "updatedAt": _now(),
