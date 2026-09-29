@@ -548,3 +548,8 @@ test("a model call whose tool arguments do not parse is asked again, in the runt
     backoff: { ...MODEL_RETRY_POLICY.backoff },
   }, "the image's boot smoke validates the same policy the runtime gets");
 });
+
+test('the native thinking selector remains visible while provider settings stay hidden', () => {
+  assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-model-selection'), false);
+  assert.equal(HOSTED_DISABLED_BROWSER_PANELS.includes('ui-settings-models'), true);
+});
