@@ -110,3 +110,13 @@ test("completion preserves safe stored-run artifacts and never accepts an artifa
   assert.equal(completed.status, "failed");
   assert.deepEqual(completed.artifactRefs, ["reports/result.md", "scripts/reproduce.py", "data/partial.csv"].map(path => ({ projectId: f.project.id, runId: f.run.id, sessionId: f.run.sessionId, path })));
 });
+
+test("a proven pre-prompt pause is canceled without folding a scientific failure", async () => {
+  const f = fixture();
+  f.run.status = "failed"; f.run.dispatchStatus = "rejected"; f.run.errorCode = "autopilot_paused";
+  f.dependencies.service.markEpisodeCanceled = async (...args) => f.calls.push(["canceled", ...args]);
+  await completeOwnedAutopilotRun(f.dependencies, f.project, f.run);
+  assert.equal(f.calls.some(call => call[0] === "delta" || call[0] === "complete" || call[0] === "usage"), false);
+  assert.equal(f.calls.filter(call => call[0] === "canceled").length, 1);
+  assert.equal(f.calls.filter(call => call[0] === "release").length, 1);
+});
