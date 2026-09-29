@@ -1,0 +1,428 @@
+{
+  "protocolVersion": 1,
+  "methods": {
+    "profile.snapshot": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "profile_dataset.py"
+      ]
+    },
+    "cohort.build": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": []
+    },
+    "population.scenario": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "simstudy semantics"
+      ]
+    },
+    "population.literature": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": []
+    },
+    "population.synthpop": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "synthpop"
+      ]
+    },
+    "population.quality": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": []
+    },
+    "patients.continuous": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": []
+    },
+    "patients.binary": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary"
+      ],
+      "crossChecks": []
+    },
+    "patients.time_to_event": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "simsurv"
+      ]
+    },
+    "evidence.pool": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "metafor",
+        "meta engine"
+      ]
+    },
+    "evidence.reconstruct_km": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "IPDfromKM"
+      ]
+    },
+    "comparator.entropy_balance": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "WeightIt",
+        "cobalt"
+      ]
+    },
+    "comparator.propensity_weight": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "WeightIt"
+      ]
+    },
+    "comparator.rmst": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "survRM2"
+      ]
+    },
+    "comparator.maic": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "NICE DSU TSD 18"
+      ]
+    },
+    "comparator.evalue": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "EValue"
+      ]
+    },
+    "comparator.map_prior": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "continuous"
+      ],
+      "crossChecks": [
+        "RBesT"
+      ]
+    },
+    "design.analytic": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "rpact",
+        "gsDesign"
+      ]
+    },
+    "design.simulate": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "design.analytic"
+      ]
+    },
+    "design.grid": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": []
+    },
+    "design.assurance": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "O'Hagan 2005"
+      ]
+    },
+    "design.procova": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "EMA 2022 qualification opinion"
+      ]
+    },
+    "accrual.poisson_gamma": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "Anisimov & Fedorov 2007"
+      ]
+    },
+    "matching.evaluate": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "Kleene truth table"
+      ]
+    }
+  },
+  "jobMethods": {
+    "profile_snapshot": "profile.snapshot",
+    "build_cohort": "cohort.build",
+    "generate_population": "population.scenario",
+    "literature_population": "population.literature",
+    "synthesize_population": "population.synthpop",
+    "population_quality": "population.quality",
+    "generate_patients": "patients.time_to_event",
+    "generate_patients_continuous": "patients.continuous",
+    "generate_patients_binary": "patients.binary",
+    "reconstruct_km": "evidence.reconstruct_km",
+    "pool_evidence": "evidence.pool",
+    "weight_comparator": "comparator.entropy_balance",
+    "propensity_weight_comparator": "comparator.propensity_weight",
+    "maic_comparator": "comparator.maic",
+    "evalue": "comparator.evalue",
+    "rmst": "comparator.rmst",
+    "design_analytic": "design.analytic",
+    "design_simulation": "design.simulate",
+    "design_grid": "design.grid",
+    "assurance": "design.assurance",
+    "procova": "design.procova",
+    "accrual_forecast": "accrual.poisson_gamma",
+    "map_prior": "comparator.map_prior",
+    "match_criteria": "matching.evaluate"
+  },
+  "patientLevelJobKinds": [
+    "profile_snapshot",
+    "build_cohort",
+    "synthesize_population",
+    "population_quality",
+    "weight_comparator",
+    "propensity_weight_comparator",
+    "rmst",
+    "match_criteria"
+  ],
+  "jobKinds": [
+    "profile_snapshot",
+    "build_cohort",
+    "generate_population",
+    "literature_population",
+    "synthesize_population",
+    "population_quality",
+    "generate_patients",
+    "generate_patients_continuous",
+    "generate_patients_binary",
+    "reconstruct_km",
+    "pool_evidence",
+    "weight_comparator",
+    "propensity_weight_comparator",
+    "maic_comparator",
+    "evalue",
+    "rmst",
+    "design_analytic",
+    "design_simulation",
+    "design_grid",
+    "assurance",
+    "procova",
+    "accrual_forecast",
+    "map_prior",
+    "match_criteria"
+  ],
+  "endpointTypes": [
+    "continuous",
+    "binary",
+    "time_to_event"
+  ],
+  "trialDesigns": [
+    "single_arm",
+    "single_arm_external",
+    "two_arm_fixed",
+    "group_sequential",
+    "simon_two_stage"
+  ],
+  "performanceMeasures": [
+    "power",
+    "type_one_error",
+    "bias",
+    "coverage",
+    "expected_sample_size",
+    "duration_months",
+    "cost"
+  ],
+  "spendingFunctions": [
+    "obrien_fleming",
+    "pocock"
+  ],
+  "notEstimableRules": [
+    "entropy_balance_infeasible",
+    "outside_common_support",
+    "effective_sample_size_below_floor",
+    "standardized_difference_above_floor",
+    "tau_beyond_followup",
+    "reconstruction_failed_qc",
+    "map_prior_conflict"
+  ],
+  "countKeys": [
+    "realPatients",
+    "events",
+    "effectiveSampleSize",
+    "generatedRecords"
+  ],
+  "optionalCountKeys": [
+    "priorEffectiveSampleSize",
+    "reconstructedPseudoPatients"
+  ],
+  "valueSources": [
+    "observed",
+    "extracted",
+    "calculated",
+    "imputed",
+    "aggregate",
+    "reconstructed",
+    "predicted",
+    "assumed",
+    "synthetic"
+  ],
+  "realPatientSources": [
+    "observed",
+    "extracted",
+    "calculated",
+    "imputed"
+  ],
+  "nonIndividualSources": [
+    "aggregate",
+    "synthetic",
+    "predicted"
+  ],
+  "populationKinds": [
+    "real",
+    "scenario",
+    "literature",
+    "empirical_synthetic"
+  ],
+  "comparatorRoutes": [
+    "prognostic_adjustment",
+    "external_control",
+    "literature_control",
+    "model_comparator",
+    "hybrid_control"
+  ],
+  "estimands": [
+    "ATT",
+    "ATE",
+    "ATO"
+  ],
+  "defaultEstimand": "ATT",
+  "poolingMethods": [
+    "single_study",
+    "random_effects_dl",
+    "random_effects_reml",
+    "random_effects_hksj",
+    "fixed_effect"
+  ],
+  "distributions": [
+    "point",
+    "normal",
+    "lognormal",
+    "beta",
+    "gamma",
+    "empirical"
+  ],
+  "intervalKinds": [
+    "confidence",
+    "credible",
+    "prediction",
+    "monte_carlo"
+  ],
+  "qualityCategories": [
+    "conformance",
+    "completeness",
+    "plausibility",
+    "duplication",
+    "linkage"
+  ],
+  "analysisTables": [
+    "subject",
+    "longitudinal",
+    "events"
+  ],
+  "criterionStates": [
+    "satisfied",
+    "not_satisfied",
+    "unknown",
+    "pending_recheck"
+  ],
+  "eligibilitySummaries": [
+    "eligible",
+    "ineligible",
+    "insufficient_evidence",
+    "pending"
+  ],
+  "twinEvidence": [
+    "individual_conditioned",
+    "updates_with_new_data",
+    "calibrated_uncertainty",
+    "validation_record"
+  ],
+  "modelTiers": [
+    "scenario",
+    "literature",
+    "data",
+    "validated"
+  ],
+  "syntheticUses": [
+    "design",
+    "feasibility",
+    "testing",
+    "training",
+    "shared_preview"
+  ],
+  "limits": {
+    "minCellSize": 10,
+    "bootstrapMin": 2000,
+    "replicatesNullMin": 20000,
+    "replicatesAltMin": 5000,
+    "smdFloor": 0.1
+  }
+}
