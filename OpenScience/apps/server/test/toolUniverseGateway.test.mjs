@@ -19,7 +19,9 @@ async function fixture(t, options = {}) {
     calls.push({ body, authorization: req.headers.authorization, session: req.headers["mcp-session-id"], method: req.method });
     if (options.redirect) { res.writeHead(302, { location: "http://untrusted.invalid/" }); res.end(); return; }
     if (req.method === "DELETE" || body.method === "notifications/initialized") { res.writeHead(202); res.end(); return; }
-    const result = body.method === "initialize" ? { protocolVersion: "2024-11-05" }
+    const info = { name: "EuropePMC_search_articles", type: "EuropePMCTool", description: "Search and enrich", parameter: { properties: { query: { type: "string" }, enrich_missing_abstract: { type: "boolean" }, fulltext_terms: { type: "array" } }, required: ["query"], additionalProperties: true }, test_examples: [{ query: "test", enrich_missing_abstract: true }] };
+    const result = options.info && body.method === "tools/call" ? { content: [{ type: "text", text: JSON.stringify(info) }], structuredContent: info }
+      : body.method === "initialize" ? { protocolVersion: "2024-11-05" }
       : body.method === "tools/list" ? { tools: [{ name: "list_tools" }] }
       : { content: [{ type: "text", text: "public evidence" }] };
     if (options.revoke && body.method === "tools/call") active = false;
@@ -97,4 +99,16 @@ test("the actual application routes the bridge through workload authentication",
     method: "POST", headers: { authorization: "Bearer invalid", "content-type": "application/json" }, body: JSON.stringify({ method: "tools/list" }) });
   assert.equal(response.status, 401);
   assert.equal((await response.json()).code, "evimed_workload_token_invalid");
+});
+
+
+test("tool information exposes the same safe argument surface execution accepts", async t => {
+  const f = await fixture(t, { info: true });
+  const response = await f.request({ method: "tools/call", params: { name: "get_tool_info", arguments: { tool_names: "EuropePMC_search_articles" } } });
+  const result = (await response.json()).result;
+  const info = JSON.parse(result.content[0].text);
+  assert.deepEqual(Object.keys(info.parameter.properties), ["query"]);
+  assert.equal(info.parameter.additionalProperties, false);
+  assert.equal(info.test_examples, undefined);
+  assert.deepEqual(result.structuredContent, info);
 });
