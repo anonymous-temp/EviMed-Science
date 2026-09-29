@@ -449,8 +449,14 @@ def _parse_results(
                 "presso": result.presso_global_pval is not None, "radial": result.radial_pval is not None, "conmix": result.conmix_pval is not None}
     for name, available in observed.items():
         result.module_status.setdefault(name, {"status": "completed" if available else "unavailable"})
+    for name, filename in (("selectedSourceRows", "selected-source-rows.csv"), ("harmonisedRows", "harmonised-rows.csv")):
+        if filename not in current or (previous is not None and current[filename] == previous.get(filename)):
+            result.module_status[name] = {"status": "unavailable", "reason": "not_produced_by_this_attempt"}
+        else:
+            # A fresh header-only snapshot is a real zero-row observation.
+            result.module_status[name] = {"status": "observed"}
     path = output_dir / "harmonised-rows.csv"
-    if path.is_file() and not path.is_symlink() and path.stat().st_size <= 8 * 1024 * 1024:
+    if result.module_status["harmonisedRows"]["status"] == "observed" and path.stat().st_size <= 8 * 1024 * 1024:
         from mr_agent.source_context import variant_sample_summary
         try:
             rows = pd.read_csv(path)

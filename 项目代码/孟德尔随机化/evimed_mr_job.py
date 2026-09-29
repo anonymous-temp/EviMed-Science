@@ -45,6 +45,18 @@ _PLOTS = {name + suffix for name in ("forest_plot", "scatter_plot", "funnel_plot
 _NUMERIC_FILES = {"mr_results.csv", "heterogeneity.csv", "pleiotropy.csv", "f_statistics.csv", "conmix.csv", "radial.csv", "mrpresso.csv", "steiger.csv"}
 _NUMERIC_COLUMNS = {"b", "beta", "se", "pval", "nsnp", "Q", "Q_df", "Q_pval", "egger_intercept", "F_stat", "F_statistic", "F", "lo_ci", "up_ci", "or", "or_lci95", "or_uci95"}
 _METHODS = {"IVW", "Inverse variance weighted", "MR Egger", "Weighted median", "Weighted mode", "Simple mode", "Wald ratio", "Maximum likelihood", "Penalised weighted median", "MR RAPS", "Contamination mixture"}
+# The current R templates' public statistical fields; free-text skip/correction
+# reasons remain private. MR-PRESSO may express permutation p-values as bounds.
+_SCIENTIFIC_NUMERIC_COLUMNS = _NUMERIC_COLUMNS | {
+    "ci_lower", "ci_upper", "estimate", "n_intervals", "global_p", "n_outliers",
+    "n_distributions", "outlier_resolution", "raw_beta", "raw_se", "raw_p",
+    "corrected_beta", "corrected_se", "corrected_p", "corrected_or",
+    "corrected_ci_lower", "corrected_ci_upper", "distortion_coefficient", "distortion_p",
+    "global_q_pval", "n_variants", "steiger_pval", "snp_r2.exposure", "snp_r2.outcome",
+}
+_BOUNDED_P_COLUMNS = {"global_p", "raw_p", "corrected_p", "distortion_p"}
+_PROBABILITY_COLUMNS = _BOUNDED_P_COLUMNS | {"pval", "Q_pval", "global_q_pval", "steiger_pval"}
+_COUNT_COLUMNS = {"nsnp", "n_outliers", "n_distributions", "n_intervals", "n_variants"}
 
 
 def _integer(value, low=0, high=1_000_000_000):
@@ -403,13 +415,18 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> tuple[list[
 def _scientific_rows(body: bytes, name: str) -> tuple[bytes, int]:
     """Project complete numerical rows; an unfinished primary row is never an estimate."""
     variants = name in {"selected-source-rows.csv", "harmonised-rows.csv", "open-exposure.csv", "open-outcome.csv"}
-    allowed = (_NUMERIC_COLUMNS | {"samplesize", "samplesize.exposure", "samplesize.outcome", "beta.exposure", "beta.outcome",
+    allowed = (_SCIENTIFIC_NUMERIC_COLUMNS | {"samplesize", "samplesize.exposure", "samplesize.outcome", "beta.exposure", "beta.outcome",
                                   "se.exposure", "se.outcome", "pval.exposure", "pval.outcome", "eaf", "pval", "f_statistic"})
+    labels = {"SNP", "snp", "method"}
+    if name == "steiger.csv":
+        labels |= {"status", "correct_causal_direction"}
+    if name == "mrpresso.csv":
+        labels.add("outlier_snps")
     reader = csv.DictReader(io.StringIO(body.decode("utf-8")), strict=True)
     headers = reader.fieldnames or []
     if not headers or len(headers) != len(set(headers)) or len(headers) > 128:
         raise ValueError("invalid columns")
-    selected = [key for key in headers if key in allowed or key in {"SNP", "snp", "method"}]
+    selected = [key for key in headers if key in allowed or key in labels]
     required = {"method", "nsnp", "b", "se", "pval"} if name == "mr_results.csv" else set()
     if required - set(headers) or not set(selected) & allowed:
         raise ValueError("incomplete numerical module")
@@ -428,13 +445,26 @@ def _scientific_rows(body: bytes, name: str) -> tuple[bytes, int]:
             elif key in {"SNP", "snp"}:
                 if not re.fullmatch(r"rs[0-9]{1,16}", value):
                     raise ValueError("unsafe variant identifier")
+            elif key == "outlier_snps":
+                if value and not re.fullmatch(r"rs[0-9]{1,16}(?:;rs[0-9]{1,16}){0,4999}", value):
+                    raise ValueError("unsafe outlier identifiers")
+            elif key == "status":
+                if value not in {"computed", "not_computable", "failed"}:
+                    raise ValueError("unknown statistical status")
+            elif key == "correct_causal_direction":
+                if value not in {"TRUE", "FALSE", "NA", ""}:
+                    raise ValueError("invalid direction verdict")
             elif value in {"", "NA", "NaN"}:
                 if key in required:
                     raise ValueError("incomplete primary statistic")
-            elif len(value) > 40 or not math.isfinite(float(value)):
-                raise ValueError("invalid number")
-            elif (key in {"se", "nsnp"} and float(value) <= 0) or (key in {"pval", "Q_pval"} and not 0 <= float(value) <= 1):
-                raise ValueError("invalid statistic")
+            else:
+                number = float(value[1:] if key in _BOUNDED_P_COLUMNS and value.startswith("<") else value)
+                if len(value) > 40 or not math.isfinite(number):
+                    raise ValueError("invalid number")
+                if ((key in {"se", "nsnp"} and number <= 0)
+                        or (key in _PROBABILITY_COLUMNS and not 0 <= number <= 1)
+                        or (key in _COUNT_COLUMNS and (number < 0 or not number.is_integer()))):
+                    raise ValueError("invalid statistic")
             projected[key] = value
         writer.writerow(projected); count += 1
     if not variants and count == 0:
