@@ -100,6 +100,13 @@ file paths and field names are bookkeeping for `meta-analysis-run.json` and
 `revision-notes.md`, not for the reader; nor does the report carry author,
 funding or conflict-of-interest declarations - the run is not an author.
 
+Preserve evidence statuses when compressing the accounting into prose: rows
+with unconfirmed quotes are not verified results, while a verified row omitted
+to avoid duplication is a different case. Raw database retrieval counts and
+post-deduplication flow counts use different denominators; state each scope
+separately unless a recorded mapping establishes their overlap. Keep usable
+analyses while describing these limits, without inventing an adjudication step.
+
 Write `meta-analysis-run.json` with the job id, terminal job status, release
 status, project path, returned artifacts, warnings or blockers, and the retrieval
 time. Do not claim completion until both files exist and the managed job is

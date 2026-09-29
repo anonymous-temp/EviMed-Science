@@ -90,6 +90,12 @@ probe host, a social crawler or a marketplace.
   抖音、百度、公众号、医生、药师 …). An empty list is an empty column. Give each
   claim `sourceRefLabel`, the source as a reader names it (“玛仕度肽注射液说明书
   （国家药监局 2025）”); the page never shows a preserved page's id.
+- Patient subtypes may overlap. State disjoint membership/exclusion rules only
+  when the evidence supports them; otherwise preserve useful subtype hypotheses
+  as overlapping or uncertain, and do not sum their population counts.
+- A content priority is a hypothesis with an evidence rationale. Without measured
+  cost and outcome data, do not present it as a demonstrated return-on-investment
+  ranking; keep the proposed priority and say which outcomes remain unmeasured.
 - Measurement is the platform's. Never batch-probe inside a run: once the set
   is locked the platform runs the baseline on its own. `mcp__evimed__geo_visibility_probe`
   is only for a single question the user asks about in the conversation.
