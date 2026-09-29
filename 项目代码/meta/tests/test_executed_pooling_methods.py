@@ -293,3 +293,35 @@ def test_partial_delivery_section_prompt_uses_execution_not_protocol(monkeypatch
         else:
             assert "Tau-squared was estimated by restricted maximum likelihood" in prompt
             assert "Prediction interval: recorded" in prompt
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_resume_never_attaches_new_optimizer_provenance_to_retained_primary(monkeypatch, tmp_path, legacy):
+    from new_meta import main
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.core.project import Project
+    from new_meta.schemas.meta_result import MetaAnalysisResults
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    project = Project("cached methods", output_dir=tmp_path)
+    protocol = ResearchProtocol(research_question="Outcome", model_preference="random", tau_estimator="REML", effect_measure="MD",
+                                pico=PICO(population="Adults", intervention="X", comparator="Y", outcome_primary="Outcome"))
+    with monkeypatch.context() as failed:
+        failed.setattr(meta_engine.optimize, "minimize_scalar", lambda *a, **k: SimpleNamespace(success=False))
+        primary = meta_engine.random_effects_reml(effects(), "MD", "Outcome")
+    if legacy:
+        fields = {"ci_method", "requested_method", "fallback_reason", "tau_estimation_converged"}
+        primary = PooledEffect.model_validate(primary.model_dump(exclude=fields))
+    before = primary.model_dump()
+    monkeypatch.setattr(main, "_load_cached_study_effects", lambda project: effects())
+    resumed = main._ensure_cached_model_artifacts(project, protocol, MetaAnalysisResults(primary_outcome=primary))
+    assert resumed.primary_outcome.model_dump() == before
+    assert resumed.model_decision["executed_method"] == primary.execution_metadata().model_dump(mode="json")
+    assert resumed.model_sensitivity["origin"] == "recomputed_from_cached_study_effects"
+    assert resumed.model_sensitivity["random"]["executed_method"]["tau_estimator"] == "REML"
+    text = WritingAgent(lang="en")._model_decision_paragraph({"model_decision": resumed.model_decision})
+    if legacy:
+        assert resumed.model_decision["executed_method"]["ci_method"] == "unknown"
+        assert "normal-Wald" not in text
+    else:
+        assert "REML optimization failed" in text
+        assert "DerSimonian-Laird" in text
