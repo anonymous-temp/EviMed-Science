@@ -87,3 +87,28 @@ test("an event mute leaves unrelated unclustered items visible", options, async 
   await service.createFollow(alice, { kind: "event", key: "eventmute1234", muted: true });
   assert.deepEqual((await list(alice, {})).body.items.map((row) => row.id), [otherItem.publicId]);
 });
+
+for (const kind of ["drug", "topic", "event"]) test(`a ${kind} mute applies to cached and reranked recommendations`, options, async () => {
+  const { FrontierProfiles } = await import("../src/frontierProfiles.mjs");
+  const wanted = await insertItem(db, { title: "Semaglutide unmuted observation" });
+  const muted = await insertItem(db, { title: "Semaglutide pilot signal" });
+  await db.query("UPDATE evimed_frontier.items SET entity_keys='{drug:semaglutide}' WHERE id=$1", [muted.id]);
+  const ev = await db.query("INSERT INTO evimed_frontier.events(public_id,title_zh,lane,first_at,last_at) VALUES($1,'Trial','evidence',now(),now()) RETURNING id", [`evt${kind}123456`]);
+  await db.query("UPDATE evimed_frontier.items SET event_id=$1 WHERE id=$2", [ev.rows[0].id, muted.id]);
+  const now = new Date("2026-09-22T04:00:00Z");
+  const phrases = [{ text: "Semaglutide", source: "question", kind: "question", memoryId: "" }];
+  const frozen = { state: "available", basis: "tags", items: [wanted, muted].map((item) => ({ itemId: item.publicId, text: "Semaglutide", source: "question", kind: "question", memoryId: "" })) };
+  await db.query(`INSERT INTO evimed_frontier.user_profiles(user_id,phrases,for_you,computed_at,for_you_at)
+    VALUES('alice',$1::jsonb,$2::jsonb,$3,$3) ON CONFLICT(user_id) DO UPDATE SET phrases=EXCLUDED.phrases,for_you=EXCLUDED.for_you,for_you_at=EXCLUDED.for_you_at`, [JSON.stringify(phrases),JSON.stringify(frozen),now]);
+  const key = kind === "drug" ? "semaglutide" : kind === "topic" ? "pilot" : `evt${kind}123456`;
+  await service.createFollow(alice, { kind, key, muted: true });
+  // A stale concurrent cache writer must not undo the user's current mute.
+  await db.query("UPDATE evimed_frontier.user_profiles SET for_you=$1::jsonb,for_you_at=$2 WHERE user_id='alice'", [JSON.stringify(frozen),now]);
+  const profiles = new FrontierProfiles({ database: db, researchMemory: { configured: true, settings: async () => ({ recallPaused: false, pausedProjects: [] }) },
+    config: { deepseekProviderEnabled: true, deepseekApiKey: "test-only-key" }, embedder: { configured: false }, now: () => now });
+  const hydrate = async (_user, ids) => new Map(ids.map((id) => [id, { id, state: { hidden: false } }]));
+  assert.deepEqual((await profiles.forYou(alice, hydrate)).items.map((entry) => entry.item.id), [wanted.publicId]);
+  const ranked = await profiles.rank(alice.id);
+  assert.equal(ranked.items.some((entry) => entry.itemId === muted.publicId), false);
+  assert.equal(ranked.items.some((entry) => entry.itemId === wanted.publicId), true);
+});
