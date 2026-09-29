@@ -158,6 +158,29 @@ describe("记忆胶囊", () => {
     await waitFor(() => expect(resetMemory).toHaveBeenCalledTimes(1));
   });
 
+  it("shows actual learning outcomes from the account summary rather than the loaded page", async () => {
+    listMethods.mockResolvedValue({ items: [method], nextCursor: "next-page", summary: {
+      methods: { approved: 61, candidate: 2, retired: 4 },
+      uses: { loaded: 120, invoked: 40, succeeded: 35, read: 40 },
+      lessons: { byTrigger: { delivered: 90 }, succeeded: 80, failed: 2 },
+      results: { create: 70, amend: 12, merge: 3, no_change: 5, handbook: 2 },
+      handbookCandidates: 2, spend24hCny: 0.25,
+    } });
+    open();
+    const overview = await screen.findByRole("region", { name: "方法学习" });
+    expect(within(overview).getByRole("region", { name: "生效做法" })).toHaveTextContent("61");
+    expect(within(overview).getByRole("region", { name: "做法改进" })).toHaveTextContent("15");
+    expect(within(overview).getByRole("region", { name: "新增做法" })).toHaveTextContent("70");
+    expect(overview).not.toHaveTextContent(/提升率|成功率|token|队列/);
+  });
+
+  it("does not invent a zero learning summary when learning is unavailable", async () => {
+    listMethods.mockRejectedValue(new Error("learning unavailable"));
+    open();
+    await screen.findByText(/药学背景/);
+    expect(screen.queryByRole("region", { name: "方法学习" })).not.toBeInTheDocument();
+  });
+
   it("draws one line of how the capsule grew above the list, its sentence as the heading and nothing else", async () => {
     open();
     const heading = await screen.findByRole("heading", { level: 3, name: "9月12日开始记住你，现在有 4 条记忆，学会 1 种做法" });
