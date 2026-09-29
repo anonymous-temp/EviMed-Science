@@ -217,9 +217,11 @@ def _check_sample_overlap(result: MRAnalysisResult, report: ValidationReport) ->
         return
     prefix = result.exposure_id.lower().split("-")[0]
     result.sample_overlap_warning = True
+    if result.sample_overlap.get("status") == "unknown":
+        result.sample_overlap = {**result.sample_overlap, "status": "possible", "evidence": ["shared_gwas_id_prefix"]}
     report.warnings.append(
         f"Potential sample overlap: both GWAS share consortium prefix "
-        f"'{prefix}'. Consider MR-LAP or split-sample approaches."
+        f"'{prefix}'. Participant overlap is unquantified; its extent and bias direction are unestablished."
     )
 
 

@@ -405,37 +405,15 @@ Analysis details:
 - Bidirectional: {bidirectional}
 - Sensitivity analyses performed: {sensitivity}
 
-Required limitations (discuss ALL of the following — do NOT omit any):
-1. MR Assumption 1 (Relevance): note that while F-statistic > 10 confirms instrument
-   strength, weak instrument bias toward the null cannot be entirely excluded in
-   finite samples
-2. MR Assumption 2 (Independence): residual population stratification may exist even
-   after standard GWAS quality control; mention if bidirectional analysis was or was
-   not performed
-3. MR Assumption 3 (Exclusion restriction / horizontal pleiotropy): state that although
-   MR-Egger intercept and MR-PRESSO showed no evidence of directional pleiotropy,
-   the possibility of balanced/uncorrelated pleiotropy cannot be fully ruled out
-4. Population generalizability: GWAS data predominantly from European-ancestry
-   populations; results may not generalize to other ethnic groups
-5. Sample overlap: potential partial overlap between exposure and outcome GWAS cohorts
-   could introduce bias toward observational estimates; the two-sample MR design
-   minimizes this risk compared to one-sample designs, and ideally separate,
-   non-overlapping cohorts were used; discuss whether this bias would inflate or
-   deflate the estimated effect
-6. Non-linear effects: two-sample MR estimates a linear average causal effect and
-   cannot capture threshold, non-linear, or dose-dependent relationships
-7. Winner's curse: SNP effects may be overestimated in the discovery GWAS, potentially
-   leading to instrument strength inflation
-8. GWAS database selection bias: the study relied on summary statistics from publicly
-   available GWAS databases (OpenGWAS/MR-Base); if the chosen GWAS was conducted in a
-   specific sub-population or under particular environmental conditions, the
-   representativeness of the instruments may be limited; alternative GWAS datasets
-   for the same trait may have yielded different instrument sets and effect sizes
-9. Future research: suggest specific directions — validation in non-European populations,
-   use of newer and larger GWAS with more SNPs, multi-variable MR to account for
-   correlated exposures, and non-linear MR methods to explore dose-response
-10. 3-4 paragraphs, balanced academic tone — acknowledge limitations without
-    overstating their impact on the overall conclusion"""
+Use the observed scientific context and actual module statuses. Do not invent missing findings.
+1. Instrument relevance: describe observed F statistics as a diagnostic heuristic. F>10 does not prove all MR assumptions.
+2. Independence and exclusion restriction: distinguish assumptions from observed sensitivity tests; skipped or absent Egger/PRESSO is not a negative test.
+3. Population: use reported ancestry only; unknown ancestry remains unknown. Do not calculate analyzed ancestry shares from unmatched catalogue and variant sample sizes.
+4. Sample overlap: a consortium prefix only suggests possible overlap. Without direct participant/cohort evidence, extent and direction of bias are unestablished; any mechanism discussion must state its assumptions. Do not claim independent cohorts or an executed overlap correction without evidence.
+5. Exposure scale: describe the documented unit and transformation and distinguish supplied declarations from repository records. Unknown units are source units, not automatically SD units; keep the original coefficients unchanged.
+6. Discuss residual confounding, selection, non-linearity and winner's curse as conditional limitations where relevant, not as measured effects in this run.
+7. Mention unavailable or failed modules and available partial results without turning incompleteness into a negative finding.
+8. Keep 3-4 balanced paragraphs and restrict future work to the observed gaps."""
 
 PAPER_TABLE1 = """Generate a data source characteristics table for this MR study.
 
