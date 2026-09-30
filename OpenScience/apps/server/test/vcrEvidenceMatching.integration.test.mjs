@@ -410,7 +410,10 @@ test("E-11 two saves of one assumption card at once serialize instead of collidi
 });
 
 test("AC-25 an assumption of external evidence must cite the ids verifiedEvidenceIds returns, and takes its number from the row, never from the run", options, async () => {
-  const [control] = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly: true });
+  // The two arms' rows are written in the same instant and sorted by their random ids, so which
+  // comes first is chance: the control arm is asked for by name.
+  const control = (await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly: true }))
+    .find((row) => row.arm_role === "control");
   assert.ok(control);
   const typed = await write("assumption", [{ key: "pfs_ctl", name: "对照 PFS", sourceKind: "external_evidence", parameter: "median_time", evidenceIds: [control.id], pointValue: 99 }]);
   assert.equal(typed.ok, false);

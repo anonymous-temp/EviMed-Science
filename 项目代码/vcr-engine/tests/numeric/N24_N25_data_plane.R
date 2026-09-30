@@ -249,8 +249,13 @@ vcr_case("N24d", c("AC-26"), function() {
   # but whose hash matches is refused `input_parse_failed`, and no parser text or
   # file content appears in the result.
   py <- Sys.getenv("VCR_PYTHON", "python3")
-  have <- suppressWarnings(system2(py, c("-c", shQuote("import pyarrow.parquet")), stdout = FALSE, stderr = FALSE)) == 0L
-  if (!have) return(list(pass = FALSE, detail = "pyarrow is not importable by VCR_PYTHON: the Parquet path cannot be exercised here"))
+  probe <- suppressWarnings(system2(py, c("-c", shQuote("import pyarrow.parquet")), stdout = TRUE, stderr = TRUE))
+  if (!is.null(attr(probe, "status"))) {
+    said <- utils::tail(probe[nzchar(probe)], 2)
+    return(list(pass = FALSE, detail = sprintf("pyarrow is not importable by VCR_PYTHON (%s -> %s, status %s): the Parquet path cannot be exercised here%s",
+      py, if (nzchar(Sys.which(py))) Sys.which(py) else "not on PATH", attr(probe, "status"),
+      if (length(said)) paste0(": ", paste(substr(said, 1, 200), collapse = " | ")) else "")))
+  }
   set.seed(24L, kind = VCR_RNG_KIND)
   df <- data.frame(USUBJID = sprintf("S%03d", 1:80), age = round(stats::rnorm(80, 60, 9), 3), sex = rep(c("F", "M"), 40), stringsAsFactors = FALSE)
   csv_in <- vcr_test_input(df, "snp_n24d:subject", "subject")
