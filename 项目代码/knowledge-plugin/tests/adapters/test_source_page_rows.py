@@ -61,6 +61,8 @@ def test_source_page_link_requires_actual_row_identity_and_an_allowed_public_pag
     }}))
     assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'identity_prefix': None}))
     assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'identity_prefix': 'url:fake'}))
+    assert adapter.validate_config(replace(SOURCE, source_type='company', config=CONFIG))
+    assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'url': 'https://example.org/list'}))
     now = datetime(2026, 9, 29, tzinfo=timezone.utc)
     body = b'<table><tr><td>1</td><td>Example</td><td></td><td>9/25/2026</td><td>Details</td></tr></table>'
     private = 'https://unrelated.example/records'
