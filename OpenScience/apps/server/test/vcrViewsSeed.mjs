@@ -292,9 +292,12 @@ export async function seedEv201({ store, matchStore, evidenceStore }) {
     dimensions: { designs: [{ label: "方案 B" }, { label: "方案 C" }] },
     truthScenarios: [{ name: "HR 1.0（零假设）", effect: 1 }, { name: "HR 0.75", effect: 0.75 }, { name: "HR 0.60", effect: 0.6 }, { name: "HR 0.50", effect: 0.5 }],
     comparisonGoal: { text: "成功把握尽量高、样本量尽量少", measures: [{ name: "assurance", direction: "higher" }, { name: "expected_sample_size", direction: "lower" }] },
+    // Numbered the way the engine numbers a grid's designs and truths: from 1 (R's own), so the
+    // first design under the null is (1, 1) — a seed that counted from 0 drew a page the engine's
+    // own cells would then have shifted by one design and one truth.
     cells: [
-      [0, 0, 0.0247], [0, 1, 0.35], [0, 2, 0.81], [0, 3, 0.96], [1, 0, 0.0251], [1, 1, 0.42], [1, 2, 0.85], [1, 3, 0.97],
-    ].map(([designIndex, truthIndex, power]) => ({ designIndex, truthIndex, status: "succeeded", measures: [simulated(truthIndex === 0 ? "type_one_error" : "power", power, 0.003)] })),
+      [1, 1, 0.0247], [1, 2, 0.35], [1, 3, 0.81], [1, 4, 0.96], [2, 1, 0.0251], [2, 2, 0.42], [2, 3, 0.85], [2, 4, 0.97],
+    ].map(([designIndex, truthIndex, power]) => ({ designIndex, truthIndex, status: "succeeded", measures: [simulated(truthIndex === 1 ? "type_one_error" : "power", power, 0.003)] })),
   });
 
   // --- 计算：任务、执行、结果

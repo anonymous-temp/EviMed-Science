@@ -1,5 +1,5 @@
 {
-  "headline": "文献对照：有限制地估计，12 个月 RMST 5.9 个月。",
+  "headline": "文献对照：有限制地估计，12 个月 RMST 5.900 个月。",
   "routes": [
     {
       "route": "prognostic_adjustment",
@@ -148,7 +148,7 @@
       },
       "mcse": null,
       "review": "ai_set",
-      "precision": null,
+      "precision": 3,
       "reason": null,
       "stale": false,
       "detail": {

@@ -13,13 +13,13 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, suppressForModel } from "@evimed/domain";
+import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, suppressForModel } from "@evimed/domain";
 import {
-  VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT,
-  analysisTableIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, decodeUploadText, deriveAnalysisShapes,
+  VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_COLUMN_SOURCE_ORDER, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT,
+  analysisTableIssues, asOfIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, columnSourceIssues, decodeUploadText, deriveAnalysisShapes,
   dictionaryEntries, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
-  qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, toCsv, treatmentEvidence, validateFieldMap,
-  writeContentAddressed,
+  qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, tableVisibleAsOf, toCsv, treatmentEvidence,
+  validateFieldMap, weakestSource, writeContentAddressed,
 } from "../src/vcrDataPlane.mjs";
 
 /** @type {string} */
@@ -372,9 +372,16 @@ test("AC-06 AC-15 `--as-of` keeps out rows the platform could not yet see", asyn
   assert.equal(json.asOfFilter.undated, 1);
   assert.equal(json.snapshot.rowCount, 1);
   assert.equal(json.asOf, "2026-01-20T00:00:00Z");
+  assert.deepEqual(json.asOfFilter.whole, [], "every table said when its rows became visible");
   const all = await profile([file], fieldMap);
   assert.equal(all.json.snapshot.rowCount, 3);
   assert.equal(all.json.asOfFilter.applied, false);
+  // A standalone run leaves a table with no visibility column whole — and says so,
+  // where the control plane (which refuses to freeze such a file with a date) never asks.
+  const plain = await write("plain.csv", "USUBJID,LDH\nS1,210\nS2,260\n");
+  const mixed = await profile([file, plain], fieldMap, ["--as-of", "2026-01-20T00:00:00Z"]);
+  assert.deepEqual(mixed.json.asOfFilter.whole, ["plain.csv"]);
+  assert.equal(mixed.json.snapshot.rowCount, 3, "the dated file's one visible row and the undated file's two");
 });
 
 test("the snapshot profile is byte-identical for the same input", async () => {
@@ -605,6 +612,143 @@ test("C2-23 an events table with two rows for one subject and parameter is refus
   assert.ok(issues.some((issue) => issue.issue === "duplicate-event-row" && issue.blocking));
   assert.ok(VCR_ANALYSIS_TABLE_BLOCKING_ISSUES.includes("duplicate-event-row"));
   assert.ok(!analysisTableIssues("events", rows.slice(1)).some((issue) => issue.issue === "duplicate-event-row"));
+});
+
+// ---------------------------------------------------------------------------
+// A snapshot's as-of reaches the tables the engine reads (AC-15, data side)
+// ---------------------------------------------------------------------------
+
+/** A baseline file that says, per row, when the platform could first see it. */
+const REPLAY_TABLES = [
+  { name: "cohort.csv", header: ["PATIENT_NO", "ARM", "AGE", "OS_MONTHS", "OS_DEAD", "SHARED"] },
+  { name: "visits.csv", header: ["PATIENT_NO", "SBP", "SHARED"] },
+];
+const REPLAY_MAP = [
+  ...GOOD_MAP.filter((entry) => entry.table === "cohort.csv"),
+  { table: "cohort.csv", column: "SHARED", role: "other", timeKind: "visible_at" },
+  { table: "visits.csv", column: "PATIENT_NO", role: "subject_key" },
+  { table: "visits.csv", column: "SBP", role: "measurement", parameter: "SBP" },
+  { table: "visits.csv", column: "SHARED", role: "other", timeKind: "visible_at" },
+];
+/** Four people; B3 became visible after the replay's date, B4 has no visibility date at all. */
+const REPLAY_COHORT = { name: "cohort.csv", header: REPLAY_TABLES[0].header, rows: [
+  ["B1", "TRT", "50", "12", "1", "2026-01-05"],
+  ["B2", "CTL", "61", "8", "0", "2026-01-19"],
+  ["B3", "TRT", "44", "20", "1", "2026-03-01"],
+  ["B4", "CTL", "70", "5", "1", ""],
+] };
+const REPLAY_VISITS = { name: "visits.csv", header: REPLAY_TABLES[1].header, rows: [
+  ["B1", "120", "2026-01-06"], ["B1", "130", "2026-02-10"], ["B2", "111", "2026-01-19"], ["B3", "150", "2026-03-02"],
+] };
+const replayEntries = () => validateFieldMap(normalizeFieldMap(REPLAY_MAP).columns, REPLAY_TABLES).columns;
+
+test("AC-15 a replay's tables are cut to the rows visible then before anything is derived from them", () => {
+  const key = Buffer.alloc(32, 9);
+  const entries = replayEntries();
+  const all = deriveAnalysisShapes({ tables: [REPLAY_COHORT, REPLAY_VISITS], entries, key });
+  assert.equal(all.shapes.subject?.rows.length, 4, "no date, no cut");
+  assert.equal(all.asOf, null);
+
+  const replay = deriveAnalysisShapes({ tables: [REPLAY_COHORT, REPLAY_VISITS], entries, key, asOf: "2026-01-20T00:00:00.000Z" });
+  const b1 = pseudonymOf(key, "B1");
+  const b2 = pseudonymOf(key, "B2");
+  assert.deepEqual(replay.shapes.subject?.rows.map((row) => row[0]).sort(), [b1, b2].sort(), "B3 and B4 were not visible on the 20th");
+  assert.deepEqual(replay.shapes.events?.rows.map((row) => row[0]).sort(), [b1, b2].sort(), "nor is anything of theirs an outcome");
+  // The visit the platform got on 10 February is not part of a replay dated 20 January.
+  assert.deepEqual(replay.shapes.longitudinal?.rows.map((row) => `${row[0] === b1 ? "B1" : "B2"}:${row[2]}`).sort(), ["B1:120", "B2:111"]);
+  assert.deepEqual(replay.identity.map(([pseudonym]) => pseudonym).sort(), [b1, b2].sort(), "a hidden person is not in the way back either");
+  assert.deepEqual(replay.dropped, { not_yet_visible: 3, visible_date_missing: 1 });
+  assert.deepEqual(replay.asOf, { at: "2026-01-20T00:00:00.000Z", files: [
+    { file: "cohort.csv", column: "SHARED", decidable: true, visible: 2, hidden: 1, undated: 1 },
+    { file: "visits.csv", column: "SHARED", decidable: true, visible: 2, hidden: 2, undated: 0 },
+  ] });
+  // Later, more of them are visible: the date is the only thing that changed.
+  const later = deriveAnalysisShapes({ tables: [REPLAY_COHORT, REPLAY_VISITS], entries, key, asOf: "2026-03-05T00:00:00.000Z" });
+  assert.equal(later.shapes.subject?.rows.length, 3, "B3 is visible by March; B4 never says when");
+  assert.equal(later.dropped.visible_date_missing, 1);
+});
+
+test("AC-15 a file with no visibility column contributes no rows to a replay, and the freeze names it", () => {
+  const cohort = { name: "cohort.csv", header: ["PATIENT_NO", "ARM"], rows: [["C1", "TRT"], ["C2", "CTL"]] };
+  const entries = validateFieldMap(normalizeFieldMap([
+    { table: "cohort.csv", column: "PATIENT_NO", role: "subject_key" }, { table: "cohort.csv", column: "ARM", role: "arm", alias: "arm" }]).columns,
+  [{ name: "cohort.csv", header: cohort.header }]).columns;
+  const replayed = tableVisibleAsOf(cohort, entries, "2026-01-20T00:00:00Z");
+  assert.deepEqual(replayed.table.rows, [], "'we do not know when we could see this' is not 'we could always see it'");
+  assert.deepEqual(replayed.report, { file: "cohort.csv", column: null, decidable: false, visible: 0, hidden: 0, undated: 0 });
+  const derived = deriveAnalysisShapes({ tables: [cohort], entries, key: Buffer.alloc(32, 1), asOf: "2026-01-20T00:00:00Z" });
+  assert.equal(derived.shapes.subject, undefined);
+  assert.equal(derived.dropped.as_of_undecidable, 2);
+  // The freeze refuses before any of that: it names the file and what to mark.
+  const refused = asOfIssues(entries, "2026-01-20T00:00:00.000Z");
+  assert.deepEqual(refused.map((issue) => [issue.code, issue.table]), [["as_of_needs_visible_at", "cohort.csv"]]);
+  assert.match(refused[0].message, /cohort\.csv.*平台可见时间/);
+  assert.deepEqual(asOfIssues(entries, null), [], "no date, nothing to demand");
+  assert.deepEqual(asOfIssues(replayEntries(), "2026-01-20T00:00:00.000Z"), []);
+  const twice = replayEntries().map((entry) => (entry.column === "AGE" ? { ...entry, timeKind: "visible_at" } : entry));
+  assert.deepEqual(asOfIssues(twice, "2026-01-20T00:00:00.000Z").map((issue) => issue.code), ["as_of_visible_at_repeated"]);
+});
+
+test("AC-06 a blank treatment is counted under its missing reason and never becomes the control arm", () => {
+  const cohort = { name: "cohort.csv", header: TABLES[0].header, rows: [["D1", "TRT", "50", "1", "1"], ["D2", "", "51", "2", "0"], ["D3", "CTL", "52", "3", "1"], ["D4", "  ", "53", "4", "1"]] };
+  const map = GOOD_MAP.filter((entry) => entry.table === "cohort.csv").map((entry) => (entry.column === "ARM" ? { ...entry, missingReason: "restricted_in_trial" } : entry));
+  const entries = validateFieldMap(normalizeFieldMap(map).columns, [TABLES[0]]).columns;
+  const key = Buffer.alloc(32, 5);
+  const { shapes, treatment, dropped } = deriveAnalysisShapes({ tables: [cohort], entries, key });
+  const armOf = (/** @type {string} */ id) => shapes.subject?.rows.find((row) => row[0] === pseudonymOf(key, id))?.[2];
+  assert.equal(armOf("D1"), "1");
+  assert.equal(armOf("D3"), "0");
+  assert.equal(armOf("D2"), "", "not told is not 'control'");
+  assert.equal(armOf("D4"), "");
+  assert.deepEqual(treatment, { arm: { recorded: 2, unknown: 2, notApplicable: 0, missingReason: "restricted_in_trial" } });
+  assert.equal(dropped.arm_value_not_coded, undefined, "a blank is not a value the map failed to code");
+  // Where the map says the absence is not applicable, that is what is counted.
+  const notApplicable = validateFieldMap(normalizeFieldMap(map.map((entry) => (entry.column === "ARM" ? { ...entry, missingReason: "not_applicable" } : entry))).columns, [TABLES[0]]).columns;
+  assert.deepEqual(deriveAnalysisShapes({ tables: [cohort], entries: notApplicable, key }).treatment.arm, { recorded: 2, unknown: 0, notApplicable: 2, missingReason: null });
+});
+
+test("AC-03 a column names its own value source, and a table of mixed columns is never called observed", () => {
+  assert.deepEqual([...VCR_COLUMN_SOURCE_ORDER].sort(), [...VCR_REAL_PATIENT_SOURCES].sort(), "the order ranks exactly the real-patient sources");
+  assert.equal(weakestSource(["observed", "observed"], "observed"), "observed");
+  assert.equal(weakestSource(["observed", "calculated", "extracted"], "observed"), "calculated");
+  assert.equal(weakestSource(["imputed", "observed"], "observed"), "imputed");
+  assert.equal(weakestSource([], "extracted"), "extracted");
+  assert.equal(weakestSource(["synthetic"], "synthetic"), "synthetic", "a source that is not a real person's is not improved by ranking");
+
+  const { columns, issues } = normalizeFieldMap([
+    { table: "cohort.csv", column: "AGE", role: "covariate", alias: "age", valueSource: "imputed" },
+    { table: "cohort.csv", column: "ARM", role: "arm", alias: "arm", valueSource: "" },
+    { table: "cohort.csv", column: "OS_MONTHS", role: "outcome_time", parameter: "OS", valueSource: "synthetic" },
+    { table: "cohort.csv", column: "OS_DEAD", role: "outcome_event", parameter: "OS", valueSource: "guessed" },
+  ]);
+  assert.deepEqual(issues.map((issue) => `${issue.index}:${issue.code}`), ["2:value_source_not_individual", "3:value_source_unknown"]);
+  assert.equal(columns.find((entry) => entry.column === "AGE")?.valueSource, "imputed");
+  assert.ok(!("valueSource" in (columns.find((entry) => entry.column === "ARM") ?? {})), "a column that says nothing keeps the map's old spelling and hash");
+  assert.equal(fieldMapHash(normalizeFieldMap(GOOD_MAP).columns), fieldMapHash(normalizeFieldMap(GOOD_MAP.map((entry) => ({ ...entry, valueSource: null }))).columns));
+  assert.notEqual(fieldMapHash(normalizeFieldMap(GOOD_MAP).columns),
+    fieldMapHash(normalizeFieldMap(GOOD_MAP.map((entry) => (entry.column === "AGE" ? { ...entry, valueSource: "imputed" } : entry))).columns));
+
+  const cohort = { name: "cohort.csv", header: TABLES[0].header, rows: [["E1", "TRT", "50", "12.5", "1"], ["E2", "CTL", "61", "8", "0"]] };
+  const visits = { name: "visits.csv", header: TABLES[1].header, rows: [["E1", "120"], ["E2", "111"]] };
+  const mixed = validateFieldMap(normalizeFieldMap(GOOD_MAP.map((entry) => (
+    entry.column === "AGE" ? { ...entry, valueSource: "imputed" } : entry.column === "SBP" ? { ...entry, valueSource: "calculated" } : entry))).columns, TABLES).columns;
+  const derived = deriveAnalysisShapes({ tables: [cohort, visits], entries: mixed, key: Buffer.alloc(32, 4), fileSource: "observed" });
+  assert.deepEqual(derived.shapes.subject?.columnSources, { age: "imputed", arm: "observed" });
+  assert.equal(derived.shapes.subject?.valueSource, "imputed", "one imputed covariate keeps the whole table from reading observed");
+  assert.deepEqual(derived.shapes.events?.columnSources, { AVAL: "observed", CNSR: "observed" });
+  assert.equal(derived.shapes.events?.valueSource, "observed", "the events table holds no imputed column and says so");
+  assert.deepEqual(derived.shapes.longitudinal?.columnSources, { AVAL: "calculated" });
+  assert.equal(derived.shapes.longitudinal?.valueSource, "calculated");
+  assert.deepEqual(derived.shapes.subject?.columns.map((column) => [column.name, column.valueSource]), [["age", "imputed"], ["arm", "observed"]]);
+  // A file extracted from documents is extracted throughout, except where a column says it was observed.
+  const extracted = deriveAnalysisShapes({ tables: [cohort, visits], entries: validateFieldMap(normalizeFieldMap(GOOD_MAP.map((entry) => (
+    entry.column === "AGE" ? { ...entry, valueSource: "observed" } : entry))).columns, TABLES).columns, key: Buffer.alloc(32, 4), fileSource: "extracted" });
+  assert.deepEqual(extracted.shapes.subject?.columnSources, { age: "observed", arm: "extracted" });
+  assert.equal(extracted.shapes.subject?.valueSource, "extracted");
+  // On a synthetic or aggregate source, a column may not claim to be real.
+  assert.deepEqual(columnSourceIssues(mixed, "observed"), []);
+  assert.deepEqual(columnSourceIssues(mixed, "synthetic").map((issue) => issue.code), ["column_source_on_non_individual_source", "column_source_on_non_individual_source"]);
+  assert.deepEqual(columnSourceIssues(validateFieldMap(normalizeFieldMap(GOOD_MAP).columns, TABLES).columns, "synthetic"), []);
 });
 
 // ---------------------------------------------------------------------------

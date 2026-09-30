@@ -20,6 +20,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -33,14 +34,28 @@ import { createVcrEngineClient } from "../src/vcrEngineClient.mjs";
 import { VcrJobs } from "../src/vcrJobs.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { VcrOrchestrator, vcrBuildStages } from "../src/vcrOrchestrator.mjs";
-import { seedVcrCatalogue } from "../src/vcrService.mjs";
+import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { createVcrWorkerLoops } from "../src/vcrWorker.mjs";
 import { COHORT_SIZE, FIELD_MAP, cohortCsv, streamOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENGINE_ROOT = path.resolve(HERE, "../../../../项目代码/vcr-engine");
-const R_LIBS = process.env.VCR_R_LIBS ?? "/home/coder/R/vcr-4.3";
+// The R library is the machine's to name (`scripts/vcr/r-library.sh`); there is no path baked in here.
+const R_LIBS = process.env.VCR_R_LIBS ?? "";
+// CI runs these with `VCR_ENGINE_TESTS=required`: a box without R, without its library or without uvicorn
+// is then a red run with the reason, never a green one that proved nothing.
+const ENGINE_REQUIRED = process.env.VCR_ENGINE_TESTS === "required";
+
+/** What this machine lacks of what the real engine needs: `{ code, message }`, or null. */
+function engineProblem() {
+  if (spawnSync("Rscript", ["--version"]).status !== 0) return { code: "rscript", message: "Rscript is not installed (or not on PATH)" };
+  if (!R_LIBS) return { code: "library_unset", message: "VCR_R_LIBS is not set: it names the R library the engine runs on (scripts/vcr/r-library.sh installs it)" };
+  if (!existsSync(R_LIBS)) return { code: "library_missing", message: `VCR_R_LIBS names a directory that does not exist: ${R_LIBS}` };
+  if (spawnSync("python3", ["-c", "import uvicorn"]).status !== 0) return { code: "uvicorn", message: "python3 cannot import uvicorn (the engine service's server; see requirements.txt in 项目代码/vcr-engine)" };
+  return null;
+}
+const problem = engineProblem();
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -48,7 +63,9 @@ if (databaseUrl) {
   assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname));
   assert.match(parsed.pathname, /evimed_test/);
 }
-const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 900_000 };
+// Not required and no R library named: skipped with the reason. Required, or any other gap: `before` fails with it.
+const options = { skip: (!databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured")
+  || (!ENGINE_REQUIRED && problem?.code === "library_unset" && `the real engine is not available here: ${problem.message}`), timeout: 900_000 };
 
 /** @type {ControlPlaneDatabase} */
 let database;
@@ -85,9 +102,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 before(async () => {
   if (!databaseUrl) return;
-  // The box has to have R: a skipped engine test would be a green run that proves nothing.
-  const rscript = spawnSync("Rscript", ["--version"], { encoding: "utf8" });
-  assert.equal(rscript.status, 0, "Rscript must be installed: this file is the proof the control plane and the real engine agree");
+  // A skipped engine test would be a green run that proves nothing: with the library named (or the run required),
+  // what the machine lacks is a failure that says what.
+  assert.equal(problem, null, `${ENGINE_REQUIRED ? "VCR_ENGINE_TESTS=required: " : ""}this file is the proof the control plane and the real engine agree, and this machine cannot run the engine — ${problem?.message}`);
 
   const source = new URL(databaseUrl);
   isolatedName = `${decodeURIComponent(source.pathname.slice(1))}_vcrseam_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
@@ -333,6 +350,20 @@ test("AC-02 AC-35 the T0 chain runs on the real engine: population, patients, co
     const population = results.find((result) => result.kind === "population");
     assert.equal(population.counts.generatedRecords, 240);
     assert.ok(population.tables.find((table) => table.name === "population")?.location.startsWith("derived/"));
+    // C3-03: what the engine's next job opens is readable by the engine's own user, which is not the control plane's — the
+    // filed tables and every directory down to them are world-readable (their rows are generated, never a real person's),
+    // where a patient-level file is owner-only. Read off the disk, not off what the code says it did.
+    const plane = path.join(scratch, "data-plane");
+    for (const listed of [population, results.find((result) => result.kind === "comparator")]) {
+      for (const table of listed?.tables ?? []) {
+        if (!String(table.location ?? "").startsWith("derived/")) continue;
+        assert.equal((await fs.stat(path.join(plane, table.location))).mode & 0o777, 0o644, `${table.location} is readable by the engine's user`);
+        const parts = table.location.split("/").slice(0, -1);
+        for (let depth = 1; depth <= parts.length; depth += 1) {
+          assert.equal((await fs.stat(path.join(plane, ...parts.slice(0, depth)))).mode & 0o777, 0o755, `${parts.slice(0, depth).join("/")} can be walked by the engine's user`);
+        }
+      }
+    }
     const patientsJob = byKind("generate_patients")[0];
     const patientsRow = await store.one("SELECT inputs FROM evimed_vcr.jobs WHERE id = $1", [patientsJob.id]);
     const table = patientsRow.inputs.find((/** @type {any} */ input) => input.kind === "snapshot_file");
@@ -560,4 +591,286 @@ test("every job kind the domain pairs with a method is built as the schema that 
   const typo = vcrBuildStages({ kind: "trial_scenario", row: { ...seed.scenarioA, configuration: { ...seed.scenarioA.configuration, accrual: { kind: "uniform", duration: 12, followup: 12, dropoutRate: 0.1 } } } }, context);
   assert.equal(typo.ok, false);
   assert.deepEqual(/** @type {any} */ (typo).refused.paths, ["accrual.dropoutRate"]);
+});
+
+// ---------------------------------------------------------------------------
+// The verification review's findings, on the real engine
+// ---------------------------------------------------------------------------
+
+/**
+ * A T0 study with a definition and nothing else: what a test furnishes itself.
+ * @param {string} label @param {Record<string, any>} [patch]
+ */
+async function bareStudy(label, patch = {}) {
+  const study = await store.createStudy({ userId: `u_${label}`, projectId: `prj_${label}`, name: `验证 ${label}`, question: "设计怎么选", dataTier: "T0",
+    intendedUse: "design_support", ...patch });
+  await store.saveDefinition({ studyId: study.id, userId: study.userId, ...definition, endpointType: patch.endpointType ?? "time_to_event" });
+  return study;
+}
+
+/** The page's own service over the same store and queue, read as the study's owner. @param {ReturnType<typeof compose>} module */
+function pages(module) {
+  return new VcrService({ store, config: module.config, jobs: module.jobs, now: () => new Date() });
+}
+
+test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on the scale the cards state, and a card the method does not read is dropped in silence — not refused as the run's own field", options, async () => {
+  const module = compose();
+  const study = await bareStudy("scales", { endpointType: "continuous" });
+  const card = (/** @type {Record<string, any>} */ fields) => store.saveAssumption({ studyId: study.id, userId: study.userId, sourceKind: "expert_set", valueSource: "assumed", ...fields });
+  await card({ key: "mean_difference", name: "均值差", pointValue: 4, unit: "mmHg", distribution: { family: "normal", params: { mean: 4, sd: 1.2 }, range: { kind: "prediction", low: 1.6, high: 6.4 } } });
+  await card({ key: "outcome_sd", name: "结局标准差", pointValue: 12, unit: "mmHg" });
+  await card({ key: "risk_difference", name: "率差", pointValue: 0.15, distribution: { family: "normal", params: { mean: 0.15, sd: 0.05 }, range: { kind: "prediction", low: 0.05, high: 0.25 } } });
+  await card({ key: "control_event_rate", name: "对照应答率", pointValue: 0.3 });
+  const continuous = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "连续 1:1", design: "two_arm_fixed", endpointType: "continuous",
+    assumptionIds: ["mean_difference", "outcome_sd"],
+    configuration: { design: { nTreat: 150, nControl: 150, allocation: 0.5 }, analysis: { method: "ttest", alpha: 0.025, sided: 1, power: 0.9 }, performance: ["power"] } });
+  const binary = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "二分类 1:1", design: "two_arm_fixed", endpointType: "binary",
+    assumptionIds: ["control_event_rate", "risk_difference"],
+    configuration: { design: { nTreat: 200, nControl: 200, allocation: 0.5 }, analysis: { method: "risk_difference", alpha: 0.025, sided: 1, power: 0.9 }, performance: ["power"] } });
+  // Simon's two-stage is analytic only, and states its own rates: the 「对照应答率」 card has no key of it to fill.
+  const simon = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "Simon 两阶段", design: "simon_two_stage", endpointType: "binary",
+    assumptionIds: ["control_event_rate"],
+    configuration: { design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 } } });
+
+  await settle(module, study.id);
+  const jobs = await store.jobs(study.id, 100);
+  for (const job of jobs) assert.equal(job.state, "succeeded", `${job.kind} ${job.id} ended ${job.state}: ${JSON.stringify(job.error)}`);
+  assert.deepEqual(jobs.map((job) => job.kind).sort(), ["assurance", "assurance", "design_analytic", "design_analytic", "design_analytic", "design_simulation", "design_simulation"],
+    "both fixed designs have their assurance, and Simon's design is computed analytically without being refused for a field nobody wrote");
+  const marks = await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id = $1 AND kind = 'job'", [study.id]);
+  assert.ok(marks.every((mark) => mark.state === "done"), `every mark is done: ${JSON.stringify(marks.map((mark) => [mark.key, mark.state, mark.detail.message ?? mark.detail.error]))}`);
+
+  const frozen = (/** @type {string} */ subject, /** @type {string} */ kind) => store.one(
+    "SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = $2 AND checkpoint ->> 'subjectId' = $3", [study.id, kind, subject]);
+  // The continuous assurance integrates on the outcome's own standard deviation (12), not the schema's default of 1.
+  const continuousAssurance = await frozen(continuous.id, "assurance");
+  assert.equal(continuousAssurance.scenario.truth.sd, 12);
+  assert.deepEqual(continuousAssurance.scenario.designPrior, { mean: 4, sd: 1.2, kind: "normal", basis: "prediction" });
+  assert.deepEqual(continuousAssurance.checkpoint.bound.map((/** @type {any} */ entry) => entry.path), ["truth.sd"],
+    "only what the job actually used is said to have been bound: the effect's point value is not an input of this integral");
+  const binaryAssurance = await frozen(binary.id, "assurance");
+  assert.equal(binaryAssurance.scenario.truth.controlRate, 0.3);
+  assert.equal(binaryAssurance.scenario.design.nTreat, 200);
+  // Simon's job carries no rate the card 「对照应答率」 was bound to, and says it bound nothing.
+  const simonAnalytic = await frozen(simon.id, "design_analytic");
+  assert.deepEqual(simonAnalytic.scenario.truth, { nullRate: 0.2, alternativeRate: 0.4 });
+  assert.deepEqual(simonAnalytic.checkpoint.bound, []);
+
+  const results = await store.results(study.id, "trial_scenario");
+  for (const subject of [continuous.id, binary.id]) {
+    const result = results.find((row) => row.subjectId === subject);
+    const assurance = result?.measures.find((/** @type {any} */ measure) => measure.name === "assurance");
+    assert.ok(assurance && assurance.value > 0.3 && assurance.value < 1, `${subject} assurance ${assurance?.value}`);
+  }
+});
+
+test("C2-6 a key the run itself wrote that no stage reads is still refused by its path — only what the platform injected is dropped in silence", options, async () => {
+  const seed = await seedT0("typo");
+  const context = { study: seed.study, definition: await store.latestDefinition(seed.study.id), assumptions: await store.assumptions(seed.study.id),
+    populations: [seed.population], scenarios: [seed.scenarioA], grid: null, analytic: null };
+  // The run's own `truth.controlRate` on a time-to-event design is a key nothing reads, and the run wrote it.
+  const stated = vcrBuildStages({ kind: "trial_scenario", row: { ...seed.scenarioA, configuration: { ...seed.scenarioA.configuration, truth: { controlRate: 0.3 } } } }, context);
+  assert.equal(stated.ok, false);
+  assert.deepEqual(/** @type {any} */ (stated).refused.paths, ["truth.controlRate"]);
+  // The same card, injected into a plan that only has a stage which cannot read it, is not the run's mistake.
+  const injected = vcrBuildStages({ kind: "trial_scenario", row: { ...seed.scenarioC, design: "simon_two_stage", endpointType: "binary", assumptionIds: ["control_event_rate"],
+    configuration: { design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 } } } },
+  { ...context, assumptions: [{ key: "control_event_rate", version: 1, pointValue: 0.3 }] });
+  assert.equal(injected.ok, true, JSON.stringify(injected));
+});
+
+test("C2-3 a design grid the engine computed is drawn as the engine numbered it: two designs by two truths are a two-by-two picture, each cell in its own place", options, async () => {
+  const module = compose();
+  const study = await bareStudy("grid", { endpointType: "continuous" });
+  const grid = await store.saveDesignGrid({ studyId: study.id, userId: study.userId,
+    dimensions: { designs: [{ label: "每组 60", kind: "two_arm_fixed", nTreat: 60, nControl: 60 }, { label: "每组 120", kind: "two_arm_fixed", nTreat: 120, nControl: 120 }],
+      base: { endpoint: { type: "continuous" }, analysis: { method: "ttest", alpha: 0.025, sided: 1 }, performance: ["power"] } },
+    truthScenarios: [{ label: "效应 0.3", effect: 0.3, sd: 1 }, { label: "效应 0.6", effect: 0.6, sd: 1 }] });
+  await settle(module, study.id);
+  const [job] = await store.jobs(study.id, 10);
+  assert.equal(job.kind, "design_grid");
+  assert.equal(job.state, "succeeded", JSON.stringify(job.error));
+  const stored = await store.latestDesignGrid(study.id);
+  assert.equal(stored?.id, grid.id);
+  assert.deepEqual((stored?.cells ?? []).map((/** @type {any} */ cell) => [cell.designIndex, cell.truthIndex]).sort(), [[1, 1], [1, 2], [2, 1], [2, 2]],
+    "the engine numbers a grid from 1, and the cells are kept as it numbered them");
+  const powerAt = (/** @type {number} */ design, /** @type {number} */ truth) => stored?.cells
+    .find((/** @type {any} */ cell) => cell.designIndex === design && cell.truthIndex === truth).measures.find((/** @type {any} */ measure) => measure.name === "power").value;
+  assert.ok(powerAt(2, 1) > powerAt(1, 1) && powerAt(2, 2) > powerAt(1, 2), "more patients, more power — under either truth");
+  assert.ok(powerAt(1, 2) > powerAt(1, 1) && powerAt(2, 2) > powerAt(2, 1), "a bigger effect, more power — under either design");
+
+  const page = await pages(module).tab({ id: study.userId }, study.id, "trial");
+  assert.equal(page.grid?.rows.length, 2, "two designs are two rows, not three with an empty first");
+  assert.equal(page.grid?.columns.length, 2);
+  assert.deepEqual(page.grid?.rows.map((/** @type {any} */ row) => row.header), ["每组 60", "每组 120"]);
+  assert.deepEqual(page.grid?.columns.map((/** @type {any} */ column) => column.header), ["效应 0.3", "效应 0.6"]);
+  for (const [row, design] of [[0, 1], [1, 2]]) {
+    for (const [column, truth] of [[0, 1], [1, 2]]) {
+      const cell = page.grid?.rows[row].cells[column];
+      assert.equal(cell.value, powerAt(design, truth), `row ${row} column ${column} is the engine's cell (${design}, ${truth})`);
+      assert.match(cell.text, /^\d+(\.\d)?%$/);
+    }
+  }
+});
+
+test("C2-4 while a change is recomputed the page says its numbers are old; an edit that drops the prior drops the assurance it made; an edit that keeps the value keeps the prior", options, async () => {
+  const module = compose({ config: configFor({ vcrMaxConcurrentJobs: 1 }) });
+  const study = await bareStudy("stale");
+  const card = (/** @type {Record<string, any>} */ fields) => store.saveAssumption({ studyId: study.id, userId: study.userId, sourceKind: "expert_set", valueSource: "assumed", ...fields });
+  const prior = { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 }, range: { kind: "prediction", low: 0.52, high: 0.94 } };
+  await card({ key: "hazard_ratio", name: "风险比", pointValue: 0.7, distribution: prior });
+  await card({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, unit: "月" });
+  await card({ key: "dropout_rate", name: "脱落率", pointValue: 0.1 });
+  const scenarioRow = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "A 2:1 随机", design: "two_arm_fixed", endpointType: "time_to_event",
+    assumptionIds: ["hazard_ratio", "control_median_pfs", "dropout_rate"],
+    configuration: { design: { nTreat: 120, nControl: 60, allocation: 2 / 3 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 },
+      accrual: { kind: "uniform", duration: 12, followup: 12 }, performance: ["power"] } });
+  const service = pages(module);
+  const owner = { id: study.userId };
+  const design = async () => (await service.tab(owner, study.id, "trial")).designs[0];
+  const measuresOf = async () => Object.fromEntries(Object.entries((await design()).measures).map(([key, value]) => [key, /** @type {any} */ (value)]));
+
+  await settle(module, study.id);
+  const first = await measuresOf();
+  assert.ok(first.assurance && first.power && first.required_events, Object.keys(first).join());
+  assert.equal(first.power.stale, false);
+
+  // A person's edit of the card, exactly as the UI sends it: a number, no distribution. The old prior was centred on the old number.
+  const edited = await card({ key: "hazard_ratio", name: "风险比", pointValue: 0.85, reviewState: "reviewed" });
+  assert.deepEqual(edited?.distribution, {}, "a value that moved takes the distribution centred on the value that is gone with it");
+  await module.orchestrator.recomputeAfterChange({ studyId: study.id, changed: [`assumption:hazard_ratio@${edited?.version}`], reason: "assumption_changed" });
+  // One job at a time, so the analytic recomputation lands while the simulation is still queued: the window in which the page
+  // used to show yesterday's simulated power as if it were current (the analytic result is a new version nobody had marked).
+  const analyticDone = async () => (await store.rows("SELECT state FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_analytic' ORDER BY created_at DESC LIMIT 1", [study.id]))[0]?.state === "succeeded";
+  for (let turn = 0; turn < 200 && !(await analyticDone()); turn += 1) { await module.loops.jobs?.(); await sleep(50); }
+  const simulation = await store.rows("SELECT state FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' ORDER BY created_at DESC LIMIT 1", [study.id]);
+  assert.equal(simulation[0].state, "queued", "the window is real: the analytic stage has landed and the simulation has not run");
+  const during = await measuresOf();
+  assert.equal(during.power.value, first.power.value, "the simulated power on the page is still yesterday's");
+  assert.equal(during.power.stale, true, "and the page says so — the stage that made it has not been redone");
+  assert.ok(during.required_events.value !== first.required_events.value && during.required_events.stale === false, "what was just recomputed is fresh");
+  assert.equal(during.assurance, undefined, "there is no prior to integrate over any more: the old assurance is not left beside the new numbers");
+  const trialDuring = await service.tab(owner, study.id, "trial");
+  assert.ok(trialDuring.stale, "the design's page is stale until every stage of it has landed");
+  assert.ok(trialDuring.footnotes.some((/** @type {string} */ note) => /方案 A：成功把握不再显示/.test(note)), JSON.stringify(trialDuring.footnotes));
+
+  await settle(module, study.id);
+  const settled = await measuresOf();
+  assert.equal(settled.power.stale, false);
+  assert.notEqual(settled.power.value, first.power.value, "the new simulation is the new number");
+  assert.equal(settled.assurance, undefined);
+  assert.deepEqual(await store.staleMarks(study.id), []);
+
+  // The other half: an edit that leaves the number where it was (a note) keeps the prior it had, and the assurance is computed again.
+  const restored = await card({ key: "hazard_ratio", name: "风险比", pointValue: 0.7, distribution: prior });
+  const noted = await card({ key: "hazard_ratio", name: "风险比", pointValue: 0.7, note: "与统计师核对过", reviewState: "reviewed" });
+  assert.equal(noted?.distribution.family, "lognormal", "the value did not move: the distribution stays");
+  assert.equal(noted?.version, (restored?.version ?? 0) + 1);
+  await module.orchestrator.recomputeAfterChange({ studyId: study.id, changed: [`assumption:hazard_ratio@${noted?.version}`], reason: "assumption_changed" });
+  await settle(module, study.id);
+  const again = await measuresOf();
+  assert.ok(again.assurance && again.assurance.stale === false, "the assurance is back, on the prior the card kept");
+  const finalPage = await service.tab(owner, study.id, "trial");
+  assert.deepEqual(finalPage.footnotes, [], "and nothing is said to have been dropped any more");
+  assert.equal(scenarioRow.id, (await store.trialScenarios(study.id))[0].id);
+});
+
+test("C2-1 an engine refusal reaches the study's own words: a cohort rule naming a column the table does not have fails the job with that column, on the real engine", options, async () => {
+  const OWNER = "refusal-owner";
+  const plane = path.join(scratch, "data-plane");
+  const vcr = composeVcr({ config: { vcrEnabled: true, vcrDataPlaneDir: plane, vcrAudience: "all" }, productDatabase: database });
+  await vcr.store.ready();
+  const study = await store.createStudy({ userId: OWNER, projectId: "prj_refusal", name: "队列被拒", question: "外部对照", dataTier: "T2", intendedUse: "exploratory" });
+  const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "合作方", ownerParty: "合作方医院", allowedUses: ["vcr"], valueSource: "observed" });
+  for (const [name, body] of /** @type {Array<[string, string]>} */ ([["cohort.csv", cohortCsv()], ["visits.csv", visitsCsv()]])) {
+    await vcr.dataPlane.storeUpload({ actor: OWNER, studyId: study.id, sourceId: source.id, name, stream: streamOf(body), declaredLength: Buffer.byteLength(body) });
+  }
+  const proposed = await vcr.dataPlane.proposeFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, columns: FIELD_MAP });
+  await vcr.dataPlane.confirmFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, hash: proposed.hash });
+  const { snapshot } = await vcr.dataPlane.freezeSnapshot({ userId: OWNER, studyId: study.id, sourceId: source.id });
+  const module = compose({ dataPlane: vcr.dataPlane });
+  const { job } = await module.jobs.enqueue({ studyId: study.id, userId: OWNER, kind: "build_cohort", inputs: [{ kind: "snapshot", id: snapshot.id }],
+    scenario: { rules: [{ name: "肌酐正常", rule: { op: "compare", column: "creatinine_umol", comparator: "lt", value: 110 } }] } });
+  for (let turn = 0; turn < 100 && (await store.job(study.id, job.id))?.state !== "failed"; turn += 1) { await module.loops.jobs?.(); await sleep(200); }
+  const row = await store.job(study.id, job.id);
+  assert.equal(row?.state, "failed");
+  assert.equal(row?.error?.code, "rule_column_unknown", "the reason the engine gave");
+  assert.match(String(row?.error?.message), /creatinine_umol/, "and the column it named");
+  assert.equal(row?.error?.issues[0].code, "rule_column_unknown");
+  assert.match(String(row?.error?.field), /rules?\b/, "the field of the scenario it refused");
+  // What the study page shows is the same reason.
+  const page = await pages(module).studyView({ id: OWNER }, study.id);
+  const shown = page.jobs.find((/** @type {any} */ entry) => entry.id === job.id);
+  assert.equal(shown.error.code, "rule_column_unknown");
+  assert.match(shown.error.message, /creatinine_umol/);
+  assert.equal((await store.results(study.id)).length, 0, "a refusal computed nothing");
+});
+
+test("AC-38 a cancel keeps what the real engine had completed: batches it finished, measures with the error of exactly those replicates", options, async () => {
+  const module = compose({ config: configFor({ vcrMaxConcurrentJobs: 1 }) });
+  const study = await bareStudy("cancel", { endpointType: "continuous" });
+  const scenario = { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "continuous" }, truth: { effect: 0.3, sd: 1 },
+    analysis: { method: "ttest", alpha: 0.025, sided: 1 }, performance: ["power"] };
+  const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, replicates: 100_000 });
+  await module.loops.jobs?.();
+  const engineJobId = (await store.job(study.id, job.id))?.checkpoint.engineJobId;
+  assert.ok(engineJobId, "the job reached the engine");
+  // Wait until the engine itself says a batch is done, then cancel: nothing here is a number the test wrote.
+  let done = 0;
+  for (let turn = 0; turn < 300 && done < 500; turn += 1) { done = (await engine.status(engineJobId)).progress.done; if (done < 500) await sleep(100); }
+  assert.ok(done >= 500 && done < 100_000, `the engine had completed ${done} replicates`);
+  const cancelled = await module.jobs.cancel(study.id, job.id, { actor: "u_cancel" });
+  assert.equal(cancelled.job.state, "canceled");
+  /** @type {any[]} */
+  let recovered = [];
+  for (let turn = 0; turn < 300 && !recovered.length; turn += 1) { recovered = await module.jobs.recoverCanceled(); if (!recovered.length) await sleep(200); }
+  assert.equal(recovered.length, 1, `the engine's partial result was fetched: ${serviceLog.slice(-500)}`);
+  const kept = recovered[0].result;
+  assert.equal(kept.conclusion, "limited");
+  assert.equal(kept.diagnostics.canceled, true);
+  const completed = kept.diagnostics.replicatesCompleted;
+  assert.ok(Number.isInteger(completed) && completed >= done && completed < 100_000 && completed % 500 === 0, `the engine kept ${completed} replicates, whole batches`);
+  const power = kept.measures.find((/** @type {any} */ measure) => measure.name === "power");
+  assert.ok(power.value > 0.3 && power.value < 0.9, `power ${power.value}`);
+  // The error the engine reported is the error of the replicates it kept, and of no others.
+  const binomial = Math.sqrt(power.value * (1 - power.value) / completed);
+  assert.ok(Math.abs(power.mcse - binomial) < 0.05 * binomial, `mcse ${power.mcse} against ${binomial} for ${completed} replicates`);
+  const execution = await store.one("SELECT replicates, receipt FROM evimed_vcr.executions WHERE job_id = $1", [job.id]);
+  assert.equal(execution.replicates, completed, "the execution says how many replicates were kept, as the engine did");
+  assert.equal(execution.receipt.partial, true);
+  assert.equal((await store.job(study.id, job.id))?.state, "canceled", "the job stays cancelled");
+  assert.equal((await module.jobs.resultOf(study.id, job.id))?.id, kept.id, "and its status answer carries the partial result");
+});
+
+test("C2-13 a hybrid control's historical counts are `aggregate` only when verified extractions hold them; typed into a configuration they are `assumed`, and the result says so", options, async () => {
+  const module = compose();
+  const historical = { events: [12, 30, 22], n: [40, 90, 60] };
+  const build = async (/** @type {string} */ label, /** @type {boolean} */ verified) => {
+    const study = await bareStudy(label, { endpointType: "binary" });
+    if (verified) {
+      for (const [index, [events, n]] of historical.events.map((count, at) => [count, historical.n[at]]).entries()) {
+        await store.query(`INSERT INTO evimed_vcr.evidence_items (id, user_id, study_id, parameter, arm, arm_role, value, events, sample_size, source_ref, quote, locator)
+          VALUES ($1, $2, $3, 'response_rate', '对照组', 'control', $4, $5, $6, 'NCT0000000${index}', $7, $8::jsonb)`,
+        [`evd_${label}_${index}`, study.userId, study.id, events / n, events, n, `${events} of ${n} patients responded`, JSON.stringify({ verification: "verified" })]);
+      }
+    }
+    await store.saveComparatorDesign({ studyId: study.id, userId: study.userId, route: "hybrid_control", estimand: "ATT",
+      configuration: { historical, robustWeight: 0.2, tauPrior: { kind: "half_normal", scale: 1 } } });
+    await settle(module, study.id);
+    const [result] = await store.results(study.id, "comparator");
+    return { study, result };
+  };
+  const typed = await build("typed", false);
+  assert.equal(typed.result.conclusion === "estimable" || typed.result.conclusion === "limited", true, typed.result.conclusion);
+  assert.ok(typed.result.measures.length >= 4);
+  assert.deepEqual([...new Set(typed.result.measures.map((/** @type {any} */ measure) => measure.source))], ["assumed"], "numbers somebody typed are not a summary of evidence");
+  assert.equal(typed.result.diagnostics.inputsAssumed, true);
+  const page = await pages(module).tab({ id: typed.study.userId }, typed.study.id, "comparator");
+  assert.match(page.headline, /输入为假设/);
+  assert.ok(page.diagnostics.some((/** @type {any} */ row) => row.key === "map_mean" && row.value.source === "assumed"), "the MAP prior's numbers are on the page, each with its source");
+  assert.ok(page.diagnostics.some((/** @type {any} */ row) => row.key === "prior_effective_sample_size_moment"));
+
+  const held = await build("held", true);
+  assert.deepEqual([...new Set(held.result.measures.map((/** @type {any} */ measure) => measure.source))], ["aggregate"], "the same counts, each backed by a verified extraction");
+  assert.equal(held.result.diagnostics.inputsAssumed, undefined);
 });

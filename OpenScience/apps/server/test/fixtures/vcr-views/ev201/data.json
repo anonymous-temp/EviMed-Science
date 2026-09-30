@@ -337,7 +337,7 @@
       "applicability": null,
       "sensitivity": null,
       "review": {
-        "by": null,
+        "by": "u_stat",
         "at": "昨天",
         "version": 1,
         "kind": "统计复核"

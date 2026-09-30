@@ -13,14 +13,14 @@ import { VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
   attentionOf, budgetView, conclusionOf, designsSentence, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
-  presentPrecedent, presentSummary, useCeilingOf, valueString, vcrReviewIsCurrent,
+  presentPrecedent, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
   seriesView, criterionCodes,
 } from "../src/vcrViewsTabs.mjs";
 import {
-  countsView, decimalsFor, defaultSourceOf, intervalView, measureValue, rangeString, staleNote, zhDate, zhTime,
+  countsView, decimalsFor, defaultSourceOf, intervalView, measureValue, rangeString, reviewOfNode, staleNote, withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -482,4 +482,186 @@ test("AC-21 a review of a result that has since been superseded reads changed, a
   assert.deepEqual(ceiling.reasons.map((reason) => reason.code), ["review_changed"]);
   // A node still marked stale also makes it changed, whatever the results.
   assert.equal(vcrReviewIsCurrent({ nodes: ["assumption:dropout_rate@1"] }, { results: [], stale: [{ node: "assumption:dropout_rate@1" }] }), false);
+});
+
+// --- the verification review's findings, on the presenters ----------------------------------------------------------------
+
+test("C2-9 the overview counts a design as simulated only when it has a number from a result — a configured sample size is not one", () => {
+  const written = { code: "A", dominated: false, measures: { sample_size: { value: 120 }, cost: { value: 90 } } };
+  const run = { code: "B", dominated: false, measures: { sample_size: { value: 120 }, power: { value: 81.2 } } };
+  assert.equal(designsSentence([written]), null, "one design written and none run says nothing of simulation");
+  assert.equal(designsSentence([written, written, run]), "已模拟 1 个方案，功效 81%", "three designs on the page, one of them simulated");
+  const headline = conclusionOf({ designs: [written, written], results: [], allResults: [], comparators: [] });
+  assert.equal(headline, null, "and the study's conclusion does not claim a simulation that was never run");
+});
+
+test("C2-3 a grid's cells are read as the engine numbers them, from 1: two designs by two truths are a two-by-two picture", () => {
+  const grid = {
+    id: "grd_1", version: 1, comparisonGoal: null,
+    dimensions: { designs: [{ label: "每组 60" }, { label: "每组 120" }] },
+    truthScenarios: [{ label: "效应 0.3", effect: 0.3 }, { label: "效应 0.6", effect: 0.6 }],
+    cells: [[1, 1, 0.25], [1, 2, 0.75], [2, 1, 0.5], [2, 2, 0.95]].map(([designIndex, truthIndex, value]) => ({
+      designIndex, truthIndex, status: "succeeded", measures: [{ name: "power", value, simulated: true, mcse: 0.004 }] })),
+  };
+  const tab = presentTrialTab({ ...emptyBundle(), grid });
+  assert.equal(tab.grid.rows.length, 2);
+  assert.equal(tab.grid.columns.length, 2);
+  assert.deepEqual(tab.grid.rows.map((row) => row.header), ["每组 60", "每组 120"]);
+  assert.deepEqual(tab.grid.rows.map((row) => row.cells.map((cell) => cell.value)), [[0.25, 0.75], [0.5, 0.95]],
+    "the cell (design 2, truth 1) is the second row's first column, not shifted by one");
+  // A cell numbered 0 is not a cell of this grid: the page does not invent a row for it.
+  const zero = presentTrialTab({ ...emptyBundle(), grid: { ...grid, cells: [{ ...grid.cells[0], designIndex: 0, truthIndex: 0 }] } });
+  assert.equal(zero.grid, null);
+});
+
+test("C2-4 a design's number is stale while the design is marked and its result is older than the mark — the numbers a later stage wrote are fresh, and the ones it carried say so themselves", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a2" });
+  const node = "trial_scenario:a@1";
+  const marked = { node, reason: "assumption_changed", markedAt: "2026-09-28T02:00:00.000Z", queuedJobId: "job_9" };
+  const base = { ...emptyBundle(), scenarios: [design], stale: [marked] };
+  const older = { ...result("a", [measure("power", 0.5)]), id: "res_a2", createdAt: "2026-09-28T01:00:00.000Z" };
+  assert.equal(presentDesigns({ ...base, results: [older], allResults: [older] }).designs[0].measures.power.stale, true,
+    "the result predates the change: yesterday's world, marked by the design's own node");
+  // A later stage landed after the mark: a result version nobody marked. Its own number is fresh; the number it carried says it is old.
+  const newer = { ...result("a", [measure("required_events", 300), { ...measure("power", 0.5), stale: true }]), id: "res_a2", version: 2, createdAt: "2026-09-28T03:00:00.000Z" };
+  const fresh = presentDesigns({ ...base, results: [newer], allResults: [newer] }).designs[0].measures;
+  assert.equal(fresh.required_events.stale, false);
+  assert.equal(fresh.power.stale, true);
+  const page = presentTrialTab({ ...base, results: [newer], allResults: [newer] });
+  assert.ok(page.stale, "the page as a whole stays stale until the mark clears");
+  assert.equal(page.stale.queued, true);
+});
+
+test("C2-4 a stage the recomputation did not run again is not left on the page: it is dropped and said", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a" });
+  const dropped = { ...result("a", [measure("power", 0.5)]), diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }] } };
+  const page = presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [dropped], allResults: [dropped] });
+  assert.deepEqual(page.footnotes, ["方案 A：成功把握不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。"]);
+  const other = { ...dropped, diagnostics: { notRerun: [{ stage: "simulation", measures: ["power"] }] } };
+  assert.match(presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [other], allResults: [other] }).footnotes[0], /仿真没有重算/);
+});
+
+test("C3-11 the run record says an analytic value is an approximation and what tolerance the simulation was held to", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a" });
+  /** @param {Record<string, any>} check */
+  const withCheck = (check) => presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }],
+    allResults: [{ ...result("a", [measure("power", 0.5)]), diagnostics: { analyticCheck: check } }] }).runRecord[0];
+  const approximate = withCheck({ difference: -0.011, mcse: 0.0004, withinThreeMcse: false, withinTolerance: true, approximationBias: 0.015, tolerance: 0.0162 });
+  assert.equal(approximate.ok, true, "1.1 points against an approximation documented to 1.5 is agreement");
+  assert.match(approximate.detail, /一阶近似.*相差 1\.1 个百分点.*容许的 1\.6 个百分点/);
+  const exact = withCheck({ difference: 0.0003, withinThreeMcse: true, approximationBias: 0, tolerance: 0.0012, withinTolerance: true });
+  assert.match(exact.detail, /解析值与仿真值一致/);
+  const off = withCheck({ difference: 0.03, withinThreeMcse: false, withinTolerance: false, approximationBias: 0.015, tolerance: 0.0162 });
+  assert.equal(off.ok, false);
+  assert.match(off.detail, /超出容许/);
+  const older = withCheck({ difference: 0.001, withinThreeMcse: true });
+  assert.equal(older.ok, true, "a result written before the tolerance existed still reads");
+});
+
+test("C2-8 the comparator page reads a two-arm reconstruction: both arms' quality checks, both medians, the RMST interval to the decimals it supports", () => {
+  const check = (reported, reconstructed, pass = true) => ({ name: "n", reported, reconstructed, pass });
+  const comparator = { id: "cmp_1", version: 1, route: "literature_control", estimand: "ATT", conclusion: "estimable", gapList: [], resultId: "res_c",
+    targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const stored = { id: "res_c", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: {}, executionId: null,
+    measures: [
+      { name: "median_survival_control", value: 12.1, source: "reconstructed" },
+      { name: "median_survival_treatment", value: 17.6, source: "reconstructed" },
+      { name: "rmst_difference", value: 1.63519536, unit: "months", source: "calculated", interval: { kind: "confidence", low: 0.38681, high: 2.883581, level: 0.95 } },
+    ],
+    diagnostics: { tau: 18, qualityControl: [
+      { checks: { atRisk: check([200, 150], [200, 149]), events: check(130, 128), median: check(12, 12.1) } },
+      { checks: { atRisk: check([200, 170], [200, 168]), events: check(90, 91, true), logHazardRatio: check(-0.4, -0.38) } }] } };
+  const tab = presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [stored], allResults: [stored] });
+  assert.equal(tab.qc.length, 6, "three checks for each arm");
+  assert.ok(tab.qc.some((row) => row.label === "对照组：总事件数") && tab.qc.some((row) => row.label === "试验组：|Δlog HR|"));
+  assert.equal(new Set(tab.qc.map((row) => row.key)).size, 6, "no two rows share a key");
+  assert.equal(tab.median.value, 12.1, "the page's median is the control arm's");
+  assert.ok(tab.diagnostics.some((row) => row.key === "median_survival_treatment" && row.value.value === 17.6), "and the treatment arm's is beside it");
+  assert.deepEqual([tab.rmst.value.value, tab.rmst.value.interval.low, tab.rmst.value.interval.high], [1.63519536, 0.39, 2.88],
+    "an interval without a Monte-Carlo error is stated to the decimals its own width supports, not to six");
+  assert.equal(tab.rmst.value.precision, 2);
+  // One arm keeps its plain shape.
+  const single = presentComparatorTab({ ...emptyBundle(), comparators: [comparator], allResults: [{ ...stored, diagnostics: { qualityControl: { checks: { events: check(130, 128) } } } }],
+    results: [] });
+  assert.deepEqual(single.qc.map((row) => row.label), ["总事件数"]);
+});
+
+test("C2-8 C2-13 a hybrid control shows the MAP prior's own numbers, each with its source; typed inputs say so in the headline", () => {
+  const comparator = { id: "cmp_h", version: 1, route: "hybrid_control", estimand: "ATT", conclusion: "estimable", gapList: [], resultId: "res_h",
+    targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const stored = { id: "res_h", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: { priorEffectiveSampleSize: 31.2 }, executionId: null,
+    measures: [{ name: "map_mean", value: -0.71, source: "assumed" }, { name: "map_sd", value: 0.4, source: "assumed" },
+      { name: "prior_effective_sample_size_moment", value: 31.2, source: "assumed" }, { name: "tau_posterior_median", value: 0.3, source: "assumed" }],
+    diagnostics: { inputsAssumed: true } };
+  const tab = presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [stored], allResults: [stored] });
+  assert.deepEqual(tab.diagnostics.map((row) => row.key), ["map_mean", "map_sd", "prior_effective_sample_size_moment", "tau_posterior_median"]);
+  assert.ok(tab.diagnostics.every((row) => row.value.source === "assumed"));
+  assert.equal(tab.diagnostics[2].label, "先验有效样本量（矩法）");
+  assert.match(String(tab.headline), /输入为假设/);
+});
+
+test("C2-14 when the latest comparator version has no result, the page keeps the last good one and says it is not the latest", () => {
+  const good = { id: "cmp_1", version: 1, route: "external_control", estimand: "ATT", conclusion: "estimable", gapList: [], resultId: "res_1",
+    targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-27T01:00:00.000Z" };
+  const latest = { ...good, id: "cmp_2", version: 2, conclusion: null, resultId: null, createdAt: "2026-09-28T01:00:00.000Z" };
+  const stored = { id: "res_1", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: { realPatients: 100 }, executionId: null,
+    measures: [{ name: "rmst_difference", value: 1.5, unit: "months", source: "calculated" }], diagnostics: { tau: 12 } };
+  const node = "comparator_design:cmp_2@2";
+  const bundle = { ...emptyBundle(), study: { ...study, dataTier: "T2" }, comparators: [latest, good], results: [stored], allResults: [stored],
+    jobMarks: [{ key: `job:${node}`, state: "failed", detail: { node, error: "vcr_scenario_unknown_fields", message: "配置里有引擎不读的字段：foo" } }] };
+  const tab = presentComparatorTab(bundle);
+  assert.equal(tab.rmst.value.value, 1.5, "the last good result's numbers are still on the page");
+  assert.match(tab.partial.done, /上一版对照设计（v1）/);
+  assert.match(tab.partial.missing, /最新一版（v2）没有算成：配置里有引擎不读的字段：foo/);
+  assert.equal(tab.routes.find((route) => route.route === "external_control").selected, true);
+  // A route with only a failed version and nothing before it has nothing to keep.
+  const none = presentComparatorTab({ ...bundle, comparators: [latest], results: [], allResults: [] });
+  assert.equal(none.rmst, null);
+  assert.equal(none.partial, null);
+});
+
+test("C3-05 a countersignature moves the node it names to reviewed — who, when, which version — and one on an earlier version says the card changed after it", () => {
+  const reviews = [
+    { id: "rev_2", kind: "statistical", nodes: ["assumption:dropout_rate@3"], reviewer: "u_stat", createdAt: "2026-09-28T02:00:00.000Z" },
+    { id: "rev_1", kind: "clinical", nodes: ["assumption:hazard_ratio@1", "assumption:dropout_rate@2"], reviewer: "u_clin", createdAt: "2026-09-27T02:00:00.000Z" },
+  ];
+  const signed = reviewOfNode("assumption:hazard_ratio@1", reviews);
+  assert.deepEqual([signed.state, signed.reviewedBy, signed.reviewedAt, signed.reviewedVersion, signed.reviewKind],
+    ["reviewed", "u_clin", "2026-09-27T02:00:00.000Z", 1, "clinical"]);
+  const moved = reviewOfNode("assumption:hazard_ratio@2", reviews);
+  assert.deepEqual([moved.state, moved.reviewedVersion, moved.reviewedBy], ["changed_after_review", 1, "u_clin"], "the signed version is the earlier one, and the card says so");
+  assert.equal(reviewOfNode("assumption:dropout_rate@3", reviews).reviewedBy, "u_stat", "the newest signature that names the version");
+  assert.equal(reviewOfNode("assumption:outcome_sd@1", reviews), null, "nobody signed it: it is what it was stored as");
+  const card = { key: "hazard_ratio", version: 1, reviewState: "ai_set" };
+  assert.equal(withReviewState(card, "assumption:hazard_ratio@1", reviews).reviewState, "reviewed");
+  assert.equal(withReviewState({ ...card, reviewState: "reviewed" }, "assumption:hazard_ratio@2", reviews).reviewState, "reviewed", "a card a person wrote stays theirs");
+  assert.equal(withReviewState(card, "assumption:hazard_ratio@9", []), card);
+});
+
+test("C3-07 a review is current only when every node it names is at its current version — an edited card, a regenerated population — and only a review of what the headline rests on lifts the ceiling", () => {
+  const study = { id: "std_1", intendedUse: "specified_analysis" };
+  const rows = {
+    study, assumptions: [{ key: "hazard_ratio", version: 2 }, { key: "outcome_sd", version: 1 }], populations: [{ id: "pop_2", version: 2 }],
+    scenarios: [{ id: "scn_a", version: 1, label: "A" }], results: [{ id: "res_a", version: 1 }], comparators: [], patientSets: [], grid: null,
+  };
+  const current = vcrCurrentNodes(rows);
+  assert.ok(current.nodes.has("assumption:hazard_ratio@2") && current.nodes.has("population:pop_2@2") && current.nodes.has("result:res_a@1"));
+  const context = { results: rows.results, stale: [], current };
+  assert.equal(vcrReviewIsCurrent({ nodes: ["assumption:hazard_ratio@1"] }, context), false, "the card was edited after it was signed: no stale mark says so, the version does");
+  assert.equal(vcrReviewIsCurrent({ nodes: ["assumption:hazard_ratio@2", "population:pop_2@2"] }, context), true);
+  assert.equal(vcrReviewIsCurrent({ nodes: ["population:pop_1@1"] }, context), false, "a population regenerated since");
+  assert.equal(vcrReviewIsCurrent({ nodes: ["snapshot:src_1@1"] }, context), true, "a kind the study does not version is judged by its stale mark alone");
+
+  // What the headline depends on, from the lineage edges backwards.
+  const edges = [{ from: "assumption:hazard_ratio@2", to: "trial_scenario:scn_a@1" }, { from: "trial_scenario:scn_a@1", to: "result:res_a@1" },
+    { from: "assumption:outcome_sd@1", to: "comparator_design:cmp_1@1" }];
+  const depends = vcrDependencies(edges, "result:res_a@1");
+  assert.deepEqual([...depends].sort(), ["assumption:hazard_ratio@2", "result:res_a@1", "trial_scenario:scn_a@1"]);
+  const useOf = (reviews) => useCeilingOf({ study, results: rows.results, reviews, stale: [], current, dependsOn: depends });
+  assert.equal(useOf([{ id: "r1", nodes: ["assumption:hazard_ratio@2"] }]).withinCeiling, true, "a current review of a card the headline rests on");
+  const elsewhere = useOf([{ id: "r2", nodes: ["assumption:outcome_sd@1"] }]);
+  assert.equal(elsewhere.withinCeiling, false, "a current review of something the headline does not rest on is not a review of it");
+  assert.deepEqual(elsewhere.reasons.map((reason) => reason.code), ["review_not_of_headline"]);
+  const moved = useOf([{ id: "r3", nodes: ["assumption:hazard_ratio@1"] }]);
+  assert.deepEqual(moved.reasons.map((reason) => reason.code), ["review_changed"]);
 });

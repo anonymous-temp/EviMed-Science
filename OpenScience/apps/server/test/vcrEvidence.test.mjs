@@ -196,7 +196,7 @@ test("every value extracted from the recorded registry record passes its own quo
   assert.equal(RECORD.extractions.length, 14, "the walk read the record, not an empty one");
 });
 
-test("a value whose number is not in its quotation is refused and stored as unknown", () => {
+test("AC-25 a value whose number is not in its quotation is refused and stored as unknown", () => {
   const enrolment = RECORD.extractions.find((item) => item.parameter === "enrollment_actual");
   const tampered = verifyExtraction({ extraction: { ...enrolment, value: 675 }, sourceText: RECORD.record.text, checkedAt: AT });
   assert.equal(tampered.verified, false);

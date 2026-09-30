@@ -15,12 +15,12 @@ import { VCR_QUALITY_CATEGORIES } from "@evimed/domain";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VCR_ACCESS_CODES, VcrAccess } from "../src/vcrAccess.mjs";
-import { VCR_DATA_PLANE_CODES, VcrDataPlane } from "../src/vcrDataPlane.mjs";
+import { VCR_DATA_PLANE_CODES, VcrDataPlane, parseTable, pseudonymOf, sha256OfBytes, snapshotView, studyPseudonymKey, tableView } from "../src/vcrDataPlane.mjs";
 import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrMembers } from "../src/vcrMembers.mjs";
 import { vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
-import { FIELD_MAP, cohortCsv, fingerprints, streamOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
+import { COHORT_SIZE, FIELD_MAP, cohortCsv, fingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { timeout: 60_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -309,4 +309,181 @@ test("AC-03 deleting the study takes the data-plane metadata with it and leaves 
   assert.ok((await fs.stat(path.join(dataPlaneDir, "studies", studyId))).isDirectory(), "the files go by the deletion path's own removal, after the rows commit");
   await plane.deleteStudyFiles(studyId);
   await assert.rejects(() => fs.stat(path.join(dataPlaneDir, "studies", studyId)));
+});
+
+// ---------------------------------------------------------------------------
+// A snapshot's as-of and a column's own value source reach what the engine reads
+// ---------------------------------------------------------------------------
+
+/** People 1..VISIBLE were visible to the platform by 10 January; the rest only on 1 March. */
+const VISIBLE = 25;
+const SHARED_EARLY = "2026-01-10";
+const SHARED_LATE = "2026-03-01";
+/** The replay date: after the early people were shared, before the late ones. */
+const REPLAY_AS_OF = "2026-02-01T00:00:00Z";
+
+/** The baseline and visits files with the column that says when each row became visible. */
+function replayFiles() {
+  const cohort = cohortCsv().trimEnd().split("\n").map((line, index) => {
+    if (index === 0) return `${line},SHARED`;
+    return `${line},${index <= VISIBLE ? SHARED_EARLY : SHARED_LATE}`;
+  }).join("\n");
+  // Two visits per person, in person order: row 1 and 2 belong to person 1.
+  const visits = visitsCsv().trimEnd().split("\n").map((line, index) => {
+    if (index === 0) return `${line},SHARED`;
+    return `${line},${Math.ceil(index / 2) <= VISIBLE ? SHARED_EARLY : SHARED_LATE}`;
+  }).join("\n");
+  return { "cohort.csv": `${cohort}\n`, "visits.csv": `${visits}\n` };
+}
+
+/** The intake map plus the two columns that carry the platform's own clock. */
+const REPLAY_FIELD_MAP = [
+  ...FIELD_MAP,
+  { table: "cohort.csv", column: "SHARED", role: "other", timeKind: "visible_at" },
+  { table: "visits.csv", column: "SHARED", role: "other", timeKind: "visible_at" },
+];
+
+/**
+ * A source with the replay files uploaded and the map confirmed, not yet frozen.
+ * @param {string} studyId @param {{ map?: any[], files?: Record<string, string>, valueSource?: string }} [entry]
+ */
+async function seedConfirmed(studyId, { map = REPLAY_FIELD_MAP, files = replayFiles(), valueSource = "observed" } = {}) {
+  const source = await plane.registerSource({ userId: OWNER, studyId, name: "合作方回放导出", ownerParty: "合作方医院", allowedUses: ["vcr"], valueSource });
+  for (const [name, body] of Object.entries(files)) await plane.storeUpload({ actor: OWNER, studyId, sourceId: source.id, name, stream: streamOf(body) });
+  const proposed = await plane.proposeFieldMap({ actor: OWNER, studyId, sourceId: source.id, columns: map });
+  assert.deepEqual([proposed.entryIssues, proposed.mapIssues], [[], []]);
+  await plane.confirmFieldMap({ actor: OWNER, studyId, sourceId: source.id, hash: proposed.hash });
+  return source;
+}
+
+/** The rows of a table the plane holds, read from its file. @param {string} location */
+async function planeTable(location) {
+  return parseTable(await fs.readFile(path.join(dataPlaneDir, location), "utf8"));
+}
+
+test("AC-15 a snapshot frozen as of a date hands the engine only the rows visible then, in every table and every raw file", options, async () => {
+  const studyId = await seedStudy();
+  const source = await seedConfirmed(studyId);
+  const everyone = await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id });
+  const replay = await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id, asOf: REPLAY_AS_OF });
+
+  // The date is on the snapshot, where every later derivation reads it back.
+  const stored = await store.getSnapshot(replay.snapshot.id);
+  assert.equal(stored.profile.frozen.asOf, "2026-02-01T00:00:00.000Z");
+  assert.equal(snapshotView(stored).asOf, "2026-02-01T00:00:00.000Z");
+  assert.equal("asOf" in snapshotView(await store.getSnapshot(everyone.snapshot.id)), false, "a snapshot with no date says nothing about one");
+  assert.equal((await plane.snapshotProfileForModel({ studyId, snapshotId: replay.snapshot.id, principal: OWNER })).asOf, "2026-02-01T00:00:00.000Z");
+  const freezes = await store.auditTrail({ studyId, action: "snapshot.freeze" });
+  assert.deepEqual(freezes.map((row) => row.detail.asOf).sort((a, b) => String(a).localeCompare(String(b))), ["2026-02-01T00:00:00.000Z", null], "the ledger says which snapshot replays which instant");
+
+  // Row counts: what the profiler counted is what was derived is what the engine reads.
+  assert.equal(replay.snapshot.rowCount, VISIBLE + 2 * VISIBLE, "the profiler's count of the replay");
+  assert.equal(everyone.snapshot.rowCount, COHORT_SIZE + 2 * COHORT_SIZE);
+  const byShape = (/** @type {any} */ result) => Object.fromEntries(result.tables.registered.map((/** @type {any} */ table) => [table.shape, table]));
+  assert.equal(byShape(everyone).subject.rowCount, COHORT_SIZE);
+  assert.equal(byShape(replay).subject.rowCount, VISIBLE);
+  assert.equal(byShape(replay).events.rowCount, VISIBLE);
+  assert.equal(byShape(replay).longitudinal.rowCount, 2 * VISIBLE);
+  assert.equal(replay.tables.dropped.not_yet_visible, (COHORT_SIZE - VISIBLE) * 3, "each hidden person's cohort row and two visits, counted");
+  assert.equal(tableView(byShape(replay).subject).asOf, "2026-02-01T00:00:00.000Z");
+  assert.equal(replay.tables.asOf.files.find((/** @type {any} */ file) => file.file === "cohort.csv").hidden, COHORT_SIZE - VISIBLE);
+
+  // The bytes: the people the platform could see, and not one value of anybody it could not.
+  const key = await studyPseudonymKey(dataPlaneDir, studyId);
+  const visibleIds = new Set(Array.from({ length: VISIBLE }, (_, index) => pseudonymOf(key, patientNo(index + 1))));
+  const events = await planeTable(byShape(replay).events.location);
+  assert.equal(events.rows.length, VISIBLE);
+  assert.ok(events.rows.every((row) => visibleIds.has(row[0])), "every person in the events table was visible on the replay date");
+  const eventsText = await fs.readFile(path.join(dataPlaneDir, byShape(replay).events.location), "utf8");
+  for (let n = 1; n <= COHORT_SIZE; n += 1) {
+    assert.equal(eventsText.includes(survivalOf(n)), n <= VISIBLE, `person ${n}'s survival time ${n <= VISIBLE ? "is" : "is not"} in the replay's events table`);
+  }
+  const identity = await fs.readFile(path.join(dataPlaneDir, "studies", studyId, "identity", `${replay.snapshot.id}.csv`), "utf8");
+  assert.equal(parseTable(identity).rows.length, VISIBLE, "a hidden person is not in the way back from a pseudonym either");
+
+  // The inputs the control plane builds for a job are these very files, under their own hash.
+  const inputs = await plane.resolveEngineInputs({ studyId, snapshotId: replay.snapshot.id, principal: OWNER, purpose: "vcr",
+    kind: "rmst", method: "comparator.rmst", endpointType: "time_to_event" });
+  assert.deepEqual(inputs.map((input) => input.shape).sort(), ["events", "subject"]);
+  for (const input of inputs) {
+    const bytes = await fs.readFile(path.join(dataPlaneDir, input.location));
+    assert.equal(sha256OfBytes(bytes), input.hash);
+    assert.equal(parseTable(bytes.toString("utf8")).rows.length, VISIBLE, `the ${input.shape} table the engine opens`);
+  }
+  // A raw-file input is cut the same way.
+  const raw = await plane.resolveSnapshotInputs({ studyId, snapshotId: replay.snapshot.id, principal: OWNER, purpose: "vcr", include: ["files"] });
+  const rawRows = await Promise.all(raw.inputs.filter((input) => input.kind === "snapshot_file").map(async (input) => (await planeTable(input.location)).rows.length));
+  assert.deepEqual(rawRows.sort((a, b) => a - b), [VISIBLE, 2 * VISIBLE]);
+  const fullRaw = await plane.resolveSnapshotInputs({ studyId, snapshotId: everyone.snapshot.id, principal: OWNER, purpose: "vcr", include: ["files"] });
+  assert.deepEqual((await Promise.all(fullRaw.inputs.map(async (input) => (await planeTable(input.location)).rows.length))).sort((a, b) => a - b), [COHORT_SIZE, 2 * COHORT_SIZE]);
+
+  // Derived again a week later, it is the same tables: the date was frozen with the snapshot.
+  const again = await plane.deriveAnalysisTables({ userId: OWNER, studyId, snapshotId: replay.snapshot.id });
+  assert.deepEqual(again.registered.map((/** @type {any} */ table) => table.sha256).sort(), replay.tables.registered.map((/** @type {any} */ table) => table.sha256).sort());
+});
+
+test("AC-15 a replay date needs a visibility column in every file that derives rows, and a bad date is the caller's mistake", options, async () => {
+  const studyId = await seedStudy();
+  const source = await seedConfirmed(studyId, { map: FIELD_MAP });
+  await assert.rejects(() => plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id, asOf: REPLAY_AS_OF }), (error) => {
+    assert.equal(error.code, VCR_DATA_PLANE_CODES.fieldMapInvalid);
+    assert.equal(error.status, 422);
+    assert.deepEqual(error.vcrDetail.issues.map((/** @type {any} */ issue) => [issue.code, issue.table]).sort(),
+      [["as_of_needs_visible_at", "cohort.csv"], ["as_of_needs_visible_at", "visits.csv"]]);
+    return true;
+  });
+  for (const asOf of ["next tuesday", "2026-13-45", "yesterday-ish"]) {
+    await assert.rejects(() => plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id, asOf }),
+      (error) => error.status === 400 && error.code === VCR_DATA_PLANE_CODES.payloadInvalid, `${asOf} is refused by name, not with a crash`);
+  }
+  assert.deepEqual(await store.listSnapshots({ studyId }), [], "nothing was frozen by any of them");
+  // The same source, frozen with no date, is still a snapshot.
+  assert.equal((await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id })).snapshot.version, 1);
+});
+
+test("AC-03 a column that says it was imputed keeps the table it is in from reading observed, down to the input the engine gets", options, async () => {
+  const studyId = await seedStudy(OWNER, "specified_analysis");
+  const map = REPLAY_FIELD_MAP.map((entry) => {
+    if (entry.column === "AGE") return { ...entry, valueSource: "imputed", outcome: true };
+    if (entry.column === "SBP") return { ...entry, valueSource: "calculated" };
+    return entry;
+  });
+  const source = await seedConfirmed(studyId, { map });
+  const { snapshot, tables } = await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id });
+  assert.equal(snapshot.valueSource, "observed", "the source is what it was registered as");
+  const held = Object.fromEntries((await store.listAnalysisTables({ studyId })).map((table) => [table.shape, table]));
+  assert.deepEqual(Object.keys(held).sort(), ["events", "longitudinal", "subject"]);
+  assert.equal(held.subject.valueSource, "imputed");
+  assert.equal(held.events.valueSource, "observed");
+  assert.equal(held.longitudinal.valueSource, "calculated");
+  assert.deepEqual(held.subject.derivedFrom.columnSources, { age: "imputed", arm: "observed", ecog: "observed", sex: "observed" });
+  assert.deepEqual(held.longitudinal.derivedFrom.columnSources, { ADT: "observed", AVAL: "calculated" });
+  assert.deepEqual(tableView(held.subject).columnSources, held.subject.derivedFrom.columnSources, "and the page can say which column is which");
+  assert.deepEqual(held.subject.derivedFrom.columns.find((/** @type {any} */ column) => column.source === "AGE"), { source: "AGE", name: "age", valueSource: "imputed" });
+  assert.deepEqual((await store.getSnapshot(snapshot.id)).profile.frozen.columnSources.map((/** @type {any} */ column) => `${column.table}:${column.column}:${column.valueSource}`).sort(),
+    ["cohort.csv:AGE:imputed", "visits.csv:SBP:calculated"]);
+  assert.equal(tables.registered.length, 3);
+
+  // What the control plane hands the engine carries the same labels. The seal holds
+  // AGE (it was declared an outcome) back from the subject table, and a table
+  // without the imputed column is no longer labelled by it.
+  const inputs = await plane.resolveEngineInputs({ studyId, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", kind: "rmst", method: "comparator.entropy_balance", endpointType: "binary" });
+  const subject = inputs.find((input) => input.shape === "subject");
+  assert.ok(subject);
+  assert.equal(subject.valueSource, "observed", "the view without AGE holds only observed columns");
+  assert.ok(!(await fs.readFile(path.join(dataPlaneDir, subject.location), "utf8")).split("\n")[0].includes("age"));
+  const longitudinal = await plane.resolveEngineInputs({ studyId, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", include: ["longitudinal"] });
+  assert.equal(longitudinal[0].valueSource, "calculated");
+});
+
+test("AC-03 a column cannot claim a source its file is not: a synthetic file has no observed columns", options, async () => {
+  const studyId = await seedStudy();
+  const map = REPLAY_FIELD_MAP.map((entry) => (entry.column === "AGE" ? { ...entry, valueSource: "observed" } : entry));
+  const source = await seedConfirmed(studyId, { map, valueSource: "synthetic" });
+  await assert.rejects(() => plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id }), (error) => {
+    assert.equal(error.code, VCR_DATA_PLANE_CODES.fieldMapInvalid);
+    assert.deepEqual(error.vcrDetail.issues.map((/** @type {any} */ issue) => issue.code), ["column_source_on_non_individual_source"]);
+    return true;
+  });
+  assert.deepEqual(await store.listSnapshots({ studyId }), []);
 });

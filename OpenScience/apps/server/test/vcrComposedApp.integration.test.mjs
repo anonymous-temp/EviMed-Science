@@ -136,6 +136,14 @@ async function furnishedStudy(name = "EV-201") {
   return { id, projectId, siteId: site.id };
 }
 
+/** @type {Promise<{ id: string, projectId: string, siteId: string }> | null} */
+let evidenceAndLedgerStudy = null;
+/**
+ * One furnished study for the evidence and ledger cases: an account may hold twenty projects and this
+ * file makes most of them, so what does not need a study of its own shares one.
+ */
+const sharedStudy = () => (evidenceAndLedgerStudy ??= furnishedStudy("证据与台账研究"));
+
 let counter = 0;
 /**
  * One request per route in the ability table (keyed exactly like it), built for
@@ -263,6 +271,74 @@ test("CS-1 what the routes write reaches the module's own tables, under the sess
   // The audit trail names the writer, not the owner.
   const audited = await rows(`SELECT actor FROM evimed_vcr.audit WHERE study_id = $1 AND action = 'vcr.review.add' ORDER BY occurred_at`, [study.id]);
   assert.deepEqual(audited.map((row) => row.actor).sort(), [accounts.clinician, accounts.statistician].sort());
+});
+
+test("AC-25 C2-11 a card a person writes as 「外部证据」 cites only what the platform verified — the rule the runtime's write holds — and a person's own value is an expert setting", options, async () => {
+  const study = await sharedStudy();
+  const S = `/api/vcr/studies/${study.id}`;
+  const store = context.app.vcr.evidenceStore;
+  const seeded = await store.appendEvidenceItems({ userId: accounts.owner, studyId: study.id, items: [
+    { parameter: "median_time", arm: "对照", armRole: "control", endpointKey: "pfs", value: 10.2, unit: "months", quote: "10.2", locator: { verification: "verified" } },
+    { parameter: "median_time", arm: "对照 B", armRole: "control", endpointKey: "pfs", value: 9.1, unit: "months", quote: "9.1", locator: { verification: "verified" } },
+    { parameter: "dropout_rate", armRole: "control", endpointKey: "drop", value: 0.1, quote: "0.1", locator: { verification: "verified" } },
+    { parameter: "median_time", arm: "试验", armRole: "treatment", endpointKey: "pfs", value: 99, quote: "not in the record", locator: { verification: "quote_not_found" } },
+  ] });
+  const [medianA, medianB, dropout, failed] = seeded.ids;
+  const card = (/** @type {Record<string, any>} */ extra) => ({ key: "fake_median", name: "凭空的中位数", pointValue: 42, sourceKind: "external_evidence", valueSource: "extracted", ...extra });
+  const count = async () => (await rows(`SELECT key FROM evimed_vcr.assumptions WHERE study_id = $1 AND key = 'fake_median'`, [study.id])).length;
+
+  const invented = await call("datamanager", "POST", `${S}/assumptions`, card({ evidenceIds: ["evd_00000000000000000000zz"] }));
+  assert.equal(invented.status, 422, invented.text);
+  assert.equal(invented.body.code, "vcr_evidence_unverified");
+  for (const evidenceIds of [undefined, [], [failed], [medianA, dropout], [medianA, "not an id!"], Array.from({ length: 21 }, () => medianA)]) {
+    const refused = await call("datamanager", "POST", `${S}/assumptions`, card({ ...(evidenceIds === undefined ? {} : { evidenceIds }) }));
+    assert.equal(refused.status, 422, `${JSON.stringify(evidenceIds)}: ${refused.text}`);
+    assert.equal(refused.body.code, "vcr_evidence_unverified");
+  }
+  assert.equal(await count(), 0, "no card was written by any refused request");
+
+  const verified = await call("datamanager", "POST", `${S}/assumptions`, card({ evidenceIds: [medianA, medianB] }));
+  assert.equal(verified.status, 201, verified.text);
+  const saved = (await rows(`SELECT source_kind, evidence_ids, review_state FROM evimed_vcr.assumptions WHERE study_id = $1 AND key = 'fake_median'`, [study.id]))[0];
+  assert.deepEqual([saved.source_kind, saved.evidence_ids.sort(), saved.review_state], ["external_evidence", [medianA, medianB].sort(), "reviewed"]);
+  // A person's own number is an expert setting and needs no citation: the page's edit form writes exactly this.
+  const own = await call("datamanager", "POST", `${S}/assumptions`, { key: "own_median", name: "自设中位数", pointValue: 8, sourceKind: "expert_set", valueSource: "assumed" });
+  assert.equal(own.status, 201, own.text);
+  // Another study's verified rows are not this study's evidence: a different account's own study cites one.
+  const other = await call("stranger", "POST", "/api/vcr/studies", { name: "别人的研究", question: "q", dataTier: "T0", intendedUse: "exploratory" });
+  assert.equal(other.status, 201, other.text);
+  const foreign = await call("stranger", "POST", `/api/vcr/studies/${other.body.data.id}/assumptions`, card({ evidenceIds: [medianA] }));
+  assert.equal(foreign.status, 422, foreign.text);
+  assert.equal(foreign.body.code, "vcr_evidence_unverified");
+});
+
+test("C2-12 the ledger the browser reads carries the keys its reader takes, all of them for the lead and a site's own only for a site; a model is adopted from the library page", options, async () => {
+  const study = await sharedStudy();
+  const S = `/api/vcr/studies/${study.id}`;
+  const otherSite = await context.app.vcr.matchStore.upsertSite({ site: { studyId: study.id, name: "中心 B" }, userId: accounts.owner });
+  for (const [subjectKey, siteId] of [["S-own-1", study.siteId], ["S-own-2", study.siteId], ["S-other-1", otherSite.id]]) {
+    await context.app.vcr.matchStore.createReferral({ referral: { studyId: study.id, subjectKey, siteId, actor: "test" }, userId: accounts.owner });
+  }
+  const lead = await call("lead", "GET", `${S}/referrals`);
+  assert.equal(lead.status, 200, lead.text);
+  assert.deepEqual(lead.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-other-1", "S-own-1", "S-own-2"]);
+  // The keys `readVcrReferrals` in the web client takes: a change on either side is a red test here.
+  for (const key of ["id", "subjectKey", "state", "siteId", "assessmentId", "contactApprovedBy", "contactApprovedAt", "screenFailReason", "enrolledOn", "updatedAt"]) {
+    assert.ok(key in lead.body.data.referrals[0], `the ledger row has ${key}`);
+  }
+  const site = await call("site", "GET", `${S}/referrals`);
+  assert.deepEqual(site.body.data.referrals.map((/** @type {any} */ row) => row.subjectKey).sort(), ["S-own-1", "S-own-2"], "a site reads its own referrals only");
+  assert.equal((await call("lead", "GET", `${S}/referrals?state=contactable`)).body.data.referrals.length, 0);
+
+  // The library page's adoption: the account's own model, written by the server as literature-tier from the trials named.
+  const adopted = await call("owner", "POST", "/api/vcr/models", { name: `page-model-${suffix}`, version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"] });
+  assert.equal(adopted.status, 201, adopted.text);
+  const model = (await rows(`SELECT tier, risk, applicability FROM evimed_vcr.models WHERE name = $1`, [`page-model-${suffix}`]))[0];
+  assert.equal(model.tier, "literature");
+  assert.equal(model.risk, "medium");
+  assert.match(String(model.applicability.population), /NCT02296125/);
+  const library = await call("owner", "GET", "/api/vcr/models");
+  assert.ok(library.body.data.models.some((/** @type {any} */ row) => row.name === `page-model-${suffix}`));
 });
 
 test("PA-11 the first human stop, through HTTP: a coordinator confirms one patient by name; a viewer and a site cannot; the second click writes nothing more", options, async () => {

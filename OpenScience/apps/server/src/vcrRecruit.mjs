@@ -743,7 +743,11 @@ export function postExitEpisode(input) {
 }
 
 /**
- * Refuse, by name, every conversion of an exit record into a trial fact.
+ * Refuse, by name, every conversion of an exit record into a trial fact — and
+ * every observation of a field the partner cannot see while the patient is in
+ * somebody else's trial, which is the same conversion by another road: a
+ * `progression_date` typed as an observation of a study-specific episode is an
+ * exit turned into an efficacy fact.
  *
  * It returns a refusal rather than throwing so a caller can record the attempt
  * and carry on: the interesting thing about this function is how often it is
@@ -752,13 +756,17 @@ export function postExitEpisode(input) {
  */
 export function deriveFromExit({ field, from = "exit" }) {
   return refuse("vcr_exit_field_not_derivable",
-    `出组记录不能转换成「${field}」；出组日期与原因照原样保留（方案 §7.3）。`, { field, from });
+    `试验期间的「${field}」不可见，也不能从出组记录推出；出组日期与原因照原样保留。`, { field, from });
 }
 
 /**
  * Is this episode a faithful record of what the partner sent?
  *
  * Checks the two verbatim fields and that nothing restricted acquired a value.
+ * The runtime's follow-up write reads the subject's recorded exit back and
+ * holds a new write to it: the exit stands as first recorded, and a different
+ * one is reported beside the new row, which is appended, never written over the
+ * old (plan §7.3: an exit does not rewrite what is already recorded).
  * Advisory: it returns findings, never a block (principle 4).
  * @param {any} episode @param {{ exitDate?: string, exitReason?: string }} source
  */
@@ -766,10 +774,12 @@ export function followupFidelityFindings(episode, source) {
   /** @type {{ code: string, message: string, severity: string }[]} */
   const findings = [];
   if (source?.exitDate != null && String(episode?.exitDate ?? "") !== String(source.exitDate)) {
-    findings.push({ code: "vcr_exit_date_rewritten", severity: "advisory", message: "出组日期与来源不一致。" });
+    findings.push({ code: "vcr_exit_date_rewritten", severity: "advisory",
+      message: "这位受试者已记录的出组日期与这次写的不同：已记录的照原样保留，这一条作为新增说明追加。" });
   }
   if (source?.exitReason != null && String(episode?.exitReason ?? "") !== String(source.exitReason)) {
-    findings.push({ code: "vcr_exit_reason_rewritten", severity: "advisory", message: "出组原因与来源不一致。" });
+    findings.push({ code: "vcr_exit_reason_rewritten", severity: "advisory",
+      message: "这位受试者已记录的出组原因与这次写的不同：已记录的照原样保留，这一条作为新增说明追加。" });
   }
   for (const field of VCR_TRIAL_RESTRICTED_FIELDS) {
     const entry = episode?.restricted?.[field];
@@ -781,23 +791,4 @@ export function followupFidelityFindings(episode, source) {
     findings.push({ code: "vcr_followup_kind_unknown", severity: "advisory", message: "随访片段的类型不在词表内。" });
   }
   return findings;
-}
-
-/**
- * What an exit-derived cohort may and may not be asked (plan §7.4's table, in
- * code so an interface can render it rather than restate it).
- */
-export const VCR_PARTNER_DATA_USES = Object.freeze([
-  Object.freeze({ use: "matching_evaluation", allowed: true, note: "历史转诊记录 + 后来是否入组，就是一套真实的中文匹配评测集。" }),
-  Object.freeze({ use: "accrual_calibration", allowed: true, note: "历史漏斗给出每中心入组率和筛选失败率的先验。" }),
-  Object.freeze({ use: "feasibility", allowed: true, note: "新方案的入排条件在历史候选人群上跑一遍漏斗。" }),
-  Object.freeze({ use: "post_exit_observation", allowed: true, note: "范围有限：只针对出组后的这群人。" }),
-  Object.freeze({ use: "trial_efficacy", allowed: false, note: "试验期间的分组和结局不可见。" }),
-  Object.freeze({ use: "external_control", allowed: false, note: "平台不会从出组后的记录反推试验期间分组。" }),
-]);
-
-/** @param {string} use */
-export function partnerDataUseAllowed(use) {
-  const row = VCR_PARTNER_DATA_USES.find((entry) => entry.use === use);
-  return row ? { ...row } : { use, allowed: false, note: "未登记的用途默认不允许。" };
 }

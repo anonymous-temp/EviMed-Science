@@ -40,16 +40,17 @@ import {
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_DEFAULT_STUDY_NAME } from "./vcrStore.mjs";
+import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
-  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, presentTodos, useCeilingOf, vcrReviewIsCurrent,
+  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, presentTodos, resultNode, useCeilingOf,
+  vcrCurrentNodes, vcrReviewIsCurrent,
 } from "./vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab,
 } from "./vcrViewsTabs.mjs";
-import { numeric } from "./vcrViewsKit.mjs";
+import { numeric, withReviewState } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
@@ -77,22 +78,42 @@ export const VCR_READ_WHATS = Object.freeze([
  * snapshot and result ids; a location or an input hash in its hands is an
  * address to guess at and an oracle to confirm a guess (merge verification,
  * 2026-09-29). Removed by key at any depth before the small-cell boundary.
- * @param {unknown} value
+ * @param {unknown} value @param {Set<unknown>} [ancestors]
  * @returns {unknown}
  */
-export function stripPlaneAddresses(value, seen = new WeakSet()) {
+export function stripPlaneAddresses(value, ancestors = new Set()) {
   if (!value || typeof value !== "object") return value;
-  if (seen.has(value)) return value;
-  seen.add(value);
-  if (Array.isArray(value)) return value.map((item) => stripPlaneAddresses(item, seen));
-  /** @type {Record<string, unknown>} */
-  const out = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (key === "location" || key === "inputHashes" || key === "outputHash" || key === "signature") continue;
-    out[key] = stripPlaneAddresses(item, seen);
+  // A value two branches share is data twice; only a value that contains itself is a cycle, and a
+  // boundary that cannot finish a payload refuses it whole.
+  if (ancestors.has(value)) throw new TypeError("stripPlaneAddresses: the payload refers to itself");
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) return value.map((item) => stripPlaneAddresses(item, ancestors));
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return value;
+    /** @type {Record<string, unknown>} */
+    const out = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "location" || key === "inputHashes" || key === "outputHash" || key === "signature") continue;
+      out[key] = stripPlaneAddresses(item, ancestors);
+    }
+    return out;
+  } finally {
+    ancestors.delete(value);
   }
-  return out;
 }
+
+/**
+ * The reads whose figures are another trial's, published: an extracted value
+ * and its sample size, a registry record's enrollment, its arms and its site
+ * count. They are not this study's people, so the small-cell floor has nothing
+ * to protect in them — and applied to them it hollowed every row that had a
+ * `sampleSize` beside an unknown `events` and read a registry's site count as a
+ * head count (merge verification C2-2). Named here, by `what`, rather than
+ * recognised by shape: a shape rule is the thing that let the first boundary
+ * pass what nothing produced.
+ */
+export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record"]);
 
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -476,7 +497,7 @@ export class VcrService {
    * @param {any} study
    */
   async studyViewOf(study) {
-    const [definition, results, stale, reviews, jobs, budget, assumptions, members, exports] = await Promise.all([
+    const [definition, results, stale, reviews, jobs, budget, assumptions, members, exports, populations, patientSets, comparators, scenarios, grid, protocol] = await Promise.all([
       this.store.latestDefinition(study.id),
       this.store.results(study.id),
       this.store.staleMarks(study.id),
@@ -486,10 +507,13 @@ export class VcrService {
       this.store.assumptions(study.id),
       this.store.members(study.id),
       this.store.exports(study.id),
+      this.store.populations(study.id, 20), this.store.patientSets(study.id, 20), this.store.comparatorDesigns(study.id, 20),
+      this.store.trialScenarios(study.id, 60), this.store.latestDesignGrid(study.id), this.store.latestProtocolVersion(study.id),
     ]);
     const headline = results.find((result) => result.kind === "trial_scenario") ?? results[0] ?? null;
     const seal = vcrSealState(study);
-    const ceiling = useCeilingOf({ study, results, reviews, stale });
+    const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
+    const ceiling = useCeilingOf({ study, results, reviews, stale, current });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
       dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status,
@@ -499,7 +523,7 @@ export class VcrService {
       results: results.map((result) => this.#resultView(result, stale)),
       conclusion: headline?.conclusion ?? null,
       seal,
-      review: this.#reviewView(reviews, results, stale),
+      review: this.#reviewView(reviews, results, stale, current),
       intendedUseCeiling: ceiling,
       stale,
       jobs,
@@ -513,8 +537,20 @@ export class VcrService {
     };
   }
 
-  /** @param {any[]} reviews @param {any[]} results @param {any[]} stale */
-  #reviewView(reviews, results, stale) {
+  /**
+   * The highest use this study's results can be labelled with, and why — the
+   * study page's own answer, taken from the page's own computation (the
+   * presenter over the same bundle, for the study's owner) and not made again:
+   * a package cover that says what the page says is the point, and a second
+   * computation of the ceiling is a second answer.
+   * @param {any} study
+   */
+  async ceilingOf(study) {
+    return presentStudy(await this.#bundle(study, { id: String(study.userId) })).ceiling;
+  }
+
+  /** @param {any[]} reviews @param {any[]} results @param {any[]} stale @param {{ nodes: Set<string>, kinds: Set<string> }} currentNodes */
+  #reviewView(reviews, results, stale, currentNodes) {
     const staleNodes = new Set(stale.map((mark) => String(mark.node)));
     const current = results.map((result) => `result:${result.id}@${result.version}`);
     return {
@@ -523,11 +559,11 @@ export class VcrService {
         // A review countersigns one version; if any of them moved it reads
         // `changed_after_review` (AC-21). The node list is what moved, not the
         // review, which is why the state is derived and never stored.
-        state: !vcrReviewIsCurrent(review, { results, stale })
+        state: !vcrReviewIsCurrent(review, { results, stale, current: currentNodes })
           ? "changed_after_review"
           : reviewStateFor({ reviewedNodes: review.nodes, currentNodes: [...new Set([...current, ...review.nodes.filter((node) => !staleNodes.has(node))])] }),
       })),
-      reviewed: reviews.some((review) => vcrReviewIsCurrent(review, { results, stale })),
+      reviewed: reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current: currentNodes })),
       kinds: [...new Set(reviews.map((review) => review.kind))],
     };
   }
@@ -594,7 +630,7 @@ export class VcrService {
   async #bundle(study, user, tab = "overview", query = {}) {
     const wants = tab === "overview" || tab === "trial" || tab === "comparator";
     const [definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions, roles,
-      scenarios, comparators, populations, patientSets, grid, forecasts, models, executions, protocol] = await Promise.all([
+      scenarios, comparators, populations, patientSets, grid, forecasts, models, executions, protocol, jobMarks] = await Promise.all([
       this.store.latestDefinition(study.id),
       this.store.results(study.id),
       this.store.allResults(study.id),
@@ -616,14 +652,25 @@ export class VcrService {
       this.store.models(study.userId),
       this.#executions(study.id),
       this.store.latestProtocolVersion(study.id),
+      // Why an object is not being computed (a refusal recorded before any job was queued).
+      this.store.rows(`SELECT key, state, detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job' AND state = 'failed'`, [study.id]),
     ]);
+    // What the countersignatures say about each version the pages show (assumption cards carry
+    // theirs from the store): a result or an object whose exact version somebody signed reads
+    // 已复核, one whose earlier version was signed reads 复核后有变更, the rest is what it was stored as.
+    const signed = (/** @type {any[]} */ rows, /** @type {(row: any) => string} */ nodeOf) => rows.map((row) => withReviewState(row, nodeOf(row), reviews));
+    const reviewedResults = signed(results, resultNode);
+    const reviewedAll = signed(allResults, resultNode);
+    const reviewedPopulations = signed(populations, (row) => vcrObjectNode("population", row));
+    const reviewedComparators = signed(comparators, (row) => vcrObjectNode("comparator", row));
     /** @type {Record<string, any>} */
     const bundle = {
-      now: this.now(), study, definition, results, allResults, stale, reviews, jobs, budget, assumptions, members, exports, decisions,
-      roles, scenarios, comparators, comparator: comparators[0] ?? null, populations, patientSets, grid, forecasts, models,
+      now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews, jobs, budget, assumptions, members, exports, decisions,
+      roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study),
-      forecastResults: allResults.filter((result) => result.kind === "accrual_forecast"),
-      criteria: protocol ? await this.store.criteria(protocol.id) : [],
+      forecastResults: reviewedAll.filter((result) => result.kind === "accrual_forecast"),
+      criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
+      currentNodes: vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol }),
     };
     if (tab === "data" || wants) {
       bundle.edges = await this.store.edges(study.id);
@@ -851,11 +898,17 @@ export class VcrService {
    * boundary that stops walking and lets the rest through has a hole in it.
    * Applying it twice would hide more than once (a hidden cell reads as zero),
    * so a caller hands over data that has not been through it.
-   * @param {unknown} payload
+   *
+   * `publishedFigures` is for the reads of {@link VCR_PUBLISHED_FIGURE_READS}
+   * only: another trial's numbers pass the boundary's other half (no plane
+   * address, a cycle refused whole) and are not judged as this study's head
+   * counts: the exemption is a rule about numbers, not a hole.
+   * @param {unknown} payload @param {{ publishedFigures?: boolean }} [options]
    */
-  forModel(payload) {
+  forModel(payload, { publishedFigures = false } = {}) {
     try {
-      return suppressForModel(stripPlaneAddresses(payload), { minCell: this.minCell });
+      const addressed = stripPlaneAddresses(payload);
+      return publishedFigures ? addressed : suppressForModel(addressed, { minCell: this.minCell });
     } catch {
       throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     }
@@ -882,7 +935,8 @@ export class VcrService {
    * What a run may read. **Aggregates and structure only**: no row of any
    * person ever appears here, and a cell speaking for fewer than
    * `minCell` people is suppressed by the domain's `suppressForModel` before it
-   * leaves (plan §8.1, AC-26) — for every `what`, with no exception listed. The
+   * leaves (plan §8.1, AC-26) — for every `what` but the three that carry
+   * another trial's published figures ({@link VCR_PUBLISHED_FIGURE_READS}). The
    * one thing that is per person is `subject_document`, whose whole point is
    * the person's own record, so it is judged and audited per read and answers
    * with a pseudonymous key and nothing that names anyone.
@@ -894,7 +948,7 @@ export class VcrService {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
     this.counters.reads += 1;
-    return this.forModel(await this.#runtimeRead(study, what, filter));
+    return this.forModel(await this.#runtimeRead(study, what, filter), { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what) });
   }
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter */
@@ -902,13 +956,15 @@ export class VcrService {
     const limit = Math.min(VCR_READ_MAX_ITEMS, Math.max(1, Number(filter.limit ?? 20)));
     switch (what) {
       case "study": {
-        const [definition, stale, budget] = await Promise.all([
+        const [definition, stale, budget, intendedUseCeiling] = await Promise.all([
           this.store.latestDefinition(study.id), this.store.staleMarks(study.id),
           this.packages.jobs?.budgetOf ? this.packages.jobs.budgetOf(study.id).catch(() => null) : null,
+          this.ceilingOf(study),
         ]);
         return { study: { id: study.id, name: study.name, question: study.question, dataTier: study.dataTier,
           intendedUse: study.intendedUse, status: study.status, steps: study.steps }, definition, stale, budget,
-        seal: vcrSealState(study) };
+        seal: vcrSealState(study),
+        intendedUseCeiling };
       }
       case "definition": return { definition: await this.store.latestDefinition(study.id),
         versions: (await this.store.definitionVersions(study.id)).map((version) => ({ version: version?.version, createdAt: version?.createdAt })) };

@@ -202,6 +202,17 @@ export const MEASURE_META = Object.freeze({
   cells: { label: "网格单元数" },
   median_pfs_control: { label: "对照组中位 PFS", unit: "个月" },
   events: { label: "事件数", unit: "个" },
+  events_control: { label: "对照组事件数", unit: "个" },
+  events_treatment: { label: "试验组事件数", unit: "个" },
+  median_survival_control: { label: "对照组中位生存时间", unit: "个月" },
+  median_survival_treatment: { label: "试验组中位生存时间", unit: "个月" },
+  log_hazard_ratio: { label: "风险比的对数（重建）" },
+  prior_effective_sample_size_moment: { label: "先验有效样本量（矩法）", unit: "例" },
+  prior_effective_sample_size_elir: { label: "先验有效样本量（ELIR）", unit: "例" },
+  prior_effective_sample_size_ceiling: { label: "先验有效样本量的上界", unit: "例" },
+  map_effective_sample_size_moment: { label: "MAP 先验有效样本量（矩法）", unit: "例" },
+  map_effective_sample_size_elir: { label: "MAP 先验有效样本量（ELIR）", unit: "例" },
+  tau_posterior_median: { label: "研究间异质性 τ（后验中位数）" },
 });
 
 /** The unit words the engine writes, said in Chinese. */
@@ -224,8 +235,14 @@ export function measureLabel(name) {
 /** @param {unknown} moment */
 const textOrNull = (moment) => (typeof moment === "string" && moment ? moment : null);
 
-/** An interval on the page's scale, with its name kept. @param {unknown} raw @param {number} scale */
-export function intervalView(raw, scale = 1) {
+/**
+ * An interval on the page's scale, with its name kept. `decimals` is the
+ * precision the value beside it is printed to: an interval read off a CI with no
+ * Monte-Carlo error (an RMST difference) is stated to the decimals its own width
+ * supports, so 1.64 (0.39–2.88) and never 0.38681–2.883581.
+ * @param {unknown} raw @param {number} scale @param {number | null} [decimals]
+ */
+export function intervalView(raw, scale = 1, decimals = null) {
   const interval = object(raw);
   const kind = String(interval.kind ?? "");
   if (!VCR_INTERVAL_KINDS.includes(kind)) return null;
@@ -233,10 +250,11 @@ export function intervalView(raw, scale = 1) {
   const high = finite(interval.high);
   if (low === null && high === null) return null;
   const level = finite(interval.level);
+  const places = decimals === null ? 6 : Math.min(6, Math.max(0, decimals));
   return {
     kind,
-    low: low === null ? null : roundTo(low * scale, 6),
-    high: high === null ? null : roundTo(high * scale, 6),
+    low: low === null ? null : roundTo(low * scale, places),
+    high: high === null ? null : roundTo(high * scale, places),
     // The engine keeps a level as a fraction (0.95); the page says 95.
     level: level === null ? null : (level <= 1 ? roundTo(level * 100, 6) : level),
   };
@@ -266,22 +284,33 @@ export function measureValue(measure, options) {
   const source = VCR_VALUE_SOURCES.includes(named) ? named : defaultSourceOf(kind, measure, context);
   const notEstimable = result?.conclusion === "not_estimable";
   const label = options.label ?? measureLabel(name);
+  // The decimals of the value's own error: 71.2 beside ±0.31, never 71.2345. A value with
+  // an interval and no Monte-Carlo error (a confidence interval on an RMST difference)
+  // takes its decimals from the interval's width — three significant digits of it.
+  const shown = intervalView(measure?.interval, scale);
+  const width = shown && shown.low !== null && shown.high !== null ? shown.high - shown.low : null;
+  /** @type {number | null} */
+  let precision = null;
+  if (value !== null && mcse !== null && mcse > 0) precision = decimalsFor(mcse, 1);
+  else if (percent && value !== null) precision = 1;
+  else if (value !== null && width !== null && width > 0) precision = decimalsFor(width, 3);
   return {
     value,
     text: value === null ? (notEstimable ? "不可估计" : "—") : null,
     unit,
     source,
-    interval: intervalView(measure?.interval, scale),
+    interval: mcse === null && !percent && precision !== null ? intervalView(measure?.interval, scale, precision) : shown,
     mcse,
     review: result ? String(result.reviewState ?? "ai_set") : null,
-    // The decimals of the value's own error: 71.2 beside ±0.31, never 71.2345.
-    precision: value !== null && mcse !== null && mcse > 0 ? decimalsFor(mcse, 1) : (percent && value !== null ? 1 : null),
+    precision,
     reason: value === null
       ? (notEstimable && result?.notEstimableRule
         ? /** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[String(result.notEstimableRule)] ?? String(result.notEstimableRule)
         : "没有算出这个数")
       : null,
-    stale: Boolean(staleMark),
+    // Stale when the result or the object it belongs to is marked, and when the number is
+    // one carried over from before a change that its own stage has not yet recomputed.
+    stale: Boolean(staleMark) || measure?.stale === true,
     detail: runDetail({ label, measure, result, execution, mcse, tab }),
   };
 }
@@ -370,6 +399,58 @@ export function staleNote(marks) {
 
 /** The stale mark of a lineage node, if any. @param {readonly Record<string, any>[]} marks @param {string} node */
 export const markFor = (marks, node) => marks.find((mark) => mark.node === node) ?? null;
+
+// --- reviews -------------------------------------------------------------------------------------------
+
+/**
+ * What the countersignatures say about one version node. A review names the
+ * exact versions it signed: the newest review that names this version says
+ * `reviewed` — who, when, which version — and one that names only an earlier
+ * version of the same object says `changed_after_review`. Derived on every read
+ * from the reviews and never stored on the row, because the row did not change;
+ * the world moved past what was signed (plan §10.2, AC-33).
+ * @param {string} node @param {readonly Record<string, any>[]} reviews newest first
+ * @returns {{ state: "reviewed" | "changed_after_review", reviewedBy: string | null, reviewedAt: string | null, reviewedVersion: number, reviewKind: string | null } | null}
+ */
+export function reviewOfNode(node, reviews) {
+  const at = node.lastIndexOf("@");
+  if (at < 0) return null;
+  const head = node.slice(0, at + 1);
+  const version = Number(node.slice(at + 1));
+  if (!Number.isFinite(version)) return null;
+  /** @type {Record<string, any> | null} */
+  let exact = null;
+  /** @type {{ review: Record<string, any>, version: number } | null} */
+  let earlier = null;
+  for (const review of reviews) {
+    for (const named of list(review.nodes).map(String)) {
+      if (!named.startsWith(head)) continue;
+      const named_ = Number(named.slice(at + 1));
+      if (named_ === version) { exact ??= review; continue; }
+      if (named_ < version && (!earlier || named_ > earlier.version)) earlier = { review, version: named_ };
+    }
+  }
+  const found = exact ? { review: exact, version, state: /** @type {const} */ ("reviewed") }
+    : earlier ? { review: earlier.review, version: earlier.version, state: /** @type {const} */ ("changed_after_review") } : null;
+  return found ? { state: found.state, reviewedBy: text(found.review.reviewer), reviewedAt: textOrNull(found.review.createdAt),
+    reviewedVersion: found.version, reviewKind: text(found.review.kind) } : null;
+}
+
+/**
+ * A row with the review state its node has earned. A row already stored
+ * `reviewed` was written by a person (the state follows who wrote it) and stays;
+ * otherwise the countersignatures decide, and a row nobody has signed is what it
+ * was stored as.
+ * @template {Record<string, any>} T
+ * @param {T} row @param {string} node @param {readonly Record<string, any>[]} reviews
+ * @returns {T & { reviewedBy?: string | null, reviewedAt?: string | null, reviewedVersion?: number, reviewKind?: string | null }}
+ */
+export function withReviewState(row, node, reviews) {
+  const derived = reviewOfNode(node, reviews);
+  if (!derived) return row;
+  const { state, ...who } = derived;
+  return { ...row, ...who, reviewState: row.reviewState === "reviewed" ? "reviewed" : state };
+}
 
 // --- small text --------------------------------------------------------------------------------------
 

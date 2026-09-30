@@ -47,6 +47,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
+import { withReviewState } from "./vcrViewsKit.mjs";
 
 /** @param {unknown} value */
 const iso = (value) => (value == null ? null : new Date(/** @type {any} */ (value)).toISOString());
@@ -536,13 +537,27 @@ export class VcrStore extends VcrStoreBase {
   async saveAssumption(input) {
     return this.transaction(async (client) => {
       const version = await this.nextVersion(client, "assumptions", "study_id = $1 AND key = $2", [input.studyId, String(input.key)]);
+      // A card written without a distribution keeps the one it had — as long as the edit
+      // leaves the number where it was: a note or a unit changed is not a new belief. An edit
+      // that moves the number takes the old distribution with it (it was centred on the value
+      // that is gone), so the card says it has none and the assurance that integrated over it
+      // is not computed again — never a stale prior silently standing behind a new value.
+      // `distribution: {}` says 「none」 in as many words.
+      let distribution = input.distribution;
+      if (distribution === undefined && version > 1) {
+        const previous = (await client.query(`SELECT point_value, distribution FROM ${VCR_SCHEMA}.assumptions
+          WHERE study_id = $1 AND key = $2 AND version = $3`, [input.studyId, String(input.key), version - 1])).rows[0];
+        const sameValue = input.pointValue === undefined || input.pointValue === null
+          ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
+        distribution = previous && sameValue ? object(previous.distribution) : {};
+      }
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.assumptions
         (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity, source_kind,
          value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19)
         RETURNING *`,
       [vcrId("assumption"), input.studyId, String(input.userId), String(input.key), version, String(input.name ?? input.key),
-        input.endpoint ?? null, input.unit ?? null, input.pointValue ?? null, JSON.stringify(input.distribution ?? {}),
+        input.endpoint ?? null, input.unit ?? null, input.pointValue ?? null, JSON.stringify(distribution ?? {}),
         JSON.stringify(input.sensitivity ?? {}), String(input.sourceKind ?? "expert_set"), String(input.valueSource ?? "assumed"),
         input.poolingMethod ?? null, JSON.stringify(input.pooling ?? {}), list(input.evidenceIds).map(String),
         JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? "")])).rows[0];
@@ -552,18 +567,32 @@ export class VcrStore extends VcrStoreBase {
     });
   }
 
-  /** The current version of every assumption key. @param {string} studyId */
+  /**
+   * The current version of every assumption key, each with the review state its
+   * countersignatures give it — 已复核 with who signed, when and which version, or
+   * 复核后有变更 when only an earlier version was signed (AC-33). A card is what a
+   * page shows and what a run reads, so the state is derived here, once.
+   * @param {string} studyId
+   */
   async assumptions(studyId) {
-    const rows = await this.rows(`SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.assumptions
-      WHERE study_id = $1 ORDER BY key, version DESC`, [studyId]);
-    return rows.map(assumptionFromRow);
+    const [rows, reviews] = await Promise.all([this.rows(`SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.assumptions
+      WHERE study_id = $1 ORDER BY key, version DESC`, [studyId]), this.reviews(studyId)]);
+    return rows.map((row) => this.#assumptionWithReview(assumptionFromRow(row), reviews));
   }
 
   /** Every version of one key, newest first. @param {string} studyId @param {string} key */
   async assumptionVersions(studyId, key) {
-    const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.assumptions WHERE study_id = $1 AND key = $2
-      ORDER BY version DESC LIMIT 100`, [studyId, String(key)]);
-    return rows.map(assumptionFromRow);
+    const [rows, reviews] = await Promise.all([this.rows(`SELECT * FROM ${VCR_SCHEMA}.assumptions WHERE study_id = $1 AND key = $2
+      ORDER BY version DESC LIMIT 100`, [studyId, String(key)]), this.reviews(studyId)]);
+    return rows.map((row) => this.#assumptionWithReview(assumptionFromRow(row), reviews));
+  }
+
+  /** @param {any} card @param {any[]} reviews */
+  #assumptionWithReview(card, reviews) {
+    if (!card || !reviews.length) return card;
+    let node;
+    try { node = lineageNode("assumption", card.key, card.version); } catch { return card; }
+    return withReviewState(card, node, reviews);
   }
 
   // --- research objects -------------------------------------------------------------
@@ -856,6 +885,19 @@ export class VcrStore extends VcrStoreBase {
     const rows = await this.rows(`SELECT id, version FROM ${VCR_SCHEMA}.results
       WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3`, [studyId, kind, subjectId ?? null]);
     return rows.map((row) => lineageNode("result", String(row.id), Number(row.version)));
+  }
+
+  /**
+   * The result one job produced, found through the execution it wrote — a
+   * finished job's, a failed one's partial one, and the partial result of a
+   * cancelled job that the engine kept and the queue fetched afterwards. Never
+   * 「the newest result of this study」, which would hand a job somebody else's
+   * numbers under its own id.
+   * @param {string} studyId @param {string} jobId
+   */
+  async resultOfJob(studyId, jobId) {
+    return resultFromRow(await this.one(`SELECT r.* FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
+      WHERE r.study_id = $1 AND e.job_id = $2 ORDER BY r.created_at DESC, r.version DESC LIMIT 1`, [studyId, jobId]));
   }
 
   /** @param {string} studyId @param {string} id */

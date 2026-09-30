@@ -11,6 +11,7 @@
 // Skipped when OPEN_SCIENCE_TEST_POSTGRES_URL is not configured.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +34,19 @@ const options = { timeout: 120_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POS
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENGINE_ROOT = path.resolve(HERE, "../../../../项目代码/vcr-engine");
-const R_LIBS = process.env.VCR_R_LIBS ?? "/home/coder/R/vcr-4.3";
+// The R library is the machine's to name (`scripts/vcr/r-library.sh`); there is no path baked in here.
+const R_LIBS = process.env.VCR_R_LIBS ?? "";
+// CI runs this file with `VCR_ENGINE_TESTS=required`: a box without R or its library is then a red run with
+// the reason; without it the engine step says why it did not run.
+const ENGINE_REQUIRED = process.env.VCR_ENGINE_TESTS === "required";
+
+/** What this machine lacks of what the real engine needs: `{ code, message }`, or null. */
+function engineProblem() {
+  if (spawnSync("Rscript", ["--version"]).status !== 0) return { code: "rscript", message: "Rscript is not installed (or not on PATH)" };
+  if (!R_LIBS) return { code: "library_unset", message: "VCR_R_LIBS is not set: it names the R library the engine runs on (scripts/vcr/r-library.sh installs it)" };
+  if (!existsSync(R_LIBS)) return { code: "library_missing", message: `VCR_R_LIBS names a directory that does not exist: ${R_LIBS}` };
+  return null;
+}
 
 /** @type {any} */ let isolated = null;
 /** @type {any} */ let database = null;
@@ -696,7 +709,15 @@ function jobOf(kind, method, scenario, inputs, studyId) {
 }
 
 test("PA-10 the real engine reads the inputs the control plane resolved: a profile of the raw files, a cohort on the subject table, and RMST on the events", options, async (t) => {
-  assert.equal(spawnSync("Rscript", ["--version"]).status, 0, "Rscript is on this box; this test does not skip");
+  const problem = engineProblem();
+  if (problem) {
+    // Required, or Rscript itself gone: a red run that says what is missing. With no library named the step
+    // reports why it did not run, and the rest of the file stands.
+    assert.ok(ENGINE_REQUIRED === false && problem.code === "library_unset",
+      `${ENGINE_REQUIRED ? "VCR_ENGINE_TESTS=required: " : ""}this test is the proof the real engine reads what the control plane resolved, and this machine cannot run it — ${problem.message}`);
+    t.skip(`the real engine is not available here: ${problem.message}`);
+    return;
+  }
   const study = await seedStudy({ intendedUse: "specified_analysis" });
   const { snapshot } = await seedFrozen(study);
   await vcr.seal.freezePlan({ studyId: study.id, plan: { endpoint: { type: "time_to_event" }, analysis: { method: "comparator.rmst" }, intendedUse: "specified_analysis" }, actor: OWNER });

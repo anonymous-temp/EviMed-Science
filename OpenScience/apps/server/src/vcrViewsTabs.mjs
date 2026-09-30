@@ -461,7 +461,15 @@ export function presentPatientsTab(bundle) {
 export function presentComparatorTab(bundle) {
   const { study, comparators, stale, now } = bundle;
   const current = comparators[0] ?? null;
-  const result = current ? resultById(bundle, current.resultId) : null;
+  // The newest version whose compute failed has no result of its own. The page keeps the
+  // last version of the same route that has one — its numbers stay on the page — and says
+  // so: a route that lost its numbers because the latest edit did not compute would read
+  // as one that was never computed.
+  const lastGood = current && !current.resultId
+    ? comparators.find((design) => design.id !== current.id && design.route === current.route && design.resultId && resultById(bundle, design.resultId)) ?? null
+    : null;
+  const shown = lastGood ?? current;
+  const result = shown ? resultById(bundle, shown.resultId) : null;
   const marks = current ? [markFor(stale, vcrObjectNode("comparator", current)), result ? markFor(stale, resultNode(result)) : null] : [];
   const diagnostics = object(result?.diagnostics);
   const execution = executionOf(bundle, result);
@@ -492,13 +500,29 @@ export function presentComparatorTab(bundle) {
     };
   });
   const curves = seriesList(diagnostics.curves);
-  const qcRaw = object(object(diagnostics.qualityControl).checks);
-  const qc = Object.entries(qcRaw).map(([key, check]) => qcRow(key, object(check))).filter((row) => row !== null);
-  const rmstMeasure = list(result?.measures).find((measure) => String(object(measure).name) === "rmst_difference")
-    ?? list(result?.measures).find((measure) => String(object(measure).name) === "rmst_control");
-  const medianMeasure = list(result?.measures).find((measure) => String(object(measure).name) === "median_survival");
+  // One arm's reconstruction is one quality-control object; two arms are a list of two (control, then treatment),
+  // each with its own checks — the page reads both, each row saying whose it is.
+  const qcArms = Array.isArray(diagnostics.qualityControl) ? diagnostics.qualityControl.map(object) : [object(diagnostics.qualityControl)];
+  const armNames = qcArms.length > 1 ? ["对照组", "试验组"] : [""];
+  const qc = qcArms.flatMap((arm, index) => Object.entries(object(arm.checks)).map(([key, check]) => {
+    const row = qcRow(key, object(check));
+    return row && armNames[index] ? { ...row, key: `${key}_${index === 0 ? "control" : "treatment"}`, label: `${armNames[index]}：${row.label}` } : row;
+  })).filter((row) => row !== null);
+  const measureOf = (/** @type {string} */ name) => list(result?.measures).find((measure) => String(object(measure).name) === name);
+  const rmstMeasure = measureOf("rmst_difference") ?? measureOf("rmst_control");
+  // A two-arm reconstruction names its medians per arm; the comparator page is about the control arm,
+  // and the treatment arm's median is one of the rows beside it.
+  const medianMeasure = measureOf("median_survival") ?? measureOf("median_survival_control");
   const value = (/** @type {any} */ measure) => measureValue(measure, { kind: "comparator", result, execution, staleMark: marks[1],
-    context: { route: current?.route }, tab: "comparator" });
+    context: { route: shown?.route }, tab: "comparator" });
+  const measureRowsOf = (/** @type {readonly string[]} */ names) => names.map((name) => measureOf(name)).filter((measure) => measure !== undefined)
+    .map((measure) => ({ key: String(object(measure).name), label: measureLabel(String(object(measure).name)), value: value(measure) }));
+  // What only some routes produce: the treatment arm's median, and a MAP prior's own numbers.
+  const routeRows = measureRowsOf(["median_survival_treatment", "map_mean", "map_sd", "prior_effective_sample_size_moment",
+    "prior_effective_sample_size_elir", "map_effective_sample_size_moment", "map_effective_sample_size_elir",
+    "prior_effective_sample_size_ceiling", "tau_posterior_median"]);
+  // Why the newest version has no numbers, in the compute's own words.
+  const failure = lastGood ? failureOfNode(bundle, vcrObjectNode("comparator", /** @type {any} */ (current))) : null;
   const balance = list(diagnostics.balance).map(object);
   // The gap list belongs to the route that could not be estimated, which is
   // not always the route the page is about.
@@ -538,10 +562,10 @@ export function presentComparatorTab(bundle) {
   }).filter((row) => row !== null);
   const estimandLabel = current ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[current.estimand] ?? current.estimand : null;
   const rmstValue = rmstMeasure ? value(rmstMeasure) : null;
-  const conclusion = result?.conclusion ?? current?.conclusion ?? null;
+  const conclusion = result?.conclusion ?? shown?.conclusion ?? null;
   return {
-    headline: current && conclusion && conclusion !== "not_estimable"
-      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[current.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${numeric(diagnostics.tau) !== null ? `${diagnostics.tau} 个月 ` : ""}RMST ${valueString(rmstValue)}` : ""}。`
+    headline: shown && conclusion && conclusion !== "not_estimable"
+      ? `${(/** @type {Record<string, string>} */ (VCR_COMPARATOR_ROUTE_LABELS_ZH))[shown.route] ?? "对照"}：${(/** @type {Record<string, string>} */ ({ estimable: "可估计", limited: "有限制地估计" }))[conclusion] ?? ""}${rmstValue && rmstValue.value !== null ? `，${numeric(diagnostics.tau) !== null ? `${diagnostics.tau} 个月 ` : ""}RMST ${valueString(rmstValue)}` : ""}${diagnostics.inputsAssumed === true ? "，输入为假设" : ""}。`
       : null,
     routes,
     curves,
@@ -573,18 +597,34 @@ export function presentComparatorTab(bundle) {
     }),
     comparabilityNote: balance.length ? "标准化差异是加权之后的；界值 0.1。" : null,
     dimensions,
-    diagnostics: diagnosticRows,
+    diagnostics: [...diagnosticRows, ...routeRows],
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
-    verdict: current ? {
+    verdict: shown ? {
       conclusion,
-      review: result?.reviewState ?? current.reviewState,
-      reviewed: (result?.reviewState ?? current.reviewState) === "reviewed",
+      review: result?.reviewState ?? shown.reviewState,
+      reviewed: (result?.reviewState ?? shown.reviewState) === "reviewed",
     } : null,
-    at: current ? zhTime(current.createdAt, now) : null,
+    at: shown ? zhTime(shown.createdAt, now) : null,
     stale: staleNote(marks),
-    partial: partialOf(bundle, ["comparator"]),
+    partial: lastGood ? {
+      done: `这里显示的是上一版对照设计（v${lastGood.version}）的结果`,
+      missing: `最新一版（v${current?.version}）没有算成${failure ? `：${failure}` : ""}；上一版的数字保留在这里，不是最新一版的结果`,
+    } : partialOf(bundle, ["comparator"]),
   };
+}
+
+/**
+ * Why an object's compute did not produce a result, in the words the compute
+ * gave: the refusal the orchestrator recorded before any job (an unread field, a
+ * model that does not cover the study) or the newest failed job of the node.
+ * @param {Record<string, any>} bundle @param {string} node
+ */
+function failureOfNode(bundle, node) {
+  const mark = list(bundle.jobMarks).map(object).find((entry) => entry.state === "failed" && object(entry.detail).node === node);
+  const job = list(bundle.jobs).map(object).find((entry) => entry.state === "failed" && object(entry.checkpoint).node === node);
+  const said = text(object(mark?.detail).message) ?? text(object(job?.error).message);
+  return said ? said.slice(0, 200) : null;
 }
 
 /** One reconstruction check as a row: the largest difference, the way the paper's own table states it. @param {string} key @param {Record<string, any>} check */
@@ -670,15 +710,29 @@ export function presentTrialTab(bundle) {
     const diagnostics = object(row._result.diagnostics);
     const check = object(diagnostics.analyticCheck);
     const differencePoints = numeric(check.difference) !== null ? roundTo(Math.abs(Number(check.difference)) * 100, 1) : null;
+    // A closed-form value is exact for some methods and a first-order approximation for others (the
+    // log-rank power): the engine says which, and the tolerance it holds the simulation to — three
+    // Monte-Carlo errors plus the approximation's documented bias. A run with many replicates has a
+    // tiny error, and comparing an approximation to it with the error alone reads 「不一致」 for a
+    // difference the approximation itself explains.
+    const within = check.withinTolerance ?? check.withinThreeMcse;
+    const approximate = numeric(check.approximationBias) !== null && Number(check.approximationBias) > 0;
+    const allowedPoints = numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null;
     return {
       key: `run_${row.code}`,
       title: `方案 ${row.code}：${execution ? `${execution.method}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
       detail: [
         execution?.seed != null ? `种子 ${execution.seed}` : null,
-        check.withinThreeMcse === true && differencePoints !== null ? `解析值与仿真值一致（差 ${differencePoints} 个百分点，在 3 倍蒙特卡洛标准误内）`
-          : check.withinThreeMcse === false && differencePoints !== null ? `解析值与仿真值相差 ${differencePoints} 个百分点，超出 3 倍蒙特卡洛标准误` : null,
+        within === true && differencePoints !== null
+          ? (approximate
+            ? `解析值是一阶近似，与仿真值相差 ${differencePoints} 个百分点，在容许的 ${allowedPoints} 个百分点内（3 倍蒙特卡洛标准误加近似本身的偏差）`
+            : `解析值与仿真值一致（差 ${differencePoints} 个百分点，在 3 倍蒙特卡洛标准误内）`)
+          : within === false && differencePoints !== null
+            ? (approximate
+              ? `解析值与仿真值相差 ${differencePoints} 个百分点，超出容许的 ${allowedPoints} 个百分点（3 倍蒙特卡洛标准误加近似本身的偏差）`
+              : `解析值与仿真值相差 ${differencePoints} 个百分点，超出 3 倍蒙特卡洛标准误`) : null,
       ].filter(Boolean).join(" · ") || null,
-      ok: check.withinThreeMcse === true,
+      ok: within === true,
     };
   });
   const forecastRows = forecasts.map((forecast) => forecastView(forecast, now));
@@ -693,7 +747,7 @@ export function presentTrialTab(bundle) {
     designs,
     columns,
     grid: grids.heat,
-    footnotes: [],
+    footnotes: notRerunNotes(designRows),
     powerCurve: powerSeries.length ? {
       xLabel: text(powerRaw.xLabel) ?? "真实效应", yLabel: text(powerRaw.yLabel) ?? "功效", unit: "%", series: powerSeries,
       markers: markersOf(headlineRow?._scenario), prior: list(powerRaw.prior).map(object).filter((point) => finite(point.x) !== null && finite(point.y) !== null).map((point) => ({ x: Number(point.x), y: Number(point.y) })),
@@ -716,6 +770,31 @@ export function presentTrialTab(bundle) {
   };
 }
 
+/** What a stage of a design's result is called when it is said not to have been redone. */
+const STAGE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ assurance: "成功把握", analytic: "解析计算", simulation: "仿真", reconstruct: "曲线重建", rmst: "RMST 比较" }));
+
+/**
+ * The notes under the design table: a stage the design had and its latest
+ * computation did not run again is not left on the page as if it were current
+ * — it is dropped, and said. The usual case is a design whose effect card lost
+ * its prediction distribution: there is no prior to integrate over any more, and
+ * the success assurance it once had described a belief that is gone.
+ * @param {ReadonlyArray<Record<string, any>>} designRows
+ */
+function notRerunNotes(designRows) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const row of designRows) {
+    for (const entry of list(object(row._result?.diagnostics).notRerun).map(object)) {
+      const word = STAGE_WORDS[String(entry.stage)] ?? String(entry.stage);
+      notes.push(entry.stage === "assurance"
+        ? `方案 ${row.code}：成功把握不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。`
+        : `方案 ${row.code}：上一次的${word}没有重算，已不再显示。`);
+    }
+  }
+  return notes;
+}
+
 /** The vertical markers of a power curve: the assumed effect, which is a setting and not an estimate. @param {Record<string, any> | null | undefined} scenario */
 function markersOf(scenario) {
   const truth = object(object(scenario?.configuration).truth);
@@ -730,19 +809,22 @@ function markersOf(scenario) {
  * @param {Record<string, any> | null} grid @param {readonly Record<string, any>[]} designs
  */
 function gridView(grid, designs) {
-  const cells = list(grid?.cells).map(object).filter((cell) => finite(cell.designIndex) !== null && finite(cell.truthIndex) !== null);
+  // A cell is addressed the way the engine numbers it: the first design under the first truth is
+  // (1, 1) — R's own — so the position on the page is the index less one, and a cell numbered 0
+  // is not one of this grid's (it would be the design before the first).
+  const cells = list(grid?.cells).map(object).filter((cell) => (finite(cell.designIndex) ?? 0) >= 1 && (finite(cell.truthIndex) ?? 0) >= 1);
   if (!grid || !cells.length) return { heat: null, powerSeries: [] };
   const truths = list(grid.truthScenarios).map(object);
   const dimensionDesigns = list(object(grid.dimensions).designs).map(object);
   const measureOf = (/** @type {any} */ cell, /** @type {string[]} */ names) => list(cell.measures).map(object).find((measure) => names.includes(String(measure.name)));
-  const designCount = Math.max(...cells.map((cell) => Number(cell.designIndex))) + 1;
-  const truthCount = Math.max(...cells.map((cell) => Number(cell.truthIndex))) + 1;
+  const designCount = Math.max(...cells.map((cell) => Number(cell.designIndex)));
+  const truthCount = Math.max(...cells.map((cell) => Number(cell.truthIndex)));
   const columns = Array.from({ length: truthCount }, (_unused, index) => ({ key: `t${index}`, header: text(truths[index]?.name) ?? text(truths[index]?.label) ?? `情景 ${index + 1}` }));
   const rows = Array.from({ length: designCount }, (_row, index) => ({
     key: `d${index}`,
     header: text(dimensionDesigns[index]?.label) ?? text(dimensionDesigns[index]?.name) ?? designs[index]?.name ?? `设计 ${letterCode(index)}`,
     cells: Array.from({ length: truthCount }, (_unused, truthIndex) => {
-      const cell = cells.find((entry) => Number(entry.designIndex) === index && Number(entry.truthIndex) === truthIndex);
+      const cell = cells.find((entry) => Number(entry.designIndex) === index + 1 && Number(entry.truthIndex) === truthIndex + 1);
       const measure = cell ? measureOf(cell, ["power", "type_one_error"]) : null;
       const value = measure ? finite(measure.value) : null;
       if (value === null) return { value: null, text: "—", hint: "没有算出" };
@@ -760,7 +842,7 @@ function gridView(grid, designs) {
   if (effects.every((effect) => effect !== null) && truthCount >= 3) {
     for (let index = 0; index < designCount; index += 1) {
       const points = Array.from({ length: truthCount }, (_unused, truthIndex) => {
-        const cell = cells.find((entry) => Number(entry.designIndex) === index && Number(entry.truthIndex) === truthIndex);
+        const cell = cells.find((entry) => Number(entry.designIndex) === index + 1 && Number(entry.truthIndex) === truthIndex + 1);
         const measure = cell ? measureOf(cell, ["power", "type_one_error"]) : null;
         return { x: /** @type {number} */ (effects[truthIndex]), y: finite(measure?.value), low: null, high: null };
       }).filter((point) => point.y !== null).sort((a, b) => a.x - b.x);
@@ -810,6 +892,8 @@ function judgementView(criterion, code, judgment, now) {
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);
   return {
+    // What a re-judgment is addressed to; `code` is only the label the page derives from position.
+    criterionId: text(criterion.id),
     code,
     kind: criterion.kind,
     text: text(criterion.sourceText) ?? "",
@@ -896,6 +980,8 @@ export function presentMatchingTab(bundle, query = {}) {
     const referral = referralBySubject.get(chosen.id) ?? null;
     return {
       candidate: chosen,
+      // The person's newest assessment: what a re-judgment and a countersignature are addressed to.
+      assessmentId: text(selectedAssessment.id),
       facts: [
         { label: "临床资格", value: (/** @type {Record<string, string>} */ (VCR_ELIGIBILITY_SUMMARY_LABELS_ZH))[selectedAssessment.summary] ?? selectedAssessment.summary,
           tone: selectedAssessment.summary === "eligible" ? "neutral" : "attention" },
@@ -1052,16 +1138,18 @@ function forestOf(card, evidence, precedentById) {
  * @param {Record<string, any>} bundle @param {{ card?: string | null }} [query]
  */
 export function presentDataTab(bundle, query = {}) {
-  const { study, assumptions, scenarios, stale, reviews, decisions, now, evidence, dataPlane } = bundle;
+  const { study, assumptions, scenarios, stale, decisions, now, evidence, dataPlane } = bundle;
   const used = new Set(scenarios.flatMap((/** @type {any} */ scenario) => list(scenario.assumptionIds).map(String)));
   const precedentById = new Map((evidence?.precedents ?? []).map((/** @type {any} */ row) => [String(row.id), row]));
   const evidenceFor = (/** @type {any} */ card) => list(card.evidenceIds).map(String)
     .map((id) => (evidence?.items ?? []).find((/** @type {any} */ item) => String(item.id) === id)).filter(Boolean);
-  const reviewOf = (/** @type {any} */ card) => {
-    const node = `assumption:${card.key}@${card.version}`;
-    const found = reviews.find((/** @type {any} */ review) => list(review.nodes).includes(node));
-    return found ? { by: null, at: zhDate(found.createdAt, now), version: card.version, kind: (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[found.kind] ?? null } : null;
-  };
+  // Who countersigned the card, when, and which version — read off the card, which the store
+  // gives the state its countersignatures earned. A card whose signed version is an older one
+  // says which (针对版本 1) beside 「复核后有变更」.
+  const reviewOf = (/** @type {any} */ card) => (card.reviewedAt
+    ? { by: card.reviewedBy ?? null, at: zhDate(card.reviewedAt, now), version: card.reviewedVersion ?? card.version,
+      kind: (/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[card.reviewKind] ?? null }
+    : null);
   const staleNodes = new Set(stale.map((/** @type {any} */ mark) => mark.node));
   const usedBy = (/** @type {any} */ card) => {
     const node = `assumption:${card.key}@${card.version}`;

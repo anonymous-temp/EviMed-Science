@@ -37,10 +37,11 @@ import {
   VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  intendedUseCeiling, parseLineageNode, twinLabel, useWithin,
+  intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
 } from "@evimed/domain";
 
 import { vcrReportModel } from "./vcrRender.mjs";
+import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
   text, cpuText, zhTime,
@@ -116,28 +117,95 @@ export function jobView(job, now) {
 // --- the use ceiling ----------------------------------------------------------------------------------
 
 /**
- * Whether a review still countersigns what the study holds now: every result it
- * names is a current result, and nothing it names is marked stale. A review of a
- * result that has since been superseded reads `changed_after_review` whether or
- * not a stale mark is still open for it (AC-21).
- * @param {Record<string, any>} review
- * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[] }} context
+ * The version nodes the study holds now, by kind: the current version of each
+ * assumption key, of the population, the patient set, each comparator route,
+ * each labelled design, the grid, the definition and the protocol, and every
+ * current result. What a review has to name to still be current.
+ * @param {{ study?: Record<string, any> | null, assumptions?: readonly Record<string, any>[], populations?: readonly Record<string, any>[],
+ *   patientSets?: readonly Record<string, any>[], comparators?: readonly Record<string, any>[], scenarios?: readonly Record<string, any>[],
+ *   grid?: Record<string, any> | null, results?: readonly Record<string, any>[], definition?: Record<string, any> | null,
+ *   protocol?: Record<string, any> | null }} rows the rows, newest first where a line has versions
+ * @returns {{ nodes: Set<string>, kinds: Set<string> }}
  */
-export function vcrReviewIsCurrent(review, { results, stale = [] }) {
-  const current = new Set(list(results).map((result) => `result:${object(result).id}@${object(result).version}`));
+export function vcrCurrentNodes({ study = null, assumptions = [], populations = [], patientSets = [], comparators = [], scenarios = [],
+  grid = null, results = [], definition = null, protocol = null }) {
+  /** @type {Set<string>} */
+  const nodes = new Set();
+  const add = (/** @type {string} */ kind, /** @type {unknown} */ id, /** @type {unknown} */ version) => {
+    try { nodes.add(lineageNode(kind, String(id), Number(version))); } catch { /* an id no node can carry names no object */ }
+  };
+  for (const card of assumptions) add("assumption", card.key, card.version);
+  if (populations[0]) add("population", populations[0].id, populations[0].version);
+  if (patientSets[0]) add("patient_set", patientSets[0].id, patientSets[0].version);
+  const routes = new Set();
+  for (const design of comparators) if (!routes.has(design.route)) { routes.add(design.route); add("comparator_design", design.id, design.version); }
+  const labels = new Set();
+  for (const scenario of scenarios) {
+    const key = scenario.label || scenario.id;
+    if (!labels.has(key)) { labels.add(key); add("trial_scenario", scenario.id, scenario.version); }
+  }
+  if (grid) add("design_grid", grid.id, grid.version);
+  for (const result of results) add("result", result.id, result.version);
+  if (definition) add("study_definition", definition.id, definition.version);
+  if (protocol && study) add("protocol_version", study.id, protocol.version);
+  return { nodes, kinds: new Set(["assumption", "population", "patient_set", "comparator_design", "trial_scenario", "design_grid", "result",
+    "study_definition", "protocol_version"]) };
+}
+
+/**
+ * Whether a review still countersigns what the study holds now: nothing it
+ * names is marked stale, and every node it names is at its current version — a
+ * result that has since been superseded, but also an assumption card edited
+ * again, a population regenerated, a design replaced (`current`, from
+ * {@link vcrCurrentNodes}). A review of an older version reads
+ * `changed_after_review` whether or not a stale mark is still open for it
+ * (AC-21). A node of a kind the study does not version (a snapshot, an
+ * execution) is judged by its stale mark alone.
+ * @param {Record<string, any>} review
+ * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[], current?: { nodes: Set<string>, kinds: Set<string> } | null }} context
+ */
+export function vcrReviewIsCurrent(review, { results, stale = [], current = null }) {
+  const currentResults = new Set(list(results).map((result) => `result:${object(result).id}@${object(result).version}`));
   const staleNodes = new Set(list(stale).map((mark) => String(object(mark).node)));
-  return list(object(review).nodes).map(String)
-    .every((node) => !staleNodes.has(node) && (!node.startsWith("result:") || current.has(node)));
+  return list(object(review).nodes).map(String).every((node) => {
+    if (staleNodes.has(node)) return false;
+    if (node.startsWith("result:") && !currentResults.has(node)) return false;
+    const kind = parseLineageNode(node)?.kind;
+    return !(current && kind && current.kinds.has(kind) && !current.nodes.has(node));
+  });
+}
+
+/**
+ * Every node a result depends on, found from the lineage edges backwards: what
+ * a person has to have countersigned for the number to be theirs.
+ * @param {readonly { from: string, to: string }[]} edges @param {string} node
+ * @returns {Set<string>}
+ */
+export function vcrDependencies(edges, node) {
+  /** @type {Map<string, string[]>} */
+  const into = new Map();
+  for (const edge of edges) into.set(edge.to, [...(into.get(edge.to) ?? []), edge.from]);
+  /** @type {Set<string>} */
+  const seen = new Set([node]);
+  const queue = [node];
+  for (let head = 0; head < queue.length; head += 1) {
+    for (const from of into.get(queue[head]) ?? []) if (!seen.has(from)) { seen.add(from); queue.push(from); }
+  }
+  return seen;
 }
 
 /**
  * The highest use this study's results can be labelled with, and why. The
  * weakest model decides (§8.2); an unreviewed study cannot claim
  * `specified_analysis` or above (§10.2, AC-21) — and a review whose inputs
- * moved since it was signed no longer counts as one.
- * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], reviews: readonly Record<string, any>[], stale?: readonly Record<string, any>[] }} input
+ * moved since it was signed no longer counts as one. With the headline
+ * result's dependencies (`dependsOn`), only a current review of one of *those*
+ * nodes lifts the ceiling: a countersignature on something the headline number
+ * does not rest on is not a review of it.
+ * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], reviews: readonly Record<string, any>[], stale?: readonly Record<string, any>[],
+ *   current?: { nodes: Set<string>, kinds: Set<string> } | null, dependsOn?: ReadonlySet<string> | null }} input
  */
-export function useCeilingOf({ study, results, reviews, stale = [] }) {
+export function useCeilingOf({ study, results, reviews, stale = [], current = null, dependsOn = null }) {
   /** @type {string[]} */
   const tiers = [];
   for (const result of results) {
@@ -147,7 +215,8 @@ export function useCeilingOf({ study, results, reviews, stale = [] }) {
     }
   }
   const modelCeiling = intendedUseCeiling(tiers);
-  const reviewed = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale }));
+  const reviewed = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current })
+    && (!dependsOn || list(review.nodes).some((node) => dependsOn.has(String(node)))));
   const reviewCeiling = reviewed ? "submission_preparation" : "design_support";
   const ceiling = useWithin(modelCeiling, reviewCeiling) ? modelCeiling : reviewCeiling;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
@@ -157,9 +226,12 @@ export function useCeilingOf({ study, results, reviews, stale = [] }) {
     reasons.push({ code: "model_tier", detail: `所用模型的可信度层级最多支持「${word(modelCeiling)}」` });
   }
   if (!reviewed) {
-    reasons.push(reviews.length
-      ? { code: "review_changed", detail: "复核之后结果或假设有了变更，需要重新复核；在此之前不能标「指定研究分析」及以上" }
-      : { code: "not_reviewed", detail: "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上" });
+    const elsewhere = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current }));
+    reasons.push(!reviews.length
+      ? { code: "not_reviewed", detail: "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上" }
+      : elsewhere
+        ? { code: "review_not_of_headline", detail: "现有的复核签注的不是这项结论所依赖的内容；复核它依赖的假设或结果之后，才能标「指定研究分析」及以上" }
+        : { code: "review_changed", detail: "复核之后结果或假设有了变更，需要重新复核；在此之前不能标「指定研究分析」及以上" });
   }
   return {
     ceiling,
@@ -440,6 +512,8 @@ export function presentStudy(bundle) {
   // last design that is still in the running — never to one another design beats.
   const headline = (rows.find((row) => row.chosen) ?? [...rows].reverse().find((row) => !row.dominated && row._result) ?? null)?._result
     ?? results.find((result) => result.kind === "trial_scenario") ?? results[0] ?? null;
+  // What the headline number rests on: only a current countersignature of one of these lifts the ceiling.
+  const dependsOn = headline && bundle.edges ? vcrDependencies(bundle.edges, resultNode(headline)) : null;
   const overview = {
     headline: overviewHeadline({ results: allResultsOf(bundle), designs, comparators }),
     metrics: overviewMetrics(bundle, designs),
@@ -462,7 +536,7 @@ export function presentStudy(bundle) {
     abilities: abilitiesOf(roles ?? []),
     budget: budgetView(budget),
     jobs: jobs.slice(0, 12).map((/** @type {any} */ job) => jobView(job, now)),
-    ceiling: useCeilingOf({ study, results, reviews, stale }),
+    ceiling: useCeilingOf({ study, results, reviews, stale, current: bundle.currentNodes ?? null, dependsOn }),
     overview,
     updatedAt: zhTime(study.updatedAt, now),
     createdAt: study.createdAt,
@@ -482,7 +556,9 @@ function headlineScope(headline, rows) {
  * @param {readonly Record<string, any>[]} designs
  */
 export function designsSentence(designs) {
-  const live = designs.filter((design) => !design.dominated && design.measures);
+  // A design counts as simulated when it has a number from a result — one with only its
+  // configured sample size (or cost) has been written, not run.
+  const live = designs.filter((design) => !design.dominated && Object.keys(object(design.measures)).some((key) => !["sample_size", "cost"].includes(key)));
   if (!live.length) return null;
   const pick = (/** @type {string} */ key) => live.map((design) => numeric(design.measures[key]?.value)).filter((value) => value !== null);
   const assurance = pick("assurance");
@@ -640,7 +716,17 @@ export function presentDesigns(bundle) {
   const rows = ordered.map((scenario, index) => {
     const result = resultOf(scenario);
     const code = String.fromCharCode(65 + (index % 26)) + (index >= 26 ? String(Math.floor(index / 26)) : "");
-    const staleMark = result ? markFor(stale, resultNode(result)) : null;
+    // A number is stale when its own result version is marked, and also while the design it
+    // belongs to is: a recomputation lands one stage at a time, each stage a new result
+    // version nobody has marked, carrying the numbers of the stages not yet redone. The
+    // design's own mark — cleared only when everything of it has landed — is what says
+    // the page is still showing yesterday's world. A result written after that mark is the
+    // recomputation's own: its numbers are fresh, and the ones it carried over say so
+    // themselves (`stale` on the measure); the page as a whole stays stale until the mark clears.
+    const resultMark = result ? markFor(stale, resultNode(result)) : null;
+    const designMark = result ? markFor(stale, vcrObjectNode("trial_scenario", /** @type {{ id: string, version: number }} */ (scenario))) : null;
+    const olderThanChange = designMark && Date.parse(String(result.createdAt)) < Date.parse(String(designMark.markedAt));
+    const staleMark = resultMark ?? (olderThanChange ? designMark : null);
     const execution = result?.executionId ? executions.get(result.executionId) ?? null : null;
     /** @type {Record<string, any>} */
     const measures = {};
@@ -682,7 +768,7 @@ export function presentDesigns(bundle) {
       measures: beaten ? {} : measures,
       _scenario: scenario,
       _result: result,
-      _stale: staleMark,
+      _stale: resultMark ?? designMark,
     };
   });
   // The dominating scenario's letter is only known once every row has one.
@@ -997,9 +1083,15 @@ function coverStatus({ cover, row, bundle, model }) {
   const status = [{ label: "预期用途", value: word(use), state: "neutral", note: null }];
   const reviews = list(cover.reviews).length ? list(cover.reviews) : list(model.review?.records);
   for (const kind of ["statistical", "clinical"]) {
-    const done = reviews.find((review) => String(object(review).kind) === kind);
+    // A review the cover says has stopped holding (`current: false`) is not 已复核 — the page says what became of it.
+    const ofKind = reviews.filter((review) => String(object(review).kind) === kind);
+    const done = ofKind.find((review) => object(review).current !== false);
+    const changed = !done ? ofKind[0] : null;
     const label = `${(/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[kind]}`;
-    if (done) {
+    if (changed) {
+      status.push({ label, value: "复核后有变更", state: "attention",
+        note: "签注之后它签的内容有了新版本，需要重新复核" });
+    } else if (done) {
       const at = zhTime(object(done).at ?? object(done).createdAt, now);
       status.push({ label, value: `已复核${at ? `（${at.replace(/ \d\d:\d\d$/, "")}）` : ""}`, state: "ok",
         note: list(object(done).nodes).length ? `针对 ${list(object(done).nodes).map((/** @type {string} */ node) => nodeLabel(String(node))).filter(Boolean).slice(0, 2).join("、")}` : null });

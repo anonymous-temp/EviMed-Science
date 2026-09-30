@@ -10,6 +10,7 @@
 // and that the flow's control-plane half (facts → job → assessments →
 // referrals → notice) works on the tables it writes to.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
 
@@ -408,7 +409,7 @@ test("E-11 two saves of one assumption card at once serialize instead of collidi
   assert.equal((await vcr.evidenceStore.latestAssumption({ studyId: study.id, key: "race_card" })).version, 6);
 });
 
-test("an assumption of external evidence must cite the ids verifiedEvidenceIds returns, and takes its number from the row, never from the run", options, async () => {
+test("AC-25 an assumption of external evidence must cite the ids verifiedEvidenceIds returns, and takes its number from the row, never from the run", options, async () => {
   const [control] = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly: true });
   assert.ok(control);
   const typed = await write("assumption", [{ key: "pfs_ctl", name: "对照 PFS", sourceKind: "external_evidence", parameter: "median_time", evidenceIds: [control.id], pointValue: 99 }]);
@@ -456,6 +457,76 @@ test("simulate pool_evidence builds the engine job from this study's verified ex
   const nothing = await gateway("simulate", { action: "start", kind: "pool_evidence", scenario: { parameter: "hazard_ratio", endpointKey: "os" } });
   assert.equal(nothing.json().data.state, "not_started", "no verified extraction of a parameter is no pool, said plainly");
   assert.equal(nothing.json().data.reason, "no_evidence");
+});
+
+test("C2-14 a newer hand-entered row that failed its check never supersedes a verified extraction, and the pool names every study it left out", options, async () => {
+  const CONTROL = "SoC EGFR-TKI (Global Cohort)";
+  const before = (await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly: true }))
+    .find((row) => row.arm === CONTROL && row.endpoint_key === "pfs-blinded");
+  assert.ok(before, "the registry extraction of the control arm's median is verified");
+  // A run types a number for the same precedent, arm and endpoint; its quotation is not in the record.
+  const typed = await write("evidence_item", [{ registryId: "NCT02296125", parameter: "median_time", arm: CONTROL, armRole: "control", endpointKey: "pfs-blinded",
+    value: 14.2, unit: "months", quote: "Median PFS was 14.2 months" }]);
+  assert.equal(typed.issues.some((entry) => entry.code === "vcr_evidence_unverified"), true, "the typed value failed its check");
+  const all = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time" });
+  const failed = all.filter((row) => row.locator?.authoredBy === "run" && row.locator.verification !== "verified");
+  assert.ok(failed.length >= 1 && failed[failed.length - 1].created_at >= before.created_at, "the failed attempt is newer than the verified extraction");
+
+  // The newest row of that key that counts is still the verified extraction, verified filter or not.
+  for (const verifiedOnly of [true, false]) {
+    const latest = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly });
+    const control = latest.filter((row) => row.arm === CONTROL && row.endpoint_key === "pfs-blinded");
+    assert.equal(control.length, 1, `one row for the key (verifiedOnly ${verifiedOnly})`);
+    assert.equal(control[0].id, before.id, `the verified extraction stands (verifiedOnly ${verifiedOnly})`);
+    assert.equal(control[0].value === null, false);
+  }
+  // Where only a failed hand-entered row exists for a key, it is that key's newest and is read as such.
+  await write("evidence_item", [{ registryId: "NCT02296125", parameter: "dropout_rate", armRole: "control", endpointKey: "dropout-any", value: 12, unit: "人", quote: "twelve withdrew" }]);
+  const alone = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "dropout_rate", latestOnly: true });
+  assert.equal(alone.filter((row) => row.endpoint_key === "dropout-any").length, 1);
+  assert.equal(alone.find((row) => row.endpoint_key === "dropout-any").locator.verification === "verified", false);
+
+  // The pool takes the verified extraction in, and reports every row it refused with the reason — the unverified ones included.
+  const asked = [];
+  const queue = { enqueue: async (input) => { asked.push(input); return { job: { id: `job_pool_${asked.length}`, state: "queued" }, created: true }; } };
+  const pooled = await createPipeline(queue).poolParameter({ userId: USER, studyId: study.id, parameter: "median_time", endpointKey: "pfs-blinded", target: {} });
+  assert.equal(pooled.status, "queued");
+  assert.ok(asked.length >= 1);
+  assert.equal(asked[0].scenario.studies.some((entry) => entry.studyId === before.id), true, "the control arm's verified extraction is one of the pooled studies");
+  const noDropout = await createPipeline(queue).poolParameter({ userId: USER, studyId: study.id, parameter: "dropout_rate", endpointKey: "dropout-any", target: {} });
+  assert.equal(noDropout.status, "no_evidence");
+  assert.ok(noDropout.refused.some((entry) => entry.reasons.includes("quote_not_verified")), "an unverified study is refused by name, not dropped without a trace");
+});
+
+test("C2-14 a single-study card takes only the arm its parameter needs: a control-arm median is not the treatment arm's", options, async () => {
+  const rows = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "median_time", latestOnly: true, verifiedOnly: true });
+  const treatment = rows.find((row) => row.arm_role === "treatment");
+  const control = rows.find((row) => row.arm_role === "control");
+  assert.ok(treatment && control);
+  const wrongArm = await write("assumption", [{ key: "pfs_ctl_wrong", name: "对照 PFS", sourceKind: "external_evidence", parameter: "median_time", evidenceIds: [treatment.id] }]);
+  assert.equal(wrongArm.ok, false);
+  assert.equal(wrongArm.issues[0].field, "evidenceIds");
+  assert.match(wrongArm.issues[0].message, /treatment.*control/, "the run is told which arm the parameter needs");
+  assert.equal(await vcr.evidenceStore.latestAssumption({ studyId: study.id, key: "pfs_ctl_wrong" }), null, "nothing was written");
+  const right = await write("assumption", [{ key: "pfs_ctl_right", name: "对照 PFS", sourceKind: "external_evidence", parameter: "median_time", evidenceIds: [control.id] }]);
+  assert.equal(right.ok, true, JSON.stringify(right.issues));
+});
+
+test("what the package skill tells a run to write on the cover is in what the reads return: the study's ceiling is the page's own, with its reasons", options, async () => {
+  const skill = await readFile(new URL("../../../capabilities/vcr-package/SKILL.md", import.meta.url), "utf8");
+  for (const field of ["intendedUseCeiling", "useDowngrade", "intendedUse"]) assert.ok(skill.includes(field), `the skill names ${field}`);
+  const read = await vcr.service.runtimeRead(study, "study", {});
+  const page = await vcr.service.studyView({ id: USER }, study.id);
+  assert.deepEqual(read.intendedUseCeiling, page.ceiling, "the run reads the ceiling the page shows, not a second computation of it");
+  assert.deepEqual(Object.keys(read.intendedUseCeiling).sort(), ["ceiling", "reasons", "requested", "withinCeiling"]);
+  assert.ok(read.intendedUseCeiling.reasons.every((reason) => reason.code && reason.detail), "and it says why");
+  const recorded = await vcr.store.recordResult({
+    studyId: study.id, userId: USER, kind: "trial_scenario", conclusion: "estimable", counts: { realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: 0 },
+    measures: [{ name: "power", value: 0.8, simulated: true, mcse: 0.01 }], models: [], requestedUse: "exploratory",
+  });
+  const results = await vcr.service.runtimeRead(study, "results", {});
+  const mine = results.results.find((entry) => entry.id === recorded.id);
+  for (const field of ["intendedUse", "useDowngrade"]) assert.ok(field in mine, `each result carries ${field}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -643,6 +714,28 @@ test("PA-12 a site is written into this study only, without a verification a run
   const trial = episodes.find((episode) => episode.kind === "study_specific");
   assert.equal(trial.exitReason, "患者要求退出", "the exit is recorded as it was given");
   assert.equal(trial.restricted.progression_date.reason, "restricted_in_trial", "and never converted into a progression date");
+  // Trying to turn the exit into a trial fact is refused by the exit rule's own name, and the run is told why in words.
+  const derived = follow.issues.find((issue) => issue.index === 1);
+  assert.equal(derived.code, "vcr_exit_field_not_derivable");
+  assert.match(derived.message, /不可见，也不能从出组记录推出/);
+  assert.doesNotMatch(derived.message, /方案\s*§|AC-\d/);
+
+  // The exit stands as first recorded: a different one for the same subject is appended, reported, never written over.
+  const restated = await write("followup", [
+    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-09", exitReason: "患者要求退出" },
+    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "疾病进展" },
+    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "患者要求退出" },
+    { subjectKey: "P-001", kind: "study_specific", exitDate: "2026-08-01", exitReason: "患者要求退出", windowEnd: "2026-09-30" },
+  ]);
+  assert.equal(restated.ids.length, 3, "a different exit is appended (three written), a window that ends after the exit is refused");
+  assert.deepEqual(restated.issues.map((issue) => [issue.index, issue.field, issue.code]), [
+    [0, "exitDate", "vcr_exit_date_rewritten"],
+    [1, "exitReason", "vcr_exit_reason_rewritten"],
+    [3, "windowEnd", "vcr_write_value_invalid"],
+  ]);
+  const after = await vcr.matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: "P-001" });
+  assert.equal(after.find((episode) => episode.kind === "study_specific" && episode.exitReason === "患者要求退出").exitReason, "患者要求退出", "the first record is untouched");
+  assert.ok(after.filter((episode) => episode.kind === "study_specific").length >= 4, "nothing was overwritten: every write is a row");
 });
 
 test("PA-26 the accrual forecast is built from the referral ledger in exactly the engine's shape, and the backtest reads the registered forecasts", options, async () => {

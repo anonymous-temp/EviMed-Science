@@ -257,13 +257,18 @@ export class VcrEvidenceStore extends VcrStoreBase {
     values.push(Math.max(1, Math.min(2_000, Math.floor(limit))));
     if (latestOnly) {
       // The newest attempt at each thing, verified or not: a newer refusal
-      // supersedes an older success, because the newer text is what was read.
-      // Only then is the verified filter applied.
+      // of the platform's own re-reading supersedes an older success, because
+      // the newer text is what was read. A hand-entered value that failed its
+      // check is not a re-reading of anything — it is a run's attempt to type a
+      // number — so it never supersedes what was verified for the same
+      // precedent, arm and endpoint; it is the newest only when nothing else
+      // exists. Only then is the verified filter applied.
+      const failedHandEntry = `COALESCE(locator->>'authoredBy' = 'run' AND (value IS NULL OR locator->>'verification' IS DISTINCT FROM 'verified'), false)`;
       return this.rows(
         `SELECT * FROM (
            SELECT DISTINCT ON (precedent_id, parameter, arm, endpoint_key) *
              FROM ${VCR_SCHEMA}.evidence_items WHERE ${where.join(" AND ")}
-            ORDER BY precedent_id, parameter, arm, endpoint_key, created_at DESC, id DESC
+            ORDER BY precedent_id, parameter, arm, endpoint_key, ${failedHandEntry} ASC, created_at DESC, id DESC
          ) latest ${verifiedOnly ? `WHERE ${verified}` : ""} ORDER BY created_at ASC, id LIMIT $${values.length}`,
         values,
       );

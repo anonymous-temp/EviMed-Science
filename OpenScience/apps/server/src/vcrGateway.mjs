@@ -66,8 +66,8 @@ import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { VCR_TRIAL_RESTRICTED_FIELDS, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf } from "./vcrEvidence.mjs";
+import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate"]);
@@ -263,6 +263,23 @@ const issue = (index, field, code, message) => ({ ...(index == null ? {} : { ind
 // ---------------------------------------------------------------------------
 
 /**
+ * A comparison goal's `measures`: the names of the measures it compares and
+ * which way is better, `[{ name: "power", direction: "higher" }]` — words, no
+ * number. That is a list of names, not a result, so the rule against writing a
+ * `measures` (an engine output) does not apply to it; a `measures` at that
+ * path that carries anything else (a value, an interval, a standard error) is
+ * still one. Scoped by path and by shape, never by the key's spelling alone.
+ * @param {string} where the path of the object that holds the key @param {unknown} measures
+ */
+function isGoalMeasureNames(where, measures) {
+  if (where !== "comparisonGoal" && !where.endsWith(".comparisonGoal")) return false;
+  if (!Array.isArray(measures) || measures.length > 20) return false;
+  return measures.every((entry) => typeof entry === "string" || (entry !== null && typeof entry === "object" && !Array.isArray(entry)
+    && Object.keys(entry).every((key) => key === "name" || key === "direction")
+    && typeof entry.name === "string" && (entry.direction === undefined || typeof entry.direction === "string")));
+}
+
+/**
  * The first key, at any depth, that a runtime write may not carry. Bounded and
  * cycle-safe: the input is parsed JSON, so neither is expected, and a bound is
  * still what makes the check a check.
@@ -282,6 +299,7 @@ export function forbiddenWriteKey(value, path = "") {
     }
     for (const key of Object.keys(node)) {
       const here = where ? `${where}.${key}` : key;
+      if (key === "measures" && isGoalMeasureNames(where, node[key])) continue;
       if (VCR_FORBIDDEN_WRITE_KEYS.includes(key)) return here;
       const found = walk(node[key], here, depth + 1);
       if (found) return found;
@@ -695,6 +713,13 @@ const WRITERS = {
       }
       if (cited.length !== 1) return void item.bad("evidenceIds", "直接取值只引用一条证据；多项证据用 fromPooling 交给引擎合并。");
       const [row] = await evidenceStore.verifiedItemsById({ userId: study.userId, studyId: study.id, ids: cited });
+      // The arm the parameter is a quantity of, the same rule the pool takes its
+      // studies by: a control-arm median is not the treatment arm's, and a card
+      // built from the wrong arm's row would carry a true number for the wrong thing.
+      const needed = defaultArmRoleOf(parameter);
+      if (row.arm_role !== needed) {
+        return void item.bad("evidenceIds", `这条抽取值属于「${row.arm_role}」组；「${parameter}」要的是「${needed}」组的值。`);
+      }
       const range = row.ci_low !== null && row.ci_high !== null ? { kind: "confidence", low: Number(row.ci_low), high: Number(row.ci_high) } : null;
       const saved = await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card: {
         key, name, endpoint, unit, pointValue: Number(row.value),
@@ -1117,10 +1142,16 @@ const WRITERS = {
       if (Object.keys(row).some((key) => !["variable", "value", "unit", "at"].includes(key))) item.bad(`observations[${at}]`, "观察写成 { variable, value, unit, at }。");
       else if (typeof row.variable !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(row.variable)) item.bad(`observations[${at}].variable`, "variable 是小写英文变量名。");
       else if (kind === "study_specific" && VCR_TRIAL_RESTRICTED_FIELDS.includes(row.variable)) {
-        item.bad(`observations[${at}].variable`, `试验期间的「${row.variable}」不可见，不能写成观察。`);
+        // An observation of a field the partner cannot see is an exit turned into a trial fact.
+        const refusal = deriveFromExit({ field: row.variable });
+        item.bad(`observations[${at}].variable`, refusal.message, refusal.code);
       }
     }
     if (kind === "study_specific" && (!exitDate || !exitReason)) item.bad("exitDate", "试验期间的片段要写出组日期 exitDate 和原因 exitReason，照原样，不转换。");
+    // The trial-period window ends on the exit date: a different end would leave the exit date recorded nowhere.
+    if (kind === "study_specific" && exitDate && windowEnd && new Date(windowEnd).getTime() !== new Date(exitDate).getTime()) {
+      item.bad("windowEnd", "试验期间的片段在出组日结束：windowEnd 不写，或与 exitDate 相同。");
+    }
     if (kind === "post_exit" && !windowStart) item.bad("windowStart", "出组后观察要写起点 windowStart。");
     if (!item.ok) return null;
     if (!matchStore?.saveFollowupEpisode) return void item.bad("subjectKey", "匹配与招募未接入本部署。", "vcr_write_refused");
@@ -1130,7 +1161,20 @@ const WRITERS = {
       : kind === "post_exit"
         ? postExitEpisode({ studyId: study.id, subjectKey: String(subjectKey), from: String(windowStart), to: windowEnd ?? null, observations })
         : { studyId: study.id, subjectKey: String(subjectKey), kind, windowStart: windowStart ?? null, windowEnd: windowEnd ?? null, observations, restricted: {}, exitReason: exitReason ?? null };
+    // The exit stands as first recorded: what this subject's trial-period episode already says, read back,
+    // is what the new exit is held to. A different one is appended and reported, never written over.
+    const recorded = kind === "study_specific" && matchStore.listFollowupEpisodes
+      ? (await matchStore.listFollowupEpisodes({ studyId: study.id, subjectKey: String(subjectKey) })).find((/** @type {any} */ row) => row.kind === "study_specific") ?? null
+      : null;
     const saved = await matchStore.saveFollowupEpisode({ userId: study.userId, episode });
+    if (recorded) {
+      /** @param {unknown} value */
+      const instant = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : "");
+      for (const finding of followupFidelityFindings({ ...recorded, exitDate: instant(recorded.windowEnd) }, { exitDate: instant(exitDate), exitReason: exitReason ?? "" })) {
+        item.issues.push(issue(item.index, finding.code === "vcr_exit_date_rewritten" ? "exitDate" : finding.code === "vcr_exit_reason_rewritten" ? "exitReason" : "kind",
+          finding.code, finding.message));
+      }
+    }
     return saved.id;
   },
 
@@ -1452,6 +1496,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime" });
             return { action: "cancel", jobId: request.jobId, state: result.job?.state ?? "canceled", canceled: result.canceled };
           }
+          // A service without the boundary is a wiring fault, and the raw
+          // answer is never the fallback: it would carry every small cell.
+          if (typeof vcr.service.forModel !== "function") {
+            throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+          }
           const job = await vcr.jobs.get(study.id, request.jobId);
           if (!job) throw gatewayError(404, "vcr_job_not_found", "这个作业不属于本研究。");
           // The result this job produced, found through the execution it wrote
@@ -1469,7 +1518,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           // its small cells (contract §4): the answer passes the boundary once.
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}) };
-          return vcr.service.forModel ? vcr.service.forModel(answer) : answer;
+          return vcr.service.forModel(answer);
         };
       }
 
@@ -1548,12 +1597,14 @@ async function startJob(vcr, study, request) {
       calibres: scenario.calibres ?? null,
     });
     const started = list(pooled.jobs).filter((/** @type {any} */ job) => job.jobId);
+    // Every study the pool left out, with why: the list is as long as the pool can be (a run that
+    // is told 「20 项」 of 60 excluded has been told nothing about the other 40).
+    const refused = list(pooled.refused);
+    const left = { refused: refused.slice(0, VCR_POOL_MAX_STUDIES), refusedCount: refused.length };
     if (!started.length) {
-      return { action: "start", state: "not_started", jobs: list(pooled.jobs), reason: pooled.code ?? pooled.status, message: pooled.message ?? null,
-        refused: list(pooled.refused).slice(0, 20) };
+      return { action: "start", state: "not_started", jobs: list(pooled.jobs), reason: pooled.code ?? pooled.status, message: pooled.message ?? null, ...left };
     }
-    return { action: "start", jobId: started[0].jobId, state: started[0].status, progress: {}, jobs: list(pooled.jobs),
-      refused: list(pooled.refused).slice(0, 20) };
+    return { action: "start", jobId: started[0].jobId, state: started[0].status, progress: {}, jobs: list(pooled.jobs), ...left };
   }
 
   /** @type {Record<string, any>} */

@@ -8,8 +8,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_RUN_CAPABILITIES, vcrAssumptionConflicts, vcrBindAssumptions,
-  vcrBuildStages, vcrDesignPriorFrom, vcrDispatchId, vcrGapsForRule, vcrJobKindFor, vcrProgramSteps, vcrProjectScenario, vcrRunId,
-  vcrRunPrompt, vcrSupersededNodes, wantedVcrSteps,
+  vcrBuildStages, vcrDesignPriorFrom, vcrDispatchId, vcrGapsForRule, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
+  vcrProgramSteps, vcrProjectScenario, vcrRunId, vcrRunPrompt, vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
@@ -461,4 +461,65 @@ test("a superseded version is found where the graph knows it: an earlier version
   const edges = [{ from: "assumption:dropout_rate@1", to: "trial_scenario:scn_1@1" }];
   assert.deepEqual([...vcrSupersededNodes(edges, ["assumption:dropout_rate@2"])].sort(), ["assumption:dropout_rate@1", "assumption:dropout_rate@2"]);
   assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length === 24);
+});
+
+test("C2-5 the assurance stage binds what its own schema takes from the cards — the outcome's standard deviation, the control rate — and says it used exactly those", () => {
+  const prior = { family: "normal", params: { mean: 4, sd: 1.2 }, range: { kind: "prediction", low: 1.6, high: 6.4 } };
+  const continuous = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 150, nControl: 150 }, analysis: { method: "ttest", alpha: 0.025 } },
+    { endpointType: "continuous" }) }, { ...context, assumptions: [{ key: "mean_difference", version: 1, pointValue: 4, distribution: prior }, { key: "outcome_sd", version: 2, pointValue: 12 }] }));
+  const assurance = continuous.stages.find((entry) => entry.stage === "assurance");
+  assert.equal(assurance.scenario.truth.sd, 12, "not the schema's default of 1, which read a 4-unit effect as four standard deviations");
+  assert.deepEqual(assurance.scenario.designPrior, { mean: 4, sd: 1.2, kind: "normal", basis: "prediction" });
+  assert.deepEqual(assurance.bound, [{ key: "outcome_sd", version: 2, path: "truth.sd" }], "the effect's point value is not an input of this integral, and the job does not claim it");
+  assert.deepEqual(validateScenario("design.assurance", assurance.scenario), []);
+  const binary = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 200, nControl: 200 }, analysis: { method: "risk_difference", alpha: 0.025 } },
+    { endpointType: "binary" }) }, { ...context, assumptions: [{ key: "control_event_rate", version: 1, pointValue: 0.3 },
+    { key: "risk_difference", version: 1, pointValue: 0.15, distribution: { family: "normal", params: { mean: 0.15, sd: 0.05 } } }] }));
+  const binaryAssurance = binary.stages.find((entry) => entry.stage === "assurance");
+  assert.equal(binaryAssurance.scenario.truth.controlRate, 0.3, "the binary assurance schema requires the control rate");
+  assert.deepEqual(validateScenario("design.assurance", binaryAssurance.scenario), []);
+});
+
+test("C2-6 a key only the binder injected, which the stage's schema does not read, is dropped in silence; a key the run wrote is refused by its path", () => {
+  const simon = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 } },
+    { design: "simon_two_stage", endpointType: "binary" }) }, { ...context, assumptions: [{ key: "control_event_rate", version: 1, pointValue: 0.3 }] }));
+  assert.equal(simon.ok, true, JSON.stringify(simon));
+  assert.deepEqual(simon.stages[0].scenario.truth, { nullRate: 0.2, alternativeRate: 0.4 });
+  assert.deepEqual(simon.stages[0].bound, [], "and the job does not say it used a card it did not");
+  const written = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4, controlRate: 0.3 }, analysis: { alpha: 0.05, power: 0.8 } },
+    { design: "simon_two_stage", endpointType: "binary" }) }, context));
+  assert.equal(written.ok, false);
+  assert.deepEqual(written.refused.paths, ["truth.controlRate"]);
+});
+
+test("C3-09 a model answers only for what it declares it covers: the endpoint, the fields it needs and the ranges it was fitted on", () => {
+  const variables = vcrPopulationVariables({ definition: { population: { variables: [{ name: "age", family: "normal", mean: 63, sd: 9, min: 30, max: 92 }, { name: "egfr", family: "normal", mean: 75, sd: 20 }] } } });
+  assert.deepEqual([...variables.keys()], ["age", "egfr"]);
+  assert.deepEqual(variables.get("age"), { min: 30, max: 92 });
+  const referenceBinary = { id: "mdl_1", name: "reference-binary", version: "1.0.0", endpointType: "binary", applicability: { endpoints: ["binary"] }, card: {} };
+  assert.deepEqual(vcrModelApplicabilityIssues(referenceBinary, { endpointType: "binary", variables }), [], "a reference simulator declares an endpoint and nothing else");
+  const outside = vcrModelApplicabilityIssues(referenceBinary, { endpointType: "time_to_event", variables });
+  assert.deepEqual(outside.map((issue) => [issue.code, issue.field]), [["endpoint_not_covered", "endpoint.type"]]);
+  const fitted = { id: "mdl_2", name: "fitted-os", version: "1.0.0", endpointType: "time_to_event",
+    applicability: { endpoints: ["time_to_event"], requiredFields: ["age", "creatinine"], inputRanges: { age: [40, 80], egfr: [15, 140] } }, card: {} };
+  const issues = vcrModelApplicabilityIssues(fitted, { endpointType: "time_to_event", variables });
+  assert.deepEqual(issues.map((issue) => [issue.code, issue.field]), [["required_field_missing", "creatinine"], ["input_out_of_range", "age"]],
+    "creatinine is not in the population; age reaches 30 and 92, outside the 40–80 the model was fitted on; egfr is inside its range");
+  assert.match(issues[1].text, /40–80/);
+
+  // The plan refuses the patient set before any job is queued, and names the model and what fell outside.
+  const patientRow = { id: "pts_1", version: 1, populationId: "pop_1", modelId: "fitted-os", modelVersion: "1.0.0",
+    scenario: { design: { nTreat: 60, nControl: 40 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 } } };
+  const population = { id: "pop_1", resultId: "res_1", definition: { population: { variables: [{ name: "age", family: "normal", mean: 63, sd: 9, min: 30, max: 92 }] } } };
+  const refused = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [population], models: [fitted] }));
+  assert.equal(refused.ok, false);
+  assert.equal(refused.refused.code, "vcr_model_not_applicable");
+  assert.deepEqual(refused.refused.paths, ["creatinine", "age"]);
+  assert.match(refused.refused.message, /fitted-os/);
+  // A model the library does not hold is judged by its tier at the result, not refused here; a covered one plans as before.
+  const unknown = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "absent" } }, { ...context, populations: [population], models: [fitted] }));
+  assert.equal(unknown.ok, true);
+  const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "reference-time-to-event" } },
+    { ...context, populations: [population], models: [{ id: "mdl_3", name: "reference-time-to-event", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: {} }] }));
+  assert.equal(covered.ok, true);
 });

@@ -1414,7 +1414,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         return { status: "refused", code: "vcr_pool_endpoint_key_required", parameter,
           message: "合并需要写明终点口径（endpointKey）：口径不同的值不知道量的是不是同一件事。", jobs: [] };
       }
-      const rows = await store.listEvidenceItems({ userId, studyId, parameter, verifiedOnly: true, latestOnly: true });
+      // Every study's newest row, verified or not: the eligibility check names
+      // the ones it leaves out and why (`quote_not_verified` among them). Reading
+      // only the verified ones would drop an unverified study without a trace.
+      const rows = await store.listEvidenceItems({ userId, studyId, parameter, latestOnly: true });
       const eligibility = poolEligibility({ items: rows, endpointKey, armRole: role });
       if (!eligibility.eligible.length) {
         return { status: "no_evidence", parameter, endpointKey, armRole: role, refused: eligibility.refused.map((entry) => ({ id: entry.item?.id, reasons: entry.reasons })), jobs: [] };

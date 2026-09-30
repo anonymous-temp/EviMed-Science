@@ -19,11 +19,19 @@
  *   missing result is a fact about the study, and a zero would be a claim
  *   about the world. The issue is advisory: the report still delivers, with
  *   the gap visible in it.
- * - **A number typed into the template is reported, not removed.** Some
- *   numbers legitimately belong in prose — a protocol's own 「第 12 页」, a
- *   year, a criterion's 「≥18 岁」 — so `typed` is a list the reviewer reads,
- *   not a refusal. Years, small ordinals and anything inside a reference are
- *   never counted.
+ * - **A number typed into the template is reported and does not reach the
+ *   report.** The mechanism is that every number in a report is a reference; a
+ *   digit the words carry instead is exactly what the mechanism exists to
+ *   remove, so the stored report writes 「未计算」 where it stood and the issue
+ *   tells the run to bind it. The delivery is never withheld (the gap is
+ *   visible in the report, as any unbound reference's is). What the words may
+ *   say in digits is closed and small: a year, an ordinal or month up to twelve,
+ *   a day of the month, a locator (`第 35 页`, `图 3`), a source's own words in
+ *   「」, a date; anything inside a reference is not prose.
+ * - **A reference that cannot be read is not passed on raw.** `{{n:` in any
+ *   case that the grammar does not parse (a capital format, a space in a path, a
+ *   missing brace) would print as `{{n:…}}` in a reader's report; it renders
+ *   「未计算」 and is named in `vcr_number_unparsed`.
  * - **An interval is never rendered bare** (plan §8.3): the `ci` format prints
  *   which kind of interval it is, in Chinese, from the interval's own `kind`.
  *   A simulated measure printed with `pm` carries its Monte-Carlo standard
@@ -44,6 +52,15 @@ import { VCR_COUNT_KEYS, VCR_INTERVAL_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH
  * `measure(power, scenario=scn_x)` — and inside them anything but `)` `}` `|`.
  */
 export const VCR_NUMBER_PATTERN = /\{\{\s*n:((?:[A-Za-z0-9_.[\]一-鿿-]|\([^)}|]*\))+?)\s*(?:\|\s*([a-z0-9]+)\s*)?\}\}/g;
+
+/**
+ * Anything that opens like a reference and is not one the grammar read: `{{n:`
+ * in any case, up to the brace that closes it (never across a line or another
+ * brace), so what the run meant is quotable in the issue. One that never closes
+ * takes only the characters a reference is spelled with, so the sentence after
+ * it is not eaten.
+ */
+const VCR_UNPARSED_PATTERN = /\{\{\s*n:(?:[^{}\n]{0,200}\}{1,2}|[A-Za-z0-9_.[\]()=,|-]*)/gi;
 
 /** What a reference renders as when the study has no such result yet. */
 export const VCR_UNCOMPUTED = "未计算";
@@ -149,25 +166,67 @@ export function vcrFormatValue(value, format) {
 }
 
 /**
+ * Stretches of prose whose digits are not a statement of the study: a source's
+ * own words in 「」 or “”, and an ISO date or instant. Closed formats, not a
+ * reading of language (principle 5).
+ */
+const QUOTED_OR_DATED = [
+  /「[^」\n]*」/g,
+  /“[^”\n]*”/g,
+  /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?/g,
+];
+
+/**
+ * Whether the digits at `start` label something rather than measure it: a day
+ * of the month (`29 日`), a locator (`第 35 页`, `图 3`, `表 2`, `#25`).
+ * @param {string} text @param {number} start @param {number} end @param {number} value
+ */
+function isLabelNumber(text, start, end, value) {
+  const after = text.slice(end);
+  const before = text.slice(Math.max(0, start - 6), start);
+  if (Number.isInteger(value) && value <= 31 && /^\s*[日号]/.test(after)) return true;
+  if (/第\s*$/.test(before) && /^\s*(?:页|条|节|章|表|图|项)/.test(after)) return true;
+  return /(?:图|表|附录|#)\s*$/.test(before);
+}
+
+/**
+ * The typed numbers of one stretch of prose, with where each stands. What
+ * the report may say in digits without a reference: a year, an ordinal or month
+ * up to twelve, a day, a locator, a quoted source, a date.
+ * @param {string} text
+ * @returns {Array<{ raw: string, start: number, end: number }>}
+ */
+function typedNumberSpans(text) {
+  /** @type {Array<[number, number]>} */
+  const exempt = [];
+  for (const pattern of QUOTED_OR_DATED) for (const match of text.matchAll(pattern)) exempt.push([match.index, match.index + match[0].length]);
+  /** @type {Array<{ raw: string, start: number, end: number }>} */
+  const found = [];
+  const pattern = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g;
+  let match;
+  while ((match = pattern.exec(text))) {
+    const raw = match[1];
+    const start = match.index;
+    const end = start + raw.length;
+    const value = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(value)) continue;
+    if (Number.isInteger(value) && value >= 1900 && value <= 2100) continue;
+    if (Number.isInteger(value) && value <= 12) continue;
+    if (exempt.some(([from, to]) => start >= from && end <= to)) continue;
+    if (isLabelNumber(text, start, end, value)) continue;
+    found.push({ raw, start, end });
+  }
+  return found;
+}
+
+/**
  * Numbers a template typed instead of referencing. Years, ordinals up to
  * twelve and everything inside a `{{n:…}}` reference are not counted.
  * @param {string} template
  */
 export function vcrTypedNumbers(template) {
   const withoutRefs = String(template ?? "").replace(VCR_NUMBER_PATTERN, " ");
-  /** @type {string[]} */
-  const found = [];
-  const pattern = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g;
-  let match;
-  while ((match = pattern.exec(withoutRefs))) {
-    const raw = match[1];
-    const value = Number(raw.replace(/,/g, ""));
-    if (!Number.isFinite(value)) continue;
-    if (Number.isInteger(value) && value >= 1900 && value <= 2100) continue;
-    if (Number.isInteger(value) && value <= 12) continue;
-    found.push(raw);
-  }
-  return found;
+  return typedNumberSpans(withoutRefs).map((span) => span.raw);
 }
 
 /**
@@ -184,7 +243,51 @@ export function renderVcrNumbers(template, results) {
   /** @type {Array<{ code: string, path: string, message: string, severity: string }>} */
   const issues = [];
   const document = object(results);
-  const text = String(template ?? "").replace(VCR_NUMBER_PATTERN, (ref, rawPath, rawFormat) => {
+  const source = String(template ?? "");
+
+  /**
+   * The digits one stretch of words types, replaced and counted.
+   * @param {string} words
+   */
+  const withoutTyped = (words) => {
+    let out = "";
+    let cursor = 0;
+    for (const span of typedNumberSpans(words)) {
+      out += words.slice(cursor, span.start) + VCR_UNCOMPUTED;
+      cursor = span.end;
+      typed.push(span.raw);
+    }
+    return out + words.slice(cursor);
+  };
+
+  /**
+   * Prose between references: the digits it types are replaced and counted,
+   * and anything that opens as a reference and is not one is named and
+   * replaced. Rendered references are never scanned again — a value that
+   * itself contains digits or braces is a result, not prose.
+   * @param {string} words
+   */
+  const prose = (words) => {
+    let out = "";
+    let cursor = 0;
+    for (const found of words.matchAll(VCR_UNPARSED_PATTERN)) {
+      out += withoutTyped(words.slice(cursor, found.index)) + VCR_UNCOMPUTED;
+      unparsed.push(found[0].trim());
+      cursor = found.index + found[0].length;
+    }
+    return out + withoutTyped(words.slice(cursor));
+  };
+
+  /** @type {string[]} */
+  const typed = [];
+  /** @type {string[]} */
+  const unparsed = [];
+  let text = "";
+  let cursor = 0;
+  for (const match of source.matchAll(VCR_NUMBER_PATTERN)) {
+    const [ref, rawPath, rawFormat] = match;
+    text += prose(source.slice(cursor, match.index));
+    cursor = match.index + ref.length;
     const path = String(rawPath);
     const format = rawFormat && VCR_NUMBER_FORMATS.includes(String(rawFormat)) ? String(rawFormat) : "raw";
     if (rawFormat && !VCR_NUMBER_FORMATS.includes(String(rawFormat))) {
@@ -205,12 +308,18 @@ export function renderVcrNumbers(template, results) {
         severity: "advisory",
       });
     }
-    return rendered.text;
-  });
-  const typed = vcrTypedNumbers(template);
+    text += rendered.text;
+  }
+  text += prose(source.slice(cursor));
+
+  for (const found of unparsed) {
+    issues.push({ code: "vcr_number_unparsed", path: found.slice(0, 80),
+      message: `「${found.slice(0, 80)}」读不成数字引用，报告此处写「${VCR_UNCOMPUTED}」；引用写成 {{n:路径|格式}}，格式用小写。`,
+      severity: "advisory" });
+  }
   if (typed.length) {
     issues.push({ code: "vcr_number_typed", path: "",
-      message: `模板里有 ${typed.length} 个手写数字（${typed.slice(0, 5).join("、")}${typed.length > 5 ? "…" : ""}）：报告里的数应由结果渲染（方案 §8.3）。`,
+      message: `模板里有 ${typed.length} 个手写数字（${typed.slice(0, 5).join("、")}${typed.length > 5 ? "…" : ""}）：报告里这些位置写了「${VCR_UNCOMPUTED}」，数应由结果渲染（方案 §8.3）；改成引用。`,
       severity: "advisory" });
   }
   return { text, bindings, issues, typed };

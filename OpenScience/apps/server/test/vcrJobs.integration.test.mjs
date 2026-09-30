@@ -432,7 +432,6 @@ test("AC-38 a cancel is final: nothing a still-running worker does afterwards mo
   const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:cancel` });
   const [claimed] = await jobs.claim({ workerId: "worker-1" });
   await jobs.advance(claimed);
-  await jobs.checkpoint(job.id, { completedBatches: 12, ofBatches: 20 });
 
   const cancelled = await jobs.cancel(study.id, job.id, { actor: "u_cancel" });
   assert.equal(cancelled.canceled, true);
@@ -440,8 +439,11 @@ test("AC-38 a cancel is final: nothing a still-running worker does afterwards mo
   assert.deepEqual(engine.cancelled, [job.id], "the engine is told afterwards, on a best-effort basis");
   assert.deepEqual(heard, [["canceled", job.id]], "whoever cancelled, the module that owns the object hears of it");
   const row = await store.job(study.id, job.id);
-  assert.equal(row.checkpoint.completedBatches, 12, "已完成的批次保留");
+  // What the engine kept of a cancelled run is the engine's to say (the real engine's own batches are read in
+  // vcrEngineContract.integration.test.mjs, AC-38); what the queue itself keeps is the way back to it.
+  assert.ok(row.checkpoint.engineJobId, "the engine's job id survives the cancel: it is how what the engine kept is found afterwards");
   assert.equal(row.error.code, "vcr_job_canceled");
+  assert.equal(await jobs.resultOf(study.id, job.id), null, "no result of a cancelled job until the engine's partial one has been fetched");
 
   // The worker that held it finishes a moment later, with a perfectly good result: it is not recorded, and the row does not move.
   const late = await jobs.finish(job.id, { status: "succeeded", result: engineResult(await frozenJob(job.id)), cpuSeconds: 9, leaseOwner: "worker-1" });
@@ -469,6 +471,11 @@ test("AC-38 a cancel is final: nothing a still-running worker does afterwards mo
   assert.equal(recovered[0].result.measures[0].value, 0.77);
   assert.equal(recovered[0].result.diagnostics.canceled, true);
   assert.equal((await store.job(study.id, job.id)).state, "canceled", "the job stays cancelled");
+  // C2-14: the job's own status answer carries what the engine kept, found through the execution it wrote.
+  const kept = await jobs.resultOf(study.id, job.id);
+  assert.equal(kept?.id, recovered[0].result.id);
+  assert.equal(kept?.conclusion, "limited");
+  assert.equal(kept?.measures[0].value, 0.77);
   assert.equal(await store.one("SELECT count(*)::int AS n FROM evimed_vcr.executions WHERE job_id = $1", [job.id]).then((entry) => entry.n), 1);
   assert.deepEqual(await jobs.recoverCanceled(), [], "once");
 });
@@ -664,4 +671,130 @@ test("the worker's four loops drive the queue, tell the orchestrator what finish
   const results = await store.results(study.id, "trial_scenario");
   assert.equal(results.length, 1);
   assert.equal(results[0].measures[0].mcse, 0.0031);
+});
+
+test("C3-06 the same question asked in two of one account's studies is two jobs: the study is part of what identifies one", options, async () => {
+  const first = await makeStudy("twin-a");
+  const second = await store.createStudy({ userId: first.userId, projectId: "prj_twin_b", name: "twin-b", dataTier: "T0" });
+  const jobs = new VcrJobs({ store, config: { ...config, vcrMaxConcurrentJobs: 4 }, engine: engineDouble() });
+  // Nothing names a key of its own (a run's bare `vcr_simulate` start): the scenario is the whole question.
+  const one = await jobs.enqueue({ studyId: first.id, userId: first.userId, kind: "design_simulation", scenario });
+  const two = await jobs.enqueue({ studyId: second.id, userId: second.userId, kind: "design_simulation", scenario });
+  assert.equal(two.created, true, "the second study's job is its own, not the first study's handed back");
+  assert.notEqual(two.job.id, one.job.id);
+  assert.equal(two.job.studyId, second.id);
+  assert.equal((await jobs.enqueue({ studyId: first.id, userId: first.userId, kind: "design_simulation", scenario })).job.id, one.job.id,
+    "and the same study asking the same thing twice is still one job");
+  const keys = await store.rows("SELECT idempotency_key FROM evimed_vcr.jobs WHERE id = ANY($1::text[])", [[one.job.id, two.job.id]]);
+  assert.equal(new Set(keys.map((row) => row.idempotency_key)).size, 2);
+});
+
+test("C2-1 an engine refusal is the job's own reason: the first issue's code, field and sentence, every issue kept, and a spent CPU budget names itself", options, async () => {
+  const study = await makeStudy("refusal");
+  const refusal = (/** @type {any} */ job) => engineResult(job, { status: "failed", conclusion: undefined, measures: [], counts: { realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: null },
+    diagnostics: { issues: [
+      { code: "rule_column_unknown", field: "scenario.rules[0].rule", detail: "The table has no column 'creatinine'." },
+      { code: "scenario_value_invalid", field: "scenario.rules[1]", detail: "second" }] } });
+  const jobs = new VcrJobs({ store, config, engine: engineDouble({ resultFor: refusal, state: "failed" }) });
+  const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:refused` });
+  const [claimed] = await jobs.claim();
+  await jobs.advance(claimed);
+  const ended = await jobs.advance(claimed);
+  assert.equal(ended.state, "failed");
+  assert.equal(ended.result, null, "a refusal computed nothing: no result, no zero");
+  const row = await store.job(study.id, job.id);
+  assert.equal(row.error.code, "rule_column_unknown", "the reason the engine gave, not a bare failed");
+  assert.equal(row.error.field, "scenario.rules[0].rule");
+  assert.match(row.error.message, /creatinine/, "the sentence names the column");
+  assert.deepEqual(row.error.issues.map((/** @type {any} */ issue) => issue.code), ["rule_column_unknown", "scenario_value_invalid"], "every issue is kept");
+
+  // The engine's own unsigned refusal (an identity it could not read) is told the same way.
+  const other = await makeStudy("refusal-unsigned");
+  const engine = engineDouble();
+  const unsigned = { ...engine, async result(/** @type {string} */ id) {
+    return { result: engineResult(engine.known.get(id), { status: "failed", conclusion: undefined, measures: [],
+      diagnostics: { issues: [{ code: "design_not_supported", field: "scenario.design.kind", detail: "no analytic calculation" }] } }), signed: false, refused: true };
+  } };
+  const bare = new VcrJobs({ store, config, engine: unsigned });
+  const { job: unsignedJob } = await bare.enqueue({ studyId: other.id, userId: other.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${other.id}:refused` });
+  const [again] = await bare.claim();
+  await bare.advance(again);
+  assert.equal((await bare.advance(again)).state, "failed");
+  const unsignedRow = await store.job(other.id, unsignedJob.id);
+  assert.equal(unsignedRow.error.code, "design_not_supported");
+  assert.equal(unsignedRow.error.field, "scenario.design.kind");
+
+  // A run cut short by its CPU budget keeps its numbers as a partial result — and says why it stopped.
+  const spent = await makeStudy("cpu");
+  const cut = new VcrJobs({ store, config, engine: engineDouble({ state: "failed", resultFor: (spec) => engineResult(spec, { status: "failed", conclusion: "limited", replicates: 2000,
+    measures: [{ name: "power", value: 0.71, simulated: true, mcse: 0.01, source: "synthetic" }],
+    diagnostics: { issues: [{ code: "cpu_budget_exhausted", field: "cpuSecondsLimit", detail: "The CPU budget ran out: 600 s." }] } }) }) });
+  const { job: cutJob } = await cut.enqueue({ studyId: spent.id, userId: spent.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${spent.id}:cpu` });
+  const [running] = await cut.claim();
+  await cut.advance(running);
+  const stopped = await cut.advance(running);
+  assert.equal(stopped.partial, true);
+  assert.equal(stopped.result.measures[0].value, 0.71, "the batches that finished are kept");
+  const cutRow = await store.job(spent.id, cutJob.id);
+  assert.equal(cutRow.error.code, "cpu_budget_exhausted", "the job says the budget ended it");
+  assert.equal(cutRow.error.partial, true);
+  assert.match(cutRow.error.message, /计算时间上限/);
+});
+
+test("C2-4 a stage carried over from before a change is marked old until its own numbers replace it, and one the recomputation will not run again is dropped and said", options, async () => {
+  const study = await makeStudy("carry");
+  const node = "trial_scenario:scn_carry@1";
+  /** @param {any} job */
+  const measuresOf = (job) => (job.method === "design.analytic" ? [{ name: "required_events", value: 372, simulated: false, source: "calculated" }]
+    : job.method === "design.assurance" ? [{ name: "assurance", value: 0.776, simulated: true, mcse: 0.004, source: "synthetic" }]
+      : [{ name: "power", value: 0.518, simulated: true, mcse: 0.003, source: "synthetic" }]);
+  const engine = engineDouble({ resultFor: (job) => engineResult(job, { measures: measuresOf(job) }) });
+  const jobs = new VcrJobs({ store, config: { ...config, vcrMaxConcurrentJobs: 4 }, engine });
+  const analytic = { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 }, analysis: { alpha: 0.025, power: 0.9, sided: 1 } };
+  const assurance = { design: { events: 372 }, endpoint: { type: "time_to_event" }, designPrior: { mean: -0.3567, sd: 0.15, kind: "lognormal", basis: "prediction" } };
+  let cycle = 0;
+  /** Enqueue one stage of the cycle and run it to the end. @param {string} kind @param {string} stage @param {Record<string, any>} shape @param {string[]} planned */
+  const land = async (kind, stage, shape, planned) => {
+    cycle += 1;
+    await jobs.enqueue({ studyId: study.id, userId: study.userId, kind, scenario: shape, cpuSecondsLimit: 60, idempotencyKey: `vcr:${study.id}:${stage}:${cycle}`,
+      detail: { subjectId: "scn_carry", resultKind: "trial_scenario", node, stage, plannedStages: planned } });
+    const [claimed] = await jobs.claim();
+    await jobs.advance(claimed);
+    return jobs.advance(claimed);
+  };
+  const current = async () => (await store.results(study.id, "trial_scenario")).find((row) => row.subjectId === "scn_carry");
+  const value = (/** @type {any} */ result, /** @type {string} */ name) => result.measures.find((/** @type {any} */ measure) => measure.name === name);
+
+  // The first computation: three stages, nothing stale, nothing carried.
+  const all = ["analytic", "simulation", "assurance"];
+  await land("design_analytic", "analytic", analytic, all);
+  await land("design_simulation", "simulation", scenario, all);
+  await land("assurance", "assurance", assurance, all);
+  let result = await current();
+  assert.deepEqual(result.measures.map((/** @type {any} */ measure) => measure.name).sort(), ["assurance", "power", "required_events"]);
+  assert.ok(result.measures.every((/** @type {any} */ measure) => measure.stale === undefined), "a first run carries nothing old");
+
+  // A change: the design is marked stale. The next computation runs analytic and simulation — no assurance any more.
+  await store.markStale(study.id, [node], "assumption_changed");
+  await land("design_analytic", "analytic", analytic, ["analytic", "simulation"]);
+  result = await current();
+  assert.equal(value(result, "required_events").stale, undefined, "what was just recomputed is fresh");
+  assert.equal(value(result, "power").stale, true, "the simulation has not run again: its number is one carried over, and says so");
+  assert.equal(value(result, "assurance"), undefined, "a stage the recomputation will not run again is not left standing beside the new numbers");
+  assert.deepEqual(result.diagnostics.notRerun, [{ stage: "assurance", measures: ["assurance"] }], "and the page is told what was dropped");
+  assert.deepEqual(result.diagnostics.stages.map((/** @type {any} */ entry) => entry.stage).sort(), ["analytic", "simulation"]);
+
+  await land("design_simulation", "simulation", scenario, ["analytic", "simulation"]);
+  result = await current();
+  assert.equal(value(result, "power").stale, undefined, "its own new number replaces the old one");
+  assert.deepEqual(result.diagnostics.notRerun, [{ stage: "assurance", measures: ["assurance"] }], "the note stays until the stage itself runs again");
+
+  // The prior comes back with a new change: the assurance stage runs again and the note goes.
+  await store.clearStale(study.id, [node]);
+  await store.markStale(study.id, [node], "assumption_changed");
+  await land("assurance", "assurance", assurance, all);
+  result = await current();
+  assert.equal(value(result, "assurance").value, 0.776);
+  assert.equal(result.diagnostics.notRerun, undefined, "a stage that ran again is no longer said to have been dropped");
+  assert.equal(value(result, "power").stale, true, "and the simulation, again older than the change, is carried and marked");
 });

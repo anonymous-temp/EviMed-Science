@@ -688,7 +688,9 @@ export class VcrDataStore extends VcrStoreBase {
         client, studyId: entry.studyId ?? null, userId, actor: entry.actor ?? userId,
         action: "snapshot.freeze", object: id,
         detail: { sourceId, version, sha256, rowCount: entry.rowCount ?? null, columnCount: entry.columnCount ?? null,
-          files: (entry.fileHashes ?? []).length, fieldMapHash: entry.fieldMapHash ?? null, sealedFields: words(entry.sealedFields) },
+          files: (entry.fileHashes ?? []).length, fieldMapHash: entry.fieldMapHash ?? null, sealedFields: words(entry.sealedFields),
+          // A replay says which instant it replays: the ledger is where a person finds out why two snapshots of one file differ.
+          asOf: text(object(object(entry.profile).frozen).asOf) },
       });
       // The seal is its own row in the ledger, stamped when it was set: AC-32
       // compares this instant with the analysis plan's.

@@ -8,11 +8,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  VCR_ACCRUAL_MEASURES, VCR_ACCRUAL_PRIOR_DEFAULT, VCR_EXIT_VERBATIM_FIELDS, VCR_PARTNER_DATA_USES, VCR_RECRUIT_REFUSALS,
+  VCR_ACCRUAL_MEASURES, VCR_ACCRUAL_PRIOR_DEFAULT, VCR_EXIT_VERBATIM_FIELDS, VCR_RECRUIT_REFUSALS,
   VCR_REFERRAL_TRANSITIONS, VCR_RISK_APPETITE_QUANTILES, VCR_SITE_VERIFICATION_STALE_DAYS,
   VCR_TRIAL_RESTRICTED_FIELDS, accrualBacktestSlices, accrualForecastScenario, accrualPosterior,
   backtestAccrualCoverage, candidateReferrals, decideContactApproval, decideReferralTransition,
-  deriveFromExit, followupFidelityFindings, isSiteScopedRole, parseProbabilityByMonth, partnerDataUseAllowed, postExitEpisode, readAccrualForecast,
+  deriveFromExit, followupFidelityFindings, isSiteScopedRole, parseProbabilityByMonth, postExitEpisode, readAccrualForecast,
   referralFunnel, requestAccrualForecast, screenFailuresByCriterion, siteProfileStatus, trialPeriodEpisode,
   wilsonInterval,
 } from "../src/vcrRecruit.mjs";
@@ -453,7 +453,8 @@ test("AC-22 an exit record is never converted into a progression date, a last-do
     assert.equal(refusal.ok, false);
     assert.equal(refusal.code, "vcr_exit_field_not_derivable");
     assert.equal(refusal.field, field);
-    assert.match(refusal.message, /出组记录不能转换/);
+    assert.match(refusal.message, /不可见，也不能从出组记录推出/);
+    assert.doesNotMatch(refusal.message, /方案\s*§|AC-\d/, "what a run is told carries no plan identifiers");
     assert.equal(Object.hasOwn(refusal, "value"), false, "a refusal never carries a value to use anyway");
   }
   assert.ok(VCR_RECRUIT_REFUSALS.includes("vcr_exit_field_not_derivable"));
@@ -479,16 +480,4 @@ test("AC-22 the post-exit window is a cohort about itself, and says so", () => {
   assert.match(episode.scope, /不代表未治疗的自然病程/);
   assert.match(episode.scope, /不代表原来入组的全体/);
   assert.deepEqual(followupFidelityFindings(episode, {}), [], "a post-exit episode owes no restriction marks");
-});
-
-test("AC-22 what partner data may and may not answer is a table in code, and an unlisted use is refused", () => {
-  assert.equal(partnerDataUseAllowed("matching_evaluation").allowed, true);
-  assert.equal(partnerDataUseAllowed("accrual_calibration").allowed, true);
-  assert.equal(partnerDataUseAllowed("feasibility").allowed, true);
-  assert.equal(partnerDataUseAllowed("post_exit_observation").allowed, true);
-  assert.equal(partnerDataUseAllowed("trial_efficacy").allowed, false);
-  assert.equal(partnerDataUseAllowed("external_control").allowed, false);
-  assert.equal(partnerDataUseAllowed("anything_else").allowed, false, "an unlisted use defaults to refused");
-  assert.equal(VCR_PARTNER_DATA_USES.filter((row) => row.allowed).length, 4);
-  assert.ok(VCR_PARTNER_DATA_USES.every((row) => row.note.length > 0));
 });

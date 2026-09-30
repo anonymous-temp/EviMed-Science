@@ -71,6 +71,25 @@
  *   missing reason is `not_shared` or `restricted_in_trial` is a question the
  *   data cannot answer; `treatmentEvidence` returns `unknown` for it and never
  *   `none`. The partner's data is precisely this case (plan §3.2).
+ * - **A snapshot's as-of is applied where the engine's bytes are written, not
+ *   only where the profiler counts.** Freezing "as of 2026-01-20" stores that
+ *   instant on the snapshot and every table derived from it — and every raw-file
+ *   view the engine is handed — keeps the rows `rowsVisibleAsOf` admits, so the
+ *   row count of a replay is what the engine reads. The first build accepted the
+ *   date on the freeze route and only the profiler saw it: the profile counted
+ *   the visible rows and the engine read them all. A file that cannot say when
+ *   its rows became visible cannot be replayed, and the freeze names which one
+ *   (`as_of_needs_visible_at`) rather than admitting its rows as if they had
+ *   always been visible.
+ * - **A value source is a fact about a column, not only about a file.** A field
+ *   map entry may name the source of its own column (`valueSource`: observed,
+ *   extracted, calculated or imputed — a column of a real source is still a real
+ *   person's value); a column that says nothing has its source's. The analysis
+ *   tables keep each column's source (`derivedFrom.columnSources`), because a
+ *   result that rests on an imputed baseline must not read as observed for
+ *   sharing a table with observed columns (plan §3.5). The engine's input has
+ *   room for one source per table, so the table is labelled with the weakest of
+ *   its columns' (`weakestSource`): a mixed table is never called `observed`.
  *
  * @module vcrDataPlane
  */
@@ -84,7 +103,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
-  VCR_QUALITY_CATEGORIES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson, suppressForModel, workspaceLayout,
+  VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
+  suppressForModel, workspaceLayout,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -474,6 +494,36 @@ export function treatmentEvidence(value, fieldMap) {
   };
 }
 
+/**
+ * How directly a real person's value was recorded, most direct first. The order
+ * is a judgment, made once: a recorded value beats a transcription of one, a
+ * transcription beats a deterministic computation from others, and a computed
+ * value beats one filled in by a declared method.
+ */
+export const VCR_COLUMN_SOURCE_ORDER = Object.freeze(["observed", "extracted", "calculated", "imputed"]);
+
+/**
+ * The source a table of mixed columns is labelled with: the least direct of
+ * them. A table is never called `observed` because most of its columns are.
+ * A source outside the real-patient four (a synthetic or aggregate source has no
+ * per-column sources) is returned as it is, so a caller cannot launder it.
+ * @param {Iterable<string>} sources @param {string} fallback what an empty table is labelled with
+ */
+export function weakestSource(sources, fallback) {
+  const list = [...sources];
+  if (!list.length) return fallback;
+  const outside = list.find((source) => !VCR_COLUMN_SOURCE_ORDER.includes(source));
+  if (outside) return outside;
+  return list.reduce((weakest, source) => (VCR_COLUMN_SOURCE_ORDER.indexOf(source) > VCR_COLUMN_SOURCE_ORDER.indexOf(weakest) ? source : weakest));
+}
+
+/**
+ * The source of one mapped column: its own when the map names one, else its
+ * file's.
+ * @param {{ valueSource?: string | null } | null | undefined} entry @param {string} fileSource
+ */
+export const columnSourceOf = (entry, fileSource) => entry?.valueSource ?? fileSource;
+
 // ---------------------------------------------------------------------------
 // Hashing and reading bytes (the control plane may; the model may not)
 // ---------------------------------------------------------------------------
@@ -585,7 +635,7 @@ export const VCR_DECLARED_TYPES = Object.freeze(["integer", "number", "date", "t
 const DERIVING_ROLES = Object.freeze(["arm", "covariate", "outcome_time", "outcome_event", "time_zero", "measurement", "visit_date"]);
 const FIELD_ENTRY_KEYS = Object.freeze([
   "table", "column", "role", "concept", "unit", "codingSystem", "timeKind", "missingReason", "identifier", "parameter",
-  "alias", "type", "range", "required", "outcome", "codes",
+  "alias", "type", "range", "required", "outcome", "codes", "valueSource",
 ]);
 /** What an event indicator's cell may say when the map names no codes. */
 const EVENT_YES = Object.freeze(["1", "true", "yes", "y", "是"]);
@@ -602,7 +652,8 @@ const hasControl = (value) => [...value].some((character) => character.charCodeA
  * @typedef {{ table: string, column: string, role: string, concept: string, unit: string | null,
  *   codingSystem: string | null, timeKind: string | null, missingReason: string | null, identifier: boolean,
  *   parameter: string | null, alias: string | null, type: string | null, range: number[] | null, required: boolean,
- *   outcome: boolean, codes: { event?: string[], censored?: string[], treated?: string[], control?: string[] } }} VcrFieldEntry
+ *   outcome: boolean, codes: { event?: string[], censored?: string[], treated?: string[], control?: string[] },
+ *   valueSource?: string | null }} VcrFieldEntry
  * @typedef {{ index?: number, code: string, field?: string, table?: string, column?: string, message: string }} VcrFieldIssue
  */
 
@@ -668,6 +719,14 @@ export function normalizeFieldMap(input) {
     }
     if (raw.required != null && typeof raw.required !== "boolean") bad("required", "required_invalid", "是否必填是 true 或 false。");
     if (raw.outcome != null && typeof raw.outcome !== "boolean") bad("outcome", "outcome_invalid", "是否结局是 true 或 false。");
+    const valueSource = raw.valueSource == null || raw.valueSource === "" ? null : text(raw.valueSource);
+    if (valueSource !== null && !VCR_VALUE_SOURCES.includes(valueSource)) {
+      bad("valueSource", "value_source_unknown", `值的来源必须是：${VCR_VALUE_SOURCES.join("、")}。`);
+    } else if (valueSource !== null && !VCR_REAL_PATIENT_SOURCES.includes(valueSource)) {
+      // A column of a real source is a real person's value; "synthetic" or
+      // "aggregate" belongs to the whole source, which is registered as such.
+      bad("valueSource", "value_source_not_individual", `一列真实数据的来源只能是：${VCR_REAL_PATIENT_SOURCES.join("、")}。`);
+    }
     /** @type {{ event?: string[], censored?: string[], treated?: string[], control?: string[] }} */
     const codes = {};
     if (raw.codes != null) {
@@ -689,6 +748,8 @@ export function normalizeFieldMap(input) {
     columns.push({
       table, column, role, concept, unit, codingSystem, timeKind, missingReason, identifier: raw.identifier === true,
       parameter, alias, type, range, required: raw.required === true, outcome: raw.outcome === true, codes,
+      // Left out when the column says nothing, so a map that never names one hashes as it always did.
+      ...(valueSource ? { valueSource } : {}),
     });
   });
   columns.sort((a, b) => a.table.localeCompare(b.table) || a.column.localeCompare(b.column));
@@ -819,6 +880,55 @@ export function validateFieldMap(columns, tables) {
     }
   }
   return { columns: resolved, issues };
+}
+
+/** Whether a file's mapped columns put any of its rows into a derived table. @param {readonly VcrFieldEntry[]} own */
+const derivesRows = (own) => own.some((entry) => entry.role === "subject_key" || DERIVING_ROLES.includes(entry.role));
+
+/**
+ * What a snapshot frozen as of a date needs of its map: every file that derives
+ * anything says, in exactly one column, when its rows became visible to the
+ * platform. Without it the freeze cannot tell which rows a replay may see, and
+ * admitting them all would be the leak the replay exists to prevent (AC-15).
+ * Nothing here applies when no date was given.
+ * @param {readonly VcrFieldEntry[]} entries the map, tables resolved @param {string | null} asOf
+ * @returns {VcrFieldIssue[]}
+ */
+export function asOfIssues(entries, asOf) {
+  if (!asOf) return [];
+  /** @type {VcrFieldIssue[]} */
+  const issues = [];
+  /** @type {Map<string, VcrFieldEntry[]>} */
+  const byTable = new Map();
+  for (const entry of entries) byTable.set(entry.table, [...(byTable.get(entry.table) ?? []), entry]);
+  for (const [table, own] of byTable) {
+    if (!derivesRows(own)) continue;
+    const label = table || "数据文件";
+    const clocks = own.filter((entry) => entry.timeKind === "visible_at");
+    if (!clocks.length) {
+      issues.push({ code: "as_of_needs_visible_at", ...(table ? { table } : {}),
+        message: `${label} 没有标为「平台可见时间」的列，按 ${asOf.slice(0, 10)} 回放时无法判断哪些行当时已经看得到；请在字段映射里标出这一列。` });
+    } else if (clocks.length > 1) {
+      issues.push({ code: "as_of_visible_at_repeated", ...(table ? { table } : {}),
+        message: `${label} 里有 ${clocks.length} 列标为「平台可见时间」，回放只能依据一列；请只保留一列。` });
+    }
+  }
+  return issues;
+}
+
+/**
+ * A column may declare its own value source only on a source of real people: on
+ * a synthetic or aggregate source the whole source is what it is, and a column
+ * that claimed to be `observed` would launder it.
+ * @param {readonly VcrFieldEntry[]} entries @param {string} fileSource
+ * @returns {VcrFieldIssue[]}
+ */
+export function columnSourceIssues(entries, fileSource) {
+  if (VCR_REAL_PATIENT_SOURCES.includes(fileSource)) return [];
+  return entries.filter((entry) => entry.valueSource).map((entry) => ({
+    code: "column_source_on_non_individual_source", table: entry.table, column: entry.column,
+    message: `这个数据源的值是「${fileSource}」，不是真实个体记录；「${entry.column}」不能单独声明另一种来源。`,
+  }));
 }
 
 /**
@@ -1047,19 +1157,55 @@ export function dictionaryEntries(table) {
 
 /**
  * @typedef {{ name: string, header: string[], rows: string[][] }} VcrTableData
- * @typedef {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean,
- *   parameters: string[], files: string[] }} VcrDerivedShape
+ * @typedef {{ source: string, name: string, valueSource: string }} VcrDerivedColumn
+ * @typedef {{ header: string[], rows: string[][], columns: VcrDerivedColumn[], outcomeBearing: boolean,
+ *   parameters: string[], files: string[], columnSources?: Record<string, string>, valueSource?: string }} VcrDerivedShape
+ * @typedef {{ file: string, column: string | null, decidable: boolean, visible: number, hidden: number, undated: number }} VcrAsOfFile
  */
+
+/**
+ * A file's rows as a replay dated `asOf` may see them, and what was left out and
+ * why. `rowsVisibleAsOf` decides; this only carries its answer back to the
+ * array-of-cells shape the derivation works in. A file with no `visible_at`
+ * column has no visible rows: "we do not know when we could see this" is not
+ * "we could always see it".
+ * @param {VcrTableData} table @param {readonly VcrFieldEntry[]} entries @param {string} asOf
+ * @returns {{ table: VcrTableData, report: VcrAsOfFile }}
+ */
+export function tableVisibleAsOf(table, entries, asOf) {
+  const maps = entries.filter((entry) => entry.table === table.name).map((entry) => ({ columnName: entry.column, timeKind: entry.timeKind }));
+  const column = snapshotClocks(maps).visible_at[0] ?? null;
+  const index = column === null ? -1 : table.header.indexOf(column);
+  // One small object per row, holding only the date the answer turns on; the
+  // answer hands the same objects back, which is how each is tied to its row.
+  const probes = table.rows.map((row) => ({ [column ?? ""]: index >= 0 ? row[index] : "" }));
+  const byProbe = new Map(probes.map((probe, position) => [probe, table.rows[position]]));
+  const answer = rowsVisibleAsOf(probes, maps, asOf);
+  const rows = answer.decidable ? answer.rows.map((probe) => /** @type {string[]} */ (byProbe.get(probe))) : [];
+  return {
+    table: { ...table, rows },
+    report: { file: table.name, column, decidable: answer.decidable, visible: rows.length, hidden: answer.hidden, undated: answer.undated },
+  };
+}
 
 /**
  * A treatment-arm cell as the engine reads it: 1 for the trial arm, 0 for the
  * control, when the map names which is which. A value the map does not name is
  * blank — unknown is not control — and is counted. Without codes the cell
  * passes as it is, and an engine that needs 0 and 1 says so by name.
+ *
+ * A blank is judged by `treatmentEvidence` and stays blank: what the partner did
+ * not tell us is `unknown`, and it is counted under its missing reason so the
+ * page can say how much of the arm assignment is not known (AC-06).
  * @param {string} raw @param {VcrFieldEntry} entry @param {(reason: string) => void} drop
+ * @param {(evidence: string, reason: string | null) => void} [note]
  */
-function armCoded(raw, entry, drop) {
-  if (entry.role !== "arm" || (!entry.codes.treated && !entry.codes.control)) return raw;
+function armCoded(raw, entry, drop, note = () => {}) {
+  if (entry.role !== "arm") return raw;
+  const evidence = treatmentEvidence(raw, { missingReason: entry.missingReason });
+  note(evidence.evidence, evidence.missingReason);
+  if (evidence.evidence !== "recorded") return "";
+  if (!entry.codes.treated && !entry.codes.control) return raw;
   const word = raw.toLowerCase();
   if ((entry.codes.treated ?? []).some((code) => code.toLowerCase() === word)) return "1";
   if ((entry.codes.control ?? []).some((code) => code.toLowerCase() === word)) return "0";
@@ -1085,15 +1231,27 @@ function eventFlag(raw, entry) {
  * key is not a person and is counted rather than kept. Deterministic: rows are
  * sorted, so the same files and the same map give the same bytes.
  *
+ * With `asOf`, each file is cut to the rows visible then before anything else
+ * reads it — nobody hidden by the date reaches the roster, the identity map or
+ * an outcome — and what was cut is counted (`not_yet_visible`,
+ * `visible_date_missing`, `as_of_undecidable`). Each shape reports the source of
+ * every column it carries and is labelled with the weakest of them.
+ *
  * @param {{ tables: readonly VcrTableData[], entries: readonly VcrFieldEntry[], key: Buffer,
- *   identifying?: ReadonlySet<string> }} input
+ *   identifying?: ReadonlySet<string>, asOf?: string | null, fileSource?: string }} input
  * @returns {{ shapes: Partial<Record<"subject" | "longitudinal" | "events", VcrDerivedShape>>,
- *   identity: [string, string][], dropped: Record<string, number>, excluded: { column: string, reason: string }[] }}
+ *   identity: [string, string][], dropped: Record<string, number>, excluded: { column: string, reason: string }[],
+ *   asOf: { at: string, files: VcrAsOfFile[] } | null,
+ *   treatment: Record<string, { recorded: number, unknown: number, notApplicable: number, missingReason: string | null }> }}
  */
-export function deriveAnalysisShapes({ tables, entries, key, identifying = new Set() }) {
+export function deriveAnalysisShapes({ tables, entries, key, identifying = new Set(), asOf = null, fileSource = "observed" }) {
   /** @type {Record<string, number>} */
   const dropped = {};
-  const drop = (/** @type {string} */ reason, count = 1) => { dropped[reason] = (dropped[reason] ?? 0) + count; };
+  const drop = (/** @type {string} */ reason, count = 1) => { if (count > 0) dropped[reason] = (dropped[reason] ?? 0) + count; };
+  /** @type {VcrAsOfFile[]} */
+  const replay = [];
+  /** @type {Record<string, { recorded: number, unknown: number, notApplicable: number, missingReason: string | null }>} */
+  const treatment = {};
   /** @type {{ column: string, reason: string }[]} */
   const excluded = [];
   /** @type {Map<string, string>} */
@@ -1103,9 +1261,9 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
   const subjectRows = new Map();
   /** Everyone with a key, carried columns or not. @type {Set<string>} */
   const roster = new Set();
-  /** @type {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean, parameters: string[], files: string[] }} */
+  /** @type {VcrDerivedShape} */
   const events = { header: [], rows: [], columns: [], outcomeBearing: true, parameters: [], files: [] };
-  /** @type {{ header: string[], rows: string[][], columns: { source: string, name: string }[], outcomeBearing: boolean, parameters: string[], files: string[] }} */
+  /** @type {VcrDerivedShape} */
   const longitudinal = { header: [], rows: [], columns: [], outcomeBearing: false, parameters: [], files: [] };
   /** @type {string[]} */
   const subjectFiles = [];
@@ -1117,9 +1275,21 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
   const longRows = [];
 
   const ordered = [...tables].sort((a, b) => a.name.localeCompare(b.name));
-  for (const table of ordered) {
-    const mapped = entries.filter((entry) => entry.table === table.name);
+  for (const whole of ordered) {
+    const mapped = entries.filter((entry) => entry.table === whole.name);
     const keyEntry = mapped.find((entry) => entry.role === "subject_key");
+    let table = whole;
+    // A file that derives nothing has nothing to hide, and counting its rows as
+    // "not yet visible" would only be noise on the page.
+    if (asOf && keyEntry) {
+      const replayed = tableVisibleAsOf(whole, entries, asOf);
+      table = replayed.table;
+      replay.push(replayed.report);
+      if (replayed.report.decidable) {
+        drop("not_yet_visible", replayed.report.hidden);
+        drop("visible_date_missing", replayed.report.undated);
+      } else drop("as_of_undecidable", whole.rows.length);
+    }
     const at = new Map(table.header.map((name, index) => [name, index]));
     const cell = (/** @type {string[]} */ row, /** @type {VcrFieldEntry | undefined} */ entry) => (entry ? row[at.get(entry.column) ?? -1] ?? "" : "");
     if (!keyEntry) continue;
@@ -1144,15 +1314,19 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
     if (measures.length) longitudinal.files.push(table.name);
     for (const pair of pairs) {
       events.parameters.push(String(pair.time.parameter));
-      events.columns.push({ source: pair.time.column, name: "AVAL" }, { source: /** @type {VcrFieldEntry} */ (pair.event).column, name: "CNSR" });
+      const eventEntry = /** @type {VcrFieldEntry} */ (pair.event);
+      events.columns.push(
+        { source: pair.time.column, name: "AVAL", valueSource: columnSourceOf(pair.time, fileSource) },
+        { source: eventEntry.column, name: "CNSR", valueSource: columnSourceOf(eventEntry, fileSource) },
+      );
     }
-    if (zero && pairs.length) events.columns.push({ source: zero.column, name: "STARTDT" });
+    if (zero && pairs.length) events.columns.push({ source: zero.column, name: "STARTDT", valueSource: columnSourceOf(zero, fileSource) });
     for (const measure of measures) {
       longitudinal.parameters.push(String(measure.parameter));
-      longitudinal.columns.push({ source: measure.column, name: "AVAL" });
+      longitudinal.columns.push({ source: measure.column, name: "AVAL", valueSource: columnSourceOf(measure, fileSource) });
       if (measure.outcome) longitudinal.outcomeBearing = true;
     }
-    if (visit && measures.length) longitudinal.columns.push({ source: visit.column, name: "ADT" });
+    if (visit && measures.length) longitudinal.columns.push({ source: visit.column, name: "ADT", valueSource: columnSourceOf(visit, fileSource) });
 
     for (const row of table.rows) {
       const rawId = cell(row, keyEntry).trim();
@@ -1161,7 +1335,13 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
       identity.set(id, rawId);
       roster.add(id);
       if (carried.length) {
-        const values = new Map(carried.map((entry) => [analysisNameOf(entry), armCoded(cell(row, entry).trim(), entry, drop)]));
+        const values = new Map(carried.map((entry) => [analysisNameOf(entry), armCoded(cell(row, entry).trim(), entry, drop, (evidence, reason) => {
+          if (entry.role !== "arm") return;
+          const tally = treatment[analysisNameOf(entry)] ??= { recorded: 0, unknown: 0, notApplicable: 0, missingReason: null };
+          if (evidence === "recorded") tally.recorded += 1;
+          else if (evidence === "not_applicable") tally.notApplicable += 1;
+          else { tally.unknown += 1; tally.missingReason = reason; }
+        })]));
         const perFile = subjectRows.get(id) ?? new Map();
         perFile.set(table.name, [...(perFile.get(table.name) ?? []), values]);
         subjectRows.set(id, perFile);
@@ -1183,6 +1363,11 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
 
   /** @type {Partial<Record<"subject" | "longitudinal" | "events", VcrDerivedShape>>} */
   const shapes = {};
+  // A replay that leaves nobody visible leaves no tables: a registered table of
+  // zero rows would read as "the cohort is empty", and the reason is not that.
+  if (asOf && roster.size === 0) {
+    return { shapes, identity: [], dropped, excluded, treatment, asOf: { at: asOf, files: replay } };
+  }
   if (subjectColumns.length) {
     const names = subjectColumns.map((entry) => entry.name);
     /** @type {string[][]} */
@@ -1202,7 +1387,7 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
     }
     shapes.subject = {
       header: ["USUBJID", ...names], rows, outcomeBearing: subjectColumns.some((item) => item.entry.outcome === true), parameters: [], files: subjectFiles,
-      columns: subjectColumns.map((entry) => ({ source: entry.entry.column, name: entry.name })),
+      columns: subjectColumns.map((entry) => ({ source: entry.entry.column, name: entry.name, valueSource: columnSourceOf(entry.entry, fileSource) })),
     };
   } else if (roster.size) {
     // Subjects with a key and nothing carried: the subject table is the roster.
@@ -1220,7 +1405,21 @@ export function deriveAnalysisShapes({ tables, entries, key, identifying = new S
     longitudinal.rows = longRows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]) || (a[3] ?? "").localeCompare(b[3] ?? ""));
     shapes.longitudinal = longitudinal;
   }
-  return { shapes, identity: [...identity.entries()].sort((a, b) => a[0].localeCompare(b[0])), dropped, excluded };
+  // Each shape says what every value column of it is, and is labelled with the
+  // weakest of them. The key and the parameter code are identifiers, not values.
+  for (const shape of Object.values(shapes)) {
+    /** @type {Record<string, string>} */
+    const columnSources = {};
+    for (const column of shape.columns) {
+      columnSources[column.name] = column.name in columnSources ? weakestSource([columnSources[column.name], column.valueSource], fileSource) : column.valueSource;
+    }
+    shape.columnSources = columnSources;
+    shape.valueSource = weakestSource(Object.values(columnSources), fileSource);
+  }
+  return {
+    shapes, identity: [...identity.entries()].sort((a, b) => a[0].localeCompare(b[0])), dropped, excluded, treatment,
+    asOf: asOf ? { at: asOf, files: replay } : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1420,15 +1619,38 @@ function issueSummary(issues) {
   return issues.slice(0, 4).map((issue) => issue.message).join(" ") + (issues.length > 4 ? ` 另有 ${issues.length - 4} 处。` : "");
 }
 
-/** The field map rows of a snapshot, as the entries they were frozen from. @param {any[]} rows @returns {VcrFieldEntry[]} */
-function entriesOfRows(rows) {
+/**
+ * The field map rows of a snapshot, as the entries they were frozen from. A
+ * column's own value source is not a column of `field_maps`; it is read from
+ * what the snapshot was frozen with.
+ * @param {any[]} rows @param {ReturnType<typeof snapshotFreezeNotes> | null} [frozen] @returns {VcrFieldEntry[]}
+ */
+function entriesOfRows(rows, frozen = null) {
+  const sources = new Map((frozen?.columnSources ?? []).map((/** @type {any} */ item) => [`${item.table}\u0000${item.column}`, String(item.valueSource)]));
   return rows.map((row) => ({
     table: row.tableName ?? "", column: row.columnName, role: row.role ?? "other", concept: row.concept ?? "", unit: row.unit ?? null,
     codingSystem: row.codingSystem ?? null, timeKind: row.timeKind ?? null, missingReason: row.missingReason ?? null,
     identifier: row.identifier === true && row.role !== "subject_key", parameter: row.parameter ?? null, alias: row.alias ?? null,
     type: row.declaredType ?? null, range: Array.isArray(row.range) ? row.range : null, required: row.required === true,
-    outcome: row.outcome === true, codes: row.codes ?? {},
+    outcome: row.outcome === true, codes: row.codes ?? {}, valueSource: sources.get(`${row.tableName ?? ""}\u0000${row.columnName}`) ?? null,
   }));
+}
+
+/**
+ * What a snapshot was frozen with beyond its files: the instant it replays
+ * (`asOf`) and the source each column declared for itself. Both live in the
+ * snapshot's own profile, which is immutable after the freeze, so a table
+ * derived a week later is derived under the same as-of and the same sources.
+ * @param {any} snapshot
+ * @returns {{ asOf: string | null, asOfFilter: Record<string, unknown> | null, columnSources: { table: string, column: string, valueSource: string }[] }}
+ */
+export function snapshotFreezeNotes(snapshot) {
+  const frozen = snapshot?.profile?.frozen;
+  const asOf = typeof frozen?.asOf === "string" && Number.isFinite(Date.parse(frozen.asOf)) ? new Date(Date.parse(frozen.asOf)).toISOString() : null;
+  const columnSources = (Array.isArray(frozen?.columnSources) ? frozen.columnSources : [])
+    .filter((/** @type {any} */ item) => item && typeof item.column === "string" && VCR_VALUE_SOURCES.includes(item.valueSource))
+    .map((/** @type {any} */ item) => ({ table: String(item.table ?? ""), column: item.column, valueSource: item.valueSource }));
+  return { asOf, asOfFilter: isObject(frozen?.asOfFilter) ? frozen.asOfFilter : null, columnSources };
 }
 
 /**
@@ -1921,8 +2143,12 @@ export class VcrDataPlane {
     // A snapshot frozen after the plan was frozen is sealed on the record and
     // already lifted: what was sealed is a fact, and so is when it stopped.
     const sealedUntil = sealedFields.length && planFrozenAt ? planFrozenAt : null;
-    const asOf = entry.asOf ? new Date(Date.parse(entry.asOf)).toISOString() : null;
-    if (entry.asOf && !asOf) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "asOf is a date.");
+    // A malformed date is the caller's mistake, not a crash: `toISOString` throws on NaN.
+    const asOfMs = entry.asOf == null || entry.asOf === "" ? null : Date.parse(String(entry.asOf));
+    if (asOfMs !== null && !Number.isFinite(asOfMs)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "asOf is a date.");
+    const asOf = asOfMs === null ? null : new Date(asOfMs).toISOString();
+    const replayIssues = [...asOfIssues(entries, asOf), ...columnSourceIssues(entries, source.valueSource)];
+    if (replayIssues.length) throw refuse(422, VCR_DATA_PLANE_CODES.fieldMapInvalid, issueSummary(replayIssues), { issues: replayIssues });
 
     const profile = await this.profiler({
       files: files.map((item) => item.absolute), tableNames: files.map((item) => item.file.name),
@@ -1936,7 +2162,16 @@ export class VcrDataPlane {
       sourceId: source.id, studyId: entry.studyId, userId: source.userId, actor: String(entry.userId),
       location: files.map((item) => item.file.location).join("\n"), sha256: digest.digest("hex"),
       rowCount: profile?.snapshot?.rowCount ?? null, columnCount: profile?.snapshot?.columnCount ?? null,
-      profile: profile?.profile ?? {}, quality: profile?.quality ?? {},
+      profile: {
+        ...(profile?.profile ?? {}),
+        // What this snapshot replays and what its columns declare for themselves:
+        // read back by every derivation and every raw-file view.
+        frozen: {
+          asOf, asOfFilter: profile?.asOfFilter ?? null,
+          columnSources: entries.filter((mapped) => mapped.valueSource).map((mapped) => ({ table: mapped.table, column: mapped.column, valueSource: mapped.valueSource })),
+        },
+      },
+      quality: profile?.quality ?? {},
       sealedFields, sealedUntil, valueSource: source.valueSource, fieldMapHash: source.fieldMapHash,
       fileHashes: files.map(({ file }) => ({ id: file.id, name: file.name, location: file.location, sha256: file.sha256, bytes: file.bytes, role: file.role })),
       fieldMaps: entries.map((mapped) => ({
@@ -1975,7 +2210,8 @@ export class VcrDataPlane {
     const root = this.root();
     await this.#manager(entry.studyId, entry.userId);
     const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
-    const entries = entriesOfRows(await this.store.listFieldMaps(snapshot.id));
+    const frozen = snapshotFreezeNotes(snapshot);
+    const entries = entriesOfRows(await this.store.listFieldMaps(snapshot.id), frozen);
     const data = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
     /** @type {VcrTableData[]} */
     const tables = [];
@@ -1991,7 +2227,7 @@ export class VcrDataPlane {
       (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
         .filter((/** @type {any} */ column) => column?.vocabulary?.identifying === true).map((/** @type {any} */ column) => String(column.name))));
     const key = await studyPseudonymKey(root, entry.studyId);
-    const derived = deriveAnalysisShapes({ tables, entries, key, identifying });
+    const derived = deriveAnalysisShapes({ tables, entries, key, identifying, asOf: frozen.asOf, fileSource: snapshot.valueSource });
     // The way back from a pseudonym to a source id is a file in the plane, mode
     // 0600 (the engine runs as another user), read only through `identityOf`.
     const identityFile = path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`);
@@ -2022,8 +2258,14 @@ export class VcrDataPlane {
       const written = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "tables", snapshot.id, shape), "csv", toCsv(built.header, built.rows));
       registered.push(await this.store.putAnalysisTable({
         snapshotId: snapshot.id, studyId: entry.studyId, userId: snapshot.userId, shape, location: written.location, sha256: written.sha256,
-        rowCount: built.rows.length, columns: built.header, issues, outcomeBearing: built.outcomeBearing, valueSource: snapshot.valueSource,
-        derivedFrom: { files: built.files, columns: built.columns, parameters: [...new Set(built.parameters)].sort() },
+        rowCount: built.rows.length, columns: built.header, issues, outcomeBearing: built.outcomeBearing,
+        valueSource: built.valueSource ?? snapshot.valueSource,
+        derivedFrom: {
+          files: built.files, columns: built.columns, parameters: [...new Set(built.parameters)].sort(),
+          columnSources: built.columnSources ?? {},
+          ...(derived.asOf ? { asOf: derived.asOf.at, asOfFiles: derived.asOf.files } : {}),
+          ...(shape === "subject" && Object.keys(derived.treatment).length ? { treatment: derived.treatment } : {}),
+        },
         actor: String(entry.userId),
       }));
     }
@@ -2032,7 +2274,7 @@ export class VcrDataPlane {
     }
     return {
       registered, refused, skipped, subjects: derived.identity.length,
-      excluded: derived.excluded, dropped: derived.dropped,
+      excluded: derived.excluded, dropped: derived.dropped, asOf: derived.asOf, treatment: derived.treatment,
     };
   }
 
@@ -2146,7 +2388,8 @@ export class VcrDataPlane {
     if (!study) throw refuse(404, VCR_DATA_PLANE_CODES.studyNotFound, "Study not found.");
     let snapshot = await this.#snapshot(studyId, String(input.snapshotId ?? ""));
     const fieldMaps = await this.store.listFieldMaps(snapshot.id);
-    const entries = entriesOfRows(fieldMaps);
+    const frozen = snapshotFreezeNotes(snapshot);
+    const entries = entriesOfRows(fieldMaps, frozen);
     snapshot = await this.#reconcile({ study, snapshot, entries });
 
     const tables = await this.store.listAnalysisTables({ snapshotId: snapshot.id, studyId });
@@ -2200,7 +2443,7 @@ export class VcrDataPlane {
 
     for (const { table } of wantedTables) {
       const id = `${snapshot.id}:${table.shape}`;
-      /** @type {{ source: string, name: string }[]} */
+      /** @type {{ source: string, name: string, valueSource?: string }[]} */
       const mapped = table.derivedFrom?.columns ?? [];
       const missing = [...new Set(mapped.map((column) => column.source).filter((name) => judgeable(name) && !allowed.has(name)))];
       if (!missing.length) {
@@ -2213,7 +2456,9 @@ export class VcrDataPlane {
         const parsed = parseTable(await fs.readFile(this.resolve(table.location), "utf8"));
         const projection = projectTable(parsed, { keep: ["USUBJID", ...carried.map((column) => column.name)] });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
-        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: table.valueSource });
+        // The view holds fewer columns than the table, so it is labelled by the columns it holds.
+        const viewSource = weakestSource(carried.map((column) => column.valueSource ?? table.valueSource), table.valueSource);
+        inputs.push({ kind: "analysis_table", id, shape: table.shape, location: written.location, hash: written.sha256, valueSource: viewSource });
         continue;
       }
       withheld.push({ id, kind: "analysis_table", shape: table.shape, reason: why.get(missing[0]) ?? "not_granted", fields: missing });
@@ -2234,7 +2479,10 @@ export class VcrDataPlane {
         }
         const own = entries.filter((entry) => entry.table === file.name);
         const keyEntry = own.find((entry) => entry.role === "subject_key");
-        const parsed = parseTable(await fs.readFile(this.resolve(file.location), "utf8"));
+        const whole = parseTable(await fs.readFile(this.resolve(file.location), "utf8"));
+        // A replay's raw files are cut like its derived tables: the rows the
+        // platform could see then, and no others.
+        const parsed = frozen.asOf && derivesRows(own) ? tableVisibleAsOf({ name: file.name, ...whole }, entries, frozen.asOf).table : whole;
         /** @type {Record<string, string>} */
         const rename = {};
         const used = new Set(["USUBJID"]);
@@ -2248,7 +2496,8 @@ export class VcrDataPlane {
         });
         const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
-        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: snapshot.valueSource });
+        const viewSource = weakestSource(keep.map((name) => columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)), snapshot.valueSource);
+        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource });
         for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
       }
     }
@@ -2398,6 +2647,7 @@ export class VcrDataPlane {
       snapshotId: snapshot.id, sourceId: snapshot.sourceId, version: snapshot.version,
       sha256: snapshot.sha256, rowCount: snapshot.rowCount != null && snapshot.rowCount < floor ? null : snapshot.rowCount,
       columnCount: snapshot.columnCount, frozenAt: snapshot.frozenAt, valueSource: snapshot.valueSource,
+      ...(snapshotFreezeNotes(snapshot).asOf ? { asOf: snapshotFreezeNotes(snapshot).asOf } : {}),
       files: files.map((file) => ({ name: file.name, format: file.format })),
       sealedFields: sealActive ? [...sealed].sort() : [],
       sealedUntil: snapshot.sealedUntil,
@@ -2667,6 +2917,7 @@ export function snapshotView(snapshot, now = Date.now(), effective = undefined) 
     files: snapshot.fileHashes.map((/** @type {any} */ file) => ({ name: file.name, sha256: file.sha256, bytes: file.bytes })),
     sealedFields: effective ? effective.fields : snapshot.sealedFields, sealedUntil: snapshot.sealedUntil, sealed,
     quality: qualitySummary(snapshot.quality),
+    ...(snapshotFreezeNotes(snapshot).asOf ? { asOf: snapshotFreezeNotes(snapshot).asOf } : {}),
   };
 }
 
@@ -2675,5 +2926,7 @@ export function tableView(table) {
   return {
     shape: table.shape, rowCount: table.rowCount, sha256: table.sha256, columns: table.columns, issues: table.issues.length,
     outcomeBearing: table.outcomeBearing, valueSource: table.valueSource,
+    ...(table.derivedFrom?.columnSources && Object.keys(table.derivedFrom.columnSources).length ? { columnSources: table.derivedFrom.columnSources } : {}),
+    ...(typeof table.derivedFrom?.asOf === "string" ? { asOf: table.derivedFrom.asOf } : {}),
   };
 }

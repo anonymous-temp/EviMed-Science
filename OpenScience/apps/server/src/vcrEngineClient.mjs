@@ -428,15 +428,17 @@ export function createVcrEngineClient({ baseUrl = "", timeoutMs = 120_000, token
      * a torn or substituted download never sits at a name something reads.
      *
      * @param {string} jobId @param {string} name
-     * @param {{ destination: string, sha256: string, maxBytes?: number }} options
+     * @param {{ destination: string, sha256: string, maxBytes?: number, mode?: number }} options
+     *   `mode` is the file's permission bits (owner-only unless the caller says the table
+     *   holds nothing a person must not read: a table the engine's own user opens next).
      * @returns {Promise<{ bytes: number, sha256: string }>}
      */
-    async downloadTable(jobId, name, { destination, sha256, maxBytes = VCR_ENGINE_MAX_TABLE_BYTES }) {
+    async downloadTable(jobId, name, { destination, sha256, maxBytes = VCR_ENGINE_MAX_TABLE_BYTES, mode = 0o600 }) {
       if (!idShape(jobId) || !tableNameShape(name)) throw new VcrEngineError("vcr_engine_job_invalid", "作业号或表名不合法。");
       if (!/^[a-f0-9]{64}$/.test(String(sha256))) throw new VcrEngineError("vcr_engine_table_invalid", "结果没有给出这张表的 sha256。");
       const temporary = `${destination}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.part`;
       const hash = createHash("sha256");
-      const handle = await fs.open(temporary, "wx", 0o600);
+      const handle = await fs.open(temporary, "wx", mode);
       try {
         const bytes = await exchange(`/jobs/${encodeURIComponent(jobId)}/tables/${encodeURIComponent(name)}`, {
           accept: "text/csv", timeout: Math.max(timeoutMs, 300_000),
@@ -446,6 +448,8 @@ export function createVcrEngineClient({ baseUrl = "", timeoutMs = 120_000, token
           }),
         });
         await handle.close();
+        // The process's umask can strip bits from the mode a file is created with.
+        await fs.chmod(temporary, mode);
         const got = hash.digest("hex");
         if (got !== sha256) {
           throw new VcrEngineError("vcr_engine_table_invalid", "引擎给出的表和结果里登记的哈希对不上，这张表没有采用。", { detail: { table: name } });

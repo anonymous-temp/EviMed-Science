@@ -133,6 +133,7 @@
         "rationale": "ECOG 1，一线含铂后进展"
       }
     },
+    "assessmentId": "mas_2",
     "facts": [
       {
         "label": "临床资格",
@@ -162,6 +163,7 @@
     ],
     "criteria": [
       {
+        "criterionId": "crt_1",
         "code": "I1",
         "kind": "inclusion",
         "text": "年龄 ≥ 18 岁",
@@ -178,6 +180,7 @@
         "overridden": false
       },
       {
+        "criterionId": "crt_2",
         "code": "I2",
         "kind": "inclusion",
         "text": "ECOG 体能评分 0–1（近 4 周内）",
@@ -194,6 +197,7 @@
         "overridden": false
       },
       {
+        "criterionId": "crt_3",
         "code": "I3",
         "kind": "inclusion",
         "text": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
@@ -210,6 +214,7 @@
         "overridden": false
       },
       {
+        "criterionId": "crt_4",
         "code": "E1",
         "kind": "exclusion",
         "text": "活动性脑转移",
@@ -222,6 +227,7 @@
         "overridden": false
       },
       {
+        "criterionId": "crt_5",
         "code": "E2",
         "kind": "exclusion",
         "text": "末次免疫治疗距今不足 28 天",
@@ -238,6 +244,7 @@
         "overridden": false
       },
       {
+        "criterionId": "crt_6",
         "code": "E3",
         "kind": "exclusion",
         "text": "妊娠或哺乳期",

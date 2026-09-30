@@ -60,6 +60,7 @@ import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { vcrCurrentNodes, vcrReviewIsCurrent } from "./vcrViews.mjs";
 
 /** Which capability thinks each step (the domain's map, named here for readers). */
 export const VCR_RUN_CAPABILITIES = VCR_STEP_CAPABILITIES;
@@ -282,6 +283,16 @@ export function vcrProjectScenario(method, candidate) {
   return { scenario: projectObject(schema.fields, candidate, ""), dropped };
 }
 
+/** Whether a dotted path holds a value in an object. @param {Record<string, any>} root @param {string} path */
+function hasPath(root, path) {
+  let node = /** @type {any} */ (root);
+  for (const key of path.split(".")) {
+    if (!isObject(node) || node[key] === undefined || node[key] === null) return false;
+    node = node[key];
+  }
+  return true;
+}
+
 /** The last segment of a dropped path, without its list index. @param {string} path */
 const lastKey = (path) => path.replace(/\[\d+\]$/, "").split(".").pop() ?? path;
 
@@ -464,13 +475,72 @@ export function vcrJobKindFor(kind, row, context = {}) {
  */
 
 /**
+ * The variables a population carries, by name, with the bounds it states for them
+ * (`min`/`max` of a bounded variable) — read from whichever shape the population
+ * step stored: a scenario population's variable list, a literature population's
+ * baseline table, a built cohort's profile rows.
+ * @param {Record<string, any> | null | undefined} population
+ * @returns {Map<string, { min: number | null, max: number | null }>}
+ */
+export function vcrPopulationVariables(population) {
+  /** @type {Map<string, { min: number | null, max: number | null }>} */
+  const found = new Map();
+  const bound = (/** @type {unknown} */ value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+  const put = (/** @type {unknown} */ name, /** @type {Record<string, any>} */ entry) => {
+    if (typeof name === "string" && name) found.set(name, { min: bound(entry.min), max: bound(entry.max) });
+  };
+  const definition = object(object(population).definition);
+  for (const variable of list(object(definition.population).variables)) put(object(variable).name, object(variable));
+  for (const row of list(definition.baselineTable)) put(object(row).variable, object(row));
+  const profile = object(object(population).profile);
+  for (const row of list(profile.rows ?? profile.covariates ?? (Array.isArray(profile) ? profile : []))) put(object(row).key ?? object(row).covariate, object(row));
+  return found;
+}
+
+/**
+ * Can this model answer for this study? The control plane's port of the engine's
+ * applicability check (R/quality.R): what a model declares it covers (its endpoint
+ * types, the fields it needs, the input ranges it was fitted on) held against
+ * what the study has (the endpoint it asks about, the variables its population
+ * carries and the bounds it states). An empty list means nothing was found
+ * against it; a model with no declaration has none to fail.
+ * @param {Record<string, any>} model a row of the model library
+ * @param {{ endpointType: string | null, variables: Map<string, { min: number | null, max: number | null }> }} study
+ * @returns {Array<{ code: string, field: string, text: string }>}
+ */
+export function vcrModelApplicabilityIssues(model, { endpointType, variables }) {
+  /** @type {Array<{ code: string, field: string, text: string }>} */
+  const issues = [];
+  const applicability = object(model.applicability);
+  const card = object(model.card);
+  const declared = list(applicability.endpoints).map(String);
+  if (endpointType && declared.length && !declared.includes(endpointType)) {
+    issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它只覆盖 ${declared.join("、")} 终点，这个研究的终点是 ${endpointType}` });
+  } else if (endpointType && !declared.length && model.endpointType && String(model.endpointType) !== endpointType) {
+    issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它是 ${model.endpointType} 终点的模型，这个研究的终点是 ${endpointType}` });
+  }
+  for (const field of list(applicability.requiredFields ?? card.requiredFields).map(String)) {
+    if (!variables.has(field)) issues.push({ code: "required_field_missing", field, text: `它需要「${field}」，研究的人群里没有这个变量` });
+  }
+  for (const [field, range] of Object.entries(object(applicability.inputRanges ?? card.inputRanges))) {
+    const limits = list(range).map(Number);
+    const seen = variables.get(field);
+    if (!seen || limits.length < 2 || !limits.every(Number.isFinite)) continue;
+    if ((seen.min !== null && seen.min < limits[0]) || (seen.max !== null && seen.max > limits[1])) {
+      issues.push({ code: "input_out_of_range", field, text: `「${field}」在人群里的取值范围超出了它声明的 ${limits[0]}–${limits[1]}` });
+    }
+  }
+  return issues;
+}
+
+/**
  * Turn an object into the jobs that compute it — or say why it cannot be
  * computed. Pure: everything it reads is in `context`.
  *
  * @param {{ kind: string, row: Record<string, any> }} item
  * @param {{ study: Record<string, any>, definition: Record<string, any> | null, assumptions: readonly Record<string, any>[],
  *   populations?: readonly Record<string, any>[], scenarios?: readonly Record<string, any>[], grid?: Record<string, any> | null,
- *   analytic?: Record<string, any> | null }} context
+ *   analytic?: Record<string, any> | null, models?: readonly Record<string, any>[] }} context
  * @returns {VcrPlan}
  */
 export function vcrBuildStages(item, context) {
@@ -485,13 +555,25 @@ export function vcrBuildStages(item, context) {
   const stage = (jobKind, candidate, options = {}) => {
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[jobKind];
     const own = structuredClone(candidate);
+    // A path the object stated itself is the run's; a path only the binder wrote is the
+    // platform's. The two are told apart before the binder runs, because what the
+    // schema does not read is refused when it was the run's and dropped in silence
+    // when it was ours — a Simon design with a 「对照事件率」 card was refused for
+    // 「配置里有引擎不读的字段：truth.controlRate」, a key nobody had written.
+    const stated = new Set(VCR_ASSUMPTION_BINDINGS.map((rule) => rule.path.join(".")).filter((path) => hasPath(own, path)));
     const bound = options.bindAll === false ? [] : vcrBindAssumptions(own, options.cards ?? cards, options.endpoint ?? object(own.endpoint).type ?? null);
     const { scenario, dropped } = vcrProjectScenario(method, own);
+    const injected = new Set(bound.map((entry) => entry.path).filter((path) => !stated.has(path)));
+    // What the binder wrote and the method does not read never reached the engine: it
+    // is not the run's mistake, and no job used that card's number, so the job does
+    // not say it did.
+    const unread = new Set(dropped.filter((path) => injected.has(path)));
+    const used = bound.filter((entry) => !unread.has(entry.path));
     // Bound assumptions were laid over a copy: the object itself is never edited.
-    const unknown = dropped.filter((path) => !VCR_NON_ENGINE_KEYS.includes(lastKey(path)));
+    const unknown = dropped.filter((path) => !unread.has(path) && !VCR_NON_ENGINE_KEYS.includes(lastKey(path)));
     return { built: /** @type {VcrStage} */ ({
       stage: options.stage ?? null, jobKind, scenario, keepTables: options.keepTables ?? [], derived: options.derived ?? [],
-      snapshot: options.snapshot ?? VCR_PATIENT_LEVEL_JOB_KINDS.includes(jobKind), after: options.after ?? null, bound,
+      snapshot: options.snapshot ?? VCR_PATIENT_LEVEL_JOB_KINDS.includes(jobKind), after: options.after ?? null, bound: used,
       detail: options.detail ?? {},
     }), unknown };
   };
@@ -522,6 +604,19 @@ export function vcrBuildStages(item, context) {
     if (!type) return { ok: false, refused: { code: "vcr_scenario_endpoint_missing", message: "虚拟患者集要知道终点类型：先写研究定义，或在场景里写 endpoint.type。" } };
     scenario.endpoint = { ...object(scenario.endpoint), type };
     const jobKind = PATIENT_KINDS[String(type)];
+    // A model answers only for what it declares it covers. A patient set that names a model
+    // the study is outside of is refused before any job is queued, with what fell outside
+    // (the reference simulators declare an endpoint and nothing else, so they pass).
+    if (row.modelId) {
+      const named = (context.models ?? []).find((model) => (model.id === row.modelId || model.name === row.modelId)
+        && (!row.modelVersion || model.version === row.modelVersion));
+      const population = row.populationId ? (context.populations ?? []).find((entry) => entry.id === row.populationId) : null;
+      const issues = named ? vcrModelApplicabilityIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
+      if (issues.length) {
+        return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map((issue) => issue.field),
+          message: `模型「${named?.name}」的适用范围没有覆盖这个研究：${issues.map((issue) => issue.text).join("；")}。换一个适用的模型，或先补齐这些条件。` } };
+      }
+    }
     /** @type {VcrStage["derived"]} */
     const derived = [];
     if (row.populationId) {
@@ -594,7 +689,13 @@ export function vcrBuildStages(item, context) {
         ? Math.ceil(Number(configuration.design?.events ?? findMeasure(context.analytic, "required_events") ?? Number.NaN)) : null;
       if (type !== "time_to_event" || Number.isFinite(events)) {
         const assuranceBase = { ...base, design: { ...design, ...(events ? { events } : {}) }, designPrior: prior.prior };
-        stages.push(stage("assurance", assuranceBase, { stage: "assurance", endpoint: type, cards: used, snapshot: false, bindAll: false,
+        // The design prior is the effect card's own distribution; the effect's point value
+        // is a scenario, not an input of this integral. What it does read from the cards is
+        // the scale the effect is measured on — the outcome's standard deviation, the
+        // control rate — and the binder lays those over the design's own, exactly as it
+        // does for the fixed-sample stages (a continuous design's assurance used to be
+        // computed on a standard deviation of 1 or refused for want of a `truth`).
+        stages.push(stage("assurance", assuranceBase, { stage: "assurance", endpoint: type, cards: used, snapshot: false,
           after: type === "time_to_event" && !configuration.design?.events ? "analytic" : null }));
       }
     }
@@ -898,12 +999,19 @@ export class VcrOrchestrator {
    * @param {any} study
    */
   async #cover(study) {
-    const [reviews, stale, results] = await Promise.all([
-      this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.results(study.id),
+    const [reviews, stale, results, definition, assumptions, populations, patientSets, comparators, scenarios, grid, protocol] = await Promise.all([
+      this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.results(study.id), this.store.latestDefinition(study.id),
+      this.store.assumptions(study.id), this.store.populations(study.id, 20), this.store.patientSets(study.id, 20),
+      this.store.comparatorDesigns(study.id, 20), this.store.trialScenarios(study.id, 60), this.store.latestDesignGrid(study.id),
+      this.store.latestProtocolVersion(study.id),
     ]);
+    // A countersignature is printed on the cover for what it still covers: one whose versions have moved on is
+    // said to have changed after review, never 已复核 (the same test the page's ceiling uses, `vcrReviewIsCurrent`).
+    const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
+    const stillHolds = (/** @type {any} */ review) => vcrReviewIsCurrent(review, { results, stale, current });
     return {
-      reviewed: reviews.length > 0,
-      reviews: reviews.map((review) => ({ kind: review.kind, reviewer: review.reviewer, nodes: review.nodes, at: review.createdAt })),
+      reviewed: reviews.some(stillHolds),
+      reviews: reviews.map((review) => ({ kind: review.kind, reviewer: review.reviewer, nodes: review.nodes, at: review.createdAt, current: stillHolds(review) })),
       staleResults: stale.length,
       intendedUse: study.intendedUse,
       conclusions: [...new Set(results.map((result) => result.conclusion).filter(Boolean))],
@@ -1035,8 +1143,11 @@ export class VcrOrchestrator {
       const node = String(object(mark.detail).node ?? "");
       if (node) marksByNode.set(node, [...(marksByNode.get(node) ?? []), mark]);
     }
+    // The model library, read only when a patient set names a model (whether the model
+    // covers the study is decided before a job is queued).
+    const models = patientSets[0]?.modelId ? await this.store.models(String(study.userId)) : [];
     return { definition, assumptions, populations, population: populations[0] ?? null, patientSets, patientSet: patientSets[0] ?? null,
-      comparators, comparator: comparators[0] ?? null, scenarios, grid, protocol, stale, staleByNode, openByNode, openKinds, marksByNode };
+      comparators, comparator: comparators[0] ?? null, scenarios, grid, protocol, stale, staleByNode, openByNode, openKinds, marksByNode, models };
   }
 
   /**
@@ -1193,7 +1304,7 @@ export class VcrOrchestrator {
     }
     const analytic = item.kind === "trial_scenario" ? await this.store.currentResultOf(study.id, "trial_scenario", item.row.id) : null;
     const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
-      scenarios: read.scenarios, grid: read.grid, analytic });
+      scenarios: read.scenarios, grid: read.grid, analytic, models: read.models });
     /** @type {string[]} */
     const queued = [];
     if (plan.ok === false) {
@@ -1212,8 +1323,11 @@ export class VcrOrchestrator {
     }
     const generation = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
       WHERE study_id = $1 AND checkpoint ->> 'node' = $2`, [study.id, node]))?.n ?? 0);
+    // Every stage of this pass's plan, said on each job: a stage that the object had before
+    // and this plan no longer has is one no job will run again (`vcrMergeStageResult`).
+    const planned = plan.stages.map((stage) => stage.stage).filter((name) => typeof name === "string" && name);
     for (const stage of plan.stages) {
-      const outcome = await this.#enqueueStage(study, item, node, stage, read, generation);
+      const outcome = await this.#enqueueStage(study, item, node, stage, read, generation, planned);
       if (outcome.jobId) queued.push(outcome.jobId);
       // A stage waits for the one it needs; nothing after it goes ahead of it.
       if (outcome.stop) break;
@@ -1272,10 +1386,10 @@ export class VcrOrchestrator {
   /**
    * One job of an object's plan.
    * @param {any} study @param {{ step: string, kind: string, row: any }} item @param {string} node @param {import("./vcrOrchestrator.mjs").VcrStage} stage
-   * @param {VcrRead} read @param {number} generation
+   * @param {VcrRead} read @param {number} generation @param {string[]} planned the stage names of the plan this job belongs to
    * @returns {Promise<{ jobId?: string, stop?: boolean }>}
    */
-  async #enqueueStage(study, item, node, stage, read, generation) {
+  async #enqueueStage(study, item, node, stage, read, generation, planned) {
     const key = stage.stage ? `job:${node}#${stage.stage}` : `job:${node}`;
     if (await this.#mark(study.id, key)) return {};
     /** @type {Array<{ resultId: string, table: string }>} */
@@ -1317,8 +1431,11 @@ export class VcrOrchestrator {
         // guess from the method: a literature control computed by `reconstruct_km`
         // and then `rmst` is still the comparator's result, and each of N designs
         // is its own subject, so N designs are N current results.
-        detail: { node, step: item.step, stage: stage.stage, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
-          subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound, ...stage.detail },
+        detail: { node, step: item.step, stage: stage.stage, plannedStages: planned, resultKind: VCR_OBJECT_RESULT_KINDS[item.kind] ?? null,
+          subjectId: item.row.id, supersedes: line, keepTables: stage.keepTables, bound: stage.bound,
+          // A hybrid control's historical counts are evidence only when verified extractions say so.
+          ...(stage.jobKind === "map_prior" && !(await this.#historicalIsVerified(study, stage.scenario)) ? { inputsAssumed: true } : {}),
+          ...stage.detail },
       });
       await this.#update(study.id, key, { state: "running", jobId: job.id, detail: { jobId: job.id, state: job.state } });
       if (read.staleByNode.has(node)) await this.store.noteRecomputeJob(study.id, node, job.id);
@@ -1337,6 +1454,36 @@ export class VcrOrchestrator {
       this.report(codeOf(error));
       return {};
     }
+  }
+
+  /**
+   * Whether the historical control arms a MAP prior is asked to borrow from are
+   * numbers the study's own verified extractions hold: every (events, n) pair of
+   * the scenario is the events and sample size of a verified control-arm evidence
+   * item (a value with the quotation it was read from, checked against the source).
+   * Numbers typed into a comparator's configuration are settings, not evidence, and
+   * the prior a run builds on them says so; the estimate-and-standard-error path
+   * carries no counts to hold against an item and is always a setting.
+   * @param {any} study @param {Record<string, any>} scenario
+   */
+  async #historicalIsVerified(study, scenario) {
+    const historical = object(scenario.historical);
+    const events = list(historical.events).map(Number);
+    const sizes = list(historical.n).map(Number);
+    if (!events.length || events.length !== sizes.length) return false;
+    const rows = await this.store.rows(`SELECT events, sample_size FROM ${VCR_SCHEMA}.evidence_items
+      WHERE study_id = $1 AND arm_role = 'control' AND events IS NOT NULL AND sample_size IS NOT NULL
+        AND value IS NOT NULL AND locator ->> 'verification' = 'verified'`, [study.id]);
+    /** @type {Map<string, number>} */
+    const held = new Map();
+    for (const row of rows) held.set(`${row.events}/${row.sample_size}`, (held.get(`${row.events}/${row.sample_size}`) ?? 0) + 1);
+    return events.every((count, index) => {
+      const key = `${count}/${sizes[index]}`;
+      const left = held.get(key) ?? 0;
+      if (left <= 0) return false;
+      held.set(key, left - 1);
+      return true;
+    });
   }
 
   /**
@@ -1472,7 +1619,11 @@ export class VcrOrchestrator {
         : (result.conclusion === "not_estimable" ? vcrGapsForRule(String(result.notEstimableRule ?? "")) : []);
       await this.store.attachResult(table, parsed.id, result.id, table === "comparator_designs" ? { conclusion: result.conclusion, gapList: gaps } : {});
     } else if (parsed.kind === "design_grid") {
-      const cells = list(object(result.diagnostics).cells).map(object).filter((cell) => Number.isInteger(cell.designIndex) && Number.isInteger(cell.truthIndex));
+      // The engine numbers a grid's designs and truths from 1 (it is R's, and its own long table
+      // says design 2, truth 1 of the second design under the first truth); a cell is kept as
+      // the engine numbered it, and the page reads it as that — a 0 is not a cell of this grid.
+      const cells = list(object(result.diagnostics).cells).map(object)
+        .filter((cell) => Number.isInteger(cell.designIndex) && Number.isInteger(cell.truthIndex) && cell.designIndex >= 1 && cell.truthIndex >= 1);
       if (cells.length) await this.store.attachGridCells(parsed.id, cells.map((cell) => ({ designIndex: cell.designIndex, truthIndex: cell.truthIndex,
         status: cell.status, measures: list(cell.measures) })));
     }

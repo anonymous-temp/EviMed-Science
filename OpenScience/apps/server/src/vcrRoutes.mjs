@@ -91,6 +91,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_job_not_found",
   "vcr_budget_invalid",
   "vcr_assumption_invalid",
+  "vcr_evidence_unverified",
   "vcr_review_kind_invalid",
   "vcr_decision_invalid",
   "vcr_export_kind_invalid",
@@ -233,7 +234,8 @@ function wholeNumber(value, field, max) {
  *     bindSession: (user: any, projectId: string, capabilityId: string) => Promise<{ sessionId: string, bound: boolean }>,
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
- *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any }} dependencies
+ *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
+ *   evidence?: any, evidenceStore?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -266,6 +268,9 @@ export function createVcrRoutes(dependencies) {
       // The data plane, reached through the service's seam (`intake`): the routes
       // are composed before the module is, and the seam is where the plane lives.
       get dataPlane() { return dependencies.dataPlane ?? service.packages?.dataPlane?.intake ?? null; },
+      // The evidence side: what a card that cites the literature is checked against.
+      get evidence() { return dependencies.evidence ?? service.packages?.evidence ?? null; },
+      get evidenceStore() { return dependencies.evidenceStore ?? service.packages?.evidenceStore ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -314,6 +319,33 @@ export function createVcrRoutes(dependencies) {
       const study = await service.requireStudy(user, id);
       const roles = await requireAbility(study, abilities);
       return { study, roles };
+    };
+
+    /**
+     * The citations of an `external_evidence` card are ids of this study's
+     * extractions that passed their check against the record they name, all of
+     * one parameter (`verifiedEvidenceIds` — the same reader the runtime's write
+     * uses). Refused `vcr_evidence_unverified`; a deployment without the
+     * evidence side cannot verify, so it does not accept the claim. Answers the
+     * cited ids, each once.
+     * @param {any} study @param {unknown} ids @returns {Promise<string[]>}
+     */
+    const requireVerifiedEvidence = async (study, ids) => {
+      const cited = Array.isArray(ids) && ids.length <= 20 ? [...new Set(ids.map(String))] : [];
+      if (!cited.length || cited.some((cite) => !ID.test(cite))) {
+        throw new HttpError(422, "vcr_evidence_unverified", "来源写成「外部证据」的卡要引用本研究通过原文核对的证据（evidenceIds，至少一条）；自己设的值请把来源写成专家设定。");
+      }
+      if (!hooks.evidence?.verifiedEvidenceIds || !hooks.evidenceStore?.verifiedItemsById) throw UNAVAILABLE();
+      const rows = await hooks.evidenceStore.verifiedItemsById({ userId: study.userId, studyId: study.id, ids: cited });
+      const parameters = [...new Set(rows.map((/** @type {any} */ row) => String(row.parameter)))];
+      const verified = new Set(parameters.length === 1
+        ? await hooks.evidence.verifiedEvidenceIds({ userId: study.userId, studyId: study.id, parameter: parameters[0] }) : []);
+      const unverified = cited.filter((cite) => !verified.has(cite));
+      if (unverified.length || parameters.length !== 1) {
+        throw new HttpError(422, "vcr_evidence_unverified",
+          `这些证据不是本研究通过原文核对的、同一参数的抽取值：${(unverified.length ? unverified : cited).slice(0, 5).join("、")}。`);
+      }
+      return cited;
     };
 
     /**
@@ -672,12 +704,18 @@ export function createVcrRoutes(dependencies) {
       if (body.sourceKind != null) word(body.sourceKind, VCR_ASSUMPTION_SOURCE_KINDS, "vcr_assumption_invalid", "sourceKind");
       if (body.valueSource != null) word(body.valueSource, VCR_VALUE_SOURCES, "vcr_assumption_invalid", "valueSource");
       const saved = await audited("vcr.assumption.save", (card) => ({ code: card.id, detail: key }), { code: id, detail: key },
-        () => data().saveAssumption({
-          ...body, key, studyId: study.id, userId: String(user.id), name: body.name ?? key,
-          // A person editing a card is not the AI setting it: the review state
-          // follows who wrote it (plan §10.2, AC-33).
-          reviewState: "reviewed",
-        }));
+        async () => {
+          // A card that says its number is the literature's must cite what the
+          // platform verified — the rule the runtime's write holds (a person
+          // is no more entitled to an invented citation than a run is).
+          const evidenceIds = body.sourceKind === "external_evidence" ? await requireVerifiedEvidence(study, body.evidenceIds) : body.evidenceIds;
+          return data().saveAssumption({
+            ...body, ...(evidenceIds === undefined ? {} : { evidenceIds }), key, studyId: study.id, userId: String(user.id), name: body.name ?? key,
+            // A person editing a card is not the AI setting it: the review state
+            // follows who wrote it (plan §10.2, AC-33).
+            reviewState: "reviewed",
+          });
+        });
       // Changing an assumption is what §6.3 is about: everything downstream of
       // this version goes stale and the light half recomputes at once.
       if (hooks.orchestrator?.recomputeAfterChange) {

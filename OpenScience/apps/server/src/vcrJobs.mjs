@@ -87,7 +87,7 @@ import path from "node:path";
 
 import {
   VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES,
-  canonicalScenarioJson, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor,
+  canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -145,14 +145,17 @@ export function vcrSeedFor(scenarioHash) {
 
 /**
  * What the idempotency key of a job is made of: the caller's own key (or the
- * kind, when it named none), the scenario's hash and the inputs' hash. Anything
- * that changes what is computed changes the key.
- * @param {{ key?: string | null, kind: string, scenarioHash: string, inputs: readonly unknown[], seed: number }} parts
+ * kind, when it named none), the study, the scenario's hash and the inputs'
+ * hash. Anything that changes what is computed changes the key — and so does
+ * the study: the queue's uniqueness is per account, and one account's two
+ * studies asking the same question (a default `vcr_simulate` scenario, say) are
+ * two jobs, not the first study's job handed to the second.
+ * @param {{ key?: string | null, kind: string, studyId: string, scenarioHash: string, inputs: readonly unknown[], seed: number }} parts
  */
-export function vcrIdempotencyKey({ key, kind, scenarioHash, inputs, seed }) {
+export function vcrIdempotencyKey({ key, kind, studyId, scenarioHash, inputs, seed }) {
   const inputsHash = sha256(canonicalScenarioJson(inputs));
   const head = (key == null || key === "" ? `vcr-job:${kind}` : String(key)).slice(0, 110);
-  return `${head}:s${scenarioHash.slice(0, 16)}:i${inputsHash.slice(0, 16)}:r${seed}`;
+  return `${head}:t${sha256(studyId).slice(0, 16)}:s${scenarioHash.slice(0, 16)}:i${inputsHash.slice(0, 16)}:r${seed}`;
 }
 
 /**
@@ -209,34 +212,76 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
 /**
  * A later stage of one object folded into the object's current result: the
  * measures of both (the later stage wins a name they share), the worst of the
- * two conclusions, and a record of which job made which part. The result stays
+ * conclusions, and a record of which job made which part. The result stays
  * one row per version — a new version each time a stage lands — so a page that
  * reads an object's result reads all its stages at once.
+ *
+ * **A number carried over from before a change is said to be old.** When the
+ * object was marked stale (an assumption moved, a method changed) the stages
+ * that landed before the mark computed the world as it was. A stage this
+ * recomputation will run again (`planned`) has its measures carried marked
+ * `stale: true` until its own new numbers replace them; a stage it will not run
+ * again (a design whose effect card lost its distribution has no assurance any
+ * more) has its measures dropped and named in `diagnostics.notRerun`, so an old
+ * number is never left standing beside new ones as if it were current.
  *
  * @param {ReturnType<typeof resultFromRow> | null} prior
  * @param {{ conclusion: string | null, notEstimableRule: string | null, counts: Record<string, any>, measures: any[],
  *   diagnostics: Record<string, any>, tables: any[] }} incoming
- * @param {{ stage: string, jobId: string, method: string, methodVersion: string }} stage
+ * @param {{ stage: string, jobId: string, method: string, methodVersion: string, at?: string | null }} stage
+ * @param {{ staleSince?: string | null, planned?: readonly string[] | null }} [change]
+ *   `staleSince`: when the object was marked stale and not yet recomputed;
+ *   `planned`: the stages the recomputation runs (null: not known — carried, never dropped).
  */
-export function vcrMergeStageResult(prior, incoming, stage) {
-  const stages = [...list(object(prior?.diagnostics).stages).filter((entry) => object(entry).stage !== stage.stage), {
-    ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)),
-  }];
-  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages } };
-  const byName = new Map(list(prior.measures).map((measure) => [String(object(measure).name), measure]));
+export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null, planned = null } = {}) {
+  const entry = { ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)) };
+  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages: [entry] } };
+
+  const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
+  const since = staleSince ? Date.parse(staleSince) : Number.NaN;
+  /** Stages that landed before the change: their numbers describe the world as it was. */
+  const old = Number.isFinite(since) ? before.filter((each) => typeof each.at === "string" && Date.parse(each.at) < since) : [];
+  const rerun = planned == null ? null : new Set(planned.map(String));
+  const dropped = rerun ? old.filter((each) => !rerun.has(String(each.stage))) : [];
+  const carried = old.filter((each) => !dropped.includes(each));
+  const current = before.filter((each) => !old.includes(each));
+
+  const namesOf = (/** @type {Record<string, any>[]} */ entries) => new Set(entries.flatMap((each) => list(each.measures).map(String)));
+  const currentNames = namesOf([...current, entry]);
+  const carriedNames = namesOf(carried);
+  const droppedNames = namesOf(dropped);
+
+  /** @type {Map<string, any>} */
+  const byName = new Map();
+  for (const measure of list(prior.measures)) {
+    const name = String(object(measure).name);
+    if (currentNames.has(name)) byName.set(name, measure);
+    else if (carriedNames.has(name)) byName.set(name, { ...object(measure), stale: true });
+    else if (!droppedNames.has(name)) byName.set(name, measure);
+  }
   for (const measure of incoming.measures) byName.set(String(object(measure).name), measure);
+
   const counts = { ...object(prior.counts) };
   for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
-  const worst = [prior.conclusion, incoming.conclusion].filter(Boolean)
+  const kept = [...current, ...carried];
+  const conclusions = kept.length ? [incoming.conclusion, ...kept.map((each) => each.conclusion)] : [prior.conclusion, incoming.conclusion];
+  const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));
   for (const table of incoming.tables) tables.set(String(object(table).name), table);
+  // What an earlier merge of this cycle dropped stays said, until the stage itself runs again.
+  const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
+    ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
+  /** @type {Record<string, any>} */
+  const diagnostics = { ...prior.diagnostics, ...incoming.diagnostics, stages: [...current, ...carried, entry] };
+  if (notRerun.length) diagnostics.notRerun = notRerun;
+  else delete diagnostics.notRerun;
   return {
     conclusion: worst ?? null,
     notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null,
     counts,
     measures: [...byName.values()],
-    diagnostics: { ...prior.diagnostics, ...incoming.diagnostics, stages },
+    diagnostics,
     tables: [...tables.values()],
   };
 }
@@ -386,7 +431,7 @@ export class VcrJobs {
     const overBudget = cpuSecondsLimit > budget.remainingSeconds;
     const state = overBudget ? "awaiting_budget" : "queued";
 
-    const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, scenarioHash, inputs, seed });
+    const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
     const row = await this.store.one(`INSERT INTO ${VCR_SCHEMA}.jobs
       (id, study_id, user_id, kind, method, method_version, state, scenario, scenario_hash, inputs, seed, replicates,
        cpu_seconds_limit, max_attempts, run_id, idempotency_key, checkpoint)
@@ -488,6 +533,17 @@ export class VcrJobs {
   /** @param {string} studyId @param {string} jobId */
   async get(studyId, jobId) {
     return this.store.job(studyId, jobId);
+  }
+
+  /**
+   * What a job produced, whatever state it ended in: a finished job's result, a
+   * failed job's partial one, and the partial result of a job that was cancelled
+   * once the engine has reported it stopped (`recoverCanceled`). Null while there
+   * is nothing.
+   * @param {string} studyId @param {string} jobId
+   */
+  async resultOf(studyId, jobId) {
+    return this.store.resultOfJob(studyId, jobId);
   }
 
   /** The whole row, engine job id included, for the worker. @param {string} jobId */
@@ -700,15 +756,19 @@ export class VcrJobs {
     const result = object(answer.result);
     const cpuSeconds = Number(result?.manifest?.cpuSeconds ?? status?.cpuSeconds ?? 0);
     if (answer.refused === true) {
-      const issue = object(list(object(result.diagnostics).issues)[0]);
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, cpuSeconds,
-        error: { code: String(issue.code ?? "vcr_job_failed"), message: String(issue.detail ?? issue.message ?? "引擎拒绝了这项作业。").slice(0, 400) } });
+        error: vcrErrorFromIssues(result) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
     }
     this.#verify(row, result);
     const tables = await this.#storeTables(row, result);
+    const ended = String(result.status);
     return this.finish(String(row.id), {
-      status: String(result.status), result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner,
+      status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner,
       outputHash: vcrComputedOutputHash(result),
+      // A run the engine refused or stopped says why in its issues: the reason it
+      // names is the job's own error, not a bare 「failed」 (a partial result
+      // that a spent CPU budget cut short keeps its numbers *and* says so).
+      ...(ended === "succeeded" || ended === "not_estimable" ? {} : { error: vcrErrorFromIssues(result) }),
     });
   }
 
@@ -869,13 +929,24 @@ export class VcrJobs {
       const relative = `derived/${row.study_id}/${row.id}/${table.name}.csv`;
       if (!vcrLocationIsValid(relative)) continue;
       const destination = path.join(root, relative);
-      await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+      // What is filed here is what the engine's own next job opens, and the engine
+      // runs as another user with the data plane mounted read-only: an owner-only
+      // file (the mode a patient-level file rightly has) is one it cannot read, and
+      // the step that needs it fails with a permission error nobody can trace to
+      // its cause. What a job is asked to keep (`keepTables`, named only by the
+      // orchestrator and the recruitment forecast) is a generated population, a
+      // reconstruction's pseudo-patients or a forecast's probabilities — never a row
+      // of a real person, which reaches the engine by grant and snapshot alone — and
+      // that is why this subtree, and only this one, is readable by the engine's user.
+      await fs.mkdir(path.dirname(destination), { recursive: true, mode: DERIVED_DIRECTORY_MODE });
+      for (const directory of derivedDirectories(root, relative)) await fs.chmod(directory, DERIVED_DIRECTORY_MODE);
       const present = await fs.readFile(destination).then((bytes) => sha256Bytes(bytes) === table.sha256).catch(() => false);
       if (!present) {
         await this.engine.downloadTable(String(engineJobId), String(table.name), { destination, sha256: String(table.sha256),
-          maxBytes: Number(this.config.vcrDerivedTableMaxBytes ?? 256 * 1024 * 1024) });
+          maxBytes: Number(this.config.vcrDerivedTableMaxBytes ?? 256 * 1024 * 1024), mode: DERIVED_FILE_MODE });
         this.counters.tablesStored += 1;
       }
+      await fs.chmod(destination, DERIVED_FILE_MODE);
       table.location = relative;
     }
     return tables;
@@ -963,12 +1034,21 @@ export class VcrJobs {
           startedAt: outcome.startedAt ?? result?.manifest?.startedAt ?? null,
           finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
         }, { client });
+        // A summary of numbers somebody typed is not a summary of evidence: when the
+        // orchestrator froze this job on inputs no verified extraction backs
+        // (`inputsAssumed`, a hybrid control's historical counts), the engine's
+        // `aggregate` is not the word for what those numbers are — they are `assumed`.
+        const assumedInputs = detail.inputsAssumed === true;
+        const sourced = assumedInputs
+          ? measures.map((measure) => (object(measure).source === "aggregate" ? { ...object(measure), source: "assumed" } : measure))
+          : measures;
         /** @type {any} */
         const incoming = {
           conclusion: complete ? (status === "not_estimable" ? "not_estimable" : (result.conclusion ?? "estimable")) : "limited",
           notEstimableRule: result.notEstimableRule ?? null,
-          counts: object(result.counts), measures,
-          diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}) },
+          counts: object(result.counts), measures: sourced,
+          diagnostics: { ...object(result.diagnostics), ...(partial ? { partial: true, ...(status === "canceled" ? { canceled: true } : {}) } : {}),
+            ...(assumedInputs ? { inputsAssumed: true } : {}) },
           tables: list(result.tables),
         };
         let filed = incoming;
@@ -979,8 +1059,18 @@ export class VcrJobs {
           const prior = resultFromRow((await client.query(`SELECT * FROM ${VCR_SCHEMA}.results
             WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3 AND superseded_by IS NULL
             ORDER BY version DESC LIMIT 1`, [String(row.study_id), kind, subjectId])).rows[0]);
+          // When the object was last marked stale, on the database's own clock (the
+          // clock every job row is stamped with). A stage is old when its job was
+          // frozen before that mark, whenever it landed: it computed the world as
+          // it was.
+          const marked = detail.node
+            ? (await client.query(`SELECT marked_at FROM ${VCR_SCHEMA}.stale_marks
+              WHERE study_id = $1 AND node = $2 AND cleared_at IS NULL`, [String(row.study_id), String(detail.node)])).rows[0] : null;
           filed = vcrMergeStageResult(prior, incoming, {
-            stage: String(detail.stage), jobId, method: String(row.method), methodVersion: String(row.method_version ?? "") });
+            stage: String(detail.stage), jobId, method: String(row.method), methodVersion: String(row.method_version ?? ""),
+            at: row.created_at ? new Date(row.created_at).toISOString() : null,
+          }, { staleSince: marked?.marked_at ? new Date(marked.marked_at).toISOString() : null,
+            planned: Array.isArray(detail.plannedStages) ? detail.plannedStages.map(String) : null });
         }
         // A result made of several stages is only as credible as the weakest of them:
         // the tiers and models the earlier stages used are carried into this one.
@@ -1127,6 +1217,33 @@ export class VcrJobs {
   }
 }
 
+/**
+ * The job error a result's own issues make: the first issue's code, field and
+ * sentence, and every issue kept (up to ten) beside it. The engine refuses a
+ * job in its result — `diagnostics.issues` with the code, the field and the
+ * reason (`rule_column_unknown`, `scenario_value_invalid`, `cpu_budget_exhausted`) —
+ * and a queue that read only the status word recorded a failed job with no
+ * reason, so the study page and the run's own status answer said 「failed」
+ * and nothing more.
+ * @param {Record<string, any>} result
+ * @returns {{ code: string, field?: string, message: string, issues: Array<{ code: string, field: string | null, detail: string }> } | null}
+ */
+export function vcrErrorFromIssues(result) {
+  const issues = list(object(object(result).diagnostics).issues).map(object).filter((issue) => typeof issue.code === "string" && issue.code);
+  if (!issues.length) return null;
+  const first = issues[0];
+  const detail = String(first.detail ?? first.message ?? "").slice(0, 400);
+  // The domain holds a sentence for every code the engine raises; the engine's own detail names the column or field.
+  const said = knownErrorCodeMessage(String(first.code));
+  return {
+    code: String(first.code),
+    ...(typeof first.field === "string" && first.field ? { field: first.field } : {}),
+    message: said ? (detail ? `${said}（${detail}）` : said) : (detail || "引擎拒绝了这项作业。"),
+    issues: issues.slice(0, 10).map((issue) => ({ code: String(issue.code), field: typeof issue.field === "string" ? issue.field : null,
+      detail: String(issue.detail ?? issue.message ?? "").slice(0, 400) })),
+  };
+}
+
 /** What the engine's own fixed job errors mean, for a reader. */
 const ENGINE_ERROR_MESSAGES = Object.freeze(/** @type {Record<string, string>} */ ({
   engine_crashed: "计算进程异常退出，没有做成。",
@@ -1136,6 +1253,21 @@ const ENGINE_ERROR_MESSAGES = Object.freeze(/** @type {Record<string, string>} *
   result_unreadable: "引擎没能写出可读的结果。",
   canceled: "计算已被取消。",
 }));
+
+/** Directories and files of the derived (synthetic, reconstructed) tables: readable by the engine's own user. */
+export const DERIVED_DIRECTORY_MODE = 0o755;
+export const DERIVED_FILE_MODE = 0o644;
+
+/**
+ * The directories `derived/<study>/<job>/<file>` sits in, outermost first, as
+ * paths under the data-plane root — the ones the engine's user has to be able to
+ * walk through to reach the file.
+ * @param {string} root @param {string} relative
+ */
+function derivedDirectories(root, relative) {
+  const parts = relative.split("/").slice(0, -1);
+  return parts.map((_part, index) => path.join(root, ...parts.slice(0, index + 1)));
+}
 
 /** @param {Buffer} bytes */
 function sha256Bytes(bytes) {

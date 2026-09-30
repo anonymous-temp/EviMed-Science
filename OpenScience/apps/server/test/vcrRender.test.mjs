@@ -93,6 +93,53 @@ test("AC-20 a number typed into the template is reported; a year, a page and a s
   assert.equal(issues[0].severity, "advisory");
 });
 
+test("AC-20 a number typed into the template does not reach the rendered report: it reads 「未计算」 where it stood", () => {
+  const { text, typed, issues } = renderVcrNumbers("方案 B 的功效为 71.2%，共 1,284 人，事件 138 起；真实患者 {{n:counts.realPatients|thousands}} 人。", results);
+  assert.deepEqual(typed, ["71.2", "1,284", "138"]);
+  assert.doesNotMatch(text.replace("真实患者 1,284 人", ""), /\d/, "no digit the words typed is in what a reader gets; the only digits are the rendered reference's");
+  assert.equal(text, `方案 B 的功效为 ${VCR_UNCOMPUTED}%，共 ${VCR_UNCOMPUTED} 人，事件 ${VCR_UNCOMPUTED} 起；真实患者 1,284 人。`, "the rendered reference is untouched, and so is the sentence");
+  assert.deepEqual(issues.map((issue) => issue.code), ["vcr_number_typed"]);
+  assert.match(issues[0].message, /未计算/, "the run is told what the report says in the number's place");
+});
+
+test("AC-20 what a report may say in digits without a reference is closed: a year, an ordinal, a date, a locator, a quoted source", () => {
+  const prose = "2026 年 9 月 29 日起，第 35 页图 3 表 2 运行 #25；快照 2026-09-29T10:00:00Z；方案入选「年龄 ≥ 18 岁」“ECOG 0–1”，第 3 节。";
+  const { text, typed, issues } = renderVcrNumbers(prose, results);
+  assert.deepEqual(typed, []);
+  assert.equal(text, prose, "nothing was replaced");
+  assert.deepEqual(issues, []);
+  // The same digits outside those forms are a statement of the study.
+  assert.deepEqual(renderVcrNumbers("年龄 ≥ 18 岁，第 40 例", results).typed, ["18", "40"]);
+});
+
+test("C2-10 a reference the grammar cannot read never reaches the report raw, whatever its spelling", () => {
+  const cases = [
+    ["功效 {{n:measure(power).value|PCT1}} 很高。", "capital format"],
+    ["功效 {{N:measure(power).value|pct1}} 很高。", "capital N"],
+    ["功效 {{n: measure(power).value }} 很高。", "a space inside the path"],
+    ["功效 {{n:measure(power).value|pct1} 很高。", "one closing brace"],
+    ["功效 {{n:measure(power).value 很高。", "never closed"],
+    ["功效 {{ n:measure(power).value|pct1 |x}} 很高。", "two formats"],
+  ];
+  for (const [template, why] of cases) {
+    const { text, issues } = renderVcrNumbers(template, results);
+    assert.doesNotMatch(text, /\{\{|n:measure/i, `${why}: a raw reference reached the text: ${text}`);
+    assert.match(text, new RegExp(VCR_UNCOMPUTED), why);
+    assert.ok(issues.some((issue) => issue.code === "vcr_number_unparsed"), `${why}: ${JSON.stringify(issues.map((issue) => issue.code))}`);
+  }
+  // The sentence after an unclosed reference is not eaten, and an unparsed one is not counted as a bound one.
+  const { text, bindings } = renderVcrNumbers("功效 {{n:measure(power).value 很高，然后继续写结论。", results);
+  assert.match(text, /很高，然后继续写结论。/);
+  assert.equal(bindings.length, 0);
+});
+
+test("a rendered value that itself contains digits or braces is a result, never prose to be scanned again", () => {
+  const withText = { ...results, definition: { pico: { population: "{{n:x}} 二线 NSCLC 共 500 例" } } };
+  const { text, issues } = renderVcrNumbers("人群：{{n:definition.pico.population|text}}。", withText);
+  assert.equal(text, "人群：{{n:x}} 二线 NSCLC 共 500 例。", "the result's own words come out as they are");
+  assert.deepEqual(issues, []);
+});
+
 test("an unknown format is reported and the raw value still prints", () => {
   const { text, issues } = renderVcrNumbers("功效 {{n:measure(power).value|percent}}。", results);
   assert.equal(issues[0].code, "vcr_number_format_unknown");

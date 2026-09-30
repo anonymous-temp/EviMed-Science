@@ -12,7 +12,7 @@ import {
   VCR_GATEWAY_OPERATIONS, VCR_GATEWAY_PATH, VCR_GATEWAY_WINDOW_LIMITS, createVcrGatewayHandler, vcrGatewayProviderUrl,
   vcrGatewayRoutePattern, vcrRuntimeWrite,
 } from "../src/vcrGateway.mjs";
-import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
+import { VCR_READ_WHATS, VCR_WRITE_WHATS, VcrService } from "../src/vcrService.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 
 /** The one saved result the fixture's study has. */
@@ -49,9 +49,12 @@ const runtimeManager = { assertActiveModelGatewayToken: (/** @type {string} */ t
 function fixture(overrides = {}) {
   /** @type {any[]} */
   const calls = [];
+  // What a run reads of a result passes the real service's boundary; a double that answered raw would hide the seam.
+  const boundary = new VcrService({ store: /** @type {any} */ ({}), config: {} });
   const service = {
     allows: () => true,
     counters: { reads: 0, writes: 0, writeIssues: 0 },
+    forModel: (/** @type {unknown} */ payload) => boundary.forModel(payload),
     async runtimeRead(target, what, filter) { calls.push(["read", what, filter]); return { what, studyId: target.id, items: [] }; },
     async reportModel(target) { return vcrReportModel({ study: target, results: await vcrStoreResults() }); },
     async adoptModel(_user, input) { calls.push(["adopt", input.name]); return { id: "mdl_1" }; },
@@ -85,7 +88,7 @@ function fixture(overrides = {}) {
     async models() { return []; },
     async exports() { return []; },
     async createExport(input) { calls.push(["export", input.kind]); return { id: "exp_1", kind: input.kind, state: "queued", cover: {} }; },
-    async updateExport(id, patch) { calls.push(["updateExport", id, Object.keys(patch).join(",")]); return { id, ...patch }; },
+    async updateExport(id, patch) { calls.push(["updateExport", id, Object.keys(patch).join(","), patch]); return { id, ...patch }; },
   };
   const jobs = {
     async enqueue(input) { calls.push(["enqueue", input.kind, input.idempotencyKey]); return { job: { id: "job_1", state: "queued", progress: {} }, created: true }; },
@@ -282,6 +285,59 @@ test("AC-20 a report the run writes is rendered by the platform, and its typed n
   const stored = calls.find((call) => call[0] === "updateExport");
   assert.ok(stored, "the rendered report is kept on the export row");
   assert.equal(/2\.4|71\.0%|0\.71/.test(JSON.stringify(data)), false, "what the run is told carries no rendered number");
+  // The typed number is not in the report a reader gets: the words say 「未计算」 where the run typed it.
+  const report = stored[3].cover.report;
+  assert.equal(report.rendered.includes("999"), false, "the typed number was removed from the stored report");
+  assert.match(report.rendered, /事件 未计算 起/);
+  assert.equal(report.rendered.includes("{{n:"), false);
+});
+
+test("C2-10 a reference the renderer cannot parse is an issue and never reaches the stored report raw", async () => {
+  const { calls, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", {
+    what: "report",
+    data: { kind: "study_package", template: "功效为 {{n:results.trial_scenario.measures[0].value|PCT1}}，把握 {{N:measure(power)}}。" },
+  }), res);
+  const data = res.json().data;
+  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => issue.code), ["vcr_number_unparsed", "vcr_number_unparsed"]);
+  const rendered = calls.find((call) => call[0] === "updateExport")?.[3].cover.report.rendered;
+  assert.equal(rendered, "功效为 未计算，把握 未计算。");
+});
+
+test("C2-7 a design grid's comparison goal names the measures it compares; a result-shaped `measures` is still refused", async () => {
+  const grid = { dimensions: { designs: [{ label: "A", kind: "two_arm_fixed", nTreat: 100, nControl: 100 }] }, truthScenarios: [{ label: "零效应" }] };
+  const { handler } = fixture();
+  const named = response();
+  await handler(request("/internal/vcr/v1/write", { what: "design_grid", data: { ...grid,
+    comparisonGoal: { text: "功效尽量高", measures: [{ name: "power", direction: "higher" }, "type_one_error"] } } }), named);
+  assert.equal(named.json().data.ok, true, JSON.stringify(named.json().data.issues));
+  assert.deepEqual(named.json().data.ids, ["grd_1"], "the grid was written");
+  // Anything that carries a number is a result, at that path as anywhere.
+  for (const measures of [[{ name: "power", value: 0.9 }], [{ name: "power", direction: "higher", mcse: 0.01 }], { power: 0.9 }, [{ name: "power", interval: { low: 1, high: 2 } }]]) {
+    const refused = response();
+    await handler(request("/internal/vcr/v1/write", { what: "design_grid", data: { ...grid, comparisonGoal: { text: "x", measures } } }), refused);
+    assert.equal(refused.json().data.ok, false, JSON.stringify(measures));
+    assert.equal(refused.json().data.issues[0].code, "vcr_write_field_forbidden");
+    assert.equal(refused.json().data.issues[0].field, "comparisonGoal.measures");
+  }
+  // And a `measures` anywhere else in the object is as forbidden as ever.
+  const elsewhere = response();
+  await handler(request("/internal/vcr/v1/write", { what: "design_grid", data: { ...grid, dimensions: { ...grid.dimensions, measures: [{ name: "power", direction: "higher" }] } } }), elsewhere);
+  assert.equal(elsewhere.json().data.ok, false);
+  assert.equal(elsewhere.json().data.issues[0].field, "dimensions.measures");
+});
+
+test("a pooling start tells the run every study it left out, not the first twenty", async () => {
+  const refused = Array.from({ length: 45 }, (_, at) => ({ id: `evd_${at}`, reasons: ["quote_not_verified"] }));
+  const { handler } = fixture({ evidence: { async poolParameter() { return { status: "no_evidence", parameter: "median_time", jobs: [], refused }; } } });
+  const res = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "pool_evidence", scenario: { parameter: "median_time", endpointKey: "pfs" } }), res);
+  const data = res.json().data;
+  assert.equal(data.state, "not_started");
+  assert.equal(data.refused.length, 45, "the whole list, with each study's reason");
+  assert.equal(data.refusedCount, 45);
+  assert.deepEqual(data.refused[44], { id: "evd_44", reasons: ["quote_not_verified"] });
 });
 
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
