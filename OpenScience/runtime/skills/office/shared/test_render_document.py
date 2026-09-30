@@ -45,7 +45,8 @@ class DocumentRendererTest(unittest.TestCase):
         text = unicodedata.normalize("NFKC", "".join(page.extract_text() for page in pdf.pages))
         self.assertGreater(len(pdf.pages), 2)
         self.assertGreater(len(pdf.pages[0].images), 0)
-        for value in ("中文研究", "95%", "12.5", "119.25", "未计算"):
+        self.assertNotIn("\x00", text)
+        for value in ("中文研究", "95%", "12.5", "119.25", "未计算", "β"):
             self.assertIn(value, text)
 
     def test_pdf_failure_keeps_docx_and_html(self):

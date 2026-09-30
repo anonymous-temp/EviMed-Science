@@ -73,6 +73,7 @@ system() {
     ${browser} \
     curl \
     fonts-noto-cjk \
+    fonts-texgyre-math \
     pandoc \
     git \
     gzip \

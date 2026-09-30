@@ -21,7 +21,7 @@ from pathlib import Path
 
 VERSION = "pandoc-chromium-v1"
 MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "pdf": "application/pdf", "html": "text/html; charset=utf-8"}
-CSS = """@page { size:A4; margin:20mm 16mm; } body { font:11pt 'Noto Sans CJK SC','Noto Sans',sans-serif; line-height:1.65; color:#17212b; overflow-wrap:anywhere; } h1,h2,h3 { break-after:avoid; } table { border-collapse:collapse; width:100%; font-size:9pt; } thead { display:table-header-group; } tr { break-inside:avoid; } th,td { border:1px solid #aaa; padding:5px; text-align:left; } img { max-width:100%; max-height:230mm; } pre { white-space:pre-wrap; } .pagebreak { break-before:page; }"""
+CSS = """@page { size:A4; margin:20mm 16mm; } body { font:11pt 'Noto Sans CJK SC','Noto Sans',sans-serif; line-height:1.65; color:#17212b; overflow-wrap:anywhere; } h1,h2,h3 { break-after:avoid; } math { font-family:"TeX Gyre Termes Math","STIX Two Math","Cambria Math",serif; } table { border-collapse:collapse; width:100%; font-size:9pt; } thead { display:table-header-group; } tr { break-inside:avoid; } th,td { border:1px solid #aaa; padding:5px; text-align:left; } img { max-width:100%; max-height:230mm; } pre { white-space:pre-wrap; } .pagebreak { break-before:page; }"""
 
 
 def sha256(data: bytes) -> str:

@@ -12,4 +12,4 @@ Use `scripts/create_pdf.py` for a PDF with the runtime's CJK fonts, then retain 
 python3 scripts/create_pdf.py --input report.txt --output report.pdf
 ```
 
-The runtime supplies Pandoc, Playwright, Chromium and Noto CJK fonts. Headings, tables, mathematics and Chinese text use the shared renderer; remote images and executable HTML are unavailable. Missing resources remain visibly labelled. Tagged PDF accessibility is not claimed.
+The runtime supplies Pandoc, Playwright, Chromium, Noto CJK and TeX Gyre mathematics fonts. Headings, tables, mathematics and Chinese text use the shared renderer; remote images and executable HTML are unavailable. Missing resources remain visibly labelled. Tagged PDF accessibility is not claimed.

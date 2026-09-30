@@ -15,7 +15,7 @@
         },
         "pdf": {
           "entrypoints": ["scripts/create_pdf.py"],
-          "dependencies": ["python>=3.11", "pandoc", "playwright", "chromium", "fonts-noto-cjk"],
+          "dependencies": ["python>=3.11", "pandoc", "playwright", "chromium", "fonts-noto-cjk", "fonts-texgyre-math"],
           "artifacts": ["document.pdf"],
           "smoke": "minimal-pdf"
         },

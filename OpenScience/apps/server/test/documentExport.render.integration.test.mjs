@@ -85,13 +85,15 @@ for case in cases:
   text=' '.join(ElementTree.fromstring(archive.read('word/document.xml')).itertext())
   assert any(name.startswith('word/media/') for name in archive.namelist())
  pdf=PdfReader(root/'document.pdf')
- pdf_text=unicodedata.normalize('NFKC',' '.join(page.extract_text(extraction_mode='layout') for page in pdf.pages))
+ pdf_text=unicodedata.normalize('NFKC',' '.join(page.extract_text() for page in pdf.pages))
  expected=set(re.findall(r'\\d+(?:\\.\\d+)?',case['canonicalMarkdown']))
  assert expected <= set(re.findall(r'\\d+(?:\\.\\d+)?',text)), 'DOCX numeric tokens missing'
  assert expected <= set(re.findall(r'\\d+(?:\\.\\d+)?',pdf_text)), 'PDF numeric tokens missing'
  assert '未计算' in pdf_text
+ assert '\\x00' not in pdf_text
+ for glyph in case.get('requiredMathGlyphs',[]): assert glyph in pdf_text, 'PDF math glyph missing'
 print(json.dumps({'verifiedDocuments':len(cases)},ensure_ascii=False))
-`], { input:JSON.stringify([{ outputDirectory:path.join(directory,'output'), canonicalMarkdown },...vcrOutputs]), encoding:'utf8', timeout:30000 });
+`], { input:JSON.stringify([{ outputDirectory:path.join(directory,'output'), canonicalMarkdown, requiredMathGlyphs:['β'] },...vcrOutputs]), encoding:'utf8', timeout:30000 });
   assert.equal(check.status,0,check.stderr);
   await fs.writeFile(path.join(destination,'acceptance.json'),JSON.stringify({imageId,rendererVersion:DOCUMENT_RENDERER_VERSION,availableMemory:available,elapsedMs:Date.now()-started,outputDirectory:path.join(directory,'output'),sourceDigest:input.sourceDigest,manifest,vcrOutputs,textCheck:JSON.parse(check.stdout)},null,2));
 });
