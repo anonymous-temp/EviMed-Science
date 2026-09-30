@@ -67,6 +67,8 @@ vcr_case("N00c", c("AC-04"), function() {
     list(list(x = list(2, 1), y = "中"), '{"x":[2,1],"y":"中"}'),
     list(list(k = NULL, j = TRUE), '{"j":true,"k":null}'),
     list(list(n = 0.30000000000000004), '{"n":0.30000000000000004}'),
+    list(list(n = 0.3-0.1), '{"n":0.19999999999999998}'),
+    list(list(n = 1.8568 + .Machine$double.eps), '{"n":1.8568000000000002}'),
     list(list(m = matrix(c(1, 0.2, 0.2, 1), 2)), '{"m":[[1,0.2],[0.2,1]]}'),
     list(list(e = vcr_empty_object(), a = list()), '{"a":[],"e":{}}'))
   nat <- vapply(native, function(p_) vcr_canonical_json(p_[[1]]), character(1))

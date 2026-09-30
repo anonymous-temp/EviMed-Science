@@ -145,8 +145,8 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
 | `comparator.evalue` | E-values on every scale | EValue |
 | `comparator.map_prior` | MAP by quadrature, robustify, prior ESS (ELIR), conflict against the MAP alone, hybrid operating characteristics | RBesT, an independent joint grid |
-| `design.analytic` | Schoenfeld, Lan-DeMets boundaries (`sided` honoured), n, Simon two-stage over the whole grid | rpact, gsDesign, published Simon designs |
-| `design.simulate` | the ADEMP runner: calendar-time group sequential, dropout, `sided`, costs | `design.analytic`, an independent `survdiff` simulation (N04c) |
+| `design.analytic` | Schoenfeld, Lan-DeMets boundaries (`sided` honoured), n, exact single-arm binomial rejection/power, Simon two-stage over the whole grid | rpact, gsDesign, `stats::binom.test`, published Simon designs |
+| `design.simulate` | the ADEMP runner: fixed two-arm, calendar-time group sequential, exact binary single-arm, frozen Simon, explicitly synthetic stratified binary external controls | `design.analytic`, independent binomial/joint-table enumeration, beta-binomial moments, independent `survdiff` (N04c) |
 | `design.grid` | designs × truths, one immutable run per cell, a long-format table | — |
 | `design.assurance` | power averaged over a design prior (normal on effect, on log HR, on the risk difference) | numerical integration, a Monte-Carlo z-test |
 | `design.procova` | prognostic-adjustment sample size, three paths | the closed form, EMA 2022 |
@@ -185,7 +185,7 @@ prediction distribution. **When `k < 3` the prediction measure is absent** and
 
 The domain's scenario schemas are the authority, and the domain lists every key
 the handlers read. `tests/helpers/scenario-schema-additions.json` is the
-checklist that keeps it so: 40 entries (method, path, key, expected schema
+checklist that keeps it so: 65 entries (method, path, key, expected schema
 node), each looked up in the domain's schemas by case N26, which fails naming any
 that is missing or unreachable (and asserts it looked up all of them). A missing
 entry is also overlaid in memory so the rest of the suite still runs against the
@@ -287,3 +287,45 @@ failed on the code it replaced; the comment on the case says what it pins.
 7. **The engine's own issue codes** (`VCR_ENGINE_OWN_ISSUE_CODES` in
    `R/engine.R`) are the ones the protocol registry does not carry; E10d fails
    when a code is literal in the sources and in neither list.
+### Binary single-arm contracts (design methods 1.1.0)
+
+`single_arm` requires `design.n`, `truth.nullRate`, `truth.responseRate` and
+`analysis.method: exact_binomial` with an explicit `alternative` (`greater`,
+`less`, `two.sided`) and matching `sided`. Its success rule is exact p-value
+less than or equal to alpha; the two-sided convention orders binomial
+probabilities as [R's exact test](https://www.stat.ethz.ch/R-manual/R-devel/library/stats/html/binom.test.html).
+Response rates may equal zero or one. Analytical rejection probability is
+exact count enumeration; confidence intervals are Clopper-Pearson and remain
+distinct from the Monte Carlo interval on simulated performance.
+
+`simon_two_stage` analytical search retains optimal/minimax selection over
+the complete grid ([Simon 1989](https://pubmed.ncbi.nlm.nih.gov/2702835/)).
+Simulation requires the selected, frozen `design.n1/n/r1/r`: stop for futility
+when first-stage responses are at most r1; after continuing, success requires
+total responses strictly greater than r. It draws no unobserved second-stage
+records after stopping. Rejection, PET and expected N carry MCSE and exact
+references. The naive stopped response estimate is labeled as such; an adjusted
+sequential confidence interval is not implemented, so no coverage is fabricated.
+
+`single_arm_external` supports **binary two-stratum synthetic scenarios only**.
+The frozen `external.kind: stratified_beta_binomial` declares historical size,
+source/target covariate prevalences, finite beta `parameterInformation`,
+`logOddsDrift`, and a finite `sensitivityDrifts` list. Truth gives two
+`controlRates` and `treatmentRates`; analysis declares ATT and
+`stratified_risk_difference`. Both response means are standardized to the fixed
+treatment target. The historical generation law has shared stratum parameter
+uncertainty; increasing generated historical size never removes that component.
+Its Wald variance includes that declared beta-binomial uncertainty. Calibration,
+bias, coverage, effective historical N and every drift sensitivity are actually
+simulated. Missing target-stratum support produces `not_estimable`; replicate
+failures remain in performance denominators. This is neither observed controls
+nor a causal guarantee: selection, time drift and unmeasured confounding remain
+limitations ([FDA external-control guidance](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/considerations-design-and-conduct-externally-controlled-trials-drug-and-biological-products)).
+
+Single-arm null floors derive from responseRate minus nullRate, or target ATT,
+not from a flag that changes no generating law. A contradictory `truth.null` is
+refused. All generated records remain synthetic; realPatients is zero. Continuous
+and survival single-arm variants are explicitly unsupported. Prior supported
+two-arm/group-sequential (and analytical Simon) jobs may replay version 1.0.0;
+new variants require 1.1.0. N31 records numerical evidence; local unpinned R runs
+are exploratory, and release validation runs the locked R 4.3.3 library in CI.

@@ -91,9 +91,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
-  'design.analytic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic']), modelTier: 'scenario' },
-  'design.grid': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.analytic': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
+  'design.simulate': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance']), modelTier: 'scenario' },
+  'design.grid': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005"]), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
@@ -467,7 +467,7 @@ export function validateEngineJob(job) {
   }
   if (job.methodVersion === undefined || job.methodVersion === null || job.methodVersion === '') {
     bad('method_version_missing', 'methodVersion', 'A job names the method version its numbers are validated at.')
-  } else if (methodKnown && job.methodVersion !== VCR_ENGINE_METHODS[/** @type {keyof typeof VCR_ENGINE_METHODS} */ (method)].version) {
+  } else if (methodKnown && job.methodVersion !== VCR_ENGINE_METHODS[/** @type {keyof typeof VCR_ENGINE_METHODS} */ (method)].version && !legacyDesignVersionMatches(job)) {
     bad('method_version_mismatch', 'methodVersion', `Method ${method} is ${VCR_ENGINE_METHODS[/** @type {keyof typeof VCR_ENGINE_METHODS} */ (method)].version} in this build.`)
   }
   if (!Number.isInteger(job.seed) || job.seed < 0 || job.seed > 2_147_483_647) {
@@ -581,6 +581,16 @@ export function validateEngineJob(job) {
     }
   }
   return frozen(issues)
+}
+
+/** Replay prior supported designs under their recorded version; never label new designs as old. @param {any} job */
+function legacyDesignVersionMatches(job) {
+  const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
+  if (!spec?.legacyVersion || job.methodVersion !== spec.legacyVersion) return false
+  const base = job.scenario?.design?.kind
+  const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
+    ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]
+  return kinds.length > 0 && kinds.every((/** @type {string} */ kind) => !VCR_TRIAL_DESIGNS.includes(kind) || spec.legacyDesigns.includes(kind))
 }
 
 // ---------------------------------------------------------------------------

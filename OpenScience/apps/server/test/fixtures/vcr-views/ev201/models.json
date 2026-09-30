@@ -292,7 +292,7 @@
       "id": "mth_9",
       "name": "方案的解析计算",
       "method": "design.analytic",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
       "usedIn": null
@@ -310,7 +310,7 @@
       "id": "mth_11",
       "name": "设计网格",
       "method": "design.grid",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
       "usedIn": null
@@ -328,7 +328,7 @@
       "id": "mth_13",
       "name": "方案的模拟运行",
       "method": "design.simulate",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
       "usedIn": null

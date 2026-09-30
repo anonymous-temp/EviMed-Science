@@ -290,6 +290,36 @@ vcr_simon_two_stage <- function(p0, p1, alpha = 0.05, beta = 0.2, n_max = 100) {
   total
 }
 
+#' Frozen exact-binomial rule. Two-sided means probability ordering, matching
+#' stats::binom.test (not doubling the smaller one-sided tail). Every possible
+#' count is computed once; replicates only index the frozen rejection/CI table.
+vcr_exact_binomial <- function(n, p0, response_rate, alpha = .025, alternative = "greater") {
+  if (length(n)!=1L || !is.finite(n) || n<1 || n!=floor(n) || n>10000 ||
+      any(!is.finite(c(p0,response_rate,alpha))) || p0<0 || p0>1 || response_rate<0 || response_rate>1 ||
+      alpha<=0 || alpha>=1 || !(alternative %in% c("greater","less","two.sided")) || (alternative!="two.sided" && alpha>=.5)) {
+    vcr_abort("scenario_value_invalid", "scenario.design", "Exact binary design requires a finite size/rates/alpha and a declared binomial alternative.")
+  }
+  x <- 0:n; mass <- stats::dbinom(x,n,p0)
+  pvals <- if (alternative=="greater") stats::pbinom(x-1,n,p0,lower.tail=FALSE)
+           else if (alternative=="less") stats::pbinom(x,n,p0)
+           else {
+             # binom.test's probability-ordering tie tolerance is 1+1e-7.
+             ordered <- sort(mass); cumulative <- c(0,cumsum(ordered))
+             pmin(1,cumulative[findInterval(mass*(1+1e-7),ordered)+1L])
+           }
+  sided <- if (alternative=="two.sided") 2 else 1
+  tail <- alpha/sided
+  lower <- rep(0,length(x)); upper <- rep(1,length(x))
+  lower[x>0] <- stats::qbeta(tail,x[x>0],n-x[x>0]+1)
+  upper[x<n] <- stats::qbeta(1-tail,x[x<n]+1,n-x[x<n])
+  reject <- pvals<=alpha
+  list(n=n,nullRate=p0,responseRate=response_rate,alternative=alternative,alpha=alpha,
+    pValues=pvals,reject=reject,rejectCounts=x[reject],ciLow=lower,ciHigh=upper,
+    typeOneError=sum(mass[reject]),power=sum(stats::dbinom(x,n,response_rate)[reject]),
+    intervalLevel=1-2*tail,rule="p_value_less_than_or_equal_alpha",
+    twoSidedConvention=if(sided==2)"probability_ordered_binomial" else NULL)
+}
+
 # --- asymptotic log-rank power (a design's patients, not its events) --------
 
 #' Expected proportion still under observation `t` after entry, for uniform

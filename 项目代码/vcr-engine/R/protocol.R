@@ -121,7 +121,10 @@ vcr_num_to_json <- function(x) {
   exp10 <- NULL
   for (p in 1:17) {
     s <- sprintf(paste0("%.", p - 1L, "e"), x)
-    if (identical(as.numeric(s), x)) {
+    # R's decimal-to-double parser can double-round a 17-digit scientific
+    # string (e.g. 0.3-0.1). The JSON decoder uses correctly rounded strtod,
+    # matching the consumer; otherwise a valid result cannot acquire a hash.
+    if (identical(jsonlite::fromJSON(s), x)) {
       parts <- strsplit(s, "e", fixed = TRUE)[[1]]
       mant <- gsub(".", "", parts[1], fixed = TRUE)
       # trailing zeros are not part of the shortest representation
@@ -340,6 +343,16 @@ vcr_replicate_floor <- function(is_null, target_mcse = NULL, p = NULL, alpha = 0
 .vcrp_is_null_scenario <- function(scenario) {
   truth <- .vcrp_get(scenario, "truth")
   if (!.vcrp_named(truth)) return(FALSE)
+  kind <- .vcrp_get(.vcrp_get(scenario,"design"),"kind") %||% ""
+  if(!.vcrp_chr(kind))kind<-""
+  if (kind %in% c("single_arm","simon_two_stage")) {
+    return(.vcrp_num(truth$responseRate) && .vcrp_num(truth$nullRate) && abs(truth$responseRate-truth$nullRate)<1e-12)
+  }
+  if (identical(kind,"single_arm_external")) {
+    p0<-unlist(truth$controlRates);p1<-unlist(truth$treatmentRates)
+    q<-.vcrp_get(.vcrp_get(scenario,"external"),"targetPrevalence")
+    return(length(p0)==2L && length(p1)==2L && is.numeric(p0) && is.numeric(p1) && .vcrp_num(q) && all(is.finite(c(p0,p1))) && abs(sum(c(1-q,q)*(p1-p0)))<1e-12)
+  }
   if (.vcrp_lgl(truth[["null"]])) return(truth[["null"]])
   type <- .vcrp_get(.vcrp_get(scenario, "endpoint"), "type")
   if (!.vcrp_chr(type)) return(FALSE)
@@ -666,14 +679,15 @@ vcr_pattern_match <- function(pattern, x) {
   }
   for (key in names(fields)) {
     field <- fields[[key]]
+    required<-isTRUE(field$req)||(!is.null(field$reqWhen)&&.vcrp_when_holds(field$reqWhen,ctx$root))
     if (!active(field)) next
     if (.vcrp_has(value, key) && is.null(value[[key]])) {
       if (!isTRUE(field$nullable)) raise("scenario_value_invalid", .vcrp_at(path, key), "null is not a value; leave the key out.")
-      else if (isTRUE(field$req)) raise("scenario_field_missing", .vcrp_at(path, key), "The key is required.")
+      else if (required) raise("scenario_field_missing", .vcrp_at(path, key), "The key is required.")
       next
     }
     if (!.vcrp_present(value, key)) {
-      if (isTRUE(field$req)) raise("scenario_field_missing", .vcrp_at(path, key), "The key is required.")
+      if (required) raise("scenario_field_missing", .vcrp_at(path, key), "The key is required.")
       next
     }
     .vcrp_check_value(field, value[[key]], .vcrp_at(path, key), ctx)
@@ -723,7 +737,9 @@ vcr_pattern_match <- function(pattern, x) {
     cell[["truth"]] <- .vcrp_merge(scenario[["truth"]], truths[[t]])
     inner <- .vcrp_walk_ctx(cell, ctx$input_ids)
     .vcrp_check_object(cell_schema, cell, "", inner)
-    hit <- Filter(function(i) i$code != "scenario_field_unknown", inner$issues)
+    .vcrp_check_design_semantics(cell,"",inner)
+    single<-cell$design$kind %in% c("single_arm","single_arm_external","simon_two_stage")
+    hit <- Filter(function(i) single || i$code != "scenario_field_unknown", inner$issues)
     if (length(hit)) {
       ctx$raise("scenario_value_invalid",
                 if (startsWith(hit[[1]]$field, "truth")) .vcrp_at_index("truths", t) else .vcrp_at_index("designs", d),
@@ -731,6 +747,38 @@ vcr_pattern_match <- function(pattern, x) {
       return(invisible(NULL))
     }
   }
+  invisible(NULL)
+}
+
+# Coupled fields of single-arm rules; mirrors checkDesignSemantics in the domain.
+.vcrp_check_design_semantics <- function(sc,path,ctx) {
+  d<-.vcrp_get(sc,"design");an<-.vcrp_get(sc,"analysis");tr<-.vcrp_get(sc,"truth")
+  if(!.vcrp_named(an))an<-list()
+  if(!.vcrp_named(tr))tr<-list()
+  kind<-.vcrp_get(d,"kind") %||% "";method<-an$method;endpoint<-.vcrp_get(.vcrp_get(sc,"endpoint"),"type")
+  if(!.vcrp_chr(kind))kind<-""
+  bad<-function(field,detail)ctx$raise("scenario_value_invalid",.vcrp_at(path,field),detail)
+  if (!(kind %in% c("single_arm","single_arm_external","simon_two_stage"))) {
+    methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst"))
+    allowed<-if(.vcrp_chr(endpoint))methods[[endpoint]] else character(0)
+    if (!is.null(method) && !(method %in% allowed)) bad("analysis.method","The analysis must match the endpoint.")
+    return(invisible(NULL))
+  }
+  if (!identical(endpoint,"binary")) bad("endpoint.type","This single-arm implementation requires a binary endpoint.")
+  expected<-c(single_arm="exact_binomial",single_arm_external="stratified_risk_difference",simon_two_stage="simon_boundary")
+  if (!is.null(method) && !identical(method,unname(expected[kind]))) bad("analysis.method","The analysis must match the declared single-arm design.")
+  sided<-an$sided %||% 1
+  if(!.vcrp_num(sided))sided<-1
+  if(sided==1 && .vcrp_num(an$alpha) && an$alpha>=.5)bad("analysis.alpha","A one-sided analysis uses alpha below one half.")
+  if (kind=="single_arm" && sided!=if(identical(an$alternative,"two.sided"))2 else 1) bad("analysis.sided","Sidedness must agree with the exact binomial alternative.")
+  if (kind=="simon_two_stage") {
+    if (.vcrp_num(d$n1) && .vcrp_num(d$n) && d$n1>=d$n) bad("design.n1","Stage one is smaller than the total sample size.")
+    if (.vcrp_num(d$r1) && .vcrp_num(d$n1) && d$r1>=d$n1) bad("design.r1","Stage one continues only above r1 < n1.")
+    if (.vcrp_num(d$r) && .vcrp_num(d$n) && (d$r>=d$n || (!is.null(d$r1) && d$r<d$r1))) bad("design.r","The final threshold satisfies r1 <= r < n.")
+    if (sided!=1) bad("analysis.sided","Simon uses the upper one-sided frozen boundary rule.")
+    if (.vcrp_num(tr$alternativeRate) && .vcrp_num(tr$nullRate) && tr$alternativeRate<=tr$nullRate) bad("truth.alternativeRate","The alternative rate exceeds the null rate.")
+  }
+  if (.vcrp_lgl(tr[["null"]]) && !identical(tr[["null"]],.vcrp_is_null_scenario(sc))) bad("truth.null","The null label must agree with the generating estimand.")
   invisible(NULL)
 }
 
@@ -747,6 +795,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
     ctx$raise("rule_expression_forbidden", holder, "A scenario never carries an expression.")
   }
   .vcrp_check_object(schema, scenario, path, ctx)
+  if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
   if (!is.null(schema$gridCells)) .vcrp_check_grid(schema, scenario, ctx)
   seen <- character(0)
   Filter(function(issue) {
@@ -788,7 +837,7 @@ vcr_validate_job <- function(job) {
   mv <- job[["methodVersion"]]
   if (is.null(mv) || (.vcrp_chr(mv) && !nzchar(mv))) {
     bad("method_version_missing", "methodVersion", "A job names the method version its numbers are validated at.")
-  } else if (method_known && !identical(mv, d$methods[[method]]$version)) {
+  } else if (method_known && !identical(mv, d$methods[[method]]$version) && !.vcrp_legacy_design_version(job,d$methods[[method]])) {
     bad("method_version_mismatch", "methodVersion", "This build has another version of the method.")
   }
   seed <- job[["seed"]]
@@ -902,6 +951,17 @@ vcr_validate_job <- function(job) {
     }
   }
   issues
+}
+
+.vcrp_legacy_design_version <- function(job,spec) {
+  if(is.null(spec$legacyVersion)||!identical(job$methodVersion,spec$legacyVersion))return(FALSE)
+  sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
+  if(!.vcrp_chr(base))base<-""
+  designs<-.vcrp_get(sc,"designs")
+  kinds<-if(identical(job$method,"design.grid") && is.list(designs))
+    vapply(designs,function(d){k<-.vcrp_get(d,"kind") %||% base;if(.vcrp_chr(k))k else ""},character(1)) else base
+  if(!length(kinds))return(TRUE) # malformed/missing design is refused by its scenario issue
+  all(!(kinds %in% unlist(vcr_domain()$trialDesigns)) | kinds %in% unlist(spec$legacyDesigns))
 }
 
 #' Validate a result. Mirrors `validateEngineResult`. The engine runs this on

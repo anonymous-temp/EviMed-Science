@@ -1671,6 +1671,234 @@
           }
         ]
       }
+    },
+    {
+      "name": "exact binary analytic",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "exact binary simulation",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "frozen Simon binary simulation",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "simon_two_stage",
+            "n1": 10,
+            "n": 29,
+            "r1": 1,
+            "r": 5
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3,
+            "responseRate": 0.1
+          },
+          "analysis": {
+            "method": "simon_boundary",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "synthetic stratified external simulation",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm_external",
+            "n": 400
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRates": [
+              0.2,
+              0.4
+            ],
+            "treatmentRates": [
+              0.2,
+              0.4
+            ]
+          },
+          "external": {
+            "kind": "stratified_beta_binomial",
+            "n": 1000,
+            "targetPrevalence": 0.5,
+            "sourcePrevalence": 0.3,
+            "parameterInformation": 10000,
+            "logOddsDrift": 0,
+            "sensitivityDrifts": [
+              -0.3,
+              0,
+              0.3
+            ]
+          },
+          "analysis": {
+            "method": "stratified_risk_difference",
+            "estimand": "ATT",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "single-arm immutable grid",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          },
+          "designs": [
+            {
+              "n": 30
+            },
+            {
+              "n": 60
+            }
+          ],
+          "truths": [
+            {
+              "responseRate": 0.2
+            },
+            {
+              "responseRate": 0.4
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -5636,7 +5864,7 @@
       ]
     },
     {
-      "name": "a single-arm design with external control",
+      "name": "a two-arm surrogate is not an external-control contract",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -5667,11 +5895,12 @@
         "inputs": []
       },
       "expected": [
-        "design_not_supported@scenario.design.kind"
+        "scenario_field_missing@scenario.external",
+        "scenario_field_missing@scenario.design.n"
       ]
     },
     {
-      "name": "a Simon design in a simulation",
+      "name": "a Simon simulation without frozen boundaries",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -5702,7 +5931,8 @@
         "inputs": []
       },
       "expected": [
-        "design_not_supported@scenario.design.kind"
+        "scenario_field_missing@scenario.design.n1",
+        "scenario_field_missing@scenario.design.r"
       ]
     },
     {
@@ -12081,6 +12311,410 @@
       "expected": [
         "input_hash_missing@inputs[0].hash",
         "input_value_source_missing@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "single-arm null flag contradicts response law",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4,
+            "null": true
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.null"
+      ]
+    },
+    {
+      "name": "Simon stage one equals total",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "simon_two_stage",
+            "n1": 29,
+            "n": 29,
+            "r1": 1,
+            "r": 5
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3,
+            "responseRate": 0.1
+          },
+          "analysis": {
+            "method": "simon_boundary",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.n1"
+      ]
+    },
+    {
+      "name": "one-sided rule cannot be called two-sided",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 2,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.sided"
+      ]
+    },
+    {
+      "name": "unsupported external generation is named",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm_external",
+            "n": 400
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRates": [
+              0.2,
+              0.4
+            ],
+            "treatmentRates": [
+              0.2,
+              0.4
+            ]
+          },
+          "external": {
+            "kind": "arbitrary_patients",
+            "n": 1000,
+            "targetPrevalence": 0.5,
+            "sourcePrevalence": 0.3,
+            "parameterInformation": 10000,
+            "logOddsDrift": 0,
+            "sensitivityDrifts": [
+              -0.3,
+              0,
+              0.3
+            ]
+          },
+          "analysis": {
+            "method": "stratified_risk_difference",
+            "estimand": "ATT",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.external.kind"
+      ]
+    },
+    {
+      "name": "single-arm analysis must be explicit",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analysis"
+      ]
+    },
+    {
+      "name": "single-arm malformed analysis is refused",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": 5
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis"
+      ]
+    },
+    {
+      "name": "single-arm malformed design kind is refused",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": [
+              "single_arm",
+              "other"
+            ],
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "external rates cannot be strings",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm_external",
+            "n": 400
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRates": [
+              ".2",
+              ".4"
+            ],
+            "treatmentRates": [
+              0.2,
+              0.4
+            ],
+            "null": true
+          },
+          "external": {
+            "kind": "stratified_beta_binomial",
+            "n": 1000,
+            "targetPrevalence": 0.5,
+            "sourcePrevalence": 0.3,
+            "parameterInformation": 10000,
+            "logOddsDrift": 0,
+            "sensitivityDrifts": [
+              -0.3,
+              0,
+              0.3
+            ]
+          },
+          "analysis": {
+            "method": "stratified_risk_difference",
+            "estimand": "ATT",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.controlRates[0]"
+      ]
+    },
+    {
+      "name": "single-arm one-sided alpha preserves positive CI level",
+      "job": {
+        "jobId": "job_single_arm",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 3131,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.alpha"
       ]
     }
   ],

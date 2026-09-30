@@ -137,9 +137,9 @@ test("the design table names real designs, endpoints and methods, and nothing th
       for (const endpoint of endpoints) assert.ok(VCR_ENDPOINT_TYPES.includes(endpoint), `${method}: ${endpoint}`);
     }
   }
-  // Single-arm designs are not simulated: a scenario naming one is refused, not run as a two-arm trial.
+  // These designs have distinct binary implementations, never two-arm fallbacks.
   for (const design of ["single_arm", "single_arm_external", "simon_two_stage"]) {
-    assert.equal(design in VCR_DESIGN_SUPPORT["design.simulate"], false, design);
+    assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"][/** @type {'single_arm' | 'single_arm_external' | 'simon_two_stage'} */ (design)], ["binary"], design);
   }
   assert.deepEqual(VCR_DESIGN_SUPPORT["design.simulate"].group_sequential, ["time_to_event"]);
 });
@@ -200,10 +200,10 @@ test("thresholds are presets, not scenario keys: a scenario cannot loosen the ru
 test("a design × endpoint the engine does not implement is refused for what it is, per grid cell too", () => {
   const job = validJob();
   job.scenario.design.kind = "single_arm";
-  assert.deepEqual(keys(validateEngineJob(job)), ["design_not_supported@scenario.design.kind"]);
+  assert.ok(keys(validateEngineJob(job)).includes("design_not_supported@scenario.design.kind"));
   const grid = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "design.grid").job);
   grid.scenario.designs[0] = { kind: "simon_two_stage" };
-  assert.ok(keys(validateEngineJob(grid)).includes("design_not_supported@scenario.designs[0].kind"));
+  assert.ok(keys(validateEngineJob(grid)).includes("scenario_value_invalid@designs[0]"));
 });
 
 test("a grid's cells are scenarios of their own, and the grid has a size", () => {

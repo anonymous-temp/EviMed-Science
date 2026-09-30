@@ -31,10 +31,10 @@
 #   MCSE units so AC-29 ("within 3 MCSE") is a number on the result rather
 #   than a thing someone checks by hand.
 # - **A design the runner does not implement is refused, never simulated as
-#   something else.** Single-arm, Simon and single-arm-with-external-control
-#   scenarios used to run as a fixed two-arm trial of twice the size and report
-#   the answer under the design's own name (EB-8); they now stop with
-#   `design_not_supported`. The group-sequential run is the time-to-event one
+#   something else.** Binary exact single-arm, frozen Simon boundaries and the
+#   explicit stratified beta-binomial external-control generator have distinct
+#   branches before any two-arm default. Unsupported endpoints are refused.
+#   The group-sequential run is the time-to-event one
 #   (the domain's design table lists no other), and it looks in *calendar* time: the k-th
 #   target event's own calendar time decides who has entered and who has been
 #   observed, which is what makes `expected_events` and `expected_sample_size`
@@ -80,7 +80,7 @@ vcr_mcse_mean <- function(x) stats::sd(x) / sqrt(length(x))
 vcr_mcse_empse <- function(x) stats::sd(x) / sqrt(2 * (length(x) - 1))
 
 #' The designs each endpoint can be simulated under. Anything else is refused.
-VCR_SIMULATED_DESIGNS <- c("two_arm_fixed", "group_sequential")
+VCR_SIMULATED_DESIGNS <- c("two_arm_fixed", "group_sequential", "single_arm", "single_arm_external", "simon_two_stage")
 
 #' The documented bias of the analytic log-rank power, as a proportion. It is a
 #' first-order approximation (`vcr_logrank_power`): measured against an
@@ -99,10 +99,19 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
   endpoint <- scenario$endpoint$type
   if (!(kind %in% VCR_SIMULATED_DESIGNS)) {
     vcr_abort("design_not_supported", "scenario.design.kind",
-              sprintf("This build simulates two-arm fixed and group-sequential designs; '%s' is not simulated and is not run as something else.", kind))
+              sprintf("'%s' is not a declared simulated design and is not run as something else.", kind))
   }
   if (!(endpoint %in% names(VCR_ANALYSIS_METHODS))) {
     vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "The endpoint is continuous, binary or time_to_event.")
+  }
+  if (kind %in% c("single_arm","single_arm_external","simon_two_stage")) {
+    if (!identical(endpoint,"binary")) vcr_abort("design_not_supported","scenario.endpoint.type","This single-arm implementation requires a binary endpoint.")
+    expected<-c(single_arm="exact_binomial",single_arm_external="stratified_risk_difference",simon_two_stage="simon_boundary")
+    method<-scenario$analysis$method %||% unname(expected[kind])
+    if (!identical(method,unname(expected[kind]))) vcr_abort("scenario_value_invalid","scenario.analysis.method","The analysis must match the declared single-arm design.")
+    issues<-vcr_validate_scenario("design.simulate",scenario)
+    if(length(issues))vcr_abort(issues[[1]]$code,issues[[1]]$field,issues[[1]]$detail)
+    return(method)
   }
   method <- scenario$analysis$method %||% VCR_ANALYSIS_METHODS[[endpoint]][1]
   if (!(method %in% VCR_ANALYSIS_METHODS[[endpoint]])) {
@@ -126,6 +135,82 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
   v
 }
 
+.vcr_single_binary_runner <- function(sc,alpha,sided) {
+  d<-sc$design;tr<-sc$truth;n<-vcr_scalar(d$n);p0<-vcr_scalar(tr$nullRate);p<-vcr_scalar(tr$responseRate)
+  if (identical(d$kind,"single_arm")) {
+    rule<-vcr_exact_binomial(n,p0,p,alpha,sc$analysis$alternative)
+    return(list(estimand=p-p0,run=function(i){
+      x<-stats::rbinom(1,n,p);k<-x+1L
+      c(estimate=x/n-p0,se=sqrt(p*(1-p)/n),p=rule$pValues[k],reject=as.numeric(rule$reject[k]),
+        ci_low=rule$ciLow[k]-p0,ci_high=rule$ciHigh[k]-p0,sampleSize=n,generatedRecords=n)
+    }))
+  }
+  n1<-vcr_scalar(d$n1);r1<-vcr_scalar(d$r1);r<-vcr_scalar(d$r)
+  list(estimand=p-p0,run=function(i){
+    x1<-stats::rbinom(1,n1,p);stop_early<-x1<=r1
+    size<-if(stop_early)n1 else n
+    x<-x1+if(stop_early)0 else stats::rbinom(1,n-n1,p)
+    # The stopped sample proportion is explicitly the naive estimator. No
+    # fixed-sample CI is mislabeled as a sequentially adjusted confidence bound.
+    c(estimate=x/size-p0,reject=as.numeric(!stop_early && x>r),earlyStop=as.numeric(stop_early),
+      sampleSize=size,generatedRecords=size,look=if(stop_early)1 else 2)
+  })
+}
+
+#' A synthetic external-control operating-characteristic model, not observed
+#' controls: fixed target covariate mixture, selected historical mixture, two
+#' stratum response laws and finite beta parameter information. Standardizing
+#' both arms to the declared treatment target defines ATT. Historical drift is
+#' uncorrected by the analysis and its resulting bias is deliberately measured.
+.vcr_external_binary_runner <- function(sc,alpha,sided) {
+  ex<-sc$external;n<-vcr_scalar(sc$design$n);ne<-vcr_scalar(ex$n)
+  q<-vcr_scalar(ex$targetPrevalence);qs<-vcr_scalar(ex$sourcePrevalence);w<-c(1-q,q)
+  p0<-vcr_num(sc$truth$controlRates);p1<-vcr_num(sc$truth$treatmentRates)
+  info<-vcr_scalar(ex$parameterInformation);drift<-vcr_scalar(ex$logOddsDrift)
+  sensitivity<-vcr_num(ex$sensitivityDrifts);estimand<-sum(w*(p1-p0))
+  nt<-c(n-round(n*q),round(n*q));active<-w>0
+  unsupported<-any(active & (nt<2 | c(1-qs,qs)==0))
+  if(unsupported)return(list(estimand=estimand,notEstimableRule="outside_common_support",externalControl=list(
+    targetPrevalence=q,sourcePrevalence=qs,estimand="ATT",reason="A target stratum has no historical support or fewer than two trial draws.")))
+  shift<-function(p,delta)ifelse(p<=0,0,ifelse(p>=1,1,stats::plogis(stats::qlogis(p)+delta)))
+  compare<-function(yt,nc,up,uc,delta){
+    mu<-shift(p0,delta)
+    latent<-mu;inside<-mu>0 & mu<1
+    latent[inside]<-stats::qbeta(up[inside],info*mu[inside],info*(1-mu[inside]))
+    yc<-stats::qbinom(uc,nc,latent)
+    pt<-yt/pmax(1,nt);pc<-yc/pmax(1,nc)
+    ess<-1/sum(w[active]^2/nc[active])
+    if(any(nc[active]<2)||!is.finite(ess)||ess<vcr_domain()$limits$essFloor)return(c(estimate=NA_real_,se=NA_real_,reject=NA_real_,ci_low=NA_real_,ci_high=NA_real_,externalEss=ess,externalParameterVariance=NA_real_))
+    # Unbiased p(1-p) estimate under the declared beta-binomial law. Finite
+    # historical parameter uncertainty persists as n_external increases.
+    variance_p<-pc*(1-pc)*nc/(pmax(1,nc-1))*(info+1)/info
+    vt<-pt*(1-pt)/pmax(1,nt-1)
+    vc<-variance_p*(1+(nc-1)/(info+1))/pmax(1,nc)
+    parameter_variance<-sum(w[active]^2*variance_p[active]/(info+1))
+    estimate<-sum(w*(pt-pc));se<-sqrt(sum(w[active]^2*(vt[active]+vc[active])))
+    z<-if(se>0)estimate/se else if(estimate==0)0 else sign(estimate)*Inf
+    critical<-stats::qnorm(1-alpha/sided)
+    pval<-if(sided==1)stats::pnorm(z,lower.tail=FALSE) else 2*stats::pnorm(-abs(z))
+    c(estimate=estimate,se=se,p=pval,reject=as.numeric(if(sided==1)z>critical else abs(z)>critical),
+      ci_low=estimate-critical*se,ci_high=estimate+critical*se,externalEss=ess,externalParameterVariance=parameter_variance)
+  }
+  list(estimand=estimand,externalControl=list(kind=ex$kind,estimand="ATT",targetPrevalence=q,sourcePrevalence=qs,
+    parameterInformation=info,logOddsDrift=drift,analysis="stratified risk difference with beta-binomial variance; asymptotic Wald inference",
+    limitation="Synthetic binary two-stratum scenario only. Unmeasured confounding, finite-sample calibration and drift are not certified away.",sensitivityDrifts=sensitivity),
+    run=function(i){
+      nc1<-stats::rbinom(1,ne,qs);nc<-c(ne-nc1,nc1)
+      yt<-stats::rbinom(2,nt,p1);up<-stats::runif(2);uc<-stats::runif(2)
+      main<-compare(yt,nc,up,uc,drift)
+      extra<-numeric(0)
+      for(k in seq_along(sensitivity)){
+        r<-compare(yt,nc,up,uc,sensitivity[k])
+        covered<-if(all(is.finite(r[c("ci_low","ci_high")])))as.numeric(r["ci_low"]<=estimand && r["ci_high"]>=estimand) else NA_real_
+        extra<-c(extra,stats::setNames(c(r["estimate"],r["reject"],covered),paste0(c("sensitivityEstimate_","sensitivityReject_","sensitivityCoverage_"),k)))
+      }
+      c(main,sampleSize=n,externalSize=ne,generatedRecords=n+ne,extra)
+    })
+}
+
 #' Build the generate/analyse pair for a scenario.
 #'
 #' A scenario is
@@ -142,6 +227,8 @@ vcr_scenario_runner <- function(scenario) {
   analysis <- scenario$analysis %||% list()
   alpha <- vcr_scalar(analysis$alpha, 0.025)
   sided <- vcr_check_sided(analysis$sided)
+  if (design$kind %in% c("single_arm","simon_two_stage")) return(.vcr_single_binary_runner(scenario,alpha,sided))
+  if (identical(design$kind,"single_arm_external")) return(.vcr_external_binary_runner(scenario,alpha,sided))
   n1 <- .vcr_need(design$nTreat, "scenario.design.nTreat", "A simulated design states its treatment-arm size.")
   n0 <- vcr_scalar(design$nControl, n1)
   gs <- identical(design$kind, "group_sequential")
@@ -291,6 +378,8 @@ vcr_run_simulation <- function(scenario, seed, replicates = NULL, cores = 1L,
                                batch_size = 500L, progress = NULL,
                                cpu_seconds_limit = Inf) {
   runner <- vcr_scenario_runner(scenario)
+  if(!is.null(runner$notEstimableRule))return(list(status="not_estimable",notEstimableRule=runner$notEstimableRule,measures=list(),issues=list(),values=NULL,
+    scenarioHash=vcr_scenario_hash(scenario),diagnostics=list(conclusion="not_estimable",replicatesCompleted=0,replicatesUsable=0,externalControl=runner$externalControl)))
   plan <- vcr_plan_replicates(scenario, replicates, runner$estimand)
   n_rep <- plan$replicates
   hash <- vcr_scenario_hash(scenario)
@@ -350,6 +439,18 @@ vcr_run_simulation <- function(scenario, seed, replicates = NULL, cores = 1L,
   }
 
   summary <- vcr_summarize_replicates(values, runner$estimand, scenario, done)
+  if(!is.null(runner$externalControl) && !is.null(values) && nrow(values)>0) {
+    ec<-runner$externalControl;ec$sensitivity<-list()
+    for(k in seq_along(ec$sensitivityDrifts)){
+      est<-values[,paste0("sensitivityEstimate_",k)];rej<-values[,paste0("sensitivityReject_",k)];cov<-values[,paste0("sensitivityCoverage_",k)]
+      good<-is.finite(est);total<-nrow(values)
+      prob<-sum(rej[is.finite(rej)])/total;coverage<-sum(cov[is.finite(cov)])/total
+      ec$sensitivity[[k]]<-list(logOddsDrift=ec$sensitivityDrifts[k],replicates=total,usable=sum(good),
+        rejectionProbability=prob,rejectionMcse=vcr_mcse_proportion(prob,total),coverage=coverage,coverageMcse=vcr_mcse_proportion(coverage,total),
+        bias=if(sum(good)>1)mean(est[good])-runner$estimand else NULL,biasMcse=if(sum(good)>1)vcr_mcse_mean(est[good]) else NULL)
+    }
+    summary$diagnostics$externalControl<-ec
+  }
   # A run held below its precision floor by this engine's replicate ceiling
   # (`VCR_ENGINE_MAX_REPLICATES`) reports its MCSEs, and says it is limited.
   if (isTRUE(plan$capped)) summary$diagnostics$conclusion <- "limited"
@@ -436,6 +537,16 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     l <- values[, "look"]; l <- l[is.finite(l)]
     if (length(l) > 1L) add(vcr_measure("expected_analyses", mean(l), simulated = TRUE, mcse = vcr_mcse_mean(l), source = src))
   }
+  if ("earlyStop" %in% colnames(values)) {
+    pet<-mean(values[,"earlyStop"])
+    add(vcr_measure("early_stop_probability",pet,simulated=TRUE,mcse=vcr_mcse_proportion(pet,total),source=src))
+    notes[[length(notes)+1L]]<-vcr_issue("performance_measure_unsupported","performance",
+      "Simon response estimates are naive stopped proportions; sequentially adjusted confidence intervals are not implemented, so coverage is not reported.")
+  }
+  if ("externalEss" %in% colnames(values)) {
+    ess<-values[,"externalEss"];good<-is.finite(ess)
+    if(sum(good)>1)add(vcr_measure("mean_external_effective_sample_size",mean(ess[good]),simulated=TRUE,mcse=vcr_mcse_mean(ess[good]),source=src))
+  }
   dur <- if ("duration" %in% colnames(values)) values[, "duration"] else numeric(0)
   dur <- dur[is.finite(dur)]
   if ("duration_months" %in% wanted) {
@@ -476,6 +587,30 @@ vcr_analytic_check <- function(scenario, measures) {
   sided <- vcr_check_sided(scenario$analysis$sided)
   is_null <- vcr_is_null_scenario(scenario)
   analytic <- NULL
+  if (design$kind %in% c("single_arm","simon_two_stage")) {
+    p<-vcr_scalar(truth$responseRate);p0<-vcr_scalar(truth$nullRate)
+    name<-if(is_null)"type_one_error" else "power"
+    refs<-if(identical(design$kind,"single_arm")){
+      ex<-vcr_exact_binomial(vcr_scalar(design$n),p0,p,alpha,scenario$analysis$alternative)
+      stats::setNames(ex$power,name)
+    } else {
+      n<-vcr_scalar(design$n);n1<-vcr_scalar(design$n1);r1<-vcr_scalar(design$r1);r<-vcr_scalar(design$r)
+      pet<-stats::pbinom(r1,n1,p)
+      stats::setNames(c(.vcr_simon_prob(p,n1,n,r1,r),pet,n1+(1-pet)*(n-n1)),c(name,"early_stop_probability","expected_sample_size"))
+    }
+    checks<-lapply(seq_along(refs),function(k){
+      m<-Filter(function(x)identical(x$name,names(refs)[k]),measures)
+      out<-list(name=names(refs)[k],value=unname(refs[k]),basis="exact_binomial_enumeration")
+      if(length(m)){
+        delta<-m[[1]]$value-refs[k];se<-m[[1]]$mcse
+        out<-c(out,list(simulated=m[[1]]$value,difference=unname(delta),mcse=se,withinThreeMcse=abs(delta)<=3*se+1e-12,
+          differenceInMcse=if(se>0)unname(delta)/se else if(abs(delta)<1e-12)0 else NULL))
+      }
+      out
+    })
+    primary<-checks[[1]];if(length(checks)>1)primary$additionalChecks<-checks[-1]
+    return(primary)
+  }
   n1 <- vcr_scalar(design$nTreat, NA_real_); n0 <- vcr_scalar(design$nControl, n1)
   fixed <- identical(design$kind %||% "two_arm_fixed", "two_arm_fixed")
   method <- scenario$analysis$method %||% NULL

@@ -158,7 +158,7 @@
       "modelTier": "literature"
     },
     "design.analytic": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -166,31 +166,50 @@
       ],
       "crossChecks": [
         "rpact",
-        "gsDesign"
+        "gsDesign",
+        "stats::binom.test",
+        "Simon 1989"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": [
+        "two_arm_fixed",
+        "group_sequential",
+        "simon_two_stage"
+      ]
     },
     "design.simulate": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
         "time_to_event"
       ],
       "crossChecks": [
-        "design.analytic"
+        "design.analytic",
+        "independent beta-binomial variance"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": [
+        "two_arm_fixed",
+        "group_sequential"
+      ]
     },
     "design.grid": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
         "time_to_event"
       ],
       "crossChecks": [],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "legacyVersion": "1.0.0",
+      "legacyDesigns": [
+        "two_arm_fixed",
+        "group_sequential"
+      ]
     },
     "design.assurance": {
       "version": "1.0.0",
@@ -2990,7 +3009,13 @@
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "default": 0.5
+              "default": 0.5,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "single_arm"
+                ]
+              }
             },
             "maxN": {
               "t": "integer",
@@ -3003,6 +3028,18 @@
                   "simon_two_stage"
                 ]
               }
+            },
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 10000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              },
+              "req": true
             }
           },
           "req": true
@@ -3063,6 +3100,8 @@
                 {
                   "path": "design.kind",
                   "notIn": [
+                    "single_arm",
+                    "single_arm_external",
                     "simon_two_stage"
                   ]
                 }
@@ -3083,6 +3122,8 @@
                 {
                   "path": "design.kind",
                   "notIn": [
+                    "single_arm",
+                    "single_arm_external",
                     "simon_two_stage"
                   ]
                 }
@@ -3102,6 +3143,8 @@
                 {
                   "path": "design.kind",
                   "notIn": [
+                    "single_arm",
+                    "single_arm_external",
                     "simon_two_stage"
                   ]
                 }
@@ -3120,6 +3163,8 @@
                 {
                   "path": "design.kind",
                   "notIn": [
+                    "single_arm",
+                    "single_arm_external",
                     "simon_two_stage"
                   ]
                 }
@@ -3206,12 +3251,25 @@
             },
             "nullRate": {
               "t": "number",
-              "gt": 0,
-              "lt": 1,
+              "min": 0,
+              "max": 1,
               "when": {
                 "path": "design.kind",
                 "in": [
+                  "single_arm",
                   "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "responseRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
                 ]
               },
               "req": true
@@ -3246,6 +3304,8 @@
                 {
                   "path": "design.kind",
                   "notIn": [
+                    "single_arm",
+                    "single_arm_external",
                     "simon_two_stage"
                   ]
                 }
@@ -3269,6 +3329,34 @@
         "analysis": {
           "t": "object",
           "fields": {
+            "method": {
+              "t": "string",
+              "values": [
+                "exact_binomial"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              },
+              "req": true
+            },
+            "alternative": {
+              "t": "string",
+              "values": [
+                "greater",
+                "less",
+                "two.sided"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              },
+              "req": true
+            },
             "alpha": {
               "t": "number",
               "gt": 0,
@@ -3279,7 +3367,13 @@
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "default": 0.9
+              "default": 0.9,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "single_arm"
+                ]
+              }
             },
             "sided": {
               "t": "integer",
@@ -3287,6 +3381,12 @@
               "max": 2,
               "default": 1
             }
+          },
+          "reqWhen": {
+            "path": "design.kind",
+            "in": [
+              "single_arm"
+            ]
           }
         },
         "accrual": {
@@ -3343,12 +3443,76 @@
               "t": "integer",
               "min": 1,
               "max": 1000000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm_fixed",
+                  "group_sequential"
+                ]
+              },
               "req": true
             },
             "nControl": {
               "t": "integer",
               "min": 1,
-              "max": 1000000
+              "max": 1000000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm_fixed",
+                  "group_sequential"
+                ]
+              }
+            },
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 10000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "single_arm_external",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "n1": {
+              "t": "integer",
+              "min": 1,
+              "max": 10000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "r1": {
+              "t": "integer",
+              "min": 0,
+              "max": 9999,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "r": {
+              "t": "integer",
+              "min": 0,
+              "max": 9999,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
             },
             "informationRates": {
               "t": "array",
@@ -3447,55 +3611,105 @@
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              },
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ],
               "req": true
             },
             "treatmentRate": {
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "riskDifference": {
               "t": "number",
               "gt": -1,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "oddsRatio": {
               "t": "number",
               "gt": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "covariateLogit": {
               "t": "number",
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "hazardRatio": {
               "t": "number",
@@ -3575,6 +3789,78 @@
                   "time_to_event"
                 ]
               }
+            },
+            "nullRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "responseRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "alternativeRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "controlRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 2,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 2,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
             }
           },
           "exactlyOne": [
@@ -3584,12 +3870,22 @@
                 "riskDifference",
                 "oddsRatio"
               ],
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             {
               "keys": [
@@ -3611,23 +3907,53 @@
           "fields": {
             "method": {
               "t": "string",
-              "valuesBy": {
-                "path": "endpoint.type",
-                "map": {
-                  "continuous": [
-                    "ttest",
-                    "ancova"
-                  ],
-                  "binary": [
-                    "risk_difference",
-                    "logistic"
-                  ],
-                  "time_to_event": [
-                    "logrank",
-                    "rmst"
-                  ]
-                }
+              "values": [
+                "ttest",
+                "ancova",
+                "risk_difference",
+                "logistic",
+                "logrank",
+                "rmst",
+                "exact_binomial",
+                "simon_boundary",
+                "stratified_risk_difference"
+              ],
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "single_arm_external",
+                  "simon_two_stage"
+                ]
               }
+            },
+            "alternative": {
+              "t": "string",
+              "values": [
+                "greater",
+                "less",
+                "two.sided"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              },
+              "req": true
+            },
+            "estimand": {
+              "t": "string",
+              "values": [
+                "ATT"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
             },
             "alpha": {
               "t": "number",
@@ -3653,7 +3979,76 @@
               },
               "req": true
             }
+          },
+          "reqWhen": {
+            "path": "design.kind",
+            "in": [
+              "single_arm",
+              "single_arm_external",
+              "simon_two_stage"
+            ]
           }
+        },
+        "external": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "stratified_beta_binomial"
+              ],
+              "req": true
+            },
+            "n": {
+              "t": "integer",
+              "min": 2,
+              "max": 1000000,
+              "req": true
+            },
+            "targetPrevalence": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "req": true
+            },
+            "sourcePrevalence": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "req": true
+            },
+            "parameterInformation": {
+              "t": "number",
+              "gt": 0,
+              "max": 1000000000,
+              "req": true
+            },
+            "logOddsDrift": {
+              "t": "number",
+              "min": -10,
+              "max": 10,
+              "req": true
+            },
+            "sensitivityDrifts": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": -10,
+                "max": 10
+              },
+              "min": 1,
+              "max": 9,
+              "unique": true,
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "in": [
+              "single_arm_external"
+            ]
+          },
+          "req": true
         },
         "accrual": {
           "t": "variant",
@@ -3806,12 +4201,76 @@
               "t": "integer",
               "min": 1,
               "max": 1000000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm_fixed",
+                  "group_sequential"
+                ]
+              },
               "req": true
             },
             "nControl": {
               "t": "integer",
               "min": 1,
-              "max": 1000000
+              "max": 1000000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm_fixed",
+                  "group_sequential"
+                ]
+              }
+            },
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 10000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "single_arm_external",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "n1": {
+              "t": "integer",
+              "min": 1,
+              "max": 10000,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "r1": {
+              "t": "integer",
+              "min": 0,
+              "max": 9999,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "r": {
+              "t": "integer",
+              "min": 0,
+              "max": 9999,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
             },
             "informationRates": {
               "t": "array",
@@ -3910,55 +4369,105 @@
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              },
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ],
               "req": true
             },
             "treatmentRate": {
               "t": "number",
               "gt": 0,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "riskDifference": {
               "t": "number",
               "gt": -1,
               "lt": 1,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "oddsRatio": {
               "t": "number",
               "gt": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "covariateLogit": {
               "t": "number",
               "default": 0,
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             "hazardRatio": {
               "t": "number",
@@ -4038,6 +4547,78 @@
                   "time_to_event"
                 ]
               }
+            },
+            "nullRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "responseRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "alternativeRate": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "controlRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 2,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 2,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
             }
           },
           "exactlyOne": [
@@ -4047,12 +4628,22 @@
                 "riskDifference",
                 "oddsRatio"
               ],
-              "when": {
-                "path": "endpoint.type",
-                "in": [
-                  "binary"
-                ]
-              }
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "single_arm",
+                    "single_arm_external",
+                    "simon_two_stage"
+                  ]
+                }
+              ]
             },
             {
               "keys": [
@@ -4074,23 +4665,53 @@
           "fields": {
             "method": {
               "t": "string",
-              "valuesBy": {
-                "path": "endpoint.type",
-                "map": {
-                  "continuous": [
-                    "ttest",
-                    "ancova"
-                  ],
-                  "binary": [
-                    "risk_difference",
-                    "logistic"
-                  ],
-                  "time_to_event": [
-                    "logrank",
-                    "rmst"
-                  ]
-                }
+              "values": [
+                "ttest",
+                "ancova",
+                "risk_difference",
+                "logistic",
+                "logrank",
+                "rmst",
+                "exact_binomial",
+                "simon_boundary",
+                "stratified_risk_difference"
+              ],
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm",
+                  "single_arm_external",
+                  "simon_two_stage"
+                ]
               }
+            },
+            "alternative": {
+              "t": "string",
+              "values": [
+                "greater",
+                "less",
+                "two.sided"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              },
+              "req": true
+            },
+            "estimand": {
+              "t": "string",
+              "values": [
+                "ATT"
+              ],
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm_external"
+                ]
+              },
+              "req": true
             },
             "alpha": {
               "t": "number",
@@ -4116,7 +4737,76 @@
               },
               "req": true
             }
+          },
+          "reqWhen": {
+            "path": "design.kind",
+            "in": [
+              "single_arm",
+              "single_arm_external",
+              "simon_two_stage"
+            ]
           }
+        },
+        "external": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "stratified_beta_binomial"
+              ],
+              "req": true
+            },
+            "n": {
+              "t": "integer",
+              "min": 2,
+              "max": 1000000,
+              "req": true
+            },
+            "targetPrevalence": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "req": true
+            },
+            "sourcePrevalence": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "req": true
+            },
+            "parameterInformation": {
+              "t": "number",
+              "gt": 0,
+              "max": 1000000000,
+              "req": true
+            },
+            "logOddsDrift": {
+              "t": "number",
+              "min": -10,
+              "max": 10,
+              "req": true
+            },
+            "sensitivityDrifts": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": -10,
+                "max": 10
+              },
+              "min": 1,
+              "max": 9,
+              "unique": true,
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "in": [
+              "single_arm_external"
+            ]
+          },
+          "req": true
         },
         "accrual": {
           "t": "variant",
@@ -4261,6 +4951,26 @@
                 ],
                 "badValueCode": "design_unknown"
               },
+              "n": {
+                "t": "integer",
+                "min": 1,
+                "max": 10000
+              },
+              "n1": {
+                "t": "integer",
+                "min": 1,
+                "max": 10000
+              },
+              "r1": {
+                "t": "integer",
+                "min": 0,
+                "max": 9999
+              },
+              "r": {
+                "t": "integer",
+                "min": 0,
+                "max": 9999
+              },
               "nTreat": {
                 "t": "integer",
                 "min": 1,
@@ -4303,6 +5013,41 @@
             "fields": {
               "null": {
                 "t": "boolean"
+              },
+              "nullRate": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "responseRate": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "alternativeRate": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "controlRates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 2
+              },
+              "treatmentRates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 2
               },
               "effect": {
                 "t": "number"
@@ -4828,9 +5573,21 @@
       ],
       "simon_two_stage": [
         "binary"
+      ],
+      "single_arm": [
+        "binary"
       ]
     },
     "design.simulate": {
+      "single_arm": [
+        "binary"
+      ],
+      "single_arm_external": [
+        "binary"
+      ],
+      "simon_two_stage": [
+        "binary"
+      ],
       "two_arm_fixed": [
         "continuous",
         "binary",
@@ -4841,6 +5598,15 @@
       ]
     },
     "design.grid": {
+      "single_arm": [
+        "binary"
+      ],
+      "single_arm_external": [
+        "binary"
+      ],
+      "simon_two_stage": [
+        "binary"
+      ],
       "two_arm_fixed": [
         "continuous",
         "binary",

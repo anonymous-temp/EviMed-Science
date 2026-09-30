@@ -21,8 +21,9 @@
  *   options (`exactlyOne`, `atLeastOne`, `requires`).
  * - **Design × endpoint is a table.** The engine implements fixed two-arm
  *   designs for all three endpoint families and group-sequential only for
- *   time-to-event; single-arm, Simon and single-arm-with-external-control
- *   designs are not simulated. A combination outside `VCR_DESIGN_SUPPORT` is
+ *   time-to-event. Binary exact single-arm, frozen Simon and the explicit
+ *   stratified external-control generator have separate branches and inputs.
+ *   A combination outside `VCR_DESIGN_SUPPORT` is
  *   refused (`design_not_supported`) instead of being run as something else.
  * - **Thresholds are not scenario keys.** The ESS floor, the common-support
  *   ceiling, the MAP conflict bound, the reconstruction tolerances and the
@@ -47,7 +48,8 @@
  *   rules    { allowEmpty, columnsFrom }                list of { name, rule }
  *
  * and on a field: `req` (required — inside a `when` gate, required whenever the
- * gate holds), `when` (condition or list of conditions, all must hold, else the
+ * gate holds), `reqWhen` (required only when the condition holds), `when`
+ * (condition or list of conditions, all must hold, else the
  * key is unknown), `nullable` (null reads as absent).
  *
  * @module @evimed/domain/vcrScenarioSchemas
@@ -106,6 +108,19 @@ const has = (path, present = true) => ({ path, present })
 const CONTINUOUS = is('endpoint.type', 'continuous')
 const BINARY = is('endpoint.type', 'binary')
 const TIME_TO_EVENT = is('endpoint.type', 'time_to_event')
+const SINGLE_BINARY = is('design.kind', 'single_arm', 'simon_two_stage')
+const SINGLE_EXTERNAL = is('design.kind', 'single_arm_external')
+const TWO_ARM_BINARY = [BINARY, isNot('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage')]
+const BINARY_RATE = { min: 0, max: 1 }
+const SINGLE_SIZE = integer({ min: 1, max: 10000 })
+const EXTERNAL_MODEL = object({
+  kind: req(string({ values: ['stratified_beta_binomial'] })),
+  n: req(integer({ min: 2, max: 1000000 })),
+  targetPrevalence: req(number(BINARY_RATE)), sourcePrevalence: req(number(BINARY_RATE)),
+  parameterInformation: req(number({ gt: 0, max: 1000000000 })),
+  logOddsDrift: req(number({ min: -10, max: 10 })),
+  sensitivityDrifts: req(array(number({ min: -10, max: 10 }), { min: 1, max: 9, unique: true })),
+})
 
 /** A column name, in the row-rule grammar's spelling. */
 const COLUMN = string({ pattern: VCR_ROW_RULE_COLUMN_PATTERN, maxLength: 64 })
@@ -201,7 +216,7 @@ const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false,
   treatmentRate: gated(number({ ...PROBABILITY }), binaryWhen),
   riskDifference: gated(number({ gt: -1, lt: 1 }), binaryWhen),
   oddsRatio: gated(number({ gt: 0 }), binaryWhen),
-  ...(simulated ? { covariateLogit: gated(number({ default: 0 }), BINARY) } : {}),
+  ...(simulated ? { covariateLogit: gated(number({ default: 0 }), binaryWhen) } : {}),
   hazardRatio: req(gated(number({ gt: 0 }), TIME_TO_EVENT)),
   controlMedian: gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT),
   controlDistribution: gated(CONTROL_DISTRIBUTION, TIME_TO_EVENT),
@@ -238,9 +253,9 @@ const SIMULATED_ACCRUAL = gated({
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
-  method: string({
-    valuesBy: { path: 'endpoint.type', map: { continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] } },
-  }),
+  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
+  estimand: req(gated(string({ values: ['ATT'] }), SINGLE_EXTERNAL)),
   alpha: ALPHA,
   sided: integer({ min: 1, max: 2, default: 1 }),
   tau: req(gated(number({ gt: 0, unit: 'time units' }), is('analysis.method', 'rmst'))),
@@ -248,8 +263,12 @@ const SIMULATED_ANALYSIS = object({
 
 const SIMULATED_DESIGN_FIELDS = {
   kind: req(string({ values: [...VCR_TRIAL_DESIGNS], badValueCode: 'design_unknown' })),
-  nTreat: req(integer({ min: 1, max: 1_000_000 })),
-  nControl: integer({ min: 1, max: 1_000_000 }),
+  nTreat: req(gated(integer({ min: 1, max: 1000000 }), is('design.kind', 'two_arm_fixed', 'group_sequential'))),
+  nControl: gated(integer({ min: 1, max: 1000000 }), is('design.kind', 'two_arm_fixed', 'group_sequential')),
+  n: req(gated(SINGLE_SIZE, is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage'))),
+  n1: req(gated(SINGLE_SIZE, is('design.kind', 'simon_two_stage'))),
+  r1: req(gated(integer({ min: 0, max: 9999 }), is('design.kind', 'simon_two_stage'))),
+  r: req(gated(integer({ min: 0, max: 9999 }), is('design.kind', 'simon_two_stage'))),
   informationRates: req(gated(array(number({ gt: 0, max: 1 }), { min: 2, max: 20, increasing: true, last: 1 }), is('design.kind', 'group_sequential'))),
   spending: gated(string({ values: [...VCR_SPENDING_FUNCTIONS], default: 'obrien_fleming' }), is('design.kind', 'group_sequential')),
 }
@@ -257,8 +276,15 @@ const SIMULATED_DESIGN_FIELDS = {
 const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
-  truth: req(object(truthFields(), { exactlyOne: truthGroups() })),
-  analysis: SIMULATED_ANALYSIS,
+  truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, extra: {
+    nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY)),
+    responseRate: req(gated(number(BINARY_RATE), SINGLE_BINARY)),
+    alternativeRate: req(gated(number(BINARY_RATE), is('design.kind', 'simon_two_stage'))),
+    controlRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
+    treatmentRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
+  } }), { exactlyOne: truthGroups(TWO_ARM_BINARY) })),
+  analysis: { ...SIMULATED_ANALYSIS, reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') },
+  external: req(gated(EXTERNAL_MODEL, SINGLE_EXTERNAL)),
   accrual: SIMULATED_ACCRUAL,
   performance: PERFORMANCE,
   targetMcse: TARGET_MCSE,
@@ -511,23 +537,27 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       kind: req(string({ values: [...VCR_TRIAL_DESIGNS], badValueCode: 'design_unknown' })),
       informationRates: req(gated(array(number({ gt: 0, max: 1 }), { min: 2, max: 20, increasing: true, last: 1 }), is('design.kind', 'group_sequential'))),
       spending: gated(string({ values: [...VCR_SPENDING_FUNCTIONS], default: 'obrien_fleming' }), is('design.kind', 'group_sequential')),
-      allocation: number({ ...PROBABILITY, default: 0.5 }),
+      allocation: gated(number({ ...PROBABILITY, default: 0.5 }), isNot('design.kind', 'single_arm')),
       maxN: gated(integer({ min: 2, max: 500, default: 100 }), is('design.kind', 'simon_two_stage')),
+      n: req(gated(SINGLE_SIZE, is('design.kind', 'single_arm'))),
     })),
     endpoint: req(ENDPOINT()),
     truth: req(object(truthFields({
-      binaryWhen: [BINARY, isNot('design.kind', 'simon_two_stage')],
+      binaryWhen: TWO_ARM_BINARY,
       simulated: false,
       extra: {
-        nullRate: req(gated(number({ ...PROBABILITY }), is('design.kind', 'simon_two_stage'))),
+        nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY)),
+        responseRate: req(gated(number(BINARY_RATE), is('design.kind', 'single_arm'))),
         alternativeRate: req(gated(number({ ...PROBABILITY }), is('design.kind', 'simon_two_stage'))),
       },
-    }), { exactlyOne: truthGroups([BINARY, isNot('design.kind', 'simon_two_stage')]) })),
+    }), { exactlyOne: truthGroups(TWO_ARM_BINARY) })),
     analysis: object({
+      method: req(gated(string({ values: ['exact_binomial'] }), is('design.kind', 'single_arm'))),
+      alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
       alpha: ALPHA,
-      power: number({ ...PROBABILITY, default: 0.9 }),
+      power: gated(number({ ...PROBABILITY, default: 0.9 }), isNot('design.kind', 'single_arm')),
       sided: integer({ min: 1, max: 2, default: 1 }),
-    }),
+    }, { reqWhen: is('design.kind', 'single_arm') }),
     accrual: gated(object({
       duration: req(number({ min: 0, unit: 'time units' })),
       followup: req(number({ min: 0, unit: 'time units' })),
@@ -541,6 +571,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     ...SIMULATE_FIELDS,
     designs: req(array(object({
       kind: string({ values: [...VCR_TRIAL_DESIGNS], badValueCode: 'design_unknown' }),
+      n: SINGLE_SIZE, n1: SINGLE_SIZE, r1: integer({ min: 0, max: 9999 }), r: integer({ min: 0, max: 9999 }),
       nTreat: integer({ min: 1, max: 1_000_000 }),
       nControl: integer({ min: 1, max: 1_000_000 }),
       informationRates: array(number({ gt: 0, max: 1 }), { min: 2, max: 20, increasing: true, last: 1 }),
@@ -548,6 +579,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     }), { min: 1, max: 50 })),
     truths: req(array(object({
       null: boolean(),
+      nullRate: number(BINARY_RATE), responseRate: number(BINARY_RATE), alternativeRate: number(BINARY_RATE),
+      controlRates: array(number(BINARY_RATE), { min: 2, max: 2 }), treatmentRates: array(number(BINARY_RATE), { min: 2, max: 2 }),
       effect: number(), sd: number({ gt: 0 }), baselineCorrelation: number({ gt: -1, lt: 1 }),
       controlRate: number({ ...PROBABILITY }), treatmentRate: number({ ...PROBABILITY }),
       riskDifference: number({ gt: -1, lt: 1 }), oddsRatio: number({ gt: 0 }), covariateLogit: number(),
@@ -624,12 +657,15 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
     group_sequential: Object.freeze(['time_to_event']),
     simon_two_stage: Object.freeze(['binary']),
+    single_arm: Object.freeze(['binary']),
   }),
   'design.simulate': Object.freeze({
+    single_arm: Object.freeze(['binary']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
     group_sequential: Object.freeze(['time_to_event']),
   }),
   'design.grid': Object.freeze({
+    single_arm: Object.freeze(['binary']), single_arm_external: Object.freeze(['binary']), simon_two_stage: Object.freeze(['binary']),
     two_arm_fixed: Object.freeze(['continuous', 'binary', 'time_to_event']),
     group_sequential: Object.freeze(['time_to_event']),
   }),
@@ -648,7 +684,9 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
 /**
  * Is this scenario a null one — no true effect? One predicate for the replicate
  * floor, the measure's name (`type_one_error` vs `power`) and the report; the R
- * engine mirrors it (`vcr_is_null_scenario`). An explicit `truth.null` wins;
+ * engine mirrors it (`vcr_is_null_scenario`). An explicit `truth.null` wins
+ * for legacy two-arm scenarios. Single-arm laws derive the null from their
+ * declared response/target ATT; a contradictory flag is refused by validation;
  * otherwise it is derived from the effect the scenario states. A scenario that
  * states no effect at all is not null: it cannot be told.
  * @param {any} scenario
@@ -656,6 +694,13 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
 export function vcrIsNullScenario(scenario) {
   const truth = scenario?.truth
   if (!truth || typeof truth !== 'object' || Array.isArray(truth)) return false
+  const kind = scenario?.design?.kind
+  if (kind === 'single_arm' || kind === 'simon_two_stage') return Number.isFinite(truth.responseRate) && Number.isFinite(truth.nullRate) && Math.abs(truth.responseRate - truth.nullRate) < 1e-12
+  if (kind === 'single_arm_external' && Array.isArray(truth.controlRates) && Array.isArray(truth.treatmentRates)) {
+    const q = scenario?.external?.targetPrevalence
+    const validRates = truth.controlRates.length === 2 && truth.treatmentRates.length === 2 && [...truth.controlRates, ...truth.treatmentRates].every(Number.isFinite)
+    return validRates && Number.isFinite(q) && Math.abs((1 - q) * (truth.treatmentRates[0] - truth.controlRates[0]) + q * (truth.treatmentRates[1] - truth.controlRates[1])) < 1e-12
+  }
   if (typeof truth.null === 'boolean') return truth.null
   const type = scenario?.endpoint?.type
   const tiny = (/** @type {number} */ x) => Math.abs(x) < 1e-12
@@ -899,16 +944,17 @@ function checkObject(node, value, path, ctx) {
   }
   for (const key of Object.keys(fields)) {
     const field = fields[key]
+    const required = field.req || (field.reqWhen && whenHolds(field.reqWhen, ctx.root))
     if (!active(field)) continue
     if (Object.hasOwn(value, key) && value[key] === null) {
       // null is a value in canonical JSON, so it is refused rather than read as
       // "absent": the two would hash differently and mean the same.
       if (!field.nullable) raise(ctx, 'scenario_value_invalid', at(path, key), 'null is not a value; leave the key out.')
-      else if (field.req) raise(ctx, 'scenario_field_missing', at(path, key), `${key} is required.`)
+      else if (required) raise(ctx, 'scenario_field_missing', at(path, key), `${key} is required.`)
       continue
     }
     if (!present(value, key)) {
-      if (field.req) raise(ctx, 'scenario_field_missing', at(path, key), `${key} is required.`)
+      if (required) raise(ctx, 'scenario_field_missing', at(path, key), `${key} is required.`)
       continue
     }
     checkValue(field, value[key], at(path, key), ctx)
@@ -956,7 +1002,9 @@ function checkGrid(schema, scenario, ctx) {
       /** @type {WalkContext} */
       const inner = { root: cell, inputIds: ctx.inputIds, issues: [], suppressExpression: true }
       checkObject(cellSchema, cell, '', inner)
-      const first = inner.issues.find((issue) => issue.code !== 'scenario_field_unknown')
+      checkDesignSemantics(cell, '', inner)
+      const single = ['single_arm', 'single_arm_external', 'simon_two_stage'].includes(cell.design.kind)
+      const first = inner.issues.find((issue) => single || issue.code !== 'scenario_field_unknown')
       if (first) {
         raise(ctx, 'scenario_value_invalid', first.field.startsWith('truth') ? atIndex('truths', t) : atIndex('designs', d),
           `Cell (${d}, ${t}) is not a valid scenario: ${first.code} at ${first.field}.`)
@@ -964,6 +1012,33 @@ function checkGrid(schema, scenario, ctx) {
       }
     }
   }
+}
+
+/** Coupled design fields, mirrored by protocol.R. @param {any} scenario @param {string} path @param {WalkContext} ctx */
+function checkDesignSemantics(scenario, path, ctx) {
+  const kind = scenario?.design?.kind
+  const method = scenario.analysis?.method
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
+    const methods = { continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] }
+    if (method && !(methods[/** @type {keyof typeof methods} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
+    return
+  }
+  if (scenario.endpoint?.type !== 'binary') bad('endpoint.type', 'This single-arm implementation requires a binary endpoint.')
+  const methods = { single_arm: 'exact_binomial', single_arm_external: 'stratified_risk_difference', simon_two_stage: 'simon_boundary' }
+  if (method && method !== methods[/** @type {keyof typeof methods} */ (kind)]) bad('analysis.method', 'The analysis must match the declared single-arm design.')
+  const sided = scenario.analysis?.sided ?? 1
+  if (sided === 1 && Number.isFinite(scenario.analysis?.alpha) && scenario.analysis.alpha >= 0.5) bad('analysis.alpha', 'A one-sided analysis uses alpha below one half.')
+  if (kind === 'single_arm' && sided !== (scenario.analysis?.alternative === 'two.sided' ? 2 : 1)) bad('analysis.sided', 'Sidedness must agree with the exact binomial alternative.')
+  if (kind === 'simon_two_stage') {
+    const { n1, n, r1, r } = scenario.design
+    if (Number.isFinite(n1) && Number.isFinite(n) && n1 >= n) bad('design.n1', 'Stage one is smaller than the total sample size.')
+    if (Number.isFinite(r1) && Number.isFinite(n1) && r1 >= n1) bad('design.r1', 'Stage one continues only when responses exceed r1 < n1.')
+    if (Number.isFinite(r) && Number.isFinite(n) && (r >= n || r < r1)) bad('design.r', 'The final success threshold satisfies r1 <= r < n.')
+    if (sided !== 1) bad('analysis.sided', 'Simon uses the upper one-sided frozen boundary rule.')
+    if (Number.isFinite(scenario.truth?.alternativeRate) && Number.isFinite(scenario.truth?.nullRate) && scenario.truth.alternativeRate <= scenario.truth.nullRate) bad('truth.alternativeRate', 'The alternative response rate exceeds the null rate.')
+  }
+  if (typeof scenario.truth?.null === 'boolean' && scenario.truth.null !== vcrIsNullScenario(scenario)) bad('truth.null', 'The null label must agree with the generating estimand; it does not change the generating law.')
 }
 
 /**
@@ -987,6 +1062,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
     ctx.issues.push({ code: 'rule_expression_forbidden', field: holder, detail: 'A scenario never carries an expression: rules are data in a closed grammar.' })
   }
   checkObject(schema, scenario, path, ctx)
+  if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)
 
   // The same defect can be reported by two walkers; say it once.

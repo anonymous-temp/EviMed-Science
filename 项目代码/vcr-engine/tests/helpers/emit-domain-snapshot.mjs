@@ -26,6 +26,7 @@ const snapshot = {
   methods: Object.fromEntries(
     Object.entries(job.VCR_ENGINE_METHODS).map(([id, spec]) => [id, {
       version: spec.version, endpoints: [...spec.endpoints], crossChecks: [...spec.crossChecks], modelTier: spec.modelTier,
+      ...('legacyVersion' in spec ? { legacyVersion: spec.legacyVersion, legacyDesigns: [...spec.legacyDesigns] } : {}),
     }]),
   ),
   jobMethods: { ...job.VCR_JOB_METHODS },

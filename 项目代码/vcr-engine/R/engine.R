@@ -1350,7 +1350,7 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
 
 # --- design ---------------------------------------------------------------------
 
-.VCR_ANALYTIC_DESIGNS <- c("two_arm_fixed", "group_sequential", "simon_two_stage")
+.VCR_ANALYTIC_DESIGNS <- c("two_arm_fixed", "group_sequential", "simon_two_stage", "single_arm")
 
 vcr_job_design_analytic <- function(job, ...) {
   sc <- job$scenario
@@ -1367,6 +1367,13 @@ vcr_job_design_analytic <- function(job, ...) {
   sided <- vcr_check_sided(sc$analysis$sided)
   alloc <- vcr_scalar(d$allocation, 0.5)
   tr <- sc$truth
+  if(identical(kind,"single_arm")) {
+    if(!identical(e,"binary"))vcr_abort("design_not_supported","scenario.endpoint.type","Exact single-arm analysis requires a binary endpoint.")
+    ex<-vcr_exact_binomial(vcr_scalar(d$n),vcr_scalar(tr$nullRate),vcr_scalar(tr$responseRate),alpha,sc$analysis$alternative)
+    return(list(status="succeeded",counts=vcr_counts(realPatients=0),measures=list(
+      vcr_measure("type_one_error",ex$typeOneError,source="calculated"),vcr_measure("power",ex$power,source="calculated"),
+      vcr_measure("sample_size",ex$n,source="calculated")),diagnostics=list(exactBinomial=ex)))
+  }
   measures <- list(); diag <- list()
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
@@ -1501,14 +1508,16 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   # replicate and the directory is what gets shipped.
   if (!is.null(cp) && file.exists(cp) && identical(res$status, "succeeded")) unlink(cp)
   n_per <- vcr_scalar(sc$design$nTreat, 0) + vcr_scalar(sc$design$nControl, vcr_scalar(sc$design$nTreat, 0))
+  generated<-if(!is.null(res$values) && "generatedRecords" %in% colnames(res$values))sum(res$values[,"generatedRecords"],na.rm=TRUE) else res$diagnostics$replicatesCompleted*n_per
   # the analytic power curve at this size with the simulated point on it: analytic first, the simulation as the check
   simulated <- Filter(function(m) identical(m$name, "power"), res$measures)
   curve <- tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
                                             if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
                     error = function(e) NULL)
   list(status = res$status, measures = res$measures, issues = res$issues,
+       notEstimableRule = res$notEstimableRule,
        conclusion = res$diagnostics$conclusion,
-       counts = vcr_counts(realPatients = 0, generatedRecords = res$diagnostics$replicatesCompleted * n_per),
+       counts = vcr_counts(realPatients = 0, generatedRecords = generated),
        diagnostics = c(res$diagnostics, list(analyticCheck = check, powerCurve = curve)),
        tables = tables)
 }
