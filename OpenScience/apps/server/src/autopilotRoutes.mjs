@@ -31,17 +31,30 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
         return reply(await service.list(user.id, { projectId: await requireProject(projectId) }));
       }
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["projectId", "title", "topics", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "scheduleHour", "timeZone"]);
+        const body = await bodyOf(req, maxJsonBytes, ["projectId", "title", "topics", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny", "scheduleHour", "timeZone", "prompt", "schedule"]);
         body.projectId = await requireProject(body.projectId);
-        return reply(await service.create(user.id, body), 201);
+        return reply(service.projectAgenda(await service.create(user.id, body)), 201);
       }
+    }
+    if (parts[0] === "agendas" && parts.length === 2 && ["GET", "PATCH", "DELETE"].includes(method)) {
+      const agenda = await service.get(user.id, parts[1]);
+      await requireProject(agenda.projectId);
+      if (method === "GET") {
+        service.assertNotArchived(agenda);
+        return reply(service.projectAgenda(agenda));
+      }
+      const body = await bodyOf(req, maxJsonBytes, method === "DELETE" ? ["expectedRevision"]
+        : ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"]);
+      return reply(service.projectAgenda(await service[method === "DELETE" ? "archive" : "update"](user.id, agenda.id, body)));
     }
     if (parts[0] === "agendas" && parts.length === 3 && method === "POST") {
       const agenda = await service.get(user.id, parts[1]);
       await requireProject(agenda.projectId);
       if (["start", "stop"].includes(parts[2])) {
-        return reply(await service[parts[2]](user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["expectedRevision"])));
+        return reply(service.projectAgenda(await service[parts[2]](user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["expectedRevision"]))));
       }
+      if (parts[2] === "run-now") return reply(await service.runNow(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["requestId"])));
+      if (parts[2] === "follow-ups") return reply(await service.followUp(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["requestId", "note", "episodeId"])));
       if (parts[2] === "schedule") {
         return reply(await service.schedule(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["date"])));
       }

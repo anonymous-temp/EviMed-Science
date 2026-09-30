@@ -45,7 +45,7 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
   if (followUps.length > 5) snapshot.truncated = true;
   for (const item of followUps.slice(-5)) add(snapshot.followUps, { digestId: cut(item.digestId, 160), claimId: cut(item.claimId, 160), note: cut(item.note, 600), at: item.at });
   const ownedDigests = digests.filter(row => owns(row) && row.payload.date <= date && !(row.payload.episodeIds ?? []).includes(episodeId))
-    .sort((left, right) => String(right.payload.date).localeCompare(String(left.payload.date)) || String(right.id).localeCompare(String(left.id)));
+    .sort((left, right) => String(right.payload.createdAt ?? right.createdAt ?? right.payload.date).localeCompare(String(left.payload.createdAt ?? left.createdAt ?? left.payload.date)) || String(right.id).localeCompare(String(left.id)));
   if (ownedDigests.length > 8) snapshot.truncated = true;
   for (const row of ownedDigests.slice(0, 8)) {
     const claims = [...(row.payload.headlines ?? []), ...(row.payload.leads ?? [])];
@@ -58,8 +58,8 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
         statement: cut(claims.find(claim => claim.id === decision.claimId)?.statement), note: cut(decision.note), at: decision.at });
     }
   }
-  const previous = episodes.filter(row => owns(row) && row.id !== episodeId && row.payload.date < date)
-    .sort((left, right) => String(right.payload.date).localeCompare(String(left.payload.date)) || String(right.id).localeCompare(String(left.id)));
+  const previous = episodes.filter(row => owns(row) && row.id !== episodeId && (row.payload.date < date || (row.payload.date === date && Date.parse(row.payload.createdAt ?? row.createdAt) < Date.parse(asOf))))
+    .sort((left, right) => String(right.payload.createdAt ?? right.createdAt ?? right.payload.date).localeCompare(String(left.payload.createdAt ?? left.createdAt ?? left.payload.date)) || String(right.id).localeCompare(String(left.id)));
   if (previous.length > MAX_EPISODES) snapshot.truncated = true;
   for (const row of previous.slice(0, MAX_EPISODES)) {
     const payload = row.payload;
@@ -83,8 +83,12 @@ export function buildAutopilotProgress({ userId, agenda, date, episodeId, asOf, 
 /** Authenticate scope in the store query before the pure projection; never consume a client-supplied history.
  * @param {any} documents @param {{userId:string,agenda:any,date:string,episodeId:string,asOf:string}} input */
 export async function loadAutopilotProgress(documents, input) {
+  // The store stamps createdAt using its own clock. Use that same clock for
+  // the read horizon, so ordinary host/database skew cannot hide prior output.
+  const clock = documents.database ? await documents.database.query("SELECT clock_timestamp() AS as_of") : null;
+  const asOf = clock?.rows?.[0]?.as_of ? new Date(clock.rows[0].as_of).toISOString() : input.asOf;
   const options = { projectId: input.agenda.projectId, filter: { agendaId: input.agenda.id }, limit: 50 };
   const [episodes, digests] = await Promise.all([documents.list(input.userId, "episode", options), documents.list(input.userId, "digest", options)]);
   const owned = page => page.items.map(row => ({ ...row, ownerId: row.userId ?? input.userId }));
-  return buildAutopilotProgress({ ...input, episodes: owned(episodes), digests: owned(digests), moreAvailable: Boolean(episodes.nextCursor || digests.nextCursor) });
+  return buildAutopilotProgress({ ...input, asOf, episodes: owned(episodes), digests: owned(digests), moreAvailable: Boolean(episodes.nextCursor || digests.nextCursor) });
 }

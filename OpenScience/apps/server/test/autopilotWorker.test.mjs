@@ -13,6 +13,7 @@ function fixture({ enabled = true, dispatchError = null, cancelJob = false } = {
     get: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
     checkInactivity: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
     getEpisode: async () => ({ id: "episode-one", projectId: "project-one", revision: 1, payload: { status: "queued" } }),
+    recordResourceDeferral: async (...args) => { calls.push({ method: "deferral", args }); },
     markEpisodeDispatched: async (...args) => { calls.push({ method: "mark", args }); return { revision: 2 }; },
     markEpisodeFailed: async (...args) => { calls.push({ method: "failed", args }); },
     markEpisodeCanceled: async (...args) => { calls.push({ method: "canceled", args }); },
@@ -120,6 +121,8 @@ test("an occupied project waits past the runtime idle window before consuming an
   const failure = calls.find((call) => call.method === "jobFail");
   assert.equal(failure.args[4].retry, true);
   assert.equal(failure.args[4].delayMs, 31 * 60_000);
+  assert.equal(calls.some(call => call.method === "failed"), false);
+  assert.equal(calls.find(call => call.method === "deferral").args[2].code, "runtime_busy");
 });
 
 test("a durable cancellation job terminates one runtime session and records completion", async () => {
@@ -151,6 +154,7 @@ function verifyFixture({ enabled = true, dispatchError = null, finishError = nul
   const agenda = { id: "agenda-one", projectId: "project-one", revision: 2,
     payload: { enabled, status: enabled ? "active" : "paused" } };
   const service = {
+    recordVerificationDispatched: async () => {},
     get: async () => agenda,
     checkInactivity: async (...args) => { calls.push({ method: "checkInactivity", args }); return agenda; },
     getEpisode: async () => ({ id: EPISODE_ID, projectId: "project-one", revision: 1, payload: { status: "merged" } }),

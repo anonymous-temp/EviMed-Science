@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
+  agendaDueOccurrence, agendaNextOccurrence, agendaLocalDate, normalizeAgendaSchedule, validateAgendaSchedule, validAgendaDate,
   STOPPING_RULES, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
 import { loadAutopilotProgress, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 import { HttpError } from "./security.mjs";
@@ -10,6 +11,16 @@ function text(value, field, max = 500) {
     throw new HttpError(400, "autopilot_payload_invalid", `${field} is invalid.`);
   }
   return value.trim();
+}
+
+/** Validate without rewriting the researcher's instruction. */
+function instruction(value, field = "prompt", max = 20_000) {
+  text(value, field, max);
+  return value;
+}
+function scheduleValue(value) {
+  try { return validateAgendaSchedule(value); }
+  catch { throw new HttpError(400, "autopilot_payload_invalid", "The schedule has an invalid calendar, time or time zone."); }
 }
 
 function budget(value, field, { allowZero = false } = {}) {
@@ -351,6 +362,26 @@ function verificationTier(claim, result) {
   return { tier, verdict, reproductionMatched, numbersChecked: numbers, reason, isolationEnforced: enforced };
 }
 
+/** Cancel only a stored verification attempt in its scoped workspace. A stale
+ * cancellation can settle its old ledger entry, never stop a newer generation.
+ * @param {{runtimeManager:any,agentRuns:any}} dependencies @param {any} project @param {any} target */
+export async function cancelAutopilotVerification({ runtimeManager, agentRuns }, project, target) {
+  if (verificationEpisodeId(target.verificationId) !== target.episodeId
+    || autopilotLogicalDispatchId(target.dispatchId) !== target.verificationId) throw new HttpError(400, "autopilot_job_invalid", "Invalid cancellation identity.");
+  const run = (await agentRuns.list(project)).find(item => item.id === target.runId);
+  if (!run || run.sessionId !== target.sessionId || run.dispatchId !== target.dispatchId) throw new HttpError(409, "autopilot_cancellation_conflict", "Verification cancellation does not match its run.");
+  const current = runtimeManager.boundedRuntimeCleanupTarget(project);
+  if (!target.runtimeGeneration && current?.runId === target.verificationId) throw new HttpError(503, "runtime_cleanup_required", "The original runtime generation is unavailable; wait for its bounded lifetime.");
+  if (target.runtimeGeneration && current?.generation === target.runtimeGeneration && current.runId === target.verificationId) {
+    // endBoundedRuntime is generation fenced internally, including across awaits.
+    const stopped = await runtimeManager.endBoundedRuntime(project, target.verificationId, target.runtimeGeneration);
+    if (!stopped && runtimeManager.boundedRuntimeCleanupTarget(project)?.generation === target.runtimeGeneration) {
+      throw new HttpError(503, "runtime_cleanup_required", "The verification runtime has not stopped yet.");
+    }
+  }
+  await agentRuns.cancelRun(project, target.runId, { by: "platform" });
+}
+
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
@@ -376,17 +407,20 @@ export class AutopilotService {
     if (maxEpisodeCny > dailyBudgetCny || dailyBudgetCny > weeklyBudgetCny) {
       throw new HttpError(400, "autopilot_budget_invalid", "Episode, daily and weekly budgets must be ordered.");
     }
-    const scheduleHour = Number(input.scheduleHour);
-    if (!Number.isSafeInteger(scheduleHour) || scheduleHour < 0 || scheduleHour > 23) throw new HttpError(400, "autopilot_payload_invalid", "Schedule hour is invalid.");
+    const schedule = input.schedule !== undefined ? scheduleValue(input.schedule) : scheduleValue({ kind: "daily", timeZone: input.timeZone,
+      time: `${String(input.scheduleHour).padStart(2, "0")}:00` });
+    const topics = input.topics ? listOfText(input.topics, "agenda topics") : [text(input.title, "agenda title", 200)];
     const now = this.now().toISOString();
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       title: text(input.title, "agenda title", 200),
-      topics: listOfText(input.topics, "agenda topics"),
+      topics,
+      prompt: input.prompt === undefined ? topics.join("\n") : instruction(input.prompt),
+      schedule, scheduleVersion: 1, lastScheduledOccurrence: null,
       taskTypes: listOfText(input.taskTypes, "task types", AUTOPILOT_TASK_TYPES),
       dailyBudgetCny, weeklyBudgetCny, maxEpisodeCny,
-      scheduleHour,
-      timeZone: text(input.timeZone, "time zone", 80),
+      scheduleHour: Number(schedule.time.slice(0, 2)),
+      timeZone: schedule.timeZone,
       enabled: false,
       status: "paused",
       pauseReason: "Waiting for the researcher to start proactive research.",
@@ -409,7 +443,128 @@ export class AutopilotService {
   }
 
   /** @param {string} userId @param {{projectId:string}} options */
-  async list(userId, { projectId }) { return this.documents.list(userId, "agenda", { projectId, limit: 100 }); }
+  async list(userId, { projectId }) {
+    const items = [];
+    let cursor = null;
+    do {
+      const page = await this.documents.list(userId, "agenda", { projectId, limit: 100, cursor });
+      items.push(...page.items.filter(item => !item.payload.archivedAt).map(item => this.projectAgenda(item)));
+      cursor = page.nextCursor;
+    } while (cursor);
+    return { items, nextCursor: null };
+  }
+
+  /** Read-only normalization: no migration write, activation or history replacement. */
+  projectAgenda(agenda) {
+    const schedule = normalizeAgendaSchedule(agenda.payload);
+    const active = agenda.payload.enabled && agenda.payload.status === "active" && !agenda.payload.archivedAt;
+    const last = this.scheduleWatermark(agenda);
+    const due = active ? agendaDueOccurrence(schedule, last, this.now(), agenda.payload.createdAt ?? agenda.createdAt) : null;
+    const next = active ? due ?? agendaNextOccurrence(schedule, last, this.now()) : null;
+    return { ...agenda, payload: { ...agenda.payload, schedule, scheduleVersion: agenda.payload.scheduleVersion ?? 1,
+      prompt: agenda.payload.prompt ?? (agenda.payload.topics ?? []).join("\n"), nextRunAt: next?.scheduledAt ?? null,
+      scheduleState: agenda.payload.archivedAt ? "archived" : !active ? "paused" : next ? "scheduled" : "completed" } };
+  }
+
+  scheduleWatermark(agenda) {
+    if (agenda.payload.lastScheduledOccurrence) return agenda.payload.lastScheduledOccurrence;
+    // Old daily identities remain authoritative, even after a read-only upgrade.
+    if (agenda.payload.lastScheduledDate && !agenda.payload.schedule) {
+      const schedule = normalizeAgendaSchedule(agenda.payload);
+      return agendaDueOccurrence({ ...schedule, kind: "once", date: agenda.payload.lastScheduledDate }, null,
+        new Date(Date.parse(`${agenda.payload.lastScheduledDate}T00:00:00Z`) + 2 * 86_400_000));
+    }
+    return null;
+  }
+
+  assertNotArchived(agenda) {
+    if (agenda.payload.archivedAt) throw new HttpError(409, "autopilot_archived", "This scheduled task has been deleted.");
+  }
+
+  async update(userId, agendaId, input) {
+    const allowed = ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"];
+    if (Object.keys(input).some(key => !allowed.includes(key))) throw new HttpError(400, "autopilot_payload_invalid", "Unsupported task field.");
+    const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
+    this.revision(agenda, input.expectedRevision);
+    const payload = { ...agenda.payload };
+    if (input.title !== undefined) payload.title = text(input.title, "title", 200);
+    if (input.prompt !== undefined) payload.prompt = instruction(input.prompt);
+    if (input.taskTypes !== undefined) payload.taskTypes = listOfText(input.taskTypes, "task types", AUTOPILOT_TASK_TYPES);
+    for (const field of ["dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"]) if (input[field] !== undefined) payload[field] = budget(input[field], field);
+    if (payload.maxEpisodeCny > payload.dailyBudgetCny || payload.dailyBudgetCny > payload.weeklyBudgetCny) throw new HttpError(400, "autopilot_budget_invalid", "Episode, daily and weekly budgets must be ordered.");
+    if (input.schedule !== undefined) {
+      const schedule = scheduleValue(input.schedule);
+      const changed = JSON.stringify(schedule) !== JSON.stringify(normalizeAgendaSchedule(payload));
+      payload.schedule = schedule;
+      payload.scheduleVersion = (payload.scheduleVersion ?? 1) + Number(changed);
+      payload.lastScheduledOccurrence = changed ? null : this.scheduleWatermark(agenda);
+      payload.scheduleChangedAt = changed ? this.now().toISOString() : payload.scheduleChangedAt;
+      payload.timeZone = schedule.timeZone;
+      payload.scheduleHour = Number(schedule.time.slice(0, 2));
+    }
+    payload.updatedAt = this.now().toISOString();
+    return this.documents.put(userId, "agenda", agenda.id, payload, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+  }
+
+  async archive(userId, agendaId, input) {
+    const agenda = await this.get(userId, agendaId);
+    this.revision(agenda, input.expectedRevision);
+    const at = this.now().toISOString();
+    await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload,
+      archivedAt: at, enabled: false, status: "stopped", pauseReason: "Deleted by the researcher.",
+      stopSweep: { status: "queued", requestedAt: at }, updatedAt: at,
+    }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+    await this.sweepStop(userId, agenda.id).catch(() => null);
+    return this.get(userId, agenda.id);
+  }
+
+  async runNow(userId, agendaId, input) {
+    return this.schedule(userId, agendaId, { requestId: text(input.requestId, "request id", 160), trigger: "manual" });
+  }
+
+  async followUp(userId, agendaId, input) {
+    const requestId = text(input.requestId, "request id", 160);
+    const note = instruction(input.note, "follow-up note", 8000);
+    const agenda = await this.get(userId, agendaId);
+    if (input.episodeId !== undefined) {
+      const episode = await this.getEpisode(userId, text(input.episodeId, "episode id", 160));
+      if (episode.projectId !== agenda.projectId || episode.payload.agendaId !== agenda.id) throw new HttpError(404, "autopilot_episode_not_found", "Episode unavailable.");
+    }
+    return this.schedule(userId, agendaId, { requestId, trigger: "follow-up", note, episodeId: input.episodeId });
+  }
+
+  async scheduleDue(userId, agendaId) {
+    const agenda = await this.get(userId, agendaId);
+    if (!agenda.payload.enabled || agenda.payload.status !== "active" || agenda.payload.archivedAt) return null;
+    const schedule = normalizeAgendaSchedule(agenda.payload);
+    const occurrence = agendaDueOccurrence(schedule, this.scheduleWatermark(agenda), this.now(),
+      agenda.payload.scheduleChangedAt ?? agenda.payload.createdAt ?? agenda.createdAt);
+    if (!occurrence) return null;
+    return this.schedule(userId, agendaId, { date: occurrence.localDate, occurrence,
+      scheduleVersion: agenda.payload.scheduleVersion ?? 1, expectedRevision: agenda.revision });
+  }
+
+  /** Stable owner/id pagination cannot starve the 101st unchanged active task. */
+  async scheduleActive(database, onError = async (_row, _error) => {}) {
+    let after = ["", ""];
+    let scanned = 0;
+    let remaining = true;
+    while (remaining) {
+      const result = await database.query(`SELECT user_id,id FROM evimed_product.documents
+        WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active' AND payload->>'enabled'='true'
+        AND (user_id,id)>($1::text,$2::text) ORDER BY user_id,id LIMIT 100`, after);
+      for (const row of result.rows) {
+        scanned += 1;
+        try { await this.scheduleDue(row.user_id, row.id); }
+        catch (error) { await onError(row, error); }
+      }
+      remaining = result.rows.length === 100;
+      const last = result.rows.at(-1);
+      if (last) after = [last.user_id, last.id];
+    }
+    return { scanned };
+  }
 
   /** @param {string} userId @param {{projectId:string}} options */
   async listDigests(userId, { projectId }) { return this.documents.list(userId, "digest", { projectId, limit: 100 }); }
@@ -428,8 +583,8 @@ export class AutopilotService {
     const page = await this.documents.list(userId, "episode", {
       projectId, limit: 100, ...(agendaId ? { filter: { agendaId: text(agendaId, "agenda id", 160) } } : {}),
     });
-    const items = [...page.items].sort((left, right) => String(right.payload.date ?? "").localeCompare(String(left.payload.date ?? ""))
-      || String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
+    const items = [...page.items].sort((left, right) => String(right.payload.createdAt ?? right.createdAt ?? "").localeCompare(String(left.payload.createdAt ?? left.createdAt ?? ""))
+      || right.id.localeCompare(left.id));
     // The prompt is the run's brief, not the researcher's: the list carries
     // what happened, when, and where to open it.
     return { ...page, items: items.map((item) => ({ ...item, payload: Object.fromEntries(Object.entries(item.payload).filter(([key]) => key !== "prompt")) })) };
@@ -590,6 +745,7 @@ export class AutopilotService {
       if (episode.payload.status === "canceled" || (!input.verificationId && (episode.payload.runId || episode.payload.completion || episode.payload.digestId))) return episode;
       try {
         return await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+          ...(!input.verificationId ? { status: "queued", error: null } : {}),
           resourceDeferrals: { ...episode.payload.resourceDeferrals, [checkId]: detail }, updatedAt: this.now().toISOString(),
         }, { expectedRevision: episode.revision, projectId: episode.projectId });
       } catch (error) { if (!isConflict(error)) throw error; }
@@ -949,6 +1105,7 @@ export class AutopilotService {
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
   async start(userId, agendaId, input) {
     const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
     this.revision(agenda, input.expectedRevision);
     return this.documents.put(userId, "agenda", agenda.id, {
       ...agenda.payload, enabled: true, status: "active", pauseReason: null, userSignal: null,
@@ -997,12 +1154,53 @@ export class AutopilotService {
         }
       }
     }
+    let cursor = null;
+    do {
+      const page = await this.documents.list(userId, "episode", { projectId: agenda.projectId, filter: { agendaId }, limit: 100, cursor });
+      for (const episode of page.items) await this.cancelVerifications(userId, episode);
+      cursor = page.nextCursor;
+    } while (cursor);
     const latest = await this.get(userId, agenda.id);
     if (latest.payload.stopSweep?.status === "completed") return latest;
     return this.documents.put(userId, "agenda", latest.id, {
       ...latest.payload, stopSweep: { ...latest.payload.stopSweep, status: "completed", completedAt: this.now().toISOString() },
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: latest.revision, projectId: latest.projectId });
+  }
+
+  /** Record accepted verification identity even if its agenda was stopped during
+   * dispatch. Cancellation uses this exact attempt, never the next runtime. */
+  async recordVerificationDispatched(userId, episodeId, input) {
+    if (verificationEpisodeId(input.verificationId) !== episodeId
+      || autopilotLogicalDispatchId(input.dispatchId) !== input.verificationId) throw new HttpError(400, "autopilot_job_invalid", "Invalid verification dispatch identity.");
+    const target = { verificationId: input.verificationId, dispatchId: input.dispatchId,
+      runId: text(input.runId, "verification run", 160), sessionId: text(input.sessionId, "verification session", 160),
+      runtimeGeneration: input.runtimeGeneration ?? null, status: "running" };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      const known = episode.payload.verificationDispatches ?? [];
+      let saved = episode;
+      if (!known.some(item => item.runId === target.runId)) {
+        try {
+          saved = await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+            verificationDispatches: [...known, target].slice(-30), updatedAt: this.now().toISOString(),
+          }, { expectedRevision: episode.revision, projectId: episode.projectId });
+        } catch (error) { if (isConflict(error)) continue; throw error; }
+      }
+      const agenda = await this.get(userId, episode.payload.agendaId);
+      if (!agenda.payload.enabled || agenda.payload.status !== "active") await this.cancelVerifications(userId, saved);
+      return saved;
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "Verification changed while recording dispatch.");
+  }
+
+  async cancelVerifications(userId, episode) {
+    const targets = (episode.payload.verificationDispatches ?? []).filter(item => item.status !== "canceled");
+    for (const target of targets) {
+      await this.jobs.enqueue(userId, "episode", { action: "cancel", episodeId: episode.id, ...target }, {
+        idempotencyKey: `verify-cancel:${episode.id}:${target.runId}`, projectId: episode.projectId, maxAttempts: 10, rearmFailed: true,
+      });
+    }
   }
 
   async enqueueCancellation(userId, episode) {
@@ -1025,7 +1223,9 @@ export class AutopilotService {
     }
     const stopped = await database.query(`SELECT user_id,id FROM evimed_product.documents
       WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='stopped'
-      AND payload->'stopSweep'->>'status'='queued' ORDER BY updated_at,id LIMIT 100`);
+      AND (payload->'stopSweep'->>'status'='queued' OR EXISTS (SELECT 1 FROM evimed_product.documents e
+        WHERE e.user_id=evimed_product.documents.user_id AND e.kind='episode' AND e.payload->>'agendaId'=evimed_product.documents.id
+        AND jsonb_path_exists(e.payload, '$.verificationDispatches[*] ? (@.status == "running")'))) ORDER BY updated_at,id LIMIT 100`);
     for (const row of stopped.rows) await this.sweepStop(row.user_id, row.id).catch(() => null);
     const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
       WHERE kind='episode' AND deleted_at IS NULL AND payload->'cancellation'->>'status'='queued'
@@ -1041,7 +1241,21 @@ export class AutopilotService {
     return { scanned: completions.rows.length + stopped.rows.length + result.rows.length, enqueued };
   }
 
-  async markCancellationCompleted(userId, episodeId, runId) {
+  async markCancellationCompleted(userId, episodeId, runId, verificationId = null) {
+    if (verificationId) {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const episode = await this.getEpisode(userId, episodeId);
+        const targets = episode.payload.verificationDispatches ?? [];
+        const target = targets.find(item => item.runId === runId && item.verificationId === verificationId);
+        if (!target || target.status === "canceled") return episode;
+        try {
+          return await this.documents.put(userId, "episode", episode.id, { ...episode.payload,
+            verificationDispatches: targets.map(item => item !== target ? item : { ...item, status: "canceled" }),
+          }, { expectedRevision: episode.revision, projectId: episode.projectId });
+        } catch (error) { if (!isConflict(error)) throw error; }
+      }
+      throw new HttpError(409, "autopilot_cancellation_conflict", "Verification cancellation changed repeatedly.");
+    }
     const episode = await this.getEpisode(userId, episodeId);
     const cancellation = episode.payload.cancellation;
     if (!cancellation || cancellation.status === "completed") return episode;
@@ -1052,78 +1266,126 @@ export class AutopilotService {
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
   }
 
-  /** @param {string} userId @param {string} agendaId @param {{date:string}} input */
+  /** Enqueue and settle through the same durable ledger. A real store commits the
+   * episode, job and agenda CAS atomically; injected stores retain replay recovery.
+   * @param {string} userId @param {string} agendaId @param {any} input */
   async schedule(userId, agendaId, input) {
     const agenda = await this.checkInactivity(userId, agendaId);
+    this.assertNotArchived(agenda);
     if (agenda.payload.status === "stopped") throw new HttpError(409, "autopilot_stopped", "This research agenda has been stopped.");
     if (!agenda.payload.enabled || agenda.payload.status !== "active") throw new HttpError(409, "autopilot_paused", "This research agenda is paused.");
-    const date = text(input.date, "episode date", 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))) throw new HttpError(400, "autopilot_payload_invalid", "Episode date is invalid.");
-    if (this.usage) await this.usage.assertWithinLimits(userId, { dailyLimit: agenda.payload.dailyBudgetCny, weeklyLimit: agenda.payload.weeklyBudgetCny, now: this.now() });
-    const episodeId = `episode-${hash(`${userId}:${agenda.id}:${date}`).slice(0, 32)}`;
-    // By the day, not by a hash of it: the task types take turns, so an agenda
-    // that names two runs each of them within any two days. A hash picked the
-    // same type four days running about one time in eight, and the owner's
-    // agenda has two types (2026-09-29).
+    const manual = input.trigger === "manual" || input.trigger === "follow-up";
+    const trigger = manual ? input.trigger : "scheduled";
+    const schedule = normalizeAgendaSchedule(agenda.payload);
+    const date = manual ? agendaLocalDate(schedule.timeZone, this.now()) : text(input.date, "episode date", 10);
+    if (!validAgendaDate(date)) throw new HttpError(400, "autopilot_payload_invalid", "Episode date is invalid.");
+    if (input.scheduleVersion !== undefined && input.scheduleVersion !== (agenda.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The task schedule changed; retry from its current version.");
+    // The compatibility /schedule endpoint and pre-upgrade workers used a date
+    // key. Probe that identity before the first versioned occurrence so rolling
+    // upgrades cannot duplicate an already queued day.
+    const legacyEpisode = !manual && input.occurrence && (agenda.payload.scheduleVersion ?? 1) === 1
+      ? await this.documents.get(userId, "episode", `episode-${hash(`${userId}:${agenda.id}:${date}`).slice(0, 32)}`) : null;
+    const legacy = !manual && (!input.occurrence || !agenda.payload.schedule || Boolean(legacyEpisode));
+    const identity = manual ? `manual:${input.requestId}` : legacy ? date : `schedule:${input.scheduleVersion}:${input.occurrence.key}`;
+    const episodeId = `episode-${hash(`${userId}:${agenda.id}:${identity}`).slice(0, 32)}`;
+    const existingEpisode = legacyEpisode ?? await this.documents.get(userId, "episode", episodeId);
+    if (manual && existingEpisode && (existingEpisode.payload.trigger !== trigger
+      || (trigger === "follow-up" && (existingEpisode.payload.followUpNote !== input.note || existingEpisode.payload.replyToEpisodeId !== (input.episodeId ?? null))))) {
+      throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
+    }
+    if (input.expectedRevision !== undefined && agenda.revision !== input.expectedRevision && !existingEpisode) this.revision(agenda, input.expectedRevision);
+    if (this.usage && !existingEpisode) await this.usage.assertWithinLimits(userId, { dailyLimit: agenda.payload.dailyBudgetCny, weeklyLimit: agenda.payload.weeklyBudgetCny, now: this.now() });
     const index = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000) % agenda.payload.taskTypes.length;
     const taskType = agenda.payload.taskTypes[index];
-    // The night's money, split before anything is dispatched: the episode is
-    // told a smaller number so that the claims it earns can still be re-checked
-    // against the same rolling daily cap it spends into.
-    const { episodeCny: budgetCny, verificationCny } = splitEpisodeBudget(
-      Math.min(agenda.payload.maxEpisodeCny, agenda.payload.dailyBudgetCny));
-    // A follow-up the researcher asked on a digest is tomorrow's first task.
-    // It rides exactly one brief: the episode this call creates, never one
-    // that already existed when the question was asked.
-    const followUps = (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).slice(-5);
-    const existingEpisode = await this.documents.get(userId, "episode", episodeId);
+    const { episodeCny: budgetCny, verificationCny } = splitEpisodeBudget(Math.min(agenda.payload.maxEpisodeCny, agenda.payload.dailyBudgetCny));
+    const followUps = (agenda.payload.followUps ?? []).filter(item => !item.consumedBy).slice(-5);
+    const at = this.now().toISOString();
     const progress = existingEpisode?.payload?.progress ?? (!existingEpisode ? await loadAutopilotProgress(this.documents, {
-      userId, agenda, date, episodeId, asOf: this.now().toISOString(),
+      userId, agenda, date, episodeId, asOf: at,
     }) : null);
+    const originalInstruction = agenda.payload.prompt ?? agenda.payload.topics.join("\n");
     const prompt = [
       `Run the ${taskType} proactive research episode for agenda "${agenda.payload.title}".`,
       `Episode ID: ${episodeId}. Use this exact value as provenance.episodeId in agenda-delta.json.`,
-      `Topics: ${agenda.payload.topics.join(", ")}.`,
+      "Researcher's original instruction (preserve its scope):", originalInstruction,
       `Maximum episode budget: CNY ${budgetCny.toFixed(2)}.`,
+      ...(trigger === "follow-up" ? ["Researcher's follow-up for this episode:", input.note] : []),
       ...(followUps.length ? [`Researcher follow-up questions to answer first: ${followUps.map((item, position) => `(${position + 1}) ${item.note}`).join(" ")}`] : []),
       ...(progress ? [renderAutopilotProgress(progress)] : []),
       "Use the ordinary capability contract and delivery gate. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
     ].join("\n");
-    let episode;
-    try {
-      episode = await this.documents.put(userId, "episode", episodeId, {
-        schemaVersion: 1, agendaId: agenda.id, taskType, date, budgetCny, verificationBudgetCny: verificationCny,
-        prompt, progress, followUpKeys: followUps.map(followUpKey), status: "queued",
-        runId: null, claims: [], createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
-      }, { expectedRevision: 0, projectId: agenda.projectId });
-    } catch (error) {
-      if (!isConflict(error)) throw error;
-      episode = await this.documents.get(userId, "episode", episodeId);
-      if (!episode) throw error;
-    }
-    const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId,
-      taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
-      idempotencyKey: `episode:${agenda.id}:${date}`, projectId: agenda.projectId, maxAttempts: 10,
-    });
-    // Settle the questions frozen with this episode, including a retry after
-    // its first agenda update lost a CAS race. New questions are not consumed.
-    const consumed = new Set(episode.payload.followUpKeys ?? []);
-    let settled = false;
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    const proposed = {
+      schemaVersion: 2, agendaId: agenda.id, taskType, date, budgetCny, verificationBudgetCny: verificationCny,
+      trigger, scheduledAt: input.occurrence?.scheduledAt ?? at, occurrenceKey: input.occurrence?.key ?? null,
+      scheduleVersion: agenda.payload.scheduleVersion ?? 1, instruction: originalInstruction,
+      ...(manual ? { requestId: input.requestId } : {}),
+      ...(trigger === "follow-up" ? { followUpNote: input.note, replyToEpisodeId: input.episodeId ?? null } : {}),
+      prompt, progress, followUpKeys: followUps.map(followUpKey), status: "queued",
+      runId: null, claims: [], createdAt: at, updatedAt: at,
+    };
+    const commit = async (transactionClient = null) => {
+      let episode = existingEpisode;
+      if (!episode) {
+        try {
+          episode = await this.documents.put(userId, "episode", episodeId, proposed,
+            { expectedRevision: 0, projectId: agenda.projectId, transactionClient });
+        } catch (error) {
+          if (!isConflict(error)) throw error;
+          episode = await this.documents.get(userId, "episode", episodeId);
+          if (!episode) throw error;
+        }
+      }
+      if (manual && (episode.payload.trigger !== trigger || (trigger === "follow-up"
+        && (episode.payload.followUpNote !== input.note || episode.payload.replyToEpisodeId !== (input.episodeId ?? null))))) {
+        throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
+      }
       const current = await this.get(userId, agenda.id);
+      this.assertNotArchived(current);
+      if (!current.payload.enabled || current.payload.status !== "active") throw new HttpError(409, "autopilot_paused", "This scheduled task is no longer active.");
+      // Any edit before the enqueue boundary invalidates a newly prepared brief.
+      // Previously queued episodes retain their frozen prompt after later edits.
+      if (!existingEpisode && current.revision !== agenda.revision) {
+        const fields = ["title", "prompt", "topics", "schedule", "scheduleVersion", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"];
+        if (fields.some(field => JSON.stringify(current.payload[field]) !== JSON.stringify(agenda.payload[field]))) this.revision(current, agenda.revision);
+      }
+      const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId,
+        taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
+        idempotencyKey: legacy ? `episode:${agenda.id}:${identity}` : `episode:${episodeId}`, projectId: agenda.projectId, maxAttempts: 10, transactionClient,
+      });
+      const consumed = new Set(episode.payload.followUpKeys ?? []);
       const pending = (current.payload.followUps ?? []).some(item => !item.consumedBy && consumed.has(followUpKey(item)));
-      const scheduledDate = current.payload.lastScheduledDate > date ? current.payload.lastScheduledDate : date;
-      if (current.payload.lastScheduledDate === scheduledDate && !pending) { settled = true; break; }
-      try {
-        await this.documents.put(userId, "agenda", agenda.id, { ...current.payload, lastScheduledDate: scheduledDate,
+      const messages = current.payload.messages ?? [];
+      const messageMissing = trigger === "follow-up" && !messages.some(item => item.requestId === input.requestId)
+        && (!existingEpisode || !this.documents.database);
+      const scheduledDate = manual ? current.payload.lastScheduledDate : current.payload.lastScheduledDate > date ? current.payload.lastScheduledDate : date;
+      if (input.scheduleVersion !== undefined && input.scheduleVersion !== (current.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The schedule changed before enqueue.");
+      const watermarkMissing = !manual && input.occurrence && (!current.payload.lastScheduledOccurrence
+        || Date.parse(current.payload.lastScheduledOccurrence.scheduledAt) < Date.parse(input.occurrence.scheduledAt));
+      if (pending || messageMissing || watermarkMissing || current.payload.lastScheduledDate !== scheduledDate) {
+        await this.documents.put(userId, "agenda", agenda.id, { ...current.payload,
+          lastScheduledDate: scheduledDate,
+          ...(watermarkMissing ? { lastScheduledOccurrence: input.occurrence } : {}),
+          ...(messageMissing ? { messages: [...messages, { requestId: input.requestId, note: input.note,
+            episodeId: input.episodeId ?? null, runEpisodeId: episode.id, at: episode.payload.createdAt }].slice(-20) } : {}),
           followUps: (current.payload.followUps ?? []).map(item => item.consumedBy || !consumed.has(followUpKey(item)) ? item : { ...item, consumedBy: episodeId }),
-          updatedAt: this.now().toISOString(),
-        }, { expectedRevision: current.revision, projectId: current.projectId });
-        settled = true; break;
-      } catch (error) { if (!isConflict(error)) throw error; }
+          updatedAt: at,
+        }, { expectedRevision: current.revision, projectId: current.projectId, transactionClient });
+      } else if (transactionClient && !existingEpisode) {
+        // Manual work still CAS-locks the agenda against concurrent pause/edit;
+        // it never advances the timer watermark.
+        await this.documents.put(userId, "agenda", agenda.id, current.payload,
+          { expectedRevision: current.revision, projectId: current.projectId, transactionClient, telemetry: true });
+      }
+      return { episode, job };
+    };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try { return this.documents.database ? await this.documents.database.transaction(commit) : await commit(); }
+      catch (error) {
+        // A real transaction rolls back on a CAS loss; only the next fresh call
+        // may choose a new schedule. Memory stores exercise partial-write replay.
+        if (this.documents.database || !isConflict(error) || attempt === 4) throw error;
+      }
     }
-    if (!settled) throw new HttpError(409, "autopilot_activity_conflict", "Follow-up questions changed repeatedly; retry this same episode.");
-    return { episode, job };
   }
 
   /** @param {string} userId @param {string} agendaId @param {Record<string,any>} input */
@@ -1146,7 +1408,7 @@ export class AutopilotService {
         return await this.documents.put(userId, "agenda", agenda.id, {
           ...agenda.payload,
           enabled: paused ? false : agenda.payload.enabled,
-          status: paused ? "paused" : "active",
+          status: agenda.payload.status === "stopped" ? "stopped" : paused ? "paused" : agenda.payload.status,
           pauseReason: paused ? verdict.reason : null,
           consecutiveFailures: failures,
           episodesWithoutGatedClaim: without,

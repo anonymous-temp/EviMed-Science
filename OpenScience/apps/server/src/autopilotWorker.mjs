@@ -18,7 +18,7 @@ const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", "autopilot_job_i
  * their claims earn. The callbacks are the ordinary AgentRun dispatch path; this
  * class only owns restart-safe queue semantics. */
 export class AutopilotWorker {
-  /** @param {{jobs:any,service:any,dispatchEpisode:(input:any)=>Promise<{runId:string,sessionId:string}>,dispatchVerification?:((input:any)=>Promise<{runId:string,sessionId:string}>)|null,cancelDispatched?:(input:any)=>Promise<void>,pollMs?:number,leaseMs?:number,reconcileMs?:number,busyDelayMs?:number}} dependencies */
+  /** @param {{jobs:any,service:any,dispatchEpisode:(input:any)=>Promise<{runId:string,sessionId:string}>,dispatchVerification?:((input:any)=>Promise<{runId:string,sessionId:string,dispatchId?:string,runtimeGeneration?:string|null}>)|null,cancelDispatched?:(input:any)=>Promise<void>,pollMs?:number,leaseMs?:number,reconcileMs?:number,busyDelayMs?:number}} dependencies */
   constructor({ jobs, service, dispatchEpisode, dispatchVerification = null, cancelDispatched = async () => {},
     pollMs = 1000, leaseMs = 300_000, reconcileMs = 60_000, busyDelayMs = 31 * 60_000 }) {
     if (!jobs || !service || typeof dispatchEpisode !== "function") throw new TypeError("AutopilotWorker dependencies are required.");
@@ -106,6 +106,10 @@ export class AutopilotWorker {
         await holdsLease();
         const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: autopilotAttemptDispatchId(job.payload.verificationId, job.attempts), assertDispatchAllowed });
         verificationDispatched = true;
+        await this.service.recordVerificationDispatched(job.userId, job.payload.episodeId, {
+          ...verification, verificationId: job.payload.verificationId,
+          dispatchId: verification.dispatchId ?? autopilotAttemptDispatchId(job.payload.verificationId, job.attempts),
+        });
         await holdsLease();
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
           verificationId: job.payload?.verificationId, ...verification,
@@ -116,8 +120,9 @@ export class AutopilotWorker {
       }
       if (job.payload?.action === "cancel") {
         await this.cancelDispatched({ userId: job.userId, projectId: job.projectId, episodeId: job.payload.episodeId,
-          sessionId: job.payload.sessionId, runId: job.payload.runId });
-        await this.service.markCancellationCompleted(job.userId, job.payload.episodeId, job.payload.runId);
+          sessionId: job.payload.sessionId, runId: job.payload.runId,
+          verificationId: job.payload.verificationId, dispatchId: job.payload.dispatchId, runtimeGeneration: job.payload.runtimeGeneration });
+        await this.service.markCancellationCompleted(job.userId, job.payload.episodeId, job.payload.runId, job.payload.verificationId);
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
           episodeId: job.payload.episodeId, canceled: true,
         });
@@ -152,11 +157,11 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending", "runtime_cleanup_required"].includes(code)) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code)) {
         await holdsLease();
         const retry = job.attempts < Number(job.maxAttempts ?? 3);
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))
-          : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
+          : code === "runtime_busy" ? this.busyDelayMs : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
         const at = new Date();
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.

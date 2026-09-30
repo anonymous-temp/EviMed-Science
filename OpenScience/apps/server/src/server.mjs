@@ -135,7 +135,7 @@ import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
-import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
+import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
   autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
@@ -2782,10 +2782,15 @@ export function createWebApiApp(overrides = {}) {
     // runtime idle that long would yield its slot. Not the idle timeout: that
     // is how long a runtime stays warm (twelve hours), not how long work lasts.
     busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleYieldAfterMs) + 60_000)),
-    cancelDispatched: async ({ userId, projectId, sessionId, episodeId }) => {
+    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration }) => {
       const user = await store.userById(userId);
       if (!user) return;
       const project = await store.requireProject(user, projectId);
+      if (verificationId) {
+        return cancelAutopilotVerification({ runtimeManager, agentRuns }, verificationRunProject(project, dispatchId), {
+          episodeId, verificationId, dispatchId, runId, sessionId, runtimeGeneration,
+        });
+      }
       let cancellationError = null;
       try { await runtimeManager.cancelRuntimeSession(project, sessionId); }
       catch (error) { cancellationError = error; }
@@ -2829,7 +2834,7 @@ export function createWebApiApp(overrides = {}) {
       if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
       const project = await store.requireProject(user, verification.projectId);
       const previous = await inspectAutopilotDispatch({ service: autopilotService, agentRuns }, project, verification);
-      if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
+      if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId, dispatchId: previous.replay.dispatchId, runtimeGeneration: null };
       const dispatchId = verification.dispatchId ?? verification.verificationId;
       const agenda = await autopilotService.get(user.id, verification.agendaId);
       const brief = verificationBrief(verification);
@@ -2894,6 +2899,10 @@ export function createWebApiApp(overrides = {}) {
           effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           await assertAutopilotDispatchAllowed(verification, user);
+          await autopilotService.recordVerificationDispatched(user.id, verification.episodeId, {
+            verificationId: verification.verificationId, dispatchId, runId: dispatchedRun.id,
+            sessionId: session.id, runtimeGeneration: cleanupTarget?.generation ?? null,
+          });
           const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
             query: prompt, memories: [], specialists: [],
             routedSpecialist: {
@@ -2917,13 +2926,13 @@ export function createWebApiApp(overrides = {}) {
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
-        return { runId: run.id, sessionId: session.id };
+        return { runId: run.id, sessionId: session.id, dispatchId, runtimeGeneration: cleanupTarget?.generation ?? null };
       } catch (error) {
         // A lost lease has no authority to stop or clean the next owner's work.
         if (error?.code === "product_job_lease_lost") throw error;
         const existing = (await agentRuns.list(project)).find(run => run.dispatchId === dispatchId);
         if (existing && !(existing.dispatchStatus === "rejected" && ["autopilot_paused", "autopilot_stopped"].includes(existing.errorCode))) {
-          return { runId: existing.id, sessionId: existing.sessionId };
+          return { runId: existing.id, sessionId: existing.sessionId, dispatchId: existing.dispatchId, runtimeGeneration: cleanupTarget?.generation ?? null };
         }
         let released = !cleanupTarget;
         if (cleanupTarget?.runId === verification.verificationId) {
@@ -5409,28 +5418,12 @@ export function createWebApiApp(overrides = {}) {
 
   const scheduleAutopilot = async () => {
     if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
-    const schedule = async () => {
-      const result = await productDatabase.query(`SELECT user_id,id,payload FROM evimed_product.documents
-        WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active' AND payload->>'enabled'='true'
-        ORDER BY updated_at,id LIMIT 100`);
-      const now = new Date();
-      for (const row of result.rows) {
-        try {
-          const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-            timeZone: row.payload.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
-          }).formatToParts(now).map((part) => [part.type, part.value]));
-          const date = `${parts.year}-${parts.month}-${parts.day}`;
-          if (Number(parts.hour) >= Number(row.payload.scheduleHour) && row.payload.lastScheduledDate !== date) {
-            await autopilotService.schedule(row.user_id, row.id, { date });
-          }
-        } catch (error) {
-          await securityAudit(config, "autopilot.schedule", "failed", {
-            userId: row.user_id, agendaId: row.id,
-            code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
-          });
-        }
-      }
-    };
+    const schedule = () => autopilotService.scheduleActive(productDatabase, async (row, error) => {
+      await securityAudit(config, "autopilot.schedule", "failed", {
+        userId: row.user_id, agendaId: row.id,
+        code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
+      });
+    });
     autopilotScheduleRun = maintenanceMutation(schedule)
       .catch((error) => {
         if (error?.code === "maintenance_active") return null;

@@ -959,3 +959,5 @@ export {
   wilsonInterval,
 } from './src/geoMetrics.mjs'
 export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
+
+export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";

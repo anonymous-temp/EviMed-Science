@@ -1211,3 +1211,140 @@ test("an unsent verifier retry keeps its logical claim and existing scientific e
   assert.deepEqual(saved.payload.claims,before.payload.claims);
   assert.equal(saved.payload.unsentAttempts[0].checkId,verificationId);
 });
+
+test('scheduled tasks preserve verbatim instructions, CAS edits and frozen queued work', async () => {
+  const { service } = fixture();
+  const prompt = '  Search A and B; retain this exact instruction.\nDo not split it.  ';
+  let agenda = await service.create('user-one', { ...agendaInput, prompt, schedule: { kind: 'daily', timeZone: 'UTC', time: '01:35' } });
+  assert.equal(agenda.payload.prompt, prompt);
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  const manual = await service.runNow('user-one', agenda.id, { requestId: 'click-one' });
+  assert.equal(manual.episode.payload.instruction, prompt);
+  assert.equal((await service.runNow('user-one', agenda.id, { requestId: 'click-one' })).episode.id, manual.episode.id);
+  assert.notEqual((await service.runNow('user-one', agenda.id, { requestId: 'click-two' })).episode.id, manual.episode.id);
+  const current = await service.get('user-one', agenda.id);
+  assert.equal(current.payload.lastScheduledOccurrence ?? null, null);
+  await assert.rejects(service.update('user-one', agenda.id, { expectedRevision: current.revision - 1, prompt: 'new' }), { code: 'autopilot_revision_conflict' });
+  await service.update('user-one', agenda.id, { expectedRevision: current.revision, prompt: 'new instruction' });
+  assert.equal((await service.getEpisode('user-one', manual.episode.id)).payload.instruction, prompt);
+  assert.equal((await service.runNow('user-one', agenda.id, { requestId: 'click-three' })).episode.payload.instruction, 'new instruction');
+});
+
+test('freeform follow-up is an idempotent real run and archive preserves history while refusing restart', async () => {
+  const { service } = fixture();
+  let agenda = await service.create('user-one', agendaInput);
+  await assert.rejects(service.runNow('user-one', agenda.id, { requestId: 'paused-click' }), { code: 'autopilot_paused' });
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  const input = { requestId: 'message-one', note: '  Compare the uncertainties.\nKeep evidence.  ' };
+  const first = await service.followUp('user-one', agenda.id, input);
+  assert.equal(first.episode.payload.followUpNote, input.note);
+  assert.equal((await service.followUp('user-one', agenda.id, input)).episode.id, first.episode.id);
+  await assert.rejects(service.followUp('user-one', agenda.id, { ...input, note: 'changed' }), { code: 'autopilot_request_conflict' });
+  const current = await service.get('user-one', agenda.id);
+  assert.equal(current.payload.messages.length, 1);
+  const archived = await service.archive('user-one', agenda.id, { expectedRevision: current.revision });
+  assert.ok(archived.payload.archivedAt);
+  assert.equal((await service.list('user-one', { projectId: agenda.projectId })).items.length, 0);
+  assert.equal((await service.getEpisode('user-one', first.episode.id)).payload.status, 'canceled');
+  await assert.rejects(service.start('user-one', agenda.id, { expectedRevision: archived.revision }), { code: 'autopilot_archived' });
+});
+
+test('minute timers are idempotent and a once schedule remains authorized after enqueue', async () => {
+  let at = new Date('2026-09-06T01:00:00Z');
+  const { service } = fixture({ now: () => at });
+  let agenda = await service.create('user-one', { ...agendaInput, prompt: 'Find evidence', schedule: { kind: 'once', timeZone: 'UTC', time: '01:35', date: '2026-09-06' } });
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  assert.equal(await service.scheduleDue('user-one', agenda.id), null);
+  at = new Date('2026-09-06T01:35:00Z');
+  const results = await Promise.all([service.scheduleDue('user-one', agenda.id), service.scheduleDue('user-one', agenda.id)]);
+  assert.equal(results[0].episode.id, results[1].episode.id);
+  assert.equal(await service.scheduleDue('user-one', agenda.id), null);
+  const current = await service.get('user-one', agenda.id);
+  assert.equal(current.payload.enabled, true);
+  assert.equal(service.projectAgenda(current).payload.nextRunAt, null);
+  assert.equal(service.projectAgenda(current).payload.scheduleState, 'completed');
+});
+
+test('legacy paused records normalize without writes and an existing date is not scheduled twice', async () => {
+  const { service, documents, jobs } = fixture();
+  const created = await service.create('user-one', agendaInput);
+  const payload = { ...created.payload, schemaVersion: 1, lastScheduledDate: '2026-09-06' };
+  delete payload.schedule; delete payload.scheduleVersion; delete payload.lastScheduledOccurrence; delete payload.prompt;
+  const legacy = await documents.put('user-one', 'agenda', created.id, payload, { expectedRevision: created.revision, projectId: created.projectId });
+  const shown = service.projectAgenda(legacy);
+  assert.deepEqual(shown.payload.schedule, { kind: 'daily', timeZone: 'Asia/Shanghai', time: '01:00' });
+  assert.equal(shown.payload.status, 'paused');
+  assert.equal(shown.payload.nextRunAt, null);
+  assert.equal((await service.get('user-one', legacy.id)).revision, legacy.revision);
+  await service.start('user-one', legacy.id, { expectedRevision: legacy.revision });
+  assert.equal(await service.scheduleDue('user-one', legacy.id), null);
+  assert.equal(jobs.items.length, 0);
+});
+
+test('follow-ups consume actual earlier same-day output, with preserved instruction and reference', async () => {
+  let at = new Date('2026-09-06T01:00:00Z');
+  const { service, documents } = fixture({ now: () => at });
+  let agenda = await service.create('user-one', agendaInput);
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  const first = (await service.runNow('user-one', agenda.id, { requestId: 'first' })).episode;
+  await documents.put('user-one', 'episode', first.id, { ...first.payload, status: 'merged', runId: 'run-one', sessionId: 'session-one',
+    artifactRefs: [{ projectId: agenda.projectId, runId: 'run-one', sessionId: 'session-one', path: 'report.md' }],
+    claims: [{ id: 'claim-one', statement: 'Supported earlier finding', tier: 'gated', sources: ['source-one'] }],
+  }, { expectedRevision: first.revision, projectId: agenda.projectId });
+  at = new Date('2026-09-06T01:01:00Z');
+  const follow = await service.followUp('user-one', agenda.id, { requestId: 'follow', note: 'Explain uncertainty', episodeId: first.id });
+  assert.equal(follow.episode.payload.progress.episodes[0].id, first.id);
+  assert.equal(follow.episode.payload.progress.episodes[0].artifactRefs[0].path, 'report.md');
+  assert.equal(follow.episode.payload.replyToEpisodeId, first.id);
+});
+
+test('scheduler pages through the 101st agenda using a stable owner/id cursor', async () => {
+  const { service } = fixture();
+  const rows = Array.from({ length: 101 }, (_, index) => ({ user_id: 'owner', id: `agenda-${String(index).padStart(3, '0')}` }));
+  const scheduled = [];
+  service.scheduleDue = async (owner, id) => { scheduled.push([owner, id]); };
+  const database = { query: async (_sql, after) => ({ rows: rows.filter(row => row.user_id > after[0] || row.user_id === after[0] && row.id > after[1]).slice(0, 100) }) };
+  assert.equal((await service.scheduleActive(database)).scanned, 101);
+  assert.equal(scheduled.at(-1)[1], 'agenda-100');
+});
+
+test('archive cancels accepted verifications even on merged episodes and preserves claims', async () => {
+  const { service, documents, jobs } = fixture();
+  let agenda = await service.create('user-one', agendaInput);
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  const episode = (await service.runNow('user-one', agenda.id, { requestId: 'verification' })).episode;
+  const verificationId = verificationIdFor(episode.id, 0);
+  const claims = [{ id: 'claim-one', statement: 'Preserved result', tier: 'gated' }];
+  await documents.put('user-one', 'episode', episode.id, { ...episode.payload, status: 'merged', claims, artifactRefs: [{ path: 'report.md' }] },
+    { expectedRevision: episode.revision, projectId: agenda.projectId });
+  await service.recordVerificationDispatched('user-one', episode.id, { verificationId, dispatchId: verificationId, runId: 'verify-run', sessionId: 'verify-session', runtimeGeneration: 'generation-one' });
+  agenda = await service.get('user-one', agenda.id);
+  await service.archive('user-one', agenda.id, { expectedRevision: agenda.revision });
+  const cancel = jobs.items.find(item => item.payload.action === 'cancel');
+  assert.equal(cancel.payload.verificationId, verificationId);
+  assert.equal(cancel.payload.runtimeGeneration, 'generation-one');
+  assert.deepEqual((await service.getEpisode('user-one', episode.id)).payload.claims, claims);
+  assert.equal((await service.getEpisode('user-one', episode.id)).payload.status, 'merged');
+  await service.markCancellationCompleted('user-one', episode.id, 'verify-run', verificationId);
+  assert.equal((await service.getEpisode('user-one', episode.id)).payload.verificationDispatches[0].status, 'canceled');
+  // A dispatch completing after the stop sweep still queues its own cancellation.
+  await service.recordVerificationDispatched('user-one', episode.id, { verificationId, dispatchId: `${verificationId}-a2`, runId: 'verify-new', sessionId: 'verify-session-new', runtimeGeneration: 'generation-two' });
+  await service.markCancellationCompleted('user-one', episode.id, 'verify-run', verificationId);
+  const current = await service.getEpisode('user-one', episode.id);
+  assert.equal(current.payload.verificationDispatches[1].status, 'running', 'the old completion cannot cancel a new attempt');
+  assert.equal(jobs.items.filter(item => item.payload.action === 'cancel').length, 2);
+});
+
+test('the first versioned timer probes the legacy date identity during a rolling upgrade', async () => {
+  let at = new Date('2026-09-06T01:00:00Z');
+  const { service, jobs } = fixture({ now: () => at });
+  let agenda = await service.create('user-one', { ...agendaInput, schedule: { kind: 'daily', timeZone: 'UTC', time: '01:35' } });
+  agenda = await service.start('user-one', agenda.id, { expectedRevision: agenda.revision });
+  at = new Date('2026-09-06T01:35:00Z');
+  const prior = await service.schedule('user-one', agenda.id, { date: '2026-09-06' });
+  const timer = await service.scheduleDue('user-one', agenda.id);
+  assert.equal(timer.episode.id, prior.episode.id);
+  assert.equal(timer.job.id, prior.job.id);
+  assert.equal(jobs.items.length, 1);
+  assert.equal(await service.scheduleDue('user-one', agenda.id), null);
+});
