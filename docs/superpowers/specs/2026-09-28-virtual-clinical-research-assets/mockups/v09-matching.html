@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>匹配与招募 · 匹配 · EV-201 二线 NSCLC</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页渲染：外壳随内容增高 */
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  html, body { height: auto; }
+  body { position: relative; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+
+  /* ── 研究页页头（v08–v10 共用，保持一致） ── */
+  .shead { display: flex; align-items: center; gap: 10px; padding: 26px 0 16px; }
+  .shead .tag { font-weight: 500; }
+  .shead h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.005em; margin-right: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(7, 1fr); padding: 14px 18px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--e1); }
+  .stp { position: relative; padding-top: 20px; }
+  .stp::before { content: ""; position: absolute; top: 6px; left: 14px; right: -2px; height: 2px; background: var(--n-150); }
+  .stp.done::before { background: var(--brand-300); }
+  .stp:last-child::before { display: none; }
+  .stp .k { position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--n-200); background: var(--surface); }
+  .stp.done .k { background: var(--accent); box-shadow: none; }
+  .stp.done .k::after { content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 6.5px; border-right: 1.8px solid #fff; border-bottom: 1.8px solid #fff; transform: rotate(45deg); }
+  .stp.cur .k { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--brand-100); }
+  .stp .n { font-weight: 600; font-size: 14px; }
+  .stp .m { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .stp.cur .m { color: var(--brand-700); font-weight: 500; }
+  .navrow { display: flex; align-items: flex-end; gap: 16px; margin-top: 18px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+
+  /* ── 匹配与招募：子页签 + 数据来源 ── */
+  .subrow { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
+  .src { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-3); }
+  .src b { color: var(--text-2); font-weight: 500; }
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .box h3 { font-size: 16px; line-height: 24px; display: flex; align-items: center; gap: 8px; }
+
+  /* 方向 + 条件漏斗 */
+  .band { display: grid; grid-template-columns: 300px 1fr; gap: 0; padding: 0; }
+  .dir { padding: 18px 20px; box-shadow: inset -1px 0 0 var(--line); display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+  .dir .lab { font-size: 12px; color: var(--text-3); }
+  .seg.full { display: flex; }
+  .seg.full a { flex: 1; justify-content: center; gap: 6px; }
+  .fun { padding: 16px 22px 16px; }
+  .fsteps { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 1px 1fr; align-items: center; }
+  .fs .l { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .fs .v { font-size: 26px; line-height: 34px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .fs .d { font-size: 12px; color: var(--text-3); }
+  .fs .v.at { color: var(--attn-strong); }
+  .fs .v.br { color: var(--brand-700); }
+  .fs .v.mu { color: var(--text-2); }
+  .farr { color: var(--text-4); }
+  .fdiv { width: 1px; height: 52px; background: var(--line); justify-self: center; }
+  .fx { padding-left: 22px; }
+  .pbar { margin-top: 12px; height: 10px; border-radius: 5px; display: flex; overflow: hidden; background: var(--surface-2); }
+  .pbar i { display: block; height: 100%; }
+  .pbar .p1 { background: var(--accent); }
+  .pbar .p2 { background: repeating-linear-gradient(135deg, #F3C98A 0 3px, #FBE3BE 3px 6px); }
+  .pbar .p3 { background: var(--n-200); }
+  .plab { margin-top: 6px; display: flex; gap: 16px; font-size: 12px; color: var(--text-3); }
+  .plab i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+
+  /* 主体 */
+  .lay { display: grid; grid-template-columns: 324px 1fr; gap: 16px; margin-top: 16px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .cl { padding: 16px 12px 10px; }
+  .cl h3 { padding: 0 8px; }
+  .cl .ft { display: flex; gap: 4px; padding: 10px 8px 6px; }
+  .cl .ft a { height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border-radius: 8px; font-size: 12px; color: var(--text-2); }
+  .cl .ft a.on { background: var(--surface-2); color: var(--text); font-weight: 500; }
+  .cl .ft a b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sortl { display: flex; align-items: center; gap: 4px; padding: 2px 8px 8px; font-size: 12px; color: var(--text-3); }
+  .cd { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 10px 8px; box-shadow: inset 0 -1px 0 var(--line); }
+  .cd.on { background: var(--brand-50); box-shadow: inset 0 0 0 1px var(--brand-200); border-radius: 10px; margin: 2px 0; }
+  .cd .id { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .cd.on .id { color: var(--brand-800); }
+  .cd .who { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: 6px; }
+  .cd .gp { grid-column: 1 / -1; display: flex; gap: 4px; flex-wrap: wrap; }
+  .cd .mt { font-size: 12px; color: var(--text-3); text-align: right; }
+  .mini { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 5px; font-size: 12px; line-height: 1; white-space: nowrap; }
+  .mini.u { color: var(--attn-strong); background: var(--attn-soft); }
+  .mini.r { color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .more { display: flex; align-items: center; justify-content: center; gap: 4px; height: 36px; font-size: 13px; color: var(--text-3); }
+
+  .gaps .g { display: grid; grid-template-columns: 28px 1fr 40px; gap: 2px 10px; align-items: center; padding: 10px 0; box-shadow: inset 0 -1px 0 var(--line); }
+  .gaps .g:last-child { box-shadow: none; padding-bottom: 2px; }
+  .gaps .k { font-size: 12px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .gaps .t { font-size: 13px; color: var(--text); }
+  .gaps .n { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+  .gaps .bar { grid-column: 2 / 3; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .gaps .bar i { display: block; height: 100%; border-radius: 3px; background: repeating-linear-gradient(135deg, #E9A94F 0 3px, #F6CF95 3px 6px); }
+  .gaps .fx2 { grid-column: 2 / 4; font-size: 12px; color: var(--text-3); }
+
+  /* 患者详情 */
+  .pd { padding: 20px 20px 0; overflow: hidden; }
+  .ph { display: flex; align-items: flex-start; gap: 12px; position: relative; }
+  .pav { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); color: var(--text-2); display: grid; place-items: center; flex: none; }
+  .ph h2 { font-size: 20px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 10px; }
+  .ph h2 small { font-size: 14px; font-weight: 400; color: var(--text-2); }
+  .ph .sum { margin-top: 2px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+  .ph .rt { position: absolute; right: 0; top: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .five { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 16px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+  .five div { padding: 10px 14px; }
+  .five div + div { box-shadow: inset 1px 0 0 var(--line); }
+  .five span { display: block; font-size: 12px; color: var(--text-3); }
+  .five b { display: block; margin-top: 2px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .five b.at { color: var(--attn-strong); }
+  .thead { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+  .thead h3 { font-size: 15px; }
+  .thead .c { font-size: 12px; color: var(--text-3); display: flex; gap: 10px; }
+  .thead .c b { font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  table.cr { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  table.cr th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-3); padding: 8px 8px; background: var(--surface-1); }
+  table.cr th:first-child { border-radius: 8px 0 0 8px; } table.cr th:last-child { border-radius: 0 8px 8px 0; }
+  table.cr td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 13px; line-height: 20px; }
+  table.cr tr.gr td { padding: 12px 8px 6px; font-size: 12px; font-weight: 600; color: var(--text-3); border-bottom: 0; }
+  table.cr td.no { font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  table.cr td.pt { color: var(--text); }
+  table.cr .q { color: var(--n-800); }
+  table.cr .s { font-size: 12px; line-height: 18px; color: var(--text-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  table.cr .s .old { color: var(--attn-strong); }
+  table.cr td.fx { color: var(--text-4); }
+  table.cr tr.hl td { background: #FFFBF3; }
+  table.cr tr.hl td:first-child { box-shadow: inset 3px 0 0 #E9A94F; }
+  table.cr tr.rv td:first-child { box-shadow: inset 3px 0 0 var(--n-300); }
+  .st { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .st.ok { color: var(--ok); padding-left: 0; }
+  .st.un { color: var(--attn-strong); background: var(--attn-soft); }
+  .st.re { color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .fxl { color: var(--brand-700); font-weight: 500; }
+  .fxs { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .bottom { display: flex; align-items: center; gap: 10px; margin: 16px -20px 0; padding: 14px 20px; background: var(--surface-1); box-shadow: inset 0 1px 0 var(--line); }
+  .bottom .vd { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--attn-strong); }
+  .bottom .vd svg { color: var(--attn); }
+  .bottom .sm { font-size: 12px; color: var(--text-3); }
+</style></head>
+<body data-nav="vcr" data-recent="a">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="wrapx">
+      <!-- 研究页页头（v08–v10 共用） -->
+      <div class="shead">
+        <h1>EV-201 二线 NSCLC：单臂 II 期还是随机</h1>
+        <span class="tag outline">T0 公开资料</span>
+        <span class="tag outline">研究设计支持</span>
+        <span class="sp"></span>
+        <a class="btn secondary"><svg data-i="message-square" class="i xs"></svg>对话</a>
+        <a class="ibtn"><svg data-i="ellipsis"></svg></a>
+      </div>
+      <div class="rail">
+        <div class="stp done"><span class="k"></span><div class="n">定义</div><div class="m">研究定义 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">证据</div><div class="m">12 张假设卡</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">人群</div><div class="m">人群 v3</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">患者</div><div class="m">虚拟患者集 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">对照</div><div class="m">文献对照</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">试验</div><div class="m">4 个方案</div></div>
+        <div class="stp cur"><span class="k"></span><div class="n">匹配</div><div class="m">进行中</div></div>
+      </div>
+      <div class="navrow">
+        <nav class="tabs"><a>总览</a><a>人群</a><a>虚拟患者</a><a>对照</a><a>试验</a><a class="on">匹配与招募</a><a>数据与证据</a></nav>
+      </div>
+
+      <div class="subrow">
+        <nav class="seg"><a class="on">匹配</a><a>转诊</a><a>中心</a><a>随访</a></nav>
+        <span class="sp"></span>
+        <div class="src"><svg data-i="building-2" class="i xs"></svg><span>合作方：<b>某招募机构</b></span><span>·</span><span>候选人 <b class="num">3,412</b> 名</span><span class="tag outline" style="margin-left:2px">T1 基线与招募资料</span><span>·</span><span>数据快照 9月27日</span></div>
+      </div>
+
+      <!-- 方向 + 条件漏斗 -->
+      <section class="box band">
+        <div class="dir">
+          <nav class="seg full"><a class="on"><svg data-i="users-round" class="i xs"></svg>给试验找患者</a><a><svg data-i="clipboard-list" class="i xs"></svg>给患者找试验</a></nav>
+          <div class="lab">方案 v2 · 入排条件 14 条（I1–I8、E1–E6）</div>
+        </div>
+        <div class="fun">
+          <div class="fsteps">
+            <div class="fs"><div class="l">候选人</div><div class="v">3,412</div><div class="d">合作方 2023–2026</div></div>
+            <svg data-i="arrow-right" class="i farr"></svg>
+            <div class="fs"><div class="l">可能符合 · 待补证</div><div class="v at">612</div><div class="d">至少 1 条未知</div></div>
+            <svg data-i="arrow-right" class="i farr"></svg>
+            <div class="fs"><div class="l">符合</div><div class="v br">57</div><div class="d">14 条全部满足</div></div>
+            <span class="fdiv"></span>
+            <div class="fs fx"><div class="l">不符合</div><div class="v mu">2,743</div><div class="d">至少 1 条不满足</div></div>
+          </div>
+          <div class="pbar"><i class="p1" style="width:1.7%"></i><i class="p2" style="width:17.9%"></i><i class="p3" style="width:80.4%"></i></div>
+          <div class="plab"><span><i style="background:var(--accent)"></i>符合 1.7%</span><span><i style="background:#F3C98A"></i>待补证 17.9%</span><span><i style="background:var(--n-200)"></i>不符合 80.4%</span></div>
+        </div>
+      </section>
+
+      <div class="lay">
+        <!-- 左：候选人 + 主要缺口 -->
+        <div class="col">
+          <section class="box cl">
+            <h3>候选人<span class="sp" style="flex:1"></span><a class="ibtn" style="width:28px;height:28px"><svg data-i="search" class="i xs"></svg></a></h3>
+            <div class="ft"><a>符合 <b>57</b></a><a class="on">待补证 <b>612</b></a><a>不符合 <b>2,743</b></a></div>
+            <div class="sortl">按缺口最少<svg data-i="chevron-down" class="i xs"></svg></div>
+            <div class="cd on"><div class="id">P-0192<span class="who">男 · 63 岁 · 腺癌 IV 期</span></div><div class="mt">中心 01</div>
+              <div class="gp"><span class="mini u">E3 未知</span><span class="mini r">E5 待复评 10月6日</span></div></div>
+            <div class="cd"><div class="id">P-2051<span class="who">男 · 55 岁 · 腺癌 IV 期</span></div><div class="mt">中心 02</div>
+              <div class="gp"><span class="mini u">E3 未知</span></div></div>
+            <div class="cd"><div class="id">P-1377<span class="who">女 · 58 岁 · 腺癌 IV 期</span></div><div class="mt">中心 01</div>
+              <div class="gp"><span class="mini u">I5 未知</span></div></div>
+            <div class="cd"><div class="id">P-0408<span class="who">男 · 67 岁 · 鳞癌 IV 期</span></div><div class="mt">中心 07</div>
+              <div class="gp"><span class="mini u">I4 未知</span></div></div>
+            <div class="cd"><div class="id">P-3120<span class="who">女 · 64 岁 · 腺癌 IV 期</span></div><div class="mt">中心 02</div>
+              <div class="gp"><span class="mini u">I7 未知</span></div></div>
+            <div class="cd"><div class="id">P-0736<span class="who">女 · 61 岁 · 腺癌 IVB 期</span></div><div class="mt">中心 07</div>
+              <div class="gp"><span class="mini u">E3 未知</span><span class="mini u">I8 未知</span></div></div>
+            <div class="cd"><div class="id">P-0951<span class="who">男 · 59 岁 · 腺癌 IV 期</span></div><div class="mt">中心 01</div>
+              <div class="gp"><span class="mini u">E3 未知</span><span class="mini u">I4 未知</span></div></div>
+            <div class="cd"><div class="id">P-1893<span class="who">男 · 70 岁 · 鳞癌 IVA 期</span></div><div class="mt">中心 03</div>
+              <div class="gp"><span class="mini u">E2 未知</span><span class="mini r">E5 待复评 10月12日</span></div></div>
+            <div class="cd"><div class="id">P-2688<span class="who">女 · 52 岁 · 腺癌 IV 期</span></div><div class="mt">中心 02</div>
+              <div class="gp"><span class="mini u">E3 未知</span></div></div>
+            <div class="more">还有 603 人<svg data-i="chevron-down" class="i xs"></svg></div>
+          </section>
+
+          <section class="box gaps">
+            <h3>待补证的主要缺口<span class="sp" style="flex:1"></span><span class="t12 muted" style="font-weight:400">612 人</span></h3>
+            <div style="margin-top:4px">
+              <div class="g"><span class="k">E3</span><span class="t">活动性脑转移</span><span class="n">402</span><div class="bar"><i style="width:65.7%"></i></div><span class="fx2">近 4 周头颅 MRI</span></div>
+              <div class="g"><span class="k">I4</span><span class="t">ECOG 0–1</span><span class="n">188</span><div class="bar"><i style="width:30.7%"></i></div><span class="fx2">近 4 周门诊体能评分</span></div>
+              <div class="g"><span class="k">I5</span><span class="t">EGFR、ALK 均阴性</span><span class="n">96</span><div class="bar"><i style="width:15.7%"></i></div><span class="fx2">基因检测报告</span></div>
+              <div class="g"><span class="k">I7</span><span class="t">一线后影像学进展</span><span class="n">71</span><div class="bar"><i style="width:11.6%"></i></div><span class="fx2">进展时的影像报告</span></div>
+              <div class="g"><span class="k">E2</span><span class="t">抗 VEGF 或 VEGFR 治疗史</span><span class="n">44</span><div class="bar"><i style="width:7.2%"></i></div><span class="fx2">完整用药史</span></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 右：P-0192 逐条判断 -->
+        <section class="box pd">
+          <div class="ph">
+            <span class="pav"><svg data-i="user-round" class="i l"></svg></span>
+            <div>
+              <h2>P-0192<small>男 · 63 岁 · 腺癌 IV 期</small></h2>
+              <div class="sum">一线卡铂 + 培美曲塞 + 帕博利珠单抗，2026-07 影像进展；ECOG 1（2026-08-14 门诊记录）</div>
+            </div>
+            <div class="rt"><svg data-i="files" class="i xs"></svg>病历 12 份 · 最近可见 9月27日<a class="ibtn"><svg data-i="ellipsis"></svg></a></div>
+          </div>
+          <div class="five">
+            <div><span>临床资格</span><b class="at">不能判定</b></div>
+            <div><span>证据</span><b>缺 1 项 · 1 项待复评</b></div>
+            <div><span>患者意愿</span><b>未联系</b></div>
+            <div><span>中心名额</span><b>中心 01 · 本月余 2</b></div>
+            <div><span>进度</span><b>待补证</b></div>
+          </div>
+
+          <div class="thead"><h3>逐条判断</h3><span class="c"><span>14 条</span><span>满足 <b>12</b></span><span>未知 <b style="color:var(--attn-strong)">1</b></span><span>待复评 <b>1</b></span></span><span class="sp" style="flex:1"></span><span class="t12 muted">方案 v2</span></div>
+          <table class="cr">
+            <colgroup><col style="width:40px"><col style="width:236px"><col style="width:84px"><col><col style="width:150px"></colgroup>
+            <thead><tr><th>编号</th><th>方案原文</th><th>状态</th><th>患者证据</th><th>补证建议</th></tr></thead>
+            <tbody>
+              <tr class="gr"><td colspan="5">纳入标准</td></tr>
+              <tr><td class="no">I1</td><td class="pt">年龄 ≥ 18 岁</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「63 岁」</div><div class="s">基本信息 · 2026-08-14</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I2</td><td class="pt">组织学或细胞学确诊的非小细胞肺癌</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「（右肺下叶穿刺）浸润性腺癌」</div><div class="s">病理报告 · 2025-03-11</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I3</td><td class="pt">IV 期（AJCC 第 8 版）</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「cT2bN2M1c，IVB 期」</div><div class="s">PET-CT 报告 · 2025-03-04</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I4</td><td class="pt">ECOG 体能状态 0–1</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「一般情况可，ECOG 1 分」</div><div class="s">门诊记录 · 2026-08-14</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I5</td><td class="pt">EGFR 敏感突变、ALK 融合均为阴性</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「EGFR 未检出突变；ALK 融合阴性」</div><div class="s">基因检测报告 · 2025-03-20</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I6</td><td class="pt">一线治疗含 PD-1 或 PD-L1 抑制剂</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「一线：卡铂 + 培美曲塞 + 帕博利珠单抗」</div><div class="s">用药记录 · 2025-04-02 起</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I7</td><td class="pt">一线治疗期间或之后影像学进展</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「新发肝脏结节，考虑疾病进展」</div><div class="s">CT 报告 · 2026-07-22</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">I8</td><td class="pt">至少 1 个可测量病灶（RECIST 1.1）</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「肝 S6 结节，长径 2.1 cm」</div><div class="s">CT 报告 · 2026-07-22</div></td><td class="fx">—</td></tr>
+              <tr class="gr"><td colspan="5">排除标准<span style="font-weight:400;color:var(--text-3);margin-left:8px">状态按"未被这一条排除"计：满足 = 不触发排除</span></td></tr>
+              <tr><td class="no">E1</td><td class="pt">既往接受过多西他赛</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「既往治疗：卡铂、培美曲塞、帕博利珠单抗」</div><div class="s">门诊记录 · 2026-08-14</div></td><td class="fx">—</td></tr>
+              <tr><td class="no">E2</td><td class="pt">既往接受过抗 VEGF 或 VEGFR 治疗</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「既往治疗：卡铂、培美曲塞、帕博利珠单抗」</div><div class="s">门诊记录 · 2026-08-14</div></td><td class="fx">—</td></tr>
+              <tr class="hl"><td class="no">E3</td><td class="pt">活动性脑转移</td><td><span class="st un"><svg data-i="circle-help" class="i xs"></svg>未知</span></td><td><div class="q">「头颅 MRI 未见明确转移灶」</div><div class="s">影像报告 · 2026-02-10 · <span class="old">已超过 12 周</span></div></td><td><div class="fxl">申请近 4 周头颅 MRI</div><div class="fxs">补上后可重新判定</div></td></tr>
+              <tr><td class="no">E4</td><td class="pt">需全身治疗的活动性自身免疫病</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「否认自身免疫病史」</div><div class="s">入院记录 · 2025-03-02</div></td><td class="fx">—</td></tr>
+              <tr class="rv"><td class="no">E5</td><td class="pt">末次免疫治疗距今 &lt; 28 天</td><td><span class="st re"><svg data-i="calendar-clock" class="i xs"></svg>待复评</span></td><td><div class="q">「帕博利珠单抗 200 mg 静滴」</div><div class="s">用药记录 · 2026-09-08</div></td><td><div style="color:var(--text-2)">2026-10-06 满 28 天</div><div class="fxs">到期自动复评</div></td></tr>
+              <tr><td class="no">E6</td><td class="pt">近 3 个月明显咯血或肿瘤侵犯大血管</td><td><span class="st ok"><svg data-i="check" class="i xs"></svg>满足</span></td><td><div class="q">「无咯血，无痰中带血」</div><div class="s">门诊记录 · 2026-08-14</div></td><td class="fx">—</td></tr>
+            </tbody>
+          </table>
+          <div class="bottom">
+            <div class="vd"><svg data-i="triangle-alert" class="i"></svg>不能判为符合：排除标准 E3 未知</div>
+            <span class="sm">· E5 于 10月6日自动复评</span>
+            <span class="sp"></span>
+            <a class="btn secondary"><svg data-i="file-search" class="i xs"></svg>请求补证</a>
+            <a class="btn primary"><svg data-i="phone" class="i xs"></svg>确认后联系</a>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script src="shell.js"></script><script src="icons.js"></script>
+</body></html>

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   renameWebProject: vi.fn(),
   warmWebRuntime: vi.fn(),
   listGeoProjects: vi.fn(),
+  getVcrHome: vi.fn(),
 }));
 
 // The real store drives the component; only the network is replaced, and the
@@ -45,6 +46,11 @@ vi.mock("@/lib/runtimeWarm", () => ({ warmWebRuntime: mocks.warmWebRuntime }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   listGeoProjects: mocks.listGeoProjects,
+}));
+
+vi.mock("@/lib/vcrClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/vcrClient")>()),
+  getVcrHome: mocks.getVcrHome,
 }));
 
 function run(overrides: Partial<WebAgentRun> & { id: string }): WebAgentRun {
@@ -666,5 +672,29 @@ describe("ProjectBrowser — GEO projects", () => {
     await screen.findByRole("button", { name: "心衰" });
     expect(mocks.listGeoProjects).not.toHaveBeenCalled();
     expect(document.querySelector("svg.lucide-radar")).toBeNull();
+  });
+});
+
+describe("ProjectBrowser — 虚拟临研 studies", () => {
+  // A study is an ordinary project with a study row: it sits among the others
+  // in 「最近」, with the people icon where the folder would be (plan §9.1).
+  it("gives a study the people icon when the module is offered", async () => {
+    mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201" }] });
+    render(
+      <MemoryRouter initialEntries={["/app/chat"]}>
+        <ProjectBrowser vcr />
+      </MemoryRouter>,
+    );
+    const heart = await screen.findByRole("button", { name: "心衰" });
+    await waitFor(() => expect(heart.querySelector("svg.lucide-users-round")).not.toBeNull());
+    expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-users-round")).toBeNull();
+    expect(screen.getByRole("button", { name: "Paper 1" }).querySelector("svg.lucide-folder")).not.toBeNull();
+  });
+
+  it("reads no study list when the module is not offered", async () => {
+    renderBrowser();
+    await screen.findByRole("button", { name: "心衰" });
+    expect(mocks.getVcrHome).not.toHaveBeenCalled();
+    expect(document.querySelector("svg.lucide-users-round")).toBeNull();
   });
 });

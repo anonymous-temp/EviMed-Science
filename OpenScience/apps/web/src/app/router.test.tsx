@@ -77,6 +77,13 @@ describe("every address people already have still arrives", () => {
     ["/app/frontier", "/app/frontier"],
     ["/app/frontier?view=daily&day=2026-09-21", "/app/frontier?view=daily&day=2026-09-21"],
     ["/app/frontier/events/ev1", "/app/frontier/events/ev1"],
+    // 虚拟临研: the module's home, one study (总览 or a named tab).
+    ["/app/virtual-research", "/app/virtual-research"],
+    ["/app/virtual-research/std_1", "/app/virtual-research/std_1"],
+    ["/app/virtual-research/std_1/population", "/app/virtual-research/std_1/population"],
+    // A study package is read on the study's own address, never at a route of
+    // its own.
+    ["/app/virtual-research/std_1?package=exp_2", "/app/virtual-research/std_1?package=exp_2"],
     // 循证 GEO: the projects, one project (概览 or a named tab), one answer.
     ["/app/geo", "/app/geo"],
     ["/app/geo/geo_1", "/app/geo/geo_1"],
@@ -105,6 +112,33 @@ describe("every address people already have still arrives", () => {
     findRunSession.mockResolvedValue(null);
     landOn("/app/runs?run=run_gone");
     expect(await screen.findByTestId("landed")).toHaveTextContent(/^\/app\/chat$/);
+  });
+});
+
+describe("虚拟临研's addresses", () => {
+  /** The leaf route an address resolves to, and its parameters. */
+  function leaf(path: string) {
+    const matches = matchRoutes(routes, path) ?? [];
+    const last = matches.at(-1);
+    return { path: last?.route.path, params: last?.params ?? {} };
+  }
+
+  it("names a study's tab in the address, and 总览 when none is named", () => {
+    expect(leaf("/app/virtual-research")).toMatchObject({ path: "virtual-research" });
+    expect(leaf("/app/virtual-research/std_1")).toMatchObject({ path: "virtual-research/:studyId/:tab?", params: { studyId: "std_1" } });
+    expect(leaf("/app/virtual-research/std_1").params.tab).toBeUndefined();
+    expect(leaf("/app/virtual-research/std_1/trial")).toMatchObject({
+      path: "virtual-research/:studyId/:tab?",
+      params: { studyId: "std_1", tab: "trial" },
+    });
+  });
+
+  it("loads each page as its own chunk", () => {
+    const pages = ["virtual-research", "virtual-research/std_1/overview"].map((path) => {
+      const found = (matchRoutes(routes, `/app/${path}`) ?? []).at(-1);
+      return (found?.route.element as ReactElement | undefined)?.type as { $$typeof?: symbol } | undefined;
+    });
+    for (const type of pages) expect(String(type?.$$typeof)).toBe("Symbol(react.lazy)");
   });
 });
 

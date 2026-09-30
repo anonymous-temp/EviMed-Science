@@ -1,0 +1,12 @@
+# vcr-engine service dependencies.
+#
+# Deliberately small: this process queues work, applies a CPU ceiling and
+# serves JSON. Every number comes out of R, so nothing numerical belongs here.
+# pyarrow is the one exception and it only converts Parquet to CSV for the R
+# side (service/parquet_bridge.py) -- it must never compute.
+#
+# Test-only packages (pytest, httpx for fastapi.testclient) stay out of this
+# file: the image installs exactly what the service needs to run.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pyarrow==25.0.0

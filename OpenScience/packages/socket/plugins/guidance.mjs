@@ -267,12 +267,13 @@ export async function loadCapabilities(ctx, directory) {
 /**
  * Tools a capability cannot work without because they ARE its module: the
  * 「循证 GEO」 capabilities read and write the project's GEO record through
- * them, and the control plane switches them off (`EVIMED_DISABLED_TOOLS`)
+ * `geo_read`/`geo_write`, and the five 「虚拟临研」 capabilities read and write
+ * the study through `vcr_read`/`vcr_write`; and the control plane switches them off (`EVIMED_DISABLED_TOOLS`)
  * wherever the module is not open to the account. A capability declaring one
  * of them is not offered there, so plain chat with the module off is what it
  * was before the module existed (build spec 2026-09-25 §0.1).
  */
-export const MODULE_TOOLS = Object.freeze(['geo_read', 'geo_write'])
+export const MODULE_TOOLS = Object.freeze(['geo_read', 'geo_write', 'vcr_read', 'vcr_write'])
 
 /**
  * The file the control plane wrote before the kernel started. Absent or

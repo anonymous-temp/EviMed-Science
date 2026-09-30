@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-package",
+  "note": "Real briefs, not smoke tests: each is a package somebody would actually have to hand to a reviewer, chosen for the specific way a study package goes wrong while looking finished — a number typed from the conversation rather than rendered from a result, a stale result quietly dropped, an unreviewed package labelled as a specified analysis. mustDo / mustNotDo are the rubric; the deterministic half (the files at their names, every prose number present in results.json, the four counts apart, the two seal timestamps) is the vcr-study-package contract in @evimed/domain, whose findings are notices and never a gate (the capability ships no preflight script of its own).",
+  "briefs": [
+    {
+      "id": "vcr-package-001-nsclc-design-support",
+      "title": "EV-201 二线 NSCLC：设计支持用途的研究包",
+      "why": "The ordinary full case and the one AC-20 was written for. Every number in this package exists as a saved result; the failure that looks like success is a well-written report whose figures were retyped from the conversation and are one revision out of date.",
+      "inputs": {
+        "studyId": "std_example_nsclc",
+        "kind": "study_package",
+        "audience": "internal"
+      },
+      "mustDo": [
+        "Write every number as a {{n:…}} reference into results.json and let the platform render it.",
+        "Ship all nine sections in order: summary, input register, assumption register, population and comparator definitions, results, figures, execution record, validation and limits, decision record.",
+        "State the review status on the cover exactly as it is, including 「未复核」, and say what intended use the package may therefore claim.",
+        "State the four counts apart wherever a sample size appears.",
+        "Name the kind of every interval printed.",
+        "Record the seed, software versions and CPU seconds of every execution in the execution record.",
+        "Say that the intended use is design_support and what would be needed to raise it."
+      ],
+      "mustNotDo": [
+        "Type any number into the prose instead of referencing it.",
+        "Claim 「指定研究分析」 for an unreviewed package.",
+        "Describe retrieval or tooling in the report body ('I searched…', a tool name, a job id).",
+        "Present a Monte-Carlo interval as a confidence interval.",
+        "Leave out a result because it is inconvenient."
+      ],
+      "gradedOn": "Whether a reviewer could recompute every figure in the package from results.json without asking a question."
+    },
+    {
+      "id": "vcr-package-002-not-estimable-with-gaps",
+      "title": "结论是「不可估计」的研究包：外部对照不可行，要写清楚缺什么",
+      "why": "A finished result that reads like a failure (plan §3.6). Packages of this kind are routinely written as apologies or quietly re-scoped into a different question; the right shape states the deterministic rule that fired, the gaps, and what the study can still answer.",
+      "inputs": {
+        "studyId": "std_example_gap",
+        "kind": "study_package",
+        "audience": "sponsor"
+      },
+      "mustDo": [
+        "Present the not-estimable verdict as the study's result, with the deterministic rule that fired named.",
+        "List the gaps: what data is missing, how much of it, and what becomes possible once it exists.",
+        "Say what the study can still answer at its current data tier.",
+        "Keep every computed diagnostic that led to the verdict in the results section — overlap, standardized differences, effective sample size.",
+        "Write the limits section about the comparison, not about the platform."
+      ],
+      "mustNotDo": [
+        "Re-scope the question so that something estimable can be reported instead.",
+        "Present a sensitivity analysis as if it were the primary estimate.",
+        "Write 「数据不足」 without saying which fields, for how many patients, over which window.",
+        "Apologise instead of reporting."
+      ],
+      "gradedOn": "Whether a sponsor reading it would know exactly what to collect next, and whether the verdict is stated as a result rather than as an error."
+    },
+    {
+      "id": "vcr-package-003-cde-communication-pack",
+      "title": "CDE 沟通交流资料包：确证性用途，含结局封存的两个时间戳",
+      "why": "The regulatory-facing case. The thing a reviewer looks for first is whether the analysis plan was fixed before anyone saw the outcomes, and a package that asserts it without the two timestamps is asserting what it cannot show.",
+      "inputs": {
+        "studyId": "std_example_confirmatory",
+        "kind": "cde_communication_pack",
+        "audience": "regulator",
+        "outputLanguage": "zh"
+      },
+      "mustDo": [
+        "Print the analysis-plan freeze time with its hash and the first outcome-field read time, in that order, in the validation section.",
+        "Organise the pack by the CDE real-world-evidence communication guidance: necessity and feasibility, data suitability, protocol and statistical analysis plan, bias control and sensitivity analyses.",
+        "State the review status of each kind (clinical, statistical, data) with the version each countersigned.",
+        "Report any stale result: either recomputed, or stated as stale on the cover with its reason.",
+        "State the intended-use ceiling the model evidence supports and why, if it is lower than the one requested."
+      ],
+      "mustNotDo": [
+        "Claim the plan was pre-specified without the two timestamps.",
+        "Drop a stale result from the package.",
+        "Label the package 「申报准备」 when the model evidence or the review status does not support it.",
+        "Rewrite a number to match a sentence."
+      ],
+      "gradedOn": "Whether a regulatory reviewer could establish the order of plan freeze and outcome access from the package alone."
+    }
+  ]
+}

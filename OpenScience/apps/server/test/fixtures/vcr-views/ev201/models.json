@@ -1,0 +1,464 @@
+{
+  "models": [
+    {
+      "id": "mdl_1",
+      "name": "二线 NSCLC 多西他赛组 PFS · Weibull",
+      "family": "拟合预测",
+      "version": "1.2",
+      "tier": "literature",
+      "risk": "low",
+      "useCeiling": "design_support",
+      "scope": "二线 NSCLC，多西他赛单药",
+      "region": "含中国人群的研究",
+      "endpoint": "time_to_event",
+      "timeRange": null,
+      "inputRange": null,
+      "sources": "来源 3 项：NCT09900001、NCT09900002、CTR20990001",
+      "provider": "研究 EV-201",
+      "interface": "vcr-engine patients.time_to_event",
+      "inputs": [
+        "中位 PFS",
+        "形状参数"
+      ],
+      "outputs": "对照组个体 PFS 的推演",
+      "missingData": "缺项不插补。",
+      "retirement": "来源试验更新时复核。",
+      "twin": "baseline_conditioned_prediction",
+      "twinLabel": "基线条件化预测",
+      "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
+      "validation": [
+        {
+          "label": "外部验证",
+          "state": "none",
+          "detail": null
+        },
+        {
+          "label": "内部验证",
+          "state": "passed",
+          "detail": "重建 QC 通过"
+        },
+        {
+          "label": "代码核对",
+          "state": "passed",
+          "detail": "对照解析解"
+        }
+      ],
+      "limits": [
+        "未做外部验证",
+        "无更新机制"
+      ],
+      "missingEvidence": [
+        "代码核对",
+        "种子可复现",
+        "输入可追溯",
+        "敏感性分析"
+      ],
+      "usedBy": [
+        {
+          "id": "std_1",
+          "label": "EV-201 二线 NSCLC：单臂 II 期还是随机"
+        }
+      ],
+      "numeric": null,
+      "uncertainty": null
+    },
+    {
+      "id": "mdl_2",
+      "name": "二分类终点参考仿真器",
+      "family": "数学仿真",
+      "version": "1.0.0",
+      "tier": "scenario",
+      "risk": "none",
+      "useCeiling": "exploratory",
+      "scope": "不限，但只作情景推演",
+      "region": "不限",
+      "endpoint": "binary",
+      "timeRange": null,
+      "inputRange": null,
+      "sources": null,
+      "provider": "EviMed 虚拟临研",
+      "interface": "vcr-engine patients.binary",
+      "inputs": [
+        "事件率",
+        "处理效应（OR / RR / RD）",
+        "脱落率",
+        "入组节奏"
+      ],
+      "outputs": "按给定事件率生成的二分类观测值；输出的是情景推演，不是对任何真实人群的预测。",
+      "missingData": "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
+      "retirement": "当引擎的 patients.binary 方法版本变更时退役并重新发布。",
+      "twin": "baseline_conditioned_prediction",
+      "twinLabel": "基线条件化预测",
+      "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
+      "validation": [
+        {
+          "label": "代码核对",
+          "state": "passed",
+          "detail": "对照精确二项解"
+        },
+        {
+          "label": "种子可复现",
+          "state": "passed",
+          "detail": null
+        }
+      ],
+      "limits": [
+        "不含任何真实人群的协变量结构",
+        "不可用于个体层面的预测",
+        "不承载疗效或安全性证据"
+      ],
+      "missingEvidence": [],
+      "usedBy": [],
+      "numeric": null,
+      "uncertainty": null
+    },
+    {
+      "id": "mdl_3",
+      "name": "连续终点参考仿真器",
+      "family": "数学仿真",
+      "version": "1.0.0",
+      "tier": "scenario",
+      "risk": "none",
+      "useCeiling": "exploratory",
+      "scope": "不限，但只作情景推演",
+      "region": "不限",
+      "endpoint": "continuous",
+      "timeRange": null,
+      "inputRange": null,
+      "sources": null,
+      "provider": "EviMed 虚拟临研",
+      "interface": "vcr-engine patients.continuous",
+      "inputs": [
+        "均值",
+        "标准差",
+        "处理效应",
+        "脱落率",
+        "入组节奏"
+      ],
+      "outputs": "按给定分布生成的连续终点观测值；输出的是情景推演，不是对任何真实人群的预测。",
+      "missingData": "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
+      "retirement": "当引擎的 patients.continuous 方法版本变更时退役并重新发布。",
+      "twin": "baseline_conditioned_prediction",
+      "twinLabel": "基线条件化预测",
+      "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
+      "validation": [
+        {
+          "label": "代码核对",
+          "state": "passed",
+          "detail": "对照解析解"
+        },
+        {
+          "label": "种子可复现",
+          "state": "passed",
+          "detail": null
+        }
+      ],
+      "limits": [
+        "不含任何真实人群的协变量结构",
+        "不可用于个体层面的预测",
+        "不承载疗效或安全性证据"
+      ],
+      "missingEvidence": [],
+      "usedBy": [],
+      "numeric": null,
+      "uncertainty": null
+    },
+    {
+      "id": "mdl_4",
+      "name": "事件时间终点参考仿真器",
+      "family": "数学仿真",
+      "version": "1.0.0",
+      "tier": "scenario",
+      "risk": "none",
+      "useCeiling": "exploratory",
+      "scope": "不限，但只作情景推演",
+      "region": "不限",
+      "endpoint": "time_to_event",
+      "timeRange": null,
+      "inputRange": null,
+      "sources": null,
+      "provider": "EviMed 虚拟临研",
+      "interface": "vcr-engine patients.time_to_event",
+      "inputs": [
+        "基线风险函数",
+        "风险比或加速因子",
+        "随访时长",
+        "删失机制",
+        "入组节奏"
+      ],
+      "outputs": "按给定风险函数生成的事件时间与删失指示；生成的曲线不得画成观察到的 KM 曲线。",
+      "missingData": "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
+      "retirement": "当引擎的 patients.time_to_event 方法版本变更时退役并重新发布。",
+      "twin": "baseline_conditioned_prediction",
+      "twinLabel": "基线条件化预测",
+      "twinReason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录",
+      "validation": [
+        {
+          "label": "代码核对",
+          "state": "passed",
+          "detail": "对照 simsurv 的已知真值"
+        },
+        {
+          "label": "种子可复现",
+          "state": "passed",
+          "detail": null
+        }
+      ],
+      "limits": [
+        "默认比例风险，非比例情景须显式设定",
+        "不含任何真实人群的协变量结构",
+        "不承载疗效或安全性证据"
+      ],
+      "missingEvidence": [],
+      "usedBy": [],
+      "numeric": null,
+      "uncertainty": null
+    }
+  ],
+  "methods": [
+    {
+      "id": "mth_1",
+      "name": "Poisson–Gamma 入组预测",
+      "method": "accrual.poisson_gamma",
+      "version": "1.0.0",
+      "endpoints": "accrual",
+      "numeric": "9 / 9 通过",
+      "usedIn": null
+    },
+    {
+      "id": "mth_2",
+      "name": "构建队列",
+      "method": "cohort.build",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_3",
+      "name": "熵平衡加权",
+      "method": "comparator.entropy_balance",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": "7 / 7 通过",
+      "usedIn": null
+    },
+    {
+      "id": "mth_4",
+      "name": "E 值",
+      "method": "comparator.evalue",
+      "version": "1.0.0",
+      "endpoints": "binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_5",
+      "name": "匹配调整间接比较",
+      "method": "comparator.maic",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_6",
+      "name": "MAP 先验",
+      "method": "comparator.map_prior",
+      "version": "1.0.0",
+      "endpoints": "binary · continuous",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_7",
+      "name": "倾向评分加权",
+      "method": "comparator.propensity_weight",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_8",
+      "name": "RMST 比较",
+      "method": "comparator.rmst",
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "numeric": "6 / 6 通过",
+      "usedIn": null
+    },
+    {
+      "id": "mth_9",
+      "name": "方案的解析计算",
+      "method": "design.analytic",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_10",
+      "name": "成功把握",
+      "method": "design.assurance",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_11",
+      "name": "设计网格",
+      "method": "design.grid",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_12",
+      "name": "预后协变量调整",
+      "method": "design.procova",
+      "version": "1.0.0",
+      "endpoints": "continuous",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_13",
+      "name": "方案的模拟运行",
+      "method": "design.simulate",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_14",
+      "name": "证据合并",
+      "method": "evidence.pool",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_15",
+      "name": "生存曲线重建（Guyot）",
+      "method": "evidence.reconstruct_km",
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "numeric": "5 / 5 通过",
+      "usedIn": null
+    },
+    {
+      "id": "mth_16",
+      "name": "逐条匹配",
+      "method": "matching.evaluate",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_17",
+      "name": "虚拟患者（二分类终点）",
+      "method": "patients.binary",
+      "version": "1.0.0",
+      "endpoints": "binary",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_18",
+      "name": "虚拟患者（连续终点）",
+      "method": "patients.continuous",
+      "version": "1.0.0",
+      "endpoints": "continuous",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_19",
+      "name": "虚拟患者（事件时间终点）",
+      "method": "patients.time_to_event",
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_20",
+      "name": "文献人群",
+      "method": "population.literature",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_21",
+      "name": "人群质量报告",
+      "method": "population.quality",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_22",
+      "name": "情景人群生成",
+      "method": "population.scenario",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_23",
+      "name": "经验合成人群",
+      "method": "population.synthpop",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    },
+    {
+      "id": "mth_24",
+      "name": "数据快照画像",
+      "method": "profile.snapshot",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "usedIn": null
+    }
+  ],
+  "ladder": [
+    {
+      "risk": "none",
+      "needs": "代码核对、种子可复现",
+      "ceiling": "exploratory",
+      "count": 3
+    },
+    {
+      "risk": "low",
+      "needs": "代码核对、种子可复现、输入可追溯、敏感性分析",
+      "ceiling": "design_support",
+      "count": 1
+    },
+    {
+      "risk": "medium",
+      "needs": "代码核对、种子可复现、输入可追溯、敏感性分析、外部验证、模型已锁定、模型分析计划",
+      "ceiling": "specified_analysis",
+      "count": 0
+    },
+    {
+      "risk": "high",
+      "needs": "代码核对、种子可复现、输入可追溯、敏感性分析、外部验证、模型已锁定、模型分析计划、前瞻验证、独立评审、监管沟通",
+      "ceiling": "submission_preparation",
+      "count": 0
+    }
+  ],
+  "engineAvailable": false,
+  "engineMismatch": null
+}

@@ -101,4 +101,32 @@ describe("ConfirmDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "确定" }));
     expect(trigger).toHaveFocus();
   });
+
+  // A confirmation that takes a moment is the caller's to guard no longer:
+  // while `busy` the dialog holds still, so a second press cannot start a
+  // second delete, and it cannot be dismissed out from under the request.
+  it("while busy: the confirming button is disabled and spinning, and nothing dismisses the dialog", async () => {
+    const p = { ...props(), busy: true };
+    render(<ConfirmDialog {...p} />);
+    const confirm = screen.getByRole("button", { name: "删除" });
+    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    await userEvent.click(confirm);
+    fireEvent.click(confirm);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await userEvent.click(screen.getByRole("alertdialog").parentElement as HTMLElement);
+    expect(p.onConfirm).not.toHaveBeenCalled();
+    expect(p.onCancel).not.toHaveBeenCalled();
+  });
+
+  it("dismisses again once the request has settled", () => {
+    const p = props();
+    const view = render(<ConfirmDialog {...p} busy />);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(p.onCancel).not.toHaveBeenCalled();
+    view.rerender(<ConfirmDialog {...p} busy={false} />);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(p.onCancel).toHaveBeenCalledTimes(1);
+  });
 });

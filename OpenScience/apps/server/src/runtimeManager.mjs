@@ -33,6 +33,8 @@ import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
+import { vcrGatewayProviderUrl } from "./vcrGateway.mjs";
+import { vcrAudienceAllows } from "./vcrService.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
 import { createAgentBayClient } from "./agentbay/client.mjs";
 // A cycle, on purpose and safe: the provider module reads this one's exports
@@ -1571,6 +1573,14 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (geoGatewayUrl && geoAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_GEO_GATEWAY_URL = geoGatewayUrl;
     }
+    // 「虚拟临研」's five tools ride the same token on the same terms: the
+    // module on and open to this account. Whether this project carries a study
+    // is the gateway's answer (`vcr_no_study`), not a reason to withhold the
+    // address — a runtime that cannot ask cannot be told no.
+    const vcrGatewayUrl = gateways ? String(gateways.vcr ?? "") : vcrGatewayProviderUrl(config);
+    if (vcrGatewayUrl && vcrAudienceAllows(config, { id: String(project.userId ?? "") })) {
+      environment.EVIMED_VCR_GATEWAY_URL = vcrGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a
@@ -1711,6 +1721,22 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     : String(config.geoSocialUrl ?? "").trim() ? [] : ["social_posts_search"];
   if (geoDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...geoDisabled])].join(",");
+  }
+  // 「虚拟临研」's likewise, and one step further: without the deterministic
+  // engine `vcr_simulate` could only ever answer 「引擎未接入」, and a tool that
+  // can only refuse is not offered. The other four still work — the study, its
+  // evidence and its registry records are the control plane's, not the
+  // engine's (plan §10.5).
+  // "Without the engine" is the composed engine (URL and both secrets), not the
+  // URL alone: with the URL set and a secret missing no client is made
+  // (`vcrEngineStatus`), and a tool offered against an engine that will refuse
+  // every call is the same refusal one step later.
+  const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
+  const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
+    ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]
+    : vcrEngineComposed ? [] : ["vcr_simulate", "evidence_pool"];
+  if (vcrDisabled.length) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String((gateways ? gateways.adapters?.[key] : configured[key]) ?? "").trim();

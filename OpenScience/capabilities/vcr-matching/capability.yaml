@@ -1,0 +1,107 @@
+# Capability manifest — the only definition of this capability.
+#
+# Step 7 of a 「虚拟临研」 study (build plan 2026-09-28 §4, §7): match a protocol
+# to patients or a patient to protocols, and draft the recruitment material the
+# study team then reviews. Public so the module can bind a session to it, and
+# kept off 科研工具 and the kernel's own tool list by `display.listed: false` —
+# `visibility: internal` would make that binding answer 403.
+#
+# `safetyClass: clinical` because of what it writes, not what it decides: the
+# pre-screening questionnaire, the patient-facing explanation and the
+# coordinator's script are read by patients, so the pharmacist-owned safety
+# rules run over this package's prose. The eligibility verdict itself is not
+# produced by this run at all — `vcrMatching.mjs` computes it, and the run's job
+# is to locate evidence and to answer the criteria only language can decide.
+id: vcr-matching
+version: 1.0.0
+title: Virtual Clinical Research — Matching and Recruitment
+category: Clinical Research
+description: Two-way eligibility matching for a trial protocol — structure the criteria, locate each patient fact
+  in its source text with a character span and a visibility time, answer the language-only criteria with a quote,
+  and hand back the computed four-state judgment set with its evidence gaps, plus draft pre-screening and
+  referral material for the study team to review.
+whenToUse: 「虚拟临研」研究要做患者匹配、预筛材料或招募协作时交给我：把方案的入排条件结构化，为每位候选人从病历里定位证据（带原文区间与可见时间），把只能靠语言理解的条件给出引用原句，再交回逐条判定与待补证据清单。判定由平台代码做，我不改判；联系患者一律等协调员逐人确认。用户只问“这个人能不能入组”时也走我。
+persona: |
+  你是临床研究的预筛分析员。你的产出是证据，不是结论：每抽出一个事实，都要给出来源文档、字符区间和平台可见时间；
+  区间里找不到对应的值，就不要写这个事实。资格判定由平台的确定性引擎在你给的事实上算，你不要自己下「符合/不符合」的结论，
+  也不要把「未知」写成「不满足」——缺证据就是缺证据，写清楚缺哪一项、从哪里能补。
+  只能靠语言理解的条件（例如「能够理解并签署知情同意」）由你判断，并附上支持这一判断的原句。
+  预筛问卷、患者说明和协调员话术你可以起草，但在研究团队审阅发布之前都是草稿，患者的回答只算「患者自述」，不等同于病历事实。
+safetyClass: clinical
+skills:
+- vcr-matching
+- citation-integrity
+tools:
+- mcp__evimed__vcr_read
+- mcp__evimed__vcr_write
+- mcp__evimed__vcr_simulate
+- mcp__evimed__locate_quote
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__term_normalize
+- mcp__evimed__kb_search
+- mcp__evimed__literature_search
+produces:
+- contractKind: vcr-matching-assessment
+  outputs:
+  - path: matching-assessment.md
+    required: true
+  - path: matching.json
+    required: true
+  - path: criterion-funnel.md
+    required: false
+  - path: recruitment-drafts.md
+    required: false
+  - path: revision-notes.md
+    required: false
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - studyId
+  optional:
+  - protocolVersionId
+  - subjectKeys
+  - direction
+  - asOf
+  - draftMaterials
+autopilot:
+  # Scheduling belongs to the 「虚拟临研」 orchestrator, which dispatches this
+  # capability inside the study. The autopilot allocator has no VCR task type.
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - studyId
+estimatedMinutes:
+- 15
+- 90
+dataSources:
+- clinical-trials
+- uploaded-files
+- literature
+starterPrompts:
+- 把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。
+
+display:
+  title: "匹配与招募"
+  category: "临床研究"
+  description: "把入排条件结构化，逐条判定候选人并交回待补证据与筛选漏斗，联系患者前等人确认。"
+  listed: false
+  starterPrompts:
+  - "把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。"
+  - "这位患者能不能入组 EV-201？逐条说明，缺什么证据也写出来。"
+  - "哪一条入排条件最卡人？按历史候选人群跑一遍漏斗。"
+  materials: "需要一份方案的入排条件；有病历或候选人名单更好"
+  estimatedMinutes:
+    min: 15
+    max: 90
+  outputs:
+  - "逐条资格判定与证据位置"
+  - "待补证据清单"
+  - "入排条件漏斗"
+  - "预筛问卷与联系话术草稿"
+  knownLimits:
+  - "资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。"
+  - "缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"
+  - "联系患者前必须由协调员逐人确认，本能力不会代为联系。"
+  - "预筛问卷与患者说明在研究团队审阅发布前都是草稿。"

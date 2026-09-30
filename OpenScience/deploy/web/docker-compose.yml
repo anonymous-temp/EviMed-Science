@@ -483,6 +483,32 @@ services:
       OPEN_SCIENCE_GEO_SOCIAL_URL:
       OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
+      # 「虚拟临研」 (vcrService.mjs, build plan 2026-09-28). Value-less, same
+      # rule: unset keeps config.mjs's defaults — the module off, open to
+      # operators once on, no engine composed and no data plane, which is
+      # the state in which every tier above T0 says so rather than guessing.
+      OPEN_SCIENCE_VCR_ENABLED:
+      OPEN_SCIENCE_VCR_AUDIENCE:
+      OPEN_SCIENCE_VCR_PREVIEW_USERS:
+      OPEN_SCIENCE_VCR_POLL_MS:
+      OPEN_SCIENCE_VCR_LEASE_MS:
+      OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
+      OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS:
+      # The engine's bearer token and receipt key are files, like every other
+      # key this service holds (bound below; /dev/null where the deployment has
+      # no engine, which reads as none). Set the URL without both and the module
+      # says the engine is unconfigured and makes no client.
+      OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
+      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
+      OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
+      OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
+      # The data plane's own directory: patient-level rows live here and
+      # nowhere a runtime is mounted (plan §8.1). Set exactly when the host
+      # directory is bound below, so the path the config names is always a
+      # directory that is there.
+      OPEN_SCIENCE_VCR_DATA_PLANE_DIR: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:+/data-plane}
+      OPEN_SCIENCE_VCR_DATA_MAX_BYTES:
       OPEN_SCIENCE_MEDIA_MARKET_URL:
       OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: /run/secrets/media-market-api-key
       OPEN_SCIENCE_MEDIA_MARKET_TIMEOUT_MS:
@@ -916,6 +942,24 @@ services:
         source: ${OPEN_SCIENCE_MEDIA_MARKET_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/media-market-api-key
         read_only: true
+      # 「虚拟临研」's engine token and receipt key (each at least 32 bytes,
+      # owner-and-group readable: the engine reads the same files through its
+      # group). Optional: without them the engine is not composed.
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/vcr-engine-token
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/vcr-engine-receipt-key
+        read_only: true
+      # The data plane, read-write: uploads and the tables derived from them are
+      # written here, and the engine reads the same directory read-only at the
+      # same path. Never a runtime's mount and never inside `open-science-data`.
+      # Unset binds /dev/null and the module answers 「数据平面未接入」.
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:-/dev/null}
+        target: /data-plane
     depends_on:
       evimed-postgres:
         condition: service_healthy
@@ -952,6 +996,9 @@ services:
       - default
       - runtime-internal
       - memory-recall-internal
+      # The compute engine's own network: the control plane and the engine, and
+      # nobody else (an `internal` network has no route out).
+      - vcr-engine-internal
     healthcheck:
       test:
         [
@@ -1050,6 +1097,135 @@ services:
       - default
       - runtime-internal
     restart: unless-stopped
+
+  # 「虚拟临研」's deterministic statistics and simulation engine (plan §11.4).
+  # Not a specialist agent: it holds no model client and no gateway, it reads
+  # only the snapshot files a job names, and it answers a job protocol the
+  # control plane and the engine both validate against `@evimed/domain`'s
+  # `vcrEngineJob.mjs`. It is the one image in this stack that may never call
+  # out — the whole point of it is that numbers come from code with a version.
+  #
+  # Behind the `vcr` profile: a deployment that does not run 「虚拟临研」 does
+  # not build, pull or start an R image. `--profile vcr` (or COMPOSE_PROFILES)
+  # starts it together with the volume's one-shot owner below; the control
+  # plane finds it at OPEN_SCIENCE_VCR_ENGINE_URL=http://evimed-vcr-engine:8080.
+  # Its only network is `vcr-engine-internal`, shared with `open-science-web`
+  # and nothing else, and `internal` means no route to the internet from it.
+  evimed-vcr-engine:
+    image: ${EVIMED_VCR_ENGINE_IMAGE:-evimed-vcr-engine:1.0.0}
+    profiles: ["vcr"]
+    build:
+      context: ../../../项目代码/vcr-engine
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+        CRAN_SNAPSHOT_DATE: ${OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE:-2026-09-28}
+        # Passed even though the Dockerfile derives a default from the snapshot
+        # date: a build arg a Dockerfile declares and compose never passes is a
+        # lever that looks configurable and is not (`audit:hosted-compliance`).
+        CRAN_MIRROR: ${OPEN_SCIENCE_VCR_CRAN_MIRROR:-https://packagemanager.posit.co/cran/${OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE:-2026-09-28}}
+    user: "10001:10001"
+    environment:
+      # The names the engine reads (`service/app.py`), one variable each. The
+      # token the control plane presents and the key its results are signed
+      # with are files, never values: the service refuses to start without both.
+      VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
+      VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      # A job's directory, on the named volume below; and the only place a job's
+      # inputs may be opened from, read-only.
+      VCR_ENGINE_WORK_DIR: /jobs
+      VCR_ENGINE_DATA_ROOT: /data-plane
+      # One job at a time on the shared host, and a CPU ceiling per job: this
+      # box is four cores shared with other products (plan §11.4). A design
+      # grid waits for a compute node of its own; the interface does not change
+      # when it gets one. The per-job default follows the control plane's own
+      # ceiling; a job's `cores` can lower the core count and never raise it.
+      VCR_ENGINE_CPU_SECONDS: ${OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:-600}
+      VCR_ENGINE_MAX_CPU_SECONDS: ${OPEN_SCIENCE_VCR_ENGINE_MAX_CPU_SECONDS:-3600}
+      VCR_ENGINE_CORES: ${OPEN_SCIENCE_VCR_ENGINE_CORES:-1}
+      VCR_ENGINE_MAX_REPLICATES: ${OPEN_SCIENCE_VCR_ENGINE_MAX_REPLICATES:-200000}
+      # RLIMIT_AS of the R child: under the container's own memory limit below,
+      # so a runaway job ends with an R error and its partial result instead of
+      # the kernel's OOM kill of the whole service.
+      VCR_ENGINE_MEMORY_BYTES: ${OPEN_SCIENCE_VCR_ENGINE_MEMORY_BYTES:-3221225472}
+    volumes:
+      # Read-only, and only the data plane: the engine reads the snapshot a job
+      # names and nothing else. It is deliberately not given `open-science-data`
+      # — the volume every specialist engine mounts whole — because patient
+      # rows are the thing that must not be one path traversal away from a
+      # container that also holds a workspace (plan §8.1, attachment E §2.4).
+      # The control plane binds the same host directory read-write at the same
+      # path, so a `location` means one thing on both sides.
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:-/dev/null}
+        target: /data-plane
+        read_only: true
+      - evimed-vcr-jobs:/jobs
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/vcr-engine-token
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:-/dev/null}
+        target: /run/secrets/vcr-engine-receipt-key
+        read_only: true
+    depends_on:
+      evimed-vcr-jobs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # The bare liveness route: `/health` needs the token and answers the
+      # method catalogue, which a container check has no business holding.
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/livez', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m
+    networks:
+      - vcr-engine-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPEN_SCIENCE_VCR_ENGINE_CPUS:-2}"
+          memory: ${OPEN_SCIENCE_VCR_ENGINE_MEMORY:-4g}
+    restart: unless-stopped
+
+  # The one-shot that gives the engine's job volume to the uid it runs as. A
+  # named volume arrives owned by root when it is new to this host, or was made
+  # by an earlier image, and the engine (10001, no capabilities) then cannot
+  # create a job directory. Root with CAP_CHOWN and nothing else, no network,
+  # and the one thing it does is `chown` the volume's own directory: the job
+  # directories under it are made by the engine itself.
+  evimed-vcr-jobs-init:
+    image: ${EVIMED_VCR_ENGINE_IMAGE:-evimed-vcr-engine:1.0.0}
+    profiles: ["vcr"]
+    user: "0:0"
+    entrypoint: ["chown", "10001:10001", "/jobs"]
+    volumes:
+      - evimed-vcr-jobs:/jobs
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    read_only: true
+    restart: "no"
 
   evimed-mr-agent:
     image: ${EVIMED_MR_AGENT_IMAGE:-evimed-mr-agent:1.0.0}
@@ -1659,6 +1835,7 @@ services:
 #
 # Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
+  evimed-vcr-jobs:
   evimed-postgres-data:
   # The MR engine's GWAS Catalog scan cache (EVIMED_MR_OPEN_CACHE_DIR): public
   # summary statistics only, rebuildable, kept across releases.
@@ -1681,6 +1858,11 @@ networks:
     internal: true
   # Web and the recall index, and nobody else.
   memory-recall-internal:
+    internal: true
+  # The control plane and the compute engine, and nobody else. `internal`: the
+  # engine has no route out — it holds no model client, and what it computes
+  # must not be able to leave by any other way than the answer it gives.
+  vcr-engine-internal:
     internal: true
   # The index's route to the embedding API. Its own network rather than
   # `default` so that being able to reach the index still means being on

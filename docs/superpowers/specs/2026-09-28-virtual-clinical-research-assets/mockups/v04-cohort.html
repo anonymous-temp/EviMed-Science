@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>人群 · EV-201 二线 NSCLC</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页截图：外壳随内容增高 */
+  html, body { height: auto; }
+  body { position: relative; min-height: 100vh; }
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+
+  /* ── 研究页页头（v04–v07 共用，逐字相同） ── */
+  .shead { display: flex; align-items: center; gap: 10px; padding: 24px 0 16px; }
+  .shead h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.005em; margin-right: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(7, 1fr); padding: 14px 18px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--e1); }
+  .stp { position: relative; padding-top: 20px; }
+  .stp::before { content: ""; position: absolute; top: 6px; left: 14px; right: -2px; height: 2px; background: var(--n-150); }
+  .stp.done::before { background: var(--brand-300); }
+  .stp:last-child::before { display: none; }
+  .stp .k { position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--n-200); background: var(--surface); }
+  .stp.done .k { background: var(--accent); box-shadow: none; }
+  .stp.done .k::after { content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 6.5px; border-right: 1.8px solid #fff; border-bottom: 1.8px solid #fff; transform: rotate(45deg); }
+  .stp.wait .k { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--brand-100); }
+  .stp .n { font-weight: 600; font-size: 14px; }
+  .stp .m { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .stp.wait .m { color: var(--brand-700); font-weight: 500; }
+  .navrow { display: flex; align-items: flex-end; gap: 6px; margin-top: 16px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+  .dd { height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; font-size: 13px; color: var(--text-2); margin-bottom: 5px; white-space: nowrap; }
+  .dd b { color: var(--text); font-weight: 500; }
+  .dd svg { color: var(--text-3); }
+  .dd.pill { box-shadow: inset 0 0 0 1px var(--line-strong); border-radius: 15px; padding: 0 10px; }
+  .headline { margin: 18px 0 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; line-height: 26px; font-weight: 500; color: var(--n-900); }
+  .headline > svg { color: var(--brand-600); }
+  .headline .hl { color: var(--brand-700); font-weight: 600; }
+  .headline .at { color: var(--attn-strong); font-weight: 600; }
+
+  /* ── 通用 ── */
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .box h3 { font-size: 16px; line-height: 24px; display: flex; align-items: center; gap: 8px; }
+  .box h3 .sp { flex: 1; }
+  .ctitle { font-size: 16px; line-height: 24px; font-weight: 600; }
+  .o { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--text-3); background: var(--surface-2); line-height: 1; white-space: nowrap; vertical-align: 1px; }
+  .chip-ai { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; font-weight: 500; color: var(--attn-strong); background: var(--attn-soft); white-space: nowrap; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); font-weight: 400; align-items: center; flex-wrap: wrap; }
+  .sw { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .hatch { background: repeating-linear-gradient(135deg, rgba(161, 92, 0, .62) 0 1.6px, #FFF1DC 1.6px 4.4px); }
+  .sw.c { background: var(--brand-600); } .sw.x { background: var(--n-150); }
+
+  /* ── 三栏 ── */
+  .cols { display: grid; grid-template-columns: 360px 440px 368px; gap: 16px; align-items: stretch; }
+  .rcol { display: flex; flex-direction: column; gap: 16px; }
+  .rcol .grow { flex: 1; }
+
+  /* 定义 */
+  .kv { display: grid; grid-template-columns: 64px 1fr; gap: 8px; font-size: 13px; line-height: 20px; padding: 5px 0; }
+  .kv .k { color: var(--text-3); }
+  .kv .v { color: var(--text); }
+  .kv .v.t0 { font-weight: 600; }
+  .rhead { display: flex; align-items: center; margin: 14px 0 4px; }
+  .seg.s { padding: 2px; border-radius: 8px; }
+  .seg.s a { height: 26px; padding: 0 10px; font-size: 12px; border-radius: 6px; }
+  .cnth { display: grid; grid-template-columns: 50px 42px 50px; gap: 0; margin-left: auto; font-size: 11px; color: var(--text-3); text-align: right; }
+  .rule { padding: 8px 10px; margin: 0 -10px; border-radius: 10px; box-shadow: inset 0 -1px 0 var(--line); }
+  .rule:last-child { box-shadow: none; }
+  .rule .l1 { display: flex; align-items: center; gap: 7px; }
+  .rid { width: 24px; flex: none; font-size: 12px; font-weight: 600; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .rname { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .cnt3 { display: grid; grid-template-columns: 50px 42px 50px; margin-left: auto; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .cnt3 .ok { color: var(--text-2); }
+  .cnt3 .ex { color: var(--text-3); }
+  .cnt3 .un { color: var(--text-4); }
+  .cnt3 .un.hot { color: var(--attn-strong); font-weight: 600; }
+  .cnt3 .ex.hot { color: var(--text); font-weight: 600; }
+  .rule .l2 { margin: 3px 0 0 31px; font-size: 12px; line-height: 18px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rule.hov { background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); margin-top: 2px; margin-bottom: 2px; }
+  .rule.hov .l2 { white-space: normal; color: var(--text-2); }
+  .rule.hov .src { margin: 5px 0 0 31px; font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .vchg { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 11px; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+  /* 瀑布 */
+  .wf { margin-top: 12px; }
+  .wr { display: grid; grid-template-columns: 22px 112px 1fr 44px 40px; gap: 6px; align-items: center; height: 31px; font-size: 12px; }
+  .wr .i { color: var(--text-3); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wr .nm { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wr .tr { position: relative; height: 14px; }
+  .wr .tr i { position: absolute; top: 0; bottom: 0; }
+  .wr .tr i.c { left: 0; background: var(--brand-600); border-radius: 2px 0 0 2px; }
+  .wr .tr i.x { background: var(--n-150); border-radius: 0 3px 3px 0; }
+  .wr .rn { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+  .wr .xn { text-align: right; color: var(--text-4); font-variant-numeric: tabular-nums; }
+  .wr.hot .nm { color: var(--text); font-weight: 500; }
+  .wr.hot .xn { color: var(--text-2); font-weight: 600; }
+  .wr.start .nm { color: var(--text); font-weight: 500; }
+  .wsep { height: 1px; background: var(--line); margin: 5px 0; }
+  .fin { margin-top: 16px; padding: 12px 12px 10px; border-radius: 12px; background: var(--surface-1); }
+  .fin .bar { display: flex; height: 16px; gap: 2px; }
+  .fin .bar i { display: block; height: 100%; }
+  .fin .bar i.c { background: var(--brand-600); border-radius: 3px 0 0 3px; }
+  .fin .bar i.u { border-radius: 0 3px 3px 0; }
+  .fin .lab { display: flex; gap: 16px; white-space: nowrap; margin-top: 8px; font-size: 12px; color: var(--text-2); align-items: baseline; }
+  .fin .lab b { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; margin-right: 3px; }
+
+  .vcmp { display: flex; align-items: center; gap: 6px; margin-top: 14px; font-size: 13px; color: var(--text-2); }
+  .vcmp svg { color: var(--text-3); }
+  /* 画像 */
+  table.pf { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  table.pf th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 0 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: bottom; }
+  table.pf td { padding: 9px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.pf tr:last-child td { border-bottom: 0; }
+  table.pf td.r, table.pf th.r { text-align: right; }
+  table.pf tr.flag td { background: var(--attn-soft); }
+  table.pf tr.flag td:first-child { border-radius: 8px 0 0 8px; }
+  table.pf tr.flag td:last-child { border-radius: 0 8px 8px 0; }
+  .smd { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .smd .v { width: 30px; text-align: right; }
+  .smd svg { display: block; }
+  .pf .foot { font-size: 11px; color: var(--text-3); }
+  .note { margin-top: 10px; display: flex; gap: 6px; font-size: 12px; line-height: 18px; color: var(--text-2); }
+  .note svg { color: var(--attn); flex: none; margin-top: 2px; }
+
+  /* 无法判断原因 */
+  .why { margin-top: 10px; }
+  .why .w { display: grid; grid-template-columns: 1fr 112px 34px; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; }
+  .why .w .b { height: 8px; border-radius: 2px; }
+  .why .w .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .why .w .d { font-size: 12px; color: var(--text-3); }
+
+  /* 四个数 + 最卡人 */
+  .band { display: grid; grid-template-columns: repeat(4, 1fr) 1.9fr; margin-top: 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--e1); }
+  .band .c4 { padding: 14px 18px; position: relative; }
+  .band .c4 + .c4::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--line); }
+  .band .lab { font-size: 12px; color: var(--text-3); }
+  .band .val { font-size: 22px; line-height: 30px; font-weight: 600; margin-top: 2px; }
+  .band .val.na { color: var(--text-4); }
+  .band .sub { font-size: 12px; color: var(--text-3); }
+  .stuck { padding: 14px 18px; position: relative; }
+  .stuck::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--line); }
+  .stuck .lab { font-size: 12px; color: var(--text-3); }
+  .stuck ol { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .stuck li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px; }
+  .stuck li .i { width: 22px; color: var(--text-3); font-weight: 600; font-size: 12px; }
+  .stuck li .q { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .stuck li .q.u { color: var(--attn-strong); }
+  .stuck li .q.x { color: var(--text-2); }
+</style></head>
+<body data-nav="vcr" data-recent="a">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="wrapx">
+      <!-- 研究页页头 · 开始 -->
+      <div class="shead">
+        <h1>EV-201 二线 NSCLC：单臂 II 期还是随机</h1>
+        <span class="tag outline">T0 公开资料</span>
+        <span class="tag outline">研究设计支持</span>
+        <span class="sp"></span>
+        <a class="btn secondary"><svg data-i="message-square" class="i xs"></svg>对话</a>
+        <a class="ibtn"><svg data-i="ellipsis"></svg></a>
+      </div>
+      <div class="rail">
+        <div class="stp done"><span class="k"></span><div class="n">定义</div><div class="m">研究定义 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">证据</div><div class="m">12 张假设卡</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">人群</div><div class="m">人群 v3</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">患者</div><div class="m">虚拟患者集 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">对照</div><div class="m">文献对照</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">试验</div><div class="m">4 个方案</div></div>
+        <div class="stp"><span class="k"></span><div class="n">匹配</div><div class="m">未开始</div></div>
+      </div>
+      <!-- 研究页页头 · 结束 -->
+
+      <div class="navrow">
+        <nav class="tabs"><a>总览</a><a class="on">人群</a><a>虚拟患者</a><a>对照</a><a>试验</a><a>匹配与招募</a><a>数据与证据</a></nav>
+        <span class="sp"></span>
+        <a class="dd"><b>人群 v3</b>（方案 v2）<svg data-i="chevron-down" class="i xs"></svg></a>
+        <a class="dd pill"><svg data-i="git-compare-arrows" class="i xs"></svg>对比 v2<span class="o" style="margin-left:2px">已过期</span></a>
+        <a class="dd"><svg data-i="database" class="i xs"></svg>合作方数据 · T1 · 快照 9 月 27 日</a>
+      </div>
+
+      <div class="headline"><svg data-i="sparkles" class="i"></svg><span>按方案 v2，3,412 名候选人中 <span class="hl">57 人全部满足</span>、<span class="at">612 人至少 1 条无法判断</span>；与文献对照组相比，既往免疫治疗一项不平衡。</span></div>
+
+      <div class="cols">
+        <!-- 左：定义 -->
+        <section class="box">
+          <h3>定义<span class="o">方案 v2</span><span class="sp"></span><span class="t12 muted" style="font-weight:400">14 条</span><a class="ibtn" style="width:28px;height:28px"><svg data-i="pencil" class="i xs"></svg></a></h3>
+          <div style="margin-top:8px">
+            <div class="kv"><span class="k">时间零点</span><span class="v t0">一线治疗后首次影像进展日</span></div>
+            <div class="kv"><span class="k">证据时效</span><span class="v">影像 ≤ 12 周 · 体能评分与化验 ≤ 4 周</span></div>
+            <div class="kv"><span class="k">退出</span><span class="v">死亡 · 失访 · 已开始二线治疗</span></div>
+          </div>
+          <div class="rhead">
+            <span class="seg s"><a class="on">纳入 I1–I8</a><a>排除 E1–E6</a></span>
+            <span class="cnth"><span>保留</span><span>排除</span><span>无法判断</span></span>
+          </div>
+          <div id="rules"></div>
+        </section>
+
+        <!-- 中：筛选瀑布 -->
+        <section class="box">
+          <div class="ctitle">逐条筛选后剩 669 人，其中 612 人还差证据</div>
+          <div class="legend" style="margin-top:8px"><span><i class="sw c"></i>已知全部满足</span><span><i class="sw hatch"></i>至少 1 条无法判断</span><span><i class="sw x"></i>本条排除</span></div>
+          <div class="wf" id="wf"></div>
+          <div class="fin">
+            <div class="bar"><i class="c" style="width:8.5%"></i><i class="u hatch" style="flex:1"></i></div>
+            <div class="lab"><span><b>57</b>符合</span><span><b>612</b>可能符合</span><span class="sp"></span><span class="muted"><b style="color:var(--text-2)">2,743</b>不符合</span></div>
+          </div>
+          <div class="vcmp"><svg data-i="history" class="i xs"></svg><span>对比 v2（已过期）</span><span class="sp"></span><span class="num">符合 71 · 可能符合 766 · 不符合 2,575</span></div>
+          <div class="t12 muted" style="margin:4px 0 0 22px">差别来自 I6：v2 允许一线不含免疫治疗，该条只排除 138 人</div>
+        </section>
+
+        <!-- 右：画像 + 无法判断的原因 -->
+        <div class="rcol">
+          <section class="box">
+            <h3>人群画像<span class="sp"></span><span class="t12 muted" style="font-weight:400">669 人 vs 7 项汇总</span></h3>
+            <table class="pf">
+              <thead><tr><th>特征</th><th class="r">本人群<br><span class="o">观察</span></th><th class="r">文献对照<br><span class="o">汇总</span></th><th class="r">|SMD|<br><span class="t12" style="color:var(--text-4)">界值 0.1</span></th></tr></thead>
+              <tbody id="pf"></tbody>
+            </table>
+            <div class="note"><svg data-i="circle-alert" class="i xs"></svg><span>I6 要求一线含免疫治疗，文献对照组有 4.6% 未用过。</span></div><div class="t12 muted" style="margin:4px 0 0 20px">* 脑转移只按已知的 293 人计</div>
+          </section>
+          <section class="box grow">
+            <h3>612 人为什么无法判断</h3>
+            <div class="why" id="why"></div>
+            <a class="btn sm secondary" style="margin-top:10px"><svg data-i="list-checks" class="i xs"></svg>生成补证清单</a>
+          </section>
+        </div>
+      </div>
+
+      <section class="band">
+        <div class="c4"><div class="lab">真实患者数</div><div class="val num">669</div><div class="sub">符合 57 · 可能符合 612</div></div>
+        <div class="c4"><div class="lab">事件数</div><div class="val na">—</div><div class="sub">T1 无结局记录</div></div>
+        <div class="c4"><div class="lab">有效样本量</div><div class="val na">—</div><div class="sub">未加权</div></div>
+        <div class="c4"><div class="lab">生成记录数</div><div class="val num">0</div><div class="sub">真实队列，未生成</div></div>
+        <div class="stuck"><div class="lab">最卡人的三条</div>
+          <ol>
+            <li><span class="i">E3</span>活动性脑转移<span class="q u">无法判断 402</span></li>
+            <li><span class="i">I6</span>一线含免疫治疗<span class="q x">排除 611</span></li>
+            <li><span class="i">I4</span>ECOG 0–1<span class="q u">无法判断 188</span></li>
+          </ol>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script>
+(function () {
+  var fmt = function (n) { return n.toLocaleString("en-US"); };
+  // 14 条规则的逐步计数：进入本条的人 = 保留 + 排除 + 无法判断；U = 累计至少 1 条无法判断的人
+  var R = [
+    ["I1", "年龄 ≥ 18 岁", 0, 0, 0, "签署知情同意书时年满 18 周岁，性别不限"],
+    ["I2", "组织学确诊 NSCLC", 212, 29, 29, "经组织学或细胞学确诊的非小细胞肺癌"],
+    ["I3", "IIIB–IV 期", 271, 34, 60, "局部晚期（IIIB/IIIC 期）不适合根治性治疗，或转移性（IV 期）"],
+    ["I4", "ECOG 0–1", 152, 188, 241, "ECOG 体能状态评分为 0 或 1 分"],
+    ["I5", "EGFR / ALK 阴性", 289, 36, 265, "EGFR 敏感突变与 ALK 融合检测均为阴性"],
+    ["I6", "一线含免疫治疗", 611, 22, 260, "一线接受过含铂双药化疗联合 <span style=\"white-space:nowrap\">PD-1/PD-L1</span> 抑制剂，且在治疗期间或之后疾病进展"],
+    ["I7", "一线后影像进展", 274, 41, 284, "经影像学确认疾病进展（RECIST 1.1）"],
+    ["I8", "可测量病灶", 176, 62, 330, "至少有 1 个 RECIST 1.1 定义的可测量病灶"],
+    ["E1", "既往多西他赛", 139, 9, 332],
+    ["E2", "咯血或侵犯大血管", 118, 27, 350],
+    ["E3", "活动性脑转移", 236, 402, 610],
+    ["E4", "活动性自身免疫病", 83, 16, 611],
+    ["E5", "末次免疫 < 28 天", 121, 31, 608],
+    ["E6", "未控制的高血压", 61, 22, 612]
+  ];
+  var hot = { I4: 1, I6: 1, E3: 1 };
+  // 左栏：I1–I8
+  var n = 3412, html = "";
+  R.forEach(function (r, k) {
+    var inn = n, keep = inn - r[2] - r[3];
+    n = inn - r[2];
+    r.inn = inn; r.keep = keep; r.rem = n;
+    if (k < 8) {
+      var hov = r[0] === "I6";
+      html += '<div class="rule' + (hov ? " hov" : "") + '"><div class="l1"><span class="rid">' + r[0] + '</span><span class="rname">' + r[1] + '</span>' +
+        '<span class="cnt3"><span class="ok">' + fmt(keep) + '</span><span class="ex' + (r[0] === "I6" ? " hot" : "") + '">' + fmt(r[2]) + '</span><span class="un' + (r[3] >= 150 ? " hot" : "") + '">' + fmt(r[3]) + "</span></span></div>" +
+        '<div class="l2">' + (hov ? "方案原文：" : "") + "「" + r[5] + "」</div>" +
+        (hov ? '<div class="src"><svg data-i="file-text" class="i xs"></svg>方案 v2 · 第 13 页<span class="vchg">v2 修改</span><span class="o" style="margin-left:auto">抽取</span><span class="chip-ai">AI 设定</span></div>' : "") + "</div>";
+    }
+  });
+  document.getElementById("rules").innerHTML = html;
+  // 中栏：瀑布
+  var W = 3412, wf = "";
+  var row = function (id, name, rem, U, prev, cls, xn) {
+    var c = rem - U, pc = function (v) { return (v / W * 100).toFixed(3) + "%"; };
+    return '<div class="wr ' + (cls || "") + '"><span class="i">' + id + '</span><span class="nm">' + name + '</span><span class="tr">' +
+      '<i class="c" style="width:' + pc(c) + '"></i>' +
+      (U ? '<i class="hatch" style="left:' + pc(c) + ";width:" + pc(U) + '"></i>' : "") +
+      (prev > rem ? '<i class="x" style="left:' + pc(rem) + ";width:" + pc(prev - rem) + '"></i>' : "") +
+      '</span><span class="rn">' + fmt(rem) + '</span><span class="xn">' + (xn || "") + "</span></div>";
+  };
+  wf += row("", "候选人", 3412, 0, 3412, "start", "");
+  wf += '<div class="wsep"></div>';
+  R.forEach(function (r, k) {
+    if (k === 8) wf += '<div class="wsep"></div>';
+    wf += row(r[0], r[1], r.rem, r[4], r.inn, hot[r[0]] ? "hot" : "", r[2] ? "−" + fmt(r[2]) : "0");
+  });
+  document.getElementById("wf").innerHTML = wf;
+  // 右栏：画像（|SMD| 轨道 0–0.4，0.1 处为界）
+  var P = [
+    ["年龄（中位）", "63 岁", "62 岁", 0.08],
+    ["女性", "27.4%", "29.8%", 0.05],
+    ["ECOG 0 / 1", "31 / 69%", "35 / 65%", 0.09],
+    ["腺癌", "71.2%", "69.0%", 0.05],
+    ["既往免疫治疗", "100%", "95.4%", 0.31],
+    ["脑转移", "14.1%<span class=\"foot\">*</span>", "15.8%", 0.05]
+  ];
+  var tw = 46, sx = function (v) { return 2 + v / 0.4 * (tw - 4); };
+  document.getElementById("pf").innerHTML = P.map(function (p) {
+    var flag = p[3] >= 0.1;
+    var svg = '<svg width="' + tw + '" height="14" viewBox="0 0 ' + tw + ' 14"><line x1="2" y1="7" x2="' + (tw - 2) + '" y2="7" stroke="#E4E8EC" stroke-width="1"/>' +
+      '<line x1="' + sx(0.1) + '" y1="1" x2="' + sx(0.1) + '" y2="13" stroke="#939CA6" stroke-width="1"/>' +
+      '<circle cx="' + sx(p[3]) + '" cy="7" r="4" fill="' + (flag ? "#A15C00" : "#8A939C") + '" stroke="#fff" stroke-width="1.5"/></svg>';
+    return '<tr' + (flag ? ' class="flag"' : "") + '><td>' + p[0] + '</td><td class="r">' + p[1] + '</td><td class="r">' + p[2] + '</td><td class="r"><span class="smd"><span class="v"' + (flag ? ' style="color:var(--attn-strong);font-weight:600"' : "") + ">" + p[3].toFixed(2) + "</span>" + svg + "</span></td></tr>";
+  }).join("");
+  // 右栏：无法判断的原因（按每人的主要原因计，合计 612）
+  var Y = [["证据超过时效", "如头颅 MRI 超过 12 周", 291], ["未记录", "病历里没有这一项", 204], ["合作方未共享", "字段在授权范围外", 78], ["待出结果", "检查已做、报告未出", 39]];
+  document.getElementById("why").innerHTML = Y.map(function (y) {
+    return '<div class="w"><div><div>' + y[0] + '</div><div class="d">' + y[1] + '</div></div><div class="b hatch" style="width:' + (y[2] / 291 * 112).toFixed(1) + 'px"></div><div class="n">' + y[2] + "</div></div>";
+  }).join("");
+})();
+</script>
+<script src="shell.js"></script><script src="icons.js"></script>
+</body></html>

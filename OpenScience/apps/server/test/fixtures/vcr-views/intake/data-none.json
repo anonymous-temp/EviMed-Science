@@ -1,0 +1,172 @@
+{
+  "headline": null,
+  "status": [
+    {
+      "label": "患者级数据",
+      "value": "未接入"
+    }
+  ],
+  "assumptions": [],
+  "selectedId": null,
+  "precedents": [],
+  "precedentSources": null,
+  "precedentNote": null,
+  "snapshots": [],
+  "intake": {
+    "available": true,
+    "message": null,
+    "formats": [
+      "csv",
+      "tsv",
+      "json",
+      "xlsx"
+    ],
+    "maxBytes": null,
+    "canManage": true,
+    "seal": {
+      "required": false,
+      "planFrozenAt": null,
+      "outcomeFirstReadAt": null,
+      "ordered": false,
+      "fields": [],
+      "fieldsRead": [],
+      "note": "探索性分析：分析计划在接触结局数据之后制定，未做结局封存。"
+    },
+    "options": {
+      "roles": [
+        {
+          "value": "subject_key",
+          "label": "受试者编号"
+        },
+        {
+          "value": "arm",
+          "label": "治疗分组"
+        },
+        {
+          "value": "covariate",
+          "label": "基线协变量"
+        },
+        {
+          "value": "outcome_time",
+          "label": "结局：时间"
+        },
+        {
+          "value": "outcome_event",
+          "label": "结局：事件"
+        },
+        {
+          "value": "time_zero",
+          "label": "时间零点"
+        },
+        {
+          "value": "measurement",
+          "label": "纵向测量值"
+        },
+        {
+          "value": "visit_date",
+          "label": "测量日期"
+        },
+        {
+          "value": "other",
+          "label": "其他（不进入分析表）"
+        }
+      ],
+      "timeKinds": [
+        {
+          "value": "occurred_at",
+          "label": "发生时间"
+        },
+        {
+          "value": "recorded_at",
+          "label": "记录时间"
+        },
+        {
+          "value": "visible_at",
+          "label": "平台可见时间"
+        }
+      ],
+      "missingReasons": [
+        {
+          "value": "not_measured",
+          "label": "未测量"
+        },
+        {
+          "value": "not_recorded",
+          "label": "未记录"
+        },
+        {
+          "value": "not_shared",
+          "label": "未共享"
+        },
+        {
+          "value": "restricted_in_trial",
+          "label": "试验期间受限"
+        },
+        {
+          "value": "out_of_window",
+          "label": "在观察窗外"
+        },
+        {
+          "value": "pending_result",
+          "label": "待出结果"
+        },
+        {
+          "value": "not_applicable",
+          "label": "不适用"
+        }
+      ],
+      "valueSources": [
+        {
+          "value": "observed",
+          "label": "观察"
+        },
+        {
+          "value": "extracted",
+          "label": "抽取"
+        },
+        {
+          "value": "calculated",
+          "label": "计算"
+        },
+        {
+          "value": "imputed",
+          "label": "插补"
+        }
+      ],
+      "memberRoles": [
+        {
+          "value": "lead",
+          "label": "研究负责人"
+        },
+        {
+          "value": "clinical_reviewer",
+          "label": "临床复核"
+        },
+        {
+          "value": "statistical_reviewer",
+          "label": "统计复核"
+        },
+        {
+          "value": "data_manager",
+          "label": "数据管理"
+        },
+        {
+          "value": "recruiter",
+          "label": "招募协调员"
+        },
+        {
+          "value": "site",
+          "label": "中心"
+        },
+        {
+          "value": "viewer",
+          "label": "只读查看者"
+        }
+      ]
+    },
+    "sources": [],
+    "snapshots": []
+  },
+  "decisions": [],
+  "evidenceNote": null
+}

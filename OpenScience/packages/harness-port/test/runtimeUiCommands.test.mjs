@@ -246,6 +246,71 @@ test('the GEO chip carries 覆盖周期 and AI 引擎 once the shell has found t
   assert.equal(renderStatic(chip.component), '');
 });
 
+// 虚拟临研: the same chip through its five capabilities, and — once the shell has
+// found the study — 起点 and 预期用途 beside it and six single-task starters.
+const VCR_OPTIONS = {
+  sessionId: 'session-a', controls: true, canSetUse: true,
+  start: 'auto', startOptions: [{ id: 'auto', label: '自动' }, { id: 'cohort', label: '队列' }, { id: 'patients', label: '患者' }, { id: 'comparator', label: '对照' }, { id: 'trial', label: '试验' }],
+  intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }],
+  starters: [
+    { label: '估算样本量', draft: '帮我估算样本量：' }, { label: '外部对照可行性', draft: '评估外部对照是否可行：' },
+    { label: '找先例和参数', draft: '帮我找同类试验先例和参数：' }, { label: '生成合成数据', draft: '帮我生成合成数据：' },
+    { label: '匹配患者', draft: '帮我匹配患者：' }, { label: '完整研究', draft: '帮我做一个完整的研究：' },
+  ],
+};
+
+test('a 虚拟临研 conversation reads 「虚拟临研」 whichever of its capabilities it is bound to', () => {
+  const vcr = FRAME_VOCABULARY.vcr;
+  for (const id of vcr.capabilities) {
+    assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, id, vcr)).title, '虚拟临研');
+  }
+  assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, 'vcr-protocol', vcr)).vcr, false,
+    'the vocabulary alone claims no controls: the body claims them');
+  const f = frame();
+  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  f.kit.hub.deliver('capability', { capabilityId: 'vcr-analysis', sessionId: 'session-a' });
+  const drawn = renderStatic(chip.component);
+  assert.match(drawn, /虚拟临研/);
+  assert.match(drawn, /aria-label="移除「虚拟临研」"/);
+  assert.doesNotMatch(drawn, /起点|预期用途/, 'no controls before the shell has found the study');
+});
+
+test('the 虚拟临研 chip carries 起点 and 预期用途 once the shell has found the study, and six single-task starters on the blank conversation', () => {
+  const f = frame();
+  const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
+  const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
+  f.kit.hub.deliver('capability', { capabilityId: 'vcr-protocol', sessionId: 'session-a' });
+  f.kit.hub.deliver('vcr', VCR_OPTIONS);
+  const docked = renderStatic(chip.component);
+  assert.match(docked, /<select aria-label="起点"/);
+  assert.deepEqual([...docked.matchAll(/<option value="([a-z_]+)"[^>]*>(起点：[^<]+)</g)].map((match) => [match[1], match[2]]),
+    [['auto', '起点：自动'], ['cohort', '起点：队列'], ['patients', '起点：患者'], ['comparator', '起点：对照'], ['trial', '起点：试验']]);
+  assert.match(docked, /<option value="auto" selected="">起点：自动/);
+  assert.match(docked, /<select aria-label="预期用途"/);
+  assert.match(docked, /<option value="exploratory" selected="">预期用途：探索/);
+  assert.doesNotMatch(docked, /覆盖周期|AI 引擎/, 'GEO\'s controls are GEO\'s');
+  assert.doesNotMatch(docked, /估算样本量/, 'the starters live on the blank conversation only');
+  const blank = renderStatic(hero.component);
+  assert.match(blank, /虚拟临研/);
+  assert.match(blank, /起点/);
+  const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
+  assert.deepEqual(labels, ['估算样本量', '外部对照可行性', '找先例和参数', '生成合成数据', '匹配患者', '完整研究']);
+
+  // A reader who is not the lead changes the start and not the intended use.
+  f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, canSetUse: false });
+  const viewer = renderStatic(chip.component);
+  assert.match(viewer, /aria-label="起点"/);
+  assert.doesNotMatch(viewer, /预期用途/);
+  // A conversation in a project that is not a study: the chip and the starters, nothing to write to.
+  f.kit.hub.deliver('vcr', { ...VCR_OPTIONS, controls: false });
+  assert.doesNotMatch(renderStatic(chip.component), /起点/);
+  assert.match(renderStatic(hero.component), /估算样本量/);
+  // Another conversation: the options go with the tool until the shell speaks.
+  f.kit.hub.deliver('session', { sessionId: 'session-b' });
+  assert.equal(renderStatic(chip.component), '');
+  assert.equal(renderStatic(hero.component), '');
+});
+
 test('without the command or trigger services the rest still stands', () => {
   const f = frame({ commandUi: false, inputTriggers: false });
   assert.equal(f.commands.length, 0);

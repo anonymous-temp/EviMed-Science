@@ -389,16 +389,16 @@ class RealLedgerTests(unittest.TestCase):
         # nineteen accepted, one failed (meta-analysis), one never run. That
         # night, on the releases carrying the engine fixes, mendelian-
         # randomization and meta-analysis were accepted: every row accepted.
-        # On 2026-09-30 statistical-analysis delivered its first live WDBC
-        # comparison: twenty-two accepted. Residual scientific-review findings
-        # remain explicit; delivery acceptance is not an unqualified quality pass.
-        self.assertEqual(statuses.count("not-run"), 0)
+        # The platform retains twenty-two accepted deliveries, including statistical analysis.
+        # Five VCR capabilities remain not-run until their own live evidence exists.
+        # Delivery acceptance does not imply an unqualified scientific-quality pass.
+        self.assertEqual(statuses.count("not-run"), 5)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertEqual(
             checker.coverage_notice(),
-            "notice: acceptance ledger records 19 of 19 public capabilities with an accepted delivery "
-            "(0 failed, 0 never run); this is a metric, not a gate",
+            "notice: acceptance ledger records 19 of 24 public capabilities with an accepted delivery "
+            "(0 failed, 5 never run); this is a metric, not a gate",
         )
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):

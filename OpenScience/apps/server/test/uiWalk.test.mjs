@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { BACK_OFFICE, BUDGET_BY_PAGE, GEO_TABS, ROUTES, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
+import { BACK_OFFICE, BUDGET_BY_PAGE, GEO_TABS, ROUTES, VCR_TABS_WALK, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -28,10 +28,21 @@ function clean(overrides = {}) {
 test("every page the budget table names is a page the walk visits", () => {
   // The table said `knowledge`; the route is `files`, so the knowledge base
   // kept the reading budget and failed on its ninth control.
-  const walked = new Set([...ROUTES.map(([name]) => name), ...GEO_TABS.map(([name]) => name)]);
+  const walked = new Set([...ROUTES.map(([name]) => name), ...GEO_TABS.map(([name]) => name), ...VCR_TABS_WALK.map(([name]) => name)]);
   for (const name of Object.keys(BUDGET_BY_PAGE)) assert.ok(walked.has(name), `the budget names ${name}, which no route walks`);
   assert.deepEqual(pageFindings("files", "desktop", clean({ controlKinds: 9 }), []).failures, []);
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
+});
+
+test("the walk covers every tab a study has, and the domain is where the list lives", async () => {
+  // The browser derives its tabs from `@evimed/domain`'s VCR_TABS rather than
+  // restating them, so this reads the domain and compares the walk to it. A
+  // tab added there and not here is a page nobody looks at again.
+  const { VCR_TABS } = await import("@evimed/domain");
+  const walked = VCR_TABS_WALK.map(([name]) => name.replace(/^vcr-/, ""));
+  assert.deepEqual(walked, [...VCR_TABS], "the walk's tab list is the domain's, in the domain's order");
+  const browser = await readFile(path.join(repoRoot, "apps/web/src/components/vcr/vcrTabs.ts"), "utf8");
+  assert.match(browser, /VCR_TABS/, "the page derives its tabs from the domain; a hand-written list here would drift");
 });
 
 test("the walk covers every tab a GEO project has", async () => {

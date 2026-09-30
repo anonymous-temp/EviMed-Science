@@ -1,0 +1,123 @@
+# Capability manifest — the only definition of this capability.
+#
+# Step 2 of a 「虚拟临研」 study (build plan 2026-09-28 §4, §6.2): turn the
+# research question into a set of assumption cards whose every number can be
+# found, word for word, in a source. This is the module's largest difference
+# from Cytel, FACTS and nQuery, where the researcher types the parameters in —
+# 「参数默认从证据里来，而不是从用户手里来」.
+#
+# Public so the module can bind a session to it, and kept off 科研工具 and the
+# kernel's own tool list by `display.listed: false` — `visibility: internal`
+# would make that binding answer 403.
+#
+# `safetyClass: general`: this package produces design parameters and their
+# provenance, never patient-facing advice. The matching capability, which
+# writes what a patient reads, is the clinical one.
+id: vcr-evidence
+visibility: public
+version: 1.0.0
+title: Virtual Clinical Research — Evidence Parameterization
+category: Clinical Research
+description: Turn a research question into versioned assumption cards — find trial precedents, extract every
+  number with the sentence and field position it came from, hand the verified values to the platform's pooling
+  engine, and write the pooled value, heterogeneity and prediction interval into the distribution a simulation
+  draws from, with the applicability strata and the gaps stated.
+whenToUse: 「虚拟临研」研究要把参数做出来时交给我：按 PICO 找同类试验、从登记记录与文献里逐项抽数（每个数都带原文位置）、把核对通过的值交给平台的合并引擎、再把合并值、异质性与预测区间写成假设卡，并说明来源人群与本研究人群的差别。用户问「对照组的事件率该取多少」「这个病种入组要多久」也走我。不要自己算合并值，也不要自己写数。
+persona: |
+  你是循证参数分析员。你的产出是参数的来源，不是你的判断：每写下一个数，都要能指出它在哪份记录的哪个字段、
+  哪一句话里——指不出来就把它记成「未知」，绝不写进假设卡。
+  合并由平台的引擎做，你只负责挑出可合并的研究、提交作业、读回结果；你自己不做加权、不算 I²、不估区间，
+  也不把置信区间当成预测区间。
+  登记记录里的「预计」和「实际」要分开说；登记平台根本没有的量（筛选失败率、每中心入组数、中心启动日期）
+  写「不可得」，不要写 0。相似度只用来挑候选，终点定义或人群不一样的研究不能因为「像」就合在一起。
+  找不到证据的参数，用最接近的证据加宽范围、标「专家设定·待补证」，不要留空，也不要编一个看起来合理的数。
+safetyClass: general
+skills:
+- vcr-evidence
+- citation-integrity
+- biomedical-database-search
+tools:
+- mcp__evimed__vcr_read
+- mcp__evimed__vcr_write
+- mcp__evimed__vcr_simulate
+- mcp__evimed__evidence_pool
+- mcp__evimed__trial_registry_record
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__literature_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__locate_quote
+- mcp__evimed__guideline_search
+- mcp__evimed__kb_search
+- mcp__evimed__term_normalize
+- mcp__evimed__evidence_deduplicate
+- mcp__evimed__web_read
+produces:
+- contractKind: vcr-study-package
+  outputs:
+  - path: evidence-parameters.md
+    required: true
+  - path: results.json
+    required: true
+  - path: precedents.md
+    required: false
+  - path: applicability.md
+    required: false
+  - path: revision-notes.md
+    required: false
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - studyId
+  optional:
+  - parameters
+  - registries
+  - endpointKeys
+  - population
+  - eraYear
+  - eraWindowYears
+  - region
+  - line
+  - biomarker
+autopilot:
+  # Scheduling belongs to the 「虚拟临研」 orchestrator, which dispatches this
+  # capability inside the study. The autopilot allocator has no VCR task type.
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - studyId
+estimatedMinutes:
+- 20
+- 90
+dataSources:
+- clinical-trials
+- literature
+- guidelines
+- uploaded-files
+starterPrompts:
+- 把这项研究要用的参数从证据里做出来：先例、抽取、合并、假设卡。
+
+display:
+  title: "证据参数化"
+  category: "临床研究"
+  description: "按 PICO 找同类试验，逐项抽数并核对原文，交引擎合并，写成带预测区间的假设卡。"
+  listed: false
+  starterPrompts:
+  - "把这项研究要用的参数从证据里做出来：先例、抽取、合并、假设卡。"
+  - "对照组 12 个月无进展生存率该取多少？给出来源和预测区间。"
+  - "近五年国内同类试验的计划入组与实际入组差多少？"
+  materials: "需要一个研究定义（PICO 与主要终点）；已有先例登记号更好"
+  estimatedMinutes:
+    min: 20
+    max: 90
+  outputs:
+  - "试验先例清单（计划与实际并列）"
+  - "带原文位置的抽取值"
+  - "带预测区间的假设卡"
+  - "适用性分层与缺口清单"
+  knownLimits:
+  - "合并、异质性与预测区间由平台的统计引擎计算；引擎不可用时不出假设卡，也不会给一个估出来的数。"
+  - "登记平台不记录筛选失败率、每中心入组数与中心启动日期，这三项显示「不可得」，需要合作方或申办方提供。"
+  - "原文里核对不过的数一律记为「未知」，不进假设卡。"
+  - "假设卡默认状态是「AI 设定」，复核是签注，不是关卡。"

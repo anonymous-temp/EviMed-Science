@@ -1,0 +1,5119 @@
+{
+  "protocolVersion": 1,
+  "methods": {
+    "profile.snapshot": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "profile_dataset.py"
+      ],
+      "modelTier": null
+    },
+    "cohort.build": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": null
+    },
+    "population.scenario": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "simstudy semantics"
+      ],
+      "modelTier": "scenario"
+    },
+    "population.literature": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": "literature"
+    },
+    "population.synthpop": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "synthpop"
+      ],
+      "modelTier": "data"
+    },
+    "population.quality": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [],
+      "modelTier": "data"
+    },
+    "patients.continuous": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [],
+      "modelTier": "scenario"
+    },
+    "patients.binary": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary"
+      ],
+      "crossChecks": [],
+      "modelTier": "scenario"
+    },
+    "patients.time_to_event": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "simsurv"
+      ],
+      "modelTier": "scenario"
+    },
+    "evidence.pool": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "metafor",
+        "meta engine"
+      ],
+      "modelTier": "literature"
+    },
+    "evidence.reconstruct_km": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "IPDfromKM"
+      ],
+      "modelTier": "literature"
+    },
+    "comparator.entropy_balance": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "WeightIt",
+        "cobalt"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.propensity_weight": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "WeightIt"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.rmst": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "survRM2"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.maic": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "NICE DSU TSD 18"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.evalue": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "EValue"
+      ],
+      "modelTier": "scenario"
+    },
+    "comparator.map_prior": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "continuous"
+      ],
+      "crossChecks": [
+        "RBesT"
+      ],
+      "modelTier": "literature"
+    },
+    "design.analytic": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "rpact",
+        "gsDesign"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.simulate": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "design.analytic"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.grid": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [],
+      "modelTier": "scenario"
+    },
+    "design.assurance": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "O'Hagan 2005"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.procova": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "EMA 2022 qualification opinion"
+      ],
+      "modelTier": "scenario"
+    },
+    "accrual.poisson_gamma": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "Anisimov & Fedorov 2007"
+      ],
+      "modelTier": "scenario"
+    },
+    "matching.evaluate": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "Kleene truth table"
+      ],
+      "modelTier": null
+    }
+  },
+  "jobMethods": {
+    "profile_snapshot": "profile.snapshot",
+    "build_cohort": "cohort.build",
+    "generate_population": "population.scenario",
+    "literature_population": "population.literature",
+    "synthesize_population": "population.synthpop",
+    "population_quality": "population.quality",
+    "generate_patients": "patients.time_to_event",
+    "generate_patients_continuous": "patients.continuous",
+    "generate_patients_binary": "patients.binary",
+    "reconstruct_km": "evidence.reconstruct_km",
+    "pool_evidence": "evidence.pool",
+    "weight_comparator": "comparator.entropy_balance",
+    "propensity_weight_comparator": "comparator.propensity_weight",
+    "maic_comparator": "comparator.maic",
+    "evalue": "comparator.evalue",
+    "rmst": "comparator.rmst",
+    "design_analytic": "design.analytic",
+    "design_simulation": "design.simulate",
+    "design_grid": "design.grid",
+    "assurance": "design.assurance",
+    "procova": "design.procova",
+    "accrual_forecast": "accrual.poisson_gamma",
+    "map_prior": "comparator.map_prior",
+    "match_criteria": "matching.evaluate"
+  },
+  "patientLevelJobKinds": [
+    "profile_snapshot",
+    "build_cohort",
+    "synthesize_population",
+    "population_quality",
+    "weight_comparator",
+    "propensity_weight_comparator",
+    "rmst",
+    "match_criteria"
+  ],
+  "observedOnlyMethods": [
+    "population.synthpop",
+    "comparator.entropy_balance",
+    "comparator.propensity_weight",
+    "comparator.maic",
+    "comparator.rmst"
+  ],
+  "engineTableInputKeys": [
+    "kind",
+    "id",
+    "shape",
+    "location",
+    "hash",
+    "valueSource"
+  ],
+  "engineLineageInputKeys": [
+    "kind",
+    "id",
+    "hash",
+    "value"
+  ],
+  "individualInputSources": {
+    "population.synthpop": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.entropy_balance": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.propensity_weight": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.maic": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.rmst": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed",
+      "reconstructed"
+    ]
+  },
+  "jobFields": [
+    "jobId",
+    "studyId",
+    "kind",
+    "method",
+    "methodVersion",
+    "protocolVersion",
+    "scenario",
+    "inputs",
+    "seed",
+    "replicates",
+    "cpuSecondsLimit",
+    "requestedBy",
+    "cores",
+    "batchSize"
+  ],
+  "maxReplicates": 200000,
+  "patterns": {
+    "id": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,120}$",
+    "inputId": "^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,140}$",
+    "version": "@[1-9][0-9]*$",
+    "sha256": "^[a-f0-9]{64}$",
+    "locationSegment": "^[A-Za-z0-9_][A-Za-z0-9_.@:+=,-]{0,199}$"
+  },
+  "locationLimits": {
+    "maxSegments": 8,
+    "maxLength": 512
+  },
+  "inputKinds": [
+    "assumption",
+    "study_definition",
+    "population",
+    "comparator_design",
+    "evidence",
+    "snapshot",
+    "analysis_table",
+    "snapshot_file"
+  ],
+  "versionedInputKinds": [
+    "assumption",
+    "study_definition",
+    "population",
+    "comparator_design"
+  ],
+  "engineTableInputKinds": [
+    "analysis_table",
+    "snapshot_file"
+  ],
+  "callerSnapshotKind": "snapshot",
+  "scenarioSchemas": {
+    "profile.snapshot": {
+      "t": "object",
+      "fields": {}
+    },
+    "cohort.build": {
+      "t": "object",
+      "fields": {
+        "rules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "timeZero": {
+          "t": "object",
+          "fields": {
+            "column": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "req": true
+            }
+          }
+        },
+        "exit": {
+          "t": "object",
+          "fields": {
+            "column": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "req": true
+            }
+          }
+        },
+        "idColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "USUBJID"
+        }
+      }
+    },
+    "population.scenario": {
+      "t": "object",
+      "fields": {
+        "population": {
+          "t": "object",
+          "fields": {
+            "variables": {
+              "t": "array",
+              "items": {
+                "t": "variant",
+                "on": "family",
+                "variants": {
+                  "normal": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "mean": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "sd": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "lognormal": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "meanlog": {
+                      "t": "number",
+                      "req": true
+                    },
+                    "sdlog": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "beta": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "alpha": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "beta": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "gamma": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "shape": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "rate": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "mean": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "bernoulli": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "prob": {
+                      "t": "number",
+                      "min": 0,
+                      "max": 1,
+                      "req": true
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "categorical": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "probs": {
+                      "t": "array",
+                      "items": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 2,
+                      "max": 100,
+                      "req": true
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "uniform": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  },
+                  "exponential": {
+                    "name": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "rate": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "min": {
+                      "t": "number"
+                    },
+                    "max": {
+                      "t": "number"
+                    },
+                    "paramSd": {
+                      "t": "map",
+                      "values": {
+                        "t": "number",
+                        "min": 0
+                      },
+                      "min": 1,
+                      "max": 4
+                    }
+                  }
+                },
+                "variantGroups": {
+                  "gamma": {
+                    "exactlyOne": [
+                      [
+                        "rate",
+                        "mean"
+                      ]
+                    ]
+                  }
+                }
+              },
+              "min": 1,
+              "max": 100,
+              "req": true
+            },
+            "correlation": {
+              "t": "matrix",
+              "min": -1,
+              "max": 1,
+              "size": "population.variables"
+            },
+            "correlationScale": {
+              "t": "string",
+              "values": [
+                "latent",
+                "spearman"
+              ],
+              "default": "latent"
+            },
+            "constraints": {
+              "t": "rules",
+              "allowEmpty": true,
+              "columnsFrom": {
+                "path": "population.variables",
+                "key": "name"
+              }
+            },
+            "missing": {
+              "t": "array",
+              "items": {
+                "t": "variant",
+                "on": "kind",
+                "default": "MCAR",
+                "variants": {
+                  "MCAR": {
+                    "variable": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "rate": {
+                      "t": "number",
+                      "gt": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "reason": {
+                      "t": "string",
+                      "values": [
+                        "not_measured",
+                        "not_recorded",
+                        "not_shared",
+                        "restricted_in_trial",
+                        "out_of_window",
+                        "pending_result",
+                        "not_applicable"
+                      ]
+                    }
+                  },
+                  "MAR": {
+                    "variable": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "rate": {
+                      "t": "number",
+                      "gt": 0,
+                      "lt": 1,
+                      "req": true
+                    },
+                    "reason": {
+                      "t": "string",
+                      "values": [
+                        "not_measured",
+                        "not_recorded",
+                        "not_shared",
+                        "restricted_in_trial",
+                        "out_of_window",
+                        "pending_result",
+                        "not_applicable"
+                      ]
+                    },
+                    "on": {
+                      "t": "array",
+                      "items": {
+                        "t": "string",
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                        "maxLength": 64
+                      },
+                      "min": 1,
+                      "max": 20,
+                      "req": true
+                    },
+                    "beta": {
+                      "t": "array",
+                      "items": {
+                        "t": "number"
+                      },
+                      "min": 1,
+                      "max": 20,
+                      "req": true
+                    }
+                  }
+                }
+              },
+              "min": 1,
+              "max": 100
+            }
+          },
+          "req": true
+        },
+        "n": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000000,
+          "default": 1000
+        },
+        "parameterDraws": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000,
+          "default": 1
+        }
+      }
+    },
+    "population.literature": {
+      "t": "object",
+      "fields": {
+        "baselineTable": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "mean": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "proportion": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "proportions": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 50
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "maxLength": 64
+                },
+                "min": 2,
+                "max": 50
+              },
+              "min": {
+                "t": "number",
+                "nullable": true
+              },
+              "max": {
+                "t": "number",
+                "nullable": true
+              },
+              "distribution": {
+                "t": "string",
+                "values": [
+                  "normal",
+                  "lognormal"
+                ],
+                "default": "normal"
+              }
+            },
+            "exactlyOne": [
+              [
+                "proportion",
+                "mean",
+                "proportions"
+              ]
+            ],
+            "requires": {
+              "mean": [
+                "sd"
+              ],
+              "levels": [
+                "proportions"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "n": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000000,
+          "default": 1000
+        },
+        "correlation": {
+          "t": "matrix",
+          "min": -1,
+          "max": 1,
+          "size": "baselineTable"
+        },
+        "correlationSource": {
+          "t": "string",
+          "values": [
+            "assumed",
+            "cited"
+          ],
+          "default": "assumed"
+        },
+        "parameterDraws": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000,
+          "default": 1
+        }
+      }
+    },
+    "population.synthpop": {
+      "t": "object",
+      "fields": {
+        "holdoutShare": {
+          "t": "number",
+          "min": 0,
+          "lt": 1,
+          "default": 0.2
+        },
+        "m": {
+          "t": "integer",
+          "min": 1,
+          "max": 50,
+          "default": 5
+        },
+        "constraints": {
+          "t": "rules",
+          "allowEmpty": true
+        },
+        "criteria": {
+          "t": "rules",
+          "allowEmpty": true
+        },
+        "analyses": {
+          "t": "array",
+          "items": {
+            "t": "variant",
+            "on": "kind",
+            "variants": {
+              "mean": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "column": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "glm": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "outcome": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "family": {
+                  "t": "string",
+                  "values": [
+                    "gaussian",
+                    "binomial"
+                  ],
+                  "req": true
+                }
+              }
+            }
+          },
+          "min": 1,
+          "max": 20
+        },
+        "tstrOutcome": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64
+        }
+      }
+    },
+    "population.quality": {
+      "t": "object",
+      "fields": {
+        "trainingInputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141,
+          "req": true
+        },
+        "syntheticInputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141,
+          "req": true
+        },
+        "holdoutInputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141
+        },
+        "constraints": {
+          "t": "rules",
+          "allowEmpty": true
+        },
+        "criteria": {
+          "t": "rules",
+          "allowEmpty": true
+        },
+        "analyses": {
+          "t": "array",
+          "items": {
+            "t": "variant",
+            "on": "kind",
+            "variants": {
+              "mean": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "column": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "glm": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "outcome": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "family": {
+                  "t": "string",
+                  "values": [
+                    "gaussian",
+                    "binomial"
+                  ],
+                  "req": true
+                }
+              }
+            }
+          },
+          "min": 1,
+          "max": 20
+        },
+        "tstrOutcome": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64
+        },
+        "generator": {
+          "t": "object",
+          "fields": {
+            "family": {
+              "t": "string",
+              "maxLength": 40
+            },
+            "m": {
+              "t": "integer",
+              "min": 1,
+              "max": 50
+            },
+            "smoothing": {
+              "t": "string",
+              "maxLength": 40
+            },
+            "seed": {
+              "t": "integer",
+              "min": 0,
+              "max": 2147483647
+            }
+          }
+        }
+      }
+    },
+    "patients.continuous": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000000
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "baselineCorrelation": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "covariateLogit": {
+              "t": "number",
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "covariateEffects": {
+              "t": "map",
+              "values": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 100
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "accrual": {
+          "t": "variant",
+          "on": "kind",
+          "default": "uniform",
+          "variants": {
+            "uniform": {
+              "duration": {
+                "t": "number",
+                "min": 0,
+                "default": 0,
+                "unit": "time units"
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            },
+            "piecewise": {
+              "breaks": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 1,
+                "max": 50,
+                "increasing": true,
+                "req": true
+              },
+              "rates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 2,
+                "max": 51,
+                "req": true
+              },
+              "tail": {
+                "t": "number",
+                "gt": 0
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        }
+      }
+    },
+    "patients.binary": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000000
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "baselineCorrelation": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "covariateLogit": {
+              "t": "number",
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "covariateEffects": {
+              "t": "map",
+              "values": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 100
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "accrual": {
+          "t": "variant",
+          "on": "kind",
+          "default": "uniform",
+          "variants": {
+            "uniform": {
+              "duration": {
+                "t": "number",
+                "min": 0,
+                "default": 0,
+                "unit": "time units"
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            },
+            "piecewise": {
+              "breaks": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 1,
+                "max": 50,
+                "increasing": true,
+                "req": true
+              },
+              "rates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 2,
+                "max": 51,
+                "req": true
+              },
+              "tail": {
+                "t": "number",
+                "gt": 0
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        }
+      }
+    },
+    "patients.time_to_event": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000000
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "baselineCorrelation": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "covariateLogit": {
+              "t": "number",
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "covariateEffects": {
+              "t": "map",
+              "values": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 100
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "accrual": {
+          "t": "variant",
+          "on": "kind",
+          "default": "uniform",
+          "variants": {
+            "uniform": {
+              "duration": {
+                "t": "number",
+                "min": 0,
+                "default": 0,
+                "unit": "time units"
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            },
+            "piecewise": {
+              "breaks": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 1,
+                "max": 50,
+                "increasing": true,
+                "req": true
+              },
+              "rates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 2,
+                "max": 51,
+                "req": true
+              },
+              "tail": {
+                "t": "number",
+                "gt": 0
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        }
+      }
+    },
+    "evidence.pool": {
+      "t": "object",
+      "fields": {
+        "studies": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "studyId": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 121,
+                "req": true
+              },
+              "estimate": {
+                "t": "number",
+                "req": true
+              },
+              "se": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 500,
+          "req": true
+        },
+        "method": {
+          "t": "string",
+          "values": [
+            "single_study",
+            "random_effects_dl",
+            "random_effects_reml",
+            "random_effects_hksj",
+            "fixed_effect"
+          ],
+          "default": "random_effects_dl"
+        },
+        "level": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.95
+        },
+        "scale": {
+          "t": "string",
+          "values": [
+            "identity",
+            "log",
+            "logit"
+          ],
+          "default": "identity"
+        }
+      }
+    },
+    "evidence.reconstruct_km": {
+      "t": "object",
+      "fields": {
+        "curve": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "time": {
+                "t": "number",
+                "min": 0,
+                "req": true
+              },
+              "surv": {
+                "t": "number",
+                "gt": 0,
+                "max": 1,
+                "req": true
+              }
+            }
+          },
+          "min": 2,
+          "max": 2000,
+          "req": true
+        },
+        "riskTable": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "time": {
+                "t": "number",
+                "min": 0,
+                "req": true
+              },
+              "atRisk": {
+                "t": "number",
+                "min": 0,
+                "req": true
+              }
+            }
+          },
+          "min": 2,
+          "max": 200,
+          "req": true
+        },
+        "totalEvents": {
+          "t": "number",
+          "min": 0
+        },
+        "reportedMedian": {
+          "t": "number",
+          "gt": 0
+        },
+        "reportedLogHazardRatio": {
+          "t": "number"
+        },
+        "provenance": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "digitizer",
+                "human_click"
+              ],
+              "req": true
+            },
+            "tool": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "req": true
+            },
+            "toolVersion": {
+              "t": "string",
+              "maxLength": 40
+            }
+          },
+          "req": true
+        },
+        "treatmentArm": {
+          "t": "object",
+          "fields": {
+            "curve": {
+              "t": "array",
+              "items": {
+                "t": "object",
+                "fields": {
+                  "time": {
+                    "t": "number",
+                    "min": 0,
+                    "req": true
+                  },
+                  "surv": {
+                    "t": "number",
+                    "gt": 0,
+                    "max": 1,
+                    "req": true
+                  }
+                }
+              },
+              "min": 2,
+              "max": 2000,
+              "req": true
+            },
+            "riskTable": {
+              "t": "array",
+              "items": {
+                "t": "object",
+                "fields": {
+                  "time": {
+                    "t": "number",
+                    "min": 0,
+                    "req": true
+                  },
+                  "atRisk": {
+                    "t": "number",
+                    "min": 0,
+                    "req": true
+                  }
+                }
+              },
+              "min": 2,
+              "max": 200,
+              "req": true
+            },
+            "totalEvents": {
+              "t": "number",
+              "min": 0
+            },
+            "reportedMedian": {
+              "t": "number",
+              "gt": 0
+            }
+          }
+        }
+      }
+    },
+    "comparator.entropy_balance": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true,
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "moments": {
+          "t": "integer",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT"
+          ],
+          "default": "ATT"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months"
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "targetTrial": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "item": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "emulation": {
+                "t": "string",
+                "values": [
+                  "exact",
+                  "approximate",
+                  "cannot"
+                ],
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 50
+        }
+      }
+    },
+    "comparator.propensity_weight": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true,
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT",
+            "ATE",
+            "ATO"
+          ],
+          "default": "ATT"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months"
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "targetTrial": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "item": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "emulation": {
+                "t": "string",
+                "values": [
+                  "exact",
+                  "approximate",
+                  "cannot"
+                ],
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 50
+        }
+      }
+    },
+    "comparator.rmst": {
+      "t": "object",
+      "fields": {
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "weightColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months"
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        }
+      }
+    },
+    "comparator.maic": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true,
+          "req": true
+        },
+        "targets": {
+          "t": "map",
+          "values": {
+            "t": "number"
+          },
+          "keysFrom": "covariates",
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "anchored": {
+          "t": "boolean",
+          "default": false
+        },
+        "aggregateEstimate": {
+          "t": "number",
+          "when": {
+            "path": "anchored",
+            "in": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateOutcome": {
+          "t": "number",
+          "when": {
+            "path": "anchored",
+            "notIn": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateSe": {
+          "t": "number",
+          "gt": 0,
+          "req": true
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y",
+          "when": {
+            "path": "anchored",
+            "notIn": [
+              "true"
+            ]
+          }
+        },
+        "link": {
+          "t": "string",
+          "values": [
+            "identity",
+            "log",
+            "logit"
+          ],
+          "default": "identity"
+        },
+        "unadjustedEffectModifiers": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "maxLength": 80
+          },
+          "min": 0,
+          "max": 50
+        }
+      }
+    },
+    "comparator.evalue": {
+      "t": "object",
+      "fields": {
+        "riskRatio": {
+          "t": "number",
+          "gt": 0,
+          "req": true
+        },
+        "confidenceLimit": {
+          "t": "number",
+          "gt": 0
+        },
+        "scale": {
+          "t": "string",
+          "values": [
+            "risk_ratio",
+            "odds_ratio",
+            "hazard_ratio"
+          ],
+          "default": "risk_ratio"
+        },
+        "rare": {
+          "t": "boolean"
+        }
+      }
+    },
+    "comparator.map_prior": {
+      "t": "object",
+      "fields": {
+        "historical": {
+          "t": "object",
+          "fields": {
+            "events": {
+              "t": "array",
+              "items": {
+                "t": "integer",
+                "min": 0
+              },
+              "min": 2,
+              "max": 200
+            },
+            "n": {
+              "t": "array",
+              "items": {
+                "t": "integer",
+                "min": 1
+              },
+              "min": 2,
+              "max": 200
+            },
+            "estimate": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 2,
+              "max": 200
+            },
+            "se": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0
+              },
+              "min": 2,
+              "max": 200
+            }
+          },
+          "exactlyOne": [
+            [
+              "events",
+              "estimate"
+            ]
+          ],
+          "requires": {
+            "events": [
+              "n"
+            ],
+            "estimate": [
+              "se"
+            ]
+          },
+          "req": true
+        },
+        "unitVariance": {
+          "t": "number",
+          "gt": 0,
+          "when": {
+            "path": "historical.estimate",
+            "present": true
+          },
+          "req": true
+        },
+        "tauPrior": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "half_normal",
+                "half_cauchy",
+                "uniform"
+              ],
+              "req": true
+            },
+            "scale": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            }
+          }
+        },
+        "components": {
+          "t": "integer",
+          "min": 1,
+          "max": 2,
+          "default": 2
+        },
+        "robustWeight": {
+          "t": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.2
+        },
+        "current": {
+          "t": "object",
+          "fields": {
+            "estimate": {
+              "t": "number",
+              "req": true
+            },
+            "se": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            }
+          }
+        },
+        "operatingCharacteristics": {
+          "t": "object",
+          "fields": {
+            "nControl": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nTreatment": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "drifts": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 50,
+              "req": true
+            },
+            "effect": {
+              "t": "number",
+              "req": true
+            },
+            "robustWeights": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "min": 1,
+              "max": 5
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            }
+          }
+        }
+      }
+    },
+    "design.analytic": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "single_arm",
+                "single_arm_external",
+                "two_arm_fixed",
+                "group_sequential",
+                "simon_two_stage"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 20,
+              "increasing": true,
+              "last": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              },
+              "req": true
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock"
+              ],
+              "default": "obrien_fleming",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              }
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5
+            },
+            "maxN": {
+              "t": "integer",
+              "min": 2,
+              "max": 500,
+              "default": 100,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "simon_two_stage"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "simon_two_stage"
+                  ]
+                }
+              ]
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "simon_two_stage"
+                  ]
+                }
+              ]
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "simon_two_stage"
+                  ]
+                }
+              ]
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "nullRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            },
+            "alternativeRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "simon_two_stage"
+                ]
+              },
+              "req": true
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "simon_two_stage"
+                  ]
+                }
+              ]
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            }
+          }
+        },
+        "accrual": {
+          "t": "object",
+          "fields": {
+            "duration": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "followup": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "dropoutAnnual": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0,
+              "unit": "proportion per 12 time units"
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        }
+      }
+    },
+    "design.simulate": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "single_arm",
+                "single_arm_external",
+                "two_arm_fixed",
+                "group_sequential",
+                "simon_two_stage"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 20,
+              "increasing": true,
+              "last": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              },
+              "req": true
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock"
+              ],
+              "default": "obrien_fleming",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "null": {
+              "t": "boolean"
+            },
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "baselineCorrelation": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "covariateLogit": {
+              "t": "number",
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "method": {
+              "t": "string",
+              "valuesBy": {
+                "path": "endpoint.type",
+                "map": {
+                  "continuous": [
+                    "ttest",
+                    "ancova"
+                  ],
+                  "binary": [
+                    "risk_difference",
+                    "logistic"
+                  ],
+                  "time_to_event": [
+                    "logrank",
+                    "rmst"
+                  ]
+                }
+              }
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            },
+            "tau": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "rmst"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "accrual": {
+          "t": "variant",
+          "on": "kind",
+          "default": "uniform",
+          "variants": {
+            "uniform": {
+              "duration": {
+                "t": "number",
+                "min": 0,
+                "default": 0,
+                "unit": "time units"
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            },
+            "piecewise": {
+              "breaks": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 1,
+                "max": 50,
+                "increasing": true,
+                "req": true
+              },
+              "rates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 2,
+                "max": 51,
+                "req": true
+              },
+              "tail": {
+                "t": "number",
+                "gt": 0
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "performance": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "values": [
+              "power",
+              "type_one_error",
+              "bias",
+              "coverage",
+              "expected_sample_size",
+              "duration_months",
+              "cost"
+            ]
+          },
+          "min": 0,
+          "max": 7,
+          "unique": true
+        },
+        "targetMcse": {
+          "t": "number",
+          "min": 0.0005,
+          "max": 0.05,
+          "unit": "proportion"
+        },
+        "costs": {
+          "t": "object",
+          "fields": {
+            "perPatient": {
+              "t": "number",
+              "min": 0
+            },
+            "perSite": {
+              "t": "number",
+              "min": 0
+            },
+            "perMonth": {
+              "t": "number",
+              "min": 0
+            },
+            "sites": {
+              "t": "integer",
+              "min": 0
+            }
+          }
+        }
+      }
+    },
+    "design.grid": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "single_arm",
+                "single_arm_external",
+                "two_arm_fixed",
+                "group_sequential",
+                "simon_two_stage"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 20,
+              "increasing": true,
+              "last": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              },
+              "req": true
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock"
+              ],
+              "default": "obrien_fleming",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "group_sequential"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "null": {
+              "t": "boolean"
+            },
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "baselineCorrelation": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "riskDifference": {
+              "t": "number",
+              "gt": -1,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "oddsRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "covariateLogit": {
+              "t": "number",
+              "default": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            },
+            "controlDistribution": {
+              "t": "variant",
+              "on": "kind",
+              "default": "exponential",
+              "variants": {
+                "exponential": {
+                  "rate": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "per time unit",
+                    "req": true
+                  }
+                },
+                "weibull": {
+                  "shape": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "scale": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units",
+                    "req": true
+                  }
+                },
+                "piecewise": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 1,
+                    "max": 50,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "rates": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 51,
+                    "req": true
+                  }
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          },
+          "exactlyOne": [
+            {
+              "keys": [
+                "treatmentRate",
+                "riskDifference",
+                "oddsRatio"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            {
+              "keys": [
+                "controlMedian",
+                "controlDistribution"
+              ],
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              }
+            }
+          ],
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "method": {
+              "t": "string",
+              "valuesBy": {
+                "path": "endpoint.type",
+                "map": {
+                  "continuous": [
+                    "ttest",
+                    "ancova"
+                  ],
+                  "binary": [
+                    "risk_difference",
+                    "logistic"
+                  ],
+                  "time_to_event": [
+                    "logrank",
+                    "rmst"
+                  ]
+                }
+              }
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            },
+            "tau": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": {
+                "path": "analysis.method",
+                "in": [
+                  "rmst"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "accrual": {
+          "t": "variant",
+          "on": "kind",
+          "default": "uniform",
+          "variants": {
+            "uniform": {
+              "duration": {
+                "t": "number",
+                "min": 0,
+                "default": 0,
+                "unit": "time units"
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            },
+            "piecewise": {
+              "breaks": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 1,
+                "max": 50,
+                "increasing": true,
+                "req": true
+              },
+              "rates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0
+                },
+                "min": 2,
+                "max": 51,
+                "req": true
+              },
+              "tail": {
+                "t": "number",
+                "gt": 0
+              },
+              "followup": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              },
+              "dropoutAnnual": {
+                "t": "number",
+                "min": 0,
+                "lt": 1,
+                "default": 0,
+                "unit": "proportion per 12 time units"
+              },
+              "maxFollowup": {
+                "t": "number",
+                "gt": 0,
+                "unit": "time units"
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "performance": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "values": [
+              "power",
+              "type_one_error",
+              "bias",
+              "coverage",
+              "expected_sample_size",
+              "duration_months",
+              "cost"
+            ]
+          },
+          "min": 0,
+          "max": 7,
+          "unique": true
+        },
+        "targetMcse": {
+          "t": "number",
+          "min": 0.0005,
+          "max": 0.05,
+          "unit": "proportion"
+        },
+        "costs": {
+          "t": "object",
+          "fields": {
+            "perPatient": {
+              "t": "number",
+              "min": 0
+            },
+            "perSite": {
+              "t": "number",
+              "min": 0
+            },
+            "perMonth": {
+              "t": "number",
+              "min": 0
+            },
+            "sites": {
+              "t": "integer",
+              "min": 0
+            }
+          }
+        },
+        "designs": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "kind": {
+                "t": "string",
+                "values": [
+                  "single_arm",
+                  "single_arm_external",
+                  "two_arm_fixed",
+                  "group_sequential",
+                  "simon_two_stage"
+                ],
+                "badValueCode": "design_unknown"
+              },
+              "nTreat": {
+                "t": "integer",
+                "min": 1,
+                "max": 1000000
+              },
+              "nControl": {
+                "t": "integer",
+                "min": 1,
+                "max": 1000000
+              },
+              "informationRates": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 20,
+                "increasing": true,
+                "last": 1
+              },
+              "spending": {
+                "t": "string",
+                "values": [
+                  "obrien_fleming",
+                  "pocock"
+                ]
+              }
+            }
+          },
+          "min": 1,
+          "max": 50,
+          "req": true
+        },
+        "truths": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "null": {
+                "t": "boolean"
+              },
+              "effect": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "baselineCorrelation": {
+                "t": "number",
+                "gt": -1,
+                "lt": 1
+              },
+              "controlRate": {
+                "t": "number",
+                "gt": 0,
+                "lt": 1
+              },
+              "treatmentRate": {
+                "t": "number",
+                "gt": 0,
+                "lt": 1
+              },
+              "riskDifference": {
+                "t": "number",
+                "gt": -1,
+                "lt": 1
+              },
+              "oddsRatio": {
+                "t": "number",
+                "gt": 0
+              },
+              "covariateLogit": {
+                "t": "number"
+              },
+              "hazardRatio": {
+                "t": "number",
+                "gt": 0
+              },
+              "controlMedian": {
+                "t": "number",
+                "gt": 0
+              },
+              "controlDistribution": {
+                "t": "variant",
+                "on": "kind",
+                "default": "exponential",
+                "variants": {
+                  "exponential": {
+                    "rate": {
+                      "t": "number",
+                      "gt": 0,
+                      "unit": "per time unit",
+                      "req": true
+                    }
+                  },
+                  "weibull": {
+                    "shape": {
+                      "t": "number",
+                      "gt": 0,
+                      "req": true
+                    },
+                    "scale": {
+                      "t": "number",
+                      "gt": 0,
+                      "unit": "time units",
+                      "req": true
+                    }
+                  },
+                  "piecewise": {
+                    "breaks": {
+                      "t": "array",
+                      "items": {
+                        "t": "number",
+                        "gt": 0
+                      },
+                      "min": 1,
+                      "max": 50,
+                      "increasing": true,
+                      "req": true
+                    },
+                    "rates": {
+                      "t": "array",
+                      "items": {
+                        "t": "number",
+                        "gt": 0
+                      },
+                      "min": 2,
+                      "max": 51,
+                      "req": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "min": 1,
+          "max": 50,
+          "req": true
+        }
+      },
+      "gridCells": 400
+    },
+    "design.assurance": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5
+            },
+            "events": {
+              "t": "integer",
+              "min": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "nTreat": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "when": {
+                "path": "endpoint.type",
+                "notIn": [
+                  "time_to_event"
+                ]
+              },
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000,
+              "when": {
+                "path": "endpoint.type",
+                "notIn": [
+                  "time_to_event"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "designPrior": {
+          "t": "object",
+          "fields": {
+            "mean": {
+              "t": "number",
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            },
+            "kind": {
+              "t": "string",
+              "values": [
+                "normal",
+                "lognormal"
+              ],
+              "default": "normal"
+            },
+            "basis": {
+              "t": "string",
+              "values": [
+                "prediction",
+                "confidence"
+              ],
+              "default": "prediction"
+            },
+            "basisOverride": {
+              "t": "boolean"
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              }
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "notIn": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            }
+          }
+        }
+      }
+    },
+    "design.procova": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "design": {
+          "t": "object",
+          "fields": {
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5
+            }
+          }
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "effect": {
+              "t": "number",
+              "unit": "outcome units",
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            }
+          }
+        },
+        "prognostic": {
+          "t": "object",
+          "fields": {
+            "rho": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "req": true
+            },
+            "rhoOrdinary": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0
+            },
+            "lambda": {
+              "t": "number",
+              "gt": 0,
+              "max": 1,
+              "default": 1
+            },
+            "gamma": {
+              "t": "number",
+              "min": 1,
+              "default": 1
+            }
+          },
+          "req": true
+        }
+      }
+    },
+    "accrual.poisson_gamma": {
+      "t": "object",
+      "fields": {
+        "sites": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "id": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "alpha": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              },
+              "beta": {
+                "t": "number",
+                "gt": 0,
+                "req": true
+              },
+              "startTime": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units",
+                "req": true
+              },
+              "enrolled": {
+                "t": "integer",
+                "min": 0
+              },
+              "exposureTime": {
+                "t": "number",
+                "min": 0,
+                "unit": "time units"
+              }
+            },
+            "requires": {
+              "enrolled": [
+                "exposureTime"
+              ],
+              "exposureTime": [
+                "enrolled"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 5000,
+          "req": true
+        },
+        "target": {
+          "t": "integer",
+          "min": 1,
+          "max": 10000000,
+          "req": true
+        },
+        "eventTarget": {
+          "t": "integer",
+          "min": 1,
+          "max": 10000000
+        },
+        "eventHazard": {
+          "t": "number",
+          "gt": 0,
+          "unit": "per month"
+        },
+        "screenFailure": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            },
+            "beta": {
+              "t": "number",
+              "gt": 0,
+              "req": true
+            }
+          }
+        },
+        "byTimes": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "gt": 0
+          },
+          "min": 1,
+          "max": 100,
+          "increasing": true
+        }
+      }
+    },
+    "matching.evaluate": {
+      "t": "object",
+      "fields": {
+        "criteria": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "id": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "kind": {
+                "t": "string",
+                "values": [
+                  "inclusion",
+                  "exclusion"
+                ],
+                "req": true
+              },
+              "type": {
+                "t": "string",
+                "values": [
+                  "demographic",
+                  "diagnosis",
+                  "biomarker",
+                  "lab",
+                  "prior_treatment",
+                  "time_window",
+                  "performance_status",
+                  "comorbidity",
+                  "concomitant_medication",
+                  "pregnancy",
+                  "consent_capacity",
+                  "other"
+                ],
+                "default": "other"
+              },
+              "state": {
+                "t": "string",
+                "values": [
+                  "satisfied",
+                  "not_satisfied",
+                  "unknown",
+                  "pending_recheck"
+                ],
+                "req": true
+              },
+              "notApplicable": {
+                "t": "boolean"
+              }
+            }
+          },
+          "min": 1,
+          "max": 500,
+          "req": true
+        }
+      }
+    }
+  },
+  "designSupport": {
+    "design.analytic": {
+      "two_arm_fixed": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "group_sequential": [
+        "time_to_event"
+      ],
+      "simon_two_stage": [
+        "binary"
+      ]
+    },
+    "design.simulate": {
+      "two_arm_fixed": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "group_sequential": [
+        "time_to_event"
+      ]
+    },
+    "design.grid": {
+      "two_arm_fixed": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "group_sequential": [
+        "time_to_event"
+      ]
+    },
+    "design.assurance": {
+      "two_arm_fixed": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ]
+    },
+    "design.procova": {
+      "two_arm_fixed": [
+        "continuous"
+      ]
+    }
+  },
+  "rules": {
+    "rowRule": {
+      "ops": [
+        "all",
+        "any",
+        "not",
+        "compare",
+        "between",
+        "in",
+        "not_in",
+        "missing",
+        "present"
+      ],
+      "comparators": [
+        "lt",
+        "lte",
+        "gt",
+        "gte",
+        "eq",
+        "ne"
+      ],
+      "orderingComparators": [
+        "lt",
+        "lte",
+        "gt",
+        "gte"
+      ],
+      "columnPattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+      "limits": {
+        "maxDepth": 8,
+        "maxNodes": 200,
+        "maxOperands": 32,
+        "maxValues": 200,
+        "maxStringLength": 500,
+        "maxNameLength": 80,
+        "maxNamedRules": 100
+      }
+    }
+  },
+  "jobKinds": [
+    "profile_snapshot",
+    "build_cohort",
+    "generate_population",
+    "literature_population",
+    "synthesize_population",
+    "population_quality",
+    "generate_patients",
+    "generate_patients_continuous",
+    "generate_patients_binary",
+    "reconstruct_km",
+    "pool_evidence",
+    "weight_comparator",
+    "propensity_weight_comparator",
+    "maic_comparator",
+    "evalue",
+    "rmst",
+    "design_analytic",
+    "design_simulation",
+    "design_grid",
+    "assurance",
+    "procova",
+    "accrual_forecast",
+    "map_prior",
+    "match_criteria"
+  ],
+  "endpointTypes": [
+    "continuous",
+    "binary",
+    "time_to_event"
+  ],
+  "trialDesigns": [
+    "single_arm",
+    "single_arm_external",
+    "two_arm_fixed",
+    "group_sequential",
+    "simon_two_stage"
+  ],
+  "performanceMeasures": [
+    "power",
+    "type_one_error",
+    "bias",
+    "coverage",
+    "expected_sample_size",
+    "duration_months",
+    "cost"
+  ],
+  "spendingFunctions": [
+    "obrien_fleming",
+    "pocock"
+  ],
+  "notEstimableRules": [
+    "entropy_balance_infeasible",
+    "outside_common_support",
+    "effective_sample_size_below_floor",
+    "standardized_difference_above_floor",
+    "tau_beyond_followup",
+    "reconstruction_failed_qc",
+    "map_prior_conflict",
+    "data_tier_insufficient",
+    "route_unavailable_in_version"
+  ],
+  "countKeys": [
+    "realPatients",
+    "events",
+    "effectiveSampleSize",
+    "generatedRecords"
+  ],
+  "optionalCountKeys": [
+    "priorEffectiveSampleSize",
+    "reconstructedPseudoPatients"
+  ],
+  "valueSources": [
+    "observed",
+    "extracted",
+    "calculated",
+    "imputed",
+    "aggregate",
+    "reconstructed",
+    "predicted",
+    "assumed",
+    "synthetic"
+  ],
+  "realPatientSources": [
+    "observed",
+    "extracted",
+    "calculated",
+    "imputed"
+  ],
+  "nonIndividualSources": [
+    "aggregate",
+    "synthetic",
+    "predicted"
+  ],
+  "populationKinds": [
+    "real",
+    "scenario",
+    "literature",
+    "empirical_synthetic"
+  ],
+  "comparatorRoutes": [
+    "prognostic_adjustment",
+    "external_control",
+    "literature_control",
+    "model_comparator",
+    "hybrid_control"
+  ],
+  "estimands": [
+    "ATT",
+    "ATE",
+    "ATO"
+  ],
+  "defaultEstimand": "ATT",
+  "poolingMethods": [
+    "single_study",
+    "random_effects_dl",
+    "random_effects_reml",
+    "random_effects_hksj",
+    "fixed_effect"
+  ],
+  "distributions": [
+    "point",
+    "normal",
+    "lognormal",
+    "beta",
+    "gamma",
+    "empirical"
+  ],
+  "intervalKinds": [
+    "confidence",
+    "credible",
+    "prediction",
+    "monte_carlo"
+  ],
+  "qualityCategories": [
+    "conformance",
+    "completeness",
+    "plausibility",
+    "duplication",
+    "linkage"
+  ],
+  "conclusions": [
+    "estimable",
+    "limited",
+    "not_estimable"
+  ],
+  "missingReasons": [
+    "not_measured",
+    "not_recorded",
+    "not_shared",
+    "restricted_in_trial",
+    "out_of_window",
+    "pending_result",
+    "not_applicable"
+  ],
+  "modelRisks": [
+    "none",
+    "low",
+    "medium",
+    "high"
+  ],
+  "analysisTables": [
+    "subject",
+    "longitudinal",
+    "events"
+  ],
+  "criterionStates": [
+    "satisfied",
+    "not_satisfied",
+    "unknown",
+    "pending_recheck"
+  ],
+  "eligibilitySummaries": [
+    "eligible",
+    "ineligible",
+    "insufficient_evidence",
+    "pending"
+  ],
+  "twinEvidence": [
+    "individual_conditioned",
+    "updates_with_new_data",
+    "calibrated_uncertainty",
+    "validation_record"
+  ],
+  "modelTiers": [
+    "scenario",
+    "literature",
+    "data",
+    "validated"
+  ],
+  "syntheticUses": [
+    "design",
+    "feasibility",
+    "testing",
+    "training",
+    "shared_preview"
+  ],
+  "limits": {
+    "minCellSize": 10,
+    "bootstrapMin": 2000,
+    "replicatesNullMin": 20000,
+    "replicatesAltMin": 5000,
+    "smdFloor": 0.1,
+    "essFloor": 10,
+    "supportCeiling": 0.1,
+    "conflictBound": 0.01,
+    "tolerance": {
+      "atRiskAbsolute": 2,
+      "atRiskRelative": 0.05,
+      "events": 0.05,
+      "median": 0.05,
+      "logHazardRatio": 0.05
+    }
+  }
+}

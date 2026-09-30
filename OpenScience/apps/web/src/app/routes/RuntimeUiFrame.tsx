@@ -12,6 +12,7 @@ import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
 import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
+import { useFrameVcrOptions } from "@/components/vcr/useFrameVcrOptions";
 
 /** Why this surface is showing an alert instead of the conversation. */
 interface FrameFailure {
@@ -232,6 +233,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const [frameCapability, setFrameCapability] = useState<string | null>(null);
   // The latest `geo-options` handler, read by the message listener.
   const geoOptionsHandler = useRef<((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => void) | null>(null);
+  // The latest `vcr-options` handler, read by the message listener.
+  const vcrOptionsHandler = useRef<((change: { sessionId?: unknown; start?: unknown; intendedUse?: unknown }) => void) | null>(null);
   const theme = useUiStore((state) => state.theme);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
@@ -523,7 +526,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const routes: Record<string, string> = {
           "new-task": "/app/chat", knowledge: "/app/files",
           memory: "/app/memory", capabilities: "/app/capabilities", account: "/app/account",
-          geo: "/app/geo",
+          geo: "/app/geo", "virtual-research": "/app/virtual-research",
         };
         const to = routes[String(message.destination)];
         if (!to) return;
@@ -615,6 +618,11 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         // validates it again and writes it to this project's GEO row.
         incoming.current = message.seq;
         geoOptionsHandler.current?.({ sessionId: message.sessionId, coverageDays: message.coverageDays, engines: message.engines });
+      } else if (message.type === "evimed.runtime-ui.vcr-options") {
+        // 起点 or 预期用途 changed beside the 「虚拟临研」 chip; the handler
+        // validates it again and writes it to this project's study.
+        incoming.current = message.seq;
+        vcrOptionsHandler.current?.({ sessionId: message.sessionId, start: message.start, intendedUse: message.intendedUse });
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -756,6 +764,12 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
   geoOptionsHandler.current = useFrameGeoOptions({
     projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postGeo,
+  });
+  // 虚拟临研's options beside its chip, for a conversation bound to one of the
+  // module's capabilities (`useFrameVcrOptions`).
+  const postVcr = useCallback((payload: object) => postToFrame("vcr", payload), [postToFrame]);
+  vcrOptionsHandler.current = useFrameVcrOptions({
+    projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postVcr,
   });
 
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);

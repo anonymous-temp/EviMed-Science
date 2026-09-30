@@ -24,7 +24,7 @@ test("the purpose vocabulary is the closed set the ledger's CHECK is built from"
   // insert the database refuses.
   assert.deepEqual([...USAGE_PURPOSES], [
     "kernel", "memory-extraction", "routing", "title", "engine",
-    "capsule-scan", "channel-intent", "source-understanding", "learning", "frontier", "review", "geo", "web-search", "other",
+    "capsule-scan", "channel-intent", "source-understanding", "learning", "frontier", "review", "geo", "vcr", "web-search", "other",
   ]);
   assert.ok(Object.isFrozen(USAGE_PURPOSES));
   for (const purpose of USAGE_PURPOSES) {

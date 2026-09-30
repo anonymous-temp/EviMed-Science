@@ -1,0 +1,21 @@
+{
+  "view": "matching",
+  "available": true,
+  "headline": null,
+  "partner": null,
+  "direction": "trial_to_patient",
+  "funnel": [],
+  "candidates": [],
+  "selected": null,
+  "gaps": [],
+  "pendingReview": null,
+  "ledger": [],
+  "forecast": null,
+  "sites": [],
+  "followup": [],
+  "protocol": null,
+  "abilities": {
+    "contact": true
+  },
+  "counts": null
+}

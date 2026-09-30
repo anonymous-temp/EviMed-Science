@@ -428,6 +428,9 @@ function geoSettings(overrides) {
   };
 }
 
+/** The shortest an engine secret may be, in bytes; the engine refuses the same files below it (contract §3.5). */
+export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
+
 /**
  * The independent reviewer (plan 2026-09-22, tiered review): a model of
  * another family than the kernel's, called by the control plane on a
@@ -445,6 +448,123 @@ function geoSettings(overrides) {
  *
  * @param {Record<string, any>} overrides
  */
+/**
+ * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
+ * account like 「循证 GEO」 and 「前沿动态」 before it.
+ *
+ * Hidden knowledge: the two ceilings here are not opinions, they are the
+ * shared host (plan §11.4). The box this runs on is four cores shared with
+ * other products, so the engine runs at a global concurrency of one and every
+ * job carries a CPU-second ceiling; a design grid only opens once the engine
+ * moves to a compute node of its own, and the interface does not change when
+ * it does. `vcrEngineUrl` unset means the engine is not composed: the steps
+ * that need it answer 「暂不可用」 and every other step and the conversation
+ * carry on (plan §10.5).
+ *
+ * @param {Record<string, any>} overrides
+ */
+function vcrSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const value = read(key, name, fallback);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(value)}.`);
+    }
+    return number;
+  };
+  /** @param {string} key @param {string} name */
+  const origin = (key, name) => {
+    const value = String(read(key, name, "") ?? "").trim();
+    if (!value) return "";
+    let parsed = null;
+    try { parsed = new URL(value); } catch { parsed = null; }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error(`${name} must be an http(s) origin with an optional path and no credentials.`);
+    }
+    return value.replace(/\/$/, "");
+  };
+  const audience = String(read("vcrAudience", "OPEN_SCIENCE_VCR_AUDIENCE", "operators")).trim().toLowerCase();
+  if (!["all", "operators"].includes(audience)) {
+    throw new Error(`OPEN_SCIENCE_VCR_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
+  }
+  /**
+   * One of the engine's two shared secrets, read the way the platform reads its
+   * other key files: a file named by `<NAME>_FILE`, opened without following a
+   * symlink, no wider than owner and group (the engine container reads the same
+   * file through its group). There is no value-in-the-environment form: the
+   * token and the receipt key are the only thing that makes a result the
+   * engine's, and an environment is what a process listing and a crash report
+   * carry. An `overrides` value exists for tests alone.
+   * @param {string} valueKey @param {string} fileKey @param {string} fileEnv @param {string} code
+   * @returns {{ value: string, error: string | null }}
+   */
+  const engineSecret = (valueKey, fileKey, fileEnv, code) => {
+    if (Object.hasOwn(overrides, valueKey)) return { value: String(overrides[valueKey] ?? "").trim(), error: null };
+    const file = String(overrides[fileKey] ?? process.env[fileEnv] ?? "").trim();
+    if (!file) return { value: "", error: null };
+    if (!path.isAbsolute(file)) throw new Error(`${fileEnv} must be an absolute path.`);
+    const loaded = readSecretFile(file, code, { allowGroupRead: true });
+    // Compose binds /dev/null where a deployment has no engine: that is no
+    // secret, not a broken one (the same reading the other optional keys get).
+    if (loaded.error === `${code}_file_not_regular`) return { value: "", error: null };
+    if (loaded.error) return { value: "", error: loaded.error };
+    const value = loaded.value.trim();
+    // 32 bytes is the floor the engine itself enforces on the same files.
+    return Buffer.byteLength(value, "utf8") >= VCR_ENGINE_SECRET_MIN_BYTES
+      ? { value, error: null } : { value: "", error: `${code}_file_short` };
+  };
+  const engineToken = engineSecret("vcrEngineToken", "vcrEngineTokenFile", "OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE", "vcr_engine_token");
+  const engineReceiptKey = engineSecret("vcrEngineReceiptKey", "vcrEngineReceiptKeyFile",
+    "OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE", "vcr_engine_receipt_key");
+  const engineUrl = origin("vcrEngineUrl", "OPEN_SCIENCE_VCR_ENGINE_URL");
+  return {
+    vcrEnabled: overrides.vcrEnabled ?? boolEnv("OPEN_SCIENCE_VCR_ENABLED", false),
+    vcrAudience: audience,
+    // Accounts that see the module under `operators` without being operators.
+    vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
+    vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
+    vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
+    // The deterministic engine. Unset = not composed; the steps that need it say so.
+    vcrEngineUrl: engineUrl,
+    vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
+    // The engine's two secrets, read from the files the deployment mounts
+    // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
+    // the control plane presents and the key its results are signed with. With
+    // the URL set and either one missing, unreadable or under 32 bytes the
+    // module says the engine is unconfigured and no client is made: an engine
+    // that would take unauthenticated calls, or whose results could not be
+    // told from a forgery, is worse than the step saying 「暂不可用」.
+    // The `…Error` fields carry why, for readiness (never the secret).
+    vcrEngineToken: engineToken.value,
+    vcrEngineTokenError: engineToken.error,
+    vcrEngineReceiptKey: engineReceiptKey.value,
+    vcrEngineReceiptKeyError: engineReceiptKey.error,
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && Boolean(engineReceiptKey.value),
+    // One at a time on the shared host (plan §11.4).
+    vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
+    // Every job's own CPU ceiling; over it, the job stops at a checkpoint.
+    vcrJobCpuSeconds: integer("vcrJobCpuSeconds", "OPEN_SCIENCE_VCR_JOB_CPU_SECONDS", 600, 10, 86_400),
+    // A study's compute budget in CPU-seconds; over it the run stops for one
+    // confirmation (plan §10.1, the second of the three human stops).
+    vcrStudyCpuBudget: integer("vcrStudyCpuBudget", "OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET", 7_200, 60, 10_000_000),
+    // The data plane's own directory: patient-level rows, never mounted into a
+    // runtime (plan §8.1). Empty = the data plane is not configured and every
+    // tier above T0 answers that it is unavailable.
+    vcrDataPlaneDir: String(read("vcrDataPlaneDir", "OPEN_SCIENCE_VCR_DATA_PLANE_DIR", "") ?? "").trim(),
+    // The largest data file an upload may be, in bytes: the request is streamed
+    // and cut off at it, and the whole file is read twice (validate, derive), so
+    // this bounds memory as well as disk (principle 15). 50 MB by default.
+    vcrDataMaxBytes: integer("vcrDataMaxBytes", "OPEN_SCIENCE_VCR_DATA_MAX_BYTES", 50 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
+  };
+}
+
 function reviewSettings(overrides) {
   /** @param {string} key @param {string} name @param {unknown} fallback */
   const read = (key, name, fallback) => {
@@ -2018,6 +2138,8 @@ export function loadConfig(overrides = {}) {
     ...frontierSettings(overrides),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
+    // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
+    ...vcrSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),
     // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---

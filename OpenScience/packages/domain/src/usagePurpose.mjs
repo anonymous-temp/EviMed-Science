@@ -44,6 +44,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'frontier',
   'review',
   'geo',
+  'vcr',
   'web-search',
   'other',
 ]))
@@ -62,6 +63,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   frontier: '前沿动态',
   review: '成果审查',
   geo: '循证 GEO',
+  vcr: '虚拟临研',
   'web-search': '联网搜索',
   other: '其他',
 }))

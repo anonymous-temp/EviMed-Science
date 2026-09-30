@@ -235,6 +235,15 @@ its switch is on; the rest are changes inside existing layers.
   `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities
   inside the project; media orders are placed and settled in code. The owner's proprietary
   skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`.
+- **「虚拟临研」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
+  account): one row per study on top of an ordinary project, `/api/vcr/*` with abilities
+  checked per operation; the seven-step programme runs the five vcr capabilities inside the
+  project, and every number comes from a job of the R engine `项目代码/vcr-engine` (24 methods,
+  one scenario schema each, validated identically by the control plane and the engine).
+  Patient-level data lives in a data plane never mounted in a runtime: the control plane alone
+  resolves a snapshot into engine inputs after an access decision, outcome columns stay sealed
+  until the analysis plan is frozen, and what the runtime reads passes through small-cell
+  suppression. The seams are fixed in `docs/superpowers/specs/2026-09-29-vcr-integration-contract.md`.
 - **Fusion seams with EviMed's own platform** (fusion plan 2026-09-26 §9); login, credits
   and handoff are off by default and answer 404 when off:
   - *login* (`evimedAuthService.mjs`, `OPEN_SCIENCE_EVIMED_AUTH_ENABLED`): the shell's EviMed

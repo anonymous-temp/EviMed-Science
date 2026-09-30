@@ -1,0 +1,125 @@
+# Capability manifest — the only definition of this capability.
+#
+# Steps 3–6 of a 「虚拟临研」 study (build plan 2026-09-28 §4, §5): the research
+# population, the virtual patients, the comparator and the trial designs —
+# configured, queued on the deterministic engine, and read back. The four
+# method sections of its skill are injected per step, so one run covers the
+# stretch the study's timeline actually runs as one (plan §10.3).
+#
+# The division that matters: this run *decides and explains*; every number it
+# reports came from a `vcr_simulate` job the engine ran. Public so a study's
+# conversation can be bound to it, `display.listed: false` so it is entered
+# only from 「虚拟临研」.
+id: vcr-analysis
+version: 1.0.0
+title: Virtual Clinical Research Analysis
+category: Study Design
+description: Steps 3–6 of a virtual clinical research study — the research population and its screening
+  waterfall, virtual patients under a named model, a comparator route with its comparability diagnostics or a
+  deterministic not-estimable verdict with the gaps, and trial scenarios compared on power, assurance, duration
+  and cost, every number produced by the deterministic engine and reported with its Monte-Carlo error.
+whenToUse: 「虚拟临研」研究的人群、虚拟患者、对照与试验四步交给我：我按数据档位选路、配置好每一步、交给确定性引擎算，再把结果讲清楚。用户问「要多少例」「能不能用外部对照」「哪个方案把握更大」时委派我。我不写研究定义，也不做患者匹配与招募。
+persona: |
+  你是虚拟临床研究的分析师。你自己不算任何统计量：每一个数都来自 vcr_simulate 排的引擎作业，
+  你读回来、核对、解释。数据够不够决定能走哪条对照路线，不够就如实写「不可估计」并列出缺口——那是一份完成的结果，不是失败。
+  仿真出来的每个指标都带蒙特卡洛标准误；解析能算的先解析算，再用仿真核对，两者不一致就说出来。
+  真实患者数、事件数、有效样本量、生成记录数四个数永远分开写，生成得再多也不会变成新的真实患者。
+safetyClass: general
+skills:
+- vcr-analysis
+- citation-integrity
+tools:
+- mcp__evimed__vcr_read
+- mcp__evimed__vcr_write
+- mcp__evimed__vcr_simulate
+- mcp__evimed__evidence_pool
+- mcp__evimed__trial_registry_record
+- mcp__evimed__literature_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__locate_quote
+- mcp__evimed__kb_search
+- mcp__evimed__term_normalize
+- mcp__evimed__web_read
+# Three contract kinds, one set of files. The generated runtime manifest
+# flattens every `produces` entry into one `outputs` list, so the paths have to
+# be disjoint and whatever is `required` is required of *every* delivery. That
+# is why the report is `analysis-report.md` rather than three step-specific
+# names: one analysis delivery is one report and one machine-readable result,
+# and the two files a particular step adds are optional here and read by that
+# step's own contract validator.
+produces:
+- contractKind: vcr-cohort-snapshot
+  outputs:
+  - path: analysis-report.md
+    required: true
+  - path: results.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+- contractKind: vcr-comparator-analysis
+  outputs:
+  # Required *of this kind*, which is the only place it is asked for: the run
+  # policy resolves a deliverable's expected outputs from the produces entry
+  # whose contractKind it declared, so a comparator delivery owes its
+  # comparability table and a cohort delivery does not. The always-files
+  # (analysis-report.md, results.json) belong to the cohort entry above and
+  # cannot be repeated here — the manifest's flattened output list refuses
+  # a duplicate path (2026-09-28 merge).
+  - path: comparability.md
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+- contractKind: vcr-simulation-report
+  outputs:
+  - path: simulation.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - step
+  optional:
+  - populationDefinition
+  - comparatorRoute
+  - designs
+  - endpointType
+  - targetMcse
+  - dataTier
+autopilot:
+  taskTypes: []
+  costClass: high
+  unattendedInputs:
+  - step
+estimatedMinutes:
+- 15
+- 120
+dataSources:
+- literature
+- clinical-trials
+starterPrompts:
+- 三个方案并排比一比：单臂加文献对照、2:1 随机、1:1 随机加一次期中分析。
+
+display:
+  title: "人群、对照与试验仿真"
+  category: "虚拟临研"
+  description: "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。"
+  listed: false
+  starterPrompts:
+  - "PFS 预计 HR 0.70、对照中位 6 个月、两年入组，要多少例？"
+  - "这个单臂试验能不能用外部对照？不能的话缺什么。"
+  - "把我们上传的队列生成一份可以外发的合成数据。"
+  materials: "有研究定义就能开始；有数据授权会多出真实队列与外部对照两条路"
+  estimatedMinutes:
+    min: 15
+    max: 120
+  outputs:
+  - "人群版本、筛选流程与画像"
+  - "对照路线的可比性诊断，或「不可估计」与缺口清单"
+  - "方案 A/B/C 的运行特征表，每个数带蒙特卡洛标准误"
+  knownLimits:
+  - "计算引擎未接入时，需要它的那一步报「暂不可用」，其余步骤与对话照常。"
+  - "超出研究计算预算的仿真会停在确认处，确认一次后继续。"

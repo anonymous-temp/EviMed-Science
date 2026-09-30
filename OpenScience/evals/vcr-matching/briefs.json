@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-matching",
+  "note": "Real briefs, not smoke tests: each is a pre-screening or recruitment job somebody actually brings to 「虚拟临研」, chosen for the specific way matching goes wrong while looking finished — a washout satisfied by a chart that never mentions the drug, a laboratory value that is not in the sentence it cites, a historical replay that quietly uses next week's CT report, a patient contacted because a list was approved rather than a person. mustDo / mustNotDo are the rubric; the deterministic half (the four states, the span re-read, the as-of filter, the summary rule) is computed by apps/server/src/vcrMatching.mjs and is not the run's to decide. The labelled sample set beside this file (matching-eval-sample.json) is synthetic and says so; the AC-36 baseline is measured on a partner's real charts with two physicians reading independently.",
+  "briefs": [
+    {
+      "id": "vcr-matching-001-nsclc-prescreen",
+      "title": "EV-201 二线非小细胞肺癌：对合作方 200 份历史候选病历做一次预筛",
+      "why": "The ordinary full case, and the one where every failure mode of this capability is present at once: a 6-month cardiac window, a 28-day washout, a creatinine ceiling with two units in circulation, a pregnancy criterion that applies to half the pool, and one line («能够理解并签署知情同意») that no structured field settles. Charts are Chinese, longitudinal and copy-forward: an out-of-date medication list carried into a new note is the single commonest way a washout reads satisfied when it is not.",
+      "inputs": {
+        "studyId": "std-ev201",
+        "protocolVersionId": "prt-ev201-v2",
+        "direction": "trial_to_patient",
+        "asOf": "2026-09-28T00:00:00Z",
+        "subjectKeys": "the study's imported candidate pool (≈200)"
+      },
+      "mustDo": [
+        "Rewrite every exclusion criterion as a requirement to satisfy, so an exclusion reading 「满足」 means 「不被这一条排除」, and keep the protocol sentence beside each one.",
+        "Give every extracted fact a document id, a character span, the surface form read, and all three clocks — occurred, recorded, visible.",
+        "Mark 否认史 as a negated fact, and a family history, a 拟行 plan and a 不除外 possibility as non-assertive so they decide nothing.",
+        "Record the washout as unknown for any patient whose chart does not state a prior-therapy date, and name what would close it.",
+        "Answer the consent-capacity criterion with a quoted sentence, or unknown.",
+        "Hand back the per-criterion judgments, the evidence gaps and the void facts; let the platform compute every state and the summary."
+      ],
+      "mustNotDo": [
+        "Treat a missing treatment history as a completed washout.",
+        "Read a creatinine in µmol/L against a mg/dL ceiling without a stated conversion.",
+        "Write 「符合」 for any patient with an unknown exclusion criterion.",
+        "Fold 「不适用」 into 「未知」 for the pregnancy criterion on male patients.",
+        "Produce a single 「匹配度」 score, or contact anybody."
+      ],
+      "gradedOn": "Whether a coordinator could take one 「符合」 and one 「证据不足」 straight to the chart and confirm both readings without asking the platform a question."
+    },
+    {
+      "id": "vcr-matching-002-patient-to-trial",
+      "title": "一位晚期胃癌患者：在合作方在研的 14 项试验里找他能进哪一个",
+      "why": "The other direction, same engine. The failure here is different: with fourteen protocols and one chart, the tempting output is a ranked list with a confidence number, and the chart usually settles only a third of the criteria. What the physician needs is which two protocols are worth a phone call and what one document would settle five criteria at once.",
+      "inputs": {
+        "studyId": "std-gastric-panel",
+        "direction": "patient_to_trial",
+        "subjectKeys": ["P-2026-0914"],
+        "asOf": "2026-09-28T00:00:00Z"
+      },
+      "mustDo": [
+        "Evaluate the patient against every protocol version in the study's panel, each as its own assessment.",
+        "Rank by the deterministic summary and by what it would cost to close the remaining gaps, not by a model score.",
+        "Report the single piece of evidence that would resolve the most criteria across protocols (usually one pathology or one genomic report).",
+        "Say explicitly, for each protocol the patient cannot enter, which criterion rules him out and from which sentence."
+      ],
+      "mustNotDo": [
+        "Output a benefit probability, an 「入组概率」, or any blended match score.",
+        "Rank a protocol above another on the strength of a model's clinical priority alone without labelling it 不是获益概率.",
+        "Assume the panel's protocols share criteria because they share a disease.",
+        "Drop a protocol from the list because it is mostly unknown — that is the one a document would unlock."
+      ],
+      "gradedOn": "Whether the top two protocols are the two a treating oncologist would have picked, and whether the named missing document is the one that actually settles the most lines."
+    },
+    {
+      "id": "vcr-matching-003-criterion-funnel",
+      "title": "方案定稿前：这 26 条入排条件里，哪一条最卡人",
+      "why": "The feasibility question a sponsor pays for, and the one our difference from an SMO's site-selection model lives in. Run against a historical candidate pool, a draft protocol's own lines are testable while they can still be changed; run afterwards, the same numbers are an autopsy. The trap is reporting an exclusion rate per criterion without saying how often that criterion was the *only* reason — a line that co-occurs with four others costs nothing to relax.",
+      "inputs": {
+        "studyId": "std-hcc-feasibility",
+        "protocolVersionId": "prt-hcc-draft-v1",
+        "direction": "trial_to_patient",
+        "asOf": "2026-09-28T00:00:00Z"
+      },
+      "mustDo": [
+        "Report, per criterion, how many candidates it rules out, how many it leaves unknown, and how many it is the sole reason for.",
+        "Separate 「不满足」 from 「未知」 in the funnel: the first is a protocol problem, the second is a data problem and they are fixed by different people.",
+        "Name, for the three costliest lines, what relaxing each would plausibly return — as a count from this pool, never as a projection.",
+        "State the pool's own selection: whose charts, over what period, and why they were in the pool at all."
+      ],
+      "mustNotDo": [
+        "Report an exclusion rate without its denominator.",
+        "Recommend a threshold change on clinical grounds — the funnel says what a line costs, not whether the line is right.",
+        "Extrapolate the pool's rates to a national population.",
+        "Count a candidate twice because two protocol versions were assessed."
+      ],
+      "gradedOn": "Whether a medical monitor could take the top three lines into a protocol amendment discussion with the counts intact."
+    },
+    {
+      "id": "vcr-matching-004-historical-replay-baseline",
+      "title": "上线基线：在合作方 120 例历史转诊上做一次 as-of 回放，两位医生独立判定",
+      "why": "This is AC-36, and it is the only brief whose output is a measurement rather than a deliverable. Every part of it can be got wrong invisibly: replaying with today's chart instead of the chart as it stood; scoring against one physician's opinion; summing sixteen confusion cells into one accuracy; reporting recall without the number needed to screen. The reason the platform records the visibility clock at all is so this replay is possible, and the reason two readers are needed is that on real oncology charts physicians agree with each other only part of the time.",
+      "inputs": {
+        "studyId": "std-baseline-replay",
+        "protocolVersionId": "prt-baseline-v1",
+        "direction": "trial_to_patient",
+        "subjectKeys": "the 120 referrals with a recorded outcome",
+        "asOf": "each referral's own decision date"
+      },
+      "mustDo": [
+        "Replay each referral as of the date the coordinator actually decided, using only facts whose visible time is at or before it.",
+        "Report the four-by-four criterion confusion matrix, stratified by time, number, negation, logic and applicability, with 「未知被判成满足」 and 「满足被判成不满足」 as their own cells.",
+        "Report the eligible recall, the false-exclusion rate, the positive predictive value and the number needed to screen together.",
+        "Report the two readers' agreement and κ, and state it as the ceiling.",
+        "Report the unknown rate and the share of criteria that code could not decide.",
+        "Say in the report that no accuracy threshold is set."
+      ],
+      "mustNotDo": [
+        "Use any chart content recorded after the decision date.",
+        "Quote TrialGPT's, PRISM's or any vendor's accuracy as a comparison or a promise.",
+        "Report one accuracy figure for the whole set.",
+        "Adjudicate a disagreement by asking the model.",
+        "Drop the cases where the two readers disagreed — those are the measurement."
+      ],
+      "gradedOn": "Whether the report would let a medical director decide how much pre-screening work to hand the tool, and whether every number in it has a denominator."
+    },
+    {
+      "id": "vcr-matching-005-accrual-forecast-backtest",
+      "title": "九家中心的入组预测，并用合作方历史漏斗按时间切片回测",
+      "why": "AC-37, and the brief that keeps the forecast honest. The inputs are assembled from the ledger — each site's own open months, its own screen-failure rate, its planned versus actual activation — and the answer is a distribution. The failure is presenting it as a date, or as a vendor-style confidence: what is reportable is the measured coverage of our own 80% prediction intervals on forecasts that were registered before the enrolments that score them.",
+      "inputs": {
+        "studyId": "std-accrual-nine-sites",
+        "asOf": "2026-09-28T00:00:00Z",
+        "direction": "trial_to_patient",
+        "draftMaterials": false
+      },
+      "mustDo": [
+        "Assemble one Gamma prior per site from that site's own enrolments over its own open months, and say which sites had no history and are running on the prior alone.",
+        "Carry the screen-failure rate as an input to the process, per site where the ledger supports one.",
+        "Keep planned and actual activation dates in separate fields and show the gap.",
+        "Report the last-patient-in date as a distribution with a named prediction interval, and state that 激进 / 平衡 / 保守 selects a quantile of that same distribution.",
+        "Backtest on time slices and report the actual coverage of the 80% intervals with its Wilson bounds and the number of slices behind it.",
+        "Name which sites the forecast is most sensitive to."
+      ],
+      "mustNotDo": [
+        "Report a single completion date, or a 「置信度」 with no denominator.",
+        "Fit a site's rate on the study's elapsed months instead of that site's open months.",
+        "Score a forecast against enrolments that predate it.",
+        "Treat a 30% screen-failure rate as a 30% shift of the completion date.",
+        "Claim a coverage figure from fewer than ten slices without saying so."
+      ],
+      "gradedOn": "Whether the coverage figure, its interval and its slice count would survive a statistician asking where each of the three came from."
+    }
+  ]
+}
