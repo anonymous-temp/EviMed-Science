@@ -7020,9 +7020,48 @@
     },
     {
       "id": "moderna-news",
-      "decision": "deferred",
-      "reason": "probe_json_api_family_unmapped_generic",
-      "detail": "Observed protected probe outcome: parse-error; json_api_family_unmapped_generic.",
+      "decision": "enabled",
+      "kind": "entry-list",
+      "captureGroup": "publisher-feed",
+      "entries": 5,
+      "dated": 5,
+      "samples": [
+        {
+          "index": 0,
+          "title": "Moderna Announces Late-Breaking Data to be Presented at ESMO Congress 2026",
+          "url": "https://api.quotemedia.com/supplement/news-story/?webmasterId=102691&storyId=6920944337278521",
+          "date": "2026-09-21T14:12:00+00:00",
+          "summary": "ACCESS Newswire via QuoteMedia: CAMBRIDGE, MA / ACCESS Newswire / September 21, 2026 / Moderna, Inc. (NASDAQ:MRNA) today announced that three abstracts on intismeran autogene, an investigational mRNA-based individualized neoantigen therapy, have been accepted for presentation at the European Society for Medical Oncology (ESM."
+        },
+        {
+          "index": 2,
+          "title": "AI Drug Discovery Market Projected to Reach $13.8 Billion by 2033",
+          "url": "https://api.quotemedia.com/supplement/news-story/?webmasterId=102691&storyId=5881038227172497",
+          "date": "2026-09-14T14:00:00+00:00",
+          "summary": "Canada Newswire via QuoteMedia: AI Drug Discovery Market Projected to Reach $13.8 Billion by 2033 Canada NewsWire AUSTIN, Texas , Sept. 14, 2026 /CNW/ -- USA News Group News Commentary - Artificial intelligence is moving from the edges of drug discovery toward its center, and the market built around."
+        },
+        {
+          "index": 4,
+          "title": "Moderna to Present at Upcoming Conferences in September 2026",
+          "url": "https://api.quotemedia.com/supplement/news-story/?webmasterId=102691&storyId=7687562478254249",
+          "date": "2026-09-01T11:00:00+00:00",
+          "summary": "ACCESS Newswire via QuoteMedia: CAMBRIDGE, MA / ACCESS Newswire / September 1, 2026 / Moderna, Inc. (Nasdaq:MRNA), today announced its participation in the following upcoming investor conferences: Morgan Stanley 24 th Annual Global Healthcare Conference, on Monday, September 14 at 10:00 a.m. ET Bernstein Insights: Hea."
+        }
+      ],
+      "config": {
+        "family": "quotemedia-headlines",
+        "lookback_days": 30,
+        "max_pages": 1,
+        "url": "https://www.accesswire.com/qm/data/getHeadlines.json?topics=MRNA&noSrc=qmr&src=pzo,bayaw,prn,bwi,TheNewsWire,nfil,actw,irw,acn,cnw,nwd,glpr,nwmw&summary=true&summLen=300&start={since:%Y-%m-%d}&end={today:%Y-%m-%d}",
+        "allowed_hosts": [
+          "www.accesswire.com"
+        ],
+        "link_hosts": [
+          "api.quotemedia.com"
+        ]
+      },
+      "access": "json-api",
+      "egress": "direct",
       "evidence": [
         {
           "group": "api-original",
@@ -7125,6 +7164,29 @@
               },
               "file": "moderna-news-publisher-js-0.body.gz",
               "bytes": 58783
+            }
+          ]
+        },
+        {
+          "group": "publisher-feed",
+          "id": "moderna-news",
+          "at": "2026-09-30T03:01:35.323655+00:00",
+          "access": "html-list",
+          "egress": "direct",
+          "outcome": "readable",
+          "entries": 0,
+          "samples": [],
+          "seconds": 2.39,
+          "captures": [
+            {
+              "url": "https://www.accesswire.com/qm/data/getHeadlines.json?topics=MRNA&noSrc=qmr&src=pzo,bayaw,prn,bwi,TheNewsWire,nfil,actw,irw,acn,cnw,nwd,glpr,nwmw&summary=true&summLen=300&start=2026-08-31&end=2026-09-30",
+              "status": 200,
+              "sha256": "feda0ed54dfa925afd08c6a9901bb42583d54989ace5f102803066cfeffa1607",
+              "headers": {
+                "content-type": "text/plain; charset=utf-8"
+              },
+              "file": "moderna-news-publisher-feed-0.body.gz",
+              "bytes": 6266
             }
           ]
         },
