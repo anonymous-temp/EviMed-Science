@@ -68,7 +68,8 @@ function normalizedActivity(raw, activeMutations, databaseActivity) {
     activeTasks: count(raw?.activeTasks),
     backgroundOperations: count(raw?.backgroundOperations),
     runningAgentRuns: count(raw?.runningAgentRuns),
-    runningProductJobs: count(databaseActivity?.running_jobs),
+    runningProductJobs: count(databaseActivity?.running_jobs) === null || count(raw?.heavyWorkJobs ?? 0) === null
+      ? null : count(databaseActivity.running_jobs) + count(raw?.heavyWorkJobs ?? 0),
     pendingPromptAdmissions: count(databaseActivity?.pending_prompts),
     activeDatabaseSessions: count(databaseActivity?.active_sessions),
     busyRuntimes: count(runtimes?.busy),

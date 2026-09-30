@@ -20,7 +20,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { roleAllows } from "@evimed/domain";
+import { roleAllows, VCR_EXPORT_KINDS, DOCUMENT_EXPORT_MIME } from "@evimed/domain";
+import { exportHash } from "../src/documentExport.mjs";
+import { documentExportDirectory } from "../src/documentRenderController.mjs";
+import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VCR_ROUTE_ABILITIES } from "../src/vcrRoutes.mjs";
@@ -80,6 +83,21 @@ before(async () => {
       engineCalls.push(`${init.method ?? "GET"} ${target.pathname}`);
       const body = target.pathname === "/health" ? { ok: true, engineVersion: "test", rVersion: "test", methods: [], packageLockHash: "" } : {};
       return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    },
+    documentExportController: {
+      async inspectRuntimeImage() { return { imageId: "sha256:test-renderer" }; },
+      async cancelDocumentRender() { return { canceled: true }; },
+      async renderDocument(reference) {
+        const root = path.join(documentExportDirectory({ dataDir }, reference), "attempts", reference.attemptId);
+        const input = JSON.parse(await readFile(path.join(root, "input/document.json"), "utf8"));
+        const formats = {};
+        for (const format of input.formats) {
+          const bytes = Buffer.from(input.canonicalMarkdown);
+          await writeFile(path.join(root, "output", `document.${format}`), bytes);
+          formats[format] = { state: "ready", path: `document.${format}`, mime: DOCUMENT_EXPORT_MIME[format], sha256: exportHash(bytes), bytes: bytes.length };
+        }
+        await writeFile(path.join(root, "output/manifest.json"), JSON.stringify({ sourceDigest: input.sourceDigest, rendererVersion: input.rendererVersion, formats }));
+      },
     },
     vcrDispatchRun: async (/** @type {any} */ input) => {
       dispatches.push(input);
@@ -727,4 +745,36 @@ test("a stopped run releases its bounded runtime, and the study's dispatch does 
   assert.match(source, /startsWith\("vcr-"\)\) \{\s+if \(runtimeManager\.boundedRuntimeScope\(project\)\?\.runId === run\.dispatchId\)/,
     "a finished vcr run releases its runtime before the orchestrator folds it in");
   assert.match(source, /vcr\?\.worker\?\.status\?\.\(\)\.running/, "the release idle check counts the vcr worker");
+});
+
+
+test("shared exports serve all VCR kinds to current members without a new research run, and revoke cached downloads", options, async () => {
+  const study = await sharedStudy();
+  await rows("UPDATE evimed_vcr.jobs SET state='canceled', checkpoint=checkpoint || '{\"engineStopped\":true}'::jsonb WHERE state IN ('queued','running')");
+  const current = await context.app.vcr.store.studyById(study.id);
+  const beforeRuns = dispatches.length;
+  let lastId;
+  for (const kind of VCR_EXPORT_KINDS) {
+    const written = await vcrRuntimeWrite({ store: context.app.vcr.store, service: context.app.vcr.service, study: current,
+      what: "report", items: [ { kind, section: "Methods", template: "方法。" }, { kind, section: "Limitations", template: "尚无结果，保留限制。" } ], data: null });
+    assert.equal(written.ok, true);
+    const queued = await call("lead", "POST", `/api/vcr/studies/${study.id}/export`, { kind });
+    assert.equal(queued.status, 201, queued.text);
+    lastId = queued.body.data.conversion.id;
+    let status;
+    for (let i = 0; i < 100; i++) {
+      status = await call("lead", "GET", `/api/document-exports/${lastId}`);
+      if (status.body.data?.state === "ready") break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(status.body.data.state, "ready", status.text);
+    const download = await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`);
+    assert.equal(download.status, 200, download.text);
+    assert.match(download.text, /Methods[\s\S]*Limitations/);
+    assert.equal((await call("stranger", "GET", `/api/document-exports/${lastId}/download/pdf`)).status, 404);
+  }
+  assert.equal(dispatches.length, beforeRuns, "conversion did not start another conversation");
+  assert.equal((await call("owner", "DELETE", `/api/vcr/studies/${study.id}/members/${accounts.lead}`)).status, 200);
+  assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}`)).status, 404);
+  assert.equal((await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`)).status, 404);
 });

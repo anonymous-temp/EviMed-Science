@@ -1209,3 +1209,5 @@ export {
   vcrSimulationReportFindings,
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
+
+export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";

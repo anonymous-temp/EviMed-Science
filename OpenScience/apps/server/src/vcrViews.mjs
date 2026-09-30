@@ -1,3 +1,4 @@
+import { documentExportDigest } from "@evimed/domain";
 /**
  * What 「虚拟临研」's pages are shown: the presenter (contract 2026-09-29 §5).
  *
@@ -1059,14 +1060,32 @@ export function presentExport(row, bundle) {
   const index = exports.findIndex((/** @type {any} */ other) => other.id === row.id);
   const deliverable = presentDeliverable(row, index < 0 ? 0 : index, exports, now);
   const cover = object(row.cover);
-  const model = object(cover.results).study ? cover.results : vcrReportModel({
+  const currentModel = vcrReportModel({
     study: bundle.study, definition: bundle.definition, assumptions: bundle.assumptions, results: bundle.results,
-    seal: bundle.seal ?? null, reviews: bundle.reviews, staleMarks: bundle.stale, models: bundle.models,
-    population: bundle.populations[0] ?? null, comparator: bundle.comparator, scenarios: bundle.scenarios,
+    seal: bundle.seal ?? null, reviews: list(bundle.reviews).map(review => ({ ...review,
+      current: vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null }) })),
+    staleMarks: bundle.stale, models: bundle.models, population: bundle.populations[0] ?? null,
+    comparator: bundle.comparator, scenarios: bundle.scenarios,
   });
+  const model = object(cover.results).study ? cover.results : currentModel;
+  // Old documents remain readable. Compare the inputs available to their
+  // templates, including assumptions, model versions, reviews and seal state.
+  const comparable = (value) => {
+    const result = { ...value };
+    if (!Object.hasOwn(model, 'inputVersions')) delete result.inputVersions;
+    result.review = { ...result.review, records: list(result.review?.records).map((review, position) => {
+      const entry = { ...review };
+      if (!Object.hasOwn(model.review?.records?.[position] ?? {}, 'current')) delete entry.current;
+      return entry;
+    }) };
+    return result;
+  };
+  const snapshotChanged = Boolean(cover.results) && documentExportDigest(comparable(model)) !== documentExportDigest(comparable(currentModel));
   return {
     ...deliverable,
+    ...(snapshotChanged ? { snapshotChanged: true } : {}),
     state: row.state,
+    ...(cover.documentExportId ? { documentExportId: cover.documentExportId } : {}),
     document: {
       status: coverStatus({ cover, row, bundle, model }),
       sections: packageSections({ cover, row, bundle, model }),
@@ -1115,7 +1134,7 @@ function packageSections({ cover, bundle, model }) {
   const sections = [];
   let number = 0;
   const add = (/** @type {Record<string, any>} */ section) => { number += 1; sections.push({ ...section, id: section.id, number: String(number) }); };
-  const rendered = text(object(cover.report).rendered);
+  const rendered = list(cover.reports).length ? list(cover.reports).map(report => `${report.section}\n\n${report.rendered}`).join("\n\n") : text(object(cover.report).rendered);
   const pico = object(object(model.definition).pico);
   add({
     id: "summary", title: "研究与分析概要", body: rendered,

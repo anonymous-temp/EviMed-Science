@@ -1,3 +1,9 @@
+import { DocumentExportService, freezeArtifactDocument } from "./documentExport.mjs";
+import { DocumentExportWorker } from "./documentExportWorker.mjs";
+import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
+import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
+import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
 import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
@@ -519,6 +525,8 @@ function requestIdFor(req) {
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
   if (pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)) return `${CAPSULE_GATEWAY_PATH}/:action`;
+  if (pathname === "/api/document-exports") return pathname;
+  if (pathname.startsWith("/api/document-exports/")) return "/api/document-exports/:id/:action/:format";
   if (pathname === "/api/capsules") return pathname;
   if (pathname.startsWith("/api/capsules/")) return "/api/capsules/:id/:action";
   if (pathname === "/api/inbox") return pathname;
@@ -1651,6 +1659,35 @@ export function createWebApiApp(overrides = {}) {
     get market() { return geo?.market ?? null; },
     get exporter() { return geo?.exporter ?? null; },
   });
+  const documentController = overrides.documentExportController ?? new RuntimeControllerClient(config);
+  const vcrDocumentAdapter = vcr ? createVcrDocumentAdapter({ vcr, store }) : null;
+  const documentExportService = productDocuments && productJobs ? new DocumentExportService({
+    config, documents: productDocuments, jobs: productJobs, controller: documentController,
+    resolveSource: async (user, request) => {
+      if (request.source?.studyId) {
+        if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        return vcrDocumentAdapter.resolve(user, request);
+      }
+      const project = await store.requireProject(user, request.projectId);
+      const source = request.source ?? {};
+      return { project, reference: { artifactId: source.artifactId, root: source.root ?? "workspace", workspace: project.activeWorkspace ?? "" },
+        ...await freezeArtifactDocument(project, source) };
+    },
+    authorize: async (user, payload) => {
+      if (payload.source.studyId) {
+        if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        const { project } = await vcrDocumentAdapter.authorize(user, payload.source);
+        if (project.id !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+      } else {
+        if (user.id !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        await store.requireProject(user, payload.projectId);
+      }
+    },
+  }) : null;
+  const documentExportWorker = documentExportService ? new DocumentExportWorker({ service: documentExportService, jobs: productJobs,
+    controller: documentController, admission: client => heavyWorkAdmission(client, "render"),
+    report: code => process.stderr.write(`document export: ${code}\n`) }) : null;
+  const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -1662,7 +1699,7 @@ export function createWebApiApp(overrides = {}) {
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
       remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { if (client) await deleteVcrProjectRows(client, user.id, projectId); },
+        beforeDelete: async (client) => { if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
       }),
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
@@ -3424,6 +3461,7 @@ export function createWebApiApp(overrides = {}) {
     vcr.jobs.notifier = vcr.notifier;
     const orchestrator = new VcrOrchestrator({
       store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal,
+      queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
       latestSessionId: async ({ userId, projectId }) => {
         const owner = await store.userById(userId);
@@ -3433,6 +3471,7 @@ export function createWebApiApp(overrides = {}) {
       report: (code) => process.stderr.write(`vcr orchestrator: ${code}\n`),
     });
     vcr.orchestrator = orchestrator;
+    vcr.exporter = { requestExport: (user, study, kind) => orchestrator.requestExport(user, study, kind) };
     vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
     vcr.worker = new VcrWorker({
       pollMs: config.vcrPollMs ?? 5_000, leaseMs: config.vcrLeaseMs ?? 900_000,
@@ -3644,11 +3683,13 @@ export function createWebApiApp(overrides = {}) {
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
+          documentExportWorker?.running,
         ].filter(Boolean).length;
         return {
           activeCommands,
           activeTasks: taskManager.statsAll().active,
           backgroundOperations,
+          heavyWorkJobs: await heavyWorkBlockerCount(productDatabase),
           runningAgentRuns,
           runtimes: { busy, idle, unknown },
         };
@@ -4019,6 +4060,7 @@ export function createWebApiApp(overrides = {}) {
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
+      if (await documentExportRoutes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -5037,6 +5079,7 @@ export function createWebApiApp(overrides = {}) {
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
+            if (client) await documentExportService?.cancelProject(id, null, client);
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
@@ -5186,6 +5229,7 @@ export function createWebApiApp(overrides = {}) {
           let vcrArtifacts = null;
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
+              if (client) await documentExportService?.cancelProject(user.id, project.id, client);
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
@@ -5776,7 +5820,7 @@ export function createWebApiApp(overrides = {}) {
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
     for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, credits?.worker]) {
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -5815,6 +5859,7 @@ export function createWebApiApp(overrides = {}) {
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
+      documentExportWorker?.start();
       credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -5987,6 +6032,7 @@ export function createWebApiApp(overrides = {}) {
       await review?.worker.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
+      await documentExportWorker?.close();
       await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;

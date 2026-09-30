@@ -1,3 +1,5 @@
+import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
+
 /**
  * The cross-boundary error-code registry.
  *
@@ -1235,6 +1237,7 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
  * second list from being derived by accident and drifting.
  */
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
+  ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
   ...ANALYSIS_ERROR_CODES,
@@ -1300,6 +1303,7 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  ...DOCUMENT_EXPORT_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
@@ -2008,6 +2012,7 @@ export function errorCodeOutcome(code) {
   // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
+  if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
   if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
   // The rest of the module's codes and the protocol's per-field issues are about

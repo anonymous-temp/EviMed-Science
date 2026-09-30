@@ -237,3 +237,13 @@ test("TaskManager keeps already queued work intact while maintenance pauses clai
   assert.equal(invoked, 1);
   assert.equal((await manager.get(ctx, queued.id)).status, "succeeded");
 });
+
+
+test("expired physical render and compute work remains in the release switch's running-job count", async () => {
+  const { service } = fixture(async () => ({ ...EMPTY_ACTIVITY, heavyWorkJobs: 2 }));
+  await service.initialize();
+  assert.equal((await service.activity()).runningProductJobs, 2);
+  const held = await service.request({ requestId: "render-recovery", ttlSeconds: 30 });
+  assert.equal(held.state, "draining");
+  assert.equal(held.blockers.runningProductJobs, 2);
+});

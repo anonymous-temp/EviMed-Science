@@ -1,3 +1,4 @@
+import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { Link } from "react-router";
 import { ArrowLeft, CircleCheck, CircleDashed } from "lucide-react";
 import { VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
@@ -58,6 +59,8 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
             <Link to={file} data-vcr-package-file="" className="mt-3 inline-block text-ui text-link hover:underline">打开完整{kind}</Link>
           )}
 
+          {deliverable.snapshotChanged && <p role="status" className="mt-3 text-caption text-warn-strong">研究已有更新，此报告保留生成时的内容。</p>}
+          {sections.length > 0 && <div className="mt-3"><DocumentExportActions source={{ studyId, exportId }} initialId={deliverable.documentExportId} /></div>}
           {deliverable.document?.status && deliverable.document.status.length > 0 && (
             <dl className="mt-6 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>div]:bg-surface">
               {deliverable.document.status.map((item) => (

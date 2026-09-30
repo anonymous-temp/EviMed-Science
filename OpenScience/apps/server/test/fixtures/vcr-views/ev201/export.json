@@ -6,6 +6,7 @@
   "draft": false,
   "runId": "run_12",
   "path": "package.pdf",
+  "snapshotChanged": true,
   "state": "ready",
   "document": {
     "status": [

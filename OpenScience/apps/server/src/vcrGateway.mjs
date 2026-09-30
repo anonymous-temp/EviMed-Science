@@ -1192,17 +1192,26 @@ const WRITERS = {
     const kind = item.choice("kind", VCR_EXPORT_KINDS, { fallback: "study_package" });
     const section = item.str("section", { max: 60 }) ?? "main";
     if (!item.ok) return null;
-    const model = service.reportModel ? await service.reportModel(study) : {};
-    const rendered = renderVcrNumbers(template, model);
     const open = (await store.exports(study.id)).find((/** @type {any} */ row) => ["queued", "running"].includes(row.state) && row.kind === kind);
     const target = open ?? await store.createExport({ studyId: study.id, userId: study.userId, kind, cover: {} });
-    await store.updateExport(target.id, {
-      cover: {
-        ...object(target.cover),
-        report: { section, template, rendered: rendered.text, bindings: rendered.bindings },
-        results: model,
-      },
-    });
+    // The first section freezes the numerical and review snapshot. Later
+    // sections bind to that model under the export row lock, including two
+    // report writes arriving while a calculation changes the live study.
+    const candidate = object(target.cover).results ?? (service.reportModel ? await service.reportModel(study) : {});
+    let rendered = renderVcrNumbers(template, candidate);
+    const update = (cover) => {
+      const model = cover.results ?? candidate;
+      rendered = renderVcrNumbers(template, model);
+      const reports = Array.isArray(cover.reports) ? [...cover.reports] : [];
+      const report = { section, template, rendered: rendered.text, bindings: rendered.bindings };
+      const index = reports.findIndex(entry => entry.section === section);
+      if (index < 0) reports.push(report); else reports[index] = report;
+      return { ...cover, reports, report, results: model, intendedUse: model.intendedUse ?? study.intendedUse,
+        reviews: model.review?.records ?? [], staleResults: model.stale?.length ?? 0, seal: model.seal ?? null };
+    };
+    if (store.updateExportCover) {
+      if (!await store.updateExportCover(target.id, update)) throw new HttpError(404, "vcr_export_not_found", "Export not found.");
+    } else await store.updateExport(target.id, { cover: update(object(target.cover)) });
     for (const found of rendered.issues) item.issues.push(issue(item.index, found.path, found.code, found.message.replace(/（AC-\d+）|（方案 §[\d.]+）|方案 §[\d.]+[，。；]?/g, "")));
     return target.id;
   },

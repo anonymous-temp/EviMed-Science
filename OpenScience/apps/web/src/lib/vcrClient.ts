@@ -297,6 +297,8 @@ export interface VcrPackageSection {
 
 /** One deliverable of a study, and — when it is opened — the package as a document. */
 export interface VcrDeliverable {
+  documentExportId?: string | null;
+  snapshotChanged?: boolean;
   id: string;
   kind: VcrExportKind;
   title: string;

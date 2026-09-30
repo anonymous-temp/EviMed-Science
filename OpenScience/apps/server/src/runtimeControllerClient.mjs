@@ -4,8 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 
-// Version 6 also carries fixed per-project plugin settings and the validated public-source endpoint for citation tools.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 6;
+// Version 7 adds the fixed offline document renderer and scoped cancellation.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 7;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -161,6 +161,15 @@ export class RuntimeControllerClient {
       if (body) request.end(body);
       else request.end();
     });
+  }
+
+  /** @param {any} reference @param {{signal?:AbortSignal}} options */
+  renderDocument(reference, { signal } = {}) {
+    return this.request("POST", "/v1/document/render", reference, { signal, timeoutMs: 210_000 });
+  }
+
+  cancelDocumentRender(reference) {
+    return this.request("POST", "/v1/document/cancel", reference);
   }
 
   async health() {

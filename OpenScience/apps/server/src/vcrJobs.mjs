@@ -1,3 +1,4 @@
+import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
 /**
  * 「虚拟临研」's deterministic work: the job queue in front of `vcr-engine`
  * (build plan 2026-09-28 §11.4, integration contract 2026-09-29 §3).
@@ -563,7 +564,9 @@ export class VcrJobs {
    * @param {{ workerId?: string, leaseMs?: number, limit?: number }} [options]
    */
   async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1 } = {}) {
+    await this.reconcileStoppedEngineWork();
     const rows = await this.store.transaction(async (client) => {
+      if (!(await heavyWorkAdmission(client, "compute"))) return [];
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-job-claim'))");
       const exhausted = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
         SET state = 'failed', lease_owner = NULL, lease_until = NULL, finished_at = now(), updated_at = now(),
@@ -592,6 +595,23 @@ export class VcrJobs {
     this.counters.claimed += rows.length;
     this.counters.exhausted += this.reaped.length;
     return rows.map(jobSummaryFromRow);
+  }
+
+  /** Physical termination is proved by the engine, never by lease expiry. */
+  async reconcileStoppedEngineWork() {
+    if (!this.engine?.configured?.()) return;
+    const rows = await this.store.rows(`SELECT id, checkpoint FROM ${VCR_SCHEMA}.jobs
+      WHERE state IN ('failed','canceled') AND checkpoint ? 'engineJobId'
+        AND COALESCE(checkpoint->>'engineStopped','false') <> 'true' ORDER BY updated_at LIMIT 5`);
+    for (const row of rows) {
+      try {
+        const status = await this.engine.status(String(object(row.checkpoint).engineJobId));
+        if (["succeeded", "failed", "canceled", "not_estimable"].includes(status.state)) {
+          await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint = checkpoint || '{"engineStopped":true}'::jsonb
+            WHERE id=$1 AND state IN ('failed','canceled')`, [String(row.id)]);
+        }
+      } catch { /* Unknown physical state retains its admission slot. */ }
+    }
   }
 
   /** The jobs the last claims failed for want of attempts, once each. */

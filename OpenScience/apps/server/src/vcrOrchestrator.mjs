@@ -803,7 +803,7 @@ export function vcrGapsForRule(rule) {
 export class VcrOrchestrator {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
-   *   notifier?: any, seal?: any,
+   *   notifier?: any, seal?: any, queueExport?: any,
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
    *     reason: string, brief: string }) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
@@ -811,7 +811,7 @@ export class VcrOrchestrator {
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ store, jobs, config = {}, notifier = null, seal = null, dispatchRun = null, latestSessionId = null,
+  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, dispatchRun = null, latestSessionId = null,
     briefFor = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
@@ -820,6 +820,7 @@ export class VcrOrchestrator {
     this.config = config;
     this.notifier = notifier;
     this.seal = seal;
+    this.queueExport = queueExport;
     this.dispatchRun = dispatchRun;
     this.latestSessionId = latestSessionId;
     this.briefFor = briefFor;
@@ -985,6 +986,11 @@ export class VcrOrchestrator {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
+    const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && row.cover?.results?.study && (row.cover?.reports?.length || row.cover?.report));
+    if (previous && this.queueExport) {
+      const conversion = await this.queueExport(user, study, previous);
+      return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };
+    }
     const row = await this.store.createExport({ studyId: study.id, userId: study.userId, kind, cover: await this.#cover(study) });
     await this.#claim(study, `run:export:${row.id}`, "run", "pending",
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
@@ -1971,14 +1977,15 @@ export class VcrOrchestrator {
     this.counters.runsFinished += 1;
     const detail = object(mark.detail);
     if (detail.purpose === "export" && detail.exportId) {
-      // The cover is merged, never replaced: the run wrote its rendered report
-      // into this row while it worked, and the cover the platform adds is the
-      // review state, the stale results and the seal — two writers, one row.
       const existing = (await this.store.exports(study.id)).find((row2) => row2.id === String(detail.exportId));
-      const cover = { ...(existing?.cover ?? {}), ...(await this.#cover(study)) };
+      // The report's snapshot owns its cover; completion cannot relabel old
+      // numbers with newer reviews or replace usable work after a run failure.
+      const cover = existing?.cover ?? {};
+      const usable = Boolean(cover.results?.study && (cover.reports?.length || cover.report));
       const row = await this.store.updateExport(String(detail.exportId), {
-        state: status === "succeeded" ? "ready" : "failed", runId: mark.run_id ?? null, cover,
+        state: usable ? "ready" : "failed", runId: mark.run_id ?? null, cover,
       });
+      if (usable && this.queueExport) await this.queueExport({ id: study.userId }, study, row);
       if (row?.state === "ready" && this.notifier?.packageReady) {
         await this.#notice(study, `notice:package:${row.id}`, () => this.notifier.packageReady(study, {
           exportId: row.id, kind: row.kind, headline: object(cover).headline ?? null, gaps: Number(object(cover).staleResults ?? 0),

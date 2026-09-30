@@ -922,12 +922,21 @@ export class VcrService {
    * @param {any} study
    */
   async reportModel(study) {
-    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models] = await Promise.all([
-      this.store.latestDefinition(study.id), this.store.assumptions(study.id), this.store.results(study.id),
-      this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.latestPopulation(study.id),
-      this.store.latestComparatorDesign(study.id), this.store.trialScenarios(study.id, 60), this.store.models(study.userId),
+    return this.store.reportSnapshot ? this.store.reportSnapshot(async (snapshot) =>
+      this.reportModelFromStore(await snapshot.studyById(study.id), snapshot)) : this.reportModelFromStore(study, this.store);
+  }
+
+  /** @param {any} study @param {any} store */
+  async reportModelFromStore(study, store) {
+    if (!study) throw failure(404, "vcr_study_not_found", "Study not found.");
+    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol] = await Promise.all([
+      store.latestDefinition(study.id), store.assumptions(study.id), store.results(study.id),
+      store.reviews(study.id), store.staleMarks(study.id), store.latestPopulation(study.id),
+      store.latestComparatorDesign(study.id), store.trialScenarios(study.id, 60), store.models(study.userId),
+      store.populations(study.id, 20), store.patientSets(study.id, 20), store.comparatorDesigns(study.id, 20), store.latestDesignGrid(study.id), store.latestProtocolVersion(study.id),
     ]);
-    return vcrReportModel({ study, definition, assumptions, results, reviews, staleMarks: stale, population, comparator,
+    const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
+    return vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current }) })), staleMarks: stale, population, comparator,
       scenarios, models, seal: vcrSealState(study) });
   }
 

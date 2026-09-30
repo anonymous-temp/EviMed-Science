@@ -248,6 +248,17 @@ export { comparatorFromRow, criterionFromRow, jobSummaryFromRow, patientSetFromR
  * no package migrates a table another one reads.
  */
 export class VcrStore extends VcrStoreBase {
+  /** Read every report input at one PostgreSQL snapshot. @param {(store:VcrStore) => Promise<any>} operation */
+  async reportSnapshot(operation) {
+    await this.ready();
+    return this.database.transaction(async (client) => {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const snapshot = new VcrStore({ database: this.database });
+      snapshot.transaction = async (read) => read(client);
+      return operation(snapshot);
+    });
+  }
+
   // --- studies ------------------------------------------------------------------
 
   /**
@@ -1121,6 +1132,16 @@ export class VcrStore extends VcrStoreBase {
   async exports(studyId) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.exports WHERE study_id = $1 ORDER BY created_at DESC LIMIT 50`, [studyId]))
       .map((row) => this.#exportFromRow(row));
+  }
+
+  /** Preserve concurrently submitted report sections. @param {string} id @param {(cover:any)=>any} update */
+  async updateExportCover(id, update) {
+    return this.transaction(async client => {
+      const row = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.exports WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+      if (!row) return null;
+      return this.#exportFromRow((await client.query(`UPDATE ${VCR_SCHEMA}.exports SET cover=$2::jsonb, updated_at=now() WHERE id=$1 RETURNING *`,
+        [id, JSON.stringify(update(object(row.cover)))])).rows[0]);
+    });
   }
 
   /** @param {string} id @param {{ state?: string, runId?: string | null, location?: string | null, sha256?: string | null, cover?: Record<string, any> }} patch */

@@ -385,6 +385,10 @@ export function vcrReportModel(input) {
       id: String(study.id ?? ""), name: String(study.name ?? ""), question: String(study.question ?? ""),
       dataTier: String(study.dataTier ?? "T0"), intendedUse: String(study.intendedUse ?? "exploratory"),
     },
+    inputVersions: {
+      population: input.population ? { id: population.id ?? null, version: population.version ?? null } : null,
+      comparator: input.comparator ? { id: comparator.id ?? null, version: comparator.version ?? null } : null,
+    },
     definition: input.definition ? {
       version: Number(object(input.definition).version ?? 0),
       pico: object(object(input.definition).pico), estimand: object(object(input.definition).estimand),
@@ -432,7 +436,7 @@ export function vcrReportModel(input) {
     review: {
       records: list(input.reviews).map((review) => {
         const row = object(review);
-        return { kind: row.kind ?? null, state: row.state ?? null, reviewer: row.reviewer ?? null, nodes: list(row.nodes).map(String),
+        return { kind: row.kind ?? null, state: row.state ?? null, reviewer: row.reviewer ?? null, ...(typeof row.current === "boolean" ? { current: row.current } : {}), nodes: list(row.nodes).map(String),
           createdAt: row.createdAt ?? null };
       }),
     },

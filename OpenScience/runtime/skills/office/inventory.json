@@ -9,13 +9,13 @@
       "executable": {
         "docx": {
           "entrypoints": ["scripts/create_docx.py"],
-          "dependencies": ["python>=3.11"],
+          "dependencies": ["python>=3.11", "pandoc"],
           "artifacts": ["document.docx"],
           "smoke": "minimal-docx"
         },
         "pdf": {
           "entrypoints": ["scripts/create_pdf.py"],
-          "dependencies": ["python>=3.11"],
+          "dependencies": ["python>=3.11", "pandoc", "playwright", "chromium", "fonts-noto-cjk"],
           "artifacts": ["document.pdf"],
           "smoke": "minimal-pdf"
         },
