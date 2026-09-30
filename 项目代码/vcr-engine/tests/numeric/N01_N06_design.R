@@ -346,3 +346,35 @@ vcr_case("N06d", c("AC-28", "AC-31", "AC-04"), function() {
                         paste(names(tb) == cols, collapse = ""), nrow(tb), paste(unique(tb$status), collapse = "/"), length(unique(tb$parameters)),
                         !no_rds, cell_seed, same, null_row$value, null_row$mcse, tight$status))
 })
+
+vcr_case("N04d", c("AC-29", "AC-30"), function() {
+  # The analytic cross-check at a high replicate count. The log-rank power is a
+  # first-order approximation, documented to sit within about a percentage point
+  # of a simulation (largest measured gap 1.3 points); at 100,000 replicates the
+  # simulation's own error is 0.0004, and holding the approximation to three of
+  # those read 「不一致」 for a difference the approximation itself explains.
+  # The check now says the tolerance it used and why, keeps the literal three-MCSE
+  # flag beside it, and holds an EXACT closed form (means, proportions) to the
+  # simulation's error alone -- a real disagreement of three points is still one.
+  lr <- list(design = list(kind = "two_arm_fixed", nTreat = 140, nControl = 70), endpoint = list(type = "time_to_event"),
+             truth = list(hazardRatio = 0.6, controlMedian = 6), analysis = list(method = "logrank", alpha = 0.025, sided = 1),
+             accrual = list(kind = "uniform", duration = 12, followup = 12), performance = list("power"))
+  ref <- vcr_analytic_check(lr, list(vcr_measure("power", 0.5, simulated = TRUE, mcse = 0.001)))
+  sim <- function(gap, mcse) list(vcr_measure("power", ref$value + gap, simulated = TRUE, mcse = mcse))
+  near <- vcr_analytic_check(lr, sim(-0.011, 0.0004))
+  far <- vcr_analytic_check(lr, sim(-0.03, 0.0004))
+  low_n <- vcr_analytic_check(lr, sim(-0.002, 0.01))
+  ok_lr <- identical(near$basis, "asymptotic_logrank_score") && !isTRUE(near$withinThreeMcse) && isTRUE(near$withinTolerance) &&
+    abs(near$tolerance - (3 * 0.0004 + VCR_LOGRANK_APPROXIMATION_BIAS)) < 1e-12 && near$approximationBias == VCR_LOGRANK_APPROXIMATION_BIAS &&
+    grepl("documented bias", near$toleranceBasis) && abs(near$mcse - 0.0004) < 1e-12 &&
+    !isTRUE(far$withinTolerance) && isTRUE(low_n$withinThreeMcse) && isTRUE(low_n$withinTolerance)
+  mean_sc <- list(design = list(kind = "two_arm_fixed", nTreat = 120, nControl = 120), endpoint = list(type = "continuous"),
+                  truth = list(effect = 0.3, sd = 1), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"))
+  mref <- vcr_analytic_check(mean_sc, list(vcr_measure("power", 0.5, simulated = TRUE, mcse = 0.001)))
+  exact <- vcr_analytic_check(mean_sc, list(vcr_measure("power", mref$value - 0.011, simulated = TRUE, mcse = 0.0004)))
+  ok_exact <- exact$approximationBias == 0 && !isTRUE(exact$withinTolerance) && !isTRUE(exact$withinThreeMcse) &&
+    abs(exact$tolerance - 3 * 0.0004) < 1e-12
+  list(pass = ok_lr && ok_exact,
+       detail = sprintf("log-rank, simulation 1.1 points below the reference at MCSE 0.0004: within 3 MCSE %s, within tolerance %s (tolerance %.4f, bias %.3f: %s); 3.0 points below: within tolerance %s; means, same gap: bias %.0f, within tolerance %s",
+                        near$withinThreeMcse, near$withinTolerance, near$tolerance, near$approximationBias, near$toleranceBasis, far$withinTolerance, exact$approximationBias, exact$withinTolerance))
+})

@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # One command, one line per case, one summary line. See tests/helpers/harness.R.
 local({
-  lib <- Sys.getenv("VCR_R_LIBS", "/home/coder/R/vcr-4.3")
+  lib <- Sys.getenv("VCR_R_LIBS", "")
   if (nzchar(lib) && dir.exists(lib)) .libPaths(c(lib, .libPaths()))
 })
 VCR_ROOT <- normalizePath(Sys.getenv("VCR_ENGINE_ROOT", unset = getwd()), mustWork = TRUE)

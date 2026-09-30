@@ -51,7 +51,9 @@ finally:
 from fastapi.testclient import TestClient  # noqa: E402
 
 TERMINAL = {"succeeded", "failed", "canceled", "not_estimable"}
-R_LIBRARY = Path("/home/coder/R/vcr-4.3")
+# The engine's R library, named by the environment: there is no machine path to fall back on.
+_r_libs = _saved_environ.get("VCR_R_LIBS", "")
+R_LIBRARY = Path(_r_libs) if _r_libs else None
 
 STUB_RSCRIPT = r"""#!/bin/bash
 # Stand-in for Rscript. `Rscript -e <expr>` is the health probe;
@@ -847,8 +849,8 @@ class RestartAndMemoryTest(EngineCase):
         self.assertEqual(len({id(engine) for engine in seen}), 1)
 
 
-@unittest.skipUnless(shutil.which("Rscript") and R_LIBRARY.is_dir() and os.environ.get("VCR_SKIP_R_SMOKE") != "1",
-                     "Rscript or the pinned R library is not on this machine")
+@unittest.skipUnless(shutil.which("Rscript") and R_LIBRARY is not None and R_LIBRARY.is_dir() and os.environ.get("VCR_SKIP_R_SMOKE") != "1",
+                     "Rscript or the R library named by VCR_R_LIBS is not on this machine")
 class RealEngineSmokeTest(EngineCase):
     def test_run_job_r_end_to_end(self) -> None:
         client = self.client(VCR_RSCRIPT="Rscript", VCR_R_LIBS=str(R_LIBRARY), VCR_ENGINE_CORES="1")

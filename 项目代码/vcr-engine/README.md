@@ -41,7 +41,7 @@ language model never enters this path.
 R 4.3.3 with the library in `R/package-lock.json`. On this development box:
 
 ```bash
-export VCR_R_LIBS=/home/coder/R/vcr-4.3
+export VCR_R_LIBS=/path/to/the/R/library   # built by scripts/vcr/r-library.sh install
 export VCR_ENGINE_ROOT="$PWD"
 
 # every numeric acceptance case, one line each, `PASSED x/y` last (40-60 min at 2 cores)
@@ -134,7 +134,7 @@ that snapshot and validates every job against them before a handler runs.
 | `cohort.build` | named row rules (`rule` grammar, §2 of the contract): kept / excluded / indeterminate per rule, criterion impact, time zero, exit, member table, the rules' hash | a truth table (C2-01..07) |
 | `population.scenario` | declared marginals + Gaussian copula + row-rule constraints (violating rows are redrawn) + missingness, `paramSd` for parameter uncertainty | closed-form moments |
 | `population.literature` | a published baseline table (mean/sd with optional bounds, proportion, categorical proportions, lognormal) as a population; an assumed correlation comes with its sensitivity | moment recovery (N28a) |
-| `population.synthpop` | sequential CART, `m` in 5–50 copies, rare levels merged, holdout | synthpop, Rubin's rules (C2-17) |
+| `population.synthpop` | sequential CART, `m` in 5–50 copies, rare levels merged, holdout (the copies are not pooled into an estimate: no combining rule ships until a job needs one) | synthpop |
 | `population.quality` | the fixed fidelity / utility / disclosure suite; the disclosure axis is size-matched | a memorizer, a shuffle (C2-15..18) |
 | `patients.continuous` `.binary` `.time_to_event` | the reference simulators; for a stored population, arms by a fixed uniform and `truth.covariateEffects` (centred at the population mean) | regression on the output (N28c), common random numbers (E10c) |
 | `evidence.pool` | DL / REML / HKSJ + prediction interval; k = 1 is `single_study` | metafor |
@@ -212,7 +212,7 @@ R/rules.R            the row-rule grammar: validate and evaluate, three-valued, 
 R/inputs.R           the data-root reader, table inputs, job context (cancel, CPU budget), refusals
 R/rng.R              L'Ecuyer-CMRG substreams, ordered parallel map, the core ceiling
 R/simulators.R       the three reference simulators and their analyses
-R/population.R       scenario / literature / synthpop populations, mechanistic interface, vpop selection
+R/population.R       scenario / literature / synthpop populations, mechanistic interface
 R/quality.R          synthetic-data report suite, model cards, calibration, temporal leakage
 R/weighting.R        entropy balancing, propensity weights, SMD, ESS, whole-pipeline bootstrap, not-estimable rules
 R/rmst.R             weighted KM, RMST, the τ rule

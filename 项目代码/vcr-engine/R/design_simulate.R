@@ -81,6 +81,16 @@ vcr_mcse_empse <- function(x) stats::sd(x) / sqrt(2 * (length(x) - 1))
 
 #' The designs each endpoint can be simulated under. Anything else is refused.
 VCR_SIMULATED_DESIGNS <- c("two_arm_fixed", "group_sequential")
+
+#' The documented bias of the analytic log-rank power, as a proportion. It is a
+#' first-order approximation (`vcr_logrank_power`): measured against an
+#' independent 12,000-replicate simulation it is within about a percentage point
+#' at the effect sizes a trial is designed for, and its largest measured gap is 1.3
+#' points (HR 0.6, 140/70: 0.7544 against 0.7412). The cross-check against a
+#' simulation holds an approximation to three Monte-Carlo errors *plus* this, because
+#' at a hundred thousand replicates the error alone is a fifth of a point, and a
+#' correct approximation would read as disagreeing with a correct simulation.
+VCR_LOGRANK_APPROXIMATION_BIAS <- 0.015
 VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk_difference", "logistic"),
                              time_to_event = c("logrank", "rmst"))
 
@@ -506,9 +516,17 @@ vcr_analytic_check <- function(scenario, measures) {
   sim <- Filter(function(m) identical(m$name, analytic$name), measures)
   if (!length(sim)) return(analytic)
   d <- sim[[1]]$value - analytic$value
-  c(analytic, list(simulated = sim[[1]]$value, difference = d,
-                   differenceInMcse = if (sim[[1]]$mcse > 0) d / sim[[1]]$mcse else NA_real_,
-                   withinThreeMcse = abs(d) <= 3 * sim[[1]]$mcse))
+  mcse <- sim[[1]]$mcse
+  # An exact closed form is held to the simulation's own error; an approximation is
+  # held to that error plus the bias it is documented to carry, and the result says so.
+  bias <- if (identical(analytic$basis, "asymptotic_logrank_score")) VCR_LOGRANK_APPROXIMATION_BIAS else 0
+  tolerance <- 3 * mcse + bias
+  c(analytic, list(simulated = sim[[1]]$value, difference = d, mcse = mcse,
+                   differenceInMcse = if (mcse > 0) d / mcse else NA_real_,
+                   withinThreeMcse = abs(d) <= 3 * mcse,
+                   approximationBias = bias, tolerance = tolerance, withinTolerance = abs(d) <= tolerance,
+                   toleranceBasis = if (bias > 0) "three Monte-Carlo standard errors plus the documented bias of a first-order approximation"
+                                    else "three Monte-Carlo standard errors"))
 }
 
 #' A design grid: designs x truth scenarios, every cell one immutable run.

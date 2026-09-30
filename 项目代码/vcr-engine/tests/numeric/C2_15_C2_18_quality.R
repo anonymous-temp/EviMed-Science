@@ -80,39 +80,6 @@ vcr_case("C2-16", c("AC-04"), function() {
                         m[["corrected"]], m[["full"]], mem$nearestNeighbourInTrainShare, mem$exactReplicationRateFullTraining, mem$membershipAuc))
 })
 
-vcr_case("C2-17", c("AC-09", "AC-11"), function() {
-  # Generating more records must never narrow an interval below what the real
-  # records carry (plan 3.5, 14). For fully synthetic data drawn from a model
-  # fitted to n_obs real records, n_syn records per copy, the variance of the
-  # combined estimate is ubar * (k + 1/m) with k = n_syn / n_obs; the first
-  # version used ubar * (1 + k/m), which at n_syn = 10 n_obs reported SE 0.039
-  # for an estimate whose sampling SD is 0.071 -- and a "95%" interval that
-  # covered 71% of the time (EA-17). Checked at k = 1 and k = 10 by simulation.
-  run <- function(n_obs, n_syn, m, reps, seed) {
-    one <- function(i) {
-      x <- stats::rnorm(n_obs, 0, 1)
-      mu <- mean(x); sg <- stats::sd(x)
-      est <- numeric(m); var <- numeric(m)
-      for (k in seq_len(m)) { xs <- stats::rnorm(n_syn, mu, sg); est[k] <- mean(xs); var[k] <- stats::var(xs) / n_syn }
-      cm <- vcr_synthetic_combine(est, var, m = m, n_syn = n_syn, n_obs = n_obs)
-      old_se <- sqrt(mean(var) * (1 + (n_syn / n_obs) / m))          # the first version's rule
-      c(est = cm$estimate, se = cm$se, cover = as.numeric(abs(cm$estimate - 0) <= stats::qnorm(0.975) * cm$se),
-        old_se = old_se, old_cover = as.numeric(abs(cm$estimate - 0) <= stats::qnorm(0.975) * old_se))
-    }
-    res <- do.call(rbind, vcr_map_streams(vcr_stream_bank(seed)$take(reps), one, cores = VCR_TEST_CORES))
-    list(emp_sd = stats::sd(res[, "est"]), se = mean(res[, "se"]), cover = mean(res[, "cover"]),
-         real_se = 1 / sqrt(n_obs), old_se = mean(res[, "old_se"]), old_cover = mean(res[, "old_cover"]))
-  }
-  a <- run(200L, 2000L, 5L, 4000L, 1717L); b <- run(200L, 200L, 5L, 4000L, 1718L)
-  mcse <- sqrt(0.95 * 0.05 / 4000L)
-  ok <- abs(a$cover - 0.95) <= 3 * mcse + 0.005 && abs(b$cover - 0.95) <= 3 * mcse + 0.005 &&
-    abs(a$se / a$emp_sd - 1) < 0.05 && abs(b$se / b$emp_sd - 1) < 0.05 && a$se >= 0.95 * a$real_se &&
-    a$old_cover < 0.85
-  list(pass = ok,
-       detail = sprintf("n_obs 200, n_syn 2000 (k=10), m 5: engine SE %.4f, empirical SD %.4f, real-data SE %.4f, coverage %.4f (the old rule: SE %.4f, coverage %.3f); n_syn = n_obs (k=1): SE %.4f vs empirical %.4f, coverage %.4f",
-                        a$se, a$emp_sd, a$real_se, a$cover, a$old_se, a$old_cover, b$se, b$emp_sd, b$cover))
-})
-
 vcr_case("C2-18", c("AC-04"), function() {
   # The utility and fidelity metrics the plan lists, each of which can go red:
   # declared analyses as data (a mean; a glm coefficient) with the

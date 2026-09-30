@@ -163,10 +163,10 @@ vcr_default_measure_source <- function(method) {
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "constraint_unsatisfiable", "cpu_budget_exhausted", "grid_cell_failed", "handler_error",
-  "input_format_unsupported", "input_hash_mismatch", "input_out_of_range", "input_parse_failed", "input_too_large",
+  "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
-  "required_field_missing", "twin_label_inconsistent", "uncertainty_and_variability_conflated")
+  "twin_label_inconsistent", "uncertainty_and_variability_conflated")
 
 #' A column named by one string, or a named refusal (a number, an empty array
 #' or an object in its place used to reach `subj[[...]]` and end as an R error).

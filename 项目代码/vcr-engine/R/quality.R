@@ -511,38 +511,6 @@ vcr_model_card_issues <- function(card) {
   issues
 }
 
-#' Can this model answer about these inputs? Returns issues; a non-empty list
-#' means no prediction is produced.
-vcr_applicability_issues <- function(card, inputs) {
-  issues <- list()
-  for (field in card$requiredFields %||% character()) {
-    if (is.null(inputs[[field]]) || all(is.na(inputs[[field]]))) {
-      issues[[length(issues) + 1L]] <- vcr_issue("required_field_missing", field,
-        sprintf("%s is required by %s and was not supplied", field, card$id %||% "this model"))
-    }
-  }
-  for (field in names(card$inputRanges %||% list())) {
-    rng <- card$inputRanges[[field]]
-    v <- inputs[[field]]
-    if (is.null(v)) next
-    out <- v < rng[[1]] | v > rng[[2]]
-    if (any(out, na.rm = TRUE)) {
-      issues[[length(issues) + 1L]] <- vcr_issue("input_out_of_range", field,
-        sprintf("%d of %d values fall outside the declared range [%s, %s]",
-                sum(out, na.rm = TRUE), length(v), format(rng[[1]]), format(rng[[2]])))
-    }
-  }
-  issues
-}
-
-#' Predict only when applicable. Returns either a prediction or the issues.
-vcr_model_predict <- function(card, inputs, predictor) {
-  issues <- vcr_applicability_issues(card, inputs)
-  if (length(issues)) return(list(applicable = FALSE, issues = issues, prediction = NULL))
-  list(applicable = TRUE, issues = list(), prediction = predictor(inputs),
-       label = vcr_twin_label(card$twinEvidence))
-}
-
 #' Calibration of a continuous prediction: in-the-large, slope, and the
 #' integrated calibration index (a LOESS-free version using binned means, so
 #' the number does not depend on a smoother's bandwidth default).

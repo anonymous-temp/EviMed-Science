@@ -482,30 +482,6 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
   list(data = data, report = unname(report))
 }
 
-#' Combining rules for inference on m synthetic copies (Raab, Nowok & Dibben).
-#'
-#' For fully synthetic data drawn from a model fitted to n_obs real records, with
-#' n_syn records per copy, the variance of the combined estimate is
-#'   T = ubar * (k + 1 / m),   k = n_syn / n_obs,
-#' where `ubar` is the mean within-copy variance (which shrinks like 1 / n_syn).
-#' Multiplying ubar by `(1 + k / m)`, as the first version did, gets the limit
-#' wrong in the direction that matters: with n_syn = 10 n_obs it reported an SE
-#' of 0.039 for an estimate whose real sampling SD was 0.071, and a "95%"
-#' interval that covered 71% of the time. Generating more records must never
-#' narrow an interval below what the real records carry (plan 3.5, 14; EA-17):
-#' as n_syn grows, T tends to `ubar * k` = the variance of the real-data
-#' estimate, not to zero.
-vcr_synthetic_combine <- function(estimates, variances, m = length(estimates), n_syn = NULL, n_obs = NULL) {
-  qbar <- mean(estimates)
-  ubar <- mean(variances)
-  b <- stats::var(estimates)
-  k <- if (is.null(n_syn) || is.null(n_obs)) 1 else n_syn / n_obs
-  total <- ubar * (k + 1 / m)
-  list(estimate = qbar, variance = total, se = sqrt(total),
-       betweenVariance = b, withinVariance = ubar, m = m,
-       label = "exploratory")
-}
-
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 # ---------------------------------------------------------------------------
@@ -545,33 +521,4 @@ vcr_mechanistic_spec_issues <- function(spec) {
       "betweenSubject", "parameter uncertainty and between-subject variability are stored apart")
   }
   issues
-}
-
-#' Allen (2016) accept-reject selection of a virtual population.
-#'
-#' Plausible patients are accepted with probability proportional to
-#' target_density(output) / plausible_density(output), so the accepted set
-#' matches the observed clinical distribution on the quantities that were
-#' selected on -- and only on those. Everything else the model outputs is
-#' extrapolation and is labelled `predicted`.
-vcr_vpop_select <- function(outputs, target_mean, target_sd, bandwidth = NULL) {
-  n <- length(outputs)
-  bw <- bandwidth %||% stats::bw.nrd0(outputs)
-  plausible <- vapply(outputs, function(x) mean(stats::dnorm(x, outputs, bw)), numeric(1))
-  target <- stats::dnorm(outputs, target_mean, target_sd)
-  ratio <- target / plausible
-  ratio[!is.finite(ratio)] <- 0
-  accept_p <- ratio / max(ratio)
-  accepted <- stats::runif(n) < accept_p
-  list(accepted = accepted, acceptanceRate = mean(accepted),
-       selectedOn = c("mean", "sd"), bandwidth = bw,
-       effectiveSampleSize = sum(accepted),
-       note = "Only the selected-on quantities match the clinical distribution; every other output is extrapolation.")
-}
-
-#' Kolmogorov-Smirnov distance between a sample and a normal target.
-vcr_ks_to_normal <- function(x, mean, sd) {
-  x <- sort(x); n <- length(x)
-  f <- stats::pnorm(x, mean, sd)
-  max(pmax(abs(f - (seq_len(n) - 1) / n), abs(f - seq_len(n) / n)))
 }

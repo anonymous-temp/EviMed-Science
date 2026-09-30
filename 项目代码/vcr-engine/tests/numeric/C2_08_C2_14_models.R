@@ -1,6 +1,9 @@
-# C2-08 - C2-14 — the model side: applicability, the twin label, variability
-# versus uncertainty, virtual-population selection, calibration, leakage and
-# the model card.
+# C2-09 - C2-14 — the model side: the twin label, variability versus
+# uncertainty, calibration, leakage and the model card. (Model applicability is
+# the control plane's check, `vcrModelApplicabilityIssues`, tested there; the
+# engine's own copy, a virtual-population selector and the synthetic-copies
+# combining rule had no caller in it and were deleted with their cases: C2-08,
+# C2-11 and C2-17.)
 
 .c2_card <- function(...) utils::modifyList(list(
   id = "mdl_reference_tte", provider = "EviMed", version = "1.0.0",
@@ -14,23 +17,6 @@
   uncertaintyMethod = "parametric_bootstrap", outOfDistributionBehaviour = "refuse",
   modelRisk = "low", modelTier = "literature",
   twinEvidence = c("individual_conditioned", "calibrated_uncertainty")), list(...))
-
-vcr_case("C2-08", c("AC-13"), function() {
-  card <- .c2_card()
-  predictor <- function(inputs) rep(0.5, length(inputs$age))
-  ok_in <- vcr_model_predict(card, list(age = c(40, 55), egfr = c(60, 90)), predictor)
-  out_of_range <- vcr_model_predict(card, list(age = c(40, 95), egfr = c(60, 90)), predictor)
-  missing_field <- vcr_model_predict(card, list(age = c(40, 55)), predictor)
-  codes <- c(vapply(out_of_range$issues, function(i) i$code, character(1)),
-             vapply(missing_field$issues, function(i) i$code, character(1)))
-  ok <- ok_in$applicable && !is.null(ok_in$prediction) &&
-    !out_of_range$applicable && is.null(out_of_range$prediction) &&
-    !missing_field$applicable && is.null(missing_field$prediction) &&
-    identical(sort(unique(codes)), sort(c("input_out_of_range", "required_field_missing")))
-  list(pass = ok,
-       detail = sprintf("in range -> prediction produced; age 95 outside [18,90] -> %s, prediction NULL; egfr omitted -> %s, prediction NULL",
-                        out_of_range$issues[[1]]$code, missing_field$issues[[1]]$code))
-})
 
 vcr_case("C2-09", c("AC-33"), function() {
   full <- c("individual_conditioned", "updates_with_new_data", "calibrated_uncertainty", "validation_record")
@@ -148,25 +134,6 @@ vcr_case("C2-10b", c("AC-33", "AC-11"), function() {
                         K, n, between, sqrt(4 + sampling^2), sampling, within, stats::sd(drawn), paste(vcr_test_issue_codes(none), collapse = ",")))
   unlink(dir, recursive = TRUE)
   out
-})
-
-vcr_case("C2-11", c("AC-13"), function() {
-  # Allen (2016): plausible patients drawn from a wide parameter prior, then
-  # accepted so the selected-on output matches the observed clinical
-  # distribution. KS distance to the target below 0.05, acceptance rate stored.
-  set.seed(1111L, kind = VCR_RNG_KIND)
-  dose <- 100
-  cl <- 5 * exp(stats::rnorm(30000L, 0, 0.55))    # plausible patients: wide
-  out <- dose / cl                                # AUC
-  target_mean <- 21; target_sd <- 4
-  sel <- vcr_vpop_select(out, target_mean, target_sd)
-  accepted <- out[sel$accepted]
-  d <- vcr_ks_to_normal(accepted, target_mean, target_sd)
-  d_before <- vcr_ks_to_normal(out, target_mean, target_sd)
-  ok <- d < 0.05 && d_before > 0.05 && sel$acceptanceRate > 0 && sel$acceptanceRate < 1
-  list(pass = ok,
-       detail = sprintf("KS to target: plausible %.4f -> selected %.4f (tol 0.05); acceptance rate %.4f recorded; %d of %d accepted",
-                        d_before, d, sel$acceptanceRate, sum(sel$accepted), length(out)))
 })
 
 vcr_case("C2-12", c("AC-23"), function() {
