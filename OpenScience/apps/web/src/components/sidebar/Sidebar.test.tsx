@@ -171,7 +171,7 @@ describe("Sidebar navigation", () => {
     const row = await screen.findByRole("link", { name: "虚拟临研" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证 GEO", "知识库", "记忆胶囊", "主动科研"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -184,7 +184,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临研" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临研", "知识库", "记忆胶囊", "主动科研"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临研", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
