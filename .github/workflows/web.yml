@@ -365,12 +365,15 @@ jobs:
       - name: Install the engine service's Python requirements
         run: python3 -m pip install -r ../项目代码/vcr-engine/requirements.txt pytest==8.4.2 httpx==0.28.1
 
-      - name: TEMPORARY what R sees of python
+      # The Parquet bridge is a child of R, and R prepends its own library directories to
+      # LD_LIBRARY_PATH: a setup-python interpreter then loads the system libpython, starts
+      # without its site-packages and cannot import what pip installed (measured on this
+      # runner: the same python3 imports pyarrow from a shell and does not from inside R).
+      # The image runs the system interpreter, so the cases do too.
+      - name: Install pyarrow for the system interpreter the Parquet bridge runs under
         run: |
-          which python3
-          python3 -c "import pyarrow, sys; print('direct:', pyarrow.__file__, sys.prefix)"
-          Rscript --no-init-file -e 'cat("LD:", Sys.getenv("LD_LIBRARY_PATH"), "\n"); cat("PYTHONPATH/HOME:", Sys.getenv("PYTHONPATH"), Sys.getenv("PYTHONHOME"), "\n"); cat("PATH:", Sys.getenv("PATH"), "\n"); print(system2("python3", c("-c", shQuote("import sys; print(sys.executable, sys.prefix, sys.path)"))))'
-          Rscript --no-init-file -e 'print(system2("python3", c("-c", shQuote("import pyarrow.parquet; print(1)")), stdout = TRUE, stderr = TRUE))'
+          /usr/bin/python3 -m pip install --user --break-system-packages "$(grep -E '^pyarrow==' ../项目代码/vcr-engine/requirements.txt)"
+          /usr/bin/python3 -c "import pyarrow.parquet; print('system python has pyarrow', pyarrow.__version__)"
 
       # `shell: bash` is what makes the pipe to `tee` fail with the suite: the
       # default `bash -e` has no pipefail.
@@ -379,6 +382,7 @@ jobs:
         shell: bash
         run: |
           export VCR_TEST_CORES="$(nproc)"
+          export VCR_PYTHON=/usr/bin/python3
           bash tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/vcr-numeric.log"
 
       # `run_all.sh` exits 0 for a run whose cases all passed, and a case that
