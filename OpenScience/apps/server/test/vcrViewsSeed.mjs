@@ -534,6 +534,7 @@ export async function seedEv201({ store, matchStore, evidenceStore }) {
   await store.setStep(studyId, "matching", { status: "done", requested: true, note: "6 人已评估" });
 
   // 研究包：一个已生成（带渲染出的正文），一个 CDE 草稿
+  await store.query("UPDATE evimed_vcr.reviews SET created_at='2026-09-27T09:00:00.000Z' WHERE study_id=$1", [studyId]);
   const model = vcrReportModel({
     study, definition, assumptions, results: await store.results(studyId), seal: null, reviews: await store.reviews(studyId),
     staleMarks: await store.staleMarks(studyId), models: await store.models(userId), population, comparator: literature, scenarios,

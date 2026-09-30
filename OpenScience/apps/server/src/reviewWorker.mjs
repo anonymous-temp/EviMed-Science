@@ -1,5 +1,5 @@
 /**
- * The reply-check worker: one timer that claims queued reply checks (L1) and
+ * The review worker: one timer that claims durable study/deliverable reviews and reply checks (L1) and
  * runs them, never two ticks at once.
  *
  * Hidden knowledge: a reply check is work after the fact — the answer has been
@@ -48,7 +48,8 @@ export class ReviewWorker {
     this.state.lastRunAt = new Date(this.state.startedAt).toISOString();
     this.running = (async () => {
       try {
-        const processed = await this.service.processReplyChecks(this.workerId);
+        const studies = await this.service.processStudyReviews?.(this.workerId) ?? 0;
+        const processed = studies + await this.service.processReplyChecks(this.workerId);
         this.state.processed += processed;
         this.state.lastError = null;
         return processed;
@@ -84,6 +85,7 @@ export class ReviewWorker {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.service.cancelActiveStudyReviews?.();
     await this.running?.catch?.(() => {});
   }
 }

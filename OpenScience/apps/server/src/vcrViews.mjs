@@ -1,3 +1,4 @@
+import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { documentExportDigest } from "@evimed/domain";
 /**
  * What 「虚拟临研」's pages are shown: the presenter (contract 2026-09-29 §5).
@@ -166,6 +167,8 @@ export function vcrCurrentNodes({ study = null, assumptions = [], populations = 
  * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[], current?: { nodes: Set<string>, kinds: Set<string> } | null }} context
  */
 export function vcrReviewIsCurrent(review, { results, stale = [], current = null }) {
+  if (!list(review.nodes).length || list(review.nodes).some(node => !parseLineageNode(String(node))) || (review.status && review.status !== 'done')) return false;
+  if (review.reviewerKind === 'ai' && (!review.platformReviewId || !review.provenance?.model || !review.provenance?.inputDigest)) return false;
   const currentResults = new Set(list(results).map((result) => `result:${object(result).id}@${object(result).version}`));
   const staleNodes = new Set(list(stale).map((mark) => String(object(mark).node)));
   return list(object(review).nodes).map(String).every((node) => {
@@ -178,7 +181,7 @@ export function vcrReviewIsCurrent(review, { results, stale = [], current = null
 
 /**
  * Every node a result depends on, found from the lineage edges backwards: what
- * a person has to have countersigned for the number to be theirs.
+ * the version dependencies an advisory review must identify.
  * @param {readonly { from: string, to: string }[]} edges @param {string} node
  * @returns {Set<string>}
  */
@@ -196,17 +199,12 @@ export function vcrDependencies(edges, node) {
 }
 
 /**
- * The highest use this study's results can be labelled with, and why. The
- * weakest model decides (§8.2); an unreviewed study cannot claim
- * `specified_analysis` or above (§10.2, AC-21) — and a review whose inputs
- * moved since it was signed no longer counts as one. With the headline
- * result's dependencies (`dependsOn`), only a current review of one of *those*
- * nodes lifts the ceiling: a countersignature on something the headline number
- * does not rest on is not a review of it.
+ * Evidence and method applicability determine the use ceiling. AI and optional
+ * human review remain version-bound advice and never promote a model's tier.
  * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], reviews: readonly Record<string, any>[], stale?: readonly Record<string, any>[],
  *   current?: { nodes: Set<string>, kinds: Set<string> } | null, dependsOn?: ReadonlySet<string> | null }} input
  */
-export function useCeilingOf({ study, results, reviews, stale = [], current = null, dependsOn = null }) {
+export function useCeilingOf({ study, results }) {
   /** @type {string[]} */
   const tiers = [];
   for (const result of results) {
@@ -216,23 +214,12 @@ export function useCeilingOf({ study, results, reviews, stale = [], current = nu
     }
   }
   const modelCeiling = intendedUseCeiling(tiers);
-  const reviewed = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current })
-    && (!dependsOn || list(review.nodes).some((node) => dependsOn.has(String(node)))));
-  const reviewCeiling = reviewed ? "submission_preparation" : "design_support";
-  const ceiling = useWithin(modelCeiling, reviewCeiling) ? modelCeiling : reviewCeiling;
+  const ceiling = modelCeiling;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
   /** @type {Array<{ code: string, detail: string }>} */
   const reasons = [];
   if (modelCeiling !== "submission_preparation") {
     reasons.push({ code: "model_tier", detail: `所用模型的可信度层级最多支持「${word(modelCeiling)}」` });
-  }
-  if (!reviewed) {
-    const elsewhere = reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current }));
-    reasons.push(!reviews.length
-      ? { code: "not_reviewed", detail: "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上" }
-      : elsewhere
-        ? { code: "review_not_of_headline", detail: "现有的复核签注的不是这项结论所依赖的内容；复核它依赖的假设或结果之后，才能标「指定研究分析」及以上" }
-        : { code: "review_changed", detail: "复核之后结果或假设有了变更，需要重新复核；在此之前不能标「指定研究分析」及以上" });
   }
   return {
     ceiling,
@@ -463,8 +450,8 @@ export function presentReviewNotes(groups, now) {
   for (const { study, reviews } of groups) {
     for (const review of reviews.slice(0, 3)) {
       notes.push({
-        id: review.id, subject: reviewSubject(review), by: null, at: zhTime(review.createdAt, now),
-        studyName: study.name, state: "reviewed", sortAt: review.createdAt,
+        id: review.id, subject: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review)} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, at: zhTime(review.createdAt, now),
+        studyName: study.name, state: !review.status || review.status === "done" ? "reviewed" : "ai_set", sortAt: review.createdAt,
       });
     }
   }
@@ -513,7 +500,7 @@ export function presentStudy(bundle) {
   // last design that is still in the running — never to one another design beats.
   const headline = (rows.find((row) => row.chosen) ?? [...rows].reverse().find((row) => !row.dominated && row._result) ?? null)?._result
     ?? results.find((result) => result.kind === "trial_scenario") ?? results[0] ?? null;
-  // What the headline number rests on: only a current countersignature of one of these lifts the ceiling.
+  // The headline number's dependencies preserve review currency independently of its use ceiling.
   const dependsOn = headline && bundle.edges ? vcrDependencies(bundle.edges, resultNode(headline)) : null;
   const overview = {
     headline: overviewHeadline({ results: allResultsOf(bundle), designs, comparators }),
@@ -655,7 +642,7 @@ function presentChanges(bundle) {
     rows.push({ id: `assumption:${card.id}`, at: card.createdAt, text: `假设卡「${card.name || card.key}」v${card.version}`, by: null,
       state: card.reviewState === "reviewed" ? "reviewed" : null });
   }
-  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: reviewSubject(review), by: null, state: "reviewed" });
+  for (const review of reviews.slice(0, 2)) rows.push({ id: `review:${review.id}`, at: review.createdAt, text: `${review.reviewerKind === "ai" ? "AI " : ""}${reviewSubject(review)} · ${presentVcrReview(review).state}`, by: presentVcrReview(review).by, state: !review.status || review.status === "done" ? "reviewed" : "ai_set" });
   for (const decision of decisions.slice(0, 1)) rows.push({ id: `decision:${decision.id}`, at: decision.createdAt, text: `写入决策记录：${decision.question}`, by: null, state: null });
   for (const row of exports.slice(0, 2)) {
     rows.push({ id: `export:${row.id}`, at: row.createdAt,
@@ -669,7 +656,7 @@ function presentChanges(bundle) {
  * One deliverable of the list. The version number is the package's own
  * ordinal among packages of its kind — 「研究包 v2」 is the second one asked
  * for — and 「草稿」 is a package that is not finished or that says it is still
- * waiting for a review it needs.
+ * while conversion is unfinished; review remains separate advice.
  * @param {Record<string, any>} row @param {number} index @param {readonly Record<string, any>[]} all @param {Date} now
  */
 export function presentDeliverable(row, index, all, now) {
@@ -677,13 +664,12 @@ export function presentDeliverable(row, index, all, now) {
   // `exports` is newest first, so the ordinal counts the older ones of its kind.
   const older = all.slice(index + 1).filter((other) => other.kind === row.kind).length;
   const stateWord = /** @type {Record<string, string>} */ ({ queued: "排队中", running: "生成中", ready: "已生成", failed: "未完成" })[String(row.state)] ?? "";
-  const cover = object(row.cover);
   return {
     id: row.id,
     kind: row.kind,
     title: `${kindWord} v${older + 1}`,
     meta: [zhTime(row.createdAt, now), stateWord].filter(Boolean).join(" · "),
-    draft: row.state !== "ready" || (row.kind === "cde_communication_pack" && cover.reviewed !== true),
+    draft: row.state !== "ready",
     runId: row.runId ?? null,
     path: row.location ?? null,
   };
@@ -1087,6 +1073,8 @@ export function presentExport(row, bundle) {
     state: row.state,
     ...(cover.documentExportId ? { documentExportId: cover.documentExportId } : {}),
     document: {
+      reviews: [...list(bundle.reviews).filter(review => review.provenance?.subjectRef?.exportId === row.id),
+        ...list(model.review?.records).filter(review => !list(bundle.reviews).some(live => live.platformReviewId && live.platformReviewId === review.platformReviewId))].map(presentVcrReview),
       status: coverStatus({ cover, row, bundle, model }),
       sections: packageSections({ cover, row, bundle, model }),
     },
@@ -1104,12 +1092,15 @@ function coverStatus({ cover, row, bundle, model }) {
   for (const kind of ["statistical", "clinical"]) {
     // A review the cover says has stopped holding (`current: false`) is not 已复核 — the page says what became of it.
     const ofKind = reviews.filter((review) => String(object(review).kind) === kind);
-    const done = ofKind.find((review) => object(review).current !== false);
+    const done = ofKind.find((review) => object(review).current !== false && (!review.status || review.status === "done"));
     const changed = !done ? ofKind[0] : null;
     const label = `${(/** @type {Record<string, string>} */ (VCR_REVIEW_KIND_LABELS_ZH))[kind]}`;
-    if (changed) {
+    if (changed?.reviewerKind === 'ai' && changed.status !== 'done') {
+      const shown = presentVcrReview(changed);
+      status.push({ label, value: shown.state, state: 'attention', note: shown.note });
+    } else if (changed) {
       status.push({ label, value: "复核后有变更", state: "attention",
-        note: "签注之后它签的内容有了新版本，需要重新复核" });
+        note: "被审查的内容有了新版本，旧意见保留供参考" });
     } else if (done) {
       const at = zhTime(object(done).at ?? object(done).createdAt, now);
       status.push({ label, value: `已复核${at ? `（${at.replace(/ \d\d:\d\d$/, "")}）` : ""}`, state: "ok",

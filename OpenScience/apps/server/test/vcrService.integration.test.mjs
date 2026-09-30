@@ -161,7 +161,7 @@ test("the overview carries the counts, the results with their staleness, and the
   assert.equal(view.tier, "T0");
   assert.deepEqual(Object.keys(view.overview.counts).slice(0, 4), ["realPatients", "events", "effectiveSampleSize", "generatedRecords"]);
   assert.equal(view.overview.counts.events, 138);
-  assert.equal(view.ceiling.ceiling, "design_support", "nobody has reviewed it yet");
+  assert.equal(view.ceiling.ceiling, "submission_preparation", "review absence does not change the method/evidence ceiling");
   assert.equal(view.ceiling.withinCeiling, true);
   assert.equal(view.budget.limitSeconds, 100_000);
   assert.deepEqual(view.abilities.includes("run"), true, "the owner is a lead");

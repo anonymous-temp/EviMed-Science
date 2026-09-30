@@ -390,7 +390,7 @@ export function vcrReportModel(input) {
       comparator: input.comparator ? { id: comparator.id ?? null, version: comparator.version ?? null } : null,
     },
     definition: input.definition ? {
-      version: Number(object(input.definition).version ?? 0),
+      id: object(input.definition).id ?? null, version: Number(object(input.definition).version ?? 0),
       pico: object(object(input.definition).pico), estimand: object(object(input.definition).estimand),
       endpointType: object(input.definition).endpointType ?? null,
     } : null,
@@ -415,7 +415,7 @@ export function vcrReportModel(input) {
         valueSource: card.valueSource ?? null,
         valueSourceLabel: /** @type {Record<string, string>} */ (VCR_VALUE_SOURCE_LABELS_ZH)[String(card.valueSource)] ?? null,
         reviewState: card.reviewState ?? "ai_set",
-        sources: list(card.sources).length ? list(card.sources) : list(card.evidence),
+        sources: list(card.sources).length ? list(card.sources) : list(card.evidence), evidenceIds: list(card.evidenceIds),
       };
     }),
     // Every current result, so a template may bind to any of them by kind.
@@ -436,7 +436,7 @@ export function vcrReportModel(input) {
     review: {
       records: list(input.reviews).map((review) => {
         const row = object(review);
-        return { kind: row.kind ?? null, state: row.state ?? null, reviewer: row.reviewer ?? null, ...(typeof row.current === "boolean" ? { current: row.current } : {}), nodes: list(row.nodes).map(String),
+        return { id: row.id ?? null, reviewerName: row.reviewerName ?? null, reviewerKind: row.reviewerKind ?? "human", status: row.status ?? "done", platformReviewId: row.platformReviewId ?? null, provenance: row.provenance ?? {}, kind: row.kind ?? null, state: row.state ?? null, reviewer: row.reviewer ?? null, ...(typeof row.current === "boolean" ? { current: row.current } : {}), nodes: list(row.nodes).map(String),
           createdAt: row.createdAt ?? null };
       }),
     },

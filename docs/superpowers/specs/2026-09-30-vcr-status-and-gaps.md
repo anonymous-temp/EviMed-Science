@@ -144,7 +144,7 @@
 | P1 | 伙伴的样本数据与历史转诊记录 | AC-24（入组回测简报）、AC-36、AC-37；G5、G6 的适配格式也要靠它定 |
 | P2 | 一台独立算力节点（方案建议 16 核） | 设计网格和大规模合成；当前主机是 4 核 |
 | P3 | EviMed 证据 API 的凭据 | ChiCTR 列表接入（G8）；没有它，中国先例一栏静默为空 |
-| P4 | 统计复核者、临床复核者的人选 | 复核角色、AC-21/33 的真实使用；方案第三阶段 |
+| P4 | Optional human reviewers | Automatic version-bound clinical/statistical AI review is the default; human invitations are optional and never an export prerequisite |
 | P5 | 裁定：要不要给模块加金额预算 | 现在预算单位是 CPU 秒；自动派发的七类运行没有模块级金额上限（`OPEN_SCIENCE_VCR_DAILY_BUDGET_CNY` 因无人读取已删除；生产平台限额本来也是 0） |
 | P6 | 裁定：首版要不要补 Word/PDF 交付（G2） | 申办方的期待与工程量的取舍 |
 

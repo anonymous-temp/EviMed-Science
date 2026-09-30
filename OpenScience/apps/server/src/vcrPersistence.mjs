@@ -967,6 +967,12 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.reviews (
 );
 CREATE INDEX IF NOT EXISTS vcr_reviews_study_idx ON evimed_vcr.reviews (study_id, created_at DESC);
 
+ALTER TABLE evimed_vcr.reviews ADD COLUMN IF NOT EXISTS reviewer_kind text NOT NULL DEFAULT 'human' CHECK (reviewer_kind IN ('ai','human'));
+ALTER TABLE evimed_vcr.reviews ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'done' CHECK (status IN ('queued','running','done','failed'));
+ALTER TABLE evimed_vcr.reviews ADD COLUMN IF NOT EXISTS platform_review_id text;
+ALTER TABLE evimed_vcr.reviews ADD COLUMN IF NOT EXISTS provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_reviews_platform_idx ON evimed_vcr.reviews(platform_review_id) WHERE platform_review_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS evimed_vcr.decisions (
   id            text PRIMARY KEY,
   study_id      text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,

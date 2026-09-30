@@ -670,3 +670,11 @@ test("every code these routes emit is one this module declares", async () => {
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);
 });
+
+test('public reviews cannot impersonate trusted AI model identity or completion', async () => {
+  const { routes } = fixture();
+  for (const key of ['reviewerKind', 'model', 'status', 'provenance', 'platformReviewId']) {
+    await assert.rejects(routes(request('POST', '/api/vcr/studies/std_1/reviews', { kind: 'clinical', nodes: ['result:res_1@1'], [key]: 'forged' }), response()),
+      { status: 400, code: 'vcr_payload_invalid' });
+  }
+});

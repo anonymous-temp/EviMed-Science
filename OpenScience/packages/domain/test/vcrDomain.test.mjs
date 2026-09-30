@@ -8,6 +8,7 @@ import {
   MCP_TOOL_BASE_NAMES,
   USAGE_PURPOSES,
   VCR_CHECK_IDS,
+  VCR_REVIEWER_KINDS, VCR_REVIEW_LIFECYCLE, VCR_REVIEW_KINDS,
   VCR_COMPARATOR_ROUTES,
   VCR_CONCLUSIONS,
   VCR_COUNT_KEYS,
@@ -359,4 +360,10 @@ test("a matching judgment that decides anything needs evidence with a locator", 
 
 test("the conclusion vocabulary keeps 「不可估计」 as a first-class result", () => {
   assert.deepEqual([...VCR_CONCLUSIONS], ["estimable", "limited", "not_estimable"]);
+});
+
+test("review perspective, actor provenance and lifecycle are separate closed vocabularies", () => {
+  assert.deepEqual(VCR_REVIEWER_KINDS, ['ai', 'human']);
+  assert.deepEqual(VCR_REVIEW_LIFECYCLE, ['queued', 'running', 'done', 'failed']);
+  assert.deepEqual(VCR_REVIEW_KINDS, ['clinical', 'statistical', 'data']);
 });

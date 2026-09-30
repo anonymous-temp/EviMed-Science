@@ -92,7 +92,7 @@ function failureFor(status, providerCode) {
  *   thinking?: { enabled: boolean, budget?: number },
  *   maxTokens?: number, timeoutMs?: number, signal?: AbortSignal, at?: Date,
  * }} call
- * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number }>}
+ * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */
 export async function callReviewModel({ config, usageLedger = null, fetchImpl = fetch }, call) {
   const apiKey = String(config.dashscopeApiKey ?? "");
@@ -142,7 +142,8 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     idle = setTimeout(() => controller.abort(new ReviewModelError("review_model_stalled", `The reviewer's stream was silent for ${IDLE_MS / 1000} s.`)), IDLE_MS);
   };
   const onOuterAbort = () => controller.abort(call.signal?.reason ?? new ReviewModelError("review_cancelled", "The review was cancelled."));
-  call.signal?.addEventListener?.("abort", onOuterAbort, { once: true });
+  if (call.signal?.aborted) onOuterAbort();
+  else call.signal?.addEventListener?.("abort", onOuterAbort, { once: true });
   let dispatched = false;
   /** The status of an answer that came back without output, 0 while none has. */
   let refusedStatus = 0;
@@ -191,6 +192,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     /** @type {any} */
     let usage = null;
     let model = body.model;
+    let modelReported = false;
     /** @type {string | null} */
     let requestId = null;
     const decoder = new TextDecoder();
@@ -210,7 +212,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
           try { event = JSON.parse(data); } catch { continue; }
           if (event?.error) throw failureFor(Number(event.error?.status ?? 500), String(event.error?.code ?? ""));
           if (event?.id && !requestId) requestId = String(event.id).slice(0, 200);
-          if (event?.model) model = String(event.model);
+          if (event?.model) { model = String(event.model); modelReported = true; }
           if (event?.usage) usage = event.usage;
           if (event?.choices?.[0]?.finish_reason) finish = String(event.choices[0].finish_reason);
           const delta = event?.choices?.[0]?.delta ?? {};
@@ -258,7 +260,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       if (finish === "length") throw new ReviewModelError("review_model_truncated", `The reviewer's answer reached its ${body.max_tokens}-token ceiling before it closed.`);
       throw new ReviewModelError("review_model_response_invalid", "The reviewer's answer was not the JSON its schema requires.");
     }
-    return { value, model, usage: counted, cost: price.cost, requestId, reasoningChars };
+    return { value, model, usage: counted, cost: price.cost, requestId, reasoningChars, modelReported };
   } finally {
     clearTimeout(deadline);
     if (idle) clearTimeout(idle);

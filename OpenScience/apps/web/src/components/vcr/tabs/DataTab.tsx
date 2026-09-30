@@ -1,3 +1,4 @@
+import { VcrReviews } from "../VcrReviews";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ExternalLink } from "lucide-react";
@@ -100,6 +101,7 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
     return (
       <div className="flex flex-col gap-6">
         {note}
+        <VcrReviews reviews={data.reviews} />
         <VcrStepPending studyId={studyId} study={study} step="evidence" />
         {intakePanel}
       </div>
@@ -123,6 +125,7 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
         <VcrToolbar summary={data.status.map((item) => `${item.label} ${item.value}`).join(" · ")} />
       )}
       {note}
+      <VcrReviews reviews={data.reviews} />
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
 
       {data.assumptions.length > 0 && (

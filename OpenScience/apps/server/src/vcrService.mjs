@@ -559,7 +559,7 @@ export class VcrService {
         // A review countersigns one version; if any of them moved it reads
         // `changed_after_review` (AC-21). The node list is what moved, not the
         // review, which is why the state is derived and never stored.
-        state: !vcrReviewIsCurrent(review, { results, stale, current: currentNodes })
+        state: review.status && review.status !== "done" ? "ai_set" : !vcrReviewIsCurrent(review, { results, stale, current: currentNodes })
           ? "changed_after_review"
           : reviewStateFor({ reviewedNodes: review.nodes, currentNodes: [...new Set([...current, ...review.nodes.filter((node) => !staleNodes.has(node))])] }),
       })),
@@ -663,14 +663,15 @@ export class VcrService {
     const reviewedAll = signed(allResults, resultNode);
     const reviewedPopulations = signed(populations, (row) => vcrObjectNode("population", row));
     const reviewedComparators = signed(comparators, (row) => vcrObjectNode("comparator", row));
+    const currentNodes = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     /** @type {Record<string, any>} */
     const bundle = {
-      now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews, jobs, budget, assumptions, members, exports, decisions,
+      now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study),
       forecastResults: reviewedAll.filter((result) => result.kind === "accrual_forecast"),
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
-      currentNodes: vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol }),
+      currentNodes,
     };
     if (tab === "data" || wants) {
       bundle.edges = await this.store.edges(study.id);

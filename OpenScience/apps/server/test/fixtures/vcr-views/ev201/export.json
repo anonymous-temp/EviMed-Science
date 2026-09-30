@@ -9,6 +9,24 @@
   "snapshotChanged": true,
   "state": "ready",
   "document": {
+    "reviews": [
+      {
+        "id": "rvw_1",
+        "reviewerKind": "human",
+        "role": "statistical",
+        "label": "人工统计复核",
+        "state": "已复核",
+        "status": "done",
+        "current": true,
+        "by": null,
+        "configuredModel": null,
+        "configurationRevision": null,
+        "inputDigest": null,
+        "at": "2026-09-27T09:00:00.000Z",
+        "note": "审查意见供参考，不代表实证验证。",
+        "findings": []
+      }
+    ],
     "status": [
       {
         "label": "预期用途",

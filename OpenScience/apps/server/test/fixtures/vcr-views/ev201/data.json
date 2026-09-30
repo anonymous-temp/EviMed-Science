@@ -337,7 +337,7 @@
       "applicability": null,
       "sensitivity": null,
       "review": {
-        "by": "u_stat",
+        "by": null,
         "at": "昨天",
         "version": 1,
         "kind": "统计复核"
@@ -465,6 +465,24 @@
           }
         ]
       }
+    }
+  ],
+  "reviews": [
+    {
+      "id": "rvw_1",
+      "reviewerKind": "human",
+      "role": "statistical",
+      "label": "人工统计复核",
+      "state": "已复核",
+      "status": "done",
+      "current": true,
+      "by": null,
+      "configuredModel": null,
+      "configurationRevision": null,
+      "inputDigest": null,
+      "at": "2026-09-27T01:07:00.000Z",
+      "note": "审查意见供参考，不代表实证验证。",
+      "findings": []
     }
   ],
   "selectedId": null,

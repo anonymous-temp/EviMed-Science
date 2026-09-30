@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS evimed_review.reviews (
   finished_at timestamptz,
   FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id) ON DELETE CASCADE
 );
+ALTER TABLE evimed_review.reviews ADD COLUMN IF NOT EXISTS completion_notified boolean NOT NULL DEFAULT false;
+ALTER TABLE evimed_review.reviews ADD COLUMN IF NOT EXISTS subject jsonb;
+ALTER TABLE evimed_review.reviews ADD COLUMN IF NOT EXISTS frozen_input jsonb;
+ALTER TABLE evimed_review.reviews ADD COLUMN IF NOT EXISTS configuration jsonb;
 CREATE INDEX IF NOT EXISTS review_reviews_run_idx
   ON evimed_review.reviews (user_id, project_id, socket_run_id, deliverable_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS review_reviews_created_idx ON evimed_review.reviews (created_at DESC);

@@ -883,7 +883,7 @@ export function composeVcr({ config, productDatabase, audit = async () => {}, fe
     store, dataStore, matchStore, evidenceStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     // Composed later, beside the other modules' workers (server.mjs).
-    notifier: null, orchestrator: null, worker: null, exporter: null,
+    notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
     audit,
   };
   return composed;

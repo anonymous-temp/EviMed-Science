@@ -265,6 +265,14 @@ export interface VcrRecruitTodo {
   action?: { label: string; tab?: VcrTabKey | null } | null;
 }
 
+export interface VcrReviewSummary {
+  id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
+  status: "queued" | "running" | "done" | "failed"; current: boolean;
+  by?: string | null; at?: string | null; configurationRevision?: string | null;
+  configuredModel?: string | null; inputDigest?: string | null; note: string;
+  findings: Array<{ id?: string; kind?: string; location?: string; evidence?: string; message?: string; fix?: string; response?: string | null }>;
+}
+
 /** 「最近复核」. */
 export interface VcrReviewNote {
   id: string;
@@ -316,6 +324,7 @@ export interface VcrDeliverable {
    * offers the file.
    */
   document?: {
+    reviews?: VcrReviewSummary[];
     /** The cover block: intended use, each review, outcome sealing. */
     status?: Array<{ label: string; value: string; state?: "ok" | "attention" | "neutral"; note?: string | null }>;
     sections?: VcrPackageSection[];
@@ -897,6 +906,7 @@ export interface VcrPrecedent {
 }
 
 export interface VcrDataTab {
+  reviews?: VcrReviewSummary[];
   headline?: string | null;
   /** 「证据截至 9月27日 · 试验先例 23 项 · 假设卡 12 张 · 患者级数据 未接入」. */
   status?: Array<{ label: string; value: string }>;

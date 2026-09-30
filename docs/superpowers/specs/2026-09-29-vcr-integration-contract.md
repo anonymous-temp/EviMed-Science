@@ -278,13 +278,9 @@ the small-cell rule: plane addresses are still stripped and every other read is 
   `selected.assessmentId` and, per judgment, `criterionId`, which the browser posts back to
   `POST …/assessments/:a/judgments/:c/override` and `POST …/assessments/:a/review`. The page holds no
   id of its own making.
-- **The use ceiling follows current reviews.** `useCeilingOf({ study, results, reviews, stale })` counts
-  a review only while `vcrReviewIsCurrent` holds: none of the nodes it names is marked stale, every
-  result it names is still the current version, and every other versioned node it names (an assumption
-  card, a population, a design) is at its current version. A review that no longer holds lowers the
-  ceiling with the reason `review_changed`; a current review that signed off something the headline
-  result does not depend on gives `review_not_of_headline`; a study nobody reviewed gives
-  `not_reviewed`. Three reasons, three sentences on the page.
+- **Review is advisory and version-bound.** The existing ReviewWorker claims frozen deliverable and study reviews through ProductJobs leases. Clinical/statistical AI passes use independent contexts; the trusted adapter alone writes AI identity, actual model/configuration, usage, findings and referenced versions. Public review writes remain human-only.
+- `vcrReviewIsCurrent` requires nonempty supported nodes and completed provenance. Pending, failed and stale opinions remain visible. Model/evidence applicability determines `useCeilingOf`; absence of a signature does not lower it or stop export. Optional human display names are resolved from current accounts; immutable actor ids remain in audit.
+- A failed role, missing model identity or exhausted recovery is not agreement. Both role results remain separate, and one bounded in-place repair may address located findings while preserving completed research and artifacts.
 
 ## 6. Data plane, seal, access
 

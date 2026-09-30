@@ -1,3 +1,4 @@
+import { VcrReviews } from "./VcrReviews";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { Link } from "react-router";
 import { ArrowLeft, CircleCheck, CircleDashed } from "lucide-react";
@@ -78,6 +79,8 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
               ))}
             </dl>
           )}
+
+          <VcrReviews reviews={deliverable.document?.reviews} />
 
           {sections.map((section) => (
             <section key={section.id} id={`vcr-package-${section.id}`} className="mt-8 scroll-mt-6">

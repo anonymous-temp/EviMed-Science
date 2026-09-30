@@ -423,6 +423,7 @@ export function reviewOfNode(node, reviews) {
   /** @type {{ review: Record<string, any>, version: number } | null} */
   let earlier = null;
   for (const review of reviews) {
+    if ((review.status && review.status !== 'done') || (review.reviewerKind === 'ai' && (!review.platformReviewId || !review.provenance?.model))) continue;
     for (const named of list(review.nodes).map(String)) {
       if (!named.startsWith(head)) continue;
       const named_ = Number(named.slice(at + 1));
@@ -432,7 +433,7 @@ export function reviewOfNode(node, reviews) {
   }
   const found = exact ? { review: exact, version, state: /** @type {const} */ ("reviewed") }
     : earlier ? { review: earlier.review, version: earlier.version, state: /** @type {const} */ ("changed_after_review") } : null;
-  return found ? { state: found.state, reviewedBy: text(found.review.reviewer), reviewedAt: textOrNull(found.review.createdAt),
+  return found ? { state: found.state, reviewedBy: found.review.reviewerKind === "ai" ? `AI · ${found.review.provenance?.model ?? ""}` : text(found.review.reviewerName), reviewedAt: textOrNull(found.review.createdAt),
     reviewedVersion: found.version, reviewKind: text(found.review.kind) } : null;
 }
 
@@ -545,4 +546,23 @@ export const PARAMETER_LABELS = Object.freeze(/** @type {Record<string, string>}
 export function scaledSeries(series, factor) {
   const scale = (/** @type {unknown} */ value) => (typeof value === "number" && Number.isFinite(value) ? roundTo(value * factor, 6) : value);
   return { ...series, points: series.points.map((/** @type {any} */ point) => ({ ...point, y: scale(point.y), low: scale(point.low), high: scale(point.high) })) };
+}
+
+/** Reader-facing review provenance, distinct from method or numerical validation.
+ * @param {any} review */
+export function presentVcrReview(review) {
+  const ai = review.reviewerKind === 'ai';
+  const status = review.status ?? 'done';
+  const provenance = review.provenance ?? {};
+  const findings = provenance.findings ?? [];
+  const state = status === 'queued' ? '等待审查' : status === 'running' ? '审查中' : status === 'failed' ? '审查未完成'
+    : review.current === false ? '研究已有更新' : !ai ? '已复核' : findings.length ? '有修订建议' : '未发现明确问题';
+  return { id: review.id ?? review.platformReviewId ?? `legacy:${review.kind}:${review.createdAt}:${(review.nodes ?? []).join(",")}`, reviewerKind: ai ? 'ai' : 'human', role: review.kind,
+    label: `${ai ? 'AI' : '人工'}${review.kind === 'clinical' ? '临床' : review.kind === 'statistical' ? '统计' : '数据'}复核`,
+    state, status, current: review.current !== false, by: ai ? provenance.model ?? null : review.reviewerName ?? null,
+    configuredModel: ai ? provenance.configuration?.model ?? null : null, configurationRevision: ai ? provenance.configuration?.revision ?? null : null,
+    inputDigest: provenance.inputDigest ?? null, at: provenance.finishedAt ?? review.createdAt ?? null,
+    note: status === 'failed' ? '审查暂未完成；已完成的研究与导出仍可使用。' : '审查意见供参考，不代表实证验证。',
+    findings: findings.map(finding => ({ id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
+      message: finding.message, fix: finding.fix, response: finding.response ?? null })) };
 }

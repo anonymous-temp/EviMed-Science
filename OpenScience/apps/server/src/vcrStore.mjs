@@ -1061,17 +1061,40 @@ export class VcrStore extends VcrStoreBase {
     });
   }
 
+  /** Trusted review worker only. Public human review routes cannot set provenance.
+   * @param {any} record @param {{client?:any}} [options] */
+  async saveAiReview(record, { client = null } = {}) {
+    if (!['clinical', 'statistical'].includes(record.role) || !record.reviewId || !record.nodes?.length) throw new TypeError('Invalid trusted AI review.');
+    const write = async handle => {
+      const study = (await handle.query('SELECT user_id FROM evimed_vcr.studies WHERE id=$1 AND deleted_at IS NULL', [record.studyId])).rows[0];
+      if (!study) return null;
+      const provenance = { subjectRef: record.subjectRef, platformReviewId: record.reviewId, inputDigest: record.inputDigest, configuration: record.configuration,
+        configurationDigest: record.configurationDigest, model: record.model, usage: record.usage, usageKnown: Object.keys(record.usage ?? {}).length > 0, cost: record.cost,
+        error: record.error, deterministic: record.deterministic, findings: record.findings, finishedAt: record.finishedAt };
+      const row = (await handle.query(`INSERT INTO evimed_vcr.reviews(id,study_id,user_id,kind,nodes,state,reviewer,reviewer_kind,status,platform_review_id,provenance)
+        VALUES ($1,$2,$3,$4,$5::text[],'ai_set','','ai',$6,$1,$7::jsonb)
+        ON CONFLICT(platform_review_id) WHERE platform_review_id IS NOT NULL DO UPDATE SET status=excluded.status,provenance=excluded.provenance
+        RETURNING *`, [record.reviewId, record.studyId, study.user_id, record.role, record.nodes, record.status, JSON.stringify(provenance)])).rows[0];
+      await this.audit({ client: handle, studyId: record.studyId, userId: study.user_id, actor: 'ai-review-service', action: 'vcr.review.ai', object: record.reviewId,
+        detail: { role: record.role, status: record.status, model: record.model, inputDigest: record.inputDigest, nodes: record.nodes.length } });
+      return this.#reviewFromRow(row);
+    };
+    return client ? write(client) : this.transaction(write);
+  }
+
   /** @param {any} row */
   #reviewFromRow(row) {
     if (!row) return null;
     return { id: String(row.id), studyId: String(row.study_id), kind: String(row.kind), nodes: list(row.nodes).map(String),
       state: String(row.state), reviewer: String(row.reviewer), note: String(row.note ?? ""), changes: list(row.changes),
+      reviewerName: text(row.reviewer_name), reviewerKind: String(row.reviewer_kind ?? 'human'), status: String(row.status ?? 'done'),
+      platformReviewId: text(row.platform_review_id), provenance: object(row.provenance),
       createdAt: iso(row.created_at) };
   }
 
   /** @param {string} studyId */
   async reviews(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.reviews WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]))
+    return (await this.rows(`SELECT r.*,u.name AS reviewer_name FROM ${VCR_SCHEMA}.reviews r LEFT JOIN evimed_control.users u ON r.reviewer_kind='human' AND u.id=r.reviewer WHERE r.study_id = $1 ORDER BY r.created_at DESC LIMIT 200`, [studyId]))
       .map((row) => this.#reviewFromRow(row));
   }
 

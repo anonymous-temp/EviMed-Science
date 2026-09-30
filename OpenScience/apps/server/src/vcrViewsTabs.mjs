@@ -1,3 +1,4 @@
+import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
  * The six data tabs of a study page, presented (contract 2026-09-29 §5).
  *
@@ -1220,6 +1221,7 @@ export function presentDataTab(bundle, query = {}) {
       { label: "患者级数据", value: study.dataTier === "T0" ? "未接入" : (snapshots.length ? `${snapshots.length} 个快照` : "未接入") },
     ],
     assumptions: cards,
+    reviews: list(bundle.reviews).map(presentVcrReview),
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,
     precedents,
     precedentSources: precedents.length ? `${precedents.length} 项试验先例` : null,

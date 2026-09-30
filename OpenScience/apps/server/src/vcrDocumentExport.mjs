@@ -1,4 +1,5 @@
-import { DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH } from '@evimed/domain';
+import { presentVcrReview } from "./vcrViewsKit.mjs";
+import { DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { exportHash, freezeDocumentAssets } from './documentExport.mjs';
 import { renderVcrNumbers } from './vcrRender.mjs';
@@ -11,8 +12,9 @@ export function canonicalVcrDocument(study, row) {
   if (!model?.study || !reports.length) throw new HttpError(409, 'document_source_pending', 'The research report is still being prepared.');
   const title = `${model.study.name ?? study.name} — ${VCR_EXPORT_KIND_LABELS_ZH[row.kind] ?? row.kind}`;
   const reviewLines = (model.review?.records ?? []).map(review => {
-    const state = review.current === false ? '复核后有变更' : review.state === 'reviewed' ? '已复核' : '尚未完成复核';
-    return `- ${VCR_REVIEW_KIND_LABELS_ZH[review.kind] ?? review.kind}：${state}；${review.reviewer ?? '未记录复核人'}；${review.createdAt ?? ''}；${review.nodes?.join(', ') ?? ''}`;
+    const shown = presentVcrReview(review);
+    return `- ${shown.label}：${shown.state}；${shown.by ?? '身份未返回'}；${shown.at ?? ''}；配置 ${shown.configurationRevision ?? '不适用'}。${shown.note}`;
+
   });
   const use = model.intendedUse ?? model.study.intendedUse ?? study.intendedUse;
   const seal = model.seal ?? {};

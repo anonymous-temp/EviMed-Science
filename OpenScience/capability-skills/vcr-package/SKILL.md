@@ -39,7 +39,7 @@ description: 把一项「虚拟临研」研究写成可检查、可复现的研�
 
 ## 封面照实写
 
-- **复核状态**：「统计复核：已复核（张三，10 月 2 日，针对运行 #12）」或「未复核」。**导出不因为未复核被拦**；但未复核的研究包不能标「指定研究分析」及以上的预期用途——照 `mcp__evimed__vcr_read` `what: "study"` 回来的 `intendedUseCeiling` 写，并把 `reasons` 里的原因写明。
+- **Review provenance**: copy the stored clinical/statistical AI review role, actual model, configuration revision, time and referenced versions. Show pending, unavailable, stale and unresolved findings honestly. Human review is optional and must retain the actual person’s attribution. Review is advisory: disagreement or timeout never blocks export or lowers intended use by itself. Use the evidence/method applicability ceiling returned by `vcr_read`; AI agreement is not numerical verification or empirical validation. Never invent a reviewer identity.
 - **过期结果**：有就写明哪几项、为什么过期、是重算了还是照原样保留。**不要把过期结果从包里删掉**。
 - **预期用途降级**：结果的 `useDowngrade` 不为空时，把「本来想标什么、实际只能标到哪一级、因为哪个模型缺哪项证据」写进「验证与局限」。
 - **结局封存**（确证性用途）：分析计划冻结的时间与哈希、结局字段首次读取的时间，两个时间戳并列，先后顺序一目了然。探索性用途没有封存，就照实写「探索性分析，分析计划在接触结局后制定」。

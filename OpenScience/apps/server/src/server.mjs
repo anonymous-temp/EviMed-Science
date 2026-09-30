@@ -120,6 +120,7 @@ import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierG
 import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
 import { ReviewService, replyOfRun, reviewMetricFamilies } from "./reviewService.mjs";
 import { providerRefusalMetricFamily } from "./providerRefusals.mjs";
+import { createVcrReviewAdapter } from "./vcrReview.mjs";
 import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
@@ -2078,7 +2079,7 @@ export function createWebApiApp(overrides = {}) {
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({
-      config, database: productDatabase, usageLedger, runtimeManager, store, agentRegistry,
+      config, database: productDatabase, jobs: productJobs, usageLedger, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
       notifications: notificationService,
       imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
@@ -2094,6 +2095,7 @@ export function createWebApiApp(overrides = {}) {
     });
     review = { service, worker };
   }
+  if (vcr) vcr.review = createVcrReviewAdapter({ vcr, reviewService: review?.service ?? null });
   const reviewRoutes = createReviewRoutes({ store, service: review?.service ?? null, config });
   // 灵豆 settlement (evimedCreditsService.mjs, fusion plan §9.6): composed when
   // switched on and a product database exists. With it off the routes answer

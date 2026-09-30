@@ -86,15 +86,10 @@
   },
   "jobs": [],
   "ceiling": {
-    "ceiling": "design_support",
+    "ceiling": "submission_preparation",
     "requested": "exploratory",
     "withinCeiling": true,
-    "reasons": [
-      {
-        "code": "not_reviewed",
-        "detail": "还没有复核签注：未复核的研究包不能标「指定研究分析」及以上"
-      }
-    ]
+    "reasons": []
   },
   "overview": {
     "headline": null,

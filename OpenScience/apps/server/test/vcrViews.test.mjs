@@ -239,7 +239,7 @@ test("the use ceiling says why in sentences a reader can act on, not vocabulary 
   const unreviewed = useCeilingOf({ study, results: [{ diagnostics: { modelsUsed: [{ tier: "literature" }] } }], reviews: [] });
   assert.equal(unreviewed.ceiling, "design_support");
   assert.equal(unreviewed.withinCeiling, false);
-  assert.deepEqual(unreviewed.reasons.map((reason) => reason.code), ["model_tier", "not_reviewed"]);
+  assert.deepEqual(unreviewed.reasons.map((reason) => reason.code), ["model_tier"]);
   assert.ok(unreviewed.reasons.every((reason) => !/[a-z]+_[a-z]+/.test(reason.detail)), "no snake_case id in a sentence");
   const reviewed = useCeilingOf({ study, results: [], reviews: [{ id: "rvw_1" }] });
   assert.equal(reviewed.withinCeiling, true);
@@ -466,7 +466,7 @@ test("no fixture carries a database word the page has no use for, and none puts 
   assert.ok(scanned >= 20);
 });
 
-test("AC-21 a review of a result that has since been superseded reads changed, and no longer lifts the use ceiling", () => {
+test("AC-21 a superseded review reads changed without becoming an intended-use gate", () => {
   const study = { intendedUse: "specified_analysis" };
   const review = { id: "rev_1", kind: "statistical", nodes: ["result:res_a@1"] };
   // The reviewed version is the current one: the review counts.
@@ -478,8 +478,8 @@ test("AC-21 a review of a result that has since been superseded reads changed, a
   const after = [{ id: "res_b", version: 2 }];
   assert.equal(vcrReviewIsCurrent(review, { results: after }), false);
   const ceiling = useCeilingOf({ study, results: after, reviews: [review] });
-  assert.equal(ceiling.withinCeiling, false);
-  assert.deepEqual(ceiling.reasons.map((reason) => reason.code), ["review_changed"]);
+  assert.equal(ceiling.withinCeiling, true);
+  assert.deepEqual(ceiling.reasons, []);
   // A node still marked stale also makes it changed, whatever the results.
   assert.equal(vcrReviewIsCurrent({ nodes: ["assumption:dropout_rate@1"] }, { results: [], stale: [{ node: "assumption:dropout_rate@1" }] }), false);
 });
@@ -622,15 +622,15 @@ test("C2-14 when the latest comparator version has no result, the page keeps the
 
 test("C3-05 a countersignature moves the node it names to reviewed — who, when, which version — and one on an earlier version says the card changed after it", () => {
   const reviews = [
-    { id: "rev_2", kind: "statistical", nodes: ["assumption:dropout_rate@3"], reviewer: "u_stat", createdAt: "2026-09-28T02:00:00.000Z" },
-    { id: "rev_1", kind: "clinical", nodes: ["assumption:hazard_ratio@1", "assumption:dropout_rate@2"], reviewer: "u_clin", createdAt: "2026-09-27T02:00:00.000Z" },
+    { id: "rev_2", kind: "statistical", nodes: ["assumption:dropout_rate@3"], reviewer: "u_stat", reviewerName: "Statistician", createdAt: "2026-09-28T02:00:00.000Z" },
+    { id: "rev_1", kind: "clinical", nodes: ["assumption:hazard_ratio@1", "assumption:dropout_rate@2"], reviewer: "u_clin", reviewerName: "Clinician", createdAt: "2026-09-27T02:00:00.000Z" },
   ];
   const signed = reviewOfNode("assumption:hazard_ratio@1", reviews);
   assert.deepEqual([signed.state, signed.reviewedBy, signed.reviewedAt, signed.reviewedVersion, signed.reviewKind],
-    ["reviewed", "u_clin", "2026-09-27T02:00:00.000Z", 1, "clinical"]);
+    ["reviewed", "Clinician", "2026-09-27T02:00:00.000Z", 1, "clinical"]);
   const moved = reviewOfNode("assumption:hazard_ratio@2", reviews);
-  assert.deepEqual([moved.state, moved.reviewedVersion, moved.reviewedBy], ["changed_after_review", 1, "u_clin"], "the signed version is the earlier one, and the card says so");
-  assert.equal(reviewOfNode("assumption:dropout_rate@3", reviews).reviewedBy, "u_stat", "the newest signature that names the version");
+  assert.deepEqual([moved.state, moved.reviewedVersion, moved.reviewedBy], ["changed_after_review", 1, "Clinician"], "the signed version is the earlier one, and the card says so");
+  assert.equal(reviewOfNode("assumption:dropout_rate@3", reviews).reviewedBy, "Statistician", "the newest signature that names the version");
   assert.equal(reviewOfNode("assumption:outcome_sd@1", reviews), null, "nobody signed it: it is what it was stored as");
   const card = { key: "hazard_ratio", version: 1, reviewState: "ai_set" };
   assert.equal(withReviewState(card, "assumption:hazard_ratio@1", reviews).reviewState, "reviewed");
@@ -638,7 +638,7 @@ test("C3-05 a countersignature moves the node it names to reviewed — who, when
   assert.equal(withReviewState(card, "assumption:hazard_ratio@9", []), card);
 });
 
-test("C3-07 a review is current only when every node it names is at its current version — an edited card, a regenerated population — and only a review of what the headline rests on lifts the ceiling", () => {
+test("C3-07 a review is current only when every node it names is at its current version — an edited card, a regenerated population — while evidence, not a signature, defines the use ceiling", () => {
   const study = { id: "std_1", intendedUse: "specified_analysis" };
   const rows = {
     study, assumptions: [{ key: "hazard_ratio", version: 2 }, { key: "outcome_sd", version: 1 }], populations: [{ id: "pop_2", version: 2 }],
@@ -660,8 +660,8 @@ test("C3-07 a review is current only when every node it names is at its current 
   const useOf = (reviews) => useCeilingOf({ study, results: rows.results, reviews, stale: [], current, dependsOn: depends });
   assert.equal(useOf([{ id: "r1", nodes: ["assumption:hazard_ratio@2"] }]).withinCeiling, true, "a current review of a card the headline rests on");
   const elsewhere = useOf([{ id: "r2", nodes: ["assumption:outcome_sd@1"] }]);
-  assert.equal(elsewhere.withinCeiling, false, "a current review of something the headline does not rest on is not a review of it");
-  assert.deepEqual(elsewhere.reasons.map((reason) => reason.code), ["review_not_of_headline"]);
+  assert.equal(elsewhere.withinCeiling, true, "an unrelated review does not change the evidence ceiling");
+  assert.deepEqual(elsewhere.reasons.map((reason) => reason.code), []);
   const moved = useOf([{ id: "r3", nodes: ["assumption:hazard_ratio@1"] }]);
-  assert.deepEqual(moved.reasons.map((reason) => reason.code), ["review_changed"]);
+  assert.deepEqual(moved.reasons.map((reason) => reason.code), []);
 });

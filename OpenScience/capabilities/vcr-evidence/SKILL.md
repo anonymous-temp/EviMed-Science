@@ -159,7 +159,7 @@ metadata:
 
 - 卡的取值范围用**预测区间**，不是置信区间：仿真问的是「下一个同类研究会落在哪」。
 - 每张卡都有版本；改一个数是新版本，不是改写旧版本；同一个 `key` 同时写两次也不会撞版本。
-- 新卡的状态是「AI 设定」。复核是签注，不是关卡——不要等人复核才继续。
+- New assumptions remain labelled AI-set. The platform requests independent clinical and statistical AI reviews against frozen versions; a relevant edit requests a new review. Preserve findings and disagreements, continue supported work, and never wait for a human signature. Optional human review remains separately attributable.
 
 ### 6. 交付
 

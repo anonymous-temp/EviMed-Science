@@ -89,6 +89,8 @@ export const VCR_CONCLUSION_LABELS_ZH = Object.freeze({ estimable: '可估计', 
 export const VCR_REVIEW_STATES = frozen(['ai_set', 'reviewed', 'changed_after_review'])
 export const VCR_REVIEW_STATE_LABELS_ZH = Object.freeze({ ai_set: 'AI 设定', reviewed: '已复核', changed_after_review: '复核后有变更' })
 /** Who may countersign (§10.2). */
+export const VCR_REVIEWER_KINDS = frozen(['ai', 'human'])
+export const VCR_REVIEW_LIFECYCLE = frozen(['queued', 'running', 'done', 'failed'])
 export const VCR_REVIEW_KINDS = frozen(['clinical', 'statistical', 'data'])
 export const VCR_REVIEW_KIND_LABELS_ZH = Object.freeze({ clinical: '临床复核', statistical: '统计复核', data: '数据复核' })
 

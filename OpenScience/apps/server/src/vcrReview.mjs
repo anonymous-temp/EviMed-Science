@@ -1,0 +1,103 @@
+/** Trusted, aggregate-only VCR adapter for the platform review queue. */
+import { createHash } from 'node:crypto';
+import { vcrResultOutputPayload } from '@evimed/domain';
+import { vcrCurrentNodes, vcrReviewIsCurrent } from './vcrViews.mjs';
+import { renderVcrNumbers } from './vcrRender.mjs';
+import { studyReviewDigest } from './studyReview.mjs';
+import { HttpError } from './security.mjs';
+
+/** @param {any} input */
+export function buildVcrReviewInput({ model, results, executions, evidence, reports, forModel }) {
+  const nodes = [...results.map(row => `result:${row.id}@${row.version}`),
+    ...(model.assumptions ?? []).map(row => `assumption:${row.key}@${row.version}`),
+    ...(model.definition?.id ? [`study_definition:${model.definition.id}@${model.definition.version}`] : []),
+    ...(model.scenarios ?? []).map(row => `trial_scenario:${row.id}@${row.version}`),
+    ...Object.entries(model.inputVersions ?? {}).filter(([, value]) => value).map(([kind, value]) => `${kind === "comparator" ? "comparator_design" : kind}:${value.id}@${value.version}`)].sort();
+  const findings = [];
+  for (const result of results) {
+    const execution = executions.find(row => row.id === result.executionId);
+    const actual = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
+    if (!execution?.output_hash || execution.output_hash !== actual) findings.push({ kind: 'number_untraced', location: `result:${result.id}@${result.version}`,
+      evidence: '', message: 'Stored result could not be matched to its execution output hash.', fix: '核对该结果与对应计算记录；保留已产出的结果并标明核验不确定性。' });
+  }
+  const referenced = new Set((model.assumptions ?? []).flatMap(row => [...(row.evidenceIds ?? []), ...(row.sources ?? [])].map(source => String(source.id ?? source.evidenceId ?? source))));
+  for (const id of referenced) {
+    if (!evidence.some(row => row.id === id && row.locator?.verification === 'verified' && row.quote && row.record_text?.includes(row.quote) && row.record_hash === createHash('sha256').update(row.record_text).digest('hex'))) findings.push({ kind: 'reference_unresolvable', location: `evidence:${id}`,
+      evidence: '', message: 'The assumption source has no verified preserved quotation.', fix: '补充可核验的来源，或保留为明确声明的假设。' });
+  }
+  // Never pass the exact render model: suppression applies before template binding.
+  const safe = forModel({ study: model.study, definition: model.definition, assumptions: (model.assumptions ?? []).map(({ reviewState: _state, ...row }) => row), measures: model.measures, counts: model.counts,
+    results: model.results, scenarios: model.scenarios, scenarioResults: model.scenarioResults, models: model.models, inputVersions: model.inputVersions,
+    intendedUse: model.intendedUse, conclusion: model.conclusion, notEstimableRule: model.notEstimableRule, stale: model.stale });
+  const rendered = reports.map(report => renderVcrNumbers(String(report.template ?? ''), safe));
+  for (const report of rendered) for (const issue of report.issues) findings.push({ kind: 'number_untraced', location: issue.path,
+    evidence: '', message: issue.message, fix: '使用已保存结果的数字引用，并保留缺失值标记。' });
+  const frozenInput = { model: safe, report: rendered.map(row => row.text).join('\n\n'),
+    evidence: evidence.filter(row => referenced.has(row.id)).map(row => ({ id: row.id, quote: row.quote, source: /^(https?:\/\/|doi:|pmid:|NCT|ChiCTR)/i.test(row.source_ref ?? '') ? row.source_ref : null,
+      verification: row.locator?.verification, parameter: row.parameter, value: row.value, unit: row.unit })),
+    methods: executions.map(row => ({ method: row.method, version: row.method_version, validation: row.environment?.validation ?? null })) };
+  return { nodes, frozenInput, deterministic: { numbers: { checked: results.length, bindings: rendered.reduce((sum, row) => sum + row.bindings.length, 0) },
+    references: { checked: referenced.size }, findings } };
+}
+
+/** @param {{vcr:any, reviewService:any}} parts */
+export function createVcrReviewAdapter({ vcr, reviewService }) {
+  const persist = (client, record) => vcr.store.saveAiReview({ ...record, studyId: record.subjectRef.studyId }, { client });
+  reviewService?.registerStudyReviewAdapter('vcr', { persist, requestDeliverable: async (identity, input) => {
+    const study = await vcr.store.studyByControlProject(identity.userId, identity.projectId);
+    if (!study) return [];
+    const exports = await vcr.store.exports(study.id);
+    const row = exports.find(item => item.runId === input.runId);
+    return api.queue(study.id, { ...(row ? { exportId: row.id } : {}), runId: input.runId });
+  }, completed: async record => {
+    const exportId = record.subjectRef.exportId;
+    if (!exportId || !vcr.orchestrator?.requestReviewRepair) return;
+    const study = await vcr.store.studyById(record.subjectRef.studyId);
+    if (!study) return;
+    const reviews = await vcr.store.reviews(study.id);
+    const pair = reviews.filter(row => row.reviewerKind === 'ai' && row.provenance.inputDigest === record.inputDigest
+      && row.provenance.configurationDigest === record.configurationDigest);
+    if (!['clinical', 'statistical'].every(role => pair.some(row => row.kind === role && ['done', 'failed'].includes(row.status)))) return;
+    const [results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol] = await Promise.all([
+      vcr.store.results(study.id), vcr.store.assumptions(study.id), vcr.store.populations(study.id), vcr.store.patientSets(study.id),
+      vcr.store.comparatorDesigns(study.id), vcr.store.trialScenarios(study.id), vcr.store.latestDesignGrid(study.id), vcr.store.latestDefinition(study.id), vcr.store.latestProtocolVersion(study.id)]);
+    const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
+    const completed = pair.filter(row => row.status === 'done' && vcrReviewIsCurrent(row, { results, current }));
+    const findings = completed.flatMap(row => (row.provenance.findings ?? []).filter(finding => finding.fix));
+    if (findings.length) await vcr.orchestrator.requestReviewRepair(study.id, { sourceDigest: record.inputDigest, exportId,
+      reviewIds: completed.map(row => row.platformReviewId), findings });
+  } });
+  const api = {
+    /** Called only after authorized writes/result persistence, never with caller-provided model context.
+     * @param {string} studyId @param {{exportId?:string,runId?:string,reason?:string}} [options] */
+    async queue(studyId, { exportId, runId } = {}) {
+      const frozen = await vcr.store.reportSnapshot(async snapshot => {
+        const study = await snapshot.studyById(studyId);
+        if (!study) throw new HttpError(404, 'vcr_study_not_found', 'Study not found.');
+        const exported = exportId ? await snapshot.exportRow(studyId, exportId) : null;
+        if (exportId && !exported) throw new HttpError(404, 'vcr_export_not_found', 'Export not found.');
+        const model = exported?.cover?.results ?? await vcr.service.reportModelFromStore(study, snapshot);
+        const ids = [...new Set([...Object.values(model.results ?? {}), ...Object.values(model.scenarioResults ?? {})].map(row => row.id).filter(Boolean))];
+        const results = (await Promise.all(ids.map(id => snapshot.result(studyId, id)))).filter(Boolean);
+        const executions = await snapshot.rows('SELECT id,output_hash,method,method_version,environment FROM evimed_vcr.executions WHERE study_id=$1 AND id=ANY($2::text[])', [studyId, results.map(row => row.executionId).filter(Boolean)]);
+        const evidence = await snapshot.rows('SELECT e.id,e.quote,e.source_ref,e.parameter,e.value,e.unit,e.locator,p.record_text,p.record_hash FROM evimed_vcr.evidence_items e LEFT JOIN evimed_vcr.precedents p ON p.id=e.precedent_id AND p.user_id=e.user_id WHERE e.study_id=$1 AND e.user_id=$2 ORDER BY e.created_at DESC LIMIT 2000', [studyId, study.userId]);
+        const reports = exported?.cover?.reports ?? (exported?.cover?.report ? [exported.cover.report] : []);
+        return { study, ...buildVcrReviewInput({ model, results, executions, evidence, reports, forModel: value => vcr.service.forModel(value) }) };
+      });
+      if (!frozen.nodes.length) return [];
+      const records = [];
+      for (const role of ['clinical', 'statistical']) {
+        const input = { subjectRef: { kind: 'vcr', studyId, ...(exportId ? { exportId } : {}) }, role, nodes: frozen.nodes, frozenInput: frozen.frozenInput, deterministic: frozen.deterministic, runId };
+        if (reviewService) records.push(await reviewService.requestStudyReview({ userId: frozen.study.userId, projectId: frozen.study.projectId }, input));
+        else {
+          const digest = studyReviewDigest(frozen.frozenInput);
+          records.push(await vcr.store.saveAiReview({ reviewId: `unavailable_${studyReviewDigest({ studyId, role, digest })}`, subjectRef: input.subjectRef, studyId, role,
+            nodes: frozen.nodes, inputDigest: digest, configuration: { revision: 'study-review-v1', model: null }, configurationDigest: '', status: 'failed', error: 'review_disabled',
+            model: null, usage: {}, cost: null, deterministic: frozen.deterministic, findings: frozen.deterministic.findings, createdAt: new Date().toISOString(), finishedAt: new Date().toISOString() }));
+        }
+      }
+      return records;
+    },
+  };
+  return api;
+}
