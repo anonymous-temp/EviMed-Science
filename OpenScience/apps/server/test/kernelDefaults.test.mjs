@@ -178,6 +178,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "ui-open-in-app.disabled=true",
       "ui-plugin-manager.disabled=true",
       "ui-settings-account.disabled=true",
+      "ui-sidebar-browser.disabled=false",
       "ui-sidebar-terminal.disabled=true",
       // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",

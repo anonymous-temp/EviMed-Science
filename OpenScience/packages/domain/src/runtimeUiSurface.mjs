@@ -178,6 +178,32 @@ export function isRuntimeUiWorkspacePath(value, workspaceRoot, { relativeOnly = 
   return value === root || value.startsWith(`${root}/`);
 }
 
+/** Resolve a native preview asset relative to its containing file, within the same workspace.
+ * @param {unknown} value @param {unknown} baseFile @param {string} workspaceRoot
+ */
+function isRuntimeUiRelatedWorkspacePath(value, baseFile, workspaceRoot) {
+  if (!isRuntimeUiWorkspacePath(baseFile, workspaceRoot)
+    || typeof value !== "string" || !value || value.length > 4096 || value.includes("\0") || value.includes("\\")) return false;
+  if (value.startsWith("/")) return isRuntimeUiWorkspacePath(value, workspaceRoot);
+  const root = typeof workspaceRoot === "string" && workspaceRoot.startsWith("/") ? workspaceRoot.replace(/\/+$/, "") : "";
+  if (!root) return false;
+  const base = /** @type {string} */ (baseFile);
+  const parts = (base.startsWith("/") ? base : `${root}/${base}`).split("/").filter(part => part && part !== ".");
+  parts.pop();
+  const rootDepth = root.split("/").filter(Boolean).length;
+  for (const part of value.split("/")) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (parts.length <= rootDepth) return false;
+      parts.pop();
+    } else {
+      if (CLIMBING_SEGMENT.test(part)) return false;
+      parts.push(part);
+    }
+  }
+  return isRuntimeUiWorkspacePath(`/${parts.join("/")}`, root);
+}
+
 /**
  * Why a workspace-file call must not be forwarded, or `null` when it may.
  *
@@ -194,6 +220,13 @@ export function runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot) {
   if (!method || !workspacePathMethods.has(String(method))) return null;
   const args = payload && typeof payload === "object" && !Array.isArray(payload) ? /** @type {any} */ (payload).args : null;
   if (!args || typeof args !== "object" || Array.isArray(args)) return "a workspace-file call must carry its arguments";
+  if (method === "workspaceFiles/readBytes" && args.options !== undefined) {
+    if (!args.options || typeof args.options !== "object" || Array.isArray(args.options)) return "file-read options must be an object";
+    if (Object.hasOwn(args.options, "baseFile")) {
+      return isRuntimeUiRelatedWorkspacePath(args.path, args.options.baseFile, workspaceRoot)
+        ? null : "the related file is outside this project's workspace";
+    }
+  }
   if (!isRuntimeUiWorkspacePath(args.path, workspaceRoot)) return "the path is outside this project's workspace";
   if (method === "workspaceFiles/readRelated" && !isRuntimeUiWorkspacePath(args.relativePath, workspaceRoot, { relativeOnly: true })) {
     return "the related path is outside this project's workspace";

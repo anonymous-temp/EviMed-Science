@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -505,6 +505,15 @@ test("a workspace-file read is held to the workspace on both transports, and the
   f.manager.proxy = async (req, res) => { arrived.push([new URL(req.url, "http://ui.local").pathname, req.__openScienceProxyBody?.toString("utf8") ?? null]); res.writeHead(200); res.end("{}"); };
   const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
   assert.ok(root.startsWith("/"), "the fixture's workspace root is absolute");
+  for (const file of ["deliverables/report.md", "a.html", "img/b.png", "reports/report.html", "images/chart.png", "reports/chart.png"]) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "workspace content");
+  }
+  const escaped = path.join(f.dataDir, "private-files");
+  await mkdir(escaped);
+  await writeFile(path.join(escaped, "image.png"), "private bytes");
+  await writeFile(path.join(escaped, "report.html"), "private document");
+  await symlink(escaped, path.join(root, "linked"));
   const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
     method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
@@ -514,6 +523,8 @@ test("a workspace-file read is held to the workspace on both transports, and the
     ["workspaceFiles/readAll", { workspaceFileScopeId: "s", path: "deliverables/report.md" }],
     ["workspaceFiles/list", { workspaceFileScopeId: "s", path: root }],
     ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "img/b.png" }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "../images/chart.png", options: { baseFile: `${root}/reports/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "./chart.png", options: { baseFile: "reports/report.html" } }],
   ];
   for (const [index, [endpoint, args]] of inside.entries()) {
     assert.equal((await call(endpoint, args)).status, 200, `${endpoint} inside the workspace is forwarded`);
@@ -529,6 +540,12 @@ test("a workspace-file read is held to the workspace on both transports, and the
     ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "/etc/hosts" }],
     ["workspaceFiles/read", {}],
     ["workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/a\\b` }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: { baseFile: "/etc/report.html" } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "../private.png", options: { baseFile: `${root}/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "%2e%2e/private.png", options: { baseFile: `${root}/reports/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: [] }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: { baseFile: `${root}/linked/report.html` } }],
+    ["workspaceFiles/readAll", { sessionId: "s", path: `${root}/linked/report.html` }],
   ];
   for (const [index, [endpoint, args]] of outside.entries()) {
     const response = await call(endpoint, args);
@@ -545,6 +562,48 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal((await c.next()).type, "end");
   assert.equal(arrived.length, inside.length, "nothing outside the workspace reached the runtime");
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
+});
+
+test("native Markdown media uses authenticated bounded workspace reads with inert content", async (t) => {
+  const f = await fixture(t, { maxFileBytes: 16 });
+  const project = await f.store.requireProject(f.user, "default");
+  await mkdir(path.join(project.workspaceDir, "figures"), { recursive: true });
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  await writeFile(path.join(project.workspaceDir, "figures", "图 表.png"), bytes);
+  await writeFile(path.join(project.workspaceDir, "large.png"), Buffer.alloc(32));
+  await writeFile(path.join(project.workspaceDir, "page.html"), "<h1>hello</h1>");
+  f.manager.runtimeWorkspaceRoot = () => "/workspace";
+  f.manager.proxy = async () => assert.fail("raw kernel file reads must not bypass the host's file boundary");
+  const media = (file, options = {}) => fetch(`${f.base}/api/file?path=${encodeURIComponent(file)}`, {
+    headers: { Cookie: f.cookie }, ...options,
+  });
+  const image = await media("/workspace/figures/图 表.png");
+  assert.equal(image.status, 200);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), bytes);
+  assert.equal(image.headers.get("content-type"), "image/png");
+  assert.equal(image.headers.get("content-security-policy"), "sandbox; default-src 'none'");
+  assert.equal(image.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(image.headers.get("cache-control"), "private, no-store");
+  const head = await media("/workspace/figures/图 表.png", { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-length"), String(bytes.length));
+  assert.equal(await head.text(), "");
+  assert.equal((await media("/workspace/page.html")).headers.get("content-security-policy"), "sandbox; default-src 'none'");
+  assert.equal((await media("/workspace/large.png")).status, 413);
+  assert.equal((await media("/workspace/figures/图 表.png", { headers: {} })).status, 401);
+  assert.equal((await media("/etc/passwd")).status, 403);
+  assert.equal((await media("/workspace/../outside.png")).status, 403);
+  assert.equal((await fetch(`${f.base}/api/file?path=/workspace/page.html&path=/etc/passwd`, { headers: { Cookie: f.cookie } })).status, 400);
+  const outside = path.join(f.dataDir, "outside");
+  await mkdir(outside);
+  await writeFile(path.join(outside, "private.png"), "private");
+  await symlink(outside, path.join(project.workspaceDir, "linked"));
+  await symlink(path.join(outside, "private.png"), path.join(project.workspaceDir, "final.png"));
+  for (const file of ["/workspace/linked/private.png", "/workspace/final.png"]) {
+    const rejected = await media(file);
+    assert.equal(rejected.status, 403);
+    assert.doesNotMatch(await rejected.text(), /private<|>private/);
+  }
 });
 
 test("a composer attachment reaches the kernel on both transports, held to the file ceiling", { timeout: 5000 }, async (t) => {

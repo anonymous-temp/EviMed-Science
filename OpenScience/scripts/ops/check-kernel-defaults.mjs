@@ -99,11 +99,11 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "2d44b0046c018a68c4fb06e4f6b3713ab21ae064657cf39ad34c2a2507688321",
-  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside runtime image sha256:1182ad9c184b1d7e188493d5d26eef04c79d7cd4c3d5eada3356f84a037d6e9a with the candidate socket and preset patches from 009c1889482f1198da03fc889727a242ced61536",
+  sha256: "7be9d965af9d023ec517541157b316b36b129f39238f5165f220b3a42f129341",
+  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside runtime image sha256:19c3650b40e402f31a97570df361ff02d86b55e872e9b4028dd5f257424d9933 with the reviewed native Browser socket override on 2026-09-30",
   // Re-recorded on 2026-09-30 in a disposable network-isolated container.
   // The image's own seeded profile and installed kernel resolve the candidate
-  // patches: 191 -> 192 rows, adding evimed-engine-context only. The complete
+  // patch: 192 rows remain; only the native Browser disabled flag changes. The complete
   // runtime delta independently byte-compares this dump before its boot smoke.
 };
 

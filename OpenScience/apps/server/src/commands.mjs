@@ -17,6 +17,7 @@ import {
   normalizeWorkspaceRelativePath,
   openScopedDirectoryNoFollow,
   openScopedFileNoFollow,
+  readStableFileHandle,
   readTextFileNoFollow,
   resolveScopedPath,
   scopedDisplayPath,
@@ -108,28 +109,6 @@ function finitePositive(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 }
 
-async function readStableFileHandle(handle, initialStat) {
-  const size = initialStat.size;
-  if (!Number.isSafeInteger(size) || size < 0) {
-    throw new HttpError(409, "file_changed", "File changed while it was being read.");
-  }
-  const buffer = Buffer.alloc(size);
-  let offset = 0;
-  while (offset < size) {
-    const { bytesRead } = await handle.read(buffer, offset, size - offset, offset);
-    if (bytesRead === 0) throw new HttpError(409, "file_changed", "File changed while it was being read.");
-    offset += bytesRead;
-  }
-  const finalStat = await handle.stat();
-  if (
-    finalStat.size !== initialStat.size ||
-    finalStat.mtimeMs !== initialStat.mtimeMs ||
-    finalStat.ctimeMs !== initialStat.ctimeMs
-  ) {
-    throw new HttpError(409, "file_changed", "File changed while it was being read.");
-  }
-  return buffer;
-}
 
 function assertWorkspaceScanCapacity(count, limit) {
   if (limit != null && count > limit) {

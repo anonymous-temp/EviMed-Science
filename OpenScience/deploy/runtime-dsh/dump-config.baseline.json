@@ -558,10 +558,10 @@
   name: '@deepseek-ai/dsh-office-to-pdf'
 - id: ui-sidebar-documentpreview
   name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
+# == @deepseek-ai/dsh-web-app, patched by @evimed/dsh-socket
 - id: ui-sidebar-browser
   name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
-  disabled: !!js ctx.get('profileContext')?.name !== 'desktop'
-# == @deepseek-ai/dsh-web-app, patched by @evimed/dsh-socket
+  disabled: false
 - id: ui-sidebar-terminal
   name: '@deepseek-ai/dsh-client-ui-sidebar-terminal'
   disabled: true

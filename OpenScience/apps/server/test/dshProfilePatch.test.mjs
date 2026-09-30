@@ -240,6 +240,16 @@ test("the trajectory panel is everyone's: a researcher's runtime mounts it, labe
   assert.equal(researcher, operator, "with nothing operator-only, the two profiles are one patch");
 });
 
+test("the hosted composition enables the native browser without replacing the right sidebar", async () => {
+  const socketPatch = await readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8");
+  assert.match(socketPatch, /- id: ui-sidebar-browser\n\s+disabled: false/);
+  const rendered = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true, operator: false } });
+  for (const id of ["ui-sidebar-browser", "ui-sidebar-files", "ui-sidebar-documentpreview", "ui-sidebar-right"]) {
+    assert.doesNotMatch(rendered, new RegExp(`- id: ${id}\\n {2}disabled: true`));
+  }
+  assert.match(socketPatch, /- id: ui-sidebar-terminal\n\s+disabled: true/);
+});
+
 test("a running turn's reasoning stays folded: the transcript mode is the kernel's collapsed default and nothing in a page can change it", () => {
   // 融合方案 §8.2 asks for 「推理默认折叠并要求中文」. The folding is already the
   // kernel's: `ui-chat` draws each reasoning block as a Think disclosure and,
