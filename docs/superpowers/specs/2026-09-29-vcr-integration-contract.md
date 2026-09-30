@@ -19,9 +19,17 @@ the build-time rulings; this file holds the integration rulings. Where they disa
   and roles; matching and referral with the per-person contact stop; evidence parameterization
   with verified extractions; recompute after change; every human stop reachable from the UI.
 - **Out, recorded not hidden:** phase 3 (partner sample, AC-36/37 on real partner data); the live
-  DSH + DeepSeek acceptance run of each capability and the timed T0 run (AC-35) — both run at release
-  time against a deployed stack and are recorded `not-run` in `evals/acceptance-ledger.json` until
-  then; the separate compute node.
+  DSH + DeepSeek acceptance run of each capability and the timed T0 run (AC-35) — both can only be
+  made against a deployed stack, so both happen at release time; the separate compute node.
+  Where release-time acceptance is recorded (`evals/acceptance-ledger.json` has capability rows, not
+  AC rows, so it cannot hold AC-35): the five live capability runs go in the five `vcr-*` rows of the
+  ledger (`realDelivery`, `not-run` until a live run is on record); the timed T0 run, and every other
+  check only a deployed stack can make — the engine image and its lock, the data plane and `/jobs`
+  permissions, the migration on a production copy, the new `.env` keys reaching the web container —
+  go in the release checklist's 「虚拟临研」 section
+  (`OpenScience/docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md`), with the date, the release id and
+  the measured number. A study that has not passed them is not released, and nothing else in the
+  repository says it has.
 
 ## 2. Two closed rule grammars (no code from data, ever)
 
@@ -225,11 +233,31 @@ cohortSize, screened, eligible, enrolled, referred, contacted, candidates` (exte
 - a scalar people-count in [1, minCell − 1] outside such an array becomes `null`, and the object
   that held it gains `suppressed: [<key>, …]`;
 - a cell with several count keys is judged by its smallest;
-- `suppressedCount`-style complements are never emitted.
+- `suppressedCount`-style complements are never emitted;
+- **scalar fields** (`VCR_PEOPLE_COUNT_SCALAR_FIELDS`: `rows, startingRows, keptRows,
+  trainingObservations, effectiveSampleSize`) count people but are never one of a list's sibling
+  cells — two tables' row totals are not the parts of one whole — so they answer to the standalone
+  rule above and are never topped up with neighbours;
+- **a measure is a count by its name**: `{ name, value }` where `name` is in
+  `VCR_PEOPLE_COUNT_MEASURES` (`rows, cohort_size, cohort_size_strict, cohort_size_lenient,
+  training_observations, effective_sample_size`) answers to the standalone rule; a hidden measure keeps
+  its name and loses its value, interval and note. The list is closed: a published trial's figure or a
+  design's own size (`expected_sample_size`, `required_total_*`) is not this study's people;
+- a `null` count is a value never known, not a person; it counts only where the object's own
+  `suppressed` list names it.
 
 It is applied at exactly one boundary: everything the runtime can read (`VcrService.runtimeRead`
-for every `what`, the `simulate`/`evidence_pool` status answers, the snapshot profile). Pages a
-study member reads show exact counts. The engine never emits an exact complement of a hidden level.
+for every `what`, the `simulate`/`evidence_pool` status answers, the snapshot profile), after
+`stripPlaneAddresses` has removed `location`, `inputHashes`, `outputHash` and `signature` (a run never
+sees where the plane keeps a file). Pages a study member reads show exact counts. The engine never
+emits an exact complement of a hidden level.
+
+**Published-figure exemption.** The reads named in `VCR_PUBLISHED_FIGURE_READS` — `evidence`,
+`precedents`, `trial_registry_record` — carry another trial's published figures (an extracted value and
+its sample size, a registry record's enrollment, arms and site count). They are not this study's people
+and the floor has nothing to protect in them; applied to them it hollowed every row with a
+`sampleSize` beside an unknown `events`. The exemption is by `what`, never by shape, and it lifts only
+the small-cell rule: plane addresses are still stripped and every other read is still suppressed.
 
 ## 5. The browser ↔ server page contract
 
@@ -246,6 +274,17 @@ study member reads show exact counts. The engine never emits an exact complement
   body builder's output to the real routes.
 - A tab that receives a shape it cannot read shows an error card inside the tab, never a route-level
   crash.
+- **A person's hand on the matching tab is addressed by the page.** `presentMatchingTab` returns
+  `selected.assessmentId` and, per judgment, `criterionId`, which the browser posts back to
+  `POST …/assessments/:a/judgments/:c/override` and `POST …/assessments/:a/review`. The page holds no
+  id of its own making.
+- **The use ceiling follows current reviews.** `useCeilingOf({ study, results, reviews, stale })` counts
+  a review only while `vcrReviewIsCurrent` holds: none of the nodes it names is marked stale, every
+  result it names is still the current version, and every other versioned node it names (an assumption
+  card, a population, a design) is at its current version. A review that no longer holds lowers the
+  ceiling with the reason `review_changed`; a current review that signed off something the headline
+  result does not depend on gives `review_not_of_headline`; a study nobody reviewed gives
+  `not_reviewed`. Three reasons, three sentences on the page.
 
 ## 6. Data plane, seal, access
 
@@ -261,6 +300,41 @@ study member reads show exact counts. The engine never emits an exact complement
 - Access is judged at `now`; a caller's `asOf` only selects which rows are visible.
 - Deletion removes data-plane files after the row deletion commits, and member/grant rows naming a
   deleted account.
+- **A snapshot's as-of reaches the bytes the engine reads (wave C).** Freezing with `asOf` stores the
+  instant on the snapshot (`profile.frozen.asOf`, immutable with the snapshot); every analysis table
+  derived from it, at freeze or later, and every raw-file view handed to the engine keeps the rows
+  `rowsVisibleAsOf` admits, and counts the rest (`dropped.not_yet_visible`, `visible_date_missing`).
+  A file that derives rows and has no single `visible_at` column cannot be replayed: the freeze is
+  refused by name (`vcr_field_map_invalid`, issue `as_of_needs_visible_at`) rather than admitting its
+  rows. A replay that leaves nobody visible derives no tables. A blank in an `arm` column is judged by
+  `treatmentEvidence` and stays blank — counted under its missing reason, never read as control.
+- **A value source is per column (wave C).** A field-map entry may carry `valueSource` (observed,
+  extracted, calculated or imputed — a column of a real source is still a real person's value; anything
+  else is `value_source_unknown` / `value_source_not_individual`, and a column on a synthetic or
+  aggregate source may not claim one); a column that says nothing has its source's. The analysis tables
+  keep each analysis column's source (`derivedFrom.columnSources`, and `valueSource` on each entry of
+  `derivedFrom.columns`) and are labelled with the weakest of them (`weakestSource`: observed <
+  extracted < calculated < imputed), so a table with one imputed baseline is never called `observed`.
+  **The engine input keeps one `valueSource` per table** — carrying the per-column map to the engine
+  needs `columnSources` in `VCR_ENGINE_TABLE_INPUT_KEYS` and in the R validator, a domain and engine
+  change not made here; until then the weakest label is what the engine and its result see.
+- **Deviations from the plan's formats (ruled 2026-09-29).**
+  - *Intake is CSV, TSV, JSON records and XLSX; Parquet is refused at upload by name
+    (`vcr_data_format_unsupported`, with a hint to export CSV).* The plan (§8.1) lists Parquet among
+    the first formats. The control plane reads the bytes itself to validate and derive the three
+    tables — in memory, inside the tenant boundary — and it has no Parquet reader. `pyarrow` is in
+    the engine image for one thing, the bridge that converts a Parquet *job input* to CSV, and putting
+    a Parquet reader into the control plane for one format is a dependency the phase-1 material
+    (hospital exports: CSV and XLSX) does not need. The engine still reads a Parquet input it is
+    handed; the control plane never hands it one. Lifted by converting at the door, the way an XLSX
+    sheet already is, not by teaching the plane a second parser.
+  - *Engine result tables are CSV, next to `result.json`, not Parquet.* The plan (§9, §11.4) says
+    result tables in Parquet. The engine writes CSV: the pinned R library has no Parquet writer
+    (`arrow` is not in it), the tables are small (operating characteristics, monthly probabilities,
+    weights by subject), the control plane and the page stream them as text
+    (`GET /jobs/:id/tables/:name` is `text/csv`), and the manifest pins each table by its sha256
+    whatever the format. Machine-readable exports are CSV and JSON; Parquet, if a partner asks, is a
+    converter at export time.
 
 ## 7. Evidence and matching wiring
 
@@ -284,6 +358,20 @@ Every code a module emits is registered in `packages/domain/src/errorCodes.mjs` 
 tool can emit it, classified recoverable or terminal. A package that adds codes lists them in its
 report; the controller registers them in one pass per wave.
 
+New in the repair waves: `vcr_model_not_applicable` (a patient set names a model whose declared
+range — endpoint types, required fields, fitted input ranges — does not cover the study; refused
+before any job is queued, with the fields named). The engine's own applicability check lives in
+`R/quality.R` and reports through the engine issue codes; the control plane holds a port of it in
+`vcrOrchestrator.mjs` (`vcrModelApplicabilityIssues`) so the refusal comes before a run is spent.
+
+**Typed numbers in a stored report.** Every number in a report is a `{{n:path|format}}` reference. A
+digit the template's own words carry is reported as an advisory issue and is replaced in the stored
+report by 「未计算」, so that the gap is visible in the report the reader gets and the delivery is never
+withheld. What the words may say in digits is closed: a year (1900–2100), an ordinal or a month up to
+twelve, a day of the month, a locator (`第 35 页`, `图 3`), a date, and text inside a source's own
+quotation marks. A reference the grammar cannot parse renders 「未计算」 and is named in
+`vcr_number_unparsed`.
+
 ## 8a. Roles (amended after wave A)
 
 `manage_study` (lead) changes the data tier, intended use and status, deletes the study and confirms
@@ -291,6 +379,22 @@ the compute budget (the second human stop). `manage_data` (lead, data manager) r
 `site` member names its site in `members.detail.siteId` and reads and moves only that site's
 referrals. Deleting a study from 虚拟临研 is a soft delete (the project's conversations and files
 stay); deleting the project or the account removes the rows and the data-plane files.
+
+## 8b. Where it is checked (wave C)
+
+- **CI** (`.github/workflows/web.yml`, three jobs beside `web`): `vcr-r-library` builds the engine's R
+  library from the two package locks (`项目代码/vcr-engine/R/package-lock.json`,
+  `tests/package-lock.crosscheck.json`) from the dated CRAN snapshot the Dockerfile names, proves it is
+  exactly the locks and caches it by what it is built from (`scripts/vcr/r-library.sh`); `vcr-engine`
+  runs every numeric case (`tests/run_all.sh`) and the engine service's tests on it, and refuses a run
+  that was cut short or in which a case skipped itself (`scripts/vcr/check-numeric-log.sh`);
+  `vcr-seam` runs `vcrEngineContract.integration.test.mjs` and `vcrIntake.integration.test.mjs`
+  against a PostgreSQL. Those two are left out of the `web` job's durable-state step
+  (`ENGINE_BACKED_INTEGRATION_TESTS` in `scripts/ops/test-product-state.mjs`), where without R they
+  would skip and read as green. `VCR_ENGINE_TESTS=required` turns a missing engine environment into a
+  failure everywhere it is read; `VCR_R_LIBS` is the only way to name the R library and has no default.
+- **Release** (a deployed stack): the checklist section named in §1.
+- **Locally**: `scripts/vcr/verify.sh`, which discovers its own work.
 
 ## 9. Ownership in the repair waves
 

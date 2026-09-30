@@ -1,13 +1,13 @@
 # 虚拟临研 · 构建契约（P0）
 
-2026-09-28 · 分支 `feature/virtual-clinical-research` · 工作树 `/home/coder/worktrees/wt-vcr` · 对应方案 `docs/superpowers/specs/2026-09-28-EviMed虚拟临研平台方案.md`
+2026-09-28 · 分支 `feature/virtual-clinical-research` · 工作树 `wt-vcr`（主工作树的并列目录，路径由主线程给定） · 对应方案 `docs/superpowers/specs/2026-09-28-EviMed虚拟临研平台方案.md`
 
 这份文件是七个工作包之间唯一的共同契约。**方案是需求，这份文件是接口。**两者冲突时以方案为准，并在这里改。
 
 ## 0. 纪律
 
-1. **只在 `/home/coder/worktrees/wt-vcr` 里写。** 主工作树 `/home/coder/workspace/EviMedScience` 有别的会话在发布，一个字都不要改。
-2. **不装任何东西**：不跑 `pnpm install`、`pip install`、`npm i`、`docker build`、`R install.packages`。磁盘紧张，依赖已经准备好（R 包在 `/home/coder/R/vcr-4.3`）。
+1. **只在自己的工作树 `wt-vcr` 里写。** 主工作树有别的会话在发布，一个字都不要改。
+2. **不装任何东西**：不跑 `pnpm install`、`pip install`、`npm i`、`docker build`、`R install.packages`。磁盘紧张，依赖已经准备好（R 包在环境变量 `VCR_R_LIBS` 指向的库里；仓库里不写死任何机器路径，见 2026-09-29 集成契约 §6）。
 3. **只写自己那一包的文件**（第 2 节）。要改别人的文件，写进汇报里，由主线程合。
 4. **提交**：不要 `git commit`、不要 `git stash`、不要切分支。
 5. **测试**：`node --test apps/server/test/<你的文件>.test.mjs` 可直接跑（node_modules 已就位）。前端用 `pnpm --filter @ai4s/web exec vitest run <file>`。
