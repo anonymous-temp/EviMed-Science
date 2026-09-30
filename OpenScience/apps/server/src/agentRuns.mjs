@@ -3238,9 +3238,8 @@ async function writtenDeliverableFiles(project, since = null) {
  * The sentence a recovered package carries, so "unverified" is a label on work
  * that exists rather than a synonym for nothing.
  */
-const UNVERIFIED_DELIVERY_NOTICE = "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——"
-  + "它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。"
-  + "上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。";
+const UNVERIFIED_DELIVERY_NOTICE = "已生成的文件已保留，可以查看和下载。"
+  + "这些文件标记为「未经核验」，其中的内容仍需核对。";
 
 
 export async function readRunStateProjection(project, workspaceRoot, run = null) {
@@ -4877,9 +4876,10 @@ export class AgentRunStore {
       const recovered = await writtenDeliverableFiles(project, Number.isFinite(started) ? started : null).catch(() => []);
       if (recovered.length > 0) {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
+        const notice = (normalized.status === "canceled" ? "运行已取消。" : "") + UNVERIFIED_DELIVERY_NOTICE;
         normalized.qualityNotices = normalizeQualityNotices([
           ...normalized.qualityNotices,
-          runNotice("run_unverified_delivery", UNVERIFIED_DELIVERY_NOTICE, { detail: UNVERIFIED_DELIVERY_NOTICE }),
+          runNotice("run_unverified_delivery", notice, { detail: notice }),
         ]);
       }
     }
