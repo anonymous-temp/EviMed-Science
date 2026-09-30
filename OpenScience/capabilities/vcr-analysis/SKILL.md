@@ -44,7 +44,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
   "kind": "scenario",
   "name": "情景人群",
   "definition": {
-    "n": 2000,
+    "n": 240,
     "population": {
       "variables": [
         { "name": "age", "family": "normal", "mean": 63, "sd": 9 },
@@ -69,7 +69,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 在库里选能覆盖这个人群和这个终点的**最高一级**模型（`validated` > `data` > `literature` > `scenario`）。选不到就用文献模型或情景模型，并在报告里写明是哪一级、为什么。
 
-`mcp__evimed__vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`，有已生成的人群就写 `populationId`（两组人数之和要等于人群的人数）。
+`mcp__evimed__vcr_write` `what: "patient_set"`：`modelId`、`modelVersion`、`scenario`，有已生成的人群就写 `populationId`（上一步写人群时返回的 id；两组人数之和要等于人群的人数：上面人群的 `n` 是 240，这里 160 + 80）。
 
 ```json vcr:object:patient_set
 {
@@ -247,7 +247,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 `simulation.json` 按 FDA 复杂创新设计指导原则的清单：`designSummary`、`exampleTrial`、`scenarios`（含 `null: true` 的零效应情景）、`replicates`、`operatingCharacteristics`（每行带 `mcse`）、`sensitivity`、`code`（种子与软件版本）、`summary`。
 
-**报告里的每个数写成 `{{n:…}}` 引用**，用 `mcp__evimed__vcr_read` `what: "report_model"` 看能引用哪些路径。例如 `{{n:measure(power).value|pct1}}`、`{{n:counts.realPatients|thousands}}`、`{{n:measure(power)|pm}}`、`{{n:measure(hazard_ratio)|ci}}`；同一份报告里比较几个方案时按方案的 id 指名：`{{n:measure(power, scenario=<方案 id>).value|pct1}}`。平台在交付时按研究已保存的结果渲染这些引用，渲染不出来的写成「未计算」，不会写成 0；手打的数字会被标出来。
+**报告里的每个数写成 `{{n:…}}` 引用**，用 `mcp__evimed__vcr_read` `what: "report_model"` 看能引用哪些路径。例如 `{{n:measure(power).value|pct1}}`、`{{n:counts.realPatients|thousands}}`、`{{n:measure(power)|pm}}`、`{{n:measure(hazard_ratio)|ci}}`；同一份报告里比较几个方案时按方案的 id 指名：`{{n:measure(power, scenario=<方案 id>).value|pct1}}`。平台在交付时按研究已保存的结果渲染这些引用，渲染不出来的写成「未计算」，不会写成 0；手打的数字（年份、12 以内的序号、日期、页码图表编号和「」里引的方案原文除外）平台也写成「未计算」，并在返回值 `issues` 里告诉你；读不成引用的 `{{n:…}}`（格式要小写，如 `pct1`）同样。
 
 ## 运行完成前
 

@@ -114,7 +114,7 @@ metadata:
 | `overall` | 全部同类研究 |
 | `next_closest` | 差得最少的那一档 |
 
-平台回 `not_started` 就是没有能合并的东西（`reason` 里有原因，例如没有核对通过的值、缺 `endpointKey`），照实写进报告，不要绕过去。
+平台回 `not_started` 就是没有能合并的东西（`reason` 里有原因，例如没有核对通过的值、缺 `endpointKey`），照实写进报告，不要绕过去。`start` 的回答里 `refused` 列出被排除的每一项研究和原因（没通过核对、口径或组别不同、登记的是计划数），`refusedCount` 是总数：写报告时说清楚哪些研究没进合并、为什么。
 `{ "action": "status", "jobId": "…" }` 读回来：`pooling` 里是合并值、`k`（研究数）、I²、τ² 和预测区间（自然尺度上的数，平台已换算好）。
 少于三项研究时引擎给不出预测区间，`predictionAvailable` 为 `false`——这时写卡会自动成为加宽后的「专家设定·待补证」。
 
@@ -139,7 +139,7 @@ metadata:
    { "what": "assumption", "items": [ { "key": "single_trial_median", "name": "唯一一项先例的中位 PFS", "unit": "月",
      "parameter": "median_time", "sourceKind": "external_evidence", "evidenceIds": ["<证据行的 id>"] } ] }
    ```
-   只引用一条核对通过的证据行（用 `mcp__evimed__vcr_read` `what: "evidence"` 读到的 `id`），数由平台从那一行取。引用不是本研究的、或者没通过核对的证据，回 `vcr_evidence_unverified`。
+   只引用一条核对通过的证据行（用 `mcp__evimed__vcr_read` `what: "evidence"` 读到的 `id`），数由平台从那一行取。这一行的组要和参数对得上：比值类参数取 `contrast` 的行，其余取 `control` 的行，别的组的行会被拒，回的话里写着它属于哪一组。引用不是本研究的、或者没通过核对的证据，回 `vcr_evidence_unverified`。
 3. **找不到证据的参数不要留空**：
    ```json
    { "what": "assumption", "items": [ { "key": "dropout_rate", "name": "脱落率", "parameter": "dropout_rate",

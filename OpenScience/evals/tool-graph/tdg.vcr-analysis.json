@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:1d70fae3c088e5532f3fa0ff7ac35d3e66fc073b0e14d637f5a4abc5d4365b08",
+  "version": "sha256:2680bbc0b12fbb858c610694dcdc2084f27d1a47781a4bf1cea859cbad65bae2",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 28,
@@ -546,7 +546,7 @@
     {
       "name": "mcp__evimed__evidence_pool",
       "source": "mcp",
-      "description": "Pool this study's verified extractions of one parameter into an assumption distribution on the 虚拟临研 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name the parameter and the endpoint definition it is measured under -- the values pooled are the ones the study already holds, checked against their source, never numbers you bring. start returns a jobId (or says why nothing was started: no verified evidence, no such parameter); status reports the pooled estimate, heterogeneity and the prediction interval. Never average the numbers yourself.",
+      "description": "Pool this study's verified extractions of one parameter into an assumption distribution on the 虚拟临研 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name the parameter and the endpoint definition it is measured under -- the values pooled are the ones the study already holds, checked against their source, never numbers you bring. start returns a jobId (or says why nothing was started: no verified evidence, no such parameter) and lists every study it left out with the reason (refused); status reports the pooled estimate, heterogeneity and the prediction interval. Never average the numbers yourself.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1018,7 +1018,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {

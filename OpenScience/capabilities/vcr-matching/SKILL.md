@@ -136,7 +136,7 @@ metadata:
       "observations": [ { "variable": "ecog", "value": 1, "unit": "分", "at": "2026-08-10" } ] } ] }
   ```
   `kind` 是 `routine_care`（常规诊疗）、`study_specific`（试验期间）或 `post_exit`（出组后）。
-  试验期间的片段只写 `exitDate` 和 `exitReason`，**照文档原样写**，不要转换成别的东西；试验期间的治疗、结局、随机分组、进展日期、末次给药日期看不到，不能写成观察。
+  试验期间的片段只写 `exitDate` 和 `exitReason`，**照文档原样写**，不要转换成别的东西；试验期间的治疗、结局、随机分组、进展日期、末次给药日期看不到，不能写成观察（写了会被拒，回 `vcr_exit_field_not_derivable`）。片段在出组日结束，`windowEnd` 不写，或与 `exitDate` 相同。同一位受试者已经记录过出组，再写一条不同的出组日期或原因时，已记录的照原样保留，新的一条作为说明追加，并在返回值里告诉你（`vcr_exit_date_rewritten`、`vcr_exit_reason_rewritten`）。
   出组后的片段写 `windowStart`（必填）和 `observations[]`（`{ variable, value, unit, at }`）。
 - 入组预测：`mcp__evimed__vcr_simulate` `{ "action": "start", "kind": "accrual_forecast", "scenario": { "target": <入组目标例数>, "byTimes": [6, 12, 18] } }`，
   可选 `eventTarget` 和 `eventHazard`（要一起写）。**各中心的速率来自中心档案和转介台账，你不写 `sites`**；档案里没有的东西（例如没有筛选史就没有筛选失败率）回答里会说明，不会被当成 0。

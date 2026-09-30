@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:ab3832b2236df73dafa00dec791fdf0021fd33fd875dff7988eb6abe1780fb6e",
+  "version": "sha256:00a794162a46aee2a29e8e3eb816e2025cbc0e6659887745d36c54689714677b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -856,7 +856,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {

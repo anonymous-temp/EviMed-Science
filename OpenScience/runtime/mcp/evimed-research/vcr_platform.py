@@ -120,7 +120,9 @@ def tool_definitions():
                 "cards with their sources, verified evidence, population and patient sets, comparator designs, trial "
                 "scenarios, saved results, the report model, the model and method library, and queued jobs. "
                 "Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than "
-                "ten people. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
+                "ten people (a published trial's own figures -- registry records, extracted values, precedents -- are "
+                "not this study's people and come back whole). what: study also returns intendedUseCeiling, the "
+                "highest use the study's results can be labelled with and why. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
                 "judgments with their evidence quotes and the facts written for them, and the language criteria still "
                 "waiting for the run's answer."
@@ -239,7 +241,8 @@ def tool_definitions():
                 "虚拟临研 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name "
                 "the parameter and the endpoint definition it is measured under -- the values pooled are the ones the "
                 "study already holds, checked against their source, never numbers you bring. start returns a jobId "
-                "(or says why nothing was started: no verified evidence, no such parameter); status reports the pooled "
+                "(or says why nothing was started: no verified evidence, no such parameter) and lists every study it "
+                "left out with the reason (refused); status reports the pooled "
                 "estimate, heterogeneity and the prediction interval. Never average the numbers yourself."
             ),
             "inputSchema": {
