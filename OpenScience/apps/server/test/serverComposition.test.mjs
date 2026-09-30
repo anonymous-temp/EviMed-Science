@@ -67,7 +67,7 @@ const RECURRING_SWEEPS = [
     name: "autopilot agenda scheduling",
     intervalMs: 60_000,
     startupRuns: 1,
-    statement: /SELECT user_id,id,payload FROM evimed_product\.documents WHERE kind='agenda'/,
+    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda'/,
   },
   {
     key: "notificationDefaults",
