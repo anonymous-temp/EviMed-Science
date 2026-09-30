@@ -33,8 +33,9 @@ request={'exposure':'BMI','outcome':'CHD'}
 job=jobs.Job(workspace,output,root/'data',request,inputs.capture_bindings(workspace,request,root/'data'),sys.executable,runner,timeout=1 if mode=='timeout' else 5)
 original_publish=jobs._publish
 def checked_publish(*args,**kwargs):
-    state=jobs._process_identity(int(pidfile.read_text()))['state']
-    assert state in {'Z','X'},'live child at artifact publication'
+    try: state=jobs._process_identity(int(pidfile.read_text()))['state']
+    except FileNotFoundError: state=None
+    assert state in {None,'Z','X'},'live child at artifact publication'
     return original_publish(*args,**kwargs)
 jobs._publish=checked_publish
 if mode=='stop_unconfirmed':

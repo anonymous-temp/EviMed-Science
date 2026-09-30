@@ -335,8 +335,24 @@ def test_accepted_request_and_status_use_only_the_protected_queue(
         timeout=20,
         check=False,
     )
-    assert worker.returncode == 0, worker.stderr
     output = workspace / "mendelian-randomization-runs" / job_id / "output"
+    if sys.platform != "linux":
+        # A fresh CLI process has no fixture supervisor and must refuse before
+        # running on an unsupported host. A new accepted job exercises the
+        # queue binding with our explicit single-process fixture supervisor.
+        assert worker.returncode == 1, worker.stderr
+        assert list(output.iterdir()) == []
+        assert service._read_state(state)["request"] == accepted["request"]
+        with pytest.raises(ValueError, match="Terminal MR job state is immutable"):
+            service._write_state(state, accepted)
+        state, job_id = queue_job(service, client, secret, monkeypatch)
+        accepted = service._read_state(state)
+        shadow = shadow.with_name(f"{job_id}.json")
+        shadow.write_text(json.dumps({"request": {"exposure": "Updated workspace note"}}))
+        output = workspace / "mendelian-randomization-runs" / job_id / "output"
+        assert service.run_job(str(state)) == 0
+    else:
+        assert worker.returncode == 0, worker.stderr
     received = json.loads((output / "received.json").read_text())
     assert received["exposure"] == accepted["request"]["exposure"] == "BMI"
     assert received["outcome"] == accepted["request"]["outcome"] == "CHD"
