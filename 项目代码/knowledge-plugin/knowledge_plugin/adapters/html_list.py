@@ -72,6 +72,7 @@ MODES = ("html", "script-cdata", "script-json")
 DEFAULT_MAX_ITEMS = 60
 DEFAULT_MIN_TITLE = 4
 MAX_SELECTOR_FALLBACKS = 3
+MAX_DATE_FORMATS = 4
 _CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
 _XML_SCRIPT = re.compile(r"<script[^>]*type=[\"']text/xml[\"'][^>]*>(.*?)</script>", re.S | re.I)
 
@@ -214,8 +215,11 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
         if key in seen:
             continue
         seen.add(key)
-        published_at, precision = parse_date(_date_text(clean_markup(item.get("date")) or None, config),
-                                             naive_zone=naive_zone, date_format=config.get("date_format"))
+        date_text = _date_text(clean_markup(item.get("date")) or None, config)
+        for date_format in config.get("date_formats") or [config.get("date_format")]:
+            published_at, precision = parse_date(date_text, naive_zone=naive_zone, date_format=date_format)
+            if published_at is not None:
+                break
         if summary == title:
             summary = None
         found = PMID_IN_URL.search(link)
@@ -266,6 +270,10 @@ class HtmlListAdapter:
         problems = []
         if mode not in MODES:
             return [f"mode must be one of {MODES}"]
+        date_formats = config.get("date_formats")
+        if date_formats is not None and (not isinstance(date_formats, list) or not 1 <= len(date_formats) <= MAX_DATE_FORMATS
+                                         or any(not isinstance(value, str) or not value.strip() for value in date_formats)):
+            problems.append(f"date_formats must contain one to {MAX_DATE_FORMATS} explicit date formats")
         if mode == "script-json":
             fields = config.get("fields") or {}
             if not config.get("script_var"):

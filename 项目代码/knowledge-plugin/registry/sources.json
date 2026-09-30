@@ -14828,9 +14828,9 @@
   },
   {
    "id": "ash-annual-meeting",
-   "name": "ASH 美国血液学会年会",
-   "homepage": "https://www.hematology.org/meetings/annual-meeting",
-   "lane": "evidence",
+   "name": "美国血液学会 ASH 新闻室",
+   "homepage": "https://www.hematology.org/newsroom",
+   "lane": "mixed",
    "source_type": "evidence-body",
    "access": "html-list",
    "egress": "direct",
@@ -14844,7 +14844,7 @@
    "poll_ceiling_s": 259200,
    "enabled": true,
    "disabled_reason": null,
-   "category": "conference",
+   "category": "medical-society-news",
    "config": {
     "url": "https://www.hematology.org/newsroom",
     "max_pages": 1,
@@ -14852,12 +14852,15 @@
      "www.hematology.org"
     ],
     "selectors": {
-     "item": "p:has(strong a[href*=\"/press-releases/\"])",
-     "title": "strong a",
-     "link": "strong a@href",
-     "date": "."
+     "item": "p:has(strong a[href*=\"/press-releases/\"]:not(:empty))",
+     "title": "strong a[href*=\"/press-releases/\"]:not(:empty)",
+     "link": "strong a[href*=\"/press-releases/\"]:not(:empty)@href",
+     "date": "em:not(:empty)"
     },
-    "date_regex": "([A-Z][a-z]+\\.? \\d{1,2}, \\d{4})"
+    "date_formats": [
+     "%b. %d, %Y",
+     "%b %d, %Y"
+    ]
    }
   },
   {
@@ -15191,9 +15194,9 @@
   },
   {
    "id": "escmid-global",
-   "name": "ESCMID Global（原 ECCMID）",
+   "name": "欧洲临床微生物与感染病学会 ESCMID 动态",
    "homepage": "https://www.escmid.org/",
-   "lane": "evidence",
+   "lane": "mixed",
    "source_type": "evidence-body",
    "access": "html-list",
    "egress": "direct",
@@ -15207,7 +15210,7 @@
    "poll_ceiling_s": 259200,
    "enabled": true,
    "disabled_reason": null,
-   "category": "conference",
+   "category": "medical-society-news",
    "config": {
     "url": "https://www.escmid.org/",
     "max_pages": 1,
@@ -15695,9 +15698,9 @@
   },
   {
    "id": "csco-annual-meeting",
-   "name": "CSCO 中国临床肿瘤学会 年会",
+   "name": "CSCO 中国临床肿瘤学会动态",
    "homepage": "https://www.csco.org.cn/cn/index.aspx",
-   "lane": "evidence",
+   "lane": "mixed",
    "source_type": "evidence-body",
    "access": "html-list",
    "egress": "direct",
@@ -15711,7 +15714,7 @@
    "poll_ceiling_s": 259200,
    "enabled": true,
    "disabled_reason": null,
-   "category": "conference",
+   "category": "medical-society-news",
    "config": {
     "url": "https://www.csco.org.cn/cn/index.aspx",
     "max_pages": 1,
@@ -15719,10 +15722,11 @@
      "www.csco.org.cn"
     ],
     "selectors": {
-     "item": "li.overflow-text",
-     "title": "a",
-     "link": "a@href"
-    }
+     "item": "li.overflow-text:has(a[href*=\"ncontent.aspx?oid=\"])",
+     "title": "a[href*=\"ncontent.aspx?oid=\"]",
+     "link": "a[href*=\"ncontent.aspx?oid=\"]@href"
+    },
+    "max_items": 200
    }
   },
   {

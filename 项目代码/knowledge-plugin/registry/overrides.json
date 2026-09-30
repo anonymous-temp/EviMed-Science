@@ -1496,14 +1496,22 @@
   "egress": "direct",
   "config": {
    "selectors": {
-    "item": "p:has(strong a[href*=\"/press-releases/\"])",
-    "title": "strong a",
-    "link": "strong a@href",
-    "date": "."
+    "item": "p:has(strong a[href*=\"/press-releases/\"]:not(:empty))",
+    "title": "strong a[href*=\"/press-releases/\"]:not(:empty)",
+    "link": "strong a[href*=\"/press-releases/\"]:not(:empty)@href",
+    "date": "em:not(:empty)"
    },
-   "date_regex": "([A-Z][a-z]+\\.? \\d{1,2}, \\d{4})"
+   "date_formats": [
+    "%b. %d, %Y",
+    "%b %d, %Y"
+   ]
   },
-  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json.",
+  "name": "美国血液学会 ASH 新闻室",
+  "homepage": "https://www.hematology.org/newsroom",
+  "lane": "mixed",
+  "category": "medical-society-news",
+  "_why_scope_20260930": "The captured endpoint is society news, not a dedicated annual-meeting feed. Keep the legacy source id stable while making the name, homepage and category match the verified coverage."
  },
  "ats-conference": {
   "enabled": true,
@@ -1774,12 +1782,18 @@
   "egress": "direct",
   "config": {
    "selectors": {
-    "item": "li.overflow-text",
-    "title": "a",
-    "link": "a@href"
-   }
+    "item": "li.overflow-text:has(a[href*=\"ncontent.aspx?oid=\"])",
+    "title": "a[href*=\"ncontent.aspx?oid=\"]",
+    "link": "a[href*=\"ncontent.aspx?oid=\"]@href"
+   },
+   "max_items": 200
   },
-  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json.",
+  "name": "CSCO 中国临床肿瘤学会动态",
+  "homepage": "https://www.csco.org.cn/cn/index.aspx",
+  "lane": "mixed",
+  "category": "medical-society-news",
+  "_why_scope_20260930": "The captured endpoint is society news, not a dedicated annual-meeting feed. Keep the legacy source id stable while making the name, homepage and category match the verified coverage."
  },
  "deepseek-news": {
   "enabled": false,
@@ -1917,7 +1931,12 @@
     "www.idsociety.org"
    ]
   },
-  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json.",
+  "name": "欧洲临床微生物与感染病学会 ESCMID 动态",
+  "homepage": "https://www.escmid.org/",
+  "lane": "mixed",
+  "category": "medical-society-news",
+  "_why_scope_20260930": "The captured endpoint is society news, not a dedicated annual-meeting feed. Keep the legacy source id stable while making the name, homepage and category match the verified coverage."
  },
  "esicm-guidelines": {
   "enabled": true,

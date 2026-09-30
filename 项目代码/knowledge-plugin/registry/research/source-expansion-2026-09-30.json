@@ -1112,39 +1112,47 @@
       "decision": "enabled",
       "kind": "entry-list",
       "captureGroup": "direct",
-      "entries": 13,
-      "dated": 0,
+      "entries": 30,
+      "dated": 30,
       "samples": [
         {
           "index": 0,
-          "title": "ASH Publishes Clinical Practice Guidelines on Diagnosis of Light Chain Amyloidosis",
-          "url": "https://www.hematology.org/newsroom/press-releases/2026/ash-publishes-clinical-practice-guidelines-on-diagnosis-of-light-chain-amyloidosis",
-          "date": null,
+          "title": "ASH Sets New Standards for Diagnosing Iron Deficiency",
+          "url": "https://www.hematology.org/newsroom/press-releases/2026/ash-sets-new-standards-for-diagnosing-iron-deficiency",
+          "date": "2026-09-16T00:00:00+00:00",
           "summary": null
         },
         {
-          "index": 6,
-          "title": "Pirtobrutinib Outperforms Bendamustine Plus Rituximab for Previously Untreated CLL/SLL",
-          "url": "https://www.hematology.org/newsroom/press-releases/2025/lba-3",
-          "date": null,
+          "index": 15,
+          "title": "Ultra Endurance Running May Accelerate Aging and Breakdown of RBCs",
+          "url": "https://www.hematology.org/newsroom/press-releases/2026/ultra-endurance-running-may-accelerate-aging-and-breakdown-of-rbcs",
+          "date": "2026-02-18T00:00:00+00:00",
           "summary": null
         },
         {
-          "index": 12,
+          "index": 29,
           "title": "Research Reveals Avenues for Informing and Improving Sickle Cell Care",
           "url": "https://www.hematology.org/newsroom/press-releases/2025/research-reveals-avenues-for-informing-and-improving-sickle-cell-care",
-          "date": null,
+          "date": "2025-12-06T00:00:00+00:00",
           "summary": null
         }
       ],
       "config": {
+        "url": "https://www.hematology.org/newsroom",
+        "max_pages": 1,
+        "allowed_hosts": [
+          "www.hematology.org"
+        ],
         "selectors": {
-          "item": "p:has(strong a[href*=\"/press-releases/\"])",
-          "title": "strong a",
-          "link": "strong a@href",
-          "date": "."
+          "item": "p:has(strong a[href*=\"/press-releases/\"]:not(:empty))",
+          "title": "strong a[href*=\"/press-releases/\"]:not(:empty)",
+          "link": "strong a[href*=\"/press-releases/\"]:not(:empty)@href",
+          "date": "em:not(:empty)"
         },
-        "date_regex": "([A-Z][a-z]+\\.? \\d{1,2}, \\d{4})"
+        "date_formats": [
+          "%b. %d, %Y",
+          "%b %d, %Y"
+        ]
       },
       "access": "html-list",
       "egress": "direct",
@@ -1178,7 +1186,15 @@
             }
           ]
         }
-      ]
+      ],
+      "coverage": "Society news and announcements from the captured endpoint; not dedicated annual-meeting coverage. Legacy source ID retained.",
+      "source": {
+        "name": "美国血液学会 ASH 新闻室",
+        "homepage": "https://www.hematology.org/newsroom",
+        "lane": "mixed",
+        "source_type": "evidence-body",
+        "category": "medical-society-news"
+      }
     },
     {
       "id": "ats-conference",
@@ -2670,7 +2686,7 @@
       "decision": "enabled",
       "kind": "entry-list",
       "captureGroup": "direct",
-      "entries": 60,
+      "entries": 106,
       "dated": 0,
       "samples": [
         {
@@ -2681,26 +2697,32 @@
           "summary": null
         },
         {
-          "index": 30,
-          "title": "妇科肿瘤专家委员会",
-          "url": "https://www.csco.org.cn/cn/nlist.aspx?cids=607",
+          "index": 53,
+          "title": "辉瑞国际贸易（上海）有限公司",
+          "url": "https://www.csco.org.cn/cn/ncontent.aspx?oid=74",
           "date": null,
           "summary": null
         },
         {
-          "index": 59,
-          "title": "骨髓瘤专家委员会",
-          "url": "https://www.csco.org.cn/cn/nlist.aspx?cids=657",
+          "index": 105,
+          "title": "上海丽珠制药有限公司",
+          "url": "https://www.csco.org.cn/cn/ncontent.aspx?oid=481",
           "date": null,
           "summary": null
         }
       ],
       "config": {
+        "url": "https://www.csco.org.cn/cn/index.aspx",
+        "max_pages": 1,
+        "allowed_hosts": [
+          "www.csco.org.cn"
+        ],
         "selectors": {
-          "item": "li.overflow-text",
-          "title": "a",
-          "link": "a@href"
-        }
+          "item": "li.overflow-text:has(a[href*=\"ncontent.aspx?oid=\"])",
+          "title": "a[href*=\"ncontent.aspx?oid=\"]",
+          "link": "a[href*=\"ncontent.aspx?oid=\"]@href"
+        },
+        "max_items": 200
       },
       "access": "html-list",
       "egress": "direct",
@@ -2734,7 +2756,15 @@
             }
           ]
         }
-      ]
+      ],
+      "coverage": "Society news and announcements from the captured endpoint; not dedicated annual-meeting coverage. Legacy source ID retained.",
+      "source": {
+        "name": "CSCO 中国临床肿瘤学会动态",
+        "homepage": "https://www.csco.org.cn/cn/index.aspx",
+        "lane": "mixed",
+        "source_type": "evidence-body",
+        "category": "medical-society-news"
+      }
     },
     {
       "id": "dailymed-label-updates",
@@ -3565,6 +3595,11 @@
         }
       ],
       "config": {
+        "url": "https://www.escmid.org/",
+        "max_pages": 1,
+        "allowed_hosts": [
+          "www.escmid.org"
+        ],
         "selectors": {
           "item": "div.article:has(h4.title)",
           "title": "h4.title a",
@@ -3609,7 +3644,15 @@
             }
           ]
         }
-      ]
+      ],
+      "coverage": "Society news and announcements from the captured endpoint; not dedicated annual-meeting coverage. Legacy source ID retained.",
+      "source": {
+        "name": "欧洲临床微生物与感染病学会 ESCMID 动态",
+        "homepage": "https://www.escmid.org/",
+        "lane": "mixed",
+        "source_type": "evidence-body",
+        "category": "medical-society-news"
+      }
     },
     {
       "id": "esicm-guidelines",
