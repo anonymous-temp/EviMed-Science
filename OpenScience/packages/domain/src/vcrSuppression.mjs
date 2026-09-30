@@ -25,6 +25,17 @@
  * - **A cell with several count keys is judged by its smallest.** `{ n: 40,
  *   events: 2 }` discloses two people however large `n` is; its size, for the
  *   arithmetic above, is 2.
+ * - **A null is not a person.** Only a finite number is a head count; a `null`
+ *   count key is a value that was never known (an evidence row's missing
+ *   `events`), and reading it as one hollowed every published figure a model
+ *   was handed. A `null` counts only where the object's own `suppressed` list
+ *   names it — a cell this boundary already hid.
+ * - **A measure is a count by its name.** The engine reports a cohort's size as
+ *   `{ name: 'cohort_size', value: 3 }`; a boundary that reads keys alone lets it
+ *   out. A measure whose name is in `VCR_PEOPLE_COUNT_MEASURES` answers to the
+ *   standalone rule, and a hidden one keeps its name and loses its value, its
+ *   interval and its note. The scalar keys of `VCR_PEOPLE_COUNT_SCALAR_FIELDS`
+ *   (`startingRows`, `rows`, …) answer to the same rule and are never cells.
  * - **Never a complement.** The suppression does not emit what it hid, in any
  *   form (`suppressedCount`, a remainder, a share, a merged bucket's total); a
  *   complement the engine wrote is dropped.
@@ -36,7 +47,9 @@
  * @module @evimed/domain/vcrSuppression
  */
 
-import { VCR_MIN_CELL_SIZE, VCR_PEOPLE_COUNT_FIELDS, VCR_PEOPLE_COUNT_MAP_KEYS } from './vcrVocabulary.mjs'
+import {
+  VCR_MIN_CELL_SIZE, VCR_PEOPLE_COUNT_FIELDS, VCR_PEOPLE_COUNT_MAP_KEYS, VCR_PEOPLE_COUNT_MEASURES, VCR_PEOPLE_COUNT_SCALAR_FIELDS,
+} from './vcrVocabulary.mjs'
 
 /** Complements an engine may have written; never passed on. */
 const COMPLEMENT_KEYS = Object.freeze(['suppressedCount', 'suppressedLevels'])
@@ -63,12 +76,15 @@ const isPlainObject = (value) => {
 const isCount = (value) => typeof value === 'number' && Number.isFinite(value)
 
 /**
- * The people-count keys a cell carries. A key holding `null` (already hidden)
- * still counts as one: it is unknown, which is as disclosive as small.
+ * The people-count keys a cell carries: those holding a finite number, and
+ * those holding `null` that the cell's own `suppressed` list names (a cell this
+ * boundary already hid, which is as disclosive as a small one). A `null` nobody
+ * hid is an unknown, and an unknown is not a person.
  * @param {Record<string, any>} cell
  */
 function countKeys(cell) {
-  return VCR_PEOPLE_COUNT_FIELDS.filter((key) => Object.hasOwn(cell, key) && (isCount(cell[key]) || cell[key] === null))
+  const named = Array.isArray(cell.suppressed) ? cell.suppressed : []
+  return VCR_PEOPLE_COUNT_FIELDS.filter((key) => Object.hasOwn(cell, key) && (isCount(cell[key]) || (cell[key] === null && named.includes(key))))
 }
 
 /**
@@ -121,11 +137,12 @@ function hiddenCell(cell) {
  * The standalone rule: a count of 1 to `minCell - 1` becomes null and the
  * object lists the keys it hid.
  * @param {Record<string, any>} object @param {number} minCell
+ * @param {readonly string[]} keys the keys this object answers for
  */
-function hideStandaloneCounts(object, minCell) {
+function hideStandaloneCounts(object, minCell, keys) {
   /** @type {string[]} */
   const hidden = []
-  for (const key of VCR_PEOPLE_COUNT_FIELDS) {
+  for (const key of keys) {
     const value = object[key]
     if (isCount(value) && value >= 1 && value < minCell) {
       object[key] = null
@@ -137,6 +154,27 @@ function hideStandaloneCounts(object, minCell) {
     object.suppressed = [...new Set([...already, ...hidden])]
   }
 }
+
+/**
+ * A measure whose name counts people and whose value is small, with its numbers
+ * taken away: what it is stays, what it said does not (a note or an interval
+ * could carry the very count that was hidden).
+ * @param {Record<string, any>} measure
+ */
+function hiddenMeasure(measure) {
+  /** @type {Record<string, any>} */
+  const out = { name: measure.name }
+  for (const key of ['unit', 'source', 'simulated']) if (Object.hasOwn(measure, key)) out[key] = measure[key]
+  out.value = null
+  out.suppressed = ['value']
+  return out
+}
+
+/**
+ * @param {Record<string, any>} object @param {number} minCell
+ */
+const isSmallCountMeasure = (object, minCell) => typeof object.name === 'string' && VCR_PEOPLE_COUNT_MEASURES.includes(object.name)
+  && isCount(object.value) && object.value >= 1 && object.value < minCell
 
 /**
  * Suppress what a model must not read: every people-count below `minCell`.
@@ -195,9 +233,11 @@ export function suppressForModel(payload, { minCell = VCR_MIN_CELL_SIZE } = {}) 
         Object.defineProperty(out, own, { value: walk(value[own], own, depth + 1), enumerable: true, writable: true, configurable: true })
       }
       // A list member's counts wait for the list's own judgement (`hiddenSet`);
-      // every other object answers to the standalone rule.
-      if (!asCell) hideStandaloneCounts(out, minCell)
-      return out
+      // every other object answers to the standalone rule. The scalar keys are
+      // never a list's cells, so they answer to it wherever they are.
+      hideStandaloneCounts(out, minCell, VCR_PEOPLE_COUNT_SCALAR_FIELDS)
+      if (!asCell) hideStandaloneCounts(out, minCell, VCR_PEOPLE_COUNT_FIELDS)
+      return isSmallCountMeasure(out, minCell) ? hiddenMeasure(out) : out
     } finally {
       ancestors.delete(value)
     }

@@ -560,6 +560,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_number_mcse_missing",
   "vcr_number_typed",
   "vcr_number_unbound",
+  "vcr_number_unparsed",
   "vcr_interval_unnamed",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
@@ -1038,6 +1039,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_number_mcse_missing',
   'vcr_number_typed',
   'vcr_number_unbound',
+  'vcr_number_unparsed',
   'vcr_interval_unnamed',
 ])
 
@@ -1064,6 +1066,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
+  'vcr_model_not_applicable',
   // members and access to data
   'vcr_member_role_unknown',
   'vcr_member_user_required',
@@ -1337,8 +1340,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
   vcr_number_mcse_missing: '这个数字来自仿真，引用它必须带蒙特卡洛标准误。',
-  vcr_number_typed: '报告里有手打的数字；改成对结果字段的引用，由平台渲染。',
+  vcr_number_typed: '报告里有手打的数字，已在报告中写成「未计算」；改成对结果字段的引用，由平台渲染。',
   vcr_number_unbound: '报告里引用的结果字段不存在；核对字段名。',
+  vcr_number_unparsed: '报告里有读不成数字引用的 {{n:…}}；写成 {{n:路径|格式}}，格式用小写。',
   vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
   // The trial registry channel.
   registry_not_configured: '本部署没有配置试验登记库，登记信息取不到；报告会写「不可得」，不会编造。',
@@ -1407,7 +1411,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_contact_approval_not_per_person: '联系确认必须逐人进行，不接受批量确认。',
   vcr_screen_failure_needs_criterion: '筛选失败要写明不满足的是哪一条入排标准。',
   vcr_enrollment_needs_date: '入组要写明入组日期。',
-  vcr_exit_field_not_derivable: '出组信息由随访事件推出，不能手填。',
+  vcr_exit_field_not_derivable: '试验期间的这个字段不可见，也不能从出组记录推出；出组日期与原因照原样保留。',
   vcr_exit_date_rewritten: '出组日期已经记录，不能改写；需要更正请新增一条说明。',
   vcr_exit_reason_rewritten: '出组原因已经记录，不能改写；需要更正请新增一条说明。',
   vcr_followup_kind_unknown: '随访类型只能是常规诊疗观察、研究专属随访或出组后观察。',
@@ -1470,6 +1474,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_scenario_endpoint_missing: '情景没有写明终点类型。',
   vcr_scenario_grid_empty: '方案网格里没有可比较的设计或真值。',
   vcr_scenario_unknown_fields: '情景里有这项计算不读取的字段，已拒绝。',
+  vcr_model_not_applicable: '这个模型的适用范围没有覆盖当前研究（终点、变量或取值范围不符）；未排队计算，换一个适用的模型或补齐条件。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',

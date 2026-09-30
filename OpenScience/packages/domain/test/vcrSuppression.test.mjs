@@ -13,6 +13,8 @@ import {
   VCR_MIN_CELL_SIZE,
   VCR_PEOPLE_COUNT_FIELDS,
   VCR_PEOPLE_COUNT_MAP_KEYS,
+  VCR_PEOPLE_COUNT_MEASURES,
+  VCR_PEOPLE_COUNT_SCALAR_FIELDS,
   suppressForModel,
 } from "@evimed/domain";
 
@@ -28,17 +30,19 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
     "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size"]);
 });
 
 test("a count of 1 to 9 that stands alone becomes null, and its object says which keys it hid", () => {
-  assert.deepEqual(suppressForModel({ counts: { realPatients: 7, events: 3, effectiveSampleSize: 6.2, generatedRecords: 0 } }),
-    { counts: { realPatients: null, events: null, effectiveSampleSize: 6.2, generatedRecords: 0, suppressed: ["realPatients", "events"] } });
+  assert.deepEqual(suppressForModel({ counts: { realPatients: 7, events: 3, effectiveSampleSize: 12.2, generatedRecords: 0 } }),
+    { counts: { realPatients: null, events: null, effectiveSampleSize: 12.2, generatedRecords: 0, suppressed: ["realPatients", "events"] } });
   assert.deepEqual(suppressForModel({ n: 9 }), { n: null, suppressed: ["n"] });
   assert.deepEqual(suppressForModel({ n: 10 }), { n: 10 }, "ten is the floor, and is shown");
   assert.deepEqual(suppressForModel({ n: 0 }), { n: 0 }, "a lone zero says nothing about a person");
   assert.deepEqual(suppressForModel({ n: 1 }), { n: null, suppressed: ["n"] });
   // A key that is not a head count is not touched, however small.
-  assert.deepEqual(suppressForModel({ effectiveSampleSize: 3, mean: 4, smd: 0.05, alpha: 0.025 }), { effectiveSampleSize: 3, mean: 4, smd: 0.05, alpha: 0.025 });
+  assert.deepEqual(suppressForModel({ expectedSampleSize: 3, mean: 4, smd: 0.05, alpha: 0.025 }), { expectedSampleSize: 3, mean: 4, smd: 0.05, alpha: 0.025 });
   // A count already hidden stays hidden and is not listed twice.
   assert.deepEqual(suppressForModel({ n: 3, suppressed: ["n"] }), { n: null, suppressed: ["n"] });
 });
@@ -194,4 +198,71 @@ test("a property called __proto__ is data, and does not reach the prototype", ()
   assert.equal(Object.getPrototypeOf(shown), Object.prototype);
   assert.deepEqual(Object.keys(shown).sort(), ["__proto__", "counts"]);
   assert.equal(shown.counts.n, null);
+});
+
+test("a null count is an unknown, not a person: a list of rows with a missing count is not a list of cells", () => {
+  // The evidence and registry shapes: `events` and `n` are unknown for most rows.
+  const values = { values: [
+    { parameter: "median_time", arm: "对照", value: 4.2, sampleSize: 250, events: null },
+    { parameter: "median_time", arm: "试验", value: 5.1, sampleSize: 6, events: null, n: null },
+  ] };
+  assert.deepEqual(suppressForModel(clone(values)), values, "nothing here counts a person, so nothing is hidden or hollowed");
+  const unknown = { items: [{ id: "a", n: null, value: 1 }, { id: "b", n: null, value: 2 }] };
+  assert.deepEqual(suppressForModel(clone(unknown)), unknown);
+  // A row that does carry a head count is judged by it, as any cell is.
+  const mixed = suppressForModel({ values: [{ arm: "A", value: 0.4, n: null, events: 400 }, { arm: "B", value: 0.5, n: null, events: 300 }] });
+  assert.equal(mixed.values[0].value, 0.4, "the unknown `n` next to a large count does not hide the row");
+  assert.equal(mixed.values[1].events, 300);
+});
+
+test("a null the boundary itself hid still counts as a cell: it reads as zero, and zero is disclosive", () => {
+  const hidden = { arm: "A", n: null, suppressed: ["n"] };
+  const shown = suppressForModel({ arms: [hidden, { arm: "B", n: 400 }, { arm: "C", n: 350 }] });
+  assert.deepEqual(shown.arms.map((/** @type {any} */ cell) => cell.n), [null, 400, null], "the hidden cell is topped up with the smallest of the rest");
+  assert.deepEqual(shown.arms[0], { arm: "A", n: null, suppressed: ["n"] });
+});
+
+test("a measure whose name counts people is hidden when small, at any depth, and keeps only what it is", () => {
+  const payload = { result: { measures: [
+    { name: "cohort_size", value: 3, source: "observed", note: "3 of 412" },
+    { name: "cohort_size_strict", value: 2, simulated: false, interval: { kind: "confidence", low: 1, high: 4 } },
+    { name: "cohort_size_lenient", value: 40, source: "observed" },
+    { name: "training_observations", value: 9, source: "observed", unit: "行" },
+    { name: "effective_sample_size", value: 6.4, source: "calculated" },
+    { name: "rows", value: 5, source: "observed" },
+    { name: "hazard_ratio", value: 0.7, interval: { kind: "confidence", low: 0.5, high: 0.9 } },
+    { name: "events_treatment", value: 4, source: "reconstructed" },
+    { name: "expected_sample_size", value: 6, simulated: true, mcse: 0.1 },
+  ], diagnostics: { deep: { deeper: [{ measures: [{ name: "cohort_size", value: 7 }] }] } } } };
+  const shown = suppressForModel(clone(payload));
+  const [size, strict, lenient, training, ess, rows, hr, reconstructed, expected] = shown.result.measures;
+  assert.deepEqual(size, { name: "cohort_size", source: "observed", value: null, suppressed: ["value"] }, "its note is gone with its value");
+  assert.deepEqual(strict, { name: "cohort_size_strict", simulated: false, value: null, suppressed: ["value"] }, "and so is its interval");
+  assert.equal(lenient.value, 40, "a measure over the floor is shown");
+  assert.deepEqual(training, { name: "training_observations", unit: "行", source: "observed", value: null, suppressed: ["value"] });
+  assert.equal(ess.value, null);
+  assert.equal(rows.value, null);
+  assert.equal(hr.value, 0.7, "a measure that is not a head count is not touched");
+  assert.equal(reconstructed.value, 4, "a published curve's events are another trial's figure, not this study's people");
+  assert.equal(expected.value, 6, "a design's expected sample size is a plan, not people");
+  assert.equal(shown.result.diagnostics.deep.deeper[0].measures[0].value, null, "at any depth");
+  assert.ok(!JSON.stringify(shown).includes("3 of 412"));
+  // Zero and the floor are not small; a hidden measure is not hidden twice.
+  assert.equal(suppressForModel({ name: "cohort_size", value: 0 }).value, 0);
+  assert.equal(suppressForModel({ name: "cohort_size", value: 10 }).value, 10);
+  assert.deepEqual(suppressForModel(suppressForModel({ name: "cohort_size", value: 3 })), { name: "cohort_size", value: null, suppressed: ["value"] });
+});
+
+test("the row counts a diagnostics block carries are head counts, judged alone and never as a list's cells", () => {
+  const shown = suppressForModel({ diagnostics: { startingRows: 4, keptRows: 3, waterfall: [{ rule: "a", kept: 3, excluded: 1 }] },
+    tables: [{ input: "s:subject", rows: 5, columns: [] }, { input: "s:events", rows: 900, columns: [{ column: "x", missing: 4 }] }],
+    counts: { realPatients: 412, effectiveSampleSize: 4.5 } });
+  assert.equal(shown.diagnostics.startingRows, null);
+  assert.equal(shown.diagnostics.keptRows, null);
+  assert.deepEqual(shown.diagnostics.suppressed.sort(), ["keptRows", "startingRows"]);
+  assert.equal(shown.tables[0].rows, null, "a small table's total is hidden");
+  assert.equal(shown.tables[1].rows, 900, "another table's total is not a sibling cell to be topped up around it");
+  assert.deepEqual(shown.tables[1].columns, [{ column: "x", missing: 4 }], "and its profile is not hollowed");
+  assert.equal(shown.counts.effectiveSampleSize, null, "an effective sample size of an unweighted analysis is the head count");
+  assert.equal(shown.counts.realPatients, 412);
 });

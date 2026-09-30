@@ -624,6 +624,29 @@ export const VCR_PEOPLE_COUNT_FIELDS = frozen([
  * (`{ "A": 12, "B": 3 }`): its entries are sibling cells.
  */
 export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
+/**
+ * Keys that count people but are never one of a list's sibling cells: a table's
+ * row total, the rows a cohort started from and kept, the rows a synthetic
+ * model was trained on, the effective sample size a weighted estimate rests on
+ * (an unweighted one is exactly the head count). Small-cell suppression reads
+ * them alone — one of them under ten becomes null — and never as a cell whose
+ * neighbours are topped up around it, because two tables' row totals or two
+ * diagnostics blocks are not the parts of one whole.
+ */
+export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
+  'rows', 'startingRows', 'keptRows', 'trainingObservations', 'effectiveSampleSize',
+])
+/**
+ * Names of measures — `{ name, value }` — whose value is a head count of the
+ * study's own people. The engine reports a cohort's size this way, not as a
+ * `counts` key, so a boundary that reads only keys lets a small cohort out as
+ * `cohort_size`. Closed: a measure of a published trial's figure (a
+ * reconstructed curve's events) or of a design (`expected_sample_size`,
+ * `required_total_*`) is not this study's people and is not listed.
+ */
+export const VCR_PEOPLE_COUNT_MEASURES = frozen([
+  'rows', 'cohort_size', 'cohort_size_strict', 'cohort_size_lenient', 'training_observations', 'effective_sample_size',
+])
 
 /**
  * An assumption's key — the name a lineage node and an engine input id carry
