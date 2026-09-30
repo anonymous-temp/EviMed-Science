@@ -1,536 +1,208 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { CalendarClock, Plus } from "lucide-react";
-import { directionVerdict, STOPPING_RULES } from "@evimed/domain";
+import { useNavigate, useSearchParams } from "react-router";
+import { ArrowLeft, ArrowUp, CalendarClock, Plus, RefreshCw } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
-import { createAgenda, getDigest, listAgendas, listEpisodes, markDigestOpened, scheduleAgenda, startAgenda, stopAgenda,
-  type AgendaRecord, type EpisodeRecord } from "@/lib/autopilotClient";
-import { listInbox } from "@/lib/inboxClient";
+import { archiveAgenda, followUpAgenda, getDigest, listAgendas, listEpisodes, markDigestOpened, runAgendaNow, startAgenda, stopAgenda, type AgendaRecord, type EpisodeRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
-import { safeWorkspacePath } from "@/lib/claimCitations";
-import { artifactDisplayName } from "@/lib/artifactNames";
-import { snapshotHref } from "@/lib/readPages";
 import { chatPath } from "@/lib/runLocation";
-import { formatDay } from "@/lib/format";
-import { toast } from "@/lib/toast";
+import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
-import { Input } from "@/components/ui/Input";
-import { List, ListRow } from "@/components/ui/ListRow";
-import { Menu } from "@/components/ui/Menu";
-import { Switch } from "@/components/ui/Switch";
+import { Textarea } from "@/components/ui/Input";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageTitle } from "@/components/layout/PageTitle";
+import { TaskForm } from "@/components/autopilot/TaskForm";
+import { TaskTimeline } from "@/components/autopilot/TaskTimeline";
+import { activeAgenda, recurrence, RECOMMENDATIONS, revisionConflict, scheduleOf, scheduleStatus, type Recommendation } from "@/components/autopilot/taskPresentation";
 
-function pendingFollowUps(agenda: AgendaRecord): number {
-  return (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).length;
-}
+type Action = { kind: "pause" | "archive" | "resume" | "run" | "follow-up"; agenda: AgendaRecord; requestId?: string; note?: string };
 
-/**
- * The kinds of work an agenda may do, in the product's words.
- *
- * Mirrors `@evimed/domain`'s `AUTOPILOT_TASK_TYPES`; the service validates
- * against that list, so a value here that is not there is refused rather than
- * silently accepted. Listed in the order a researcher would build one up:
- * watch the literature, then check what changed, then look further.
- */
-const TASK_TYPE_LABELS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "literature-sentinel", label: "文献哨兵" },
-  { value: "evidence-update", label: "证据更新" },
-  { value: "signal-monitoring", label: "安全信号监测" },
-  { value: "data-prospecting", label: "数据探查" },
-  { value: "hypothesis-suggestion", label: "假设建议" },
-  { value: "writing-pipeline", label: "成稿流水线" },
-];
-
-/** A run's state, said in a task's history only when it is not simply done. */
-const EPISODE_STATE: Record<string, string> = {
-  queued: "排队中",
-  running: "进行中",
-  failed: "未完成",
-  canceled: "已取消",
-};
-
-/**
- * What the platform picks when the researcher says nothing about it.
- *
- * ¥100 a turn, ¥500 a day, ¥3,000 a week: an ordered triple the service
- * accepts and far above what any turn has cost (a deep run measured ¥3.4–5.5),
- * because the owner ruled on 2026-09-21 that no money ceiling may stop the
- * product from being exercised while it is being tested. 07:00 is before a
- * working day in the researcher's own zone.
- */
-const AGENDA_DEFAULTS = {
-  taskTypes: ["literature-sentinel"],
-  maxEpisodeCny: "100",
-  dailyBudgetCny: "500",
-  weeklyBudgetCny: "3000",
-  scheduleHour: "7",
-} as const;
-
-/**
- * Why a task stopped itself, in a few words — keyed on the reasons the
- * domain's stopping rules write (`directionVerdict`), so a rule reworded there
- * is not silently shown raw here. The pause a researcher made themselves, and
- * the one a new task starts in, say only 「已暂停」: the switch already shows
- * who turned it off.
- */
-const PAUSE_REASONS: ReadonlyMap<string, string> = (() => {
-  const calm = { episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false };
-  const rules = STOPPING_RULES;
-  return new Map([
-    [directionVerdict({ ...calm, daysSinceDigestOpened: rules.daysWithoutOpeningDigestBeforePausing }).reason,
-      `${rules.daysWithoutOpeningDigestBeforePausing} 天没有查看结果`],
-    [directionVerdict({ ...calm, consecutiveFailures: rules.consecutiveFailuresBeforePausingTaskType }).reason,
-      `连续 ${rules.consecutiveFailuresBeforePausingTaskType} 次未完成`],
-    [directionVerdict({ ...calm, userRejected: true }).reason, "你驳回了这个方向"],
-    [directionVerdict({ ...calm, episodesWithoutGatedClaim: rules.episodesWithoutGatedClaimBeforeParking }).reason,
-      `连续 ${rules.episodesWithoutGatedClaimBeforeParking} 次没有新结论`],
-  ]);
-})();
-
-/** A name for an agenda the researcher did not name: their own sentence. */
-function defaultTitle(direction: string): string {
-  const text = direction.trim().replace(/\s+/g, " ");
-  return text.length <= 60 ? text : `${text.slice(0, 59)}…`;
-}
-
-/**
- * The directions a sentence names. A researcher writing 「司美格鲁肽的胰腺炎
- * 与心血管结局」 means three of them; splitting on the punctuation that already
- * separates them is what makes 「研究方向」 a field they never have to fill.
- */
-function splitTopics(direction: string): string[] {
-  const parts = direction.split(/[,，、;；\n]|\s和\s|与/).map((value) => value.trim()).filter(Boolean);
-  return parts.length > 0 ? parts.slice(0, 12) : [];
-}
-
-/**
- * Today, in the agenda's own zone.
- *
- * `toISOString().slice(0, 10)` is the UTC date, and the create form records
- * the researcher's zone precisely because the two differ: between 00:00 and
- * 08:00 Beijing time it names yesterday, so 「立即运行」 scheduled the
- * previous day's episode (2026-09-16 walk, U7). Read per agenda, because two
- * agendas may not share a zone.
- */
-function todayIn(timeZone?: string, now = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(now);
-}
-
-/**
- * The task's line under its name: how often, and then when it next runs — or
- * that it is paused, and why when a stopping rule paused it. The schedule
- * runs once a day at the hour, so 「下次」 is today until today's run has been
- * scheduled, and tomorrow after (the scheduler's own test, server.mjs).
- */
-function scheduleLine(agenda: AgendaRecord): string {
-  const payload = agenda.payload;
-  const frequency = `每天 ${String(payload.scheduleHour).padStart(2, "0")}:00`;
-  const reason = payload.pauseReason ? PAUSE_REASONS.get(payload.pauseReason) : undefined;
-  const state = payload.status === "active"
-    ? `下次 ${payload.lastScheduledDate === todayIn(payload.timeZone) ? "明天" : "今天"}`
-    : reason ? `已暂停：${reason}` : "已暂停";
-  const followUps = pendingFollowUps(agenda);
-  return [frequency, state, followUps > 0 ? `${followUps} 条追问待答` : ""].filter(Boolean).join(" · ");
-}
-
-/**
- * The run a task's row opens, the words at the row's end, and what opening it
- * does, said to a screen reader after the task's name: the newest run while
- * it is still going, otherwise the newest one that has a conversation. The
- * server lists a project's runs newest first.
- */
-function lastResult(episodes: readonly EpisodeRecord[]): { episode: EpisodeRecord | null; label: string; opens: string } {
-  const newest = episodes[0];
-  if (newest && (newest.payload.status === "queued" || newest.payload.status === "running")) {
-    return { episode: newest.payload.sessionId ? newest : null, label: "进行中", opens: "打开正在进行的这次运行" };
-  }
-  const finished = episodes.find((episode) => episode.payload.sessionId) ?? null;
-  if (!finished) return { episode: null, label: "还没有结果", opens: "" };
-  return finished.payload.status === "failed"
-    ? { episode: finished, label: "上次未完成", opens: "打开上次运行" }
-    : { episode: finished, label: "上次结果", opens: "打开上次结果" };
-}
-
-/**
- * Creating a scheduled research task: one sentence, and the rest drafted.
- *
- * Manus, ChatGPT and Kimi all take a description rather than a form and hand
- * back an editable card of title, frequency and content. This asks for the
- * one thing only the researcher knows, picks the rest, and keeps every field
- * editable behind 「高级」. The API is unchanged. A task is created paused —
- * the service sets `enabled: false` — so this spends nothing until the
- * researcher turns its switch on.
- */
-/**
- * Six directions a reader can start from.
- *
- * An empty page that only says 「还没有定时研究」 asks the reader to invent the
- * product's use for it. Every one of these is a real standing question — a
- * safety signal, a guideline that moves, a competitor's trial reading out — and
- * picking one opens the form already filled in, so the first agenda costs a
- * click instead of a blank field.
- */
-const STARTERS: ReadonlyArray<{ title: string; direction: string }> = [
-  { title: "一个药的安全信号", direction: "司美格鲁肽的胰腺炎与胃轻瘫不良事件信号" },
-  { title: "一条指南的更新", direction: "2 型糖尿病降糖治疗指南的更新与推荐变化" },
-  { title: "同类药的头对头证据", direction: "替尔泊肽与司美格鲁肽在减重与血糖控制上的直接比较研究" },
-  { title: "一个适应证的新证据", direction: "GLP-1 受体激动剂在慢性肾脏病中的结局研究" },
-  { title: "对手在研管线", direction: "国内减重适应证在研药物的 III 期试验进展与读出时间" },
-  { title: "一个人群的用药安全", direction: "妊娠期与哺乳期使用降压药的安全性证据" },
-];
-
-function NewAgendaForm({ projectId, initialDirection = "", onCreated, onError, onCancel }: {
-  projectId: string;
-  initialDirection?: string;
-  onCreated: () => void;
-  onError: (message: string) => void;
-  onCancel: () => void;
-}) {
-  const [direction, setDirection] = useState(initialDirection);
-  const [title, setTitle] = useState("");
-  const [taskTypes, setTaskTypes] = useState<string[]>([...AGENDA_DEFAULTS.taskTypes]);
-  const [maxEpisodeCny, setMaxEpisodeCny] = useState<string>(AGENDA_DEFAULTS.maxEpisodeCny);
-  const [dailyBudgetCny, setDailyBudgetCny] = useState<string>(AGENDA_DEFAULTS.dailyBudgetCny);
-  const [weeklyBudgetCny, setWeeklyBudgetCny] = useState<string>(AGENDA_DEFAULTS.weeklyBudgetCny);
-  const [scheduleHour, setScheduleHour] = useState<string>(AGENDA_DEFAULTS.scheduleHour);
-  const [saving, setSaving] = useState(false);
-
-  const topicList = splitTopics(direction);
-  const episode = Number(maxEpisodeCny);
-  const daily = Number(dailyBudgetCny);
-  const weekly = Number(weeklyBudgetCny);
-  // The service refuses an unordered triple with `autopilot_budget_invalid`.
-  // Saying so before the request is what keeps that refusal from being the
-  // first the researcher hears of the rule — and these are only reachable
-  // under 「高级」, so the defaults can never trip it.
-  const budgetsOrdered = [episode, daily, weekly].every((value) => Number.isFinite(value) && value > 0)
-    && episode <= daily && daily <= weekly;
-  const ready = topicList.length > 0 && taskTypes.length > 0 && budgetsOrdered;
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!ready || saving) return;
-    setSaving(true);
-    try {
-      await createAgenda({
-        projectId,
-        title: title.trim() || defaultTitle(direction),
-        topics: topicList,
-        taskTypes,
-        maxEpisodeCny: episode,
-        dailyBudgetCny: daily,
-        weeklyBudgetCny: weekly,
-        scheduleHour: Number(scheduleHour),
-        // The researcher's zone, not the container's. The learning window was
-        // written in Beijing time and evaluated in UTC for exactly this reason.
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-      });
-      onCreated();
-    } catch (caught) {
-      onError(productErrorMessage(caught));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <form className="space-y-4" onSubmit={submit}>
-      <Input label="想持续跟进什么？" value={direction} required maxLength={400}
-        placeholder="例如：司美格鲁肽的胰腺炎与心血管结局"
-        onChange={(event) => setDirection(event.target.value)} />
-      <Disclosure summary="高级">
-        <div className="space-y-3">
-          <Input label="名称" value={title} maxLength={200}
-            placeholder={direction.trim() ? defaultTitle(direction) : undefined}
-            onChange={(event) => setTitle(event.target.value)} />
-          <fieldset className="space-y-2">
-            <legend className="mb-2 text-ui font-medium text-text">任务类型</legend>
-            <div className="flex flex-wrap gap-3">
-              {TASK_TYPE_LABELS.map((type) => (
-                <label key={type.value} className="flex items-center gap-1.5 text-ui text-text">
-                  <input type="checkbox" checked={taskTypes.includes(type.value)}
-                    onChange={(event) => setTaskTypes((current) => event.target.checked
-                      ? [...current, type.value]
-                      : current.filter((value) => value !== type.value))} />
-                  {type.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="单次上限 ¥" type="number" min="0" step="0.5" value={maxEpisodeCny} onChange={(event) => setMaxEpisodeCny(event.target.value)} />
-            <Input label="每日上限 ¥" type="number" min="0" step="1" value={dailyBudgetCny} onChange={(event) => setDailyBudgetCny(event.target.value)} />
-            <Input label="每周上限 ¥" type="number" min="0" step="1" value={weeklyBudgetCny} onChange={(event) => setWeeklyBudgetCny(event.target.value)} />
-            <Input label="每天运行时刻" type="number" min="0" max="23" step="1" value={scheduleHour} onChange={(event) => setScheduleHour(event.target.value)} />
-          </div>
-          {!budgetsOrdered && <p className="text-caption text-danger">需单次 ≤ 每日 ≤ 每周，且都大于 0</p>}
-        </div>
-      </Disclosure>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={!ready || saving} loading={saving}>创建</Button>
-        <Button variant="secondary" disabled={saving} onClick={onCancel}>取消</Button>
-      </div>
-    </form>
-  );
-}
-
-/**
- * A task's runs, newest first: one per scheduled day, each a finished
- * conversation to open — Manus's replay is a completed session the reader
- * opens; so is this, with no scrubber and no speed. The conversation's own
- * 运行 view is the process.
- */
-function EpisodeHistory({ projectId, agenda, onOpen }: { projectId: string; agenda: AgendaRecord; onOpen: (episode: EpisodeRecord) => void }) {
-  const [episodes, setEpisodes] = useState<EpisodeRecord[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setError(null);
-    try { setEpisodes((await listEpisodes(projectId, agenda.id)).items); }
-    catch (caught) { setEpisodes([]); setError(productErrorMessage(caught)); }
-  }, [projectId, agenda.id]);
-  useEffect(() => { void load(); }, [load]);
-  if (error) return <LoadError message={error} onRetry={() => void load()} />;
-  if (episodes === null) return <FilesSkeleton />;
-  if (episodes.length === 0) return <p className="text-ui text-text-3">还没有运行</p>;
-  return (
-    <List label="运行">
-      {episodes.map((episode) => {
-        const waiting = !episode.payload.runId && episode.payload.resourceDeferrals?.episode?.code === "credits_exhausted";
-        const state = waiting ? (episode.payload.resourceDeferrals?.episode?.status === "exhausted" ? "余额不足" : "等待余额") : EPISODE_STATE[episode.payload.status];
-        const claims = (episode.payload.claims ?? []).slice(0, 3);
-        const artifacts = (episode.payload.artifactRefs ?? []).filter(ref => ref.projectId === projectId && ref.runId === episode.payload.runId
-          && ref.sessionId === episode.payload.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path)).slice(0, 12);
-        return (
-          <ListRow
-            key={episode.id}
-            title={formatDay(episode.payload.date) || episode.payload.date}
-            onOpen={episode.payload.sessionId ? () => onOpen(episode) : undefined}
-            meta={(claims.length > 0 || artifacts.length > 0) ? <>
-              {claims.map(claim => <p key={claim.id} className="line-clamp-2">
-                {claim.tier === "reproduced" && claim.verification?.status === "recorded" && claim.verification.reproductionMatched && claim.verification.isolationEnforced ? "已复现：" : "研究线索："}{claim.statement}
-              </p>)}
-              {artifacts.length > 0 ? <div className="relative z-10 mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                {artifacts.map(ref => <Link key={`${ref.runId}:${ref.path}`} to={snapshotHref(ref.runId, ref.path)} className="text-link hover:underline">{artifactDisplayName(ref.path)}</Link>)}
-              </div> : claims.length > 0 ? <p>成果文件暂不可用</p> : null}
-            </> : undefined}
-            trailing={state ? <span>{state}</span> : undefined}
-          />
-        );
-      })}
-    </List>
-  );
-}
-
-/**
- * 主动科研 — scheduled research tasks, and what each last produced.
- *
- * The owner's ruling (2026-09-22): the core of proactive research is the
- * scheduled task and its reproducible result — the finished conversation of
- * its last run, which the researcher opens (「相当于 AI 自动模拟用户行为提前
- * 做了一遍，用户可以点进去看一下」). So the page is one list: a row is a task,
- * its schedule and a switch, and the row — 「上次结果 ›」 — opens that run's
- * conversation. The briefing cards with their adopt / reject / follow-up
- * buttons and the 「需要你决定」 block left the page (plan §5.7); what waits
- * on the researcher is one line pointing at the inbox, where it is resolved.
- *
- * Opening a result also records that its briefing was read: the stopping rule
- * that pauses a task nobody looks at (`daysWithoutOpeningDigestBeforePausing`)
- * counts that record, and the briefing is no longer shown anywhere else.
- */
 export function AutopilotPage() {
-  // A project switch in the sidebar reloads the page for the new project.
-  useProjectStore((state) => state.currentId);
+  useProjectStore(state => state.currentId);
   const projectId = getWebProjectId();
   return <ProjectAutopilotPage key={projectId} projectId={projectId} />;
 }
 
 function ProjectAutopilotPage({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const digestId = searchParams.get("digest");
+  const [params, setParams] = useSearchParams();
+  const selectedId = params.get("task");
+  const digestId = params.get("digest");
   const [agendas, setAgendas] = useState<AgendaRecord[] | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeRecord[]>([]);
+  const [taskEpisodes, setTaskEpisodes] = useState<{ agendaId: string; items: EpisodeRecord[] } | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [decisions, setDecisions] = useState(0);
-  /** The agenda a researcher asked to run now, held until they confirm the
-   *  spend: running is the one control on this page that costs money. */
-  const [running, setRunning] = useState<AgendaRecord | null>(null);
-  const [creating, setCreating] = useState<{ direction: string } | null>(null);
-  const [history, setHistory] = useState<AgendaRecord | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [retry, setRetry] = useState<Action | null>(null);
+  const [confirm, setConfirm] = useState<Action | null>(null);
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [editor, setEditor] = useState<{ agenda?: AgendaRecord; recommendation?: Recommendation } | null>(null);
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshExhausted, setRefreshExhausted] = useState(false);
+  const [refreshCycle, setRefreshCycle] = useState(0);
+  const live = useRef(true);
   const generation = useRef(0);
+  const historyGeneration = useRef(0);
+  const operating = useRef(false);
+  const selection = useRef(selectedId); selection.current = selectedId;
 
-  const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
-    const current = ++generation.current;
-    setError(null);
-    if (!background) setAgendas(null);
+  const load = useCallback(async () => {
+    const request = ++generation.current;
     try {
-      const [agendaPage, episodePage] = await Promise.all([listAgendas(projectId), listEpisodes(projectId)]);
-      if (current !== generation.current) return;
-      setAgendas(agendaPage.items); setEpisodes(episodePage.items);
-    } catch (loadError) {
-      if (current !== generation.current) return;
-      setAgendas([]); setError(`主动科研状态不可用：${productErrorMessage(loadError)}`);
+      const [tasks, runs] = await Promise.all([listAgendas(projectId), listEpisodes(projectId)]);
+      if (!live.current || request !== generation.current) return;
+      setAgendas(tasks.items); setEpisodes(runs.items); setError(null);
+    } catch (caught) {
+      if (live.current && request === generation.current) { setError(`定时任务暂不可用：${productErrorMessage(caught)}`); setAgendas(current => current ?? []); }
     }
   }, [projectId]);
+  useEffect(() => { const requests = generation; live.current = true; void load(); return () => { live.current = false; requests.current++; }; }, [load]);
+  useEffect(() => { setNote(""); setActionError(null); setRetry(null); }, [selectedId]);
+
+  const loadHistory = useCallback(async () => {
+    if (!selectedId || selectedId !== selection.current) return;
+    const request = ++historyGeneration.current;
+    try {
+      const page = await listEpisodes(projectId, selectedId);
+      if (live.current && selectedId === selection.current && request === historyGeneration.current) { setTaskEpisodes({ agendaId: selectedId, items: page.items }); setHistoryError(null); }
+    } catch (caught) {
+      if (live.current && selectedId === selection.current && request === historyGeneration.current) setHistoryError(`任务记录暂不可用：${productErrorMessage(caught)}`);
+    }
+  }, [projectId, selectedId]);
   useEffect(() => {
-    void load();
-    const requests = generation;
+    const requests = historyGeneration;
+    setHistoryError(null); setTaskEpisodes(null); void loadHistory();
     return () => { requests.current++; };
-  }, [load]);
-
-  // What waits on the researcher — questions and reviews in the inbox — is a
-  // count and a way there; the inbox is where each one is answered.
+  }, [loadHistory]);
+  const selectedEpisodes = taskEpisodes?.agendaId === selectedId ? taskEpisodes.items : null;
+  const pending = [...episodes, ...(selectedEpisodes ?? [])].some(episode => ["queued", "running", "verifying"].includes(episode.payload.status));
+  const watching = pending || (agendas ?? []).some(agenda => activeAgenda(agenda) && agenda.payload.scheduleState !== "completed");
+  // A bounded poll follows background work without maintaining a second kernel connection.
   useEffect(() => {
-    let active = true;
-    void listInbox({ unread: true })
-      .then((page) => {
-        if (active) setDecisions(page.items.filter((item) => item.noticeType !== "notify" && !item.resolvedAt).length);
-      })
-      .catch(() => { /* isolated: the count is a pointer, and the inbox has the items */ });
-    return () => { active = false; };
-  }, []);
+    if (!watching) { setRefreshExhausted(false); return; }
+    let canceled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (canceled) return;
+      if (!document.hidden && !operating.current) { attempts++; await Promise.all([load(), loadHistory()]); }
+      if (canceled) return;
+      if (attempts >= 60) { setRefreshExhausted(true); return; }
+      timer = setTimeout(() => void tick(), pending ? 5000 : 30000);
+    };
+    timer = setTimeout(() => void tick(), pending ? 5000 : 30000);
+    return () => { canceled = true; clearTimeout(timer); };
+  }, [watching, pending, load, loadHistory, refreshCycle]);
 
-  /** A run's result is its conversation; opening it is reading its briefing. */
-  const openResult = useCallback((episode: EpisodeRecord) => {
-    const { sessionId, digestId: briefing } = episode.payload;
-    if (!sessionId) return;
-    if (briefing) void markDigestOpened(briefing).catch(() => { /* the stopping rule's record; never blocks the reader */ });
-    navigate(chatPath(sessionId));
-  }, [navigate]);
-
-  // A briefing's address — what an inbox notice or a Feishu card carries —
-  // opens the conversation of the run that produced it, in whichever of the
-  // account's projects that run is. A briefing with no conversation, or one
-  // that cannot be read, lands on the list.
   useEffect(() => {
     if (!digestId) return;
-    let live = true;
+    let active = true;
     void (async () => {
       try {
         const digest = await getDigest(digestId);
-        const runs = await listEpisodes(digest.projectId);
-        const episode = runs.items.find((item) => item.payload.sessionId
-          && (item.payload.digestId === digest.id || digest.payload.episodeIds?.includes(item.id))) ?? null;
-        if (live && episode?.payload.sessionId) {
-          void markDigestOpened(digest.id).catch(() => { /* never blocks the reader */ });
-          navigate(digest.projectId === getWebProjectId()
-            ? chatPath(episode.payload.sessionId)
-            : `/app/runs?run=${encodeURIComponent(episode.payload.runId ?? episode.payload.sessionId)}`, { replace: true });
-          return;
+        if (!active) return;
+        const runs = await listEpisodes(digest.projectId, digest.payload.agendaId);
+        const episode = runs.items.find(item => item.payload.sessionId && (item.payload.digestId === digest.id || digest.payload.episodeIds?.includes(item.id)));
+        if (active && episode?.payload.sessionId) {
+          void markDigestOpened(digest.id).catch(() => { /* Reading a conversation never waits on read telemetry. */ });
+          navigate(digest.projectId === getWebProjectId() ? chatPath(episode.payload.sessionId) : `/app/runs?run=${encodeURIComponent(episode.payload.runId ?? episode.payload.sessionId)}`, { replace: true }); return;
         }
-      } catch { /* fall through to the list */ }
-      if (live) setSearchParams((current) => { const next = new URLSearchParams(current); next.delete("digest"); return next; }, { replace: true });
+      } catch { /* An obsolete briefing address falls back to tasks. */ }
+      if (active) setParams(current => { const next = new URLSearchParams(current); next.delete("digest"); return next; }, { replace: true });
     })();
-    return () => { live = false; };
-  }, [digestId, navigate, setSearchParams]);
+    return () => { active = false; };
+  }, [digestId, navigate, setParams]);
 
-  const mutate = async (operation: () => Promise<unknown>) => {
-    const current = generation.current;
-    setBusy(true);
-    try { await operation(); if (current === generation.current) await load({ background: true }); }
-    catch (operationError) { if (current === generation.current) toast.error(productErrorMessage(operationError)); }
-    finally { setBusy(false); }
+  const select = (id: string | null) => setParams(current => { const next = new URLSearchParams(current); if (id) next.set("task", id); else next.delete("task"); return next; });
+  const record = (value: AgendaRecord) => { generation.current++; setAgendas(current => [value, ...(current ?? []).filter(item => item.id !== value.id)]); };
+  const operate = async (action: Action) => {
+    if (operating.current) return;
+    operating.current = true; setBusy(true); setActionError(null); setRetry(null);
+    // In-flight background snapshots must not replace a successful mutation.
+    generation.current++; historyGeneration.current++;
+    try {
+      if (action.kind === "run" || action.kind === "follow-up") {
+        const result = action.kind === "run" ? await runAgendaNow(action.agenda.id, action.requestId!)
+          : await followUpAgenda(action.agenda.id, { requestId: action.requestId!, note: action.note! });
+        if (!live.current) return;
+        setEpisodes(current => [result.episode, ...current.filter(item => item.id !== result.episode.id)]);
+        if (selection.current === action.agenda.id) setTaskEpisodes(current => ({ agendaId: action.agenda.id, items: [result.episode, ...(current?.agendaId === action.agenda.id ? current.items : []).filter(item => item.id !== result.episode.id)] }));
+        setRefreshExhausted(false); setRefreshCycle(value => value + 1);
+        if (action.kind === "follow-up" && selection.current === action.agenda.id) setNote("");
+      } else {
+        const value = await (action.kind === "pause" ? stopAgenda : action.kind === "resume" ? startAgenda : archiveAgenda)(action.agenda.id, action.agenda.revision);
+        if (!live.current) return;
+        if (action.kind === "archive") { setAgendas(current => (current ?? []).filter(item => item.id !== action.agenda.id)); if (selection.current === action.agenda.id) select(null); }
+        else record(value);
+        await Promise.all([load(), loadHistory()]);
+      }
+    } catch (caught) {
+      if (!live.current) return;
+      const conflict = revisionConflict(caught);
+      if (conflict) await load();
+      if (live.current && selection.current === action.agenda.id) {
+        setActionError(conflict ? "任务状态已变化，已刷新最新内容。请核对后重新操作。" : productErrorMessage(caught));
+        if (!conflict) setRetry(action);
+      }
+    } finally { operating.current = false; if (live.current) setBusy(false); }
   };
+  const openDigest = (id?: string | null) => { if (id) void markDigestOpened(id).catch(() => { /* Read telemetry must not prevent opening a result. */ }); };
+  const selected = agendas?.find(agenda => agenda.id === selectedId);
+  const visible = (agendas ?? []).filter(agenda => !agenda.payload.archivedAt && `${agenda.payload.title}\n${agenda.payload.prompt ?? agenda.payload.topics.join(" ")}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  const scheduled = visible.filter(agenda => activeAgenda(agenda) && agenda.payload.scheduleState !== "completed").sort((a, b) => (a.payload.nextRunAt ?? "z").localeCompare(b.payload.nextRunAt ?? "z"));
+  const inactive = visible.filter(agenda => !scheduled.includes(agenda));
+  const railList = (label: string, items: AgendaRecord[]) => items.length > 0 && <section aria-label={label} className="space-y-2"><h2 className="px-3 text-caption font-medium text-text-3">{label}</h2><ul className="space-y-1">{items.map(agenda => <li key={agenda.id}>
+    <Button variant="text" aria-label={agenda.payload.title} aria-pressed={selectedId === agenda.id} className={cn("h-auto w-full flex-col items-start whitespace-normal px-3 py-3 text-left", selectedId === agenda.id && "bg-surface-3 text-text")} onClick={() => select(agenda.id)}>
+      <span className="line-clamp-2 text-ui font-medium">{agenda.payload.title}</span><span className="text-caption font-normal text-text-3">{scheduleStatus(agenda)}</span><span className="text-caption font-normal text-text-3">{recurrence(scheduleOf(agenda))}</span>
+    </Button>
+  </li>)}</ul></section>;
 
-  const runsOf = (agenda: AgendaRecord) => episodes.filter((episode) => episode.payload.agendaId === agenda.id);
-
-  return (
-    <PageShell
-      title="主动科研"
-      actions={<Button disabled={busy} onClick={() => setCreating({ direction: "" })}><Plus size={16} aria-hidden="true" />新建定时研究</Button>}
-    >
-      {decisions > 0 && (
-        <Link to="/app/inbox" className="mb-4 inline-flex rounded text-ui text-text-2 hover:text-text">{decisions} 项待你决定 →</Link>
-      )}
-      {error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}
-      {agendas === null ? <FilesSkeleton /> : agendas.length === 0
-        ? (error ? null : (
-          <>
-            <EmptyState icon={CalendarClock} title="还没有定时研究。" description="选一个方向开始，或者自己写一个。" />
-            <List label="可以从这些方向开始" divided>
-              {STARTERS.map((starter) => (
-                <ListRow
-                  key={starter.title}
-                  title={starter.title}
-                  meta={starter.direction}
-                  onOpen={() => setCreating({ direction: starter.direction })}
-                />
-              ))}
-            </List>
-          </>
-        ))
-        : (
-          <List label="定时研究" divided>
-            {agendas.map((agenda) => {
-              const title = agenda.payload.title;
-              const active = agenda.payload.status === "active";
-              const result = lastResult(runsOf(agenda));
-              const open = result.episode ? () => openResult(result.episode!) : undefined;
-              return (
-                <ListRow
-                  key={agenda.id}
-                  title={open ? <>{title}<span className="sr-only">：{result.opens}</span></> : title}
-                  onOpen={open}
-                  meta={scheduleLine(agenda)}
-                  trailing={<>
-                    {open
-                      // The whole row opens the result; these words are its
-                      // visible handle, so they are not a second tab stop.
-                      ? <Button variant="text" size="sm" tabIndex={-1} aria-hidden="true" onClick={open}>{result.label} ›</Button>
-                      : <span className="px-2 text-ui">{result.label}</span>}
-                    <Switch checked={active} label={`定时运行“${title}”`} disabled={busy}
-                      onChange={(on) => void mutate(() => (on ? startAgenda : stopAgenda)(agenda.id, agenda.revision))} />
-                  </>}
-                  menu={<Menu label={`“${title}”的更多操作`} items={[
-                    ...(active ? [{ label: "立即运行", onSelect: () => setRunning(agenda), disabled: busy }] : []),
-                    { label: "历史", onSelect: () => setHistory(agenda) },
-                  ]} />}
-                />
-              );
-            })}
-          </List>
-        )}
-
-      {running && <ConfirmDialog
-        tone="primary"
-        title="立即运行？"
-        body={`最多花费 ¥${running.payload.maxEpisodeCny}。`}
-        confirmLabel="立即运行"
-        onCancel={() => setRunning(null)}
-        onConfirm={() => {
-          const agenda = running;
-          setRunning(null);
-          void mutate(() => scheduleAgenda(agenda.id, todayIn(agenda.payload.timeZone)));
-        }}
-      />}
-      {creating && (
-        <Drawer title="新建定时研究" onClose={() => setCreating(null)}>
-          <NewAgendaForm projectId={projectId} initialDirection={creating.direction} onCancel={() => setCreating(null)}
-            onCreated={() => { setCreating(null); void load({ background: true }); }}
-            onError={(message) => { setCreating(null); toast.error(message); }} />
-        </Drawer>
-      )}
-      {history && (
-        <Drawer
-          title={history.payload.title}
-          description={`每天 ${String(history.payload.scheduleHour).padStart(2, "0")}:00 · 单次 ¥${history.payload.maxEpisodeCny} · 每日 ¥${history.payload.dailyBudgetCny} · 每周 ¥${history.payload.weeklyBudgetCny}`}
-          onClose={() => setHistory(null)}
-          widthClassName="max-w-2xl"
-        >
-          <EpisodeHistory projectId={history.projectId} agenda={history} onOpen={(episode) => { setHistory(null); openResult(episode); }} />
-        </Drawer>
-      )}
-    </PageShell>
-  );
+  return <div className="flex h-full min-h-0 bg-bg">
+    <PageTitle page="定时任务" />
+    <aside aria-label="定时任务列表" className={cn("min-h-0 w-full shrink-0 overflow-y-auto border-r border-border bg-surface p-4 md:w-72 lg:w-80", selectedId && "hidden md:block")}>
+      <header className="mb-5 flex items-center justify-between px-3"><h1 className="text-heading font-semibold text-text">定时任务</h1><CalendarClock size={20} className="text-text-3" aria-hidden="true" /></header>
+      <SearchInput label="搜索任务" className="mb-3 w-full" value={search} onChange={event => setSearch(event.target.value)} />
+      <Button variant="text" className="mb-6 w-full justify-start" onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />新建任务</Button>
+      {error && <LoadError message={error} onRetry={() => void load()} />}
+      {agendas === null ? <FilesSkeleton /> : <div className="space-y-6">
+        {railList("即将执行", scheduled)}{railList("已暂停 / 已完成", inactive)}
+        {visible.length === 0 && !error && <p className="px-3 text-ui text-text-3">{search ? "没有匹配的任务" : "还没有定时任务"}</p>}
+        <section aria-label="推荐" className="space-y-2"><h2 className="px-3 text-caption font-medium text-text-3">推荐</h2><ul className="space-y-1">{RECOMMENDATIONS.map(item => <li key={item.title}><Button variant="text" aria-label={item.title} className="h-auto w-full flex-col items-start whitespace-normal px-3 py-3 text-left" onClick={() => setEditor({ recommendation: item })}><span className="text-ui font-medium text-text">{item.title}</span><span className="line-clamp-2 text-caption font-normal text-text-3">{item.prompt}</span></Button></li>)}</ul></section>
+      </div>}
+    </aside>
+    <section aria-label="任务详情" className={cn("min-h-0 min-w-0 flex-1 flex-col", selectedId ? "flex" : "hidden md:flex")}>
+      {selected ? <>
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="min-w-0"><Button variant="text" size="sm" aria-label="返回任务列表" className="mb-2 md:hidden" onClick={() => select(null)}><ArrowLeft size={16} aria-hidden="true" />任务列表</Button><h2 className="text-body font-semibold text-text">{selected.payload.title}</h2><p className="mt-1 text-caption text-text-3">{recurrence(scheduleOf(selected))} · {scheduleOf(selected).timeZone}</p><p className="mt-1 text-caption text-text-3">{scheduleStatus(selected)}</p></div>
+          <div className="flex flex-wrap gap-1">
+            <Button variant="text" size="sm" disabled={busy} onClick={() => setEditor({ agenda: selected })}>编辑任务</Button>
+            <Button variant="text" size="sm" disabled={busy} onClick={() => activeAgenda(selected) ? setConfirm({ kind: "pause", agenda: selected }) : void operate({ kind: "resume", agenda: selected })}>{activeAgenda(selected) ? "暂停任务" : "启用任务"}</Button>
+            <Button variant="secondary" size="sm" disabled={busy || !activeAgenda(selected)} onClick={() => setConfirm({ kind: "run", agenda: selected, requestId: crypto.randomUUID() })}>立即运行</Button>
+            <Button variant="text" size="sm" disabled={busy} onClick={() => setConfirm({ kind: "archive", agenda: selected })}>删除任务</Button>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6"><div className="mx-auto max-w-read space-y-5">
+          {error && <LoadError message={error} onRetry={() => void load()} />}
+          {actionError && <div role="alert" className="text-ui text-error">{actionError}{retry && <Button variant="text" disabled={busy} onClick={() => void operate(retry)}>重试操作</Button>}</div>}
+          <div className="ml-auto max-w-body rounded-panel bg-accent px-5 py-4 text-ui leading-relaxed text-accent-fg"><p className="whitespace-pre-wrap break-words">{selected.payload.prompt ?? selected.payload.topics.join("\n")}</p></div>
+          {historyError && <LoadError message={historyError} onRetry={() => void loadHistory()} />}
+          {selectedEpisodes ? <TaskTimeline agenda={selected} episodes={selectedEpisodes} onOpen={openDigest} /> : !historyError && <FilesSkeleton />}
+        </div></div>
+        <div className="px-5 pb-5 pt-3"><form className="mx-auto max-w-read rounded-composer border border-border bg-surface-2 p-3 shadow-e1" onSubmit={event => { event.preventDefault(); if (!note.trim() || busy || !activeAgenda(selected) || retry?.kind === "follow-up") return; void operate({ kind: "follow-up", agenda: selected, requestId: crypto.randomUUID(), note }); }}>
+          <Textarea aria-label="针对任务追问" rows={2} maxLength={8000} placeholder={activeAgenda(selected) ? "针对这个任务继续提问…" : "请先启用任务，再发送追问"} disabled={!activeAgenda(selected) || busy || retry?.kind === "follow-up"} value={note} className="border-transparent bg-transparent focus:border-transparent" onChange={event => setNote(event.target.value)} />
+          <div className="flex items-center justify-between gap-3"><span className="text-caption text-text-3">{activeAgenda(selected) ? `单次上限 ¥${selected.payload.maxEpisodeCny}` : "请先启用任务"}</span><Button type="submit" aria-label="发送追问" size="sm" loading={busy} disabled={!activeAgenda(selected) || !note.trim() || retry?.kind === "follow-up"}><ArrowUp size={16} aria-hidden="true" /></Button></div>
+        </form>{refreshExhausted && <div className="mx-auto mt-2 flex max-w-read items-center gap-2 text-caption text-text-3">自动刷新已暂停<Button variant="text" size="sm" onClick={() => { setRefreshExhausted(false); setRefreshCycle(value => value + 1); void Promise.all([load(), loadHistory()]); }}><RefreshCw size={16} aria-hidden="true" />刷新结果</Button></div>}</div>
+      </> : <div className="flex h-full items-center justify-center p-6">{agendas === null ? <FilesSkeleton /> : <div><Button variant="text" className="mb-4 md:hidden" onClick={() => select(null)}><ArrowLeft size={16} aria-hidden="true" />返回任务列表</Button><EmptyState icon={CalendarClock} title={selectedId ? "未找到这个任务" : "让研究按时继续"} description={selectedId ? "返回列表选择其他任务。" : "选择一个任务查看记录，或从推荐开始。"} /></div>}</div>}
+    </section>
+    {editor && <Drawer title={editor.agenda ? "编辑任务" : "新建任务"} onClose={() => { if (!editorSaving) setEditor(null); }}><TaskForm projectId={projectId} agenda={editor.agenda} recommendation={editor.recommendation} onRecorded={record} onBusyChange={setEditorSaving} onCancel={() => setEditor(null)} onSaved={value => { record(value); setEditor(null); select(value.id); }} /></Drawer>}
+    {confirm && <ConfirmDialog title={confirm.kind === "run" ? "立即运行？" : confirm.kind === "pause" ? "暂停任务？" : "删除任务？"} body={confirm.kind === "run" ? `本次最多花费 ¥${confirm.agenda.payload.maxEpisodeCny}，不改变原定计划。` : confirm.kind === "pause" ? "暂停后将取消正在进行和排队中的研究，已产生的结果会保留。" : "删除后停止后续计划，取消正在进行和排队中的研究，并保留历史研究结果。"} tone={confirm.kind === "run" ? "primary" : "danger"} confirmLabel={confirm.kind === "run" ? "立即运行" : confirm.kind === "pause" ? "暂停任务" : "删除任务"} onCancel={() => setConfirm(null)} onConfirm={() => { const action = confirm; setConfirm(null); void operate(action); }} />}
+  </div>;
 }

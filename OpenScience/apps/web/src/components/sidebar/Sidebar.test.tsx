@@ -93,7 +93,7 @@ describe("Sidebar navigation", () => {
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新对话", "科研工具", "知识库", "记忆胶囊", "主动科研"];
+    const order = ["新对话", "科研工具", "知识库", "记忆胶囊", "定时任务"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -148,7 +148,7 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "主动科研"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -159,7 +159,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "主动科研"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
   it("keeps the row out when /api/me cannot be read", async () => {
@@ -206,7 +206,7 @@ describe("Sidebar navigation", () => {
   // the list now — and so is the 「最近任务」 list of the current one only.
   it("puts the projects between the destinations and the account row, and no project dropdown above them", async () => {
     renderSidebar();
-    const lastRow = screen.getByRole("link", { name: "主动科研" });
+    const lastRow = screen.getByRole("link", { name: "定时任务" });
     const projects = screen.getByRole("region", { name: "项目" });
     const account = await screen.findByRole("link", { name: "设置" });
     expect(lastRow.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
