@@ -29,7 +29,7 @@ from fastapi import Header, APIRouter, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
-from new_meta import evimed_usage_report
+from new_meta import evimed_job_observation as job_observation, evimed_usage_report
 
 
 _BEARER = HTTPBearer(auto_error=False, scheme_name="EviMedWorkloadBearer")
@@ -725,6 +725,7 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         "createdAt": _now(),
         "updatedAt": _now(),
         "artifacts": [],
+        **job_observation.admission(arguments, workspace, owner),
     }
     _atomic_json(state_path, state)
     failure = _launch_worker(state_path, state, model_credentials=model_credentials)
@@ -842,7 +843,7 @@ def _resume_job(state_path: Path, state: dict[str, Any], *,
     previous_error = state.get("error")
     for key in ("finishedAt", "returnCode", "retryable", "error", "workerPid",
                 "releaseStatus", "blockingReasons", "warningReasons", "releaseSummary",
-                "deliverable", "nextActions", "modules"):
+                "deliverable", "nextActions", "modules", "auditReceipt"):
         state.pop(key, None)
     state.update({
         "status": "queued",
@@ -1020,6 +1021,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 for entry in (state.get("modules") or {}).values()
             ),
             "projectPath": state.get("projectRelativePath"),
+            **({"auditReceipt": state["auditReceipt"]} if state.get("auditReceipt") else {}),
         },
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
@@ -1225,6 +1227,10 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
 def run_job(state_file: str) -> int:
     state_path = Path(state_file).resolve()
     state = _read_state(state_path)
+    if state.get("status") == "succeeded":
+        return 0
+    if not job_observation.unchanged(state):
+        state["auditObservationUnavailable"] = "admission_evidence_changed_or_missing"
     if state.get("modelRoute") == "gateway":
         token = os.environ.pop(engine_model.TOKEN_ENV, "")
         base_url = os.environ.pop(engine_model.BASE_URL_ENV, "")
@@ -1355,6 +1361,9 @@ def run_job(state_file: str) -> int:
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
         "artifacts": _artifact_list(workspace, project),
     })
+    receipt = job_observation.complete(state)
+    if receipt is not None:
+        state["auditReceipt"] = receipt
     _atomic_json(state_path, state)
     _report_usage(state_path, state, project, log_path)
     return 0

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -116,3 +118,87 @@ def test_terminal_worker_reentry_does_not_rewrite_original_observation(tmp_path,
     monkeypatch.setattr(adapter.subprocess, "run", lambda *args, **kwargs: pytest.fail("terminal job executed twice"))
     assert adapter.run_job(str(state_path)) == 0
     assert state_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("change", ["changed", "added", "symlink", "hardlink"])
+def test_input_mutation_during_engine_execution_does_not_become_fresh_evidence(tmp_path, monkeypatch, change):
+    client, workspace, _, job, state_path, _ = start(tmp_path, monkeypatch, with_inputs=True)
+    original_complete = adapter.job_observation.complete
+
+    def mutate_then_observe(state):
+        target = workspace / "papers/trial.pdf"
+        if change == "changed":
+            target.write_bytes(b"%PDF-changed-during-execution")
+        elif change == "added":
+            (workspace / "papers/new.pdf").write_bytes(b"%PDF-not-admitted")
+        else:
+            target.unlink()
+            if change == "symlink":
+                target.symlink_to(workspace / "data/ipd.json")
+            else:
+                os.link(workspace / "data/ipd.json", target)
+        return original_complete(state)
+
+    monkeypatch.setattr(adapter.job_observation, "complete", mutate_then_observe)
+    assert complete(monkeypatch, state_path) == 0
+    response = _post(client, {"action": "status", "jobId": job}).json()
+    assert response["artifacts"] and response["data"]["jobStatus"] == "succeeded"
+    assert "auditReceipt" not in response["data"]
+
+
+def test_admission_observation_failure_does_not_prevent_start_or_delivery(tmp_path, monkeypatch):
+    def unavailable():
+        raise OSError("private path must never be copied")
+
+    monkeypatch.setattr(adapter.job_observation, "current_evidence", unavailable)
+    client, _, _, job, state_path, _ = start(tmp_path, monkeypatch)
+    assert complete(monkeypatch, state_path) == 0
+    response = _post(client, {"action": "status", "jobId": job}).json()
+    assert response["artifacts"] and "auditReceipt" not in response["data"]
+    assert "private path" not in state_path.read_text()
+
+
+def test_scope_uses_original_named_workspace_and_request(tmp_path, monkeypatch):
+    _, workspace, _, _, _, _ = start(tmp_path, monkeypatch)
+    named = workspace / "Research 1"
+    named.mkdir()
+    request = {"topic": "question", "action": "start", "waitSeconds": 5, "jobId": "ignored-transport-id"}
+    owner = {"userId": "user-1", "projectId": "project-1"}
+    observed = adapter.job_observation.admission(request, named, owner)
+    assert observed["auditScope"] == {**owner, "activeWorkspace": "Research 1"}
+    assert observed["auditRequest"] == {"topic": "question"}
+    assert "sourceEvidence" not in adapter.job_observation.admission(request, named, {**owner, "projectId": "other"})
+
+
+def test_source_formula_covers_shipped_inputs_and_ignores_runtime_secrets(tmp_path):
+    observation = adapter.job_observation
+    root = tmp_path / "image"
+    (root / "new_meta/data").mkdir(parents=True)
+    for name in ("evimed_adapter.py", "evimed_job_observation.py", "main.py"):
+        (root / "new_meta" / name).write_text("# deployed source\n")
+    for name in ("requirements.txt", "requirements.lock", "pyproject.toml"):
+        (root / name).write_text("dependency declaration\n")
+    (root / "new_meta/data/source.json").write_text("{}")
+    before = observation.current_evidence(root)
+    (root / ".env").write_text("must-not-hash")
+    (root / "new_meta/.env.json").write_text("must-not-hash")
+    (root / "outputs").mkdir()
+    (root / "outputs/research.json").write_text("must-not-hash")
+    assert observation.current_evidence(root) == before
+    for name in ("new_meta/main.py", "new_meta/data/source.json", "requirements.txt", "requirements.lock", "pyproject.toml"):
+        original = (root / name).read_bytes()
+        (root / name).write_bytes(original + b"\n")
+        assert observation.current_evidence(root) != before
+        (root / name).write_bytes(original)
+    # Site-packages/build caches are not part of the image's source identity.
+    clone = tmp_path / "other-image"
+    shutil.copytree(root, clone)
+    (clone / "new_meta/__pycache__").mkdir()
+    (clone / "new_meta/__pycache__/main.py").write_text("ignored generated cache")
+    assert observation.current_evidence(clone) == before
+
+
+@pytest.mark.parametrize("path", ["../secret.json", ".jobs/state.json", "secrets/provider.json", "data//ipd.json"])
+def test_observation_reader_never_hashes_private_or_escaping_paths(tmp_path, path):
+    with pytest.raises(ValueError, match="path_invalid"):
+        adapter.job_observation.file_receipt(tmp_path, path)

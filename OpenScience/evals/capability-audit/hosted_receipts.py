@@ -155,20 +155,19 @@ def write_new(root, relative, blob):
         os.close(descriptor)
 
 
+def meta_observation(repo=REPO):
+    location = repo.parent / "项目代码/meta/new_meta/evimed_job_observation.py"
+    spec = importlib.util.spec_from_file_location("hosted_meta_observation", location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def current_evidence(tool, repo=REPO):
-    # Every engine the shared adapter runs signs its receipts over the same
-    # evidence formula since 2026-09-29 (the whole engine tree plus the
-    # adapter); MR was the only one before. Meta runs outside the adapter and
-    # keeps the legacy rule until it signs receipts of its own.
+    # Each producer and the consumer share the source formula. Meta ships in
+    # its own image; all observations are unsigned, non-gating job records.
     if tool == "meta_analysis":
-        location = repo / "runtime/mcp/evimed-research/execution_evidence.py"
-        spec = importlib.util.spec_from_file_location("hosted_legacy_execution_evidence", location)
-        legacy = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(legacy)
-        adapter = repo / "deploy/specialist-adapter"
-        return {"executionEvidence": legacy.execution_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool],
-                    adapter / "evimed_specialist_adapter/service.py"),
-                "adapterEvidence": legacy.source_tree_evidence(adapter)}
+        return meta_observation(repo).current_evidence(repo.parent / "项目代码/meta")
     adapter = repo / "deploy/specialist-adapter/evimed_specialist_adapter"
     location = adapter / "audit_receipt.py"
     spec = importlib.util.spec_from_file_location("hosted_audit_execution_evidence", location)
@@ -177,11 +176,16 @@ def current_evidence(tool, repo=REPO):
     return module.current_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool], adapter)
 
 
-def request_inputs(request):
+def request_inputs(request, workspace=None):
     sources = [request[key] for key in ("exposureSource", "outcomeSource") if key in request]
     paths = [relative_path(source["path"]) for source in sources if isinstance(source, dict) and source.get("type") == "local_file"]
     if request.get("manuscript"):
         paths.append(relative_path(request["manuscript"]))
+    if request.get("userPdfDirectory") or request.get("ipdData"):
+        try:
+            paths.extend(meta_observation().request_inputs(request, workspace))
+        except (OSError, ValueError, TypeError, KeyError):
+            raise ReceiptError("hosted_receipt_input_binding_invalid") from None
     return paths
 
 
@@ -279,7 +283,7 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
         for row in rows:
             if not isinstance(row, dict) or set(row) != {"path", "bytes", "sha256"} or file_receipt(workspace, row["path"]) != row:
                 raise ReceiptError("hosted_receipt_artifact_changed")
-    if sorted(row["path"] for row in proof["inputs"]) != sorted(request_inputs(request)):
+    if sorted(row["path"] for row in proof["inputs"]) != sorted(request_inputs(request, workspace)):
         raise ReceiptError("hosted_receipt_input_binding_invalid")
     if sorted(response.get("artifacts", [])) != sorted(row["path"] for row in proof["artifacts"]):
         raise ReceiptError("hosted_receipt_artifact_binding_invalid")

@@ -1,7 +1,6 @@
 """Review regressions for MR job observations and single-execution ownership."""
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import shutil
@@ -59,21 +58,14 @@ def test_each_shipped_deployment_input_is_bound_to_current_evidence(tmp_path, mo
     assert audit_receipt.current_evidence(tmp_path / "agent", adapter / "evimed_specialist_adapter") != before
 
 
-def test_adapter_engines_share_the_adapter_evidence_rule_and_meta_keeps_the_legacy_one(tmp_path, monkeypatch):
+def test_adapter_engines_and_meta_use_their_actual_producer_evidence_rule(tmp_path, monkeypatch):
     setup_audit(tmp_path, monkeypatch)
     import hosted_receipts
     from evimed_specialist_adapter import audit_receipt
     adapter_package = AUDIT.parents[1] / "deploy/specialist-adapter/evimed_specialist_adapter"
     assert hosted_receipts.current_evidence("peer_review") == audit_receipt.current_evidence(
         AUDIT.parents[2] / "项目代码/论文审稿", adapter_package)
-    location = AUDIT.parents[1] / "runtime/mcp/evimed-research/execution_evidence.py"
-    spec = importlib.util.spec_from_file_location("legacy_execution_for_test", location)
-    legacy = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(legacy)
-    adapter = AUDIT.parents[1] / "deploy/specialist-adapter"
-    expected = {"executionEvidence": legacy.execution_evidence(AUDIT.parents[2] / "项目代码/meta",
-        adapter / "evimed_specialist_adapter/service.py"), "adapterEvidence": legacy.source_tree_evidence(adapter)}
-    assert hosted_receipts.current_evidence("meta_analysis") == expected
+    assert hosted_receipts.current_evidence("meta_analysis") == hosted_receipts.meta_observation().current_evidence()
 
 
 
