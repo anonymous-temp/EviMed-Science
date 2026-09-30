@@ -206,8 +206,18 @@ export function GeoLineChart({
             const x = count <= 1 ? 50 : (index / (count - 1)) * 100;
             const edge = pointLabels || count <= 1 ? "-translate-x-1/2"
               : index === 0 ? "translate-x-0" : index === count - 1 ? "-translate-x-full" : "-translate-x-1/2";
+            const neighbours = [...shown].filter((other) => other !== index);
+            const gap = neighbours.length
+              ? Math.min(...neighbours.map((other) => Math.abs(other - index))) / Math.max(1, count - 1) * 100
+              : 100;
+            const edgeAligned = !pointLabels && count > 1 && (index === 0 || index === count - 1);
             return (
-              <span key={`label-${index}`} className={cn("absolute whitespace-nowrap text-meta text-text-3", edge)} style={{ left: `${x}%` }}>
+              <span
+                key={`label-${index}`}
+                title={label}
+                className={cn("absolute truncate text-meta text-text-3", edge)}
+                style={{ left: `${x}%`, maxWidth: `${edgeAligned ? gap / 2 : gap}%` }}
+              >
                 {label}
               </span>
             );

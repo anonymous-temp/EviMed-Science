@@ -60,6 +60,9 @@ const hostSideOnly = {
  *  written to prove: a documented lever that no service receives is a knob that
  *  does nothing and says nothing. */
 const operatorLevers = {
+  // Both launch paths must install the optional MCP; its private token stays on web.
+  OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED: ["open-science-web"],
   // The way back to server-side repair rounds, off by default since
   // 2026-09-17. A lever that does not arrive leaves an operator believing the

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { BUDGET_BY_PAGE, GEO_TABS, ROUTES, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
+import { BACK_OFFICE, BUDGET_BY_PAGE, GEO_TABS, ROUTES, TYPE_PAIR_NOTICE, measure, pageFindings } from "../../../scripts/ops/ui-walk.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -82,7 +82,7 @@ function measureControls(controls) {
     if (attribute) return attribute[2] === undefined ? attribute[1] in el.attributes : el.attributes[attribute[1]] === attribute[2];
     return el.tag === part;
   };
-  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {}, statusMark = false }) => {
+  const make = ({ tag, text = "", height, width = 120, declaredHeight = "auto", icon = false, style = {}, statusMark = false, chartMark = false, chartRoot = false }) => {
     const el = {
       tag, text, attributes: {}, tagName: tag.toUpperCase(), id: "", style: { ...base, ...style },
       children: [], childNodes: text ? [{ nodeType: 3, textContent: text }] : [],
@@ -92,7 +92,8 @@ function measureControls(controls) {
       matches: (selector) => selector.split(",").some((part) => matchesOne(el, part.trim())),
       querySelector: (selector) => el.children.find((child) => child.matches(selector)) ?? null,
       getAttribute: (name) => el.attributes[name] ?? null,
-      closest: (selector) => (statusMark && selector === "[data-status-mark]" ? el : null),
+      closest: (selector) => selector === "[data-status-mark]" ? (statusMark ? el : null)
+        : selector === "[data-geo-chart][aria-hidden='true']" ? (chartRoot ? el : chartMark ? {} : null) : null,
     };
     if (icon) el.children.push(make({ tag: "svg", height: 16 }));
     if (icon) el.children[0].attributes["aria-hidden"] = "true";
@@ -114,7 +115,7 @@ function measureControls(controls) {
     CSS: { escape: (value) => value },
   });
   try {
-    return measure([[], []]);
+    return measure([[], BACK_OFFICE.map(re => [re.source, re.flags])]);
   } finally {
     Object.assign(globalThis, saved);
   }
@@ -199,6 +200,7 @@ function context() {
   };
   const newPage = async () => {
     let url = "";
+    let routeSettled = false;
     const failed = [];
     // FAKE_CHAT=network-changed: the chat page drops its requests with
     // ERR_NETWORK_CHANGED and shows 打开超时 until 重试 is pressed;
@@ -209,16 +211,20 @@ function context() {
     return {
       on(event, handler) { if (event === "requestfailed") failed.push(handler); }, off() {},
       async setViewportSize() {}, async route() {}, async close() {}, async screenshot() {}, async waitForTimeout() {},
+      async waitForFunction() {
+        if (process.env.FAKE_SLOW_ROUTE === "never" && new URL(url).pathname === "/app/account") throw Error("route still loading after 30000ms");
+        routeSettled = true;
+      },
       frames: () => [{ url: () => "https://evimed.example.org/__evimed/f/x", evaluate: async () => ({ composer: !chatFailing(), stats: [] }) }],
       getByRole: (role, { name }) => ({ count: async () => (chatFailing() && role === "button" && name === "重试" ? 1 : 0), first: () => ({ click: async () => { retried = true; log({ click: name }); } }) }),
       async goto(target) {
-        url = target; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href);
+        url = target; routeSettled = false; log({ goto: target }); await fire(new URL("/api/commands/start_runtime", target).href);
         if (chatMode && target.endsWith("/app/chat")) for (const handler of failed) handler({ failure: () => ({ errorText: "net::ERR_NETWORK_CHANGED" }) });
       },
       async evaluate(fn) {
         if (url.endsWith("/app/chat") && typeof fn === "function" && String(fn).includes("document.body.innerText")) return chatFailing() ? "打开超时，请重试\n重试" : "";
         if (typeof fn === "function" && fn.name === "measure") {
-          return { title: "页面 · EviMed", controlKinds: 3, colorKinds: 3, borderKinds: 1, sizeWeightPairs: ["12px/400", "13px/400", "14px/400", "14px/500", "24px/600"],
+          return { title: (process.env.FAKE_SLOW_ROUTE && !routeSettled && new URL(url).pathname === "/app/account") || process.env.FAKE_MISSING_TITLE ? "" : "页面 · EviMed", controlKinds: 3, colorKinds: 3, borderKinds: 1, sizeWeightPairs: ["12px/400", "13px/400", "14px/400", "14px/500", "24px/600"],
             pageLefts: [240], rowTitleLefts: [], subtitle: [], backOfficeHits: [], leakHits: [], unnamedControls: [], overflowX: false, smallTargets: 0, decorativeSvgs: 0 };
         }
         return { english: false, sidebar: true, text: "" };
@@ -309,4 +315,31 @@ test("a chat page that still fails after the one retry fails the walk", async ()
   const { code, report } = await walk({ OPEN_SCIENCE_WALK_CHAT: "1", FAKE_CHAT: "broken" });
   assert.equal(code, 1);
   assert.ok(report.failures.some((failure) => /chat@desktop: the conversation frame did not load \(打开超时/.test(failure)), report.failures.join("\n"));
+});
+
+
+test("medical acronyms remain prose while actual internal source labels are still detected", () => {
+  const prose = measureControls([{ tag: "p", height: 24, text: "FDA 警告涉及 cGMP、原料药（API）及掺假问题；血压（BP）正常。" }]);
+  assert.deepEqual(prose.backOfficeHits, []);
+  const internal = measureControls([{ tag: "p", height: 24, text: "检索来源 openFDA 药品召回；缓存命中。" }]);
+  assert.equal(internal.backOfficeHits.length, 2);
+});
+
+test("CSS chart marks are drawing strokes while chart frames and ordinary borders still count", () => {
+  const stroke = (color, flags) => ({ tag: "span", height: 12, width: 12, ...flags,
+    style: { borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: color } });
+  const measured = measureControls([stroke("red", { chartMark: true }), stroke("blue", { chartMark: true }),
+    stroke("grey", { chartRoot: true }), stroke("black", {})]);
+  assert.equal(measured.borderKinds, 2);
+});
+
+test("a slow route is measured after it settles, and an unresolved route or missing title still fails", async () => {
+  const ready = await walk({ FAKE_SLOW_ROUTE: "ready" });
+  assert.equal(ready.code, 0, ready.stdout + ready.stderr);
+  const pending = await walk({ FAKE_SLOW_ROUTE: "never" });
+  assert.equal(pending.code, 1);
+  assert.ok(pending.report.failures.some(line => line.includes("account@phone: did not load")));
+  const missing = await walk({ FAKE_MISSING_TITLE: "1" });
+  assert.equal(missing.code, 1);
+  assert.ok(missing.report.failures.some(line => line.includes("the page has no title of its own")));
 });

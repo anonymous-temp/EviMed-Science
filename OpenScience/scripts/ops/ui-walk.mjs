@@ -119,9 +119,9 @@ const LEAKS = [
  * item 8). A closed list of the product's own phrases, not a pattern over
  * open prose: each is something this code base used to print.
  */
-const BACK_OFFICE = [
+export const BACK_OFFICE = [
   /已交付/, /核对\s*\d+\s*条/, /已核对\s*\d+\s*[\/／]/, /用过\s*\d+\s*次/, /\d+月\d+日\s*起生效/, /缓存命中/, /tok\/s/,
-  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /（[^）]*\bAPI）/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
+  /\b\d[\d,.]*[KMk]?\s*tok(en)?s?\b/, /openFDA (药品召回|Drugs@FDA|器械)/, /理解遗漏/, /处理第\s*\d+\s*代/, /Unexpected Application Error/, /dynamically imported module/,
 ];
 
 /**
@@ -290,7 +290,12 @@ export function measure([leakSources, backOfficeSources]) {
   // A status ring drawn by code — a progress-rail step, a next-step dot — is
   // a mark, not a stroke (spec §7.2: 「焦点环和进度轨的状态环不是描边」); the
   // component says so with `data-status-mark`, and its ring is not a border.
-  for (const el of all.filter((node) => !node.closest("[data-status-mark]"))) {
+  // CSS dots/axes inside the existing chart drawing have the same role as
+  // SVG strokes. Keep the drawing root's frame in the chrome inventory.
+  for (const el of all.filter((node) => {
+    const chart = node.closest("[data-geo-chart][aria-hidden='true']");
+    return !node.closest("[data-status-mark]") && (!chart || chart === node);
+  })) {
     const cs = getComputedStyle(el);
     const sides = ["Top", "Right", "Bottom", "Left"].filter((side) => parseFloat(cs[`border${side}Width`]) > 0
       && cs[`border${side}Style`] !== "none" && cs[`border${side}Color`] !== "rgba(0, 0, 0, 0)");
@@ -392,6 +397,17 @@ export function measure([leakSources, backOfficeSources]) {
   };
 }
 
+/** A lazy route is ready only after the shell and its routed content mount. */
+export function routeReady() {
+  const routeMain = document.querySelector("main");
+  if (!routeMain || routeMain.getBoundingClientRect().width === 0) return false;
+  return ![...routeMain.querySelectorAll('[role="status"]')].some((node) => {
+    const rect = node.getBoundingClientRect();
+    return node.textContent?.trim() === "正在载入" && rect.width > 0 && rect.height > 0
+      && getComputedStyle(node).visibility !== "hidden";
+  });
+}
+
 async function main() {
   const base = required("OPEN_SCIENCE_WALK_BASE_URL").replace(/\/+$/, "");
   const username = required("OPEN_SCIENCE_WALK_USER");
@@ -460,6 +476,7 @@ async function main() {
       await probe.setViewportSize(VIEWPORTS[0][1]);
       try {
         await probe.goto(`${base}/app/capabilities`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+        await probe.waitForFunction(routeReady, undefined, { timeout: 30_000 });
         await probe.waitForTimeout(3_000);
         await probe.route(/\/assets\/InboxPage-[^/]+\.js$/, (route) => route.fulfill({ status: 404, contentType: "text/plain", body: "" }));
         await probe.evaluate(() => {
@@ -488,6 +505,7 @@ async function main() {
         current = `${name}@${viewportName}`;
         try {
           await page.goto(`${base}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+          await page.waitForFunction(routeReady, undefined, { timeout: 30_000 });
           await page.waitForTimeout(3_000);
           await page.screenshot({ path: path.join(out, `${current}.png`) });
           const measured = await page.evaluate(measure, [leaks.map((re) => [re.source, re.flags]), BACK_OFFICE.map((re) => [re.source, re.flags])]);
