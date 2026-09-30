@@ -120,7 +120,14 @@ test("the deadline covers the body as well as the headers: an answer that stalls
     fetchImpl: async (/** @type {any} */ _url, /** @type {any} */ init) => new Response(new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode('{"jobId":'));
-        init.signal.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
+        // A real socket keeps the event loop alive while it waits; the client's deadline timer
+        // is unref'd on purpose, and Node 22's test runner cancels a test that has nothing
+        // else pending. Hold the loop until the deadline aborts the read.
+        const hold = setTimeout(() => {}, 60_000);
+        init.signal.addEventListener("abort", () => {
+          clearTimeout(hold);
+          controller.error(new DOMException("aborted", "AbortError"));
+        });
       },
     }), { status: 200 }),
   });

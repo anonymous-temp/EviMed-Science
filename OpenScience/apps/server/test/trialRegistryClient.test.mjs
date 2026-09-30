@@ -29,8 +29,15 @@ function upstream(script) {
     seen.push(String(url));
     const answer = await script(String(url), init);
     if (answer.abort) {
+      // A real socket keeps the event loop alive while it waits. This stand-in has to as
+      // well: the client's deadline timer is unref'd on purpose, and Node 22's test runner
+      // cancels a test whose only pending work is an unref'd timer.
       return new Promise((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+        const hold = setTimeout(() => {}, 60_000);
+        init?.signal?.addEventListener("abort", () => {
+          clearTimeout(hold);
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
       });
     }
     return new Response(answer.raw ?? JSON.stringify(answer.body ?? {}), {
