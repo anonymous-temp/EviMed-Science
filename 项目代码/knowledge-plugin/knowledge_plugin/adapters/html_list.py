@@ -172,7 +172,8 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
     link_prefix = config.get("link_base") or base
     entries: list[NormalizedEntry] = []
     seen: set[str] = set()
-    dropped = {"title": 0, "link": 0, "host": 0}
+    dropped = {"title": 0, "link": 0, "host": 0, "id": 0}
+    page_links = 0
     for item in raw_items:
         title = clean_markup(item.get("title"))
         if len(title) < min_title:
@@ -180,6 +181,16 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             continue
         link = absolute_url(item.get("link"), link_prefix)
         derived = False
+        source_page_link = config.get("link_to_source_page") is True
+        row_id = clean_markup(item.get("id"))
+        if source_page_link:
+            # Some regulator tables publish stable records without detail URLs.
+            # Link to the real fetched page and retain each row's own identity.
+            if not row_id:
+                dropped["id"] += 1
+                continue
+            link = absolute_url(base, base)
+            derived = True
         if not link and config.get("link_template"):
             link = absolute_url(_fill(config["link_template"], item, encode=True), link_prefix)
             derived = bool(link)
@@ -194,7 +205,8 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
         if allowed and not host_allowed(link, allowed):
             dropped["host"] += 1
             continue
-        key = link if derived else str(item.get("id") or link)  # a template names what tells rows apart
+        key = f"{base}::{row_id}" if source_page_link else (
+            link if derived else str(item.get("id") or link))
         if key in seen:
             continue
         seen.add(key)
@@ -217,9 +229,13 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             defects=["link-derived"] if derived else [],
             feed_summary=True,
         ))
+        if source_page_link:
+            page_links += 1
         if len(entries) >= int(config.get("max_items") or DEFAULT_MAX_ITEMS):
             break
     notes = [f"html_list_dropped_{reason}={count}" for reason, count in dropped.items() if count]
+    if page_links:
+        notes.append(f"html_list_source_page_links={page_links}")
     if not raw_items:
         notes.append("html_list_no_items")
     elif entries and all(e.published_at is None for e in entries) and (config.get("selectors") or config.get("fields") or {}).get("date"):
@@ -253,8 +269,11 @@ class HtmlListAdapter:
                     problems.append(f"script-json needs fields.{key}")
         else:
             selectors = config.get("selectors") or {}
+            source_page_link = config.get("link_to_source_page") is True
+            if source_page_link and not selectors.get("id"):
+                problems.append("link_to_source_page requires selectors.id for stable record identity")
             for key in ("item", "title", "link"):
-                if not selectors.get(key) and not (key == "link" and config.get("link_template")):
+                if not selectors.get(key) and not (key == "link" and (config.get("link_template") or source_page_link)):
                     problems.append(f"selectors.{key} missing")
             if config.get("link_template") and "{" not in str(config["link_template"]):
                 problems.append("link_template names no {id}/{date}/{title}/{summary}: every row would share one link")

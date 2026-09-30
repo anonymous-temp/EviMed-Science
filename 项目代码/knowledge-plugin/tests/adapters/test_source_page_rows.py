@@ -41,7 +41,8 @@ def test_regulatory_table_records_keep_real_page_link_and_distinct_stable_keys()
     assert output.entries[0].title == 'Atebrioz'
     assert output.entries[0].published_at == datetime(2026, 9, 25, tzinfo=timezone.utc)
     assert 'heterotopic ossification' in output.entries[0].summary
-    assert 'source-page-link' in output.entries[0].defects
+    assert 'link-derived' in output.entries[0].defects
+    assert 'html_list_source_page_links=44' in output.notes
 
 
 def test_source_page_link_requires_actual_row_identity_and_an_allowed_public_page():
