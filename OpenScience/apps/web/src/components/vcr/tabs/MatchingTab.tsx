@@ -3,12 +3,15 @@ import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } f
 import {
   contactVcrReferral,
   getVcrMatching,
+  getVcrReferrals,
   recordVcrDecision,
+  reviewVcrAssessment,
   transitionVcrReferral,
   type VcrCandidate,
   type VcrCriterionJudgement,
   type VcrCriterionState,
   type VcrMatchingTab as MatchingData,
+  type VcrReferral,
   type VcrStudy,
 } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -21,6 +24,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DataTable } from "@/components/ui/DataTable";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tag } from "@/components/ui/Tag";
+import { VcrJudgmentDrawer } from "../VcrJudgmentDrawer";
 import { VcrCountsBand } from "../VcrCounts";
 import { VcrForecastChart } from "../VcrCharts";
 import { VcrFunnelBar } from "../VcrDiagrams";
@@ -80,6 +84,14 @@ const STATE_ICON: Record<VcrCriterionState, typeof CircleCheck> = {
  *    taken in says so instead of offering a button that would be refused.
  *  - Picking a candidate re-reads the tab for that person (`?candidate=`), and
  *    the page keeps the rest of the tab on screen while it does.
+ *  - **改判 and 复核 are a person's hand, addressed by the page contract.** The
+ *    panel names the assessment it is about (`selected.assessmentId`) and each
+ *    rule names itself (`criterionId`); with either missing neither control is
+ *    offered, because an address that is guessed lands a judgment on the wrong
+ *    assessment. The platform's answer stays beside the person's.
+ *  - **The ledger is read from its own route.** The counts above it are the
+ *    presenter's; the rows — each person, their state, who confirmed the contact —
+ *    are `GET …/referrals`, read only by an account the route would answer.
  *  - When the recruiting side is not composed on this deployment the payload
  *    says so (`available: false`), and that sentence is all the tab shows.
  */
@@ -143,7 +155,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
           onDone={reload}
         />
       )}
-      {view === "referral" && <ReferralView data={data} />}
+      {view === "referral" && <ReferralView studyId={studyId} data={data} abilities={study.abilities} />}
       {view === "sites" && <SitesView data={data} />}
       {view === "followup" && <FollowupView data={data} />}
       <VcrCountsBand counts={data.counts} />
@@ -175,7 +187,8 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   onDone: () => void;
 }) {
   const [confirming, setConfirming] = useState<{ subject: string; referralId: string } | null>(null);
-  const [busy, setBusy] = useState<"contact" | "evidence" | null>(null);
+  const [judging, setJudging] = useState<VcrCriterionJudgement | null>(null);
+  const [busy, setBusy] = useState<"contact" | "evidence" | "review" | null>(null);
   const selected = data.selected;
   const current = picked ?? selected?.candidate.id ?? null;
   const needs = selected ? evidenceNeeds(selected.criteria) : [];
@@ -190,15 +203,29 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
   // record when there is none yet (`write`) — the two routes the server has.
   const mayMoveLedger = abilities.includes("write_referrals") || abilities.includes("contact_patients");
   const evidenceAsked = referralState === "needs_evidence";
+  // A person's hand on an assessment (plan §7.5): a coordinator or clinician re-judges a rule, a
+  // reviewer countersigns. Both are addressed to the assessment the panel shows, so a panel that
+  // does not name it offers neither — an address is never guessed.
+  const assessmentId = selected?.assessmentId ?? null;
+  const mayJudge = Boolean(assessmentId)
+    && (abilities.includes("write_referrals") || abilities.includes("review_clinical") || abilities.includes("review_any"));
+  const mayReview = Boolean(assessmentId) && (abilities.includes("review_clinical") || abilities.includes("review_any")) && !selected?.reviewedBy;
   const mayAskEvidence = needs.length > 0 && !evidenceAsked && (referralId
     ? mayMoveLedger && (referralState === "candidate" || referralState === "contactable" || referralState === "contacted")
     : abilities.includes("write"));
 
   /** One write at a time (CW-18): every control that writes is disabled while one is in flight. */
-  const once = (key: "contact" | "evidence", work: () => Promise<unknown>) => {
+  const once = (key: "contact" | "evidence" | "review", work: () => Promise<unknown>) => {
     if (busy !== null) return;
     setBusy(key);
     void work().finally(() => setBusy(null));
+  };
+
+  const review = () => {
+    if (!assessmentId || busy !== null) return;
+    once("review", () => reviewVcrAssessment(studyId, assessmentId)
+      .then(() => { toast.success("已记录复核。"); onDone(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "复核暂时无法记录，请稍后重试。" }))));
   };
 
   const contact = () => {
@@ -351,6 +378,15 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                     </span>
                   ) : <span className="text-text-3">—</span>,
                 },
+                ...(mayJudge ? [{
+                  key: "judge",
+                  header: "改判",
+                  width: "w-20",
+                  isEmpty: (row: VcrCriterionJudgement) => !row.criterionId,
+                  cell: (row: VcrCriterionJudgement) => row.criterionId ? (
+                    <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => setJudging(row)}>改判</Button>
+                  ) : null,
+                }] : []),
               ]}
               rows={selected.criteria}
               rowKey={(row) => row.code}
@@ -384,6 +420,10 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
                   {selected.verdict.note && <span className="text-text-3">{selected.verdict.note}</span>}
                 </p>
               )}
+              {mayReview && (
+                <Button variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
+              )}
+              {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedBy}`}</Tag></span>}
               <Button
                 variant="secondary"
                 loading={busy === "evidence"}
@@ -407,6 +447,16 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
           </Card>
         )}
       </div>
+
+      {judging && assessmentId && judging.criterionId && (
+        <VcrJudgmentDrawer
+          studyId={studyId}
+          assessmentId={assessmentId}
+          criterion={{ ...judging, criterionId: judging.criterionId }}
+          onClose={() => setJudging(null)}
+          onSaved={onDone}
+        />
+      )}
 
       {confirming && (
         <ConfirmDialog
@@ -472,12 +522,60 @@ function CriterionState({ row }: { row: VcrCriterionJudgement }) {
     >
       <Icon size={16} aria-hidden="true" />
       {criterionStateLabel(row.state)}
+      {/* The state shown is a person's: the platform's own answer is kept beside it. */}
+      {row.overridden && <span data-vcr-overridden=""><Tag>人工改判</Tag></span>}
     </span>
   );
 }
 
-function ReferralView({ data }: { data: MatchingData }) {
+/**
+ * The ledger itself: one row per person the platform has taken in, at the state
+ * it holds them in, and who confirmed the contact. The counts above it are the
+ * same ledger summed; this is what they add up.
+ */
+function ReferralLedger({ studyId, sites }: { studyId: string; sites: NonNullable<MatchingData["sites"]> }) {
+  const { state, reload } = useVcrLoad(`${studyId}:referrals`, () => getVcrReferrals(studyId));
+  if (state.kind === "loading") return <VcrTabSkeleton rows={3} />;
+  if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
+  const referrals: VcrReferral[] = state.data;
+  if (referrals.length === 0) return null;
+  const siteName = (id: string | null) => (id ? sites.find((site) => site.id === id)?.name ?? null : null);
+  return (
+    <VcrSection title="转诊台账" meta={`${referrals.length} 人`}>
+      <DataTable
+        label="转诊台账"
+        minWidth="min-w-[40rem]"
+        columns={[
+          { key: "subject", header: "受试者", rowHeader: true, cell: (row) => <span className="tabular-nums text-text">{row.subjectKey}</span> },
+          { key: "state", header: "状态", cell: (row) => <Tag>{referralStateLabel(row.state)}</Tag> },
+          { key: "site", header: "中心", isEmpty: (row) => !siteName(row.siteId), cell: (row) => siteName(row.siteId) ?? "—" },
+          {
+            key: "approved",
+            header: "联系确认",
+            isEmpty: (row) => !row.contactApprovedBy,
+            cell: (row) => row.contactApprovedBy
+              ? <span className="block">{row.contactApprovedBy}{row.contactApprovedAt && <span className="block text-caption text-text-3">{row.contactApprovedAt.slice(0, 10)}</span>}</span>
+              : <span className="text-text-3">—</span>,
+          },
+          {
+            key: "note",
+            header: "备注",
+            isEmpty: (row) => !row.screenFailReason && !row.enrolledOn,
+            cell: (row) => row.screenFailReason ?? (row.enrolledOn ? `入组 ${row.enrolledOn.slice(0, 10)}` : "—"),
+          },
+        ]}
+        rows={referrals}
+        rowKey={(row) => row.id}
+        rowAttrs={(row) => ({ "data-vcr-referral": row.id, "data-vcr-referral-row-state": row.state })}
+      />
+    </VcrSection>
+  );
+}
+
+function ReferralView({ studyId, data, abilities }: { studyId: string; data: MatchingData; abilities: readonly string[] }) {
   const forecast = data.forecast;
+  // The ledger is read by whoever may read referrals: the study's readers, and a site (its own only).
+  const readsLedger = abilities.includes("read") || abilities.includes("read_referrals");
   // The band's own level, from the forecast's own rows: 「80% 预测区间」 is
   // written only when the data says 80.
   const level = forecast?.rows?.map((row) => row.value.interval).find((interval) => interval?.kind === "prediction")?.level ?? null;
@@ -500,6 +598,8 @@ function ReferralView({ data }: { data: MatchingData }) {
           </ol>
         </VcrSection>
       )}
+
+      {readsLedger && (data.ledger ?? []).length > 0 && <ReferralLedger studyId={studyId} sites={data.sites ?? []} />}
 
       {forecast && (
         <div className={cn("grid gap-4", drawable && "xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>

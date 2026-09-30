@@ -3,6 +3,7 @@ import {
   cancelVcrJob, confirmVcrBudget, contactVcrReferral, exportVcrStudy, getVcrComparator, getVcrData, getVcrHome, getVcrMatching, getVcrModels,
   getVcrPatients, getVcrPopulation, getVcrPrecedents, getVcrStudy, getVcrTrial, patchVcrStudy, readVcrCounts, readVcrValue, recordVcrDecision,
   saveVcrAssumption, signVcrReview, getVcrMembers, readVcrMembers, removeVcrMember, setVcrMembers, transitionVcrReferral,
+  adoptVcrModel, getVcrReferrals, overrideVcrJudgment, readVcrReferrals, reviewVcrAssessment,
   readVcrComparator, readVcrData, readVcrHome, readVcrMatching, readVcrModels, readVcrPatients, readVcrPopulation, readVcrStudy, readVcrTrial,
 } from "./vcrClient";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
@@ -209,6 +210,28 @@ describe("members and the referral ledger", () => {
     await transitionVcrReferral(STUDY_ID, "ref_seed_1", { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
     expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals/ref_seed_1/transition`, "POST",
       { to: "needs_evidence", note: "E1 申请近 4 周头颅 MRI" });
+  });
+
+  it("reads the ledger's rows as the route answers them, and drops a row with no id", async () => {
+    const referrals = await getVcrReferrals(STUDY_ID);
+    expect(referrals.map((row) => [row.id, row.subjectKey, row.state, row.assessmentId])).toEqual([
+      ["ref_seed_1", "P-0192", "contactable", "asm_P-0192"], ["ref_seed_2", "P-0201", "contacted", "asm_P-0201"],
+      ["ref_seed_3", "P-0177", "needs_evidence", "asm_P-0177"], ["ref_seed_4", "P-0150", "enrolled", "asm_P-0150"],
+    ]);
+    expect(referrals[1].contactApprovedBy).toBe("coordinator-1");
+    expect(readVcrReferrals(null)).toEqual([]);
+    expect(readVcrReferrals({ referrals: [{ subjectKey: "x" }, "no", { id: "r", subjectKey: "y" }] }).map((row) => row.id)).toEqual(["r"]);
+    await getVcrReferrals(STUDY_ID, { state: "contactable" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/referrals?state=contactable`);
+  });
+
+  it("re-judges one rule and countersigns one assessment by the ids in the path, and adopts a model through the library route", async () => {
+    await overrideVcrJudgment(STUDY_ID, "asm_1", "crt/2", { state: "not_satisfied", note: " 依据 " });
+    await reviewVcrAssessment(STUDY_ID, "asm_1");
+    await adoptVcrModel({ name: "m", sources: ["NCT02296125"] });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assessments/asm_1/judgments/crt%2F2/override`, "POST", { state: "not_satisfied", note: "依据" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assessments/asm_1/review`, "POST", {});
+    expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", { name: "m", sources: ["NCT02296125"] });
   });
 
   it("puts the composer's 起点 in the settings body, and still no budget", async () => {

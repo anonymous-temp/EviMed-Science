@@ -64,6 +64,9 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         const set = id === EMPTY_STUDY_ID ? "empty" : "ev201";
         if (!section) return fixture(`${set}/study.json`);
         if (section === "export") return fixture("ev201/export.json");
+        // The ledger route answers the store's own rows (`referralOf` in `vcrMatchStore.mjs`), not a presented page:
+        // one per person the referral counts of `matching-referral.json` add up to.
+        if (section === "referrals") return referralsAnswer();
         if (section === "matching" && set === "ev201") {
           const view = query.get("view");
           // Two subjects have a page of their own: P-0201 (eligible, already contacted) and P-0192 (a referral waiting on a coordinator).
@@ -81,4 +84,20 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
     return {};
   });
   return { calls };
+}
+
+/** The referral ledger as `GET …/referrals` answers it: the four persons the fixture's counts name. */
+export function referralsAnswer() {
+  const row = (id: string, subjectKey: string, state: string, extra: Record<string, unknown> = {}) => ({
+    id, studyId: STUDY_ID, assessmentId: `asm_${subjectKey}`, siteId: "ste_01", subjectKey, state, contactApprovedBy: null, contactApprovedAt: null,
+    screenFailCriterionId: null, screenFailReason: null, enrolledOn: null, createdAt: "2026-09-20T08:00:00.000Z", updatedAt: "2026-09-25T08:00:00.000Z", ...extra,
+  });
+  return {
+    referrals: [
+      row("ref_seed_1", "P-0192", "contactable"),
+      row("ref_seed_2", "P-0201", "contacted", { contactApprovedBy: "coordinator-1", contactApprovedAt: "2026-09-26T09:30:00.000Z" }),
+      row("ref_seed_3", "P-0177", "needs_evidence"),
+      row("ref_seed_4", "P-0150", "enrolled", { enrolledOn: "2026-09-18T00:00:00.000Z" }),
+    ],
+  };
 }

@@ -4,11 +4,13 @@ import { CircleCheck } from "lucide-react";
 import { VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_TWIN_LABELS_ZH } from "@evimed/domain";
 import { getVcrModels, type VcrModelCard, type VcrModelTier } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { Tag } from "@/components/ui/Tag";
 import { useVcrLoad, VcrFacts, VcrSection, VcrTabError } from "./vcrTabKit";
+import { VcrModelAdoptDialog } from "./VcrModelAdoptDialog";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { intendedUseLabel, modelRiskLabel, modelTierLabel, numberText } from "./vcrText";
 import { vcrTabPath } from "./vcrTabs";
@@ -45,6 +47,7 @@ const VALIDATION_WORD = { passed: "通过", partial: "部分", none: "无" } as 
 export function VcrModelsPanel() {
   const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [adopting, setAdopting] = useState(false);
   const { state, reload } = useVcrLoad("vcr:models", () => getVcrModels());
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") {
@@ -65,6 +68,10 @@ export function VcrModelsPanel() {
             {`计算引擎与方法目录不一致：${data.engineMismatch.join("；")}`}
           </p>
         )}
+
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={() => setAdopting(true)}>采纳文献模型</Button>
+        </div>
 
         <FilterChips
           label="模型与方法"
@@ -166,6 +173,7 @@ export function VcrModelsPanel() {
       </div>
 
       {selected && <ModelDetail model={selected} />}
+      {adopting && <VcrModelAdoptDialog onClose={() => setAdopting(false)} onSaved={reload} />}
     </div>
   );
 }

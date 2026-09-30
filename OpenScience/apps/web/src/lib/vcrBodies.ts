@@ -126,6 +126,29 @@ export interface VcrTransitionBody {
   enrolledOn?: string;
 }
 
+/**
+ * A model taken into the account's library (`POST /api/vcr/models`): a
+ * prediction model a published trial fitted, always a literature-tier model.
+ * Its applicability is written by the server from the trials it names — the
+ * page never states a population nobody fitted the model on.
+ */
+export interface VcrModelBody {
+  /** A model taken from a study is written into that study's library by someone who may write there. */
+  studyId?: string;
+  name: string;
+  version?: string;
+  risk?: "none" | "low" | "medium" | "high";
+  endpointType?: "continuous" | "binary" | "time_to_event";
+  /** The trials the model was fitted on, one label each. */
+  sources?: string[];
+}
+
+/** A person's re-judgment of one criterion; the platform's own answer is kept beside it. */
+export interface VcrJudgmentBody {
+  state: "satisfied" | "not_satisfied" | "unknown" | "pending_recheck";
+  note?: string;
+}
+
 /** Drop the keys nobody set, so the body is exactly what was said. */
 function said<T extends Record<string, unknown>>(entries: T): Partial<T> {
   const body: Record<string, unknown> = {};
@@ -198,4 +221,21 @@ export function transitionBody(input: VcrTransitionBody) {
     to: input.to, note: input.note, siteId: input.siteId, screenFailCriterionId: input.screenFailCriterionId,
     screenFailReason: input.screenFailReason, enrolledOn: input.enrolledOn,
   });
+}
+
+export function modelBody(input: VcrModelBody) {
+  const sources = (input.sources ?? []).map((source) => source.trim()).filter(Boolean);
+  return said({
+    studyId: input.studyId, name: input.name.trim(), version: input.version?.trim() || undefined, risk: input.risk, endpointType: input.endpointType,
+    sources: sources.length > 0 ? sources : undefined,
+  });
+}
+
+export function judgmentBody(input: VcrJudgmentBody) {
+  return said({ state: input.state, note: input.note?.trim() || undefined });
+}
+
+/** A countersignature on an assessment carries nothing but the assessment named in the path. */
+export function assessmentReviewBody() {
+  return {};
 }

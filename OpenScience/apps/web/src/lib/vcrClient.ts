@@ -37,15 +37,15 @@ import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
 import {
-  assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, memberBody, reviewBody, runBody,
-  studyCreateBody, studyPatchBody, transitionBody,
+  assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, judgmentBody, memberBody,
+  modelBody, reviewBody, runBody, studyCreateBody, studyPatchBody, transitionBody,
   type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrJobBody,
-  type VcrMemberBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
+  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
-  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrJobBody, VcrMemberBody, VcrPatchBody, VcrReviewBody,
-  VcrTransitionBody,
+  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
+  VcrPatchBody, VcrReviewBody, VcrTransitionBody,
 } from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -740,6 +740,11 @@ export interface VcrCandidate {
 
 /** One rule judged against one candidate. */
 export interface VcrCriterionJudgement {
+  /**
+   * The criterion's own id: what a re-judgment is addressed to (the `code` is a
+   * label the page derives from position). Absent, the row cannot be re-judged.
+   */
+  criterionId?: string | null;
   code: string;
   kind: "inclusion" | "exclusion";
   text: string;
@@ -770,6 +775,11 @@ export interface VcrMatchingTab {
   /** The candidate the detail panel is about. */
   selected: {
     candidate: VcrCandidate;
+    /**
+     * The assessment this panel is about — the newest of the person's. What a
+     * re-judgment and a countersignature are addressed to; absent, neither is offered.
+     */
+    assessmentId?: string | null;
     facts?: Array<{ label: string; value: string; tone?: "attention" | "neutral" }>;
     criteria: VcrCriterionJudgement[];
     /** 「不能判为符合：排除标准 E3 未知」 — always the reason, never a bare no. */
@@ -1452,6 +1462,11 @@ export async function getVcrModels(): Promise<VcrModels> {
   return readVcrModels(await productRequest<unknown>("/vcr/models"));
 }
 
+/** Take a literature model into the account's library; its tier is set by the server, never by the page. */
+export function adoptVcrModel(input: VcrModelBody) {
+  return productRequest<{ id: string; name?: string }>("/vcr/models", "POST", modelBody(input));
+}
+
 /** The precedent library: `q` is the server's own query word. */
 export async function getVcrPrecedents(query: { q?: string; limit?: number } = {}): Promise<VcrPrecedents> {
   const search = new URLSearchParams();
@@ -1518,6 +1533,57 @@ export function contactVcrReferral(studyId: string, referralId: string, input: V
 export function transitionVcrReferral(studyId: string, referralId: string, input: VcrTransitionBody) {
   return productRequest<{ referral: { id: string; state: VcrReferralState } | null; notices?: string[] }>(
     `${study(studyId)}/referrals/${id(referralId)}/transition`, "POST", transitionBody(input));
+}
+
+/** One row of the referral ledger, as the ledger route answers it. */
+export interface VcrReferral {
+  id: string;
+  subjectKey: string;
+  state: VcrReferralState;
+  siteId: string | null;
+  assessmentId: string | null;
+  /** The account that confirmed the contact, once one did (the first human stop). */
+  contactApprovedBy: string | null;
+  contactApprovedAt: string | null;
+  screenFailReason: string | null;
+  enrolledOn: string | null;
+  updatedAt: string | null;
+}
+
+export function readVcrReferrals(raw: unknown): VcrReferral[] {
+  return arr(obj(raw).referrals).map((entry) => {
+    const row = obj(entry);
+    return {
+      id: String(row.id ?? ""), subjectKey: String(row.subjectKey ?? ""), state: String(row.state ?? "candidate") as VcrReferralState,
+      siteId: text(row.siteId), assessmentId: text(row.assessmentId), contactApprovedBy: text(row.contactApprovedBy),
+      contactApprovedAt: text(row.contactApprovedAt), screenFailReason: text(row.screenFailReason), enrolledOn: text(row.enrolledOn),
+      updatedAt: text(row.updatedAt),
+    };
+  }).filter((row) => row.id !== "");
+}
+
+/**
+ * The referral ledger: every referral the caller may read — a site sees only its
+ * own — one row per person, at the state the ledger holds them in.
+ */
+export async function getVcrReferrals(studyId: string, query: { state?: VcrReferralState } = {}): Promise<VcrReferral[]> {
+  const search = query.state ? `?state=${encodeURIComponent(query.state)}` : "";
+  return readVcrReferrals(await productRequest<unknown>(`${study(studyId)}/referrals${search}`));
+}
+
+/**
+ * A coordinator's or clinician's re-judgment of one criterion. The platform's
+ * own answer stays beside the person's — the pair is the evaluation case — and
+ * a run never does this; only a person, as themselves.
+ */
+export function overrideVcrJudgment(studyId: string, assessmentId: string, criterionId: string, input: VcrJudgmentBody) {
+  return productRequest<unknown>(
+    `${study(studyId)}/assessments/${id(assessmentId)}/judgments/${id(criterionId)}/override`, "POST", judgmentBody(input));
+}
+
+/** A reviewer's countersignature on one assessment: a signature, never a gate. */
+export function reviewVcrAssessment(studyId: string, assessmentId: string) {
+  return productRequest<unknown>(`${study(studyId)}/assessments/${id(assessmentId)}/review`, "POST", assessmentReviewBody());
 }
 
 /** What 「让 AI 做」 and an export answer: the conversation, and the run — or the sentence that it is queued behind another. */
