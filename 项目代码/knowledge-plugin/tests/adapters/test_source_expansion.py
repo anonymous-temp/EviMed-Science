@@ -96,6 +96,10 @@ def test_probe_capture_urls_and_body_hashes_are_safe_and_complete():
 
 
 def test_unaccepted_probes_do_not_become_enabled_by_the_expansion():
+    later = json.loads((ROOT / 'registry/research/source-expansion-2026-09-30.json').read_text())
+    subsequently_verified = {row['id'] for row in later['rows'] if row['decision'] == 'enabled'}
     for record in EVIDENCE:
+        if record['id'] in subsequently_verified:
+            continue  # The later complete-scope replay suite verifies the replacement representation.
         if record['outcome'] not in ('ok', 'readable') or (record['group'] == 'relay-page' and not record.get('enabledAfterProbe')):
             assert not SOURCES[record['id']].enabled

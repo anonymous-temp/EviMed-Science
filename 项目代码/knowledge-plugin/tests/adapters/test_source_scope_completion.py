@@ -1,5 +1,6 @@
 """Every omitted source has protected evidence and a reviewable disposition."""
 from datetime import datetime
+from dataclasses import asdict, replace
 import gzip
 import hashlib
 import json
@@ -48,6 +49,11 @@ def test_admitted_source_replays_real_entries_from_its_protected_capture(record)
         assert entries[0].published_at is None
     if record['id'] == 'fda-novel-drug-approvals':
         assert len({entry.identity_key for entry in prepared}) == 44
+        fixture = json.loads((ROOT / 'tests/fixtures/source-expansion-20260930/normalized-fda-table.json').read_text())
+        projected = json.loads(json.dumps([asdict(entry) for entry in prepared], default=lambda value: value.isoformat()))
+        assert projected == fixture['entries'], 'the PostgreSQL pipeline fixture must come from the actual normalizer'
+        updated = prepare(replace(entries[0], summary=entries[0].summary + ' Updated source metadata for regression.'), row.source)
+        assert json.loads(json.dumps(asdict(updated), default=lambda value: value.isoformat())) == fixture['updated']
 
 
 def test_every_omitted_p1_and_readable_overseas_source_has_a_recorded_disposition():

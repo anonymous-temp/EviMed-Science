@@ -19,6 +19,7 @@ CONFIG = {
     **SOURCE.config,
     'link_to_source_page': True,
     'identity_prefix': 'fda:novel-approvals',
+    'title_template': None,
     'selectors': {
         'item': 'table tbody tr',
         'id': 'td:nth-child(2)',
@@ -81,7 +82,7 @@ def test_canonical_document_monitor_preserves_visible_content_without_executable
         <h1>Conference 2027</h1><p>June 16-19: London and online</p>
         <script>secretTrackingCode()</script><template>Unrendered placeholder</template>
         </main><footer>Unrelated footer</footer></body></html>'''
-    source = replace(SOURCE, config={**SOURCE.config, 'selectors': {
+    source = replace(SOURCE, config={**SOURCE.config, 'link_to_source_page': False, 'title_template': None, 'selectors': {
         'item': 'html', 'title': 'head title', 'link': 'link[rel=canonical]@href', 'summary': 'main',
     }})
     result = FetchResult(RequestSpec(URL), URL, 200, {'content-type': 'text/html'}, body, now)

@@ -184,7 +184,10 @@
  },
  "dailymed-label-updates": {
   "safety_feed": false,
-  "_why": "every SPL update, not safety-specific"
+  "_why": "every SPL update, not safety-specific",
+  "enabled": false,
+  "disabled_reason": "probe_timeout",
+  "_why_disabled_20260930": "Observed protected probe outcome: timeout; timeout."
  },
  "retraction-watch": {
   "source_type": "media",
@@ -217,7 +220,19 @@
  "zgylbx-china-health-insurance": {
   "source_type": "media",
   "authority": 2,
-  "_why": "a magazine, not the agency"
+  "_why": "a magazine, not the agency",
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "ul.txtList1 li",
+    "title": "a.txtList1-m1",
+    "link": "a.txtList1-m1@href",
+    "date": "em"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
  },
  "endpoints-news-ai": {
   "source_type": "media",
@@ -1255,5 +1270,2028 @@
     }
    ]
   }
+ },
+ "aacr-newsroom": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h3:has(a)",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "aaic": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "div.container:has(> h1)"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "aan-annual-meeting": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "aan-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "section.guideline-card",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "aap-policy": {
+  "enabled": false,
+  "disabled_reason": "probe_cloudflare",
+  "_why_disabled_20260930": "Observed protected probe outcome: challenge; cloudflare."
+ },
+ "aasld-liver-meeting": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "aasld-practice-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".content-card--accordion li",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "abbvie-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".wd_newsfeed_releases-teaser .item",
+    "title": ".wd_title a",
+    "link": ".wd_title a@href",
+    "date": ".wd_date",
+    "summary": ".wd_summary"
+   },
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "acc-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "article.carousel-slide",
+    "title": "strong",
+    "link": "a@href"
+   },
+   "link_hosts": [
+    "www.jacc.org",
+    "www.acc.org",
+    "professional.heart.org"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "acc-latest-in-cardiology": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "acr-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a[class*=\"styles_box\"]",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ada-newsroom": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".search-newsroom",
+    "title": "h2 a",
+    "link": "h2 a@href",
+    "date": ".search-newsroom__tags",
+    "summary": ".search-newsroom__description"
+   },
+   "date_regex": "([A-Z][a-z]+ \\d{1,2}, \\d{4})",
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ada-scientific-sessions": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "africa-cdc-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a[href*=\"/news-item/\"]",
+    "title": "h4",
+    "link": "@href",
+    "date": ".card-text"
+   },
+   "date_regex": "(\\d{1,2} [A-Z][a-z]+ \\d{4})",
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ahrq-newsroom": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "tr:has(td.views-field-title)",
+    "title": "td.views-field-title a",
+    "link": "td.views-field-title a@href",
+    "date": "time@datetime"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "akeso-news": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_disallow",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_disallow."
+ },
+ "amgen-newsroom": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "asco-guidelines-podcast": {
+  "enabled": false,
+  "disabled_reason": "probe_timeout",
+  "_why_disabled_20260930": "Observed protected probe outcome: timeout; timeout."
+ },
+ "asco-post": {
+  "enabled": false,
+  "disabled_reason": "probe_content_length_over_cap",
+  "_why_disabled_20260930": "Observed protected probe outcome: too-large; content_length_over_cap."
+ },
+ "ash-annual-meeting": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "p:has(strong a[href*=\"/press-releases/\"])",
+    "title": "strong a",
+    "link": "strong a@href",
+    "date": "."
+   },
+   "date_regex": "([A-Z][a-z]+\\.? \\d{1,2}, \\d{4})"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ats-conference": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   },
+   "allowed_hosts": [
+    "conference.thoracic.org",
+    "site.thoracic.org"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "beckers-hospital-review": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_disallow",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_disallow."
+ },
+ "beone-medicines-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.card-box[href*=\"ir.beonemedicines.com/news/\"]",
+    "title": "h3",
+    "link": "@href",
+    "date": ".eyebrow"
+   },
+   "link_hosts": [
+    "ir.beonemedicines.com"
+   ],
+   "allowed_hosts": [
+    "www.beonemedicines.com",
+    "beonemedicines.com"
+   ],
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "biocentury": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_disallow",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_disallow."
+ },
+ "bioon-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".item-content",
+    "title": "h2 a",
+    "link": "h2 a@href",
+    "date": ".item-meta"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "bms-news": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "bytedance-seed-blog": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "caixin-health": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".txt:has(h3),.boxa:has(h4)",
+    "title": "h3 a,h4 a",
+    "link": "h3 a,h4 a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cdc-han": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": ".dfe-post-col",
+    "title": ".dfe-post-title",
+    "link": "a.dfe-post-link@href",
+    "date": "time"
+   },
+   "date_format": "%b %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cebm-oxford": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "cepi-news": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "chinaxiv-preprints": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.paper-tab",
+    "title": ".tab-title",
+    "link": "@href",
+    "date": ".tab-date-ver"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cjcmm": {
+  "enabled": false,
+  "disabled_reason": "probe_empty",
+  "_why_disabled_20260930": "Observed protected probe outcome: empty; no normalized records."
+ },
+ "cjebm": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "cjim": {
+  "enabled": false,
+  "disabled_reason": "no_current_journal_records",
+  "_why_disabled_20260930": "The configured publisher homepage has old announcements but no article records; a PubMed ISSN query over 90 days returned zero records."
+ },
+ "clarivate-blog": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "cleveland-consult-qd": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h2:has(a)",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "clinphar-forum": {
+  "enabled": false,
+  "disabled_reason": "probe_empty_body",
+  "_why_disabled_20260930": "Observed protected probe outcome: empty; empty_body."
+ },
+ "cma-society-news": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": "li:has(> a[href*=\"art_14_\"])",
+    "title": "a",
+    "link": "a@href",
+    "date": ".riq"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cmda-announcements": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "ul.un-con-list li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span.f-r"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cmtopdr-yisheng": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(a[attrid])",
+    "title": "h5",
+    "link": "a@href",
+    "date": ".date",
+    "summary": ".w p"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cnpharm-drug": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "p:has(a[href^=\"/c/\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cochrane-colloquium": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "cochrane-methods-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".views-row:has(.title)",
+    "title": ".title",
+    "link": "a@href",
+    "date": "time@datetime",
+    "summary": ".body"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "consensus-blog": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a:has(h3)",
+    "title": "h3",
+    "link": "@href",
+    "summary": "p"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "csco-annual-meeting": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li.overflow-text",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "deepseek-news": {
+  "enabled": false,
+  "disabled_reason": "probe_empty",
+  "_why_disabled_20260930": "Observed protected probe outcome: empty; no normalized records."
+ },
+ "doctor-penguin": {
+  "enabled": false,
+  "disabled_reason": "publisher_feed_robots_unreachable",
+  "_why_disabled_20260930": "The publisher announces a move to Substack; the linked public feed robots policy could not be read. Historical Mailchimp archive was not substituted for the current newsletter."
+ },
+ "dxy-medical-news": {
+  "enabled": false,
+  "disabled_reason": "configured_endpoint_without_medical_news",
+  "_why_disabled_20260930": "The configured medical-news page contains forum navigation and historical meeting links, with no medical news entries."
+ },
+ "dxy-paper-pubmed": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "p.title",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "easl-congress": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   },
+   "allowed_hosts": [
+    "easlcongress.eu",
+    "www.easlcongress.eu"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "elicit-blog": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "div.framer-1atiqgn",
+    "title": "h2",
+    "link": "a[href*=\"./blog/\"]:has(h2)@href",
+    "date": "[data-framer-name=\"Published Date\"]",
+    "summary": "[data-framer-name=\"Excerpt\"]"
+   },
+   "date_format": "%b %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ema-dhpc": {
+  "enabled": false,
+  "disabled_reason": "publisher_unavailable",
+  "_why_disabled_20260930": "The permitted HTTP response is the publisher multilingual temporarily-unavailable page."
+ },
+ "ema-medicine-shortages": {
+  "enabled": false,
+  "disabled_reason": "publisher_unavailable",
+  "_why_disabled_20260930": "The permitted HTTP response is the publisher multilingual temporarily-unavailable page."
+ },
+ "endocrine-society-guidelines": {
+  "enabled": false,
+  "disabled_reason": "guideline_index_unavailable",
+  "_why_disabled_20260930": "Both the configured landing page and its linked guidelines-by-year page expose navigation and app promotions, not individual guideline records."
+ },
+ "epoch-ai-gradient-updates": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".button-parent:has(a.cover-link)",
+    "title": "span",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ers-congress": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": ".text__bg"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "esc-guidelines": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "esc-press-releases": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "esc-press-releases-10": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "escmid-global": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "div.article:has(h4.title)",
+    "title": "h4.title a",
+    "link": "h4.title a@href",
+    "date": "time@datetime",
+    "summary": ".teaser-text"
+   },
+   "link_hosts": [
+    "www.escmid.org",
+    "www.idsociety.org"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "esicm-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".page_content li:has(a[href*=\"doi.org/\"])",
+    "title": ".",
+    "link": "a[href*=\"doi.org/\"]@href"
+   },
+   "link_hosts": [
+    "doi.org"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "eular-congress": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "eular-recommendations": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "#wrap"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "european-pharmaceutical-review": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "h2:has(a[href$=\".article\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "eurosurveillance": {
+  "enabled": false,
+  "disabled_reason": "probe_cloudflare",
+  "_why_disabled_20260930": "Observed protected probe outcome: challenge; cloudflare."
+ },
+ "fda-advisory-committee-calendar": {
+  "enabled": true,
+  "access": "json-api",
+  "egress": "relay",
+  "config": {
+   "family": "fda-advisory-calendar",
+   "url": "https://www.fda.gov/datatables-json/advisory-committee-calendar-json"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "fda-aems-potential-signals": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "a[href*=\"-new-safety-information-\"][title]",
+    "title": "@title",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "fda-aems-quarterly-data-files": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "tr:has(> td > p):has(a[href*=\"faers_ascii_\"])",
+    "title": "td:first-child p",
+    "link": "a[href*=\"faers_ascii_\"]@href",
+    "date": "td:first-child span"
+   },
+   "url": "https://fis.fda.gov/extensions/FPD-QDE-FAERS/FPD-QDE-FAERS.html",
+   "allowed_hosts": [
+    "fis.fda.gov"
+   ],
+   "date_format": "%d-%b-%Y",
+   "date_regex": "posted on (\\d{1,2}-[A-Za-z]+-\\d{4})",
+   "title_template": "FDA AEMS quarterly data: {title}",
+   "max_items": 100
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "fda-cdrh-news-events": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "p.text-align-center:has(sup)",
+    "title": "a",
+    "link": "a@href",
+    "date": "sup"
+   },
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "fda-guidance-documents": {
+  "enabled": false,
+  "disabled_reason": "publisher_data_timeout",
+  "_why_disabled_20260930": "The page and browser render contain only a DataTables shell; the publisher-linked JSON data request through Tokyo timed out."
+ },
+ "fda-novel-drug-approvals": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "table tbody tr",
+    "title": "td:nth-child(2)",
+    "date": "td:nth-child(4)",
+    "summary": "td:nth-child(5)",
+    "id": "td:nth-child(2)"
+   },
+   "link_to_source_page": true,
+   "title_template": "FDA approval: {title}",
+   "identity_prefix": "fda:novel-approvals"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "fda-srlc-safety-labeling-changes": {
+  "enabled": false,
+  "disabled_reason": "interactive_search_without_result_feed",
+  "_why_disabled_20260930": "The public SrLC landing page provides a search form, a drug autocomplete vocabulary and terminology tables; these are not safety-change records."
+ },
+ "gavi-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".feed-article",
+    "title": ".feed__text p a",
+    "link": ".feed__text p a@href",
+    "date": "time@datetime"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "google-labs-notebooklm": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_unreachable",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_unreachable."
+ },
+ "gsk-press-releases": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": ".simple-listing__item",
+    "title": "h2",
+    "link": "a.simple-listing__link@href",
+    "date": "time@datetime"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "guokr": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "#waterfall .article",
+    "title": "a.article-title",
+    "link": "a.article-title@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "hadea-health-calls": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".ecl-content-block",
+    "title": ".ecl-content-block__title a",
+    "link": ".ecl-content-block__title a@href",
+    "date": "time@datetime",
+    "summary": ".ecl-content-block__description"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "harvard-dbmi": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".content-wrapper",
+    "title": "h2.node-title a",
+    "link": "h2.node-title a@href",
+    "date": "time@datetime",
+    "summary": ".teaser-text p:nth-child(3)"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "health-canada-infowatch": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "a.list-group-item[href*=\"/health-product-infowatch/\"]:not([href*=\"published-newsletters\"])",
+    "title": ".",
+    "link": "@href"
+   },
+   "url": "https://www.canada.ca/en/health-canada/services/drugs-health-products/medeffect-canada/health-product-infowatch/published-newsletters.html",
+   "max_items": 200
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "health-canada-news": {
+  "enabled": false,
+  "disabled_reason": "publisher_empty_document",
+  "_why_disabled_20260930": "Direct relay and browser responses have an empty document body, not a news list."
+ },
+ "hsa-singapore-safety-alerts": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.group[href^=\"/announcements/\"]",
+    "title": "h2",
+    "link": "@href",
+    "date": "p"
+   },
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "icer-news-assessments": {
+  "enabled": true,
+  "access": "rss",
+  "egress": "direct",
+  "config": {
+   "url": "https://icer.org/feed/"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ich-news": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "icirculation": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "article.newsitem",
+    "title": "h2 a",
+    "link": "h2 a@data-href",
+    "date": "time@datetime",
+    "summary": ".info p"
+   },
+   "date_format": "%y-%m-%d"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "icmje-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "div.inner p:has(a[href$=\".html\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "icpe-pharmacoepi": {
+  "enabled": false,
+  "disabled_reason": "meeting_navigation_without_event_records",
+  "_why_disabled_20260930": "The captured Meetings page contains category navigation (African, Asian, Annual, Overview) with no actual conference announcements or dates."
+ },
+ "idsa-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(> a.list-pages__link)",
+    "title": "a.list-pages__link",
+    "link": "a.list-pages__link@href"
+   },
+   "max_items": 300
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "idweek": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": ".home-hero-body"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ihme-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "article.c-card",
+    "title": "h4 a",
+    "link": "h4 a@href",
+    "summary": ".c-card__description"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "insilico-medicine": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".t923__textwrapper",
+    "title": ".t-card__title a",
+    "link": ".t-card__title a@href",
+    "date": ".t-descr"
+   },
+   "link_hosts": [
+    "www.eurekalert.org",
+    "insilico.com"
+   ],
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "iqwig-press-releases": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "isomorphic-labs": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.news-card",
+    "title": ".news-card_title,h3,h2",
+    "link": "@href"
+   },
+   "date_format": "%d.%m.%y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "isop-pharmacovigilance": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".homeEvents_moduleContainer",
+    "title": "h3",
+    "link": "a@href",
+    "summary": ".date"
+   },
+   "link_hosts": [
+    "isoponline.org",
+    "www.isop2026costarica.org"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ispor-conferences": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "main p:has(> strong > a[href*=\"/upcoming-conferences/\"])",
+    "title": "strong a",
+    "link": "strong a@href",
+    "summary": "."
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ispor-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".news-list--item__content",
+    "title": "h3 a",
+    "link": "h3 a@href",
+    "date": "p",
+    "summary": "div"
+   },
+   "date_format": "%b %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "isrctn-registry-api": {
+  "enabled": false,
+  "disabled_reason": "probe_timeout",
+  "_why_disabled_20260930": "Observed protected probe outcome: timeout; timeout."
+ },
+ "j-2515-446x": {
+  "enabled": false,
+  "disabled_reason": "probe_empty",
+  "_why_disabled_20260930": "Observed protected probe outcome: empty; no normalized records."
+ },
+ "jbi-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".card-body",
+    "title": "h3",
+    "link": "a@href",
+    "summary": ".text-body-secondary"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "jiemian-health": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".card-list__content",
+    "title": "h3",
+    "link": "a@href",
+    "summary": ".card-list__summary"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "jkb-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(a.ellipsis)",
+    "title": "a.ellipsis",
+    "link": "a.ellipsis@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "junshi-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li.wow:has(h3)",
+    "title": "h3",
+    "link": "a@href",
+    "date": ".mess span",
+    "summary": ".mess p"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "kdigo-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.inner-feat",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "kelun-biotech-news": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_unreachable",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_unreachable."
+ },
+ "kimi-changelog": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": "main"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "legend-biotech-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "div.content:has(a[href*=\"news-release-details/\"])",
+    "title": "p:first-child",
+    "link": "a@href",
+    "date": "p span"
+   },
+   "date_format": "%b %d, %Y",
+   "allowed_hosts": [
+    "www.legendbiotech.com",
+    "legendbiotech.com"
+   ],
+   "link_hosts": [
+    "investors.legendbiotech.com"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "mdweekly": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h1:has(a[href*=\"article/detail\"]),h2:has(a[href*=\"article/detail\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "medsafe-prescriber-update": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "#content-area li:has(a[href*=\"PUArticles/\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "medsafe-safety-communications": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "#recent + table tbody tr",
+    "title": "td:nth-child(4) a",
+    "link": "td:nth-child(4) a@href",
+    "date": "td:nth-child(1)"
+   },
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "medsci-articles": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "medsci-guidelines-cn": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".journal-item",
+    "title": ".item-font strong a",
+    "link": ".item-font strong a@href",
+    "date": ".more-detail p:first-child span",
+    "summary": ".item-desc"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "menet": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".item:has(h3.item_title)",
+    "title": "h3",
+    "link": "h3 a@href",
+    "date": ".item_time",
+    "summary": ".item_con"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "minimax-news": {
+  "enabled": false,
+  "disabled_reason": "client_news_list_unavailable",
+  "_why_disabled_20260930": "The permitted response contains model navigation but no rendered news records."
+ },
+ "moderna-news": {
+  "enabled": false,
+  "disabled_reason": "probe_json_api_family_unmapped_generic",
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_generic."
+ },
+ "most-research-integrity": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(.date)",
+    "title": "a",
+    "link": "a@href",
+    "date": ".date"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "msd-merck-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".d8-result-item",
+    "title": ".d8-result-item-headline a",
+    "link": ".d8-result-item-headline a@href",
+    "date": ".d8-result-item-date"
+   },
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nccn-guidelines-versions": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".item:has(.item-version)",
+    "title": ".item-name a",
+    "link": ".item-name a@href",
+    "summary": ".item-version"
+   },
+   "max_items": 300
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "newdrug": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".article-l",
+    "title": ".j-title-1 a",
+    "link": ".j-title-1 a@href",
+    "summary": ".j-volumn-doi"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nhc-english": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h3.list-tit",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nhsa-news": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": "li:has(> a[href*=\"art_14_\"])",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nmpa-english-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".list-text",
+    "title": "h3 a",
+    "link": "h3 a@href",
+    "date": ".list-date",
+    "summary": ".list-summary"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nmpa-fgwj": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": "li:has(a[href*=\"/fgwj/\"][title])",
+    "title": "a@title",
+    "link": "a@href",
+    "date": "span"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "novartis-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li.each-item",
+    "title": "h3",
+    "link": "a@href",
+    "date": "time@datetime",
+    "summary": ".views-field-body"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "novo-nordisk-news": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "nsfc-misconduct-decisions": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a:has(.sciences-content-right-content-item)",
+    "title": ".item-right-content",
+    "link": "@href",
+    "date": ".date"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nsfc-notices": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.wzy-box-c",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "nsfc-project-guides": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.wzy-box-c",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "openalex-medicine-most-cited-30d": {
+  "enabled": false,
+  "disabled_reason": "probe_json_api_family_unmapped_openalex",
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex."
+ },
+ "openalex-medicine-newest": {
+  "enabled": false,
+  "disabled_reason": "probe_json_api_family_unmapped_openalex",
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex."
+ },
+ "pbac-outcomes-australia": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "relay",
+  "config": {
+   "selectors": {
+    "item": "a[href*=\"pbac-outcomes/recommendations-made-by-the-pbac-\"]",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "pcori-funding": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "pfizer-press-releases": {
+  "enabled": false,
+  "disabled_reason": "probe_cloudflare",
+  "_why_disabled_20260930": "Observed protected probe outcome: challenge; cloudflare."
+ },
+ "pharmcube-bydrug": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_disallow",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_disallow."
+ },
+ "pharmnet-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h1:has(a[href*=\"/news/\"]),li:has(a[href*=\"/news/\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "pmda-english": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(p.date)",
+    "title": "p.title",
+    "link": "a@href",
+    "date": "p.date"
+   },
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "pmda-english-revision-of-precautions": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "tr:has(td ul li)",
+    "title": "td ul li",
+    "link": "a[href$=\".pdf\"]@href",
+    "date": "td[rowspan]"
+   },
+   "url": "https://www.pmda.go.jp/english/safety/info-services/drugs/revision-of-precautions/0014.html",
+   "date_format": "%B %d, %Y",
+   "title_template": "PMDA revisions of PRECAUTIONS: {title}"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "remegen-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(.newsListDsc)",
+    "title": ".title",
+    "link": "a@href",
+    "date": ".time",
+    "summary": ".dsc"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "roche-media-releases": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "rsna-annual-meeting": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "link[rel=\"canonical\"]@href",
+    "summary": ".weh-content"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "sabcs": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "sanofi-media-room": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a[id^=\"prlist-\"]",
+    "title": "@title",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "sccm-guidelines": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "sciencenet-xiaoke": {
+  "enabled": false,
+  "disabled_reason": "probe_http_405",
+  "_why_disabled_20260930": "Observed protected probe outcome: http-error; http_405."
+ },
+ "service-most-guides": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "sign-guidelines": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "#current tbody tr",
+    "title": "td:nth-child(2) a",
+    "link": "td:nth-child(2) a@href"
+   },
+   "max_items": 300
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "sino-biopharm-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.scaleimg[href*=\"/news-center/\"]",
+    "title": "h2,h3",
+    "link": "@href",
+    "date": ".page-time",
+    "summary": ".page-desc"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "smc-scotland-advice": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "tr.medicine-advice-table__row",
+    "title": "a.medicine-advice-table__link",
+    "link": "a.medicine-advice-table__link@href",
+    "date": "td:nth-child(2)",
+    "summary": "td:nth-child(5)"
+   },
+   "date_format": "%d/%m/%Y",
+   "allowed_hosts": [
+    "www.scottishmedicines.org.uk",
+    "scottishmedicines.org.uk"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "smpaa-joint-procurement": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "td.cotent_right li",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "stanford-aimi": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".su-news-list__headline-dek",
+    "title": "h3 a",
+    "link": "h3 a@href"
+   },
+   "link_hosts": [
+    "aimi.stanford.edu",
+    "scopeblog.stanford.edu",
+    "hai.stanford.edu",
+    "med.stanford.edu",
+    "news.stanford.edu"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "stanford-hai-news": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": "h4:has(a[href^=\"/news/\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "stanford-medicine-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li[data-tracking-publishdate]",
+    "title": "a.cmp-teaser__link@aria-label",
+    "link": "a.cmp-teaser__link@href",
+    "date": "@data-tracking-publishdate",
+    "summary": ".cmp-teaser__description"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "syfjx": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "h3:has(a[href*=\"/article/doi/\"])",
+    "title": "a",
+    "link": "a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "takeda-press-releases": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "tct-conference": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "a[href=\"/\"]@href",
+    "summary": "main"
+   },
+   "allowed_hosts": [
+    "www.crf.org",
+    "www.tctconference.com"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "tencent-hunyuan-changelog": {
+  "enabled": false,
+  "disabled_reason": "configured_endpoint_is_product_overview",
+  "_why_disabled_20260930": "The rendered page title is product overview, with product descriptions rather than a changelog. No false release notices were emitted."
+ },
+ "the-batch": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "article.card",
+    "title": "h2,h3",
+    "link": "a[aria-label]@href",
+    "date": "a.badge",
+    "summary": "p"
+   },
+   "date_format": "%b %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "thepaper-health": {
+  "enabled": false,
+  "disabled_reason": "configured_endpoint_not_medical_feed",
+  "_why_disabled_20260930": "The configured root is the general political/news homepage, not a health/science column. No medical-only endpoint was verified."
+ },
+ "think-global-health": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a[href^=\"/article/\"]:has(h2),a[href^=\"/article/\"]:has(h3)",
+    "title": "h2,h3",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "ueg-week": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "html",
+    "title": "head title",
+    "link": "meta[property=\"og:url\"]@content",
+    "summary": ".hero-content"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "uspstf-in-progress": {
+  "enabled": false,
+  "disabled_reason": "no_usable_public_entry_list",
+  "_why_disabled_20260930": "The captured configured page did not expose a usable requested entry list; navigation or unrelated page material was not admitted."
+ },
+ "uspstf-recommendations": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "tr.score10",
+    "title": "td:nth-child(4) a",
+    "link": "td:nth-child(4) a@href",
+    "summary": "td:nth-child(7)"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "vbdata": {
+  "enabled": false,
+  "disabled_reason": "client_routed_records_without_links",
+  "_why_disabled_20260930": "The configured Vue page exposes no usable public entry links; no synthetic IDs or guessed article URLs were introduced."
+ },
+ "vbdata-dongmaiwang": {
+  "enabled": false,
+  "disabled_reason": "client_routed_records_without_links",
+  "_why_disabled_20260930": "The captured page exposes article cards but no public per-card links. Client router state was not executed or converted into guessed URLs."
+ },
+ "wclc-iaslc": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "who-medical-product-alerts": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".list-view--item",
+    "title": "p",
+    "link": "a.link-container@href",
+    "date": ".timestamp"
+   },
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "who-news": {
+  "enabled": true,
+  "access": "json-api",
+  "egress": "direct",
+  "config": {
+   "url": "https://www.who.int/api/news/newsitems?$orderby=PublicationDateAndTime%20desc&$top=20",
+   "family": "who-odata",
+   "max_pages": 3
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "who-pharmaceuticals-newsletter": {
+  "enabled": false,
+  "disabled_reason": "publisher_index_without_requested_series",
+  "_why_disabled_20260930": "Rendered page lists generic related publications, not the requested Pharmaceuticals Newsletter series."
+ },
+ "who-publications": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".sf-publications-item",
+    "title": "h3",
+    "link": "a[href*=\"/publications/i/item/\"]@href",
+    "date": ".sf-publications-item__date",
+    "summary": ".sf-publications-item__description"
+   },
+   "date_format": "%d %B %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "wuxi-apptec-news": {
+  "enabled": false,
+  "disabled_reason": "rendered_list_unavailable",
+  "_why_disabled_20260930": "The configured page was read through both its ordinary transport and the protected browser; no usable requested entry list was present in the rendered response."
+ },
+ "wuxi-biologics-news": {
+  "enabled": true,
+  "access": "rss",
+  "egress": "direct",
+  "config": {
+   "url": "https://www.wuxibiologics.com/feed/"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "xhyxzz": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".article-list-right",
+    "title": ".article-list-title a",
+    "link": ".article-list-title a@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "yaozh-news": {
+  "enabled": false,
+  "disabled_reason": "probe_http_403",
+  "_why_disabled_20260930": "Observed protected probe outcome: blocked; http_403."
+ },
+ "yxj-news": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a.flex_title",
+    "title": ".",
+    "link": "@href"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "zai-lab-news": {
+  "enabled": true,
+  "access": "browser-list",
+  "egress": "browser",
+  "config": {
+   "selectors": {
+    "item": "a.post-card",
+    "title": ".font-bold",
+    "link": "@href",
+    "date": ".font-normal"
+   },
+   "link_hosts": [
+    "ir.zailaboratory.com"
+   ],
+   "date_format": "%B %d, %Y"
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "zgyyyx": {
+  "enabled": false,
+  "disabled_reason": "probe_robots_unreachable",
+  "_why_disabled_20260930": "Observed protected probe outcome: robots-denied; robots_unreachable."
+ },
+ "zhipu-news": {
+  "enabled": false,
+  "disabled_reason": "configured_endpoint_is_product_homepage",
+  "_why_disabled_20260930": "The /news request renders the product homepage; no news records or public news endpoint were present."
+ },
+ "zhishifenzi": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "li:has(a[href*=\"/depth/\"])",
+    "title": "a",
+    "link": "a@href",
+    "date": "span"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "zhongcaoyao": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "a[href*=\"/zcy/article/abstract/\"]",
+    "title": ".",
+    "link": "@href"
+   },
+   "max_items": 300
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "zhonghua-liuxingbingxue-zazhi": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": "dl:has(a[href*=\"view_abstract\"])",
+    "title": "a[href*=\"view_abstract\"]",
+    "link": "a[href*=\"view_abstract\"]@href"
+   },
+   "link_hosts": [
+    "chinaepi.icdc.cn"
+   ]
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
+ },
+ "zhonghua-neike-zazhi": {
+  "enabled": false,
+  "disabled_reason": "probe_empty",
+  "_why_disabled_20260930": "Observed protected probe outcome: empty; no normalized records."
+ },
+ "zhyx360": {
+  "enabled": true,
+  "access": "html-list",
+  "egress": "direct",
+  "config": {
+   "selectors": {
+    "item": ".l-c",
+    "title": "h1 a",
+    "link": "h1 a@href",
+    "summary": "p"
+   }
+  },
+  "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
  }
 }

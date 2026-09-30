@@ -54,6 +54,7 @@ def test_the_plan_decisions_hold(document):
                                .read_text(encoding="utf-8").splitlines()
                                if line.strip() and json.loads(line)["verdict"] == "feed-ok"}
     verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-09-29.json").read_text())["rows"] if row.get("enabledAfterProbe") or (row["group"] == "p1" and row["outcome"] == "ok")}
+    verified_on_production |= {row["id"] for row in json.loads((ROOT / "registry/research/source-expansion-2026-09-30.json").read_text())["rows"] if row["decision"] == "enabled"}
     assert "google-health-blog" in verified_on_production
     for s in sources:
         if s["enabled"]:
