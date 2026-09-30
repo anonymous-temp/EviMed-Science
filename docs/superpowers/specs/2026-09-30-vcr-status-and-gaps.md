@@ -1,5 +1,7 @@
 # 虚拟临研（vcr）：交付状态、验收对照与缺口清单
 
+> Integration update (2026-09-30): the deployed platform is `62faa8a00234`. Its full history is on main via PR #1 (`04e8b3509297b81973f076a275f67535500aef05`). VCR is integrated into candidate `e40f9405f4cea17247dafc56e38ee60c61cc4aac`, after ten semantic conflict resolutions, and is not yet deployed or available to ordinary users. The pre-integration test tables below are historical evidence, not certification of the combined candidate. Current focused merge checks: 269 server tests, 33 acceptance-ledger tests, web/server typechecks and 27 generated capability manifests passed; frozen-lockfile installation preserved the deployed dependency fixes. Required implementation and live acceptance remain open.
+
 2026 年 9 月 30 日 · 分支 `feature/virtual-clinical-research`（工作树 `wt-vcr`）· 模块默认关闭（`OPEN_SCIENCE_VCR_ENABLED`）
 
 这份文件回答三个问题：**做到哪一步了、方案的 38 条验收各自靠什么证明、还差什么。**
@@ -10,17 +12,17 @@
 
 | 项 | 状态 |
 |:--|:--|
-| 代码 | 已提交在本分支，已合入 9 月 30 日的 `main`（无冲突） |
-| 是否合入 `main` | **没有。** 分支已推到 GitHub，合并由你决定；合并前后都不改任何默认行为 |
+| 代码 | Integrated candidate `e40f9405f` contains production-preserving main and VCR history; ten conflicts were resolved and independently reviewed. |
+| 是否合入 `main` | Platform reconciliation is complete at `04e8b3509`; the combined VCR candidate is not yet merged into main. |
 | 是否上线 | **没有。** 没有发版、没有构建引擎镜像、没有真实 DSH 对话验证、没有伙伴数据 |
 | 默认行为 | 关。`OPEN_SCIENCE_VCR_ENABLED` 不设就看不到入口、`/api/vcr/*` 不存在；开也先只对运营账号（`OPEN_SCIENCE_VCR_AUDIENCE=operators`） |
-| 规模 | 分支比 `main` 多 344 个文件、约 13.2 万行：服务端 27 个模块（约 2.6 万行）、领域包 7 个文件、R 引擎 20 个文件（24 种方法）、前端 56 个文件、五个能力包 |
+| 规模 | Initial integration `04e8b3509..e40f9405f`: 444 changed paths, 143,265 inserted and 241 deleted lines, including design assets and fixtures. Production reconciliation preserved 323 commits and 801 changed paths relative to former main. |
 
 ### 怎么审、怎么合
 
 1. 合并前先读这份文件，再读集成契约（它记了每个接缝的规则）。
 2. 提交按层排列，`git log --oneline main..HEAD` 可逐个看：先是 6 个基线提交（领域、控制面、引擎、能力包、前端、文档），然后是 9 月 29 日合并审查之后的三轮修复（契约 → 领域 → 引擎 → 路由与接线 → 展示层与前端 → 数据入口 → 证据与匹配 → 安全修复），最后是 9 月 30 日的收尾（领域、控制面、前端、能力包、CI，各一个提交）。
-3. 合并是普通合并；`PROGRESS.md` 顶部的一行是这条分支自己加的，如果 `main` 同时有人在顶部加行，会碰到一个平凡冲突，两行都留即可。
+3. The actual merge required ten conflicts across gateways, exports, generated registries, acceptance records and tests. They were reconciled semantically; neither branch was selected wholesale. The integration plan records each path and the retained production behavior.
 4. 合并后，在**发版当天**做第五节的清单；清单里有一半是只有部署好的栈才能做的检查。
 
 ## 二、验证结果（9 月 30 日，合并后的树）
