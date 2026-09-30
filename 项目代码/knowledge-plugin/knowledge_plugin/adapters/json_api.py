@@ -714,6 +714,37 @@ def parse_fda_advisory_calendar(result: FetchResult, source: SourceConfig, now: 
     return ParseOutput(entries=entries, notes=["source-modified-time"])
 
 
+def parse_quotemedia_headlines(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """A publisher-linked ticker feed includes third-party news, not only issuer statements."""
+    payload = load_json(result, "quotemedia")
+    results = payload.get("results") if isinstance(payload, dict) else None
+    channels = results.get("news") if isinstance(results, dict) else None
+    if not isinstance(channels, list):
+        raise FetchError("parse-error", "quotemedia_records_missing")
+    entries = []
+    allowed = source.config.get("link_hosts") or source.config.get("allowed_hosts") or []
+    for channel in channels:
+        if not isinstance(channel, dict):
+            continue
+        records = channel.get("newsitem") or []
+        if not isinstance(records, list):
+            raise FetchError("parse-error", "quotemedia_items_missing")
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            identifier = str(record.get("newsid") or "")
+            title = clean_markup(record.get("headline"))
+            link = absolute_url(record.get("storyurl"), result.final_url or result.request.url)
+            if not identifier.isdigit() or not title or not link or not allowed or not host_allowed(link, allowed):
+                continue
+            published, precision = parse_date(record.get("datetime"))
+            summary = _labelled(clean_markup(record.get("source")) or "Distributor", record.get("qmsummary"))
+            entries.append(make_entry(external_key=identifier, url=link, title=title, summary=summary,
+                                      published_at=published, precision=precision, language=record.get("lang") or source.language,
+                                      defects=["truncated-summary"] if summary else [], feed_summary=True))
+    return ParseOutput(entries=entries)
+
+
 def parse_openalex(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
     """OpenAlex work metadata; the registry supplies the field/date/type query."""
     payload = load_json(result, "openalex")
@@ -753,6 +784,7 @@ FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]
     "star-rating": parse_star_rating,
     "fda-advisory-calendar": parse_fda_advisory_calendar,
     "openalex": parse_openalex,
+    "quotemedia-headlines": parse_quotemedia_headlines,
 }
 
 # Rows the registry still labels ``generic`` are recognised by host (the three P0 ones).
