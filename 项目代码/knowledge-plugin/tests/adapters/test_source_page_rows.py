@@ -55,6 +55,23 @@ def test_source_page_link_requires_actual_row_identity_and_an_allowed_public_pag
     private = 'https://unrelated.example/records'
     response = FetchResult(RequestSpec(private), private, 200, {'content-type': 'text/html'}, body, now)
     assert not adapter.parse(response, replace(SOURCE, config=CONFIG), now).entries
-    missing_id = body.replace(b'<td>Example</td>', b'<td></td>')
-    response = FetchResult(RequestSpec(URL), URL, 200, {'content-type': 'text/html'}, missing_id, now)
-    assert not adapter.parse(response, replace(SOURCE, config=CONFIG), now).entries
+    response = FetchResult(RequestSpec(URL), URL, 200, {'content-type': 'text/html'}, body, now)
+    missing_id = {**CONFIG, 'selectors': {**CONFIG['selectors'], 'id': 'td:nth-child(3)'}}
+    assert not adapter.parse(response, replace(SOURCE, config=missing_id), now).entries
+
+
+def test_canonical_document_monitor_preserves_visible_content_without_executable_markup():
+    now = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    body = b'''<html><head><title>Conference 2027</title>
+        <link rel="canonical" href="https://www.fda.gov/conference"></head><body>
+        <nav>Unrelated navigation</nav><main><style>.hidden {display:none}</style>
+        <h1>Conference 2027</h1><p>June 16-19: London and online</p>
+        <script>secretTrackingCode()</script><template>Unrendered placeholder</template>
+        </main><footer>Unrelated footer</footer></body></html>'''
+    source = replace(SOURCE, config={**SOURCE.config, 'selectors': {
+        'item': 'html', 'title': 'head title', 'link': 'link[rel=canonical]@href', 'summary': 'main',
+    }})
+    result = FetchResult(RequestSpec(URL), URL, 200, {'content-type': 'text/html'}, body, now)
+    entry = REGISTRY['html-list'].parse(result, source, now).entries[0]
+    assert entry.summary == 'Conference 2027 June 16-19: London and online'
+    assert entry.published_at is None
