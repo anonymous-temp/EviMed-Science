@@ -642,7 +642,9 @@ class LifecycleTest(EngineCase):
         self.assertFalse((self.work / "sleeper").exists())
         self.assertTrue((self.work / "keeper" / "result.json").exists())
         self.assertTrue(self.work.is_dir())
-        self.assertEqual(client.get("/jobs/sleeper").status_code, 404)
+        # Discard removes result bytes, not the authenticated stop identity:
+        # a delayed submit must never revive a canceled job after cleanup.
+        self.assertEqual(client.get("/jobs/sleeper").json()["state"], "canceled")
         self.assertEqual(client.delete("/jobs/sleeper").status_code, 404)
 
 
@@ -696,6 +698,18 @@ class TableRouteTest(EngineCase):
 
 
 class CancelAndLimitsTest(EngineCase):
+    def test_cancel_before_acceptance_survives_restart_and_refuses_a_late_submit(self) -> None:
+        client = self.client()
+        self.assertEqual(client.post("/jobs/notaccepted/cancel").json(), {"canceled": True})
+        self.assertEqual(client.get("/jobs/notaccepted").json()["state"], "canceled")
+        late = client.post("/jobs", json=self.job("notaccepted"))
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(late.json()["detail"], "job_canceled")
+        again = self.client()
+        self.assertEqual(again.get("/jobs/notaccepted").json()["state"], "canceled")
+        self.assertEqual(again.post("/jobs", json=self.job("notaccepted")).status_code, 409)
+        self.assertFalse((self.stub / "pid-notaccepted.txt").exists())
+
     def test_cancel_kills_the_whole_process_group(self) -> None:
         client = self.client()
         client.post("/jobs", json=self.job("wedged", "sleep_ignore"))

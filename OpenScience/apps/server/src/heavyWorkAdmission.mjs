@@ -4,9 +4,9 @@ import { maintenanceAllowsClaims } from './maintenanceService.mjs';
  * Serialized admission on this host, shared by leased render and compute jobs.
  * Build/restore use the existing maintenance lease. Physical work with unknown
  * termination holds capacity even after its logical lease expires.
- * @param {any} client @param {'render'|'compute'} kind
+ * @param {any} client @param {'render'|'compute'} kind @param {string | null} [resumingComputeId]
  */
-export async function heavyWorkAdmission(client, kind) {
+export async function heavyWorkAdmission(client, kind, resumingComputeId = null) {
   const product = await client.query("SELECT to_regclass('evimed_product.jobs') AS relation");
   const hasProduct = Boolean(product.rows[0]?.relation);
   if (hasProduct && !(await maintenanceAllowsClaims(client))) return false;
@@ -23,8 +23,9 @@ export async function heavyWorkAdmission(client, kind) {
   const exists = await client.query("SELECT to_regclass('evimed_vcr.jobs') AS relation");
   if (!exists.rows[0]?.relation) return true;
   const active = await client.query(`SELECT 1 FROM evimed_vcr.jobs WHERE ($1::boolean AND state='running')
-    OR (state IN ('canceled','failed') AND (checkpoint ? 'engineJobId' OR checkpoint ? 'submissionIntent' OR checkpoint ? 'requestedEngineJobId')
-      AND COALESCE(checkpoint->>'engineStopped','false') <> 'true') LIMIT 1`, [kind === 'render']);
+    OR (state IN ('canceled','failed','queued') AND (checkpoint ? 'engineJobId' OR checkpoint ? 'submissionIntent' OR checkpoint ? 'requestedEngineJobId')
+      AND COALESCE(checkpoint->>'engineStopped','false') <> 'true'
+      AND NOT ($1::boolean=false AND state='queued' AND id=COALESCE($2::text,''))) LIMIT 1`, [kind === 'render', resumingComputeId]);
   return !active.rows.length;
 }
 
@@ -38,7 +39,7 @@ export async function heavyWorkBlockerCount(database) {
   const exists = await database.query("SELECT to_regclass('evimed_vcr.jobs') AS relation");
   if (exists.rows[0]?.relation) {
     const compute = await database.query(`SELECT count(*)::integer AS n FROM evimed_vcr.jobs WHERE state='running'
-      OR (state IN ('canceled','failed') AND (checkpoint ? 'engineJobId' OR checkpoint ? 'submissionIntent' OR checkpoint ? 'requestedEngineJobId') AND COALESCE(checkpoint->>'engineStopped','false') <> 'true')`);
+      OR (state IN ('canceled','failed','queued') AND (checkpoint ? 'engineJobId' OR checkpoint ? 'submissionIntent' OR checkpoint ? 'requestedEngineJobId') AND COALESCE(checkpoint->>'engineStopped','false') <> 'true')`);
     count += Number(compute.rows[0]?.n ?? 0);
   }
   return count;

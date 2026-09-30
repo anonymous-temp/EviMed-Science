@@ -193,6 +193,8 @@ test('compute and render claims share one atomic slot and unknown engine complet
   assert.equal(Number(Boolean(rendered))+calculated.length,1);
   if (rendered) await jobs.cancel('alice',rendered.id);
   await database.query("UPDATE evimed_product.jobs SET status='canceled' WHERE status IN ('queued','running')");
+  await database.query("UPDATE evimed_vcr.jobs SET state='queued', checkpoint=checkpoint || '{\"engineJobId\":\"physical-one\"}'::jsonb WHERE id=$1",[numerical.id]);
+  assert.equal(await database.transaction(client=>heavyWorkAdmission(client,'render')),false, 'an old queued transport retry still owns physical capacity');
   await database.query("UPDATE evimed_vcr.jobs SET state='canceled', checkpoint=checkpoint || '{\"engineJobId\":\"physical-one\"}'::jsonb WHERE id=$1",[numerical.id]);
   assert.equal(await database.transaction(client=>heavyWorkAdmission(client,'render')),false);
   assert.equal(await database.transaction(client=>heavyWorkAdmission(client,'compute')),false);

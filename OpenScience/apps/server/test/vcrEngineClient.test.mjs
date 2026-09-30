@@ -74,6 +74,8 @@ test("a job the engine would refuse is refused here, with the field named, and a
 test("a submitted job is accepted by id, and a timeout is retryable while a refusal is not", async () => {
   const accepted = createVcrEngineClient({ baseUrl: "http://engine.local", fetchImpl: async () => json({ jobId: "job_1", accepted: true }, 202) });
   assert.deepEqual(await accepted.submit(job), { jobId: "job_1", accepted: true });
+  const wrongIdentity = createVcrEngineClient({ baseUrl: "http://engine.local", fetchImpl: async () => json({ jobId: "job_other", accepted: true }, 202) });
+  await assert.rejects(wrongIdentity.submit(job), { code: "vcr_engine_response_invalid" });
 
   const refused = createVcrEngineClient({ baseUrl: "http://engine.local", fetchImpl: async () => json({ detail: "job_field_invalid", field: "seed" }, 422) });
   await assert.rejects(refused.status("job_1"), (/** @type {any} */ error) => {

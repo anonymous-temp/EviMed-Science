@@ -14,7 +14,7 @@ The control plane's `vcrEngineClient.mjs` speaks exactly these routes
 
 Every refusal is `{"detail": "<fixed code>"}` (plus `field` for
 `job_field_invalid`): 401 unauthorized, 404 job_not_found, 409
-job_already_submitted / job_still_running / result_not_ready /
+job_already_submitted / job_canceled / job_still_running / result_not_ready /
 job_directory_conflict, 413 job_body_too_large / table_too_large, 404 table_not_found, 422 job_body_invalid /
 job_id_invalid / job_field_invalid / job_replicates_too_large, 503
 job_directory_unavailable / engine_self_check_failed. A job's `error` is
@@ -54,6 +54,10 @@ Hidden knowledge:
   signals are the fallback for a process wedged somewhere that never checks.
   They go to the group, because a job that forked (a parallel worker, a
   bridge) must not outlive its cancel.
+- An authenticated cancellation also retains a signed marker beside job
+  directories. It refuses a delayed submission after cancellation or restart,
+  including a cancel sent before the submit response arrived. Discarding result
+  bytes keeps that marker; no patient data or provider credential is in it.
 - **The queue is in memory and the results are on disk.** A restart loses
   queued jobs -- the control plane owns the ledger and re-queues them -- but it
   never loses a finished result or a checkpoint. A job directory found on disk
@@ -657,6 +661,36 @@ class Engine:
 
     # -- the routes' side --
 
+    def _cancellation_path(self, job_id: str) -> Path:
+        if not valid_job_id(job_id):
+            raise Refusal(404, "job_not_found")
+        root = self.work.ready()
+        if root is None:
+            raise Refusal(503, "job_directory_unavailable")
+        return root / f".canceled-{job_id}"
+
+    def _was_canceled(self, job_id: str) -> bool:
+        marker = self._cancellation_path(job_id)
+        raw = read_regular_file(marker, 256)
+        if raw is None:
+            if os.path.lexists(marker):
+                raise Refusal(409, "job_directory_conflict")
+            return False
+        message = f"canceled:{job_id}".encode()
+        expected = hmac.new(self.settings.receipt_key or self.settings.token or b"insecure-dev", message, hashlib.sha256).hexdigest().encode()
+        if not hmac.compare_digest(raw, expected):
+            raise Refusal(409, "job_directory_conflict")
+        return True
+
+    def _keep_cancellation(self, job_id: str) -> None:
+        marker = self._cancellation_path(job_id)
+        message = f"canceled:{job_id}".encode()
+        signed = hmac.new(self.settings.receipt_key or self.settings.token or b"insecure-dev", message, hashlib.sha256).hexdigest().encode()
+        try:
+            write_atomically(marker, signed)
+        except OSError:
+            raise Refusal(503, "job_directory_unavailable") from None
+
     def submit(self, body: Any) -> Job:
         job_id, total, cpu_limit = validate_job_body(body, self.settings)
         payload = dict(body)
@@ -674,6 +708,8 @@ class Engine:
         if directory is None:
             raise Refusal(409, "job_directory_conflict")
         with self.lock:
+            if self._was_canceled(job_id):
+                raise Refusal(409, "job_canceled")
             if job_id in self.jobs:
                 raise Refusal(409, "job_already_submitted")
             created = False
@@ -722,6 +758,9 @@ class Engine:
         if job is None:
             disk = self._on_disk(job_id)
             if disk is None:
+                if self._was_canceled(job_id):
+                    return {"jobId": job_id, "state": "canceled", "progress": {"done": 0, "total": 0},
+                            "cpuSeconds": 0, "cpuSecondsLimit": None, "error": "canceled"}
                 raise Refusal(404, "job_not_found")
             directory, _, result = disk
             done, total, cpu = read_progress(directory, _int(result.get("replicates"), 1))
@@ -791,11 +830,17 @@ class Engine:
         return opened
 
     def cancel(self, job_id: str) -> bool:
-        job = self._known(job_id)
+        if not valid_job_id(job_id):
+            raise Refusal(404, "job_not_found")
+        # Serialize with submit before retaining the authenticated cancellation:
+        # its response may precede a delayed POST /jobs under the same identity.
+        with self.lock:
+            job = self.jobs.get(job_id)
+            if job is None and self._on_disk(job_id) is not None:
+                return False
+            self._keep_cancellation(job_id)
         if job is None:
-            if self._on_disk(job_id) is None:
-                raise Refusal(404, "job_not_found")
-            return False
+            return True
         with job.lock:
             if job.state in TERMINAL:
                 return False

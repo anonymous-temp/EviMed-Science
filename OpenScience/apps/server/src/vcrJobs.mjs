@@ -566,7 +566,11 @@ export class VcrJobs {
   async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1 } = {}) {
     await this.reconcileStoppedEngineWork();
     const rows = await this.store.transaction(async (client) => {
-      if (!(await heavyWorkAdmission(client, "compute"))) return [];
+      const interrupted = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.jobs WHERE state='queued'
+        AND checkpoint ? 'engineJobId' AND COALESCE(checkpoint->>'engineStopped','false') <> 'true'
+        ORDER BY created_at LIMIT 1`)).rows[0];
+      const resumingId = interrupted ? String(interrupted.id) : null;
+      if (!(await heavyWorkAdmission(client, "compute", resumingId))) return [];
       await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-job-claim'))");
       const exhausted = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
         SET state = 'failed', lease_owner = NULL, lease_until = NULL, finished_at = now(), updated_at = now(),
@@ -581,9 +585,10 @@ export class VcrJobs {
       const take = Math.min(free, Math.max(1, limit));
       const picked = await client.query(`SELECT j.id FROM ${VCR_SCHEMA}.jobs j
         JOIN ${VCR_SCHEMA}.studies s ON s.id = j.study_id AND s.deleted_at IS NULL AND s.status = 'active'
-        WHERE (j.state = 'queued' AND j.run_after <= now())
-           OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts)
-        ORDER BY j.run_after, j.created_at LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take]);
+        WHERE ($2::text IS NULL OR j.id=$2) AND ((j.state = 'queued' AND j.run_after <= now())
+           OR (j.state = 'running' AND j.lease_until IS NOT NULL AND j.lease_until < now() AND j.attempts < j.max_attempts))
+        ORDER BY CASE WHEN j.state='running' OR j.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,
+          j.run_after, j.created_at LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take, resumingId]);
       if (!picked.rows.length) return [];
       const ids = picked.rows.map((/** @type {any} */ row) => String(row.id));
       const claimed = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
@@ -594,7 +599,7 @@ export class VcrJobs {
     });
     this.counters.claimed += rows.length;
     this.counters.exhausted += this.reaped.length;
-    return rows.map(jobSummaryFromRow);
+    return rows.map((row) => ({ ...jobSummaryFromRow(row), leaseOwner: String(row.lease_owner) }));
   }
 
   /** Physical termination is proved by the engine, never by lease expiry. */
@@ -605,7 +610,9 @@ export class VcrJobs {
         AND COALESCE(checkpoint->>'engineStopped','false') <> 'true' ORDER BY updated_at LIMIT 5`);
     for (const row of rows) {
       try {
-        const status = await this.engine.status(String(object(row.checkpoint).engineJobId));
+        const engineJobId = String(object(row.checkpoint).engineJobId);
+        await this.engine.cancel?.(engineJobId);
+        const status = await this.engine.status(engineJobId);
         if (["succeeded", "failed", "canceled", "not_estimable"].includes(status.state)) {
           await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint = checkpoint || '{"engineStopped":true}'::jsonb
             WHERE id=$1 AND state IN ('failed','canceled')`, [String(row.id)]);
@@ -630,8 +637,9 @@ export class VcrJobs {
    * How far along, and the lease renewed with it: progress is what tells a
    * study that a job that died in its first minute is not one still working.
    * @param {string} jobId @param {{ done?: number, total?: number, note?: string }} progress
+   * @param {string | null} [leaseOwner] @param {number | null} [leaseAttempt]
    */
-  async progress(jobId, progress) {
+  async progress(jobId, progress, leaseOwner = null, leaseAttempt = null) {
     const value = {
       done: Math.max(0, Number(progress?.done ?? 0)),
       total: Math.max(0, Number(progress?.total ?? 0)),
@@ -640,7 +648,8 @@ export class VcrJobs {
     };
     const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET progress = $2::jsonb, lease_until = now() + make_interval(secs => $3), updated_at = now()
-      WHERE id = $1 AND state = 'running' RETURNING *`, [jobId, JSON.stringify(value), Math.round(this.leaseMs / 1000)]);
+      WHERE id = $1 AND state = 'running' AND ($4::text IS NULL OR lease_owner=$4)
+        AND ($5::integer IS NULL OR attempts=$5) RETURNING *`, [jobId, JSON.stringify(value), Math.round(this.leaseMs / 1000), leaseOwner, leaseAttempt]);
     return jobSummaryFromRow(row);
   }
 
@@ -650,11 +659,13 @@ export class VcrJobs {
    * simulation from its own checkpoint file when the same job id is submitted
    * again; nothing here is sent to it.) Only a job still running is touched.
    * @param {string} jobId @param {Record<string, any>} checkpoint
+   * @param {string | null} [leaseOwner] @param {number | null} [leaseAttempt]
    */
-  async checkpoint(jobId, checkpoint) {
+  async checkpoint(jobId, checkpoint, leaseOwner = null, leaseAttempt = null) {
     const row = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
       SET checkpoint = checkpoint || $2::jsonb, lease_until = now() + make_interval(secs => $3), updated_at = now()
-      WHERE id = $1 AND state = 'running' RETURNING *`, [jobId, JSON.stringify(object(checkpoint)), Math.round(this.leaseMs / 1000)]);
+      WHERE id = $1 AND state = 'running' AND ($4::text IS NULL OR lease_owner=$4)
+        AND ($5::integer IS NULL OR attempts=$5) RETURNING *`, [jobId, JSON.stringify(object(checkpoint)), Math.round(this.leaseMs / 1000), leaseOwner, leaseAttempt]);
     return jobSummaryFromRow(row);
   }
 
@@ -733,18 +744,20 @@ export class VcrJobs {
     const row = await this.#row(job.id);
     if (!row || row.state !== "running") return { action: "skipped", state: row?.state ?? "gone" };
     const owner = String(row.lease_owner ?? "");
+    if (owner !== String(job.leaseOwner ?? this.owner)
+      || Number(job.attempts ?? row.attempts) !== Number(row.attempts)) return { action: "skipped", state: "lease_changed" };
     const frozen = this.#engineJob(row);
     const local = this.localExecutors[String(row.method)];
     if (local) return this.#runLocal(row, frozen, local, owner);
     if (!this.engine?.configured?.()) {
-      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, error: { code: "engine_unavailable",
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), error: { code: "engine_unavailable",
         message: "计算引擎未接入本部署，这一步暂不可用。" } });
     }
     const engineJobId = object(row.checkpoint).engineJobId;
     if (!engineJobId) return this.#submit(row, frozen, owner);
     try {
       const status = await this.engine.status(String(engineJobId));
-      if (status.progress) await this.progress(String(row.id), status.progress);
+      if (status.progress) await this.progress(String(row.id), status.progress, owner, Number(row.attempts));
       if (["queued", "running", "canceling"].includes(status.state)) return { action: "waiting", state: status.state, progress: status.progress };
       let answer;
       try {
@@ -754,7 +767,7 @@ export class VcrJobs {
         // a CPU limit, a memory limit. Its fixed code says which; nothing retries
         // a job that killed its own process.
         if (status.error && ["vcr_engine_rejected", "vcr_engine_not_found"].includes(codeOf(error))) {
-          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, cpuSeconds: Number(status.cpuSeconds ?? 0), error: {
+          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds: Number(status.cpuSeconds ?? 0), error: {
             code: "vcr_job_failed", engineError: String(status.error), message: ENGINE_ERROR_MESSAGES[String(status.error)] ?? "引擎没有做成这项计算。" } });
         }
         throw error;
@@ -776,14 +789,14 @@ export class VcrJobs {
     const result = object(answer.result);
     const cpuSeconds = Number(result?.manifest?.cpuSeconds ?? status?.cpuSeconds ?? 0);
     if (answer.refused === true) {
-      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, cpuSeconds,
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds,
         error: vcrErrorFromIssues(result) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
     }
     this.#verify(row, result);
     const tables = await this.#storeTables(row, result);
     const ended = String(result.status);
     return this.finish(String(row.id), {
-      status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner,
+      status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner, leaseAttempt: Number(row.attempts),
       outputHash: vcrComputedOutputHash(result),
       // A run the engine refused or stopped says why in its issues: the reason it
       // names is the job's own error, not a bare 「failed」 (a partial result
@@ -819,7 +832,14 @@ export class VcrJobs {
    * whose reply was lost) is the job being there.
    * @param {any} row @param {Record<string, any>} frozen @param {string} owner
    */
-  async #submit(row, frozen, owner) {
+  async #submit(row, frozen, owner, resubmit = false) {
+    const intent = await this.checkpoint(String(row.id), {
+      engineJobId: String(row.id), engineStopped: false,
+      submissionIntent: { scenarioHash: String(row.scenario_hash), methodVersion: String(row.method_version),
+        at: this.now().toISOString(), attempt: Number(row.attempts) },
+      ...(resubmit ? { resubmits: Number(object(row.checkpoint).resubmits ?? 0) + 1 } : {}),
+    }, owner, Number(row.attempts));
+    if (!intent) return { action: "skipped", state: "changed" };
     try {
       let accepted;
       try {
@@ -829,12 +849,28 @@ export class VcrJobs {
           accepted = { jobId: String(row.id), accepted: true };
         } else throw error;
       }
-      const stored = await this.checkpoint(String(row.id), { engineJobId: accepted.jobId, submittedAt: this.now().toISOString() });
-      if (!stored) return { action: "skipped", state: "changed" };
-      this.counters.dispatched += 1;
-      return { action: "submitted", engineJobId: accepted.jobId };
+      if (accepted.jobId !== String(row.id)) throw new VcrEngineError("vcr_engine_response_invalid", "引擎接收的作业身份与提交的身份不一致。");
+      const stored = await this.checkpoint(String(row.id), { submittedAt: this.now().toISOString() }, owner, Number(row.attempts));
+      if (!stored) {
+        const current = await this.#row(String(row.id));
+        if (current?.state === "canceled" || current?.state === "failed") await this.engine.cancel(String(row.id)).catch(() => null);
+        return { action: "skipped", state: "changed" };
+      }
+      if (resubmit) this.counters.resubmitted += 1;
+      else this.counters.dispatched += 1;
+      return { action: resubmit ? "resubmitted" : "submitted", engineJobId: accepted.jobId };
     } catch (error) {
-      return this.#fail(row, error, owner);
+      // A lost response cannot prove that the engine refused this identity.
+      // Poll it under the same lease and keep physical admission occupied.
+      const stored = await this.checkpoint(String(row.id), { submissionError: codeOf(error) }, owner, Number(row.attempts));
+      this.lastError = codeOf(error);
+      this.report(this.lastError);
+      if (!stored) {
+        const current = await this.#row(String(row.id));
+        if (current?.state === "canceled" || current?.state === "failed") await this.engine.cancel(String(row.id)).catch(() => null);
+        return { action: "skipped", state: "changed" };
+      }
+      return { action: "waiting", state: "submission_uncertain", code: codeOf(error) };
     }
   }
 
@@ -848,18 +884,10 @@ export class VcrJobs {
   async #resubmit(row, frozen, owner) {
     const tries = Number(object(row.checkpoint).resubmits ?? 0);
     if (tries >= VCR_JOB_MAX_RESUBMITS) {
-      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, error: { code: "vcr_engine_not_found",
+      return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), error: { code: "vcr_engine_not_found",
         message: "引擎反复找不到这项作业，没有做成；可以重新计算。" } });
     }
-    try {
-      const accepted = await this.engine.submit(frozen);
-      const stored = await this.checkpoint(String(row.id), { engineJobId: accepted.jobId, resubmits: tries + 1, submittedAt: this.now().toISOString() });
-      if (!stored) return { action: "skipped", state: "changed" };
-      this.counters.resubmitted += 1;
-      return { action: "resubmitted", engineJobId: accepted.jobId };
-    } catch (error) {
-      return this.#fail(row, error, owner);
-    }
+    return this.#submit(row, frozen, owner, true);
   }
 
   /**
@@ -873,7 +901,7 @@ export class VcrJobs {
     try {
       const result = await executor({
         job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
-        onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}),
+        onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}, owner, Number(row.attempts)),
       });
       return this.finish(String(row.id), {
         status: String(result?.status ?? "succeeded"),
@@ -881,7 +909,7 @@ export class VcrJobs {
         signed: false,
         local: true,
         startedAt,
-        leaseOwner: owner,
+        leaseOwner: owner, leaseAttempt: Number(row.attempts),
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0),
       });
     } catch (error) {
@@ -913,6 +941,10 @@ export class VcrJobs {
     const attempts = Number(row.attempts ?? 0);
     this.lastError = code;
     this.report(code);
+    if (retryable && object(row.checkpoint).engineJobId) {
+      const held = await this.checkpoint(String(row.id), { transportError: code }, owner, Number(row.attempts));
+      return held ? { action: "waiting", state: "engine_unreachable", code } : { action: "skipped", state: "changed" };
+    }
     if (retryable && attempts < Number(row.max_attempts ?? VCR_JOB_MAX_ATTEMPTS)) {
       const backoffSeconds = Math.min(600, 15 * 2 ** Math.max(0, attempts - 1));
       const requeued = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
@@ -923,7 +955,7 @@ export class VcrJobs {
       return requeued ? { action: "requeued", code, job: jobSummaryFromRow(requeued) } : { action: "skipped", state: "changed" };
     }
     return this.finish(String(row.id), {
-      status: "failed", leaseOwner: owner,
+      status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts),
       error: { code, message: String(/** @type {any} */ (error)?.message ?? "").slice(0, 400),
         ...(Array.isArray(/** @type {any} */ (error)?.detail) ? { issues: /** @type {any} */ (error).detail.slice(0, 10) } : {}) },
     });
@@ -1009,7 +1041,7 @@ export class VcrJobs {
    *
    * @param {string} jobId
    * @param {{ status: string, result?: Record<string, any> | null, error?: Record<string, any> | null, signed?: boolean,
-   *   local?: boolean, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, outputHash?: string | null }} outcome
+   *   local?: boolean, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null }} outcome
    */
   async finish(jobId, outcome) {
     const row = await this.#row(jobId);
@@ -1028,10 +1060,12 @@ export class VcrJobs {
     const kind = String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
     const leaseOwner = outcome.leaseOwner ?? null;
+    const leaseAttempt = outcome.leaseAttempt ?? null;
 
     const outcomeOf = await this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [jobId])).rows[0];
-      if (!locked || locked.state !== "running" || (leaseOwner && String(locked.lease_owner ?? "") !== leaseOwner)) {
+      if (!locked || locked.state !== "running" || (leaseOwner && String(locked.lease_owner ?? "") !== leaseOwner)
+        || (leaseAttempt != null && Number(locked.attempts) !== leaseAttempt)) {
         return { skipped: true, state: String(locked?.state ?? "gone") };
       }
       /** @type {any} */

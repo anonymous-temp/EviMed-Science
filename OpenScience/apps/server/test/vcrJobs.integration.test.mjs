@@ -319,6 +319,80 @@ test("a finished job writes an execution and an immutable result filed under the
   assert.equal(again.created, true);
 });
 
+test("submission identity is durable before the engine accepts, so a lost acknowledgement can be recovered without duplicate work", options, async () => {
+  const study = await makeStudy("submit-intent");
+  const engine = engineDouble();
+  const submit = engine.submit;
+  let accepted = false;
+  engine.submit = async (job) => {
+    const row = await store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1", [job.jobId]);
+    assert.equal(row.checkpoint.engineJobId, job.jobId, "the physical job is known before its response");
+    assert.equal(row.checkpoint.submissionIntent.scenarioHash, vcrScenarioHash(job.scenario));
+    await submit(job);
+    accepted = true;
+    throw new VcrEngineError("vcr_engine_response_invalid", "The accepted response was lost.");
+  };
+  const jobs = new VcrJobs({ store, config, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [claimed] = await jobs.claim();
+  const uncertain = await jobs.advance(claimed);
+  assert.equal(accepted, true);
+  assert.equal(uncertain.action, "waiting");
+  assert.equal((await store.job(study.id, claimed.id)).state, "running");
+  const recovered = await jobs.advance(claimed);
+  assert.equal(recovered.state, "succeeded");
+  assert.equal(engine.submitted.length, 1);
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 1);
+});
+
+test("a cancellation while submit is in flight also cancels its late acceptance and preserves physical admission", options, async () => {
+  const study = await makeStudy("cancel-submit");
+  const engine = engineDouble();
+  const submit = engine.submit;
+  let entered;
+  let resume;
+  const started = new Promise((done) => { entered = done; });
+  const gate = new Promise((done) => { resume = done; });
+  engine.submit = async (job) => { entered(); await gate; return submit(job); };
+  const jobs = new VcrJobs({ store, config, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [claimed] = await jobs.claim();
+  const pending = jobs.advance(claimed);
+  await started;
+  await jobs.cancel(study.id, claimed.id);
+  resume();
+  assert.equal((await pending).action, "skipped");
+  assert.equal((await store.job(study.id, claimed.id)).state, "canceled");
+  assert.equal(engine.cancelled.filter((id) => id === claimed.id).length, 2, "both the in-flight identity and late acknowledgement are canceled");
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 0);
+});
+
+test("a reclaimed lease fences a late completion even when the worker identity is unchanged", options, async () => {
+  const study = await makeStudy("lease-attempt");
+  const engine = engineDouble();
+  const describe = engine.status;
+  let entered;
+  let resume;
+  const started = new Promise((done) => { entered = done; });
+  const gate = new Promise((done) => { resume = done; });
+  let blocked = true;
+  engine.status = async (id) => { if (blocked) { blocked = false; entered(); await gate; } return describe(id); };
+  const jobs = new VcrJobs({ store, config, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [first] = await jobs.claim();
+  await jobs.advance(first);
+  const late = jobs.advance(first);
+  await started;
+  await store.query("UPDATE evimed_vcr.jobs SET lease_until=now()-interval '1 hour' WHERE id=$1", [first.id]);
+  const [next] = await jobs.claim();
+  assert.equal(next.attempts, first.attempts + 1);
+  resume();
+  assert.equal((await late).action, "skipped");
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 0);
+  assert.equal((await jobs.advance(next)).state, "succeeded");
+  assert.equal(engine.submitted.length, 1);
+});
+
 test("a stage of an object folds into the object's own result, and its credibility is the weakest of its stages", options, async () => {
   const study = await makeStudy("stages", { intendedUse: "specified_analysis" });
   const jobs = new VcrJobs({ store, config: { ...config, vcrMaxConcurrentJobs: 4 }, engine: engineDouble() });

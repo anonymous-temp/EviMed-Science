@@ -328,7 +328,7 @@ export function createVcrEngineClient({ baseUrl = "", timeoutMs = 120_000, token
       const answer = await exchange(VCR_ENGINE_ROUTES.submit, {
         method: "POST", body: job, timeout: Math.min(timeoutMs, 30_000), consume: (response) => jsonObject(response),
       });
-      if (answer.accepted !== true || !idShape(answer.jobId)) {
+      if (answer.accepted !== true || !idShape(answer.jobId) || answer.jobId !== job.jobId) {
         throw new VcrEngineError("vcr_engine_response_invalid", "计算引擎没有确认接收这个作业。", { detail: answer });
       }
       return { jobId: String(answer.jobId), accepted: true };
