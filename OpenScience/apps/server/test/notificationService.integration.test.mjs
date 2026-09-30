@@ -272,3 +272,26 @@ test("due defaults settle once and preferences preserve quiet hours and in-app d
     switches: { notify: true, question: true, review: true }, channels: ["in-app"] }, defaults.revision);
   assert.equal(saved.digestTime, "08:30");
 });
+
+test("default notice time shares the database clock even when the app clock is behind", options, async t => {
+  const before = (await database.query("SELECT clock_timestamp() AS now")).rows[0].now;
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() - 60_000 });
+  let notice;
+  try { notice = await service.create(owner, { noticeType: "notify", title: "Clock regression", body: "New after the database event." }); }
+  finally { t.mock.timers.reset(); }
+  assert.ok(Date.parse(notice.createdAt) >= new Date(before).getTime(), "a new notice must not predate a database binding because clocks differ");
+  const historical = await service.create(owner, { noticeType: "notify", title: "Historical event", body: "An explicit event time stays explicit." }, { now: new Date("2020-01-01T00:00:00Z") });
+  assert.equal(historical.createdAt, "2020-01-01T00:00:00.000Z");
+});
+
+test("default notice timestamps use the binding column's millisecond precision", options, async t => {
+  const binding = (await database.query("SELECT '2026-01-01T00:00:00.000600Z'::timestamptz(3) AS at")).rows[0].at;
+  const transaction = database.transaction.bind(database);
+  t.mock.method(database, "transaction", callback => transaction(client => callback({
+    query: (sql, values) => client.query(sql.startsWith("SELECT clock_timestamp()")
+      ? sql.replace("clock_timestamp()", "'2026-01-01T00:00:00.000900Z'::timestamptz") : sql, values),
+  })));
+  const notice = await service.create(owner, { noticeType: "notify", title: "Submillisecond ordering", body: "This event follows the binding." });
+  assert.ok(Date.parse(notice.createdAt) >= new Date(binding).getTime());
+  assert.equal(notice.createdAt, "2026-01-01T00:00:00.001Z");
+});

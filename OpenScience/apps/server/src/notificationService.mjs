@@ -411,11 +411,11 @@ export class NotificationService {
   }
 
   /** @param {string} userId @param {Record<string,any>} input @param {{now?:Date}} options */
-  async create(userId, input, { now = new Date() } = {}) {
+  async create(userId, input, { now } = {}) {
     const user = productId(userId, "user");
     const noticeType = String(input.noticeType ?? "");
     if (!NOTICE_TYPES.includes(noticeType)) throw new HttpError(400, "notification_payload_invalid", "Invalid notice type.");
-    const createdAt = timestamp(now, "creation time");
+    const createdAt = now === undefined ? null : timestamp(now, "creation time");
     const actionList = actions(input.actions);
     if (noticeType !== "notify" && actionList.length === 0) throw new HttpError(400, "notification_payload_invalid", "Blocking inbox items require actions.");
     const defaultAction = input.defaultAction == null ? null : productId(input.defaultAction, "default action");
@@ -443,6 +443,12 @@ export class NotificationService {
     };
     await migrateNotifications(this.database);
     const saved = await this.database.transaction(async (client) => {
+      if (now === undefined) {
+        // Channel bindings use the database clock. A host clock behind it must
+        // not make a genuinely new notice look older than its binding.
+        const clock = await client.query("SELECT clock_timestamp()::timestamptz(3) AS created_at");
+        values.createdAt = timestamp(clock.rows[0].created_at, "creation time");
+      }
       if (input.idempotencyKey != null) {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-inbox-key:${values.id}`]);
         // An event already folded into a grouped item returns that item as it

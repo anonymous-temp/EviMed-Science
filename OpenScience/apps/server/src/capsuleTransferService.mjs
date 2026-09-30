@@ -7,6 +7,7 @@ import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { boundedText } from "./researchMemory.mjs";
+import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -198,6 +199,7 @@ export class CapsuleTransferService {
    * @param {string} userId @param {string} capsuleId @param {readonly string[]} kinds
    */
   async #assemble(userId, capsuleId, kinds) {
+    await migrateResearchMemory(this.documents.database);
     return this.documents.database.transaction(async client => {
       await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const capsule = await client.query("SELECT revision FROM evimed_product.documents WHERE user_id=$1 AND kind='capsule' AND id=$2 AND deleted_at IS NULL", [productId(userId), productId(capsuleId)]);

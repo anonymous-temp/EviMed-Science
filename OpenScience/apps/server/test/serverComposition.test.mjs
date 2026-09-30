@@ -171,6 +171,7 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    if (sql === "SELECT clock_timestamp()::timestamptz(3) AS created_at") return { rows: [{ created_at: new Date() }], rowCount: 1 };
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND id=\$3/.test(sql)) {
       const row = this.documents.get(`${values[1]}:${values[2]}`);
       return { rows: row ? [row] : [], rowCount: row ? 1 : 0 };
