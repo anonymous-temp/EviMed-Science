@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 /**
  * The GEO tabs' one line chart, drawn the way the frontier feed draws its heat
@@ -212,14 +213,14 @@ export function GeoLineChart({
               : 100;
             const edgeAligned = !pointLabels && count > 1 && (index === 0 || index === count - 1);
             return (
-              <span
-                key={`label-${index}`}
-                title={label}
-                className={cn("absolute truncate text-meta text-text-3", edge)}
-                style={{ left: `${x}%`, maxWidth: `${edgeAligned ? gap / 2 : gap}%` }}
-              >
-                {label}
-              </span>
+              <Tooltip key={`label-${index}`} content={label} kind="label" whenTruncated>
+                <span
+                  className={cn("absolute truncate text-meta text-text-3", edge)}
+                  style={{ left: `${x}%`, maxWidth: `${edgeAligned ? gap / 2 : gap}%` }}
+                >
+                  {label}
+                </span>
+              </Tooltip>
             );
           })}
         </div>
