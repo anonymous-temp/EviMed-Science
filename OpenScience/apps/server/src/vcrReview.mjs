@@ -1,8 +1,9 @@
 /** Trusted, aggregate-only VCR adapter for the platform review queue. */
 import { createHash } from 'node:crypto';
 import { vcrResultOutputPayload } from '@evimed/domain';
+import { vcrRecordedResultHash } from './vcrJobs.mjs';
 import { vcrCurrentNodes, vcrReviewIsCurrent } from './vcrViews.mjs';
-import { renderVcrNumbers } from './vcrRender.mjs';
+import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
 import { studyReviewDigest } from './studyReview.mjs';
 import { HttpError } from './security.mjs';
 
@@ -16,9 +17,12 @@ export function buildVcrReviewInput({ model, results, executions, evidence, repo
   const findings = [];
   for (const result of results) {
     const execution = executions.find(row => row.id === result.executionId);
-    const actual = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
-    if (!execution?.output_hash || execution.output_hash !== actual) findings.push({ kind: 'number_untraced', location: `result:${result.id}@${result.version}`,
-      evidence: '', message: 'Stored result could not be matched to its execution output hash.', fix: '核对该结果与对应计算记录；保留已产出的结果并标明核验不确定性。' });
+    const actual = vcrRecordedResultHash(result);
+    const proof = execution?.receipt;
+    const stageHash = proof?.stageOutput ? createHash('sha256').update(vcrResultOutputPayload(proof.stageOutput)).digest('hex') : null;
+    if (proof?.stageVerified !== true || stageHash !== execution?.output_hash || proof.recordedResultHash !== actual
+      || proof.recordedResultId !== result.id || proof.recordedResultVersion !== result.version) findings.push({ kind: 'number_untraced', location: `result:${result.id}@${result.version}`,
+      evidence: '', message: 'The verified stage receipt could not be bound to this exact stored result.', fix: '核对该结果与对应计算记录；保留已产出的结果并标明核验不确定性。' });
   }
   const referenced = new Set((model.assumptions ?? []).flatMap(row => [...(row.evidenceIds ?? []), ...(row.sources ?? [])].map(source => String(source.id ?? source.evidenceId ?? source))));
   for (const id of referenced) {
@@ -54,15 +58,17 @@ export function createVcrReviewAdapter({ vcr, reviewService }) {
     if (!exportId || !vcr.orchestrator?.requestReviewRepair) return;
     const study = await vcr.store.studyById(record.subjectRef.studyId);
     if (!study) return;
+    const exportRow = await vcr.store.exportRow(study.id, exportId);
     const reviews = await vcr.store.reviews(study.id);
-    const pair = reviews.filter(row => row.reviewerKind === 'ai' && row.provenance.inputDigest === record.inputDigest
+    const pair = reviews.filter(row => row.reviewerKind === 'ai' && row.provenance.subjectRef?.exportId === exportId
+      && row.provenance.subjectRef?.reportRevision === record.subjectRef.reportRevision && row.provenance.inputDigest === record.inputDigest
       && row.provenance.configurationDigest === record.configurationDigest);
     if (!['clinical', 'statistical'].every(role => pair.some(row => row.kind === role && ['done', 'failed'].includes(row.status)))) return;
     const [results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol] = await Promise.all([
       vcr.store.results(study.id), vcr.store.assumptions(study.id), vcr.store.populations(study.id), vcr.store.patientSets(study.id),
       vcr.store.comparatorDesigns(study.id), vcr.store.trialScenarios(study.id), vcr.store.latestDesignGrid(study.id), vcr.store.latestDefinition(study.id), vcr.store.latestProtocolVersion(study.id)]);
     const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
-    const completed = pair.filter(row => row.status === 'done' && vcrReviewIsCurrent(row, { results, current }));
+    const completed = pair.filter(row => row.status === 'done' && vcrReviewIsCurrent(row, { results, current, exports: exportRow ? [exportRow] : [] }));
     const findings = completed.flatMap(row => (row.provenance.findings ?? []).filter(finding => finding.fix));
     if (findings.length) await vcr.orchestrator.requestReviewRepair(study.id, { sourceDigest: record.inputDigest, exportId,
       reviewIds: completed.map(row => row.platformReviewId), findings });
@@ -79,15 +85,15 @@ export function createVcrReviewAdapter({ vcr, reviewService }) {
         const model = exported?.cover?.results ?? await vcr.service.reportModelFromStore(study, snapshot);
         const ids = [...new Set([...Object.values(model.results ?? {}), ...Object.values(model.scenarioResults ?? {})].map(row => row.id).filter(Boolean))];
         const results = (await Promise.all(ids.map(id => snapshot.result(studyId, id)))).filter(Boolean);
-        const executions = await snapshot.rows('SELECT id,output_hash,method,method_version,environment FROM evimed_vcr.executions WHERE study_id=$1 AND id=ANY($2::text[])', [studyId, results.map(row => row.executionId).filter(Boolean)]);
+        const executions = await snapshot.rows('SELECT id,output_hash,method,method_version,environment,receipt FROM evimed_vcr.executions WHERE study_id=$1 AND id=ANY($2::text[])', [studyId, results.map(row => row.executionId).filter(Boolean)]);
         const evidence = await snapshot.rows('SELECT e.id,e.quote,e.source_ref,e.parameter,e.value,e.unit,e.locator,p.record_text,p.record_hash FROM evimed_vcr.evidence_items e LEFT JOIN evimed_vcr.precedents p ON p.id=e.precedent_id AND p.user_id=e.user_id WHERE e.study_id=$1 AND e.user_id=$2 ORDER BY e.created_at DESC LIMIT 2000', [studyId, study.userId]);
         const reports = exported?.cover?.reports ?? (exported?.cover?.report ? [exported.cover.report] : []);
-        return { study, ...buildVcrReviewInput({ model, results, executions, evidence, reports, forModel: value => vcr.service.forModel(value) }) };
+        return { study, reportRevision: exported ? vcrReportReviewRevision(exported.cover) : null, ...buildVcrReviewInput({ model, results, executions, evidence, reports, forModel: value => vcr.service.forModel(value) }) };
       });
       if (!frozen.nodes.length) return [];
       const records = [];
       for (const role of ['clinical', 'statistical']) {
-        const input = { subjectRef: { kind: 'vcr', studyId, ...(exportId ? { exportId } : {}) }, role, nodes: frozen.nodes, frozenInput: frozen.frozenInput, deterministic: frozen.deterministic, runId };
+        const input = { subjectRef: { kind: 'vcr', studyId, ...(exportId ? { exportId, reportRevision: frozen.reportRevision } : {}) }, role, nodes: frozen.nodes, frozenInput: frozen.frozenInput, deterministic: frozen.deterministic, runId };
         if (reviewService) records.push(await reviewService.requestStudyReview({ userId: frozen.study.userId, projectId: frozen.study.projectId }, input));
         else {
           const digest = studyReviewDigest(frozen.frozenInput);

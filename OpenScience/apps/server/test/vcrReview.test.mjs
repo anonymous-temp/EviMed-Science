@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { vcrResultOutputPayload } from '@evimed/domain';
+import { vcrRecordedResultHash } from '../src/vcrJobs.mjs';
 import { buildVcrReviewInput } from '../src/vcrReview.mjs';
+import { vcrReportReviewRevision } from '../src/vcrRender.mjs';
 import { vcrReviewIsCurrent, useCeilingOf } from '../src/vcrViews.mjs';
 const result = { id: 'trial', version: 1, executionId: 'execution', measures: [{ key: 'power', value: 0.8 }], counts: { observedPatients: 3 }, conclusion: 'limited', tables: [] };
 const outputHash = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
@@ -47,4 +49,34 @@ test('evidence checks verify actual preserved bytes and model input omits plane 
   evidence[0].record_text = 'Changed source';
   const changed = buildVcrReviewInput({ model: payload, results: [], executions: [], evidence, reports: [], forModel: value => service.forModel(value) });
   assert.ok(changed.deterministic.findings.some(row => row.kind === 'reference_unresolvable'));
+});
+
+test('multistage tracing binds a verified engine stage and the exact recorded aggregate separately', () => {
+  const stage = { ...result, measures: [{ name: 'power', value: 0.8 }] };
+  const aggregate = { ...result, measures: [{ name: 'required_events', value: 138 }, ...stage.measures], version: 2 };
+  const stageHash = createHash('sha256').update(vcrResultOutputPayload(stage)).digest('hex');
+  const receipt = { stageVerified: true, stageOutput: JSON.parse(vcrResultOutputPayload(stage)),
+    recordedResultHash: vcrRecordedResultHash(aggregate), recordedResultId: aggregate.id, recordedResultVersion: aggregate.version };
+  const executions = [{ id: 'execution', output_hash: stageHash, receipt }];
+  const trace = (value, rows = executions) => buildVcrReviewInput({ model, results: [value], executions: rows, evidence: [], reports: [], forModel: value => value });
+  assert.notEqual(receipt.recordedResultHash, stageHash);
+  assert.ok(!trace(aggregate).deterministic.findings.some(row => row.kind === 'number_untraced'));
+  for (const changed of [{ ...aggregate, measures: [{ name: 'required_events', value: 999 }, ...stage.measures] }, { ...aggregate, id: 'other' }, { ...aggregate, version: 3 }, { ...aggregate, diagnostics: { stageResults: { h0: { measures: [{ name: 'expected_n', value: 999 }] } } } }]) {
+    assert.ok(trace(changed).deterministic.findings.some(row => row.kind === 'number_untraced'));
+  }
+  for (const proof of [{}, { ...receipt, stageVerified: false }, { ...receipt, stageOutput: { ...receipt.stageOutput, counts: { realPatients: 99 } } }]) {
+    assert.ok(trace(aggregate, [{ ...executions[0], receipt: proof }]).deterministic.findings.some(row => row.kind === 'number_untraced'));
+  }
+});
+
+test('export-bound historical reviews without report proof are not attested current', () => {
+  const cover = { reports: [{ section: 'main', template: 'Original claim.' }], results: model };
+  const context = { results: [result], exports: [{ id: 'export', cover }] };
+  const review = { reviewerKind: 'ai', status: 'done', platformReviewId: 'rv', nodes: ['result:trial@1'],
+    provenance: { model: 'actual', inputDigest: 'snapshot', subjectRef: { exportId: 'export' } } };
+  assert.equal(vcrReviewIsCurrent(review, context), false);
+  review.provenance.subjectRef.reportRevision = vcrReportReviewRevision(cover);
+  assert.equal(vcrReviewIsCurrent(review, context), true);
+  cover.reports[0].template = 'Updated claim.';
+  assert.equal(vcrReviewIsCurrent(review, context), false);
 });

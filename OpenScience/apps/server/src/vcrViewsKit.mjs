@@ -552,7 +552,7 @@ export function scaledSeries(series, factor) {
  * @param {any} review */
 export function presentVcrReview(review) {
   const ai = review.reviewerKind === 'ai';
-  const status = review.status ?? 'done';
+  const status = review.status ?? (['queued', 'running', 'failed'].includes(review.state) ? review.state : review.state === 'ai_set' ? 'queued' : 'done');
   const provenance = review.provenance ?? {};
   const findings = provenance.findings ?? [];
   const state = status === 'queued' ? '等待审查' : status === 'running' ? '审查中' : status === 'failed' ? '审查未完成'

@@ -44,7 +44,8 @@
  * @module vcrRender
  */
 
-import { VCR_COUNT_KEYS, VCR_INTERVAL_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH } from "@evimed/domain";
+import { createHash } from "node:crypto";
+import { documentExportDigest, VCR_COUNT_KEYS, VCR_INTERVAL_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH } from "@evimed/domain";
 
 /**
  * A number reference in a template: `{{n:<path>}}` or `{{n:<path>|<format>}}`.
@@ -446,4 +447,14 @@ export function vcrReportModel(input) {
     }),
     seal: input.seal ?? null,
   };
+}
+
+/** Report content identity for advisory review. Rendering/job/review status is not scientific content.
+ * @param {any} cover */
+export function vcrReportReviewRevision(cover) {
+  const reports = cover?.reports?.length ? cover.reports : cover?.report ? [cover.report] : [];
+  const model = cover?.results ?? {};
+  const { review: _review, ...content } = model;
+  return createHash('sha256').update(documentExportDigest({ reports, model: { ...content,
+    assumptions: (model.assumptions ?? []).map(({ reviewState: _state, ...assumption }) => assumption) } })).digest('hex');
 }

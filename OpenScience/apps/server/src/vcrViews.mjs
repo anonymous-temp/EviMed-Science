@@ -42,7 +42,7 @@ import {
   intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
 } from "@evimed/domain";
 
-import { vcrReportModel } from "./vcrRender.mjs";
+import { vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -164,11 +164,16 @@ export function vcrCurrentNodes({ study = null, assumptions = [], populations = 
  * (AC-21). A node of a kind the study does not version (a snapshot, an
  * execution) is judged by its stale mark alone.
  * @param {Record<string, any>} review
- * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[], current?: { nodes: Set<string>, kinds: Set<string> } | null }} context
+ * @param {{ results: readonly Record<string, any>[], stale?: readonly Record<string, any>[], current?: { nodes: Set<string>, kinds: Set<string> } | null, exports?:readonly Record<string,any>[] }} context
  */
-export function vcrReviewIsCurrent(review, { results, stale = [], current = null }) {
-  if (!list(review.nodes).length || list(review.nodes).some(node => !parseLineageNode(String(node))) || (review.status && review.status !== 'done')) return false;
+export function vcrReviewIsCurrent(review, { results, stale = [], current = null, exports = [] }) {
+  if (!list(review.nodes).length || list(review.nodes).some(node => !parseLineageNode(String(node))) || (review.status ? review.status !== 'done' : ['queued', 'running', 'failed', 'ai_set'].includes(review.state))) return false;
   if (review.reviewerKind === 'ai' && (!review.platformReviewId || !review.provenance?.model || !review.provenance?.inputDigest)) return false;
+  const subject = review.provenance?.subjectRef;
+  if (review.reviewerKind === 'ai' && subject?.exportId) {
+    const exported = exports.find(row => row.id === subject.exportId);
+    if (!exported || !subject.reportRevision || subject.reportRevision !== vcrReportReviewRevision(exported.cover)) return false;
+  }
   const currentResults = new Set(list(results).map((result) => `result:${object(result).id}@${object(result).version}`));
   const staleNodes = new Set(list(stale).map((mark) => String(object(mark).node)));
   return list(object(review).nodes).map(String).every((node) => {
@@ -1049,7 +1054,7 @@ export function presentExport(row, bundle) {
   const currentModel = vcrReportModel({
     study: bundle.study, definition: bundle.definition, assumptions: bundle.assumptions, results: bundle.results,
     seal: bundle.seal ?? null, reviews: list(bundle.reviews).map(review => ({ ...review,
-      current: vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null }) })),
+      current: vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: bundle.exports ?? [] }) })),
     staleMarks: bundle.stale, models: bundle.models, population: bundle.populations[0] ?? null,
     comparator: bundle.comparator, scenarios: bundle.scenarios,
   });
@@ -1074,7 +1079,8 @@ export function presentExport(row, bundle) {
     ...(cover.documentExportId ? { documentExportId: cover.documentExportId } : {}),
     document: {
       reviews: [...list(bundle.reviews).filter(review => review.provenance?.subjectRef?.exportId === row.id),
-        ...list(model.review?.records).filter(review => !list(bundle.reviews).some(live => live.platformReviewId && live.platformReviewId === review.platformReviewId))].map(presentVcrReview),
+        ...list(model.review?.records).filter(review => !list(bundle.reviews).some(live => live.platformReviewId && live.platformReviewId === review.platformReviewId))].map(review => presentVcrReview({ ...review, current: vcrReviewIsCurrent(review,
+          { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) })),
       status: coverStatus({ cover, row, bundle, model }),
       sections: packageSections({ cover, row, bundle, model }),
     },
@@ -1088,7 +1094,8 @@ function coverStatus({ cover, row, bundle, model }) {
   const use = String(cover.intendedUse ?? model.intendedUse ?? bundle.study.intendedUse);
   /** @type {Array<{ label: string, value: string, state: string, note: string | null }>} */
   const status = [{ label: "预期用途", value: word(use), state: "neutral", note: null }];
-  const reviews = list(cover.reviews).length ? list(cover.reviews) : list(model.review?.records);
+  const reviews = (list(cover.reviews).length ? list(cover.reviews) : list(model.review?.records)).map(review => ({ ...review,
+    current: review.current !== false && vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) }));
   for (const kind of ["statistical", "clinical"]) {
     // A review the cover says has stopped holding (`current: false`) is not 已复核 — the page says what became of it.
     const ofKind = reviews.filter((review) => String(object(review).kind) === kind);

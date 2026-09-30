@@ -146,3 +146,112 @@ test('post-completion hook retries after restart and repeated request retains co
   assert.equal(saved.findings.length, 1);
   assert.equal((await database.query('SELECT completion_notified FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0].completion_notified, true);
 });
+
+test('restarted study review refuses provider drift before any model request and preserves its frozen configuration', options, async () => {
+  const original = service();
+  const requested = await original.requestStudyReview(identity, input('clinical', 'provider-drift'));
+  const frozen = (await database.query('SELECT configuration,frozen_input FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  let sent = 0;
+  const restarted = service(async () => { sent++; return answer(); });
+  restarted.config = { ...config, reviewApiBase: 'https://different-provider.invalid' };
+  await restarted.ready(); await restarted.processStudyReviews('provider-drift-worker');
+  const saved = (await database.query('SELECT status,error_code,configuration,frozen_input,model,usage FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  assert.equal(sent, 0); assert.equal(saved.status, 'failed'); assert.equal(saved.error_code, 'review_configuration_changed');
+  assert.deepEqual(saved.configuration, frozen.configuration); assert.deepEqual(saved.frozen_input, frozen.frozen_input);
+  assert.equal(saved.model, null); assert.deepEqual(saved.usage, {});
+  const replacement = await restarted.requestStudyReview(identity, input('clinical', 'provider-drift'));
+  assert.notEqual(replacement.reviewId, requested.reviewId);
+  await restarted.processStudyReviews('provider-drift-worker'); assert.equal(sent, 1);
+});
+
+test('report-only changes invalidate export reviews and stale completion cannot schedule repair', options, async () => {
+  const { VcrStore } = await import('../src/vcrStore.mjs');
+  const { VcrService } = await import('../src/vcrService.mjs');
+  const { createVcrReviewAdapter } = await import('../src/vcrReview.mjs');
+  const store = new VcrStore({ database }); await store.ready();
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ('alice','report-project','Report',1048576)");
+  const study = await store.createStudy({ userId: 'alice', projectId: 'report-project', name: 'Report revision', question: 'Describe uncertainty.' });
+  await store.saveDefinition({ userId: 'alice', studyId: study.id, pico: {}, estimand: {}, endpointType: 'binary' });
+  const research = new VcrService({ store, config: {} });
+  const model = await research.reportModel(study);
+  const exported = await store.createExport({ userId: 'alice', studyId: study.id, kind: 'study_package', cover: { results: model, reports: [{ section: 'main', template: 'Original claim.' }] } });
+  let repairs = 0;
+  const vcr = { store, service: research, orchestrator: { requestReviewRepair: async () => { repairs++; } } };
+  const reviewer = service(async () => answer({ findings: [{ kind: 'wording', location: 'main', evidence: 'Original claim.', fix: 'Clarify uncertainty.' }], checklist: [], acceptance: [] }));
+  const adapter = createVcrReviewAdapter({ vcr, reviewService: reviewer });
+  const first = await adapter.queue(study.id, { exportId: exported.id });
+  await reviewer.processStudyReviews('report-revision-worker');
+  assert.equal(repairs, 0);
+  await store.updateExportCover(exported.id, cover => ({ ...cover, reports: [{ section: 'main', template: 'Revised claim.' }] }));
+  await reviewer.processStudyReviews('report-revision-worker');
+  assert.equal(repairs, 0, 'The second old review cannot repair new report prose.');
+  const view = await research.studyViewOf(study);
+  assert.ok(view.review.records.filter(row => first.some(record => record.reviewId === row.platformReviewId)).every(row => row.state === 'changed_after_review'));
+  const next = await adapter.queue(study.id, { exportId: exported.id });
+  assert.notEqual(next[0].reviewId, first[0].reviewId);
+  assert.notEqual(next[0].subjectRef.reportRevision, first[0].subjectRef.reportRevision);
+  const before = next[0].subjectRef.reportRevision;
+  await store.updateExportCover(exported.id, cover => ({ ...cover, documentExportId: 'asynchronous-conversion', reviews: [{ status: 'running' }],
+    results: { ...cover.results, review: { records: [{ status: 'running' }] } } }));
+  const unchanged = await adapter.queue(study.id, { exportId: exported.id });
+  assert.equal(unchanged[0].subjectRef.reportRevision, before);
+  assert.equal(unchanged[0].reviewId, next[0].reviewId);
+  await reviewer.processStudyReviews('report-revision-worker'); await reviewer.processStudyReviews('report-revision-worker');
+  const copy = await store.createExport({ userId: 'alice', studyId: study.id, kind: 'study_package', cover: { results: model, reports: [{ section: 'main', template: 'Original claim.' }] } });
+  await adapter.queue(study.id, { exportId: copy.id });
+  await reviewer.processStudyReviews('report-revision-worker');
+  assert.equal(repairs, 0, 'Identical prose in another export cannot supply the missing second role.');
+  await reviewer.processStudyReviews('report-revision-worker');
+  assert.equal(repairs, 1, 'Repair is requested only after both roles for this exact report finish.');
+});
+
+test('real multistage job persistence proves both the engine stage and recorded aggregate for review', options, async () => {
+  const { VcrStore } = await import('../src/vcrStore.mjs');
+  const { VcrJobs, vcrScenarioHash } = await import('../src/vcrJobs.mjs');
+  const { vcrComputedOutputHash } = await import('../src/vcrEngineClient.mjs');
+  const { buildVcrReviewInput } = await import('../src/vcrReview.mjs');
+  const { vcrReportModel } = await import('../src/vcrRender.mjs');
+  const store = new VcrStore({ database }); await store.ready();
+  const study = await store.createStudy({ userId: 'alice', projectId: 'multi-stage-project', name: 'Multistage trace', intendedUse: 'specified_analysis' });
+  const submitted = new Map();
+  const engine = { configured: () => true,
+    async submit(job) { submitted.set(job.jobId, job); return { jobId: job.jobId, accepted: true }; },
+    async status() { return { state: 'succeeded', cpuSeconds: 1, progress: { done: 1, total: 1 } }; },
+    async result(id) {
+      const job = submitted.get(id);
+      const result = { jobId: id, protocolVersion: 1, status: 'succeeded', method: job.method, methodVersion: job.methodVersion,
+        scenarioHash: vcrScenarioHash(job.scenario), seed: job.seed, replicates: job.replicates ?? null, conclusion: 'estimable',
+        counts: { realPatients: 0, events: 138, effectiveSampleSize: null, generatedRecords: 3600000 },
+        measures: job.method === 'design.analytic' ? [{ name: 'required_events', value: 138, simulated: false, source: 'calculated' }]
+          : [{ name: 'power', value: 0.812, simulated: true, mcse: 0.0031, source: 'synthetic' }],
+        diagnostics: {}, tables: [], manifest: { engineVersion: '1.0.0', rVersion: 'R 4.3.3', packageLockHash: 'b'.repeat(64),
+          startedAt: '2026-09-28T10:00:00Z', finishedAt: '2026-09-28T10:00:01Z', cpuSeconds: 1 } };
+      result.manifest.outputHash = vcrComputedOutputHash(result);
+      return { result, signed: true, refused: false };
+    },
+  };
+  const work = new VcrJobs({ store, engine, config: { vcrJobCpuSeconds: 600, vcrStudyCpuBudget: 1200, vcrMaxConcurrentJobs: 1, vcrLeaseMs: 900000 } });
+  const common = { endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 6 } };
+  for (const stage of ['analytic', 'simulation']) {
+    const scenario = stage === 'analytic' ? { ...common, design: { kind: 'two_arm_fixed' }, analysis: { alpha: 0.025, power: 0.9, sided: 1 } }
+      : { ...common, design: { kind: 'two_arm_fixed', nTreat: 150, nControl: 150 }, analysis: { method: 'logrank', alpha: 0.025, sided: 1 },
+        accrual: { kind: 'uniform', duration: 12, followup: 12 }, performance: ['power'] };
+    await work.enqueue({ studyId: study.id, userId: study.userId, kind: stage === 'analytic' ? 'design_analytic' : 'design_simulation', scenario,
+      cpuSecondsLimit: 60, idempotencyKey: `multistage:${stage}`, detail: { subjectId: 'scenario-s', resultKind: 'trial_scenario', stage } });
+    const [claimed] = await work.claim({ limit: 1 }); assert.ok(claimed);
+    await work.advance(claimed); await work.advance(claimed);
+  }
+  const results = await store.results(study.id, 'trial_scenario');
+  assert.equal(results.length, 1); assert.equal(results[0].measures.length, 2);
+  const executions = await store.rows('SELECT * FROM evimed_vcr.executions WHERE study_id=$1', [study.id]);
+  const last = executions.find(row => row.id === results[0].executionId);
+  assert.notEqual(vcrComputedOutputHash(results[0]), last.output_hash, 'The aggregate differs from the final engine stage.');
+  const trace = () => buildVcrReviewInput({ model: vcrReportModel({ study, results }), results, executions, evidence: [], reports: [], forModel: value => value });
+  assert.ok(!trace().deterministic.findings.some(row => row.kind === 'number_untraced'));
+  const originalValue = results[0].measures[0].value;
+  results[0].measures[0].value = 999;
+  assert.ok(trace().deterministic.findings.some(row => row.kind === 'number_untraced'), 'Tampering with the stored numerical aggregate is still caught.');
+  results[0].measures[0].value = originalValue;
+  results[0].diagnostics.stageResults.analytic.measures[0].value = 999;
+  assert.ok(trace().deterministic.findings.some(row => row.kind === 'number_untraced'), 'Named-stage numerical diagnostics are also bound.');
+});

@@ -78,7 +78,7 @@ import {
 import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
 import { judgeCitedSentences } from "./replyCheckJev.mjs";
-import { StudyReviews, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
+import { StudyReviews, assertStudyReviewConfiguration, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
 import { ProductJobs } from "./productJobs.mjs";
 import { migrateReview } from "./reviewPersistence.mjs";
 import { createReferenceResolver } from "./referenceResolver.mjs";
@@ -434,6 +434,7 @@ export class ReviewService {
       return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { reviewId: row.id }, operation);
     };
     try {
+      assertStudyReviewConfiguration(row.configuration, this.config);
       if (studyReviewDigest(row.frozen_input) !== row.package_digest) throw Object.assign(new Error('The review snapshot changed.'), { code: 'review_input_changed' });
       const previous = await this.database.query(`SELECT id,pass,package_digest,report_text,status,created_at FROM evimed_review.reviews
         WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 AND id<>$5 AND created_at<=$6
@@ -581,14 +582,16 @@ export class ReviewService {
         today: this.now().toISOString().slice(0, 10),
         deterministic: { references: references.metrics, referenceFindings: references.findings, numeric, stats }, previousFindings,
       });
-      const edit = () => this.editors.run(() => callReviewModel({ config: { ...this.config, ...(configuration ? { reviewModel: configuration.model } : {}) }, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+      const edit = () => this.editors.run(() => {
+        if (configuration) assertStudyReviewConfiguration(configuration, this.config);
+        return callReviewModel({ config: { ...this.config, ...(configuration ? { reviewModel: configuration.model } : {}) }, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         signal, userId: identity.userId, projectId: identity.projectId, runId,
         messages: [{ role: "system", content: editorSystemPrompt({ safety: tier.safety, pass }) }, { role: "user", content: message }],
         schema: reviewEditorSchema({ checklistIds: checklist.map((item) => item.id), acceptanceCount: acceptanceItems.length }), schemaName: "review_findings",
         thinking: { enabled: true, budget: Number(configuration?.thinkingBudget ?? this.config.reviewThinkingBudget ?? 8_000) },
         maxTokens: Number(configuration?.maxTokens ?? this.config.reviewMaxOutputTokens ?? 24_000),
         timeoutMs: Number(configuration?.timeoutMs ?? this.config.reviewEditorTimeoutMs ?? 900_000),
-      }));
+      }); });
       try {
         this.counts.editorCalls += 1;
         // One retry, for a failure the provider calls transient (a broken
@@ -641,6 +644,7 @@ export class ReviewService {
           reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(configuration?.thinkingBudget ?? this.config.reviewThinkingBudget ?? 8_000), emptyAnswers,
         };
       } catch (error) {
+        if (error?.code === 'review_configuration_changed') throw error;
         this.counts.editorFailures += 1;
         editorError = error instanceof ReviewModelError ? error.code : "review_editor_failed";
         this.lastError = editorError;

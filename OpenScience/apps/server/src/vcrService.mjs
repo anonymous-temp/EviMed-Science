@@ -523,7 +523,7 @@ export class VcrService {
       results: results.map((result) => this.#resultView(result, stale)),
       conclusion: headline?.conclusion ?? null,
       seal,
-      review: this.#reviewView(reviews, results, stale, current),
+      review: this.#reviewView(reviews, results, stale, current, exports),
       intendedUseCeiling: ceiling,
       stale,
       jobs,
@@ -549,8 +549,8 @@ export class VcrService {
     return presentStudy(await this.#bundle(study, { id: String(study.userId) })).ceiling;
   }
 
-  /** @param {any[]} reviews @param {any[]} results @param {any[]} stale @param {{ nodes: Set<string>, kinds: Set<string> }} currentNodes */
-  #reviewView(reviews, results, stale, currentNodes) {
+  /** @param {any[]} reviews @param {any[]} results @param {any[]} stale @param {{ nodes: Set<string>, kinds: Set<string> }} currentNodes @param {any[]} exports */
+  #reviewView(reviews, results, stale, currentNodes, exports) {
     const staleNodes = new Set(stale.map((mark) => String(mark.node)));
     const current = results.map((result) => `result:${result.id}@${result.version}`);
     return {
@@ -559,11 +559,11 @@ export class VcrService {
         // A review countersigns one version; if any of them moved it reads
         // `changed_after_review` (AC-21). The node list is what moved, not the
         // review, which is why the state is derived and never stored.
-        state: review.status && review.status !== "done" ? "ai_set" : !vcrReviewIsCurrent(review, { results, stale, current: currentNodes })
+        state: review.status && review.status !== "done" ? "ai_set" : !vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports })
           ? "changed_after_review"
           : reviewStateFor({ reviewedNodes: review.nodes, currentNodes: [...new Set([...current, ...review.nodes.filter((node) => !staleNodes.has(node))])] }),
       })),
-      reviewed: reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current: currentNodes })),
+      reviewed: reviews.some((review) => vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports })),
       kinds: [...new Set(reviews.map((review) => review.kind))],
     };
   }
@@ -666,7 +666,7 @@ export class VcrService {
     const currentNodes = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     /** @type {Record<string, any>} */
     const bundle = {
-      now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes }) })), jobs, budget, assumptions, members, exports, decisions,
+      now: this.now(), study, definition, results: reviewedResults, allResults: reviewedAll, stale, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current: currentNodes, exports }) })), jobs, budget, assumptions, members, exports, decisions,
       roles, scenarios, comparators: reviewedComparators, comparator: reviewedComparators[0] ?? null, populations: reviewedPopulations, patientSets, grid, forecasts, models,
       executions, protocol, seal: vcrSealState(study),
       forecastResults: reviewedAll.filter((result) => result.kind === "accrual_forecast"),
@@ -930,14 +930,14 @@ export class VcrService {
   /** @param {any} study @param {any} store */
   async reportModelFromStore(study, store) {
     if (!study) throw failure(404, "vcr_study_not_found", "Study not found.");
-    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol] = await Promise.all([
+    const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol, exports] = await Promise.all([
       store.latestDefinition(study.id), store.assumptions(study.id), store.results(study.id),
       store.reviews(study.id), store.staleMarks(study.id), store.latestPopulation(study.id),
       store.latestComparatorDesign(study.id), store.trialScenarios(study.id, 60), store.models(study.userId),
-      store.populations(study.id, 20), store.patientSets(study.id, 20), store.comparatorDesigns(study.id, 20), store.latestDesignGrid(study.id), store.latestProtocolVersion(study.id),
+      store.populations(study.id, 20), store.patientSets(study.id, 20), store.comparatorDesigns(study.id, 20), store.latestDesignGrid(study.id), store.latestProtocolVersion(study.id), store.exports(study.id),
     ]);
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
-    return vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current }) })), staleMarks: stale, population, comparator,
+    return vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
       scenarios, models, seal: vcrSealState(study) });
   }
 

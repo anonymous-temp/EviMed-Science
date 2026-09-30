@@ -40,7 +40,8 @@ test('all four VCR formats assemble every section against the same frozen result
       { section: 'Limitations', template: '缺失 {{n:counts.missing|int}}。' },
     ] } });
     assert.match(result.canonicalMarkdown, /Methods[\s\S]*42[\s\S]*Limitations[\s\S]*未计算/);
-    assert.match(result.canonicalMarkdown, /尚未完成复核/);
+    assert.match(result.canonicalMarkdown, /审查未完成/);
+    assert.doesNotMatch(result.canonicalMarkdown, /已复核/);
     assert.match(result.canonicalMarkdown, /source_changed/);
     assert.deepEqual(result.cover.reviews, model.review.records);
     assert.equal(result.cover.results, undefined);

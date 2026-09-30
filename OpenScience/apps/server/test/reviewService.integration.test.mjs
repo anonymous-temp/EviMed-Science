@@ -585,3 +585,19 @@ test('queued deliverable resumes after API restart against frozen package bytes'
     assert.doesNotMatch(restarted.prompts[0].messages[1].content, /New unreviewed claim/);
   } finally { await fs.writeFile(file, original); }
 });
+
+test('restarted L2/L3 deliverable refuses provider drift without changing the frozen package or source files', options, async () => {
+  const original = service({ modelAnswers: [QUIET] });
+  const requested = await original.review.startDeliverableReview({ userId, projectId }, { runId: 'deliverable-provider-drift', deliverableId: 'd1', contractKind: 'clinical-evidence-report' });
+  const frozen = (await database.query('SELECT configuration,frozen_input FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  const file = path.join(workspace, 'deliverables/d1/clinical-evidence-report.md');
+  const bytes = await fs.readFile(file);
+  const restarted = service({ modelAnswers: [QUIET] });
+  restarted.review.config = { ...config, reviewApiBase: 'https://different-provider.invalid' };
+  await restarted.review.ready();
+  const state = await settled(restarted.review, requested.reviewId);
+  assert.equal(state.status, 'failed'); assert.equal(state.code, 'review_configuration_changed');
+  assert.equal(restarted.prompts.length, 0); assert.deepEqual(await fs.readFile(file), bytes);
+  const saved = (await database.query('SELECT configuration,frozen_input FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  assert.deepEqual(saved, frozen);
+});
