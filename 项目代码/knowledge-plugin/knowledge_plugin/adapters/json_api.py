@@ -47,6 +47,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable
 from urllib.parse import quote, quote_plus, urlsplit, urlunsplit
 
+from selectolax.parser import HTMLParser
+
 from ..model import FetchError, FetchResult, ParseOutput, RequestSpec, SourceConfig, SourceState
 from ..urltemplate import render_template, template_values
 from .common import (
@@ -54,6 +56,7 @@ from .common import (
     clean_markup,
     dig,
     guess_language,
+    host_allowed,
     load_json,
     make_entry,
     normalize_doi,
@@ -685,6 +688,32 @@ def parse_crossref_family(result: FetchResult, source: SourceConfig, now: dateti
     return parse_crossref_works(result, source)
 
 
+def parse_fda_advisory_calendar(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """FDA's public DataTables records; source modification and meeting time differ."""
+    payload = load_json(result, "fda_calendar")
+    if not isinstance(payload, list):
+        raise FetchError("parse-error", "fda_calendar_records_missing")
+    entries = []
+    for record in payload:
+        if not isinstance(record, dict):
+            continue
+        anchor = HTMLParser(str(record.get("title") or "")).css_first("a[href]")
+        if anchor is None:
+            continue
+        link = absolute_url(anchor.attributes.get("href"), result.final_url or result.request.url)
+        title = clean_markup(anchor.text())
+        if not link or not title or not host_allowed(link, ["www.fda.gov"]):
+            continue
+        changed = HTMLParser(str(record.get("changed") or "")).css_first("time[datetime]")
+        published, precision = parse_date(changed.attributes.get("datetime") if changed is not None else None)
+        summary = _join(_labelled("Meeting starts", record.get("field_start_date")),
+                        _labelled("Meeting ends", record.get("field_end_date")),
+                        _labelled("FDA center", record.get("field_center")))
+        entries.append(make_entry(external_key=link, url=link, title=title, summary=summary,
+                                  published_at=published, precision=precision, language="en"))
+    return ParseOutput(entries=entries, notes=["source-modified-time"])
+
+
 FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]] = {
     "openfda-enforcement": parse_openfda_enforcement,
     "openfda-shortages": parse_openfda_shortages,
@@ -699,6 +728,7 @@ FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]
     "medhelm": parse_medhelm,
     "prepare-registry": parse_prepare_registry,
     "star-rating": parse_star_rating,
+    "fda-advisory-calendar": parse_fda_advisory_calendar,
 }
 
 # Rows the registry still labels ``generic`` are recognised by host (the three P0 ones).
