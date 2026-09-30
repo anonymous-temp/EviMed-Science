@@ -99,6 +99,20 @@ not a model proposer, a login/challenge bypass or permission to enable an exclud
 `registry/research/source-expansion-2026-09-29.json`; raw protected responses and their hashes live
 in `tests/fixtures/source-expansion-20260929/probe-captures.json`.
 
+The complete omitted-source sweep is recorded in `registry/research/source-expansion-2026-09-30.json`:
+each previously unprobed P1 source has a protected response or refusal and an explicit disposition.
+Conference pages and inline changelogs may be monitored as one canonical document with meaningful
+body text; meeting dates remain context, never fabricated publication timestamps. CSS, scripts,
+templates and other nonvisible markup are excluded from extracted text.
+
+FDA tables without detail URLs can set `link_to_source_page: true`, an actual `selectors.id`, and
+an `identity_prefix` such as `fda:novel-approvals`. This mode is restricted to FDA regulator pages.
+The real page URL remains the link, while a canonical-page/row digest uses the existing FDA event
+identity contract, preserving separate records through platform deduplication. The FDA calendar's
+public JSON reader uses its source-modification timestamp and keeps meeting times in the summary.
+OpenAlex work queries specify both date bounds and article/review types. Publisher-linked
+QuoteMedia ticker streams are media sources; distributors and truncated excerpts stay explicit.
+
 ## Tests
 
 `pytest` (from this directory, with the dev requirements). Database tests use a scratch database

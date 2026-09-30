@@ -10354,30 +10354,33 @@
   },
   {
    "id": "moderna-news",
-   "name": "莫德纳 Moderna 新闻",
-   "homepage": "https://news.modernatx.com/",
+   "name": "Moderna · 投资者资讯流",
+   "homepage": "https://investors.modernatx.com/news/",
    "lane": "pipeline",
-   "source_type": "company",
+   "source_type": "media",
    "access": "json-api",
    "egress": "direct",
    "authority": 2,
    "safety_feed": false,
-   "owner_entity": "Moderna, Inc.",
+   "owner_entity": "Issuer Direct / QuoteMedia",
    "launch_tier": "P1",
    "language": "en",
    "region": "US",
    "poll_floor_s": 3600,
    "poll_ceiling_s": 21600,
-   "enabled": false,
-   "disabled_reason": "probe_json_api_family_unmapped_generic",
+   "enabled": true,
+   "disabled_reason": null,
    "category": "company",
    "config": {
-    "url": "https://investors.modernatx.com/news/",
-    "family": "generic",
-    "max_pages": 3,
+    "url": "https://www.accesswire.com/qm/data/getHeadlines.json?topics=MRNA&noSrc=qmr&src=pzo,bayaw,prn,bwi,TheNewsWire,nfil,actw,irw,acn,cnw,nwd,glpr,nwmw&summary=true&summLen=300&start={since:%Y-%m-%d}&end={today:%Y-%m-%d}",
+    "family": "quotemedia-headlines",
+    "max_pages": 1,
     "allowed_hosts": [
-     "investors.modernatx.com",
-     "news.modernatx.com"
+     "www.accesswire.com"
+    ],
+    "lookback_days": 30,
+    "link_hosts": [
+     "api.quotemedia.com"
     ]
    }
   },

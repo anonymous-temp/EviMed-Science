@@ -2549,9 +2549,27 @@
   "_why_disabled_20260930": "The permitted response contains model navigation but no rendered news records."
  },
  "moderna-news": {
-  "enabled": false,
-  "disabled_reason": "probe_json_api_family_unmapped_generic",
-  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_generic."
+  "enabled": true,
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_generic.",
+  "access": "json-api",
+  "egress": "direct",
+  "source_type": "media",
+  "name": "Moderna · 投资者资讯流",
+  "owner_entity": "Issuer Direct / QuoteMedia",
+  "homepage": "https://investors.modernatx.com/news/",
+  "config": {
+   "family": "quotemedia-headlines",
+   "lookback_days": 30,
+   "max_pages": 1,
+   "url": "https://www.accesswire.com/qm/data/getHeadlines.json?topics=MRNA&noSrc=qmr&src=pzo,bayaw,prn,bwi,TheNewsWire,nfil,actw,irw,acn,cnw,nwd,glpr,nwmw&summary=true&summLen=300&start={since:%Y-%m-%d}&end={today:%Y-%m-%d}",
+   "allowed_hosts": [
+    "www.accesswire.com"
+   ],
+   "link_hosts": [
+    "api.quotemedia.com"
+   ]
+  },
+  "_why_enabled_20260930": "The issuer investor page embeds this public Issuer Direct / QuoteMedia feed. It includes third-party ticker news and is therefore classified as media, not issuer-authored announcements. Distributor labels and truncated excerpts are preserved."
  },
  "most-research-integrity": {
   "enabled": true,
