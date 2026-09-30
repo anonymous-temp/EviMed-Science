@@ -26,6 +26,8 @@
 >   2026-09-04 删除）。「上线执行顺序」里只改了一处：同样以桌面形态为前提的 `pnpm check:tauri`
 >   在 `OpenScience/package.json` 里已经没有这个脚本，留着只会报错，因此在原处写明后删去；
 >   其余命令逐条仍在 `OpenScience/package.json` 里。
+> - **2026-09-29 增补：文末「虚拟临研：只有部署后才能做的检查」一节。** 它是新写的、不是快照，
+>   记的是「虚拟临研」模块发版前必须在部署好的栈上做完的六件事，以及这些结果记在哪里。
 > - 架构与部署以 `OpenScience/AGENTS.md`、`OpenScience/docs/WEB_DEPLOYMENT.md` 为准；当前的
 >   未完清单见 `docs/superpowers/plans/2026-09-07-gap-closure-todo.md`。
 
@@ -130,6 +132,89 @@ pnpm smoke:deployment
 上线验收必须确认 `/api/health` 与 `/api/ready` 同时成功，并逐一从 9 个专项页面发起任务、
 产生真实工件、检查引用/数据/日志/溯源和失败提示。验收后保留 release manifest、测试报告、
 恢复演练记录和镜像摘要，作为本次交付证据。
+
+## 虚拟临研：只有部署后才能做的检查（2026-09-29）
+
+「虚拟临研」默认关闭（`OPEN_SCIENCE_VCR_ENABLED=false`，见 `deploy/web/.env.example`）。代码能证明的部分
+在 CI 里：三个 `vcr-*` 作业在装好锁定 R 库的机器上跑全部引擎数值用例、引擎服务测试和两个依赖 R 的
+集成测试。下面六件事代码证明不了——它们要一个部署好的栈、真实的模型和生产形状的数据。**六件都做完并
+记录之前，模块保持关闭，也不把 `OPEN_SCIENCE_VCR_AUDIENCE` 从 `operators` 放开。**
+
+**记在哪里。** 「一个能力包一行」的验收账本 `evals/acceptance-ledger.json` 没有 AC 行，放不下 AC-35，
+所以：第 4 项的五次真实运行写进账本里五个 `vcr-*` 能力行的 `realDelivery`（`pnpm check:acceptance-ledger`
+校验）；六项的日期、release id 和量出来的数字，追加到本节末尾的「记录」表。没记录的检查等于没做。
+
+1. **新 `.env` 的键到达 web 容器。** 新 release 的 `.env` 是从上一版拷来的，不含新键；web 服务的环境变量
+   由 compose 逐项传入，主机上若有私有 override 覆盖了 web 的 `environment`，它的合并表也要带上新键。
+   - 只比名字，不回显值：`.env.example` 里「虚拟临研」一段的每个名字（`OPEN_SCIENCE_VCR_*`、
+     `EVIMED_VCR_ENGINE_IMAGE`）都在新 release 的 `.env` 里，尤其 `OPEN_SCIENCE_VCR_ENGINE_URL`、
+     `OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE`、`OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE`、
+     `OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR`。
+   - 起栈后进容器看名字：`docker exec <web> sh -c 'env | cut -d= -f1 | grep "^OPEN_SCIENCE_VCR_" | sort'`
+     必须列出 `ENABLED`、`AUDIENCE`、`ENGINE_URL`、`ENGINE_TOKEN_FILE`、`ENGINE_RECEIPT_KEY_FILE`、
+     `DATA_PLANE_DIR`、`MAX_CONCURRENT_JOBS`、`JOB_CPU_SECONDS`、`STUDY_CPU_BUDGET`；两个密钥文件在容器里
+     存在且各不少于 32 字节。
+   - **通过：** `/api/ready` 的 `vcr` 一项 `status: "ok"`、`engine: "wired"`，`warnings` 里没有
+     `vcr_engine_unconfigured`（它的 `engineReason` 会指出是哪个文件）、`vcr_data_plane_not_configured`、
+     `vcr_engine_catalogue_mismatch`。
+
+2. **引擎镜像构建与锁核对。** 生产主机连不上 Debian、PyPI、CRAN，走镜像：`OPEN_SCIENCE_APT_MIRROR`、
+   `OPEN_SCIENCE_PIP_INDEX_URL`、`OPEN_SCIENCE_VCR_CRAN_MIRROR`，且 CRAN 镜像必须是同一个快照日期
+   （`OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE`，默认等于 `项目代码/vcr-engine/Dockerfile` 的
+   `ARG CRAN_SNAPSHOT_DATE`）——版本来自日期，日期不同就是另一组数字。
+   - 构建：`docker compose --profile vcr build evimed-vcr-engine`。构建日志里要有
+     `package lock verified: <N> packages`（构建自己的锁核对：缺包、版本不符、多出没列的包都会让构建失败）
+     和 `engine <版本> R 4.3.3 with 24 methods`（方法注册表与 `@evimed/domain` 的快照一致）。
+   - 起来后带令牌请求 `/health`：`ok: true`、`rVersion` 为 4.3.3，`packageLockHash` 的前 12 位等于该 commit
+     的 CI `vcr-engine` 作业里数值用例头一行 `vcr-engine … | lock <12 位>`——生产跑的就是 CI 测过的那组包。
+   - **通过：** 三条都成立，且该 commit 的 `vcr-r-library`、`vcr-engine`、`vcr-seam` 三个作业是绿的。
+
+3. **数据平面与 `/jobs` 的权限。** 患者级文件在数据平面目录里，绝不能被任何运行时读到；引擎只读它，
+   只写自己的 `/jobs`。
+   - 主机目录 `OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR`：属主是 web 容器的用户、属组 10001、模式 0750；两个密钥
+     文件模式 0440、属组 10001。
+   - web 容器里在 `/data-plane` 写一个探针文件再读回；引擎容器（uid 10001）能读它、**写不进** `/data-plane`
+     （只读绑定），能写 `/jobs`（`docker exec <engine> sh -c 'touch /jobs/.probe && rm /jobs/.probe'`）；
+     一次性的 `evimed-vcr-jobs-init` 已成功退出。
+   - 任意一个运行时容器的挂载里没有数据平面：`docker inspect <runtime> --format '{{json .Mounts}}'` 不含
+     `/data-plane`，也不含它的主机路径。引擎容器只接在 `vcr-engine-internal` 网络上，出不了网。
+   - 用一个空的 T0 研究提交一次 `design.analytic` 作业，回执验签通过、作业目录出现在 `/jobs`。
+   - **通过：** 上面每条都成立，且探针文件已删。
+
+4. **五个能力的真实 DSH 运行。** `vcr-protocol`、`vcr-evidence`、`vcr-analysis`、`vcr-matching`、`vcr-package`
+   各在生产栈上用真实 DSH + DeepSeek 跑一次，走真实路径（绑定到该能力的会话，不是直接调网关），在**一次性
+   项目**里、不进任何人的对话。每个能力取 `evals/<能力>/briefs.json` 里的一条真实 brief，并做多轮追问、补充
+   数据、换主体、边界与工具失败（停掉引擎，`vcr_simulate` 应当说不可用、对话照常继续）。记下运行 id、调用
+   的工具、浪费的调用、代码版本（release id）和实际输出。
+   - **通过：** 五个能力各有一次交付、其合约校验器通过；账本里五个 `vcr-*` 行的 `realDelivery` 由
+     `not-run` 改成真实结局，`pnpm check:acceptance-ledger` 通过。
+
+5. **AC-35 计时。** 方案 §12：不上传任何数据，从一句话到研究包在 2 小时内完成（示例研究）。在部署好的栈上
+   用一个全新的 T0 研究，从第一句话计时到研究包交付，用秒表，不用估计。
+   - 记：起止时刻、总用时、七步进度轨每一步的完成、该研究耗掉的 CPU 秒（研究预算那一行）、release id。
+   - **通过：** 总用时不超过 2 小时，七步全部完成，中间没有要人接手的失败，也没有上传任何数据。
+     超时不算通过：写下每一步的耗时，超时的那一步就是要修的。
+
+6. **生产副本上的迁移。** 模块在控制面启动时建自己的 `evimed_vcr` 模式，所以它第一次见到生产数据库就是发版
+   本身。先在副本上演一遍：用备份演练的 `scripts/ops/postgres-backup.py restore-clone` 把最近一份加密备份
+   还原成克隆库（名字 `evimed_restore_<时间>_<id>`），然后
+   `node scripts/vcr/migrate-check.mjs <克隆库 URL>`（在装好依赖的 `OpenScience/` 检出目录里跑，或 `docker exec` 进 web 容器里跑——镜像带着 `scripts/vcr`）。脚本拒绝任何不是克隆库或测试库的库。
+   - 它证明的是迁移只增不改、可重复：模块之外每张表的行数迁移前后不变；迁移在两条连接上各跑一次
+     （第二次是第二个 web 副本启动时会做的）都成功；模块声明的表全部存在。
+   - 记：`firstRunMs`（生产体量下第一次迁移用了多久）。答案里的 `unvalidatedConstraints` 会列出以 `NOT VALID`
+     加的约束（转诊联系需要批准人）：副本上没有违反它的行再对生产 `VALIDATE`，否则先查那些行。
+   - **通过：** 答案 `ok: true`、`problems: []`。
+
+### 记录
+
+| 项 | 日期 | release id | 结果（数字） | 谁做的 |
+|---|---|---|---|---|
+| 1 环境键到达 web 容器 | | | | |
+| 2 引擎镜像与锁核对 | | | | |
+| 3 数据平面与 `/jobs` 权限 | | | | |
+| 4 五个能力真实运行 | | | | |
+| 5 AC-35 计时 | | | | |
+| 6 生产副本上的迁移 | | | | |
 
 ## 可延期但不阻断首发
 

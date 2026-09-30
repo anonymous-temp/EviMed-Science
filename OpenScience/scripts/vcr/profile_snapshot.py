@@ -303,12 +303,20 @@ def restrict_to_as_of(tables: list, field_map: dict, as_of):
     A row with no visible date is dropped too: "we do not know when we could
     see this" is not "we could always see it", and admitting it is exactly the
     time-travel the replay exists to prevent.
+
+    A whole table with no `visible_at` column is left as it is and named in the
+    report's `whole` — a standalone run has nothing better to do with it. The
+    control plane never gets there: freezing a snapshot with a date refuses a
+    file that derives rows and has no such column (`as_of_needs_visible_at`),
+    and cuts every derived table and raw-file view to the same rows itself, so
+    what the profiler counted and what the engine reads are the same rows.
     """
     if as_of is None:
-        return tables, {"applied": False, "hidden": 0, "undated": 0, "column": None}
+        return tables, {"applied": False, "hidden": 0, "undated": 0, "column": None, "whole": []}
     hidden = 0
     undated = 0
     column_used = None
+    whole = []
     out = []
     for name, header, rows in tables:
         visible_columns = [
@@ -317,6 +325,7 @@ def restrict_to_as_of(tables: list, field_map: dict, as_of):
             if map_for(field_map, name, str(column)).get("timeKind") == "visible_at"
         ]
         if not visible_columns:
+            whole.append(name)
             out.append((name, header, rows))
             continue
         index = visible_columns[0]
@@ -332,7 +341,7 @@ def restrict_to_as_of(tables: list, field_map: dict, as_of):
             else:
                 hidden += 1
         out.append((name, header, kept))
-    return out, {"applied": True, "hidden": hidden, "undated": undated, "column": column_used}
+    return out, {"applied": True, "hidden": hidden, "undated": undated, "column": column_used, "whole": sorted(whole)}
 
 
 # ---------------------------------------------------------------------------
