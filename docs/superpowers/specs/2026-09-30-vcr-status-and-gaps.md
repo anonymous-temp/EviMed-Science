@@ -42,6 +42,19 @@
 
 全量服务端套件（CI 模式，不接 PostgreSQL）：4815 项，4091 通过，711 项因需要 PostgreSQL 或 R 而跳过（这些在上面逐文件跑过），首轮 13 项失败全部来自第七节第 4 条，已修，重跑 `release-full-build.test.mjs`（19）与 `deploy.test.mjs`（68）通过。
 
+**托管 CI（GitHub Actions，手动触发 `web.yml`，运行 36689642955，提交 `b82cb38bf`）：**
+
+| 任务 | 结果 |
+|:--|:--|
+| `vcr-r-library`（由两份锁生成 R 库并证明与锁一致） | 通过 |
+| `vcr-engine`（108 / 108 个数值用例、引擎服务 pytest、数值日志完整性检查） | 通过 |
+| `vcr-seam`（真实引擎接缝测试对 PostgreSQL） | 通过 |
+| `gallery` | 通过 |
+| `web`：一直到「Audit production dependencies」之前的每一步（含 Node 22.22.0 下的服务端 4104 项、共享认证状态、持久化产品状态、DeepSeek 兼容闸门、契约测试、合规审计） | 通过 |
+| `web`：「Audit production dependencies」 | **失败，与本分支无关**：新公布的公告 GHSA-q2hr-2g5m-vwhr（`brace-expansion`，经 `apps/web > exceljs > archiver/glob/minimatch` 引入，6 项：4 高 2 中）。本分支没有改任何 `package.json` 或锁文件；主线跑到这一步同样会红。修法是在根 `package.json` 加 pnpm 覆盖并重生成锁文件，这会动整个平台的依赖，也会在主机上引起长时间的安装占用，所以没有夹在这个分支里做 |
+| `web`：审计之后的步骤（前端类型检查、前端测试、前端构建） | CI 里被这次失败挡住没跑；在本机用官方 Node 22.22.0 跑了：类型检查通过、vitest 168 个文件 / 1718 项全过、构建成功 |
+| `hosted-production-e2e` | 失败，与本分支无关：只在手动触发时运行，需要 `OPEN_SCIENCE_E2E_BASE_URL` 等仓库密钥，没有密钥就报 `hosted_e2e_configuration_missing` |
+
 说明：`pnpm test:server` 并行跑整个服务端套件时，共享 PostgreSQL 上会出现 `deadlock detected` 一类波动。这是主干本来就有的问题（不含 vcr 测试的对照跑也是 50 项失败对 35 项），所以本模块的验证一律按文件串行。
 
 ## 三、方案验收 AC-01…AC-38 对照
@@ -178,7 +191,7 @@
 - **主机有两个文件系统**：`/` 是 30 GB，`/home` 是另一块 79 GB，工作树、缓存、仓库都在 `/home`。看 `df /` 说明不了问题；`/home` 写满会把共享的本地 PostgreSQL（55433）打死。
 - **服务端全量并行套件不可信**：见第二节；改 vcr 后请逐文件串行跑。
 
-## 七、收尾时的四处修补
+## 七、收尾时的七处修补
 
 C 波子代理被中断后，主控接手时发现并补上的：
 
@@ -187,5 +200,9 @@ C 波子代理被中断后，主控接手时发现并补上的：
 3. 模型库对话框的文案用了「采纳」，被 `retiredWords.test.ts` 拦下；改为「引入」。
 
 4. 网页镜像的 Dockerfile 为「虚拟临研」多了一行 `COPY scripts/vcr`（数据面把快照画像脚本当子进程跑，镜像里没有它，第一次遇到真实数据时每个快照画像都会因缺文件而失败）。`scripts/ops/release-full-build.mjs` 把“唯一被接受的网页配方”钉成了哈希，所以全量服务端套件里 `release-full-build.test.mjs` 有 13 项失败——这是本分支自己造成的回归，不是既有波动。已按该文件里的惯例重新钉哈希并写明原因，19 / 19 通过。
+
+5. **Node 22 会取消“只剩一个 unref 定时器”的测试**：托管 CI 钉 Node 22.22.0，本机是 Node 24。`vcrEngineClient` 和 `trialRegistryClient` 的截止时间定时器是有意 unref 的；等这个截止时间的测试在 Node 22 上被判“事件循环已空”而取消，一个文件里 8 项连带取消，`web` 任务在这一步就停了，后面的步骤都没跑。测试里挂起的替身现在自己持有事件循环（像真实套接字那样），在官方 22.22.0 下复现并验证。（同一类问题的旧记录：CI 曾因此红了 11 天。）
+6. **一个测试靠了随机 ID 的排序**：`vcrEvidenceMatching.integration` 的 AC-25 取“第一行”当对照臂，而两个臂的行写在同一时刻、按随机 ID 排序，换一个数据库排序就取到试验臂被拒。改为按 `arm_role === "control"` 取，连跑 8 次全过。
+7. **N24d 在托管 CI 上一直失败（107 / 108）**：R 会在 `LD_LIBRARY_PATH` 前面加上自己的库目录，setup-python 的解释器于是加载系统的 libpython，起来时没有它自己的 site-packages，同一个 `python3` 在 shell 里能导入 pyarrow、在 R 里不能。先让用例失败时说清原因（哪个 python、解析到哪、退出码、末两行输出），在 CI 上量到后，改为给 Parquet 桥用的系统解释器安装钉住版本的 pyarrow 并用 `VCR_PYTHON` 指向它——和镜像里的做法一致。
 
 另外把 `vcr_model_not_applicable` 登记进错误码表（`vcrErrorCodesRegistered` 要求模块发出的每个码都有登记和中文说明）。
