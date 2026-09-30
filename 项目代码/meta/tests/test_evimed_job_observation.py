@@ -179,15 +179,25 @@ def test_source_formula_covers_shipped_inputs_and_ignores_runtime_secrets(tmp_pa
     for name in ("requirements.txt", "requirements.lock", "pyproject.toml"):
         (root / name).write_text("dependency declaration\n")
     (root / "new_meta/data/source.json").write_text("{}")
+    runtime_data = ("validation/capability_manifest.json", "validation/corpora/method.json",
+                    "docs/benchmarks/study.manifest.json", "docs/benchmarks/study.md")
+    for name in runtime_data:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text("{}")
     before = observation.current_evidence(root)
     (root / ".env").write_text("must-not-hash")
     (root / "new_meta/.env.json").write_text("must-not-hash")
     (root / "outputs").mkdir()
     (root / "outputs/research.json").write_text("must-not-hash")
     assert observation.current_evidence(root) == before
-    for name in ("new_meta/main.py", "new_meta/data/source.json", "requirements.txt", "requirements.lock", "pyproject.toml"):
+    for name in ("new_meta/main.py", "new_meta/data/source.json", "requirements.txt", "requirements.lock", "pyproject.toml", *runtime_data):
         original = (root / name).read_bytes()
         (root / name).write_bytes(original + b"\n")
+        assert observation.current_evidence(root) != before
+        (root / name).write_bytes(original)
+    for name in runtime_data:
+        original = (root / name).read_bytes()
+        (root / name).unlink()
         assert observation.current_evidence(root) != before
         (root / name).write_bytes(original)
     # Site-packages/build caches are not part of the image's source identity.
@@ -196,6 +206,17 @@ def test_source_formula_covers_shipped_inputs_and_ignores_runtime_secrets(tmp_pa
     (clone / "new_meta/__pycache__").mkdir()
     (clone / "new_meta/__pycache__/main.py").write_text("ignored generated cache")
     assert observation.current_evidence(clone) == before
+    for index, tree in enumerate(("validation", "docs/benchmarks")):
+        original = clone / tree
+        moved = tmp_path / f"missing-source-{index}"
+        original.rename(moved)
+        with pytest.raises(OSError):
+            observation.current_evidence(clone)
+        original.symlink_to(moved, target_is_directory=True)
+        with pytest.raises(OSError):
+            observation.current_evidence(clone)
+        original.unlink()
+        moved.rename(original)
 
 
 @pytest.mark.parametrize("path", ["../secret.json", ".jobs/state.json", "secrets/provider.json", "data//ipd.json"])

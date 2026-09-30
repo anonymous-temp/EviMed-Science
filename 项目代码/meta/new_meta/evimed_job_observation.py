@@ -18,7 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REQUEST_FIELDS = ("topic", "outputLanguage", "maxPapers", "analysisType", "userPdfDirectory", "ipdData")
 MAX_FILE_BYTES = 128 * 1024 * 1024
-SOURCE_EXTENSIONS = {".py", ".json", ".j2", ".jinja", ".jinja2", ".tex", ".yaml", ".yml"}
+SOURCE_EXTENSIONS = {".py", ".json", ".j2", ".jinja", ".jinja2", ".tex", ".yaml", ".yml", ".md"}
+# These are the three runtime source/data trees copied by Dockerfile.evimed.
+SOURCE_TREES = ("new_meta", "validation", "docs/benchmarks")
 
 
 def canonical(value):
@@ -81,14 +83,17 @@ def current_evidence(root=ROOT):
     def unavailable(error):
         raise error
 
-    for current, directories, files in os.walk(root / "new_meta", followlinks=False, onerror=unavailable):
-        directories[:] = sorted(name for name in directories if not name.startswith((".", "__")))
-        for name in directories:
-            if (Path(current) / name).is_symlink():
-                raise ValueError("observation_source_symlink")
-        for name in sorted(files):
-            if not name.startswith(".") and Path(name).suffix.lower() in SOURCE_EXTENSIONS:
-                rows.append(file_receipt(root, (Path(current) / name).relative_to(root).as_posix(), allow_empty=True))
+    for tree in SOURCE_TREES:
+        with directory(root, parts(tree)):
+            pass
+        for current, directories, files in os.walk(root / tree, followlinks=False, onerror=unavailable):
+            directories[:] = sorted(name for name in directories if not name.startswith((".", "__")))
+            for name in directories:
+                if (Path(current) / name).is_symlink():
+                    raise ValueError("observation_source_symlink")
+            for name in sorted(files):
+                if not name.startswith(".") and Path(name).suffix.lower() in SOURCE_EXTENSIONS:
+                    rows.append(file_receipt(root, (Path(current) / name).relative_to(root).as_posix(), allow_empty=True))
     if not rows:
         raise ValueError("observation_source_empty")
     deployment = [file_receipt(root, name) for name in ("requirements.txt", "pyproject.toml")]
