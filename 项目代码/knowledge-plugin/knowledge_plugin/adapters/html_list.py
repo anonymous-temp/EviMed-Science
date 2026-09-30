@@ -46,7 +46,7 @@ import re
 from dataclasses import replace
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from selectolax.parser import HTMLParser, Node
 
@@ -280,6 +280,9 @@ class HtmlListAdapter:
                 problems.append("link_to_source_page requires selectors.id for stable record identity")
             if source_page_link and not re.fullmatch(r"fda:[A-Za-z0-9-]{2,40}", str(config.get("identity_prefix") or "")):
                 problems.append("link_to_source_page requires an FDA event identity_prefix (fda:<namespace>)")
+            page_host = urlsplit(config.get("url") or "").hostname or ""
+            if source_page_link and (source.source_type != "regulator" or not host_allowed(f"https://{page_host}/", ["fda.gov", "*.fda.gov"])):
+                problems.append("FDA page-linked identities are restricted to FDA regulator sources")
             for key in ("item", "title", "link"):
                 if not selectors.get(key) and not (key == "link" and (config.get("link_template") or source_page_link)):
                     problems.append(f"selectors.{key} missing")
