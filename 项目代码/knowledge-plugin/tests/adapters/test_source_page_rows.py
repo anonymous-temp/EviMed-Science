@@ -7,6 +7,7 @@ from pathlib import Path
 
 from knowledge_plugin.adapters import REGISTRY
 from knowledge_plugin.model import FetchResult, RequestSpec
+from knowledge_plugin.normalize import prepare
 from knowledge_plugin.registry import load_registry
 
 
@@ -17,6 +18,7 @@ URL = 'https://www.fda.gov/drugs/development-approval-process-drugs/novel-drug-a
 CONFIG = {
     **SOURCE.config,
     'link_to_source_page': True,
+    'identity_prefix': 'fda:novel-approvals',
     'selectors': {
         'item': 'table tbody tr',
         'id': 'td:nth-child(2)',
@@ -43,6 +45,13 @@ def test_regulatory_table_records_keep_real_page_link_and_distinct_stable_keys()
     assert 'heterotopic ossification' in output.entries[0].summary
     assert 'link-derived' in output.entries[0].defects
     assert 'html_list_source_page_links=44' in output.notes
+    prepared = [prepare(entry, source) for entry in output.entries]
+    assert len({entry.identity_key for entry in prepared}) == 44
+    assert all(entry.identity_key.startswith('fda:novel-approvals:') for entry in prepared)
+    tracked = replace(response, final_url=URL + '?utm_source=weekly')
+    tracked_entries = [prepare(entry, source) for entry in REGISTRY['html-list'].parse(tracked, source, now).entries]
+    assert [entry.entry_id for entry in tracked_entries] == [entry.entry_id for entry in prepared]
+    assert [entry.identity_key for entry in tracked_entries] == [entry.identity_key for entry in prepared]
 
 
 def test_source_page_link_requires_actual_row_identity_and_an_allowed_public_page():
@@ -50,6 +59,8 @@ def test_source_page_link_requires_actual_row_identity_and_an_allowed_public_pag
     assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'selectors': {
         key: value for key, value in CONFIG['selectors'].items() if key != 'id'
     }}))
+    assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'identity_prefix': None}))
+    assert adapter.validate_config(replace(SOURCE, config={**CONFIG, 'identity_prefix': 'url:fake'}))
     now = datetime(2026, 9, 29, tzinfo=timezone.utc)
     body = b'<table><tr><td>1</td><td>Example</td><td></td><td>9/25/2026</td><td>Details</td></tr></table>'
     private = 'https://unrelated.example/records'
