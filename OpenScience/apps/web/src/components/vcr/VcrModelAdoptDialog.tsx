@@ -12,7 +12,7 @@ const RISKS: readonly VcrModelRisk[] = Object.freeze(["low", "medium", "high"]);
 const ENDPOINTS = Object.freeze(Object.entries(VCR_ENDPOINT_TYPE_LABELS_ZH) as Array<[NonNullable<VcrModelBody["endpointType"]>, string]>);
 
 /**
- * 采纳文献模型: take a prediction model a published trial fitted into the
+ * 引入文献模型: take a prediction model a published trial fitted into the
  * library both studies draw on.
  *
  * Hidden knowledge:
@@ -46,13 +46,13 @@ export function VcrModelAdoptDialog({ onClose, onSaved }: { onClose: () => void;
       name, version, risk, ...(endpoint ? { endpointType: endpoint } : {}),
       sources: sources.split("\n"),
     })
-      .then(() => { toast.success("已采纳到模型库。"); onSaved(); onClose(); })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这个模型暂时无法采纳，请稍后重试。" })))
+      .then(() => { toast.success("已引入模型库。"); onSaved(); onClose(); })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这个模型暂时无法引入，请稍后重试。" })))
       .finally(() => { holding.current = false; setBusy(false); });
   };
 
   return (
-    <Drawer title="采纳文献模型" onClose={onClose} widthClassName="max-w-md">
+    <Drawer title="引入文献模型" onClose={onClose} widthClassName="max-w-md">
       <form data-vcr-model-adopt="" className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); save(); }}>
         <Input label="模型名称" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoComplete="off" />
         <Input label="版本" placeholder="1.0.0" value={version} onChange={(event) => setVersion(event.target.value)} autoComplete="off" />
@@ -72,7 +72,7 @@ export function VcrModelAdoptDialog({ onClose, onSaved }: { onClose: () => void;
         <Textarea label="来源试验（每行一项）" rows={4} value={sources} onChange={(event) => setSources(event.target.value)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!valid || busy}>采纳</Button>
+          <Button type="submit" loading={busy} disabled={!valid || busy}>引入</Button>
         </div>
       </form>
     </Drawer>

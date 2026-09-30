@@ -70,7 +70,7 @@ export function VcrModelsPanel() {
         )}
 
         <div className="flex justify-end">
-          <Button variant="secondary" onClick={() => setAdopting(true)}>采纳文献模型</Button>
+          <Button variant="secondary" onClick={() => setAdopting(true)}>引入文献模型</Button>
         </div>
 
         <FilterChips

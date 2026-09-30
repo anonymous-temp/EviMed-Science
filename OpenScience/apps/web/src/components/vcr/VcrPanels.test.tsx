@@ -103,18 +103,18 @@ describe("模型与方法", () => {
   it("takes a literature model into the library: the name, the risk, the endpoint and the trials it was fitted on, then re-reads the list", async () => {
     draw(<VcrModelsPanel />);
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "采纳文献模型" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
     await userEvent.type(await screen.findByLabelText("模型名称"), "  EV-201 对照组 PFS 模型 ");
     await userEvent.type(screen.getByLabelText("版本"), "2.1.0");
     await userEvent.selectOptions(screen.getByLabelText("模型风险"), "medium");
     await userEvent.selectOptions(screen.getByLabelText("终点"), "time_to_event");
     await userEvent.type(screen.getByLabelText("来源试验（每行一项）"), "NCT02296125{enter}{enter}  CTR20990001 ");
     const reads = server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/models").length;
-    await userEvent.click(screen.getByRole("button", { name: "采纳" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", {
       name: "EV-201 对照组 PFS 模型", version: "2.1.0", risk: "medium", endpointType: "time_to_event", sources: ["NCT02296125", "CTR20990001"],
     }));
-    expect(toasts.success).toHaveBeenCalledWith("已采纳到模型库。");
+    expect(toasts.success).toHaveBeenCalledWith("已引入模型库。");
     await waitFor(() => expect(server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/models").length).toBeGreaterThan(reads));
     await waitFor(() => expect(screen.queryByLabelText("模型名称")).toBeNull());
   });
@@ -122,9 +122,9 @@ describe("模型与方法", () => {
   it("never names a tier or a population for the model: the page has no such field to send", async () => {
     draw(<VcrModelsPanel />);
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "采纳文献模型" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
     await userEvent.type(await screen.findByLabelText("模型名称"), "m");
-    await userEvent.click(screen.getByRole("button", { name: "采纳" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/models", "POST", { name: "m", risk: "low" }));
     const body = server.calls.find((call) => call.method === "POST")?.body as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(["name", "risk"]);
@@ -135,24 +135,24 @@ describe("模型与方法", () => {
     server = installVcrServer(network.productRequest, { "POST /vcr/models": () => new Promise((resolve) => { finish = resolve; }) });
     draw(<VcrModelsPanel />);
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "采纳文献模型" }));
-    expect(await screen.findByRole("button", { name: "采纳" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
+    expect(await screen.findByRole("button", { name: "引入" })).toBeDisabled();
     await userEvent.type(screen.getByLabelText("模型名称"), "m");
-    const adopt = screen.getByRole("button", { name: "采纳" });
+    const adopt = screen.getByRole("button", { name: "引入" });
     await userEvent.click(adopt);
     await userEvent.click(adopt);
     expect(server.calls.filter((call) => call.method === "POST")).toHaveLength(1);
     await act(async () => { finish({ id: "mdl_9" }); });
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已采纳到模型库。"));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已引入模型库。"));
   });
 
   it("says a refusal in words and keeps what was typed", async () => {
     server = installVcrServer(network.productRequest, { "POST /vcr/models": () => { throw new WebApiError("exists", { status: 409, code: "vcr_model_exists" }); } });
     draw(<VcrModelsPanel />);
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
-    await userEvent.click(screen.getByRole("button", { name: "采纳文献模型" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入文献模型" }));
     await userEvent.type(await screen.findByLabelText("模型名称"), "重名的模型");
-    await userEvent.click(screen.getByRole("button", { name: "采纳" }));
+    await userEvent.click(screen.getByRole("button", { name: "引入" }));
     await waitFor(() => expect(toasts.error).toHaveBeenCalled());
     expect(screen.getByLabelText("模型名称")).toHaveValue("重名的模型");
   });
