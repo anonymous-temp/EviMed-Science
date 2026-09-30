@@ -954,6 +954,7 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
     "matplotlib",
     "numpy",
     "openpyxl",
+    "xlrd",
     "pandas",
     "pypdf",
     "scikit-learn",

@@ -183,6 +183,7 @@ python_stack() {
     matplotlib==3.10.3 \
     numpy==2.2.6 \
     openpyxl==3.1.5 \
+    xlrd==2.0.2 \
     pandas==2.2.3 \
     Pillow==10.4.0 \
     playwright==1.58.0 \
@@ -193,9 +194,10 @@ python_stack() {
   python - <<'PY'
 import importlib
 
-for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "pandas", "PIL", "playwright", "pypdf", "sklearn", "scipy", "statsmodels"):
+for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "xlrd", "pandas", "PIL", "playwright", "pypdf", "sklearn", "scipy", "statsmodels"):
     importlib.import_module(package)
 PY
+  python /usr/local/lib/evimed/verify-legacy-spreadsheet.py
 }
 
 # A browser that is not a snap. Debian's apt package is already in place; on

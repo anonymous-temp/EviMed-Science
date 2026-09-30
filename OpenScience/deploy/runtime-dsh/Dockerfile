@@ -86,6 +86,8 @@ RUN bash /usr/local/lib/evimed/install-runtime.sh pnpm
 # deleted on 2026-09-19.)
 ENV VIRTUAL_ENV=/opt/evimed/venv
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+COPY deploy/runtime-dsh/verify-legacy-spreadsheet.py /usr/local/lib/evimed/verify-legacy-spreadsheet.py
+COPY deploy/runtime-dsh/fixtures/legacy-spreadsheet.xls /usr/local/lib/evimed/fixtures/legacy-spreadsheet.xls
 RUN bash /usr/local/lib/evimed/install-runtime.sh python
 RUN bash /usr/local/lib/evimed/install-runtime.sh browser
 RUN bash /usr/local/lib/evimed/install-runtime.sh verify-tools
