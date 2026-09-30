@@ -47,11 +47,28 @@ export function methodTitle(method: Pick<WebMethod, "title" | "name">): string {
   return method.title || method.name;
 }
 
+/** Account-wide outcomes from the durable learning ledger, independent of pagination. */
+export interface LearningSummary {
+  methods: Record<string, number>;
+  uses: Record<string, number>;
+  lessons: { byTrigger: Record<string, number>; succeeded: number; failed: number };
+  results: Record<string, number>;
+  handbookCandidates: number;
+  handbooks?: {
+    dispositions: Record<string, number>;
+    applied: number; unmeasured: number; evaluated: number; verifiedImprovement: number;
+    attached: number; used: number; outcomes: number;
+    recent: { id: string; title: string; capabilityId: string; version: number; verification: "unmeasured" | "evaluated";
+      appliedAt: string; evaluationVerdict?: string | null; source: { projectId: string; runId: string; sessionId?: string | null } }[];
+  } | null;
+  spend24hCny: number | null;
+}
+
 export function listMethods(status?: string, cursor?: string | null) {
   const params = new URLSearchParams({ limit: "50" });
   if (status) params.set("status", status);
   if (cursor) params.set("cursor", cursor);
-  return productRequest<{ items: WebMethod[]; nextCursor: string | null }>(`/methods?${params}`);
+  return productRequest<{ items: WebMethod[]; nextCursor: string | null; summary?: LearningSummary | null }>(`/methods?${params}`);
 }
 
 /**

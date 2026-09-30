@@ -13,6 +13,7 @@ function fixture({ enabled = true, dispatchError = null, cancelJob = false } = {
     get: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
     checkInactivity: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
     getEpisode: async () => ({ id: "episode-one", projectId: "project-one", revision: 1, payload: { status: "queued" } }),
+    recordResourceDeferral: async (...args) => { calls.push({ method: "deferral", args }); },
     markEpisodeDispatched: async (...args) => { calls.push({ method: "mark", args }); return { revision: 2 }; },
     markEpisodeFailed: async (...args) => { calls.push({ method: "failed", args }); },
     markEpisodeCanceled: async (...args) => { calls.push({ method: "canceled", args }); },
@@ -120,6 +121,8 @@ test("an occupied project waits past the runtime idle window before consuming an
   const failure = calls.find((call) => call.method === "jobFail");
   assert.equal(failure.args[4].retry, true);
   assert.equal(failure.args[4].delayMs, 31 * 60_000);
+  assert.equal(calls.some(call => call.method === "failed"), false);
+  assert.equal(calls.find(call => call.method === "deferral").args[2].code, "runtime_busy");
 });
 
 test("a durable cancellation job terminates one runtime session and records completion", async () => {
@@ -151,6 +154,7 @@ function verifyFixture({ enabled = true, dispatchError = null, finishError = nul
   const agenda = { id: "agenda-one", projectId: "project-one", revision: 2,
     payload: { enabled, status: enabled ? "active" : "paused" } };
   const service = {
+    recordVerificationDispatched: async () => {},
     get: async () => agenda,
     checkInactivity: async (...args) => { calls.push({ method: "checkInactivity", args }); return agenda; },
     getEpisode: async () => ({ id: EPISODE_ID, projectId: "project-one", revision: 1, payload: { status: "merged" } }),
@@ -250,4 +254,74 @@ test("a verification that was actually dispatched is never reported to the claim
   assert.equal(calls.some((call) => call.method === "record"), false,
     "a dispatched verification must not be recorded as one that never ran");
   assert.equal(calls.find((call) => call.method === "jobFail").args[4].retry, false);
+});
+
+test("known exhausted credits defer an undispatched episode without a scientific failure or cancellation", async () => {
+  const f = fixture({ dispatchError: Object.assign(new Error("Not enough credits"), { code: "credits_exhausted" }) });
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => ["failed", "canceled", "cancelDispatched", "queueCancellation"].includes(call.method)), false);
+  const failure = f.calls.find(call => call.method === "jobFail");
+  assert.equal(failure.args[4].retry, true);
+  assert.ok(failure.args[4].delayMs >= 60_000 && failure.args[4].delayMs <= 86_400_000);
+  assert.equal(failure.args[4].refundAttempt, undefined, "the finite resource-check retry budget is not reset");
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[1], "episode-one");
+});
+
+test("exhausted verification credits keep the claim's prior evidence and stop retrying at the bound", async () => {
+  const f = verifyFixture({ attempts: 3, dispatchError: Object.assign(new Error("Not enough credits"), { code: "credits_exhausted" }) });
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => call.method === "record" || call.method === "failed"), false);
+  assert.equal(f.calls.find(call => call.method === "jobFail").args[4].retry, false);
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[2].verificationId, VERIFICATION_ID);
+});
+
+test("the dispatcher can recheck pause and lease after an awaited balance check without starting work", async () => {
+  const f = fixture();
+  let reserved = false;
+  f.worker.dispatchEpisode = async input => {
+    f.service.checkInactivity = async () => ({ payload: { enabled: false, status: "paused" } });
+    await input.assertDispatchAllowed();
+    reserved = true;
+    return { runId: "unexpected", sessionId: "unexpected" };
+  };
+  await f.worker.tick();
+  assert.equal(reserved, false);
+  assert.equal(f.calls.some(call => call.method === "failed"), false);
+  assert.equal(f.calls.find(call => call.method === "finish").args[3].reason, "agenda_inactive");
+});
+
+test("a new owner gets a distinct dispatch attempt while keeping the episode billing identity", async () => {
+  const f = fixture(); const job = await f.worker.jobs.claim(); job.attempts=2;
+  f.service.getEpisode=async()=>({id:"episode-one",projectId:"project-one",payload:{status:"running",runId:"old-run"}});
+  await f.worker.tick();
+  const dispatched = f.calls.find(call=>call.method==="dispatch").args[0];
+  assert.equal(dispatched.dispatchId,"episode-one-a2");
+  assert.equal(dispatched.episodeId,"episode-one");
+  assert.equal(dispatched.previousRunId,"old-run");
+});
+
+for (const code of ["autopilot_dispatch_pending", "runtime_cleanup_required"]) test(`waiting for ${code} spends no scientific failure or cancellation`, async () => {
+  const f = fixture({dispatchError:Object.assign(new Error("Earlier dispatch pending"),{code})});
+  f.service.recordResourceDeferral=async(...args)=>f.calls.push({method:"resourceDeferred",args});
+  await f.worker.tick();
+  assert.equal(f.calls.some(call=>call.method==="failed"||call.method==="cancelDispatched"),false);
+  assert.equal(f.calls.find(call=>call.method==="jobFail").args[4].retry,true);
+});
+
+test("an unconfirmed provider close during takeover defers the job without a scientific failure", async () => {
+  const { reclaimUnsentAutopilotRuntime } = await import("../src/autopilotDispatchRecovery.mjs");
+  const f = fixture();
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  f.service.recordUnsentAttempt = async () => {};
+  const manager = { boundedRuntimeCleanupTarget: () => ({ runId: "episode-one", generation: "old-generation" }),
+    endBoundedRuntime: async () => { throw Object.assign(new Error("Provider did not confirm close"), { code: "runtime_cleanup_failed" }); } };
+  f.worker.dispatchEpisode = input => reclaimUnsentAutopilotRuntime({ service: f.service, runtimeManager: manager },
+    { id: "project-one", userId: "user-one" }, input,
+    { id: "old", dispatchId: "episode-one", status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => call.method === "failed" || call.method === "cancelDispatched"), false);
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[2].code, "runtime_cleanup_required");
+  assert.equal(f.calls.find(call => call.method === "jobFail").args[4].retry, true);
 });

@@ -208,7 +208,9 @@ def _meta_python(root):
     return executable
 
 
-def _model_environment():
+def _model_environment(execution_context=None):
+    from execution_context import model_environment
+    policy = model_environment(execution_context)
     # Gateway URL, model and token, from two environment variables plus the
     # bare one-line token file the runtime writes.
     #
@@ -255,8 +257,7 @@ def _model_environment():
         "LLM_BASE_URL": base_url.rstrip("/"),
         "LLM_API_KEY": api_key,
         "LLM_MODEL": model,
-        "LLM_ENABLE_THINKING": "true",
-        "LLM_REASONING_EFFORT": "high",
+        **policy,
         "LLM_TRUST_ENV": "false",
         "LLM_STREAM": "false",
     }
@@ -341,13 +342,13 @@ def capabilities():
     }
 
 
-def start_job(arguments):
+def start_job(arguments, execution_context=None):
     topic = str(arguments.get("topic") or "").strip()
     if not topic:
         raise MetaAgentError("meta_topic_required", "A concrete meta-analysis topic is required.")
     root = _meta_root()
     python = _meta_python(root)
-    model_environment = _model_environment()
+    model_environment = _model_environment(execution_context)
     workspace = _workspace()
     job_id = "%s%s-%s" % (JOB_ID_PATTERN, time.strftime("%Y%m%d%H%M%S"), secrets.token_hex(6))
     run_root = workspace / "meta-analysis-runs"
@@ -639,13 +640,13 @@ def status_job(arguments):
     return result
 
 
-def call(arguments):
+def call(arguments, execution_context=None):
     action = arguments.get("action")
     try:
         if action == "capabilities":
             return capabilities()
         if action == "start":
-            return start_job(arguments)
+            return start_job(arguments, execution_context)
         if action == "status":
             return status_job(arguments)
         raise MetaAgentError("meta_action_invalid", "Unsupported MetaAgent action.")

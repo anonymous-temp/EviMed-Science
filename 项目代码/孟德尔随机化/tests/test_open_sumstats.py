@@ -18,6 +18,24 @@ import pytest
 
 from mr_agent.tools import open_sumstats as osm
 
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_low_candidate_count_preserves_only_observed_rows_and_selection_scope(catalogue, monkeypatch, count):
+    original = osm._scan_significant
+    def sparse(*args, **kwargs):
+        rows, record = original(*args, **kwargs)
+        return rows[:count], record
+    monkeypatch.setattr(osm, "_scan_significant", sparse)
+    with pytest.raises(osm.OpenSourceError) as caught:
+        osm.build_pair({"type": "gwas_catalog", "accession": "GCST000001"},
+                       {"type": "gwas_catalog", "pubmedId": "222"}, http=osm._Http(opener=catalogue))
+    partial = caught.value.partial_pair
+    assert len(partial.exposure_rows) == count
+    assert partial.outcome_rows == []
+    assert partial.record["instrumentSelection"]["stage"] == "candidates_before_clumping"
+    assert partial.record["instrumentSelection"]["ldChecked"] is False
+    assert partial.record["analysisStatus"] == "not_computed"
+
 API = osm.CATALOG_API
 FTP = "https://ftp.example/pub/GCST000002"
 
@@ -328,11 +346,15 @@ def test_rows_without_their_own_n_take_the_study_sample_size_from_the_metadata_f
         http=osm._Http(opener=catalogue),
     )
     exposure = pair.record["exposure"]
+    from mr_agent.source_context import unknown_scale
     assert exposure["sampleMetadata"] == {
+        "effectScale": unknown_scale(),
         "source": f"{listing}111-GCST000001-EFO_1.h.tsv.gz-meta.yaml", "samples": 2,
         "sampleSize": 166774, "caseControlStudy": True, "caseCount": None, "controlCount": None,
+        "ancestrySamples": [["European"], ["South Asian"]],
     }
     assert exposure["sampleSize"] == {
+        "originalVariantSampleSizes": {"scope": "selected_source_rows_before_catalogue_fill", "rows": 4, "reported": 0, "minimum": None, "maximum": None, "complete": False},
         "rowsWithOwnSampleSize": 0, "rowsGivenStudySampleSize": 4, "studySampleSize": 166774,
     }
     assert [row.n for row in pair.exposure_rows] == [166774.0] * 4
@@ -365,3 +387,43 @@ def test_an_unusable_metadata_file_gives_no_total_and_says_why(body, reason):
     rows = [osm.Variant("rs1", "1", 1, "A", "G", 0.1, 0.01, 1e-9, 0.2, None)]
     filled, sizes = osm.with_study_sample_size(rows, record)
     assert filled[0].n is None and sizes["rowsGivenStudySampleSize"] == 0
+
+
+def test_ld_reference_selection_uses_exposure_metadata_before_clumping(catalogue, monkeypatch):
+    from types import SimpleNamespace
+
+    seen = []
+    metadata = {"ancestrySamples": [["European"]], "source": "https://example.org/exposure.yaml"}
+    monkeypatch.setattr(osm, "read_sample_metadata", lambda study, http: metadata if study.accession == "GCST000001" else
+                        {"ancestrySamples": [["European"], ["South Asian"]], "source": "https://example.org/outcome.yaml"})
+    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", assert_current=lambda: None, record=lambda: {"population": "EUR", "manifestSha256": "a" * 64})
+    monkeypatch.setattr(osm, "ld_reference", lambda choice: (seen.append(choice) or reference, None))
+    monkeypatch.setattr(osm, "plink_clump", lambda variants, *_: (osm.distance_clump(variants), 0))
+    pair = osm.build_pair({"type": "gwas_catalog", "accession": "GCST000001"},
+                          {"type": "gwas_catalog", "pubmedId": "222"}, http=osm._Http(opener=catalogue))
+    assert seen[0]["population"] == "EUR"
+    selected = pair.record["instrumentSelection"]
+    assert selected["method"] == "plink_ld_clumping" and selected["ldChecked"]
+    assert selected["referenceReceipt"]["population"] == "EUR"
+    assert pair.record["outcome"]["referencePopulation"]["status"] == "mixed"
+    assert osm.selection_record(pair.record)["referenceReceipt"] == selected["referenceReceipt"]
+
+
+def test_plink_failure_preserves_distance_approximation_and_explicit_reason(catalogue, monkeypatch):
+    from types import SimpleNamespace
+
+    reference = SimpleNamespace(plink="/test/plink", bfile="/test/EUR", population="EUR", assert_current=lambda: None, record=lambda: {"population": "EUR"})
+    monkeypatch.setattr(osm, "ld_reference", lambda choice: (reference, None))
+
+    def failed(*args):
+        raise osm.OpenSourceError("mr_open_clumping_failed", "PLINK unavailable")
+
+    monkeypatch.setattr(osm, "plink_clump", failed)
+    pair = osm.build_pair({"type": "gwas_catalog", "accession": "GCST000001"},
+                          {"type": "gwas_catalog", "pubmedId": "222"}, http=osm._Http(opener=catalogue))
+    selected = pair.record["instrumentSelection"]
+    assert selected["method"] == "distance_pruning" and selected["ldChecked"] is False
+    assert selected["fallbackReason"] == "mr_open_clumping_failed"
+    assert selected["attemptedReference"]["population"] == "EUR"
+    assert len(pair.exposure_rows) >= 3 and pair.outcome_rows
+    assert "stricter" not in selected["note"]

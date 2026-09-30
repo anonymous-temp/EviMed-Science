@@ -51,6 +51,7 @@ export function geoRoutePattern(pathname) {
   if (!parts.length) return "/api/geo";
   if (parts[0] === "market") {
     if (parts.length === 1) return "/api/geo/market";
+    if (parts.length === 2 && ["orders", "topups", "settlement"].includes(parts[1])) return `/api/geo/market/${parts[1]}`;
     if (parts[1] === "clear-stop") return "/api/geo/market/clear-stop";
     if (parts[1] === "orders") return `/api/geo/market/orders/:id/${["resolve", "lost"].includes(parts[3]) ? parts[3] : ":action"}`;
     return "/api/geo/market/topups/:id/confirm";
@@ -129,7 +130,9 @@ function money(value, field) {
  *     cancelOrder?: (user: any, project: any, orderId: string) => Promise<any>, confirmTopup?: (user: any, topupId: string) => Promise<any>,
  *     resolveUnknownOrder?: (user: any, orderId: string, input: { created: boolean, vendorOrderNid?: string }) => Promise<any>,
  *     markOrderLost?: (user: any, orderId: string, reason: string) => Promise<any>, clearStop?: (user: any, note?: string) => Promise<any>,
- *     balance?: () => Promise<any>, configured?: () => boolean } | null }} dependencies
+ *     balance?: () => Promise<any>, status?: () => Promise<any>, configured?: () => boolean,
+ *     orders?: (input: Record<string,string>) => Promise<any>, topups?: (input: Record<string,string>) => Promise<any>,
+ *     settlement?: (input: Record<string,string>) => Promise<any> } | null }} dependencies
  */
 export function createGeoRoutes(dependencies) {
   const { store, service, config, maxJsonBytes, audit = async () => {} } = dependencies;
@@ -159,6 +162,16 @@ export function createGeoRoutes(dependencies) {
     if (parts[0] === "market") {
       if (!service.isOperator(user)) throw new HttpError(403, "geo_operator_required", "Only an operator may see the marketplace account.");
       if (parts.length === 1 && method === "GET") return reply(await service.market(hooks.market));
+      if (parts.length === 2 && method === "GET" && ["orders", "topups", "settlement"].includes(parts[1])) {
+        const name = /** @type {"orders" | "topups" | "settlement"} */ (parts[1]);
+        const read = hooks.market?.[name];
+        if (!read) throw UNAVAILABLE();
+        const allowed = ["limit", "cursor", name === "orders" ? "view" : name === "topups" ? "status" : "month"];
+        for (const key of url.searchParams.keys()) if (!allowed.includes(key) || url.searchParams.getAll(key).length !== 1) {
+          throw new HttpError(400, "geo_payload_invalid", "Unsupported marketplace query field.");
+        }
+        return reply(await read(Object.fromEntries(url.searchParams)));
+      }
       if (parts.length === 4 && parts[1] === "topups" && parts[3] === "confirm" && method === "POST") {
         await bodyOf(req, maxJsonBytes, []);
         if (!(await service.topupExists(parts[2]))) throw new HttpError(404, "geo_topup_not_found", "Top-up request not found.");

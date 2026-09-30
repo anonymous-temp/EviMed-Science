@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
 import { changeWebPassword, fetchWebAuthMethods, webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PanelRow } from "@/components/ui/Panel";
-
-/** The floor registration sets (`store.createUser`); said before the request. */
-const PASSWORD_MIN = 8;
 
 /**
  * 「密码」 on the account panel: 修改 opens the form under the row, in place
@@ -40,8 +38,8 @@ export function PasswordRow() {
   if (!offered) return null;
 
   const mismatch = again.length > 0 && next !== again;
-  const short = next.length > 0 && next.length < PASSWORD_MIN;
-  const ready = current.length > 0 && next.length >= PASSWORD_MIN && next === again && !busy;
+  const short = next.length > 0 && !meetsPasswordMinimum(next);
+  const ready = current.length > 0 && meetsPasswordMinimum(next) && next === again && !busy;
   const close = () => { setOpen(false); setCurrent(""); setNext(""); setAgain(""); setProblem(null); };
 
   const submit = async (event: React.FormEvent) => {
@@ -67,8 +65,8 @@ export function PasswordRow() {
           <Input ref={first} label="当前密码" type="password" autoComplete="current-password" value={current} maxLength={4096}
             disabled={busy} onChange={(event) => setCurrent(event.target.value)} />
           <Input label="新密码" type="password" autoComplete="new-password" value={next} maxLength={4096}
-            placeholder={`至少 ${PASSWORD_MIN} 位`} disabled={busy} onChange={(event) => setNext(event.target.value)}
-            error={short ? `至少 ${PASSWORD_MIN} 位` : undefined} />
+            placeholder={`至少 ${MIN_PASSWORD_LENGTH} 位`} disabled={busy} onChange={(event) => setNext(event.target.value)}
+            error={short ? `至少 ${MIN_PASSWORD_LENGTH} 位` : undefined} />
           <Input label="再输一次新密码" type="password" autoComplete="new-password" value={again} maxLength={4096}
             disabled={busy} onChange={(event) => setAgain(event.target.value)}
             error={mismatch ? "两次输入不一致" : undefined} />

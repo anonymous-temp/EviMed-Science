@@ -135,6 +135,10 @@ class DataExtractionAgent(BaseAgent):
         cannot be extracted is recorded as a full-text exclusion instead of
         pausing the whole review; its id is left in ``excluded_ids``.
         """
+        from new_meta.core.primary_analysis_alignment import project_is_unattended, UNATTENDED_RUN_FILE
+        unattended = unattended or project_is_unattended(project)
+        if unattended:
+            project.save_json(UNATTENDED_RUN_FILE, {"schema_version": 1, "unattended": True})
         self.excluded_ids: set[str] = set()
         self.log(f"Extracting data from {len(included_papers)} papers...")
         # The protocol's subgroup variables become closed values once, before
@@ -201,7 +205,7 @@ class DataExtractionAgent(BaseAgent):
             for study_id in sorted(self.excluded_ids):
                 self.log(f"Excluded {study_id}: its retrieved full text cannot be extracted", level="warning")
 
-        if failures:
+        if failures and not unattended:
             # Preserve the completed source extractions before raising. They remain
             # unverified until the full phase can finish its independent checks.
             project.save_json("all_extractions.json", results, subdir="extraction")
@@ -317,6 +321,10 @@ class DataExtractionAgent(BaseAgent):
                                          if paper_identity(paper) not in self.excluded_ids],
                   **({"excluded_unusable_sources": sorted(self.excluded_ids)} if self.excluded_ids else {})},
         ), subdir="extraction")
+        if failures:
+            extraction_incomplete(project, failures,
+                                  completed_ids=[study.characteristics.study_id for study in results],
+                                  required_ids=sorted(required_ids))
         return results
 
     def _extract_single(

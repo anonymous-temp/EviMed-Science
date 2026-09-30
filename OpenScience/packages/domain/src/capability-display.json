@@ -147,7 +147,7 @@
       "description": "把同类候选药品横向比较，按你给的标准评分，辅助遴选决策。",
       "starterPrompts": [
         "在阿哌沙班、利伐沙班、达比加群之间为非瓣膜性房颤抗凝遴选一个品种。",
-        "比较候选药品，先提示我补齐量表和关键数据，再生成可追溯评分与敏感性分析。"
+        "比较候选药品的证据；没有明确量表时先给分维度比较，有量表时再计算条件评分与敏感性分析。"
       ],
       "estimatedMinutes": {
         "min": 20,
@@ -504,6 +504,34 @@
         "runs": 2,
         "delivered": 2,
         "typicalMinutes": 24
+      }
+    },
+    "statistical-analysis": {
+      "title": "统计分析",
+      "category": "研究设计与数据",
+      "description": "分析你的研究数据，解释统计结果、效应大小与不确定性。",
+      "starterPrompts": [
+        "分析我上传的数据，比较两组结局并给出效应量与置信区间。",
+        "继续上次的分析，沿用预处理并检查新增数据的影响。"
+      ],
+      "materials": "上传数据并说明分析问题",
+      "estimatedMinutes": {
+        "min": 5,
+        "max": 60
+      },
+      "outputs": [
+        "统计分析报告",
+        "可复现代码与计算结果"
+      ],
+      "knownLimits": [
+        "结论取决于数据质量与研究设计；缺少有效输入的计算会注明限制。"
+      ],
+      "evaluation": {
+        "lastStatus": "accepted",
+        "lastRunAt": "2026-09-30",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 20
       }
     }
   }

@@ -683,7 +683,7 @@ test("the thinking effort is a closed vocabulary, refused at load rather than up
   assert.equal(loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "MAX" }).deepseekReasoningEffort, "max");
   // A typo here used to ride to the provider on every call and be refused
   // there, one run at a time, with a provider error nobody had configured.
-  assert.throws(() => loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "highest" }), /OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of low, high, max/);
+  assert.throws(() => loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "highest" }), /OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of off, low, high, max/);
 });
 
 test("a key shared with the knowledge plugin may be group-readable; every other secret stays owner-only", async () => {
@@ -711,4 +711,13 @@ test("a key shared with the knowledge plugin may be group-readable; every other 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("owner-approved registration and one-credit-per-CNY defaults preserve an explicit opt-out", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.equal(config.selfRegistrationEnabled, true);
+  assert.equal(config.evimedCreditsPerCny, 1);
+  const disabled = loadConfig({ rootDir: repoRoot, selfRegistrationEnabled: false, evimedCreditsPerCny: 0 });
+  assert.equal(disabled.selfRegistrationEnabled, false);
+  assert.equal(disabled.evimedCreditsPerCny, 0);
 });

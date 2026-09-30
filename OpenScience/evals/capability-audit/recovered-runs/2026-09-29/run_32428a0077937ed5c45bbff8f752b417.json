@@ -1,0 +1,55 @@
+{
+  "runId": "run_32428a0077937ed5c45bbff8f752b417",
+  "capability": "mendelian-randomization",
+  "capabilityVersion": "1.2.0",
+  "startedAt": "2026-09-29T06:10:52.833Z",
+  "finishedAt": "2026-09-29T07:11:23.126Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_mr_estimate_with_unfinished_diagnostics",
+  "usableResults": [
+    "67 exposure rows and 66 outcome rows align to 64 SNPs after dropping 2 ambiguous palindromes and 1 unavailable outcome.",
+    "IVW beta 0.42730041429895643 and SE 0.06452695597523009 independently reproduce the table within 1e-10; OR 1.5331131616658547."
+  ],
+  "limitations": [
+    "Steiger directionality did not produce a verdict; MR-PRESSO corrected estimate/distortion are missing.",
+    "Distance pruning is explicitly not LD clumping; mixed-ancestry sources and exposure unit uncertainty remain.",
+    "Metadata sample count is not reconciled with per-SNP sample sizes."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/mr-bmi-cad/mendelian-randomization-report.md",
+      "sha256": "684813a8503423b2d0f203c19876469bf0780a3be48fa2d432ba230411a13567",
+      "bytes": 20452
+    },
+    {
+      "path": "deliverables/mr-bmi-cad/mendelian-randomization-run.json",
+      "sha256": "79b16763d80da2872bba4e0c25ab8c5c50e26ad15f5e8438cc2f708bf2ab175f",
+      "bytes": 12911
+    },
+    {
+      "path": "deliverables/mr-bmi-cad/revision-notes.md",
+      "sha256": "f460a1aa3a78e0983cec36db4dcec5fbe9fcf9a72f0187c8278f54a0cae7a67d",
+      "bytes": 8748
+    }
+  ],
+  "transcriptSha256": "ae34244691ebfc4b1f0900da2230ee0cf05ca515e05b413cd84df0cf0cf644c2",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-mr-unit-assumption-32428a00.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

@@ -1,0 +1,72 @@
+{
+  "runId": "run_e9a3ba42cefb2937da6e48337d714881",
+  "capability": "geo-insight",
+  "capabilityVersion": "1.0.6",
+  "startedAt": "2026-09-29T08:06:46.314Z",
+  "finishedAt": "2026-09-29T08:56:36.602Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_evidence_and_question_map_before_measurement",
+  "usableResults": [
+    "48 claims / 12 sources; 22 groups = 17 research + 5 controls; 88 questions, 38 tagged real; controls 22.73%.",
+    "12 stages and 13 lanes with 48 explicit cells; locked measurement version 7 is recorded.",
+    "No AI visibility baseline is invented; label dose/version conflicts and unavailable population sizes are carried explicitly."
+  ],
+  "limitations": [
+    "Indexed labels are not proven current; dose content is expressly held pending reconciliation.",
+    "ACS and recent-MI subtypes are described as mutually exclusive despite overlapping definitions.",
+    "Emotion and return-on-investment conclusions are hypotheses without a measured outcome series."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/geo-insight/claims.json",
+      "sha256": "5779d4ae556cd01982acdcc3bddc45e6652b2360b59bdea863b8b2a88e185059",
+      "bytes": 160026
+    },
+    {
+      "path": "deliverables/geo-insight/geo-insight.md",
+      "sha256": "21721c66b78610de1445379f258f8a2b1072570ae10db21d955c2684ce35fd60",
+      "bytes": 26658
+    },
+    {
+      "path": "deliverables/geo-insight/journey.json",
+      "sha256": "b0e03c740143011a7a69a4749459e691e3b8df7b3ab0a62c6f7c39465c3cac8a",
+      "bytes": 19855
+    },
+    {
+      "path": "deliverables/geo-insight/journey.md",
+      "sha256": "8fe17f750499458b9cc7b5faf668c95f279810e69c0eea2d7c67e84d599ac83a",
+      "bytes": 13790
+    },
+    {
+      "path": "deliverables/geo-insight/question-map.json",
+      "sha256": "7aff815a83a8a974c4488edbe37b7d2dcecb28e8bdd33cc33194163c218b368c",
+      "bytes": 62001
+    },
+    {
+      "path": "deliverables/geo-insight/revision-notes.md",
+      "sha256": "47690810a7d856a7d585ab6001e4ebc3d04b3726370eb761c00df6da337488c0",
+      "bytes": 6950
+    }
+  ],
+  "transcriptSha256": "0cdde0c7b76f92eb5e008d84a30d3224123eb5f00ec9f26ccb3298b0905e5e48",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-geo-nonexclusive-subtype-definitions.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-geo-unmeasured-return-not-ranked-as-fact.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

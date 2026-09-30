@@ -5,6 +5,7 @@ All computations are deterministic (numpy/scipy), no LLM involved.
 from __future__ import annotations
 
 import numpy as np
+from typing import NamedTuple
 from scipy import optimize, stats
 
 from new_meta.schemas.meta_result import (
@@ -56,6 +57,7 @@ def fixed_effect(studies: list[StudyEffect], effect_measure: str, outcome_name: 
         p_value=float(p),
         q=float(q), q_p=float(q_p), i2=float(i2), tau2=float(tau2), h2=float(h2),
         studies=updated,
+        tau_estimator="none", requested_method="FIXED",
     )
 
 
@@ -63,12 +65,15 @@ def _sparse_random_effects_fallback(
     studies: list[StudyEffect],
     effect_measure: str,
     outcome_name: str,
+    requested_method: str,
 ) -> PooledEffect:
     """Use fixed-effect pooling when k<3 makes tau² and prediction intervals unstable."""
     result = fixed_effect(studies, effect_measure, outcome_name)
     result.model = "fixed"
     result.tau_squared = 0.0
     result.prediction_interval = None
+    result.requested_method = requested_method
+    result.fallback_reason = "fewer_than_three_studies"
     return result
 
 
@@ -77,7 +82,7 @@ def random_effects_dl(studies: list[StudyEffect], effect_measure: str, outcome_n
     if len(studies) < 2:
         raise ValueError(f"Random-effects meta-analysis requires >= 2 studies, got {len(studies)}")
     if len(studies) < 3:
-        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name)
+        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name, "DL")
 
     yi = np.array([s.yi for s in studies])
     vi = np.array([s.vi for s in studies])
@@ -131,6 +136,7 @@ def random_effects_dl(studies: list[StudyEffect], effect_measure: str, outcome_n
         p_value=float(p),
         q=q, q_p=float(q_p), i2=i2, tau2=tau2, h2=h2,
         studies=updated,
+        requested_method="DL",
     )
     result.prediction_interval = (_to_original(pred_lower, effect_measure), _to_original(pred_upper, effect_measure))
     return result
@@ -213,7 +219,13 @@ def subgroup_analysis(
 # REML estimator for τ²
 # =============================================================================
 
-def _reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 100, tol: float = 1e-8) -> float:
+class _TauEstimate(NamedTuple):
+    value: float
+    estimator: str
+    converged: bool
+
+
+def _estimate_reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 100, tol: float = 1e-8) -> _TauEstimate:
     """Estimate τ² using REML (Restricted Maximum Likelihood).
 
     Reference: Viechtbauer (2005), Thompson & Sharp (1999).
@@ -250,11 +262,16 @@ def _reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 100, tol: float =
             options={"xatol": tol, "maxiter": max_iter},
         )
         if opt.success and np.isfinite(opt.fun):
-            return max(0.0, float(opt.x))
+            return _TauEstimate(max(0.0, float(opt.x)), "REML", True)
     except Exception:
         pass
 
-    return tau2_dl
+    return _TauEstimate(tau2_dl, "DL", False)
+
+
+def _reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 100, tol: float = 1e-8) -> float:
+    """Compatibility scalar entry; pooling also retains the estimation provenance."""
+    return _estimate_reml_tau2(yi, vi, max_iter, tol).value
 
 
 def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome_name: str) -> PooledEffect:
@@ -266,7 +283,7 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
     if len(studies) < 2:
         raise ValueError(f"Random-effects meta-analysis requires >= 2 studies, got {len(studies)}")
     if len(studies) < 3:
-        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name)
+        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name, "REML")
 
     yi = np.array([s.yi for s in studies])
     vi = np.array([s.vi for s in studies])
@@ -275,7 +292,8 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
     if np.any(vi <= 0):
         raise ValueError("All study variances must be positive")
 
-    tau2 = _reml_tau2(yi, vi)
+    tau_fit = _estimate_reml_tau2(yi, vi)
+    tau2 = tau_fit.value
 
     # Random-effects weights with REML tau2
     wi_star = 1.0 / (vi + tau2)
@@ -316,7 +334,10 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
         p_value=float(p),
         q=q, q_p=float(q_p), i2=i2, tau2=tau2, h2=h2,
         studies=updated,
-        tau_estimator="REML",
+        tau_estimator=tau_fit.estimator,
+        requested_method="REML",
+        fallback_reason=None if tau_fit.converged else "reml_optimizer_failed",
+        tau_estimation_converged=tau_fit.converged,
     )
     result.prediction_interval = (_to_original(pred_lower, effect_measure), _to_original(pred_upper, effect_measure))
     return result
@@ -336,7 +357,7 @@ def random_effects_hksj(studies: list[StudyEffect], effect_measure: str, outcome
     if len(studies) < 2:
         raise ValueError(f"HKSJ requires >= 2 studies, got {len(studies)}")
     if len(studies) < 3:
-        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name)
+        return _sparse_random_effects_fallback(studies, effect_measure, outcome_name, "HKSJ")
 
     yi = np.array([s.yi for s in studies])
     vi = np.array([s.vi for s in studies])
@@ -394,7 +415,7 @@ def random_effects_hksj(studies: list[StudyEffect], effect_measure: str, outcome
         p_value=float(p),
         q=q, q_p=float(q_p), i2=i2, tau2=tau2, h2=h2,
         studies=updated,
-        tau_estimator="HKSJ",
+        tau_estimator="DL", requested_method="HKSJ", ci_method="modified_hksj_t",
     )
     # Override CI (built with normal, we need t-based)
     result.ci_lower = _to_original(ci_lower, effect_measure)
@@ -586,6 +607,10 @@ def _build_pooled(
     q, q_p, i2, tau2, h2,
     studies,
     tau_estimator: str = "DL",
+    ci_method: str = "normal_wald",
+    requested_method: str | None = None,
+    fallback_reason: str | None = None,
+    tau_estimation_converged: bool | None = None,
 ) -> PooledEffect:
     """Construct a PooledEffect with both log and original scale values."""
     ci_lower_log = pooled_log - 1.96 * se
@@ -604,6 +629,10 @@ def _build_pooled(
         ci_upper_log=ci_upper_log,
         model=model,
         tau_estimator=tau_estimator,
+        ci_method=ci_method,
+        requested_method=requested_method,
+        fallback_reason=fallback_reason,
+        tau_estimation_converged=tau_estimation_converged,
         q_statistic=q,
         q_p_value=q_p,
         i_squared=i2,

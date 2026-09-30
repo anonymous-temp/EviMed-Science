@@ -1,0 +1,84 @@
+{
+  "runId": "run_ff32357ec91bd5a4e3395964a1c239d0",
+  "capability": "comprehensive-drug-evaluation",
+  "capabilityVersion": "2.4.1",
+  "startedAt": "2026-09-29T09:39:22.966Z",
+  "finishedAt": "2026-09-29T10:24:08.838Z",
+  "sourceRevision": "233c033f36f15a5f85b8ca406932d329d918895d",
+  "sourceRevisionBasis": "Retained runtime container created at run start and immutable image revision label.",
+  "sourceRevisionComponents": {
+    "runtime": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_multidomain_evaluation_with_local_applicability_limits",
+  "usableResults": [
+    "34 evidence rows, 18 unique source identifiers, five report domains; required effectiveness/safety/applicability coverage is present.",
+    "2,152 participants per arm yield 4,304 total; 197/2152=9.1543%, 312/2152=14.4981%; crude NNT 18.713 rounds to reported 19.",
+    "Report and table consistently distinguish direct CKD trial findings, class evidence, label provenance, and diabetes-only economic model evidence."
+  ],
+  "limitations": [
+    "Local purchase price/payment data absent; no unsupported local cost-effectiveness estimate or score is assigned.",
+    "Conflicting indexed labels versus hospital-republished text remain an explicitly qualified applicability issue.",
+    "Time-to-event HRs and authoritative current label status were not independently re-validated."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/dapagliflozin-ckd-evaluation/comprehensive-evaluation-report.md",
+      "sha256": "d3d25d7426ec4093e04fa95c8e96a6ab05240c62a1694a28632cd12d54cc19ce",
+      "bytes": 32238
+    },
+    {
+      "path": "deliverables/dapagliflozin-ckd-evaluation/evaluation-summary.json",
+      "sha256": "f25fa8ae5faa32854dccb00ea068953c59a15ed6eb8401e8d3e9709dc7f3b6f0",
+      "bytes": 13814
+    },
+    {
+      "path": "deliverables/dapagliflozin-ckd-evaluation/evidence-snapshot.json",
+      "sha256": "a0e8586d1f3696feff76ac62546df32e2e1c0be12841aa2a230ce15d81251cb6",
+      "bytes": 151880
+    },
+    {
+      "path": "deliverables/dapagliflozin-ckd-evaluation/evidence-table.csv",
+      "sha256": "102c1e085b5eb582d72560c582545d2ae552180311f625de75ab5fc7a0bef136",
+      "bytes": 15580
+    },
+    {
+      "path": "deliverables/dapagliflozin-ckd-evaluation/revision-notes.md",
+      "sha256": "ecf51af31a8c022985162e3ee93cdab8770220037707c552cf630e74ad84c5ea",
+      "bytes": 4579
+    },
+    {
+      "path": "work/build_evidence_table.py",
+      "sha256": "dfffaf0e7aead4d7ee7049a850649cff8be4da82fae67ab04c414c9db8335c8d",
+      "bytes": 13826
+    },
+    {
+      "path": "work/build_inventory.py",
+      "sha256": "8f32d1f3ecc94c2b2380bfaaa859fcfa06af7ff04d635e323cb60060b6fcdecc",
+      "bytes": 20892
+    },
+    {
+      "path": "work/fix_snapshot.py",
+      "sha256": "2184a28706a08ace9db9713c9c9a761a9a18858f1d5c097c1191bbef92b33de5",
+      "bytes": 1803
+    },
+    {
+      "path": "work/write_summary.py",
+      "sha256": "99d4a8313f47c39314c8806a1ef093b1989876ab782e747b48c617385b356521",
+      "bytes": 9555
+    }
+  ],
+  "transcriptSha256": "00cc623a001d546ff50a4dd9f42fc083711a13c57e030d021713983939565145",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

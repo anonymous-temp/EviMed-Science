@@ -52,7 +52,7 @@ export function frontierRoutePattern(pathname) {
   }
   if (parts[0] === "follows") return parts.length === 1 ? "/api/frontier/follows" : "/api/frontier/follows/:id";
   if (parts[0] === "ops") return parts[1] === "sources" ? "/api/frontier/ops/sources/:id/enabled" : "/api/frontier/ops/items/:id/:action";
-  if (["status", "sources", "for-you", "hot", "events", "dailies"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
+  if (["status", "sources", "for-you", "hot", "events", "dailies", "weeklies"].includes(parts[0])) return `/api/frontier/${parts[0]}${parts.length > 1 ? "/:id" : ""}`;
   return "/api/frontier/:route";
 }
 
@@ -150,6 +150,8 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
     if (parts.length === 2 && parts[0] === "dailies" && method === "GET") {
       return reply(await service.dailyIssue(user, parts[1]));
     }
+    if (parts.length === 1 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklies(url.searchParams));
+    if (parts.length === 2 && parts[0] === "weeklies" && method === "GET") return reply(await service.weeklyIssue(user, parts[1]));
     if (parts.length === 1 && parts[0] === "sources" && method === "GET") {
       return reply(await service.sources(user));
     }

@@ -345,6 +345,11 @@ def _copy_release_artifacts(output_dir: Path, state, results: list, *, include_r
                 copied.append(target_name)
 
     allowed_suffixes = {".csv", ".json", ".png", ".pdf"}
+    numerical_modules = {"mr_results.csv": "primaryEstimate", "heterogeneity.csv": "heterogeneity", "pleiotropy.csv": "pleiotropy",
+                         "steiger.csv": "steiger", "mrpresso.csv": "presso", "radial.csv": "radial", "conmix.csv": "conmix", "f_statistics.csv": "instrumentStrength",
+                         "selected-source-rows.csv": "selectedSourceRows", "harmonised-rows.csv": "harmonisedRows",
+                         "mr_summary.json": "summary", "instrument-selection.json": "instrumentSelection", "harmonisation.json": "harmonisation",
+                         "mr_error.json": "analysisError"}
     for index, result in enumerate(results, start=1):
         raw = Path(result.raw_data_path).resolve() if result.raw_data_path else None
         plot_checks = diagnostic_plot_checks(result)
@@ -356,6 +361,9 @@ def _copy_release_artifacts(output_dir: Path, state, results: list, *, include_r
         if raw and raw.is_dir():
             target_dir.mkdir(parents=True, exist_ok=True)
             for source in sorted(raw.iterdir()):
+                module = numerical_modules.get(source.name)
+                if module and result.module_status.get(module, {}).get("status") == "unavailable":
+                    continue
                 diagnostic = diagnostic_artifact_name(source)
                 if diagnostic and plot_checks[diagnostic]["status"] != "ok":
                     continue
@@ -443,6 +451,7 @@ def run(
             result for result in agent.state.analysis_results if result.n_instruments > 0
         ]
         if not valid_results:
+            _copy_release_artifacts(output_dir, agent.state, agent.state.analysis_results, include_reports=False)
             detail = agent.state.errors[-1] if agent.state.errors else analysis_message
             # A refused or unreachable source is not "no instruments found".
             source_code = str(getattr(agent.state, "error_code", "") or "")
@@ -541,6 +550,11 @@ def run(
         )
         return 1
     except Exception as error:
+        if "agent" in locals() and agent.state.analysis_results:
+            try:
+                _copy_release_artifacts(output_dir, agent.state, agent.state.analysis_results, include_reports=False)
+            except (OSError, ValueError):
+                pass
         traceback.print_exc()
         code = str(getattr(error, "code", "") or "")
         failure = {"status": "failed", "error": str(error)}

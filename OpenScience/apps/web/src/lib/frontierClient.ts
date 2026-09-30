@@ -171,6 +171,8 @@ export interface FrontierItemDetail extends FrontierItem {
 }
 
 export interface FrontierItemsQuery {
+  /** A follow owned by the authenticated reader; never an arbitrary account id. */
+  follow?: string | null;
   view?: FrontierView;
   by?: FrontierAxis;
   lane?: string | null;
@@ -870,6 +872,7 @@ function itemsQueryString(query: FrontierItemsQuery): string {
   params.set("by", query.by ?? "timeline");
   if (query.lane) params.set("lane", query.lane);
   if (query.specialty) params.set("specialty", query.specialty);
+  if (query.follow) params.set("follow", query.follow);
   if (query.window) params.set("window", query.window);
   const q = query.q?.trim();
   if (q) params.set("q", q.slice(0, 200));
@@ -934,6 +937,8 @@ function parseFollow(value: unknown): FrontierFollow | null {
   return followId && key && kind ? { id: followId, kind, key, label: text(follow?.label) ?? key, muted: follow?.muted === true } : null;
 }
 
+export const FRONTIER_FOLLOWS_CHANGED = "evimed:frontier-follows-changed";
+
 export async function listFrontierFollows(): Promise<FrontierFollow[]> {
   const raw = record(await productRequest<unknown>("/frontier/follows"));
   return (Array.isArray(raw?.follows) ? raw.follows : []).map(parseFollow).filter((follow): follow is FrontierFollow => follow !== null);
@@ -945,11 +950,13 @@ export async function addFrontierFollow(input: { kind: FrontierFollow["kind"]; k
     kind: input.kind, key: input.key, label: input.label, muted: input.muted === true,
   }))?.follow);
   if (!follow) throw new WebApiError("The frontier follow was malformed.", { status: 502 });
+  window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
   return follow;
 }
 
 export async function removeFrontierFollow(followId: string): Promise<void> {
   await productRequest<unknown>(`/frontier/follows/${id(followId)}`, "DELETE");
+  window.dispatchEvent(new Event(FRONTIER_FOLLOWS_CHANGED));
 }
 
 /**
@@ -1030,6 +1037,28 @@ export function fetchFrontierDaily(day: string): Promise<FrontierDaily | null> {
   });
 }
 
+export interface FrontierWeekly extends FrontierDaily { weekStart: string; weekEnd: string }
+export interface FrontierWeeklySummary extends Omit<FrontierDailySummary, "day"> { weekStart: string; weekEnd: string }
+
+export function listFrontierWeeklies(limit = 30): Promise<FrontierWeeklySummary[] | null> {
+  return optional(async () => {
+    const raw = record(await productRequest<unknown>(`/frontier/weeklies?limit=${Math.min(60, Math.max(1, Math.floor(limit)))}`));
+    return (Array.isArray(raw?.weeklies) ? raw.weeklies : []).flatMap((entry) => {
+      const row = record(entry), weekStart = text(row?.weekStart), weekEnd = text(row?.weekEnd);
+      return weekStart && weekEnd ? [{ weekStart, weekEnd, title: text(row?.title), itemCount: count(row?.itemCount), generatedAt: moment(row?.generatedAt) }] : [];
+    });
+  });
+}
+
+export function fetchFrontierWeekly(week: string): Promise<FrontierWeekly | null> {
+  return optional(async () => {
+    const raw = record(record(await productRequest<unknown>(`/frontier/weeklies/${id(week)}`))?.weekly);
+    const issue = parseDaily(raw);
+    if (!issue || !text(raw?.weekStart) || !text(raw?.weekEnd)) throw new WebApiError("The frontier weekly was malformed.", { status: 502 });
+    return { ...issue, weekStart: String(raw?.weekStart), weekEnd: String(raw?.weekEnd) };
+  });
+}
+
 /** Null where the route does not exist yet; the card then says 「还在准备」. */
 export function saveFrontierItemToLibrary(itemId: string, projectId: string): Promise<FrontierLibrarySave | null> {
   return optional(async () => {
@@ -1086,3 +1115,17 @@ export async function setFrontierDigestSwitch(enabled: boolean): Promise<boolean
 
 // In a module of their own, so the sidebar can ask without loading this one.
 export { frontierOffered, useFrontierFeature, type FrontierFeature } from "./frontierFeature";
+
+export type FrontierNotificationSwitch = "frontier" | "frontierWeekly" | "frontierSafety";
+export async function fetchFrontierNotificationSwitch(key: FrontierNotificationSwitch): Promise<boolean> {
+  const current = await productRequest<InboxPreferencesWire>("/inbox/preferences");
+  return current.switches[key] ?? current.switches.frontier !== false;
+}
+export async function setFrontierNotificationSwitch(key: FrontierNotificationSwitch, enabled: boolean): Promise<boolean> {
+  const current = await productRequest<InboxPreferencesWire>("/inbox/preferences");
+  const saved = await productRequest<InboxPreferencesWire>("/inbox/preferences", "PATCH", {
+    quietHours: current.quietHours, digestTime: current.digestTime, switches: { ...current.switches, [key]: enabled },
+    channels: current.channels, expectedRevision: current.revision,
+  });
+  return saved.switches[key] ?? saved.switches.frontier !== false;
+}

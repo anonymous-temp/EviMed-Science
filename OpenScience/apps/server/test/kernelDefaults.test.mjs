@@ -86,9 +86,11 @@ test("every setting the runtime depends on still holds in the composition the im
   // account and its controller, the terminal and job controllers, schedules,
   // PTC, image offload, Office preview, workspace changes and new settings
   // leaves; `code-runtime`, `workflow-worker-thread` and `agent-presets` left.
-  assert.equal(report.counts.baselineRows, 191, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe and the two community client bundles");
+  // 192 on 2026-09-30: the request-scoped engine execution-context plugin.
+  assert.equal(report.counts.baselineRows, 192, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe the two community client bundles and the engine execution-context plugin");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
+  assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
   // 25 since 2026-09-07: the compaction group gained `evimed-compaction`, the
@@ -176,6 +178,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "ui-open-in-app.disabled=true",
       "ui-plugin-manager.disabled=true",
       "ui-settings-account.disabled=true",
+      "ui-sidebar-browser.disabled=false",
       "ui-sidebar-terminal.disabled=true",
       // Sorted, and `-` sorts before `.`, so the disabled row comes first.
       "web-fetch-http.disabled=true",

@@ -310,3 +310,15 @@ def test_every_billed_response_is_counted_for_the_evimed_usage_ledger(monkeypatc
     assert provider_usage.snapshot()["requests"] == 3
     assert provider_usage.snapshot()["cacheMissTokens"] == 230, "a stream that does not split its prompt is all misses"
     provider_usage.reset()
+
+
+def test_managed_choice_reaches_request_payload(monkeypatch):
+    for effort in ("off", "low", "high", "max"):
+        monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+        monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+        service = LLMService()
+        for tier in ("flash", "pro"):
+            _, _, _, request = service._request_kwargs(messages=MESSAGES, model=None, model_tier=tier,
+                temperature=0.2, max_tokens=1000, json_mode=False, stream=False)
+            assert request["extra_body"]["thinking"]["type"] == ("disabled" if effort == "off" else "enabled")
+            assert request.get("reasoning_effort") == (None if effort == "off" else effort)

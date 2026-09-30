@@ -123,7 +123,7 @@ describe("LoginPage", () => {
     mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
     const cases: [string, RegExp][] = [
       ["user_exists", /已经有人用了/],
-      ["weak_password", /密码至少 8 位/],
+      ["weak_password", /密码至少 6 位/],
       ["auth_rate_limited", /尝试太频繁/],
     ];
     for (const [code, message] of cases) {

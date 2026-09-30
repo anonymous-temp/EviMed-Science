@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-29",
+  "modelInputs": "Only datasets and ordinary brief inputs; expected.json and reference scripts are evaluator-only.",
+  "sources": [
+    {
+      "path": "breast-cancer.csv",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "source": "https://github.com/YMa-lab/TableMage-Analysis",
+      "upstreamPath": "benchmarking/dataanalysisqa/datasets/breast_cancer.csv",
+      "license": "CC-BY-4.0",
+      "coding": {
+        "0": "malignant",
+        "1": "benign"
+      },
+      "note": "Downloaded source bytes match sklearn 1.6.1 load_breast_cancer features and targets exactly. Unnamed: 0 is a serialized row index. Upstream label prose incorrectly calls target 1 with cancer; corrected here.",
+      "upstreamCommit": "2fd5220e184bf85fb517bd7cc43a9c245b25bf49",
+      "pinnedContentVerified": true,
+      "pinnedUrl": "https://raw.githubusercontent.com/YMa-lab/TableMage-Analysis/2fd5220e184bf85fb517bd7cc43a9c245b25bf49/benchmarking/dataanalysisqa/datasets/breast_cancer.csv",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "originalSource": "https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic",
+      "attribution": "Wolberg, W., Mangasarian, O., Street, N., & Street, W. (1993). Breast Cancer Wisconsin (Diagnostic) [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5DW2B.",
+      "adaptedReferenceLicense": "BSD-3-Clause",
+      "adaptedReferenceSource": "TableMage-Analysis sequential label code, copyright 2025 Ying Ma; its license applies to the adapted reference code separately from the original dataset."
+    },
+    {
+      "path": "lung.csv",
+      "sha256": "cf2ddfa766fdc3722364e4a24878162de2facaf71df1b66d48e7126c0a6e1f12",
+      "source": "https://stat.ethz.ch/R-manual/R-devel/library/survival/html/lung.html",
+      "packageSource": "https://cran.r-project.org/src/contrib/Archive/survival/survival_3.8-6.tar.gz",
+      "license": "LGPL-2.0-or-later",
+      "R": "4.6.0",
+      "package": "survival",
+      "version": "3.8.6",
+      "export": "write.csv(survival::lung, file, row.names=FALSE, na=\"\")",
+      "coding": {
+        "status": {
+          "1": "censored",
+          "2": "dead"
+        },
+        "sex": {
+          "1": "male",
+          "2": "female"
+        }
+      }
+    }
+  ]
+}

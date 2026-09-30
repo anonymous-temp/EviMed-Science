@@ -184,6 +184,11 @@ def write_artifacts(
                 "modules": module_ledger(result),
                 "formulas": FORMULAS,
                 "display_convention": number_display.CONVENTION,
+                "expected_count_calculations": [
+                    {"reaction": row.reaction, **row.expected_count_calculation}
+                    for row in result.signals
+                ],
+                "yearly_count_interpretation": result.overview.yearly_count_interpretation,
             },
             ensure_ascii=False,
             indent=2,

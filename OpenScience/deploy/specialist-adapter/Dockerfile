@@ -6,6 +6,7 @@ ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG GITHUB_DOWNLOAD_PREFIX=
 ARG CRAN_MIRROR=https://cloud.r-project.org
+ARG MR_PLINK_VERSION=1.90~b6.26-220402-1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -48,7 +49,8 @@ RUN set -eux; \
         r-cran-rcpparmadillo r-cran-quantreg r-cran-robustbase r-cran-sparsem \
         r-cran-matrixmodels r-cran-gmp r-cran-plotly r-cran-boot \
         r-cran-lavaan r-cran-gdata r-cran-stringr r-cran-tidyr r-cran-tibble \
-        r-cran-tidyselect r-cran-rlang r-cran-matrix; \
+        r-cran-tidyselect r-cran-rlang r-cran-matrix "plink1.9=${MR_PLINK_VERSION}"; \
+      plink1.9 --version; \
     fi; \
     if [ "${AGENT_KIND}" = "peer-review" ]; then \
       apt-get install -y --no-install-recommends poppler-utils; \

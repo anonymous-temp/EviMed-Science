@@ -1,17 +1,10 @@
-# ToolUniverse as a sidecar MCP server.
-#
-# Hidden knowledge: this is deliberately NOT installed into the runtime image.
-# ToolUniverse's ~2,700 tools call their upstreams directly from their own
-# process and read their credentials from the environment. The runtime
-# container is built to do neither: it is read-only, holds no key, and reaches
-# the outside world only through the control plane's public-source gateway.
-# Putting ToolUniverse inside it would have required giving that container both
-# egress and secrets -- undoing the two properties the sandbox exists for.
-#
-# As a sidecar it keeps its own egress and its own keys, and the runtime
-# reaches it over the internal network by MCP streamable-http. What the runtime
-# gains is the tool surface; what it does not gain is the ability to leave.
-FROM python:3.12-slim-bookworm
+# Optional clinical API catalogue, isolated from research runtimes.
+# The control plane holds the sidecar's service credential; runtimes reach it
+# only through the workload-authenticated bridge. This initial catalogue uses
+# public providers without API keys. The trusted profile excludes arbitrary-URL
+# full-text tools; full-text retrieval stays on the managed source gateway.
+ARG PYTHON_BASE_IMAGE=python:3.12-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE}
 
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
@@ -30,8 +23,11 @@ RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "tooluniverse==${TOOLUNIVERSE_VERSION}" \
+COPY deploy/tooluniverse/constraints.txt /opt/evimed-tooluniverse/constraints.txt
+RUN pip install --no-cache-dir -c /opt/evimed-tooluniverse/constraints.txt "tooluniverse==${TOOLUNIVERSE_VERSION}" \
   && python -c "import tooluniverse; print('tooluniverse', tooluniverse.__version__)"
+
+COPY deploy/tooluniverse/sidecar.py deploy/tooluniverse/profile.yaml /opt/evimed-tooluniverse/
 
 # Unprivileged, like every other service we run.
 RUN useradd --create-home --uid 10001 tooluniverse
@@ -40,10 +36,8 @@ WORKDIR /home/tooluniverse
 
 EXPOSE 8080
 
-# `--compact-mode` exposes five discovery tools and reaches the rest through
-# `execute_tool`. Without it a tool list larger than most context windows
-# arrives before the question does.
-#
-# Bound to 0.0.0.0 because the only route to this port is the internal compose
-# network; it is never published to the host.
-CMD ["tooluniverse-smcp-server", "--host", "0.0.0.0", "--port", "8080", "--compact-mode"]
+# The trusted profile is seeded before importing ToolUniverse; otherwise the
+# pinned CLI loads the full default catalogue before applying category flags.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD ["python", "/opt/evimed-tooluniverse/sidecar.py", "check", "--full"]
+CMD ["python", "/opt/evimed-tooluniverse/sidecar.py", "serve"]

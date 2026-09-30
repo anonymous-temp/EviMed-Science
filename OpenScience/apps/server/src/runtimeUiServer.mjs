@@ -1,11 +1,13 @@
+import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
+import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
 import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
-import { HttpError, readBody } from "./security.mjs";
+import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
 import { IMMUTABLE_UI_CACHE, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
@@ -69,14 +71,64 @@ async function authorizeMethod(config, project, method, boundWorkspace = false, 
  * five reading methods, never confines it (see `RUNTIME_UI_WORKSPACE_PATH_METHODS`
  * in `@evimed/domain`); this is the confinement, on both transports, with
  * the same refusal the method deny list gives.
- * @param {string | null} method @param {unknown} payload @param {string} workspaceRoot
+ * @param {string | null} method @param {unknown} payload @param {string} workspaceRoot @param {any} project
  */
-function assertWorkspacePath(method, payload, workspaceRoot) {
+async function assertWorkspacePath(method, payload, workspaceRoot, project) {
   const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot);
   if (refusal) throw new HttpError(403, "runtime_ui_method_denied", `${method} refused: ${refusal}.`);
+  if (!WORKSPACE_PATH_METHODS.has(method)) return;
+  const args = /** @type {any} */ (payload).args;
+  const local = value => path.resolve(project.workspaceDir,
+    value.startsWith("/") ? path.posix.relative(workspaceRoot, value) : value);
+  const files = [local(args.path)];
+  if (method === "workspaceFiles/readBytes" && args.options?.baseFile !== undefined) {
+    const base = local(args.options.baseFile);
+    files[0] = args.path.startsWith("/") ? local(args.path) : path.resolve(path.dirname(base), args.path);
+    files.push(base);
+  } else if (method === "workspaceFiles/readRelated") {
+    files.push(path.resolve(path.dirname(files[0]), args.relativePath));
+  }
+  for (const file of files) {
+    try { await assertNoSymlinkPath(project.workspaceDir, file, { allowMissingTail: true }); }
+    catch { throw new HttpError(403, "runtime_ui_method_denied", `${method} refused: the file path is not available inside this workspace.`); }
+  }
 }
 
 const WORKSPACE_PATH_METHODS = new Set(RUNTIME_UI_WORKSPACE_PATH_METHODS);
+
+/** Serve native Markdown media through the same descriptor-bound file boundary as the artifact reader.
+ * @param {any} req @param {any} res @param {URL} url @param {any} project
+ * @param {string} workspaceRoot @param {number} maxBytes @param {() => Promise<any>} revalidate
+ */
+async function serveWorkspaceMedia(req, res, url, project, workspaceRoot, maxBytes, revalidate) {
+  if (!["GET", "HEAD"].includes(req.method)) { sendDenied(res, "workspace media method"); return; }
+  const values = url.searchParams.getAll("path");
+  if (values.length !== 1 || [...url.searchParams.keys()].some(key => key !== "path")) {
+    throw new HttpError(400, "runtime_ui_endpoint_invalid", "One workspace media path is required.");
+  }
+  const file = values[0];
+  if (!file.startsWith("/") || runtimeUiWorkspacePathRefusal("workspaceFiles/readBytes", { args: { path: file } }, workspaceRoot)) {
+    throw new HttpError(403, "path_forbidden", "The media path is outside this project's workspace.");
+  }
+  const target = path.resolve(project.workspaceDir, path.posix.relative(workspaceRoot, file));
+  const opened = await openScopedFileNoFollow(project.workspaceDir, target).catch(error => {
+    if (error?.code === "ENOENT") throw new HttpError(404, "file_not_found", "File not found.");
+    throw error;
+  });
+  try {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || opened.stat.size > maxBytes) {
+      throw new HttpError(413, "file_too_large", "The media file exceeds the read limit.");
+    }
+    const bytes = req.method === "HEAD" ? null : await readStableFileHandle(opened.handle, opened.stat);
+    await revalidate();
+    res.writeHead(200, {
+      "Content-Type": mimeFor(target), "Content-Length": String(opened.stat.size),
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+    });
+    res.end(bytes);
+  } finally { await opened.handle.close(); }
+}
 
 const exactFields = (value, fields) => value !== null && typeof value === "object" && !Array.isArray(value)
   && Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field));
@@ -189,15 +241,28 @@ function destroyUpgrade(socket, status, code) {
   socket.destroy();
 }
 
+/** @param {Record<string, any>} config @param {any} payload */
+function assertNativeModelSelection(config, payload) {
+  const request = payload?.args?.request;
+  if (!exactFields(payload, ["args"]) || !exactFields(payload.args, ["request"])
+    || !request || typeof request !== "object" || Array.isArray(request)
+    || Object.keys(request).some(key => !["sessionId", "provider", "model", "reasoningEffort"].includes(key))
+    || typeof request.sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(request.sessionId)
+    || request.provider !== "deepseek-official" || request.model !== config.deepseekModel
+    || (request.reasoningEffort !== undefined && !MODEL_REASONING_EFFORTS.includes(request.reasoningEffort))) {
+    throw new HttpError(403, "runtime_ui_model_selection_forbidden", "Only the certified model's thinking intensity can be changed.");
+  }
+}
+
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, authorizeMutation = null,
   agentRuns = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -230,6 +295,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         code: typeof error?.code === "string" ? error.code : "run_correction_observe_failed",
         detail: "runtime-ui",
       }).catch(() => {});
+    }
+  }
+  /** Freeze supplemental context without changing the native request or refusing research. */
+  async function prepareNativeContext(project, payload) {
+    if (!preparePrompt) return;
+    try { await preparePrompt(project, payload?.args?.request); }
+    catch (error) {
+      await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
     }
   }
   async function authorizePromptSession(project, payload) {
@@ -430,14 +504,16 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
     const { user, project, frame, claims } = await resolveFrame(req, res);
-    const pathname = new URL(frame.suffix, "http://runtime.local").pathname;
+    const runtimeUrl = new URL(frame.suffix, "http://runtime.local");
+    const pathname = runtimeUrl.pathname;
     const hostResult = SEAMS.wire.gatewayEndpoints.hostInteractionResult;
     const method = pathname === `/api/${hostResult}` ? hostResult : runtimeUiMethodFromPath(pathname);
     // Only canonical native API method names enter the policy. Decode solely
     // to detect a disguised /api namespace, never to rewrite or forward it.
     let decodedPath;
     try { decodedPath = decodeURIComponent(pathname); } catch { throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical runtime path is required."); }
-    if ((pathname.startsWith("/api/") || decodedPath.startsWith("/api/"))
+    const workspaceMedia = pathname === "/api/file" && decodedPath === pathname;
+    if (!workspaceMedia && (pathname.startsWith("/api/") || decodedPath.startsWith("/api/"))
       && (!method || pathname !== `/api/${method}` || pathname !== decodedPath)) {
       throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");
     }
@@ -452,6 +528,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // on is not ours to assume.
     if (isDeniedRuntimeUiHostRoute(pathname) || isDeniedRuntimeUiHostRoute(decodedPath)) {
       sendDenied(res, pathname);
+      return;
+    }
+    if (workspaceMedia) {
+      const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+      trackFrame(snapshot, claims, res);
+      await serveWorkspaceMedia(req, res, runtimeUrl, project, runtimeManager.runtimeWorkspaceRoot(project),
+        Number(config.maxFileBytes), () => resolveFrame(snapshot, null));
       return;
     }
     // A denied method this surface answers itself (`RUNTIME_UI_ANSWERED_METHODS`
@@ -473,13 +556,22 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     }
     let workspaceBody = null;
     let promptBody = null;
-    if (method === "session/prompt" && (authorizePrompt || agentRuns)) {
+    let modelBody = null;
+    if (method === "session/prompt" && (authorizePrompt || agentRuns || preparePrompt)) {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
       if (promptBody?.type !== "client-request" || promptBody.method !== "session/prompt") {
         throw new HttpError(400, "runtime_ui_prompt_invalid", "A native prompt RPC is required.");
       }
+    }
+    if (method === "session/selectModel") {
+      if (req.method !== "POST") { sendDenied(res, method); return; }
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      try { modelBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
+      if (modelBody?.type !== "client-request" || modelBody.method !== method) { sendDenied(res, method); return; }
+      assertNativeModelSelection(config, modelBody.payload);
     }
     if (method === "workspace/create" && req.method === "POST") {
       const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
@@ -494,12 +586,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       req.__openScienceProxyBody = raw;
       let fileBody = null;
       try { fileBody = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
-      const refusal = runtimeUiWorkspacePathRefusal(method, fileBody?.payload, runtimeManager.runtimeWorkspaceRoot(project));
-      if (refusal) {
+      try {
+        await assertWorkspacePath(method, fileBody?.payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+      } catch {
         // The same JSON refusal the deny list gives, not the notice page a
         // thrown error becomes: the caller is the kernel's own file panel,
         // which reads the code and says so in its own words.
-        sendDenied(res, `${method} (${refusal})`);
+        sendDenied(res, method);
         return;
       }
     }
@@ -564,6 +657,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
+        await prepareNativeContext(project, promptBody?.payload);
         await recordSteer(project, promptBody?.payload);
         return forward();
       };
@@ -574,6 +668,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     if (method === "session/prompt") {
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
       else await forwardPrompt();
+    } else if (method === "session/selectModel") {
+      const select = async () => { await authorizePromptSession(project, modelBody?.payload); return forward(); };
+      if (authorizeMutation) await authorizeMutation(select); else await select();
     } else await forward();
   }
 
@@ -615,7 +712,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
-          assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project));
+          await assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project), project);
+          if (endpoint === "session/selectModel") {
+            assertNativeModelSelection(config, payload);
+            await authorizePromptSession(project, payload);
+          }
           if (endpoint === "session/prompt") {
             // The mux's plugin admission owns the full upstream operation. This
             // short maintenance admission serializes its start with an expiring
@@ -628,7 +729,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         // The mux calls `observe` inside the prompt's admission, right before
         // the frame goes upstream — the same point the HTTP path counts at.
         const observe = async (endpoint, payload = null) => {
-          if (endpoint === "session/prompt") await recordSteer(project, payload);
+          if (endpoint === "session/prompt") {
+            await prepareNativeContext(project, payload);
+            await recordSteer(project, payload);
+          }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe });
       } catch (error) {

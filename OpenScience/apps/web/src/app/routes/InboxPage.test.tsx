@@ -110,6 +110,8 @@ it("opens a digest, the frontier daily and a memory where each lives, without de
         actions: [{ id: "open", label: "查看简报", style: "neutral" }], readAt: at(1), resolvedAt: at(1) },
       { ...review, id: "daily", noticeType: "notify", title: "今日前沿 · 9月23日", body: "头条：FDA 发布新方法学专题",
         source: { type: "digest", id: "frontier-daily:2026-09-23" }, actions: [{ id: "open", label: "打开日报", style: "neutral" }], readAt: at(1) },
+      { ...review, id: "weekly", noticeType: "notify", title: "本周医学进展", source: { type: "digest", id: "frontier-weekly:2026-09-21" }, actions: [{ id: "open", label: "查看周刊", style: "primary" }], readAt: at(1) },
+      { ...review, id: "safety", noticeType: "notify", title: "相关安全公告", source: { type: "system", id: "frontier-safety:item1" }, actions: [{ id: "open", label: "查看公告", style: "primary" }], readAt: at(1) },
       { ...review, id: "memory", noticeType: "notify", title: "一条记忆被改写", body: "",
         source: { type: "memory", id: "rec_1" }, actions: [{ id: "open", label: "查看", style: "primary" }], readAt: at(1) },
       { ...review, id: "geo", noticeType: "notify", title: "DeepSeek 把玛仕度肽说成每天注射一次", body: "", severity: "safety",
@@ -125,6 +127,8 @@ it("opens a digest, the frontier daily and a memory where each lives, without de
   expect(await screen.findByRole("link", { name: "主动科研简报：GLP-1" })).toHaveAttribute("href", "/app/autopilot?digest=digest-owned");
   expect(screen.getByRole("link", { name: "今日前沿 · 9月23日" })).toHaveAttribute("href", "/app/frontier?view=daily&day=2026-09-23");
   expect(screen.getByRole("link", { name: "一条记忆被改写" })).toHaveAttribute("href", "/app/memory?record=rec_1");
+  expect(screen.getByRole("link", { name: "本周医学进展" })).toHaveAttribute("href", "/app/frontier?view=weekly&week=2026-09-21");
+  expect(screen.getByRole("link", { name: "相关安全公告" })).toHaveAttribute("href", "/app/frontier?item=item1");
   expect(api.resolveInboxItem).not.toHaveBeenCalled();
   expect(api.markInboxRead).not.toHaveBeenCalled();
 });

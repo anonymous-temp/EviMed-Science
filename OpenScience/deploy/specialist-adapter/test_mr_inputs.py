@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -58,6 +60,19 @@ def setup_mr(tmp_path, monkeypatch):
         "(out/'received.json').write_text(json.dumps(request))\n"
         "(out/'result.json').write_text(json.dumps({'status':'succeeded'}))\n"
     )
+    if sys.platform != "linux":
+        # These fixtures are fixed, single-process fake runners. Real descendant
+        # quiescence is covered by test_mr_cleanup's offline Linux containers.
+        # Production refuses a platform without its verified group supervisor.
+        load_job = service._mr_job
+
+        def fixture_job(root):
+            jobs = load_job(root)
+            monkeypatch.setattr(jobs, "_run_analysis", lambda command, credentials, timeout, **kwargs: (
+                subprocess.run(command, timeout=timeout, check=False, **kwargs), None))
+            return jobs
+
+        monkeypatch.setattr(service, "_mr_job", fixture_job)
     return service, client, secret, workspace
 
 
@@ -320,8 +335,24 @@ def test_accepted_request_and_status_use_only_the_protected_queue(
         timeout=20,
         check=False,
     )
-    assert worker.returncode == 0, worker.stderr
     output = workspace / "mendelian-randomization-runs" / job_id / "output"
+    if sys.platform != "linux":
+        # A fresh CLI process has no fixture supervisor and must refuse before
+        # running on an unsupported host. A new accepted job exercises the
+        # queue binding with our explicit single-process fixture supervisor.
+        assert worker.returncode == 1, worker.stderr
+        assert list(output.iterdir()) == []
+        assert service._read_state(state)["request"] == accepted["request"]
+        with pytest.raises(ValueError, match="Terminal MR job state is immutable"):
+            service._write_state(state, accepted)
+        state, job_id = queue_job(service, client, secret, monkeypatch)
+        accepted = service._read_state(state)
+        shadow = shadow.with_name(f"{job_id}.json")
+        shadow.write_text(json.dumps({"request": {"exposure": "Updated workspace note"}}))
+        output = workspace / "mendelian-randomization-runs" / job_id / "output"
+        assert service.run_job(str(state)) == 0
+    else:
+        assert worker.returncode == 0, worker.stderr
     received = json.loads((output / "received.json").read_text())
     assert received["exposure"] == accepted["request"]["exposure"] == "BMI"
     assert received["outcome"] == accepted["request"]["outcome"] == "CHD"
@@ -358,6 +389,10 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
     (agent / "evimed_runner.py").write_bytes((source / "evimed_runner.py").read_bytes())
     (agent / "mr_agent/models.py").write_bytes(
         (source / "mr_agent/models.py").read_bytes()
+    )
+    (agent / "mr_agent/source_context.py").write_bytes((source / "mr_agent/source_context.py").read_bytes())
+    (agent / "mr_agent/number_display.py").write_bytes(
+        (source / "mr_agent/number_display.py").read_bytes()
     )
     (agent / "mr_agent/__init__.py").write_text("")
     (agent / "mr_agent/core/__init__.py").write_text("")

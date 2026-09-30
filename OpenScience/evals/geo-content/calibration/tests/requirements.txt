@@ -1,0 +1,4 @@
+-r ../requirements.txt
+numpy==2.2.6
+krippendorff==0.8.2
+scikit-learn==1.6.1

@@ -210,14 +210,17 @@ def run_mr_analysis(
     r_script = _build_standard_script(
         exposure_id, outcome_id, output_dir, gwas_token, pval_thresholds
     )
+    previous = _output_identities(output_dir)
     success = _execute_r_script(r_script, output_dir)
     # A classified failure exits non-zero on purpose, so the error file must be
     # read before the exit code is treated as "nothing to parse".
-    raise_for_source_failure(output_dir)
+    result = _parse_results(exposure_id, outcome_id, output_dir, previous=previous)
+    if not result.mr_results and not any(name in _output_identities(output_dir) and _output_identities(output_dir)[name] != previous.get(name) for name in ("selected-source-rows.csv", "harmonised-rows.csv")):
+        raise_for_source_failure(output_dir, previous=previous)
     if not success:
-        logger.error(f"MR analysis failed: {exposure_id} -> {outcome_id}")
-        return MRAnalysisResult(exposure_id=exposure_id, outcome_id=outcome_id)
-    return _parse_results(exposure_id, outcome_id, output_dir)
+        result.analysis_status = "partial" if result.mr_results else "failed"
+        result.analysis_error_code = str(read_error_file(output_dir, previous=previous).get("code") or "analysis_failed")
+    return result
 
 
 def _build_standard_script(
@@ -330,6 +333,8 @@ def run_mr_local(
     output_dir.mkdir(parents=True, exist_ok=True)
     if pval_thresholds is None:
         pval_thresholds = DEFAULT_PVAL_THRESHOLDS
+    previous = _output_identities(output_dir)
+    parsed_dir = output_dir
     exp_id = exposure_source.display_id()
     out_id = outcome_source.display_id()
     if (
@@ -343,20 +348,25 @@ def run_mr_local(
         success = _execute_r_file(replay / "run.R", replay)
         if success:
             complete_local_replay(replay, output_dir)
+        elif (replay / "results").is_dir():
+            parsed_dir = replay / "results"
+            previous = {}
     else:
         r_script = _select_local_template(
             exposure_source, outcome_source, output_dir,
             gwas_token, pval_thresholds,
         )
         success = _execute_r_script(r_script, output_dir)
-    raise_for_source_failure(output_dir)
+    result = _parse_results(exp_id, out_id, parsed_dir, previous=previous)
+    if not result.mr_results and not any(name in _output_identities(parsed_dir) and _output_identities(parsed_dir)[name] != previous.get(name) for name in ("selected-source-rows.csv", "harmonised-rows.csv")):
+        raise_for_source_failure(parsed_dir, previous=previous)
     if not success:
-        logger.error(f"Local MR failed: {exp_id} -> {out_id}")
-        return _empty_local_result(exposure_source, outcome_source)
-    result = _parse_results(exp_id, out_id, output_dir)
+        result.analysis_status = "partial" if result.mr_results else "failed"
+        result.analysis_error_code = str(read_error_file(parsed_dir, previous=previous).get("code") or "analysis_failed")
     result.exposure_source_type = exposure_source.source_type
     result.outcome_source_type = outcome_source.source_type
     for label, source in (("exposure", exposure_source), ("outcome", outcome_source)):
+        setattr(result, f"{label}_scale", source.effect_scale)
         if source.is_local():
             setattr(result, f"{label}_name", source.trait_name)
             setattr(result, f"{label}_metadata", {
@@ -398,23 +408,66 @@ def _empty_local_result(exp_src: DataSource, out_src: DataSource) -> MRAnalysisR
     )
 
 
+def _output_identities(root: Path) -> dict:
+    return {path.name: (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+            for path in root.iterdir() if path.is_file() and not path.is_symlink() for info in [path.stat()]}
+
+
 def _parse_results(
-    exposure_id: str, outcome_id: str, output_dir: Path,
+    exposure_id: str, outcome_id: str, output_dir: Path, *, previous: dict | None = None,
 ) -> MRAnalysisResult:
     """Parse R output files into MRAnalysisResult."""
     result = MRAnalysisResult(
         exposure_id=exposure_id, outcome_id=outcome_id,
         raw_data_path=output_dir,
     )
-    _parse_summary(result, output_dir)
-    _parse_f_statistics(result, output_dir)
-    _parse_mr_csv(result, output_dir)
-    _parse_het_csv(result, output_dir)
-    _parse_plt_csv(result, output_dir)
-    _parse_steiger_csv(result, output_dir)
-    _parse_presso_csv(result, output_dir)
-    _parse_radial_csv(result, output_dir)
-    _parse_conmix_csv(result, output_dir)
+    current = _output_identities(output_dir)
+    files = {"summary": "mr_summary.json", "instrumentSelection": "instrument-selection.json", "harmonisation": "harmonisation.json",
+             "instrumentStrength": "f_statistics.csv", "primaryEstimate": "mr_results.csv",
+             "heterogeneity": "heterogeneity.csv", "pleiotropy": "pleiotropy.csv", "steiger": "steiger.csv",
+             "presso": "mrpresso.csv", "radial": "radial.csv", "conmix": "conmix.csv"}
+    for name, parser in (("summary", _parse_summary), ("instrumentSelection", _parse_selection_json),
+                         ("harmonisation", _parse_harmonisation_json), ("instrumentStrength", _parse_f_statistics),
+                         ("primaryEstimate", _parse_mr_csv), ("heterogeneity", _parse_het_csv),
+                         ("pleiotropy", _parse_plt_csv), ("steiger", _parse_steiger_csv),
+                         ("presso", _parse_presso_csv), ("radial", _parse_radial_csv), ("conmix", _parse_conmix_csv)):
+        if previous is not None and (files[name] not in current or current[files[name]] == previous.get(files[name])):
+            result.module_status[name] = {"status": "unavailable", "reason": "not_produced_by_this_attempt"}
+            continue
+        try:
+            parser(result, output_dir)
+        except (OSError, ValueError, TypeError, KeyError):
+            result.module_status[name] = {"status": "unavailable", "reason": "incomplete_or_invalid_output"}
+    if result.mr_results:
+        result.module_status["primaryEstimate"] = {"status": "completed"}
+        if not result.n_instruments:
+            result.n_instruments = max(item.nsnp for item in result.mr_results)
+    else:
+        result.module_status.setdefault("primaryEstimate", {"status": "unavailable", "reason": "no_complete_numeric_rows"})
+        result.analysis_status = "failed"
+        result.analysis_error_code = "mr_analysis_incomplete"
+    observed = {"instrumentStrength": bool(result.instrument_strength), "heterogeneity": bool(result.heterogeneity),
+                "pleiotropy": result.pleiotropy is not None, "steiger": result.steiger_status == "computed",
+                "presso": result.presso_global_pval is not None, "radial": result.radial_pval is not None, "conmix": result.conmix_pval is not None}
+    for name, available in observed.items():
+        result.module_status.setdefault(name, {"status": "completed" if available else "unavailable"})
+    for name, filename in (("selectedSourceRows", "selected-source-rows.csv"), ("harmonisedRows", "harmonised-rows.csv"),
+                           ("analysisError", "mr_error.json")):
+        if filename not in current or (previous is not None and current[filename] == previous.get(filename)):
+            result.module_status[name] = {"status": "unavailable", "reason": "not_produced_by_this_attempt"}
+        else:
+            # A fresh header-only snapshot is a real zero-row observation.
+            result.module_status[name] = {"status": "observed"}
+    path = output_dir / "harmonised-rows.csv"
+    if result.module_status["harmonisedRows"]["status"] == "observed" and path.stat().st_size <= 8 * 1024 * 1024:
+        from mr_agent.source_context import variant_sample_summary
+        try:
+            rows = pd.read_csv(path)
+            for role in ("exposure", "outcome"):
+                if f"samplesize.{role}" in rows:
+                    result.variant_sample_sizes[role] = variant_sample_summary(rows[f"samplesize.{role}"], scope="harmonised_rows")
+        except (OSError, ValueError):
+            pass
     _collect_plots(result, output_dir)
     return result
 
@@ -442,6 +495,9 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
     if isinstance(skipped, str):
         skipped = [skipped]
     result.skipped_analyses = [str(item) for item in skipped]
+
+
+def _parse_harmonisation_json(result: MRAnalysisResult, output_dir: Path) -> None:
     harmonisation_file = output_dir / "harmonisation.json"
     if harmonisation_file.is_file():
         try:
@@ -450,14 +506,21 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
             value = None
         if isinstance(value, dict):
             result.harmonisation = value
+
+
+def _parse_selection_json(result: MRAnalysisResult, output_dir: Path) -> None:
     selection_file = output_dir / "instrument-selection.json"
     if selection_file.exists():
         result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))
 
 
-def read_error_file(output_dir: Path) -> dict:
+def read_error_file(output_dir: Path, *, previous: dict | None = None) -> dict:
     """Return the classified failure the R template wrote, if any."""
     error_file = output_dir / "mr_error.json"
+    if previous is not None:
+        current = _output_identities(output_dir)
+        if "mr_error.json" not in current or current["mr_error.json"] == previous.get("mr_error.json"):
+            return {}
     if not error_file.exists():
         return {}
     try:
@@ -468,14 +531,14 @@ def read_error_file(output_dir: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def raise_for_source_failure(output_dir: Path) -> dict:
+def raise_for_source_failure(output_dir: Path, *, previous: dict | None = None) -> dict:
     """Turn a source-level R failure into a coded exception.
 
     An analysis-level failure (too few instruments, no outcome rows) is
     returned instead: those are results, and other exposure-outcome pairs in
     the same job can still run.
     """
-    data = read_error_file(output_dir)
+    data = read_error_file(output_dir, previous=previous)
     if not data:
         return {}
     code = str(data.get("code") or "")
@@ -500,9 +563,20 @@ def _parse_mr_csv(result: MRAnalysisResult, output_dir: Path) -> None:
     csv_path = output_dir / "mr_results.csv"
     if not csv_path.exists():
         return
+    if csv_path.is_symlink() or csv_path.stat().st_size > 8 * 1024 * 1024:
+        raise ValueError("Unsafe primary output")
     df = pd.read_csv(csv_path)
+    required = {"method", "nsnp", "b", "se", "pval"}
+    if not required <= set(df.columns) or df.empty:
+        raise ValueError("Incomplete primary output")
+    parsed = []
     for _, row in df.iterrows():
-        result.mr_results.append(_row_to_mr_result(row))
+        if any(safe_float(row.get(key)) is None for key in required - {"method"}) or not str(row["method"]).strip():
+            raise ValueError("Incomplete primary row")
+        if float(row["se"]) <= 0 or (int(row["nsnp"]) <= 0 or float(row["nsnp"]) != int(row["nsnp"])) or not 0 <= float(row["pval"]) <= 1:
+            raise ValueError("Invalid primary row")
+        parsed.append(_row_to_mr_result(row))
+    result.mr_results = parsed
 
 
 def _row_to_mr_result(row) -> MRResult:

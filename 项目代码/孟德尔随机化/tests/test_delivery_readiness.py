@@ -16,6 +16,145 @@ def numeric_result(**changes):
     )
 
 
+def test_late_r_failure_keeps_completed_primary_numbers_and_original_failure(tmp_path, monkeypatch):
+    from mr_agent.tools import mr_executor
+    from mr_agent.analysis.delivery import MRDeliveryError, require_report_ready
+    def failed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nInverse variance weighted,8,0.3,0.04,0.001\n")
+        (output / "mr_error.json").write_text('{"code":"analysis_failed","error":"Late optional step failed"}')
+        return False
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", tmp_path)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 8
+    assert result.analysis_status == "partial" and result.analysis_error_code == "analysis_failed"
+    with pytest.raises(MRDeliveryError) as caught:
+        require_report_ready([result])
+    assert caught.value.module == "primaryEstimate"
+
+
+@pytest.mark.parametrize("row", ["IVW,8,,0.04,0.001", "IVW,8,0.3,,0.001", "IVW,8,0.3,0.04,", "IVW,8,0.3,0.04"])
+def test_half_written_primary_csv_does_not_fabricate_zero_effect_or_null_p_value(tmp_path, row):
+    from mr_agent.tools import mr_executor
+    (tmp_path / "mr_results.csv").write_text("method,nsnp,b,se,pval\n" + row + "\n")
+    result = mr_executor._parse_results("x", "y", tmp_path)
+    assert result.mr_results == []
+    assert result.module_status["primaryEstimate"]["status"] == "unavailable"
+
+
+def test_unchanged_old_primary_file_is_not_copied_as_a_failed_retries_partial_result(tmp_path, monkeypatch):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+    raw = tmp_path / "raw"; raw.mkdir()
+    (raw / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+    monkeypatch.setattr(mr_executor, "_execute_r_script", lambda *args: False)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results == []
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert not any(path.endswith("mr_results.csv") for path in copied)
+
+
+@pytest.mark.parametrize("fresh_rows", [None, "empty", "populated"])
+def test_row_snapshots_and_variant_n_belong_to_current_attempt(tmp_path, monkeypatch, fresh_rows):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+
+    raw = tmp_path / "raw"; raw.mkdir()
+    rows_header = "SNP,beta.exposure,se.exposure,pval.exposure,samplesize.exposure,samplesize.outcome\n"
+    for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+        (raw / name).write_text(rows_header + "rs1,0.2,0.01,1e-9,123,456\n")
+
+    def failed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+        if fresh_rows is not None:
+            for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+                (output / name).write_text(rows_header + ("rs2,0.3,0.01,1e-9,789,987\n" if fresh_rows == "populated" else ""))
+        return False
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 8
+    assert result.analysis_status == "partial"
+    if fresh_rows is None:
+        assert result.variant_sample_sizes == {}
+    else:
+        observed = result.variant_sample_sizes["exposure"]
+        assert observed["rows"] == (1 if fresh_rows == "populated" else 0)
+        assert observed["maximum"] == (789 if fresh_rows == "populated" else None)
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert any(path.endswith("mr_results.csv") for path in copied)
+    for name in ("selected-source-rows.csv", "harmonised-rows.csv"):
+        assert any(path.endswith(name) for path in copied) == (fresh_rows is not None)
+    assert (raw / "harmonised-rows.csv").exists()
+
+
+@pytest.mark.parametrize("fresh_summary", [False, True])
+@pytest.mark.parametrize("fresh_records", [False, True])
+def test_current_summary_and_nested_selection_records_are_independently_fresh(tmp_path, monkeypatch, fresh_summary, fresh_records):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+
+    raw = tmp_path / "raw"; raw.mkdir()
+    summary = {"n_instruments": 4, "mean_f_statistic": 44.5, "pval_threshold": 5e-6,
+               "sample_size_exposure": 12345, "sample_size_outcome": 67890,
+               "skipped_analyses": "mr_presso: package absent"}
+    records = {"instrument-selection.json": {"method": "declared_preclumped", "ld_rechecked": False},
+               "harmonisation.json": {"before": 6, "after": 4}}
+    (raw / "mr_summary.json").write_text(json.dumps({**summary, "sample_size_exposure": 999}))
+    for name in records:
+        (raw / name).write_text('{"old_attempt": true}')
+
+    def completed(script, output):
+        (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,4,0.3,0.04,0.001\n")
+        if fresh_summary:
+            (output / "mr_summary.json").write_text(json.dumps(summary))
+        if fresh_records:
+            for name, value in records.items():
+                (output / name).write_text(json.dumps(value))
+        return True
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", completed)
+    result = mr_executor.run_mr_analysis("x", "y", raw)
+    assert result.mr_results[0].beta == 0.3 and result.n_instruments == 4
+    assert result.sample_size_exposure == (12345 if fresh_summary else None)
+    assert result.sample_size_outcome == (67890 if fresh_summary else None)
+    assert result.f_statistic_mean == (44.5 if fresh_summary else None)
+    assert result.pval_threshold == (5e-6 if fresh_summary else 5e-8)
+    assert result.skipped_analyses == (["mr_presso: package absent"] if fresh_summary else [])
+    assert result.instrument_selection == (records["instrument-selection.json"] if fresh_records else {})
+    assert result.harmonisation == (records["harmonisation.json"] if fresh_records else {})
+    target = tmp_path / "output"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=raw), [result], include_reports=False)
+    assert any(path.endswith("mr_summary.json") for path in copied) == fresh_summary
+    for name in records:
+        assert any(path.endswith(name) for path in copied) == fresh_records
+
+
+@pytest.mark.parametrize("primary", [False, True])
+@pytest.mark.parametrize("fresh_error", [False, True])
+def test_previous_error_does_not_label_or_raise_from_this_attempt(tmp_path, monkeypatch, primary, fresh_error):
+    from mr_agent.tools import mr_executor
+    from evimed_runner import _copy_release_artifacts
+
+    (tmp_path / "mr_error.json").write_text('{"code":"opengwas_auth_failed","error":"Old attempt"}')
+
+    def failed(script, output):
+        if primary:
+            (output / "mr_results.csv").write_text("method,nsnp,b,se,pval\nIVW,8,0.3,0.04,0.001\n")
+        if fresh_error:
+            (output / "mr_error.json").write_text('{"code":"no_instruments","error":"Current observation"}')
+        return False
+
+    monkeypatch.setattr(mr_executor, "_execute_r_script", failed)
+    result = mr_executor.run_mr_analysis("x", "y", tmp_path)
+    assert result.analysis_error_code == ("no_instruments" if fresh_error else "analysis_failed")
+    assert bool(result.mr_results) == primary
+    target = tmp_path / "published"; target.mkdir()
+    copied = _copy_release_artifacts(target, SimpleNamespace(output_dir=tmp_path), [result], include_reports=False)
+    assert any(path.endswith("mr_error.json") for path in copied) == fresh_error
+
+
 @pytest.mark.parametrize("response", [None, "", "   ", RuntimeError("private-provider-detail")])
 def test_interpretation_failure_is_typed_and_retains_numerical_results(response):
     from mr_agent.analysis.delivery import MRDeliveryError

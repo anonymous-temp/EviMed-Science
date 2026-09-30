@@ -92,6 +92,12 @@ export function estimateJevTokens(state, questions) {
   };
 }
 
+/** Shared request bounds for planning batches and the actual provider preflight. @param {any} [config] */
+export function jevRequestLimits(config = {}) {
+  return { maxRequest: Number(config.reviewJevMaxRequestTokens) || 64_000,
+    maxState: Number(config.reviewJevMaxStateTokens) || 32_000 };
+}
+
 /** The provider's error type, when it is a plain identifier. @param {string} text */
 function errorType(text) {
   try {
@@ -161,8 +167,7 @@ export async function callJev({ config, usageLedger = null, fetchImpl = fetch, r
   const apiBase = String(config.reviewJevApiBase ?? "").replace(/\/+$/, "");
   if (!model || !apiBase) throw new JevError("jev_unconfigured", "No Jev model or endpoint is pinned.");
   const size = estimateJevTokens(call.state, call.questions);
-  const maxRequest = Number(config.reviewJevMaxRequestTokens) || 64_000;
-  const maxState = Number(config.reviewJevMaxStateTokens) || 32_000;
+  const { maxRequest, maxState } = jevRequestLimits(config);
   if (size.total > maxRequest || size.stateAndLongestQuestion > maxState) {
     throw new JevError("jev_request_too_large", `The request is estimated at ${size.total} tokens (state and longest question ${size.stateAndLongestQuestion}); Jev takes ${maxRequest} (${maxState}).`);
   }

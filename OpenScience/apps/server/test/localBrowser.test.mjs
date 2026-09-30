@@ -38,12 +38,17 @@ async function listen(server) {
 }
 
 /** Send a CONNECT and return the status line plus the socket, tunnel open. */
-function connectThrough(proxyUrl, authority) {
+function connectThrough(proxyUrl, authority, { expectCut = false } = {}) {
   const { hostname, port } = new URL(proxyUrl);
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: hostname, port: Number(port) });
     let buffered = "";
-    socket.once("error", reject);
+    socket.once("error", error => {
+      // A deliberate policy cut can reset queued CONNECT bytes on macOS.
+      // Connection refusal and every unexpected network error still fail.
+      if (expectCut && error.code === "ECONNRESET") resolve({ status: "closed", socket });
+      else reject(error);
+    });
     socket.on("close", () => resolve({ status: buffered.split("\r\n", 1)[0] || "closed", socket }));
     socket.on("data", function onData(chunk) {
       buffered += chunk.toString("latin1");
@@ -144,6 +149,7 @@ test("past the byte cap every tunnel is cut and the render knows why; close ends
     bindAddress: "127.0.0.1", peerAddress: "127.0.0.1", resolveImpl: resolver(),
     maxBytes: 256 * 1024, maxHosts: 16, counts, connectImpl: upstreamTo(port, []),
   });
+  t.after(() => egress.close());
   const open = await connectThrough(egress.proxyUrl, "big.example.org:443");
   assert.equal(open.status, "HTTP/1.1 200 Connection Established");
   let received = 0;
@@ -154,7 +160,7 @@ test("past the byte cap every tunnel is cut and the render knows why; close ends
   assert.ok(received <= 256 * 1024 + 64 * 1024, `the browser got ${received} bytes past a 256 KiB cap`);
   assert.equal(egress.capped(), true);
   assert.equal(counts.byteCaps, 1);
-  const late = await connectThrough(egress.proxyUrl, "other.example.org:443");
+  const late = await connectThrough(egress.proxyUrl, "other.example.org:443", { expectCut: true });
   assert.equal(late.status, "closed", "a capped render opens nothing more");
   await egress.close();
   await assert.rejects(connectThrough(egress.proxyUrl, "other.example.org:443"), "a closed egress listens no more");
@@ -168,7 +174,7 @@ test("only the browser's own address may use a render's egress", async (t) => {
     maxBytes: 1024 * 1024, maxHosts: 16, counts, connectImpl: upstreamTo(1, dialed),
   });
   t.after(() => egress.close());
-  const attempt = await connectThrough(egress.proxyUrl, "www.nmpa.example.org:443");
+  const attempt = await connectThrough(egress.proxyUrl, "www.nmpa.example.org:443", { expectCut: true });
   assert.equal(attempt.status, "closed");
   assert.equal(counts.requestsRefused, 1);
   assert.deepEqual(dialed, []);

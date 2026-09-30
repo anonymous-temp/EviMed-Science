@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "statistical-analysis",
+  "note": "Three public-data numerical briefs. Supply only inputs and follow-up prompts to a live run. Fixtures contain source data; expected.json and reference scripts stay exclusively with the evaluator. Offline reference success is not live capability acceptance.",
+  "briefs": [
+    {
+      "id": "statistics-001-wdbc-group-comparison",
+      "title": "WDBC malignant-versus-benign mean radius comparison",
+      "why": "Real public data expose reversed target semantics, row-index leakage into models and hand-typed numerical results.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "analysisQuestion": "Profile the supplied Wisconsin Diagnostic Breast Cancer dataset. Explain the target coding, then compare mean radius between malignant and benign tumors. Report denominators, malignant-minus-benign mean difference with a 95% confidence interval and a justified independent-sample test. Include a reproducible Python script.",
+        "outputLanguage": "en"
+      },
+      "fixtures": [{"source": "fixtures/breast-cancer.csv", "destination": "data/breast-cancer.csv"}],
+      "mustDo": ["Verify target coding against the source dictionary: zero malignant and one benign.", "Execute the comparison with independent tumors as units, appropriate uncertainty and correct direction.", "Keep executed code and traceable numerical outputs."],
+      "mustNotDo": ["Treat the serialized index as a biological measurement.", "Describe benign tumors as healthy controls or infer treatment recommendations.", "Invent unavailable numerical results."],
+      "gradedOn": "Full-precision numerical agreement with independent Welch references; coding, denominators, uncertainty, reproducibility and proportional interpretation. Continuous tolerance 1e-8, tiny p relative tolerance 1e-6; displayed values are graded at their stated rounding."
+    },
+    {
+      "id": "statistics-002-wdbc-sequential-transform",
+      "title": "DataAnalysisQA sequential transformations and follow-ups",
+      "why": "Adapted from public DataAnalysisQA questions 5 through 9. Fitted preprocessing must persist across turns instead of silently reverting to raw units or leaking test data.",
+      "inputs": {
+        "datasetPath": "data/breast-cancer.csv",
+        "analysisQuestion": "Use sklearn train_test_split with test_size=0.2 and random_state=42. Fit min-max scaling of mean radius on the training rows only, apply it to both splits, and fit OLS of breast_cancer_yn on the transformed mean radius in the training split. Report the slope and preserve the split and fitted transform for follow-ups. This is a benchmark reproduction with a binary outcome; explain that limitation.",
+        "outputLanguage": "en"
+      },
+      "fixtures": [{"source": "fixtures/breast-cancer.csv", "destination": "data/breast-cancer.csv"}],
+      "followUps": ["Using the same training split, standardize mean area fitted on training rows only. Apply it to both splits, fit OLS of the same target on standardized area in the training rows, and report the slope. Preserve this fitted state.", "On the full transformed dataset from our prior turns, report malignant-minus-benign mean area, the fifth largest mean radius, and the count of radius values outside 1.5 times the IQR.", "Explain which fitted state would need checking or recomputation if I supply additional patients; do not fabricate the additional data."],
+      "mustDo": ["Persist training indices, fitted scaling parameters and source fingerprints.", "Compute later answers in the prior transformed units.", "Explain OLS's binary-response limitations without refusing the benchmark computation."],
+      "mustNotDo": ["Fit preprocessing on the full data.", "Resplit or silently report raw-unit answers on follow-up.", "Treat the evaluator's expected values as input data."],
+      "gradedOn": "Agreement with source-derived sequential references to the specified three decimals, plus training-only state provenance and continuity. Supplemental-data execution is additionally covered by the runner regression tests."
+    },
+    {
+      "id": "statistics-003-lung-native-r",
+      "title": "NCCTG lung survival analysis in native R",
+      "why": "The survival package's public lung dataset tests censoring semantics, reproducible native R, and preservation of completed analysis after an optional-method failure.",
+      "inputs": {
+        "datasetPath": "data/lung.csv",
+        "analysisQuestion": "Using the supplied NCCTG advanced lung cancer data, estimate overall Kaplan-Meier median survival and fit an exploratory Cox model adjusted for age and sex using Efron ties. Explain censoring and sex coding, denominators, hazard ratios and 95% confidence intervals, and assess the proportional-hazards assumption without treating a nonsignificant diagnostic as proof. Use native R.",
+        "outputLanguage": "en"
+      },
+      "fixtures": [{"source": "fixtures/lung.csv", "destination": "data/lung.csv"}],
+      "followUps": ["Keep the completed KM and Cox results. If an optional additional method requires an unavailable package, document that method's limitation while retaining the completed analyses and their code."],
+      "mustDo": ["Use status equal to two for deaths, with one censored; sex one male and two female.", "Execute native survival::survfit, coxph and a proportional-hazards diagnostic.", "Report observed R and survival package versions."],
+      "mustNotDo": ["Treat the original publication's complete analysis as reproduced by this reanalysis.", "Claim a failed optional method ran or discard completed results.", "Interpret a nonsignificant assumption test as proof of proportional hazards."],
+      "gradedOn": "Counts and KM median exact, HR and CI absolute tolerance 5e-6, p absolute tolerance 1e-7, with correct coding and interpretation. References are generated by reference_survival.R from the frozen CSV."
+    }
+  ]
+}

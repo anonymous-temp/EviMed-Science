@@ -585,21 +585,21 @@ def _discussion(ctx):
             para = f"本研究通过文献计量学方法对\"{ctx['query']}\"领域的研究现状进行了系统分析，研究时段（{ctx['year_range']}）内共检索到{ctx['n']}篇相关文献。"
 
             if year_df is not None and not year_df.empty:
-                complete_df = year_df[~year_df["is_partial"]] if "is_partial" in year_df.columns else year_df
+                complete_df = year_df
                 if not complete_df.empty:
                     peak_year = complete_df.loc[complete_df["count"].idxmax(), "year"]
                     peak_count = int(complete_df.loc[complete_df["count"].idxmax(), "count"])
-                    para += f"发文量呈持续增长趋势，峰值出现在{peak_year}年（{peak_count}篇），表明该领域正处于快速发展阶段，学术关注度不断提升。"
+                    para += f"本次选入样本的文献数最多的记录年份为{peak_year}年（{peak_count}篇）；该分布不能单独证明整个领域持续增长。"
 
             if top_countries is not None and not top_countries.empty:
                 top_country = top_countries.iloc[0]["countries"]
                 top_count = int(top_countries.iloc[0]["count"])
-                para += f"从地域分布来看，{top_country}在该领域占据主导地位（{top_count}篇），反映出其在相关研究中的领先优势。"
+                para += f"样本中最常出现的国家为{top_country}（{top_count}篇）。"
 
             if top_authors is not None and not top_authors.empty:
                 top_author = top_authors.iloc[0]["authors_normalized"]
                 author_count = int(top_authors.iloc[0]["count"])
-                para += f"核心作者群体已经形成，其中{top_author}发文量最高（{author_count}篇），显示出该领域已建立起相对稳定的研究团队。"
+                para += f"样本中出现频次最高的作者名称为{top_author}（{author_count}篇）；名称频次本身不能证明已形成合作核心。"
 
             if n_clusters > 0:
                 quality = kw_net.get("quality", {})
@@ -627,29 +627,28 @@ def _discussion(ctx):
             )
 
             if year_df is not None and not year_df.empty:
-                complete_df = year_df[~year_df["is_partial"]] if "is_partial" in year_df.columns else year_df
+                complete_df = year_df
                 if not complete_df.empty:
                     peak_year = complete_df.loc[complete_df["count"].idxmax(), "year"]
                     peak_count = int(complete_df.loc[complete_df["count"].idxmax(), "count"])
                     para += (
-                        f" Publication volume showed sustained growth, peaking in {peak_year} ({peak_count} articles), "
-                        f"indicating rapid development and increasing academic attention."
+                        f" The selected sample has its largest recorded-year count in {peak_year} ({peak_count} articles). "
+                        "This distribution alone does not establish field-wide growth."
                     )
 
             if top_countries is not None and not top_countries.empty:
                 top_country = top_countries.iloc[0]["countries"]
                 top_count = int(top_countries.iloc[0]["count"])
                 para += (
-                    f" Geographically, {top_country} dominates the field with {top_count} publications, "
-                    f"reflecting its leading position in this research area."
+                    f" The most frequently represented country in the selected sample is {top_country} ({top_count} publications)."
                 )
 
             if top_authors is not None and not top_authors.empty:
                 top_author = top_authors.iloc[0]["authors_normalized"]
                 author_count = int(top_authors.iloc[0]["count"])
                 para += (
-                    f" A core group of prolific authors has emerged, with {top_author} being the most productive ({author_count} publications), "
-                    f"indicating the establishment of stable research teams."
+                    f" The most frequent author name in the selected sample is {top_author} ({author_count} publications). "
+                    "Name frequency alone does not establish collaboration structure."
                 )
 
             if n_clusters > 0:
@@ -744,7 +743,7 @@ def _conclusion(ctx):
     top_countries = stats.get("top_countries")
 
     total = int(year_df["count"].sum()) if year_df is not None and not year_df.empty else ctx["n"]
-    complete_df = (year_df[~year_df["is_partial"]] if "is_partial" in year_df.columns else year_df) if year_df is not None else None
+    complete_df = year_df
     peak_year = complete_df.loc[complete_df["count"].idxmax(), "year"] if complete_df is not None and not complete_df.empty else ""
     peak_count = int(complete_df.loc[complete_df["count"].idxmax(), "count"]) if complete_df is not None and not complete_df.empty else 0
 

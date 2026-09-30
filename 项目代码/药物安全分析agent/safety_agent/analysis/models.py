@@ -8,6 +8,7 @@ the deterministic signals layer. LLM-produced fields are clearly separated
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field
@@ -35,6 +36,14 @@ class CaseOverview(BaseModel):
     countries: list[CountBucket] = Field(default_factory=list)
     concomitant_drugs: list[CountBucket] = Field(default_factory=list)
     indications: list[CountBucket] = Field(default_factory=list)
+
+    @property
+    def yearly_count_interpretation(self) -> dict[str, str]:
+        """Annual count aggregation does not measure individual reporting delays."""
+        return {
+            "scope": "reported_counts", "reporting_lag_analysis": "not_performed",
+            "causal_explanations": "hypotheses_only",
+        }
 
 
 class NormalizedReaction(BaseModel):
@@ -77,6 +86,30 @@ class SignalRow(BaseModel):
     is_signal: bool
     expected_count: float | None = None
     gps_prior_id: str | None = None
+
+    @computed_field
+    @property
+    def expected_count_calculation(self) -> dict[str, object]:
+        """Expose raw margins with the engine's recorded E, not ratio pseudocounts."""
+        raw_cells = {key: value if math.isfinite(value) else None
+                     for key, value in {"a": self.a, "b": self.b, "c": self.c, "d": self.d, "n": self.n}.items()}
+        drug_margin, event_margin = self.a + self.b, self.a + self.c
+        drug_margin = drug_margin if math.isfinite(drug_margin) else None
+        event_margin = event_margin if math.isfinite(event_margin) else None
+        expected = self.expected_count
+        expected = expected if expected is not None and math.isfinite(expected) else None
+        expected_display = shown.estimate(expected)
+        worked = None
+        if expected_display is not None and drug_margin is not None and event_margin is not None and math.isfinite(self.n) and self.n > 0:
+            worked = ("E = (a+b) × (a+c) / N = "
+                      f"{shown.count(drug_margin)} × {shown.count(event_margin)} / "
+                      f"{shown.count(self.n)} ≈ {expected_display}")
+        return {
+            "raw_cells": raw_cells,
+            "drug_margin": drug_margin, "event_margin": event_margin,
+            "expected_count": expected, "worked_example": worked,
+            "cell_basis": "observed_without_continuity_correction",
+        }
 
     @computed_field
     @property

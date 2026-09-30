@@ -15,6 +15,7 @@ import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, cli
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
+import { statisticalAnalysisFindings } from './statisticalAnalysisContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
@@ -26,6 +27,8 @@ import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTA
 import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
+
+const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package'])
 
 /**
  * Every check a gate verdict can attribute a finding to.
@@ -107,6 +110,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   'appraisal-table-rendered',
   // Number provenance in a dataset-scoping package: the snapshot read, and
   // every number in the prose traced to it or not.
+  'statistical-results-shape',
+  'statistical-finite-results',
+  'statistical-execution-provenance',
   'dataset-profile-parse',
   'dataset-number-provenance',
   // manuscriptContract.mjs
@@ -166,6 +172,7 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @typedef {object} GateInput
  * @property {string} contractKind
  * @property {Map<string, string>} files          relative path inside the deliverable dir -> text
+ * @property {string} [packagePath]              trusted workspace-relative deliverable directory
  * @property {readonly {path: string, required: boolean}[]} [expectedOutputs]
  * @property {string | null} [briefText]          the dispatcher's copy of the question
  * @property {any} [matrix]
@@ -251,7 +258,11 @@ function proseHygieneIssues(input, proseFiles) {
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
     }
-    const named = packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
+    // A data report must identify its actual columns and coding. Arbitrary
+    // scientific JSON keys cannot distinguish those names from internal schema
+    // vocabulary. Explicit runtime leakage above remains checked for every kind.
+    const dataReport = NATIVE_DATA_CONTRACTS.has(input.contractKind)
+    const named = dataReport ? null : packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
     if (named) {
       issues.push(issue(
         'report_package_vocabulary',
@@ -544,6 +555,9 @@ function structuredOutputIssues(input) {
         { severity: 'advisory', path, check: 'structured-output' }))
       continue
     }
+    // Native data analysis/scoping has no specialist engine job to name. Its
+    // JSON must still parse; optional execution details are checked separately.
+    if (NATIVE_DATA_CONTRACTS.has(input.contractKind)) continue
     if (!path.endsWith('-run.json')) continue
     const receipt = json(input, path)
     if (!isRecord(receipt)) {
@@ -795,6 +809,10 @@ const VALIDATORS = Object.freeze({
   // The one kind whose prose has a deterministic snapshot of its own subject
   // shipped beside it, so "where did this number come from" is decidable here
   // and nowhere else. Advisory (principle 4).
+  'statistical-analysis-package': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input)),
+    statisticalAnalysisFindings(input),
+  ),
   'dataset-scoping-package': (input) => withFindings(
     validateReportShaped(input, proseFilesOf(input)),
     datasetScopingFindings(input, proseFilesOf(input)),

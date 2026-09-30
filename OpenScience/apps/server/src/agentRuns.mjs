@@ -73,7 +73,7 @@ import {
 // Pharmacist-authored cautions, shown to the reader as SAFETY notices (S5,
 // 2026-09-18). Imported on a line of its own so the ledger's own import list
 // stays as it is.
-import { clinicalSafetyCautionHits, usagePurposeOfRun } from "@evimed/domain";
+import { clinicalSafetyCautionHits, isResearcherOwnedWork, usagePurposeOfRun } from "@evimed/domain";
 // The evidence type stamped beside each preserved capture (C8), which a
 // claim's structured GRADE certainty is read against (S6, 2026-09-18). A line
 // of its own for the same reason as the one above.
@@ -600,6 +600,7 @@ function foldEvents(events) {
       runs.set(id, Object.freeze({
         ...current,
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
+        ...(event.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(event.capabilityHandbooks) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
@@ -777,6 +778,20 @@ function normalizeRecalledMemories(value) {
   // it over a conversation, and the panel that lists them must list them all.
   // Still bounded — the row is rewritten on every learning write.
   return rows.length > 0 ? rows.slice(0, 40) : undefined;
+}
+
+/** The supplementary body never belongs in the run ledger, only its exact receipt. */
+function normalizeCapabilityHandbooks(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item?.id === "string" && item.id.startsWith("method:capability-handbook:") && item.id.length <= 256
+    && typeof item.ownerId === "string" && /^[A-Za-z0-9_.:@-]{1,128}$/.test(item.ownerId)
+    && typeof item.capabilityId === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(item.capabilityId)
+    && /^sha256:[a-f0-9]{64}$/.test(item.contentDigest)
+    && /^\.evimed-handbooks\/[a-f0-9]{64}\/SKILL\.md$/.test(item.path)
+    && Number.isSafeInteger(item.version) && item.version > 0)
+    .slice(0, 24).map(({ id, ownerId, capabilityId, contentDigest, path: filePath, version, requestId }) => ({ id, ownerId, capabilityId, contentDigest, path: filePath, version,
+      ...(typeof requestId === "string" && requestId.length > 0 && requestId.length <= 512 && ![...requestId].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127) ? { requestId } : {}),
+    }));
 }
 
 function normalizeMethodDigests(value) {
@@ -1498,7 +1513,7 @@ const TRANSIENT_REPAIR_REFUSALS = new Set(["runtime_session_error", "plugin_appl
  * the run failed with its package and nothing anywhere said why. Every attempt
  * that fails is returned, so the run can name the refusal.
  *
- * @param {(text: string) => Promise<any>} sender @param {string} text @param {number[]} delaysMs
+ * @param {(text: string, input?: {requestIds:string[]}) => Promise<any>} sender @param {string} text @param {number[]} delaysMs
  * @returns {Promise<{ accepted: boolean, failures: unknown[] }>}
  */
 async function sendRepair(sender, text, delaysMs) {
@@ -3223,9 +3238,8 @@ async function writtenDeliverableFiles(project, since = null) {
  * The sentence a recovered package carries, so "unverified" is a label on work
  * that exists rather than a synonym for nothing.
  */
-const UNVERIFIED_DELIVERY_NOTICE = "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——"
-  + "它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。"
-  + "上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。";
+const UNVERIFIED_DELIVERY_NOTICE = "已生成的文件已保留，可以查看和下载。"
+  + "这些文件标记为「未经核验」，其中的内容仍需核对。";
 
 
 export async function readRunStateProjection(project, workspaceRoot, run = null) {
@@ -3869,10 +3883,13 @@ export class AgentRunStore {
    * ones included and marked, folded without the phase walk `list` adds —
    * what 与我相关 reads a researcher's recent questions from, in the
    * background, for every project of an account at once.
-   * @param {any} project @returns {Promise<Record<string, any>[]>}
+   * @param {any} project
+   * @param {{ includeManaged?: boolean }} [options]
+   * @returns {Promise<Record<string, any>[]>}
    */
-  async researcherRuns(project) {
-    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()].filter(isResearcherRun);
+  async researcherRuns(project, { includeManaged = false } = {}) {
+    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+      .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun);
   }
 
   /**
@@ -4194,7 +4211,9 @@ export class AgentRunStore {
           effectiveAgentId: session.agentId,
           effectiveAgentVersion: session.agentVersion,
           effectiveRuntimeAgent: session.runtimeAgent,
-          effectiveRouteReason: "session-binding",
+          // Binding owns the capability identity; the dispatcher still knows
+          // whether this is researcher-owned managed work or a platform probe.
+          effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
     const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected });
@@ -4394,7 +4413,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4418,6 +4437,10 @@ export class AgentRunStore {
         id: runId,
         at: this.now().toISOString(),
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
+        ...(patch.appendCapabilityHandbooks || patch.capabilityHandbooks ? { capabilityHandbooks: normalizeCapabilityHandbooks(
+          (patch.appendCapabilityHandbooks ? [...(current.capabilityHandbooks ?? []), ...patch.appendCapabilityHandbooks] : patch.capabilityHandbooks)
+            .filter((item, index, all) => item?.ownerId === project.userId && all.findIndex(other => other?.id === item.id && other?.contentDigest === item.contentDigest) === index)) }
+          : current.capabilityHandbooks ? { capabilityHandbooks: current.capabilityHandbooks } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
@@ -4853,9 +4876,10 @@ export class AgentRunStore {
       const recovered = await writtenDeliverableFiles(project, Number.isFinite(started) ? started : null).catch(() => []);
       if (recovered.length > 0) {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
+        const notice = (normalized.status === "canceled" ? "运行已取消。" : "") + UNVERIFIED_DELIVERY_NOTICE;
         normalized.qualityNotices = normalizeQualityNotices([
           ...normalized.qualityNotices,
-          runNotice("run_unverified_delivery", UNVERIFIED_DELIVERY_NOTICE, { detail: UNVERIFIED_DELIVERY_NOTICE }),
+          runNotice("run_unverified_delivery", notice, { detail: notice }),
         ]);
       }
     }
@@ -6289,7 +6313,7 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, estimatedMinutes?: { min: number, max: number } | null, forkedFrom?: string | null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string, input?: {requestIds:string[]}) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
@@ -6501,7 +6525,7 @@ export class AgentRunStore {
    * or repair, and multiple user inputs in one kernel turn are steering.
    * @param {any} project @param {string} sessionId
    * @param {import('@evimed/domain').RunTranscript} transcript
-   * @param {(text: string) => Promise<any>} [routeTurn]
+   * @param {(text: string, input?: {requestIds:string[]}) => Promise<any>} [routeTurn]
    * @param {{ forkedFrom?: string | null }} [options] the session this one was forked from
    */
   async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({}), { forkedFrom = null } = {}) {
@@ -6576,7 +6600,7 @@ export class AgentRunStore {
         const legacy = index === 0 ? knownRuns.find((item) => item.sessionId === sessionId && !item.nativeTurn
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
-        const routed = legacy ? {} : await routeTurn(question);
+        const routed = legacy ? {} : await routeTurn(question, { requestIds });
         const reservation = await this.reserveRun(project, binding ?? {
           sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
         }, {
@@ -6613,6 +6637,20 @@ export class AgentRunStore {
             "The native input could not be assigned a deliverable contract; its delivery checks are unchecked.",
             { detail: "这次提问没有匹配到交付契约，所以没有做交付核验。" })], { unchecked: true });
         }
+      }
+      // A steer may be committed after the turn was first adopted. Only the
+      // kernel's actual user inputs extend ownership; queue admission alone
+      // never binds a future message to this run.
+      if (requestIds.some(requestId => !run.kernelRequestIds?.includes(requestId))) {
+        run = await withProjectStorageMutation(project, async () => {
+          const events = parseEvents(await readLedgerText(project, this.maxBytes));
+          const current = foldEvents(events).get(run.id);
+          const missing = requestIds.filter(requestId => !current?.kernelRequestIds?.includes(requestId));
+          if (!current || !missing.length) return current ?? run;
+          const event = { event: "kernel-request", id: current.id, requestIds: missing };
+          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          return foldEvents([...events, event]).get(current.id);
+        });
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
         const runProject = await this.resolveRunProject(project, run);

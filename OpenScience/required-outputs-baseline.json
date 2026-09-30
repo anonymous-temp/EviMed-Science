@@ -520,6 +520,37 @@
           "addedOn": "2026-09-07"
         }
       ]
+    },
+    "statistical-analysis-package": {
+      "capability": "statistical-analysis",
+      "requiredCount": 0,
+      "outputs": [
+        {
+          "path": "statistical-report.md",
+          "required": false,
+          "addedOn": "2026-09-29"
+        },
+        {
+          "path": "analysis-results.json",
+          "required": false,
+          "addedOn": "2026-09-29"
+        },
+        {
+          "path": "analysis-run.json",
+          "required": false,
+          "addedOn": "2026-09-29"
+        },
+        {
+          "path": "analysis.py",
+          "required": false,
+          "addedOn": "2026-09-29"
+        },
+        {
+          "path": "analysis.R",
+          "required": false,
+          "addedOn": "2026-09-29"
+        }
+      ]
     }
   }
 }

@@ -137,7 +137,6 @@ test("only the researcher's own work in their own live projects is family", () =
   assert.ok(withPeers({ project: projectOf("other-paper"), runs: [run()] }), "the control completes the group of three");
   const excluded = [
     ["an automated run (evaluation cell, probe, harness)", { project: projectOf("other-paper"), runs: [run({ automated: true })] }],
-    ["an autopilot episode", { project: projectOf("other-paper"), runs: [run({ effectiveRouteReason: "autopilot:literature-sentinel" })] }],
     ["a run that failed", { project: projectOf("other-paper"), runs: [run({ status: "failed" })] }],
     ["a run still going", { project: projectOf("other-paper"), runs: [run({ status: "running", finishedAt: null })] }],
     ["a run in an internal project", { project: projectOf(LEARNING_PROJECT_ID), runs: [run()] }],
@@ -252,7 +251,6 @@ test("a routine lesson's peers read in both shapes it has been queued in", () =>
 test("the platform's own work and a plain answer never teach the researcher's loop", () => {
   const cases = [
     run({ automated: true }),
-    run({ effectiveRouteReason: "autopilot:literature-sentinel" }),
     run({ effectiveAgentId: "method-distillation" }),
     run({ transcript: { completeness: "partial" } }),
     run({ transcript: undefined }),
@@ -267,6 +265,29 @@ test("the platform's own work and a plain answer never teach the researcher's lo
   const answers = [run({ effectiveAgentId: "open-domain-answer" }), run({ effectiveAgentId: "open-domain-answer" }),
     run({ effectiveAgentId: "open-domain-answer" })];
   assert.deepEqual(triggers(learningTriggersFor({ run: answers[2], runs: answers })), ["delivered"]);
+});
+
+test("researcher-owned GEO and proactive work feed learning while internal evaluations do not", () => {
+  for (const [effectiveAgentId, effectiveRouteReason] of [
+    ["geo-content", "geo:content"],
+    ["clinical-evidence-synthesis", "autopilot:literature-sentinel"],
+  ]) {
+    const subject = run({ automated: true, effectiveAgentId, effectiveRouteReason });
+    assert.deepEqual(triggers(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("research") })), ["delivered"]);
+    assert.deepEqual(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("acceptance-geo-0929") }), []);
+    const evaluating = { ...subject, dispatchId: "methodeval_a1b2c3" };
+    assert.deepEqual(learningTriggersFor({ run: evaluating, runs: [evaluating], project: projectOf("research") }), []);
+  }
+});
+
+test("managed research completes the same cross-project routine as interactive work", () => {
+  const family = Array.from({ length: METHOD_INDUCTION_MIN_TRAJECTORIES }, () => run({
+    automated: true, effectiveAgentId: "geo-content", effectiveRouteReason: "geo:content",
+  }));
+  const ledgers = family.map((item, index) => ({ project: projectOf(`brand-${index}`), runs: [item] }));
+  const lessons = learningTriggersFor({ run: family.at(-1), runs: [family.at(-1)], project: ledgers.at(-1).project, ledgers });
+  assert.equal(routineOf(lessons)?.payload.capabilityId, "geo-content");
+  assert.equal(routineOf(lessons)?.payload.peers.length, METHOD_INDUCTION_MIN_TRAJECTORIES - 1);
 });
 
 test("the queue is fed with one job per lesson, and nothing when the researcher paused learning", async () => {

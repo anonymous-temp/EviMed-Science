@@ -1,8 +1,7 @@
 /**
  * What a finished research run hands back, said in the conversation: its
- * files as cards at the end of the answer that delivered them, and the right
- * column opening on the kernel's own file tree the first time a run writes a
- * report.
+ * files as cards at the end of the answer that delivered them, opening in the
+ * kernel's own right sidebar without replacing the reader's tab selection.
  *
  * Until 2026-09-23 this was a card docked above the composer: 已交付 · 结论 N
  * 条，已核对 N 条 · N 个文件 · 用时 · 约 ¥. The owner's ruling (整改方案 §5.3)
@@ -39,13 +38,11 @@
  *    slot component receives, on `dsh-resource://file/session/<id>/<path>`,
  *    which stats a workspace-relative path through `workspaceFiles.stat` (the
  *    proxy holds it to the workspace). Without it a card names the type alone.
- *  - `ctx.sidebarRight.openTab(kind)` acts through the mounted seat and throws
- *    when none is mounted, so an automatic open is attempted and retried on the
- *    next change rather than assumed. The kernel's file tree is kind `files`.
+ *  - `ctx.sidebarRight.openResource(address)` uses the mounted native seat;
+ *    tab creation, reuse and presentation remain the kernel's responsibility.
  *
- * Opening a file is a message to the shell, whose reader marks each
- * conclusion ✓/⚠, offers the download and goes through the control plane's own
- * file boundary.
+ * Opening a file uses the native resource provider. The shell's standalone
+ * reader remains a fallback when a native provider or mounted seat is absent.
  *
  * @module @evimed/harness-port/runtime-ui-panels
  */
@@ -56,7 +53,7 @@ import { liveRunFor } from './runtimeUiToolviews.mjs';
 /** Services this body needs outright: the slot registry and the sessions. */
 export const inject = ['slots', 'sessions'];
 
-/** The kernel's own file-tree tab, which the column opens on a delivered report. */
+/** The kernel's own file-tree tab kind. */
 export const KERNEL_FILES_TAB = 'files';
 
 /**
@@ -238,6 +235,25 @@ export function fileAddress(sessionId, path) {
 }
 
 /**
+ * Let DSH own resource providers, tab reuse and preview presentation.
+ * @param {any} sidebarRight
+ * @param {string | null} sessionId
+ * @param {string} path
+ * @param {() => unknown} openReader
+ * @returns {Promise<'native' | 'reader'>}
+ */
+export async function openDeliveredFile(sidebarRight, sessionId, path, openReader) {
+  if (sessionId && typeof sidebarRight?.openResource === 'function') {
+    try {
+      await sidebarRight.openResource(fileAddress(sessionId, path));
+      return 'native';
+    } catch { /* The standalone reader remains usable without a native provider. */ }
+  }
+  openReader();
+  return 'reader';
+}
+
+/**
  * @param {any} ctx Native Cordis client context.
  * @param {any} [_config]
  * @param {any} _target Browser global (unused: the cards read nothing off the window).
@@ -250,6 +266,12 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   const React = kit.react;
   const slot = 'conversation.chat.node';
   const { text, meta, title, textButton } = frameStyles();
+  /** @type {{ openResource: (address: string) => unknown } | null} */
+  let sidebarRight = null;
+  kit.withServices(['sidebarRight'], (/** @type {any} */ scope) => {
+    sidebarRight = scope.sidebarRight;
+    scope.effect(() => () => { if (sidebarRight === scope.sidebarRight) sidebarRight = null; });
+  });
 
   function useLive() {
     const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
@@ -294,7 +316,8 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     const facts = [file.where, file.type, size].filter(Boolean).join(' · ');
     return h('button', {
       type: 'button', 'data-evimed-file': file.path, 'aria-label': `打开${file.label}`, title: file.name,
-      onClick: () => { kit.hub.send('open-artifact', { runId, path: file.path }); },
+      onClick: () => { void openDeliveredFile(sidebarRight, sessionId, file.path,
+        () => kit.hub.send('open-artifact', { runId, path: file.path })); },
       style: {
         display: 'flex', alignItems: 'center', gap: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box',
         padding: '10px 12px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px',
@@ -373,31 +396,11 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
   }
   kit.guarded('file cards', () => kit.occupy({ slot, key: 'assistant-step', priority: -2, locale: 'chat' }, AnswerWithFiles));
 
-  // The column opens itself once per run, on the kernel's file tree, when
-  // that run first produces a report while the reader is watching — never on
-  // a visit to a finished task, and never onto an empty list.
-  kit.withServices(['sidebarRight'], (/** @type {any} */ scope) => {
-    /** @type {Set<string>} */
-    const opened = new Set();
-    /** @type {Set<string>} */
-    const watchedWithout = new Set();
-    const check = () => {
-      const state = kit.hub.getState();
-      const live = liveRunFor(state.runState, state.session);
-      if (!live || !live.runId) return;
-      const runId = String(live.runId);
-      if (!hasReport(live)) { watchedWithout.add(runId); return; }
-      if (!watchedWithout.has(runId) || opened.has(runId)) return;
-      try { scope.sidebarRight.openTab(KERNEL_FILES_TAB); opened.add(runId); } catch { /* no seat mounted yet; the next change tries again */ }
-    };
-    scope.effect(() => kit.hub.subscribe(check), 'evimed-panels: automatic open');
-    check();
-  });
 }
 
 /** The body as the socket's build composes it. */
 export const BODY = Object.freeze({
   name: 'panels',
   inject,
-  parts: Object.freeze([frameStyles, liveRunFor, fileTypeOf, documentNameOf, fileCardsModel, hasReport, turnCarriesRun, formatBytes, fileAddress, apply]),
+  parts: Object.freeze([frameStyles, liveRunFor, fileTypeOf, documentNameOf, fileCardsModel, hasReport, turnCarriesRun, formatBytes, fileAddress, openDeliveredFile, apply]),
 });

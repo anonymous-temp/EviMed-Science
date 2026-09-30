@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-mr-unit-assumption-d410b7bf",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_d410b7bfe89c780f38fc27bc9fcbd18f/workspace/deliverables/bmi-cad-mr/mendelian-randomization-report.md",
+  "line": 57,
+  "verbatim": "**效应量尺度**。暴露侧性状为体重指数，其调和数据使用 EFO_0004340 这一性状标识。运行输出没有逐字声明效应量的单位。本报告按该类性状分析的通行约定，把效应量读作「每升高 1 个标准差」；若实际单位是 kg/m²，则「OR 1.37」对应的是每升高 1 kg/m² 而非 1 个标准差，两者不能互相换算。这一尺度解读不改变关联的方向与统计学显著性，只改变「每单位」这句话的含义。要确认单位，需要查阅该暴露侧研究的表型处理记录；本报告不给出与 kg/m² 的换算。",
+  "whyItIsWrong": "Report concedes the exposure effect unit is unconfirmed yet uses per-SD in estimates and conclusions.",
+  "caughtBy": "reviewer",
+  "note": "Preserve numerical effect in source units until a source field confirms the scale; test SD, kg/m2, inverse-normalized and unknown units. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_d410b7bfe89c780f38fc27bc9fcbd18f",
+  "artifactSha256": "f2bfd00510473a5d71c3ad82e6f5842575505e8018d9b4539cb22ea2e0d7a2ab",
+  "sourceRevision": null
+}

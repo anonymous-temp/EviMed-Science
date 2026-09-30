@@ -67,6 +67,7 @@
  */
 
 import { FRONTIER_SPECIALTIES } from "@evimed/domain";
+import { FrontierSubscriptions, frontierFollowPredicate } from "./frontierSubscriptions.mjs";
 import { FRONTIER_PHRASE_LIMITS } from "./frontierEditor.mjs";
 import { migrateFrontier } from "./frontierPersistence.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
@@ -275,6 +276,7 @@ export class FrontierProfiles {
     now = () => new Date(), dimension = 1024, conversations = null }) {
     if (!database) throw new TypeError("The frontier profiles need the product database.");
     this.database = database;
+    this.subscriptions = new FrontierSubscriptions({ database });
     this.researchMemory = researchMemory;
     this.editor = editor;
     this.embedder = embedder;
@@ -618,6 +620,10 @@ export class FrontierProfiles {
    * @returns {Promise<Array<{ id: string, public_id: string, weight: number }>>}
    */
   async #candidates(userId, since) {
+    const { muted } = await this.subscriptions.read(userId);
+    const values = /** @type {any[]} */ ([since, userId]);
+    const param = (/** @type {unknown} */ value) => { values.push(value); return `$${values.length}`; };
+    const muteFilter = muted.map((follow) => `NOT coalesce((${frontierFollowPredicate(follow, param)}),false)`).join(" AND ") || "TRUE";
     return (await this.database.query(`SELECT i.id, i.public_id, coalesce(i.score_total, 0) AS weight
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND s.enabled AND i.visible_at >= $1::timestamptz
@@ -626,9 +632,8 @@ export class FrontierProfiles {
         AND (i.event_id IS NULL OR NOT EXISTS (SELECT 1 FROM evimed_frontier.user_state hs
           JOIN evimed_frontier.items hi ON hi.id = hs.item_id
           WHERE hs.user_id = $2 AND hs.hidden_at IS NOT NULL AND hi.event_id = i.event_id))
-        AND NOT EXISTS (SELECT 1 FROM evimed_frontier.user_follows f WHERE f.user_id = $2 AND f.muted
-          AND ((f.kind = 'source' AND f.key = i.primary_source_id) OR (f.kind = 'specialty' AND f.key = ANY(i.specialties))))
-      ORDER BY i.visible_at DESC, i.id DESC LIMIT ${FRONTIER_FOR_YOU_CANDIDATES}`, [since, userId])).rows ?? [];
+        AND ${muteFilter}
+      ORDER BY i.visible_at DESC, i.id DESC LIMIT ${FRONTIER_FOR_YOU_CANDIDATES}`, values)).rows ?? [];
   }
 
   /**
@@ -778,13 +783,15 @@ export class FrontierProfiles {
     }
     const kept = entries.filter((/** @type {any} */ entry) => frontierPhraseSource(entry) !== "memory" || alive.has(String(entry.memoryId)));
     this.counters.reasonsDropped += entries.length - kept.length;
-    const items = await hydrate(user, kept.map((/** @type {any} */ entry) => String(entry.itemId)));
+    const ids = kept.map((/** @type {any} */ entry) => String(entry.itemId));
+    const muted = await this.subscriptions.mutedPublicIds(user.id, ids);
+    const items = await hydrate(user, ids);
     return {
       state: "available",
       basis: forYou?.basis === "vector" ? "vector" : "tags",
       items: kept.flatMap((/** @type {any} */ entry) => {
         const item = items.get(String(entry.itemId));
-        if (!item || item.state?.hidden) return [];
+        if (!item || item.state?.hidden || muted.has(String(entry.itemId))) return [];
         const source = frontierPhraseSource(entry);
         // `topic` is the phrase alone — what 「与我相关」 groups by and heads a
         // group with (plan 2026-09-23 §6.2), without the 「因为你在做」 before it.

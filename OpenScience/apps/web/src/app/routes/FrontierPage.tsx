@@ -1,3 +1,5 @@
+import { WeeklyView } from "@/components/frontier/WeeklyView";
+import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
@@ -8,6 +10,7 @@ import {
   frontierAbsence,
   frontierErrorMessage,
   FRONTIER_LANES,
+  FRONTIER_FOLLOWS_CHANGED,
   FRONTIER_SPECIALTIES,
   FRONTIER_WINDOWS,
   hideFrontierItem,
@@ -40,9 +43,11 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
 import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
 import { SourcesLink } from "@/components/frontier/SourcesList";
+import { FrontierFollows } from "@/components/frontier/FrontierFollows";
+import { EmptyState } from "@/components/cards/EmptyState";
 import { stamp, type CardTag } from "@/components/frontier/frontierText";
 
-type PageView = "selected" | "hot" | "daily" | "all" | "foryou";
+type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | "weekly";
 
 const VIEWS: readonly TabItem<PageView>[] = [
   { value: "selected", label: "精选" },
@@ -50,6 +55,8 @@ const VIEWS: readonly TabItem<PageView>[] = [
   { value: "daily", label: "日报" },
   { value: "all", label: "全部" },
   { value: "foryou", label: "与我相关" },
+  { value: "following", label: "关注" },
+  { value: "weekly", label: "周刊" },
 ];
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
@@ -59,7 +66,7 @@ const STALE_PLUGIN = new Set(["unreachable", "degraded", "incompatible"]);
 
 /** The view a link names. Every older address — `?view=hot` (the 热点 of before), `daily`, `all` — still lands where it did. */
 function readView(value: string | null): PageView {
-  return value === "hot" || value === "daily" || value === "all" || value === "foryou" ? value : "selected";
+  return value === "hot" || value === "daily" || value === "all" || value === "foryou" || value === "following" || value === "weekly" ? value : "selected";
 }
 function readKey(value: string | null, table: readonly { key: string }[]): string {
   return value && table.some((entry) => entry.key === value) ? value : "";
@@ -72,8 +79,8 @@ function readDay(value: string | null): string | null {
 }
 
 /**
- * 「前沿动态」 (plan 2026-09-23 §6): one page, five views on one row of tabs —
- * 精选, 热榜, 日报, 全部, 与我相关 — with a server-side search at the right of
+ * 「前沿动态」 (plan 2026-09-23 §6): one page with feed, digest, recommendation and follow views —
+ * 精选, 热榜, 日报, 全部, 与我相关 and 关注 — with a server-side search at the right of
  * the title. 精选 opens with the safety strip and 当前热点 above the feed by
  * day; 全部 ends with the list of sources; there is no right rail any more
  * (its hot list is the card, its safety list the strip, its AI minute lives
@@ -115,7 +122,8 @@ export function FrontierPage() {
 function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const [params, setParams] = useSearchParams();
   const view = readView(params.get("view"));
-  const listingView = view === "selected" || view === "all";
+  const follow = view === "following" ? params.get("follow") : null;
+  const listingView = view === "selected" || view === "all" || (view === "following" && Boolean(follow));
   const q = (params.get("q") ?? "").trim();
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
   const specialty = readKey(params.get("specialty"), FRONTIER_SPECIALTIES);
@@ -125,17 +133,18 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const hotWindow: FrontierHotWindow = view === "hot" && isHotWindow(hotWindowParam) ? hotWindowParam : "current";
   const byTime = Boolean(q) && params.get("sort") === "time";
   const day = readDay(params.get("day"));
-  const filtered = Boolean(lane || specialty || starred || windowFilter);
+  const filtered = Boolean(lane || specialty || starred || windowFilter || follow);
 
   const query = useMemo<FrontierItemsQuery>(() => ({
-    view: view === "all" ? "all" : "selected",
+    view: view === "all" || view === "following" ? "all" : "selected",
+    follow,
     lane: lane || null,
     specialty: specialty || null,
     window: windowFilter || null,
     q: q || null,
     starred,
     ...(byTime ? { sort: "time" as const } : {}),
-  }), [view, lane, specialty, windowFilter, q, starred, byTime]);
+  }), [view, follow, lane, specialty, windowFilter, q, starred, byTime]);
   const key = JSON.stringify(query);
 
   /* ------------------------------------------------------------- status */
@@ -398,6 +407,17 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   }, [ready, safetyNeeded, safetyAttempt]);
 
   const daily = useFrontierDaily(view === "daily" ? day : null, ready && view === "daily");
+  useEffect(() => {
+    const changed = () => {
+      cache.current.clear();
+      setForYouAttempt((value) => value + 1);
+      setSafetyAttempt((value) => value + 1);
+      if (ready && listingView) void loadList(false);
+    };
+    window.addEventListener(FRONTIER_FOLLOWS_CHANGED, changed);
+    return () => window.removeEventListener(FRONTIER_FOLLOWS_CHANGED, changed);
+  }, [ready, listingView, loadList]);
+
 
   /* ------------------------------------------------------ navigation */
 
@@ -414,7 +434,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     const updated = new URLSearchParams(params);
     if (next === "selected") updated.delete("view"); else updated.set("view", next);
     // A view is a fresh look: the search, the day and the time range belong to the view they were chosen in.
-    for (const name of ["q", "day", "window", "sort"]) updated.delete(name);
+    for (const name of ["q", "day", "week", "window", "sort", "follow", "item"]) updated.delete(name);
     searchOrigin.current = null;
     setParams(updated);
   };
@@ -502,7 +522,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
 
   const feed = (
     <FeedList
-      view={view === "all" ? "all" : "selected"}
+      view={view === "all" || view === "following" ? "all" : "selected"}
       q={q}
       filtered={filtered}
       listing={listing && listing.key === key ? listing : null}
@@ -539,10 +559,25 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
             onRetry={() => setHotAttempt((value) => value + 1)}
           />
         );
+      case "weekly":
+        return <WeeklyView week={readDay(params.get("week"))} onWeek={(week) => {
+          const updated = new URLSearchParams(params); updated.set("week", week); setParams(updated);
+        }} />;
       case "daily":
         return <DailyIssue state={daily} onDay={openDay} />;
       case "foryou":
         return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
+      case "following":
+        return <div className="space-y-6">
+          <FrontierFollows selected={follow} onSelect={(id) => {
+            setParams((current) => {
+              const updated = new URLSearchParams(current);
+              if (id) updated.set("follow", id); else updated.delete("follow");
+              return updated;
+            });
+          }} onChanged={() => { cache.current.clear(); setForYouAttempt((value) => value + 1); }} />
+          {follow ? <>{filters}{feed}</> : <EmptyState title="选择关注内容，查看相关动态" />}
+        </div>;
       case "all":
         return (
           <>
@@ -581,6 +616,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         />
       )}
     >
+      {ready && params.get("item") && <FrontierLinkedItem id={params.get("item")!} />}
       <Tabs label="视图" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
       <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${view}`} className="mt-5">
         {ready ? main : <FrontierSkeleton />}

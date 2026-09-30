@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FEISHU_UNBIND_ACTION, ImService, appLink, cardOutcome, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
+import { FEISHU_UNBIND_ACTION, createImModule, ImService, appLink, cardOutcome, finalReplyText, noticeLink, progressView, pushNotBefore, runFileLink, runLink } from "../src/imService.mjs";
 import { runFinishedNotice } from "../src/notificationService.mjs";
 
 test("a finished run's card is coloured by the word it says, never ⚠️ beside 已完成", () => {
@@ -306,4 +306,56 @@ test("a chat past its inbound limit is told once to slow down, and the rest of i
     assert.equal(recorded.filter((row) => row.bindingId === "chb_flood").length, 6);
     assert.equal(told().length, 2);
   } finally { await service.close(); }
+});
+
+test("queued frontier delivery rechecks channel preferences and the injected mute/withdrawal policy", async () => {
+  for (const scenario of ["opt-out", "channel-removed", "muted", "withdrawn", "missing-policy", "eligible"]) {
+    const settled = [], sent = [];
+    const item = { id: "notice", userId: "alice", count: 1, source: { type: "system", id: "frontier-safety:item1" }, noticeType: "notify", title: "Public warning", body: "FDA · 2026-09-28", severity: "safety" };
+    const preferences = { channels: scenario === "channel-removed" ? ["in-app"] : ["in-app", "feishu"], switches: { notify: true, frontierSafety: scenario !== "opt-out" } };
+    const service = new ImService({ config: { imEnabled: true, publicUrl: "https://science.example.com" }, database: null, credentials: {},
+      notifications: { get: async () => item, preferences: async () => preferences, recordChannelSent: async () => {} }, users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {},
+      classifier: {}, write: () => {}, frontierDeliveryPolicy: scenario === "missing-policy" ? null : async () => !["muted", "withdrawn"].includes(scenario),
+      store: { claimDeliveries: async () => [{ id: "delivery", userId: "alice", notificationId: "notice", channel: "feishu", bindingId: "binding", eventCount: 1, attempts: 1 }], bindingById: async () => ({ status: "active" }), settleDelivery: async (...args) => settled.push(args) },
+    });
+    service.registry = { isEnabled: () => true, get: () => ({ deliver: async (_binding, message) => { sent.push(message); return { delivered: true, messageId: "sent" }; } }) };
+    await service.processDeliveries();
+    assert.equal(sent.length, scenario === "eligible" ? 1 : 0, scenario);
+    assert.equal(settled[0][2].status, scenario === "eligible" ? "sent" : "skipped");
+    if (sent.length) assert.equal(sent[0].link, "https://science.example.com/app/frontier?item=item1");
+  }
+});
+
+test("the IM module factory forwards the frontier late-delivery policy", async () => {
+  const policy = async () => false;
+  const module = createImModule({ config: { imEnabled: false }, database: {}, credentials: {}, notifications: {}, users: {}, agentRuns: {}, runtimeManager: {},
+    maxJsonBytes: 65536, dispatchRun: async () => {}, steerRun: async () => {}, frontierDeliveryPolicy: policy });
+  assert.equal(module.service.frontierDeliveryPolicy, policy);
+  await module.service.close();
+});
+
+test("digest scheduling reaches the end of quiet hours without rolling forward every retry", () => {
+  const notice = { severity: "info", source: { type: "digest", id: "frontier-weekly:2026-09-21" }, createdAt: cst("2026-09-28T07:00").toISOString() };
+  const quiet = { digestTime: "08:00", quietHours: { start: "22:00", end: "09:00" } };
+  assert.equal(pushNotBefore(notice, quiet, cst("2026-09-28T08:00")).toISOString(), cst("2026-09-28T09:00").toISOString());
+  assert.equal(pushNotBefore(notice, quiet, cst("2026-09-28T09:00")).toISOString(), cst("2026-09-28T09:00").toISOString());
+  const late = { ...notice, createdAt: cst("2026-09-28T21:00").toISOString() };
+  const lateQuiet = { digestTime: "23:00", quietHours: { start: "22:00", end: "08:00" } };
+  assert.equal(pushNotBefore(late, lateQuiet, cst("2026-09-28T21:00")).toISOString(), cst("2026-09-29T08:00").toISOString());
+  assert.equal(pushNotBefore({ ...late, createdAt: cst("2026-09-28T22:30").toISOString() }, lateQuiet, cst("2026-09-28T22:30")).toISOString(), cst("2026-09-29T08:00").toISOString());
+  assert.equal(pushNotBefore(late, lateQuiet, cst("2026-09-29T08:00")).toISOString(), cst("2026-09-29T08:00").toISOString());
+});
+
+test("a queued weekly is deferred once to quiet-hours end then actually sent", async () => {
+  let clock = cst("2026-09-28T08:00").getTime();
+  const settled = [], sent = [];
+  const item = { id: "weekly", userId: "alice", count: 1, source: { type: "digest", id: "frontier-weekly:2026-09-21" }, noticeType: "notify", title: "周刊", body: "Public weekly", severity: "info", createdAt: cst("2026-09-28T07:00").toISOString() };
+  const service = new ImService({ config: { imEnabled: true }, database: null, credentials: {}, users: {}, agentRuns: {}, runtimeManager: {}, dispatchRun: async () => {}, steerRun: async () => {}, classifier: {}, write: () => {}, now: () => clock,
+    notifications: { get: async () => item, preferences: async () => ({ channels: ["in-app", "feishu"], switches: { notify: true }, digestTime: "08:00", quietHours: { start: "22:00", end: "09:00" } }), recordChannelSent: async () => {} },
+    frontierDeliveryPolicy: async () => true,
+    store: { claimDeliveries: async () => [{ id: "delivery", userId: "alice", notificationId: "weekly", channel: "feishu", bindingId: "binding", eventCount: 1, attempts: 1 }], bindingById: async () => ({ status: "active" }), settleDelivery: async (...args) => settled.push(args) },
+  });
+  service.registry = { isEnabled: () => true, get: () => ({ deliver: async (_binding, message) => { sent.push(message); return { delivered: true, messageId: "sent" }; } }) };
+  await service.processDeliveries(); assert.equal(sent.length, 0); assert.equal(settled[0][2].retryAt.toISOString(), cst("2026-09-28T09:00").toISOString());
+  clock = cst("2026-09-28T09:00").getTime(); await service.processDeliveries(); assert.equal(sent.length, 1); assert.equal(settled[1][2].status, "sent");
 });

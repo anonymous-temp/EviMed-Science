@@ -40,15 +40,19 @@ item has no stable id of its own, so the external key is its link (or ``fields.i
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from selectolax.parser import HTMLParser, Node
 
+from ..fetch import detect_challenge
 from ..model import FetchError, FetchResult, NormalizedEntry, ParseOutput, RequestSpec, SourceConfig, SourceState
+from ..normalize import canonical_url
 from .base import decode_body, plan_from_template
 from .common import (
     PMID_IN_URL,
@@ -67,6 +71,8 @@ from .common import (
 MODES = ("html", "script-cdata", "script-json")
 DEFAULT_MAX_ITEMS = 60
 DEFAULT_MIN_TITLE = 4
+MAX_SELECTOR_FALLBACKS = 3
+MAX_DATE_FORMATS = 4
 _CDATA = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
 _XML_SCRIPT = re.compile(r"<script[^>]*type=[\"']text/xml[\"'][^>]*>(.*?)</script>", re.S | re.I)
 
@@ -103,6 +109,8 @@ def _html_items(text: str, config: dict) -> list[dict[str, Any]]:
         blocks = _XML_SCRIPT.findall(text) or [text]
         text = "\n".join(chunk for block in blocks for chunk in _CDATA.findall(block))
     tree = HTMLParser(text)
+    for hidden in tree.css('script, style, noscript, template'):
+        hidden.decompose()
     items = []
     for node in tree.css(selectors["item"]):
         title, date = _select(node, selectors.get("title")), _select(node, selectors.get("date"))
@@ -169,7 +177,8 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
     link_prefix = config.get("link_base") or base
     entries: list[NormalizedEntry] = []
     seen: set[str] = set()
-    dropped = {"title": 0, "link": 0, "host": 0}
+    dropped = {"title": 0, "link": 0, "host": 0, "id": 0}
+    page_links = 0
     for item in raw_items:
         title = clean_markup(item.get("title"))
         if len(title) < min_title:
@@ -177,6 +186,16 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             continue
         link = absolute_url(item.get("link"), link_prefix)
         derived = False
+        source_page_link = config.get("link_to_source_page") is True
+        row_id = clean_markup(item.get("id"))
+        if source_page_link:
+            # Some regulator tables publish stable records without detail URLs.
+            # Link to the real fetched page and retain each row's own identity.
+            if not row_id:
+                dropped["id"] += 1
+                continue
+            link = canonical_url(base)
+            derived = True
         if not link and config.get("link_template"):
             link = absolute_url(_fill(config["link_template"], item, encode=True), link_prefix)
             derived = bool(link)
@@ -191,12 +210,16 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
         if allowed and not host_allowed(link, allowed):
             dropped["host"] += 1
             continue
-        key = link if derived else str(item.get("id") or link)  # a template names what tells rows apart
+        key = f"{canonical_url(base)}::{row_id}" if source_page_link else (
+            link if derived else str(item.get("id") or link))
         if key in seen:
             continue
         seen.add(key)
-        published_at, precision = parse_date(_date_text(clean_markup(item.get("date")) or None, config),
-                                             naive_zone=naive_zone, date_format=config.get("date_format"))
+        date_text = _date_text(clean_markup(item.get("date")) or None, config)
+        for date_format in config.get("date_formats") or [config.get("date_format")]:
+            published_at, precision = parse_date(date_text, naive_zone=naive_zone, date_format=date_format)
+            if published_at is not None:
+                break
         if summary == title:
             summary = None
         found = PMID_IN_URL.search(link)
@@ -212,11 +235,17 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             pmid=found.group(1) if found else None,
             registry=registry_ids(title, summary),
             defects=["link-derived"] if derived else [],
+            identity_hint=(f"{config['identity_prefix']}:{hashlib.sha256(key.encode('utf-8')).hexdigest()[:40]}"
+                           if source_page_link else None),
             feed_summary=True,
         ))
+        if source_page_link:
+            page_links += 1
         if len(entries) >= int(config.get("max_items") or DEFAULT_MAX_ITEMS):
             break
     notes = [f"html_list_dropped_{reason}={count}" for reason, count in dropped.items() if count]
+    if page_links:
+        notes.append(f"html_list_source_page_links={page_links}")
     if not raw_items:
         notes.append("html_list_no_items")
     elif entries and all(e.published_at is None for e in entries) and (config.get("selectors") or config.get("fields") or {}).get("date"):
@@ -241,6 +270,10 @@ class HtmlListAdapter:
         problems = []
         if mode not in MODES:
             return [f"mode must be one of {MODES}"]
+        date_formats = config.get("date_formats")
+        if date_formats is not None and (not isinstance(date_formats, list) or not 1 <= len(date_formats) <= MAX_DATE_FORMATS
+                                         or any(not isinstance(value, str) or not value.strip() for value in date_formats)):
+            problems.append(f"date_formats must contain one to {MAX_DATE_FORMATS} explicit date formats")
         if mode == "script-json":
             fields = config.get("fields") or {}
             if not config.get("script_var"):
@@ -250,8 +283,16 @@ class HtmlListAdapter:
                     problems.append(f"script-json needs fields.{key}")
         else:
             selectors = config.get("selectors") or {}
+            source_page_link = config.get("link_to_source_page") is True
+            if source_page_link and not selectors.get("id"):
+                problems.append("link_to_source_page requires selectors.id for stable record identity")
+            if source_page_link and not re.fullmatch(r"fda:[A-Za-z0-9-]{2,40}", str(config.get("identity_prefix") or "")):
+                problems.append("link_to_source_page requires an FDA event identity_prefix (fda:<namespace>)")
+            page_host = urlsplit(config.get("url") or "").hostname or ""
+            if source_page_link and (source.source_type != "regulator" or not host_allowed(f"https://{page_host}/", ["fda.gov", "*.fda.gov"])):
+                problems.append("FDA page-linked identities are restricted to FDA regulator sources")
             for key in ("item", "title", "link"):
-                if not selectors.get(key) and not (key == "link" and config.get("link_template")):
+                if not selectors.get(key) and not (key == "link" and (config.get("link_template") or source_page_link)):
                     problems.append(f"selectors.{key} missing")
             if config.get("link_template") and "{" not in str(config["link_template"]):
                 problems.append("link_template names no {id}/{date}/{title}/{summary}: every row would share one link")
@@ -260,6 +301,26 @@ class HtmlListAdapter:
                     HTMLParser("<div></div>").css(selectors["item"])
                 except Exception as error:  # selectolax raises its own error types for a bad selector
                     problems.append(f"selectors.item does not parse: {type(error).__name__}")
+        fallbacks = config.get("selector_fallbacks", [])
+        if not isinstance(fallbacks, list) or len(fallbacks) > MAX_SELECTOR_FALLBACKS:
+            problems.append("selector_fallbacks must be a list of at most three vetted candidates")
+        elif fallbacks:
+            if mode != "html":
+                problems.append("selector recovery only supports ordinary HTML lists")
+            for candidate in fallbacks:
+                if not isinstance(candidate, dict) or any(not isinstance(candidate.get(key), str) or not candidate[key].strip() for key in ("item", "title", "link", "date")):
+                    problems.append("each selector fallback needs item, title, link and date selectors")
+                    continue
+                for spec in candidate.values():
+                    if not isinstance(spec, str):
+                        problems.append("fallback selector values must be strings")
+                        continue
+                    selector = spec.partition("@")[0].strip()
+                    if selector not in ("", "."):
+                        try:
+                            HTMLParser("<div></div>").css(selector)
+                        except Exception as error:
+                            problems.append(f"fallback selector does not parse: {type(error).__name__}")
         if not config.get("allowed_hosts"):
             problems.append("allowed_hosts missing (links outside the site must be refused)")
         return problems
@@ -273,5 +334,20 @@ class HtmlListAdapter:
         if result.status != 200:
             raise FetchError("http-error", f"html_list_http_{result.status}", status=result.status)
         text = decode_body(result)
-        entries, notes = list_entries(text, source=source, base=result.final_url or result.request.url)
+        base = result.final_url or result.request.url
+        entries, notes = list_entries(text, source=source, base=base)
+        # Recovery reads the same permitted page only. Candidates are vetted
+        # registry data; the working primary selector is never changed.
+        if not entries and (source.config.get("mode") or "html") == "html":
+            # The transport already rejects challenges. Recheck before trying
+            # recovery, without reclassifying a successfully rendered primary
+            # list merely because its markup still contains bootstrap scripts.
+            challenge = detect_challenge(result.status, result.headers.get("content-type", "text/html"), result.body, api=False)
+            if challenge:
+                raise FetchError("challenge", challenge, status=result.status)
+            for index, candidate in enumerate((source.config.get("selector_fallbacks") or [])[:MAX_SELECTOR_FALLBACKS]):
+                recovered_source = replace(source, config={**source.config, "selectors": candidate})
+                recovered, recovered_notes = list_entries(text, source=recovered_source, base=base)
+                if recovered and all(entry.published_at is not None for entry in recovered):
+                    return ParseOutput(entries=recovered, notes=[*recovered_notes, f"html_list_recovered_selector={index}"])
         return ParseOutput(entries=entries, notes=notes)

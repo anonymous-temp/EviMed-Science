@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-ces-time-horizon-consistency",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_7f1bd855fa909e3e07059bf867fd54f1/workspace/deliverables/empa-kidney-durability/clinical-evidence-report.md",
+  "line": 101,
+  "verbatim": "Three questions remain unanswered by the available reports. The recovery of benefit over time cannot be projected beyond the twelve months of post-trial observation, so whether any effect persists after that window is unknown. The relative contributions of the acute haemodynamic effect and of the chronic structural effect to the carry-over are not separable from the reported analyses, because the post-trial data include neither central eGFR measurements in all participants nor a randomized continuation. And the durability of the cardiovascular mortality result cannot be examined in isolation, since the active-phase comparison did not establish a cardiovascular mortality effect against which the whole-follow-up estimate could be compared.",
+  "whyItIsWrong": "Gap section says twelve months of post-trial observation; results describe two years and separately report first- and second-year estimates.",
+  "caughtBy": "reviewer",
+  "note": "Separate total observation duration from duration of demonstrable residual benefit; test year/month paraphrases without collapsing them. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_7f1bd855fa909e3e07059bf867fd54f1",
+  "artifactSha256": "3dbb96a01f61e447d93e77a7af0340d219eca07e8d46a687d71d9986432f9e24",
+  "sourceRevision": null
+}

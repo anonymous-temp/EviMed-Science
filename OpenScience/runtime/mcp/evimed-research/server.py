@@ -71,6 +71,7 @@ STRING = {"type": "string", "minLength": 1, "maxLength": 512}
 SHORT_STRING = {"type": "string", "minLength": 1, "maxLength": 128}
 LONG_STRING = {"type": "string", "minLength": 1, "maxLength": 4000}
 MR_COLUMN_KEYS = ("snp", "beta", "se", "effect_allele", "other_allele", "eaf", "pval")
+MR_SCALE_SCHEMA = object_schema({key: {"type": "string", "minLength": 1, "maxLength": 1000} for key in ("unit", "transformation", "evidence")})
 MR_SOURCE_SCHEMA = {
     "oneOf": [
         object_schema(
@@ -84,8 +85,9 @@ MR_SOURCE_SCHEMA = {
                     ),
                 },
                 "columnMapping": object_schema(
-                    {key: SHORT_STRING for key in MR_COLUMN_KEYS}, MR_COLUMN_KEYS
+                    {key: SHORT_STRING for key in (*MR_COLUMN_KEYS, "samplesize")}, MR_COLUMN_KEYS
                 ),
+                "effectScale": MR_SCALE_SCHEMA,
                 "sampleSize": {
                     "type": "integer",
                     "minimum": 1,
@@ -100,6 +102,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["opengwas"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "gwasId": {
                     "type": "string",
                     "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
@@ -111,6 +114,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "accession": {"type": "string", "pattern": r"^GCST\d{6,9}$"},
             },
             ("type", "accession"),
@@ -118,6 +122,7 @@ MR_SOURCE_SCHEMA = {
         object_schema(
             {
                 "type": {"type": "string", "enum": ["gwas_catalog"]},
+                "effectScale": MR_SCALE_SCHEMA,
                 "pubmedId": {"type": "string", "pattern": r"^\d{1,9}$"},
             },
             ("type", "pubmedId"),
@@ -1470,7 +1475,7 @@ def _adapter_timeout_seconds(arguments, name=None):
     return max(configured, min(wait_seconds + 5, STATUS_WAIT_MAX_SECONDS + 5))
 
 
-def _adapter_call(name, arguments):
+def _adapter_call(name, arguments, execution_context=None):
     env_name = ADAPTER_ENV[name]
     url = os.environ.get(env_name, "").strip()
     if not url:
@@ -1514,6 +1519,8 @@ def _adapter_call(name, arguments):
         "accept": "application/json",
         "Authorization": "Bearer %s" % workload_token,
     }
+    if execution_context is not None:
+        headers["X-EviMed-Execution-Context"] = json.dumps(execution_context, separators=(",", ":"))
     request = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     timeout = _adapter_timeout_seconds(arguments, name)
     try:
@@ -1709,7 +1716,19 @@ def _managed_status_with_wait(status_call, arguments):
 
 
 def call_tool(name, arguments):
-    return _with_source_types(name, _dispatch(name, arguments))
+    execution_context = None
+    if isinstance(arguments, dict) and "__evimed_execution_context" in arguments:
+        arguments = dict(arguments)
+        from execution_context import validate_context
+        try:
+            execution_context = validate_context(arguments.pop("__evimed_execution_context"))
+            if name not in {"meta_analysis", *specialist_jobs.SPECS}:
+                raise ValueError("execution context is only supported for engine tools")
+        except ValueError:
+            return failure("engine_execution_context_invalid", "The engine execution context is invalid.", False)
+    result = (_dispatch(name, arguments, execution_context=execution_context) if execution_context is not None
+              else _dispatch(name, arguments))
+    return _with_source_types(name, result)
 
 
 def _with_source_types(name, result):
@@ -1744,7 +1763,7 @@ def _with_source_types(name, result):
     return result
 
 
-def _dispatch(name, arguments):
+def _dispatch(name, arguments, execution_context=None):
     # Refused here as well as hidden from the catalog. A model that remembers a
     # tool from an earlier session, or a caller that hard-codes a name, must get
     # the deployment's answer rather than reach an adapter the deployment turned
@@ -2120,7 +2139,7 @@ def _dispatch(name, arguments):
     if name == "meta_analysis" and not os.environ.get("EVIMED_META_ANALYSIS_URL", "").strip():
         if arguments.get("action") == "status":
             return _managed_status_with_wait(meta_agent.status_job, arguments)
-        return meta_agent.call(arguments)
+        return meta_agent.call(arguments, execution_context=execution_context) if execution_context else meta_agent.call(arguments)
     if name == "literature_search" and not any(arguments.get(key) for key in ("query", "relation", "pmids")):
         return failure(
             "invalid_input",
@@ -2182,8 +2201,9 @@ def _dispatch(name, arguments):
             return _managed_status_with_wait(
                 lambda value: specialist_jobs.status_job(name, value), arguments
             )
-        return specialist_jobs.call(name, arguments)
-    return _adapter_call(name, arguments)
+        return specialist_jobs.call(name, arguments, execution_context=execution_context) if execution_context else specialist_jobs.call(name, arguments)
+    return (_adapter_call(name, arguments, execution_context=execution_context) if execution_context is not None
+            else _adapter_call(name, arguments))
 
 
 MAX_LABEL_TEXT_CHARS = 30_000
@@ -2369,7 +2389,7 @@ def process_frame(raw, handler=handle_request):
         return _rpc_error(request_id, -32603, "Internal error")
 
 
-def main():
+def main(handler=handle_request):
     stream = sys.stdin.buffer
     while True:
         frame = stream.readline(MAX_FRAME_BYTES)
@@ -2384,7 +2404,7 @@ def main():
         elif not frame.strip():
             continue
         else:
-            response = process_frame(frame)
+            response = process_frame(frame, handler)
         if response is not None:
             sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
             sys.stdout.flush()

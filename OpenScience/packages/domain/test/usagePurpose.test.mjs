@@ -6,7 +6,17 @@ import {
   isUsagePurpose,
   usagePurpose,
   usagePurposeOfRun,
+  isResearcherOwnedWork,
 } from "../index.mjs";
+
+test('managed research belongs to its researcher, but platform self-measurement does not', () => {
+  assert.equal(isResearcherOwnedWork(null), false)
+  assert.equal(isResearcherOwnedWork({ automated: true }), false)
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'geo:content' }), true)
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'autopilot:literature-sentinel' }), true)
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'geo:content', dispatchId: 'methodeval_abc' }), false)
+  assert.equal(isResearcherOwnedWork({ effectiveRouteReason: 'autopilot:verify', effectiveAgentId: 'method-distillation' }), false)
+})
 
 test("the purpose vocabulary is the closed set the ledger's CHECK is built from", () => {
   // The contract every stream codes against (X1). A member added here without

@@ -1,4 +1,4 @@
-"""Fail-closed extraction lifecycle shared by execution and resume routes."""
+"""Extraction lifecycle with explicit partial completion for unattended runs."""
 from __future__ import annotations
 
 from new_meta.schemas.phase_result import ArtifactRef, NextAction, PhaseIssue, PhaseResult
@@ -39,6 +39,29 @@ def persist_incomplete_phase(project, phase, *, step, status_path):
     })
     return phase
 
+
+
+def preserve_partial_phase(project, phase, *, step, status_path):
+    """Finish the available work, retaining unresolved facts and every saved artifact."""
+    from new_meta.schemas.phase_result import ExecutionStatus
+    phase = phase.model_copy(deep=True)
+    phase.status = ExecutionStatus.SUCCEEDED
+    phase.checkpoint = step
+    phase.next_actions = []
+    phase.data["completion"] = "partial"
+    for issue in phase.issues:
+        issue.blocking = False
+    phase.summary = (f"{phase.phase.value.capitalize()} completed with unresolved records; "
+                     "usable evidence continues and unresolved records remain documented.")
+    project.save_json(status_path, phase)
+    project.save_step_manifest(step, status="completed", artifacts=[status_path],
+                              metadata={"completion": "partial", "error_code": phase.error_code})
+    code = "partial_screening" if step == "ft_screening" else "partial_extraction"
+    project.clear_warnings(code=code)
+    entities = sorted({entity for issue in phase.issues for entity in issue.entity_ids})
+    project.add_warning("synthesis", phase.summary + (" Unresolved sources: " + ", ".join(entities) + "." if entities else ""),
+                        code=code, context={"issues": [issue.model_dump(mode="json") for issue in phase.issues]})
+    return phase
 
 def extraction_failure(study_id, code, *, retryable=False, **context):
     return {"study_id": study_id, "code": code, "retryable": retryable, **context}
@@ -195,7 +218,11 @@ def extraction_incomplete(project, failures, *, completed_ids=(), required_ids=(
         data={"failures": failures, "completed_study_ids": list(completed_ids),
               "required_study_ids": list(required_ids)},
     )
-    persist_incomplete_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    if project_is_unattended(project):
+        phase = preserve_partial_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
+    else:
+        persist_incomplete_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
     return ExtractionIncomplete(phase, project)
 
 
@@ -210,6 +237,11 @@ def require_complete_screening(project):
         error = IncompletePhaseError(PhaseResult.model_validate(status), project)
     else:
         return
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    if project_is_unattended(project):
+        preserve_partial_phase(project, error.phase, step="ft_screening",
+                               status_path="screening/full_text_screening_status.json")
+        return
     persist_incomplete_phase(project, error.phase, step="ft_screening",
                              status_path="screening/full_text_screening_status.json")
     raise error
@@ -223,11 +255,16 @@ def require_complete_extraction(project, studies=None, included_papers=None):
     run, not by supplying a smaller in-memory study list to a downstream route.
     """
     require_complete_screening(project)
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    unattended = project_is_unattended(project)
     status = project.load_json("extraction_status.json", subdir="extraction")
     if status and status.get("status") != "succeeded":
         phase = PhaseResult.model_validate(status)
-        persist_incomplete_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
-        raise ExtractionIncomplete(phase, project)
+        if unattended:
+            preserve_partial_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
+        else:
+            persist_incomplete_phase(project, phase, step="extraction", status_path="extraction/extraction_status.json")
+            raise ExtractionIncomplete(phase, project)
     cached = project.load_json("all_extractions.json", subdir="extraction")
     if studies is not None and cached is not None:
         # Supplying a successful subset cannot hide a legacy failed/empty record.
@@ -271,5 +308,7 @@ def require_complete_extraction(project, studies=None, included_papers=None):
         failures.append(extraction_failure("unknown", "extraction_outcomes_empty"))
     if failures:
         unique_failures = {row["study_id"]: row for row in failures}
-        raise extraction_incomplete(project, list(unique_failures.values()),
-                                    completed_ids=sorted(set(completed)), required_ids=sorted(required_ids))
+        error = extraction_incomplete(project, list(unique_failures.values()),
+                                      completed_ids=sorted(set(completed)), required_ids=sorted(required_ids))
+        if not unattended:
+            raise error

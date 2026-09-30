@@ -1,6 +1,6 @@
 // What a finished run hands back, in the conversation: its files as cards
-// after the answer that delivered them (and nothing above the composer), and
-// the right column opening on the kernel's own file tree. The product's own
+// after the answer that delivered them (and nothing above the composer),
+// opening through the kernel's native resource provider. The product's own
 // 运行 view and 文件 tab left on 2026-09-22; the delivery card above the
 // composer on 2026-09-23.
 import assert from 'node:assert/strict';
@@ -8,7 +8,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
-  apply, BODY, documentNameOf, fileAddress, fileCardsModel, fileTypeOf, formatBytes, hasReport, KERNEL_FILES_TAB, turnCarriesRun,
+  apply, BODY, documentNameOf, fileAddress, fileCardsModel, fileTypeOf, formatBytes, hasReport, KERNEL_FILES_TAB, openDeliveredFile, turnCarriesRun,
 } from '../src/runtimeUiPanels.mjs';
 import { apply as applyReplyChecks } from '../src/runtimeUiReplyChecks.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, realReact, renderStatic } from './helpers/frameFakes.mjs';
@@ -31,7 +31,7 @@ const DELIVERED = {
 };
 
 test('a delivered file is named by its type, and sorts the report first', () => {
-  assert.equal(KERNEL_FILES_TAB, 'files', "the kernel's own file-tree tab, which stays the column's only guide entry");
+  assert.equal(KERNEL_FILES_TAB, 'files', "the kernel's own file-tree tab");
   assert.deepEqual(fileTypeOf('deliverables/evidence/clinical-evidence-report.md'), { name: 'clinical-evidence-report.md', type: 'Markdown', icon: 'doc', rank: 0 });
   assert.deepEqual(fileTypeOf('deliverables/evidence/clinical-evidence-matrix.json'), { name: 'clinical-evidence-matrix.json', type: 'JSON', icon: 'data', rank: 1 });
   // A completed reporting checklist matches `report` and is not the report.
@@ -260,27 +260,50 @@ test('an answer can carry both the reply check and the files, each drawing what 
   assert.ok(answer === 5 && check > answer && files > check, `answer, then its check, then its files: ${html}`);
 });
 
-test("the kernel's file tree opens when a report appears while the reader watches, not on a visit to a finished task", () => {
+test("delivery never replaces the reader's native tab selection", () => {
   const watching = column();
   watching.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', artifacts: [], unverifiedArtifacts: [] });
   assert.deepEqual(watching.opened, []);
   watching.kit.hub.deliver('run-state', DELIVERED);
-  assert.deepEqual(watching.opened, ['files']);
+  assert.deepEqual(watching.opened, []);
   watching.kit.hub.deliver('run-state', { ...DELIVERED, updatedAt: 'later' });
-  assert.deepEqual(watching.opened, ['files'], 'once per run');
+  assert.deepEqual(watching.opened, [], 'only the reader opens or selects native tabs');
   const visiting = column();
   visiting.kit.hub.deliver('run-state', DELIVERED);
   assert.deepEqual(visiting.opened, [], 'a finished task already has its files; the column does not jump out');
 });
 
-test('the column retries its open while no seat is mounted', () => {
+test('delivery does not queue a tab change while the native seat is unavailable', () => {
   const f = column({ failFirstOpen: true });
   f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', artifacts: [], unverifiedArtifacts: [] });
   assert.deepEqual(f.opened, []);
   f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running' });
   assert.deepEqual(f.opened, [], 'the first open had no seat');
   f.kit.hub.deliver('run-state', { ...DELIVERED, state: 'running', updatedAt: 'later' });
-  assert.deepEqual(f.opened, ['files']);
+  assert.deepEqual(f.opened, []);
+});
+
+test('a file card opens the native encoded resource and leaves tab reuse to DSH', async () => {
+  /** @type {unknown[][]} */
+  const calls = [];
+  const sidebar = {
+    /** @param {...unknown} args */
+    openResource(...args) { calls.push(args); },
+  };
+  const fallback = () => assert.fail('an available native preview must keep the conversation open');
+  for (let click = 0; click < 2; click++) {
+    assert.equal(await openDeliveredFile(sidebar, 'session-a', 'deliverables/证据 表.md', fallback), 'native');
+  }
+  assert.deepEqual(calls, [[fileAddress('session-a', 'deliverables/证据 表.md')], [fileAddress('session-a', 'deliverables/证据 表.md')]]);
+});
+
+test('an unavailable native preview has a working reader fallback', async () => {
+  let reads = 0;
+  for (const sidebar of [null, {}, { openResource() { throw new Error('no mounted seat'); } },
+    { async openResource() { throw new Error('provider unavailable'); } }]) {
+    assert.equal(await openDeliveredFile(sidebar, 'session-a', 'report.md', () => { reads++; }), 'reader');
+  }
+  assert.equal(reads, 4);
 });
 
 test('outside a frame nothing is taken over', () => {

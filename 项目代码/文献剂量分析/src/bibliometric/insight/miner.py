@@ -209,11 +209,8 @@ def _detect_maturity(articles: list[dict], stats: dict) -> list[dict]:
     if year_df is None or year_df.empty or len(year_df) < 3:
         return insights
 
-    # Exclude partial (current incomplete) year from growth calculation
-    if "is_partial" in year_df.columns:
-        complete_df = year_df[~year_df["is_partial"]]
-    else:
-        complete_df = year_df
+    # Growth describes the selected corpus, not field-wide calendar coverage.
+    complete_df = year_df
 
     if complete_df.empty or len(complete_df) < 3:
         return insights
@@ -256,17 +253,18 @@ def _detect_maturity(articles: list[dict], stats: dict) -> list[dict]:
 
     insights.append({
         "category": "maturity",
-        "title": f"Field Maturity: {stage.title()}",
+        "title": f"Selected-corpus maturity hypothesis: {stage.title()}",
         "description": (
-            f"With {total} total publications and "
+            f"Within {total} selected publications and "
             f"{'growing' if recent_growth > 0 else 'declining'} trend "
-            f"({growth_desc}), this field appears "
-            f"to be in a {stage} stage."
+            f"({growth_desc}), the {stage} stage is a hypothesis based on this sample, "
+            "not a measured field-wide trajectory."
         ),
         "importance": 0.8,
         "evidence": {
             "total": total,
             "stage": stage,
+            "scope": "selected_records",
             "recent_growth": recent_growth,
         },
     })

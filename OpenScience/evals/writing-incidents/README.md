@@ -28,6 +28,8 @@ The genres, from the text-output review and the 2026-09-29 quality classes:
   certainty grade, method tools named and never applied, addressing the reader.
 - **Number–prose divergence** — a figure in prose with no source in the
   artifacts, or a number changed in one place and not in its dependents.
+- **Unsupported inference** — an unmeasured explanation, a presumed unit, or a
+  conclusion extended beyond the source population or selected sample.
 - **Mistranslation** — a term rendered into another language so that it names
   something else, or nothing.
 - **Absence as contradiction** — a figure the run could not find in what it

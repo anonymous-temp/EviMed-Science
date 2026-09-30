@@ -303,6 +303,26 @@ class LedgerFixtureTests(unittest.TestCase):
             issues,
         )
 
+    def test_coverage_notice_counts_each_public_status_and_excludes_internal_rows(self):
+        rows = [
+            entry("accepted", realDelivery=delivery(
+                "accepted", "PROGRESS.md@2026-09-30 09:00", "2026-09-30T09:00:00", "http-api"
+            )),
+            entry("failed", realDelivery=delivery(
+                "failed", "PROGRESS.md@2026-09-30 09:00", "2026-09-30T09:00:00", "http-api"
+            )),
+            entry("not-run"),
+        ]
+        rows += [dict(row, id="internal-" + row["id"], visibility="internal") for row in rows]
+        build_fixture(
+            self.root, rows, [row["id"] for row in rows], progress_stamps=["2026-09-30 09:00"]
+        )
+        self.assertEqual(
+            checker.coverage_notice(self.root),
+            "notice: acceptance ledger records 1 of 3 public capabilities with an accepted delivery "
+            "(1 failed, 1 never run); this is a metric, not a gate",
+        )
+
 
 class RealLedgerTests(unittest.TestCase):
     """The ledger this repository actually ships."""
@@ -369,10 +389,17 @@ class RealLedgerTests(unittest.TestCase):
         # nineteen accepted, one failed (meta-analysis), one never run. That
         # night, on the releases carrying the engine fixes, mendelian-
         # randomization and meta-analysis were accepted: every row accepted.
+        # On 2026-09-30 statistical-analysis delivered its first live WDBC
+        # comparison: twenty-two accepted. Residual scientific-review findings
+        # remain explicit; delivery acceptance is not an unqualified quality pass.
         self.assertEqual(statuses.count("not-run"), 0)
-        self.assertEqual(statuses.count("accepted"), 21)
+        self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
-        self.assertIn("notice:", checker.coverage_notice())
+        self.assertEqual(
+            checker.coverage_notice(),
+            "notice: acceptance ledger records 19 of 19 public capabilities with an accepted delivery "
+            "(0 failed, 0 never run); this is a metric, not a gate",
+        )
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
         """Pin which capabilities claim acceptance, by name.
@@ -426,7 +453,10 @@ class RealLedgerTests(unittest.TestCase):
         # mendelian-randomization (mr-001, IVW OR 1.53 over 64 variants,
         # token-free) and meta-analysis (ma-001, MD -251 mL from 2 multi-arm
         # RCTs) joined on 2026-09-28 night, each read before its row changed.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-insight", "geo-proposal", "geo-strategy", "manuscript-support", "mendelian-randomization", "meta-analysis", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding"])
+        # statistical-analysis joined on 2026-09-30 after its live WDBC run;
+        # primary Welch statistics were independently replayed, with residual
+        # interval and report-framing findings retained in its scientific review.
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "clinical-evidence-synthesis", "comprehensive-drug-evaluation", "dataset-research-scoping", "drug-selection", "evidence-appraisal", "geo-content", "geo-insight", "geo-proposal", "geo-strategy", "manuscript-support", "mendelian-randomization", "meta-analysis", "method-distillation", "method-relations", "off-label-analysis", "peer-review", "research-grant-development", "research-topic-selection", "source-understanding", "statistical-analysis"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

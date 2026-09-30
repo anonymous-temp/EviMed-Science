@@ -1,0 +1,61 @@
+{
+  "runId": "run_430c49d1aa809913ab106b2e56cb0009",
+  "capability": "adr-analysis",
+  "capabilityVersion": "1.3.1",
+  "startedAt": "2026-09-29T06:10:52.833Z",
+  "finishedAt": "2026-09-29T06:36:57.569Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_signal_analysis_with_scope_limits",
+  "usableResults": [
+    "All 13 delivered 2x2 rows sum to 13,840,535 and reproduce ROR, PRR, chi-square and expected counts to 3 decimals.",
+    "The three requested events have positive reported signals; the output explicitly distinguishes reporting disproportionality from incidence and causation."
+  ],
+  "limitations": [
+    "Live openFDA aggregate counts were not frozen; the engine leaves snapshot id/hash/extraction time empty.",
+    "PS-only request became a report-level suspect approximation; study and background windows differ.",
+    "Unfitted EBGM prior is disclosed and is not used to decide the signal."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/adr-osimertinib-cardiotox/build_signals_csv.py",
+      "sha256": "e2276486d35fb8f5fff6d9c3ce7c51660a93e669f45addaacb187c82fc74dd73",
+      "bytes": 2651
+    },
+    {
+      "path": "deliverables/adr-osimertinib-cardiotox/revision-notes.md",
+      "sha256": "797ea3416ec371dd55e6fd9a5f93423214c476db5cdd5cf177c26bf698499fea",
+      "bytes": 8916
+    },
+    {
+      "path": "deliverables/adr-osimertinib-cardiotox/safety-report.md",
+      "sha256": "67cede52efd54d44784cefd9f59ef035ad3fc79d231934f8cd464e6198320a3b",
+      "bytes": 35091
+    },
+    {
+      "path": "deliverables/adr-osimertinib-cardiotox/signals.csv",
+      "sha256": "5277e454b9e6073186124cbb6058e19a962e31ac7def0e77a7c7bf9661e44437",
+      "bytes": 4144
+    }
+  ],
+  "transcriptSha256": "fa5b3198b80c3d198f9d8addee6e45dbb4c2f7e2c0dca604dc4417abcf7262ab",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-adr-worked-formula-matches-table.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-adr-unsupported-reporting-lag-explanation.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

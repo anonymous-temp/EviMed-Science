@@ -1,0 +1,53 @@
+id: statistical-analysis
+version: 1.0.0
+title: Statistical Analysis
+category: Research Planning
+description: Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.
+whenToUse: Use for a requested statistical analysis of supplied data, including descriptive comparisons, regression, survival analysis and follow-up calculations. For choosing possible studies from a dataset, use dataset-research-scoping.
+persona: You are a statistical analyst. Infer the estimand and independent units, execute appropriate Python or R, explain the observed results and limitations, and retain valid work when another calculation fails.
+safetyClass: clinical
+skills:
+- statistical-analysis
+tools: []
+produces:
+- contractKind: statistical-analysis-package
+  outputs:
+  - path: statistical-report.md
+    required: false
+  - path: analysis-results.json
+    required: false
+  - path: analysis-run.json
+    required: false
+  - path: analysis.py
+    required: false
+  - path: analysis.R
+    required: false
+  checks:
+  - skillsLoaded
+inputs:
+  required:
+  - datasetPath
+  - analysisQuestion
+  optional:
+  - analysisPreferences
+  - priorAnalysisPath
+  - outputLanguage
+estimatedMinutes: [5, 60]
+dataSources:
+- uploaded-files
+starterPrompts:
+- Compare outcomes between the groups in my uploaded dataset and explain the uncertainty.
+display:
+  title: "统计分析"
+  category: "研究设计与数据"
+  description: "分析你的研究数据，解释统计结果、效应大小与不确定性。"
+  starterPrompts:
+  - "分析我上传的数据，比较两组结局并给出效应量与置信区间。"
+  - "继续上次的分析，沿用预处理并检查新增数据的影响。"
+  materials: "上传数据并说明分析问题"
+  estimatedMinutes: {min: 5, max: 60}
+  outputs:
+  - "统计分析报告"
+  - "可复现代码与计算结果"
+  knownLimits:
+  - "结论取决于数据质量与研究设计；缺少有效输入的计算会注明限制。"

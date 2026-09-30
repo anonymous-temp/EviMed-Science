@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-mr-metadata-n-versus-variant-n",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_d410b7bfe89c780f38fc27bc9fcbd18f/workspace/deliverables/bmi-cad-mr/mendelian-randomization-report.md",
+  "line": 29,
+  "verbatim": "| 样本量 | 合计 238,944 名参与者：最多 104,666 名欧洲祖源男性、132,115 名欧洲祖源女性，另有非裔男/女 370/517 名、西班牙裔男/女 512/764 名 | 欧洲祖源 181,522 例病例与 984,168 名对照，合计 1,165,690 名参与者 | 六个祖源分层合计 187,599 名参与者：42,096 例欧洲祖源病例与 99,121 名欧洲祖源对照 |",
+  "whyItIsWrong": "Catalogue ancestry/sample metadata sum to 238944; archived per-variant exposure inputs range from 218359 to 339205. These denominators have not been reconciled.",
+  "caughtBy": "reviewer",
+  "note": "Distinguish catalogue metadata from per-variant analysis sample sizes and avoid claiming an exact ancestry proportion for the analysed summary-statistics file until reconciled. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_d410b7bfe89c780f38fc27bc9fcbd18f",
+  "artifactSha256": "f2bfd00510473a5d71c3ad82e6f5842575505e8018d9b4539cb22ea2e0d7a2ab",
+  "sourceRevision": null
+}

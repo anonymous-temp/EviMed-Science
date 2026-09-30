@@ -287,3 +287,18 @@ async def test_every_answered_request_is_counted_for_the_evimed_usage_ledger():
         "requests": 2, "cacheHitTokens": 800, "cacheMissTokens": 203, "outputTokens": 42, "model": "deepseek-flash",
     }
     provider_usage.reset()
+
+
+@pytest.mark.parametrize("effort", ["off", "low", "high", "max"])
+@pytest.mark.parametrize("tier", ["flash", "pro"])
+@pytest.mark.asyncio
+@respx.mock
+async def test_managed_choice_reaches_request_payload(monkeypatch, effort, tier):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+    route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_payload("ok")))
+    async with _client() as client:
+        await client.complete([{"role": "user", "content": "test"}], tier=tier)
+    request = json.loads(route.calls[0].request.content)
+    assert request["thinking"]["type"] == ("disabled" if effort == "off" else "enabled")
+    assert request.get("reasoning_effort") == (None if effort == "off" else effort)

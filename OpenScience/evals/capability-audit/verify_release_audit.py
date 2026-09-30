@@ -232,8 +232,8 @@ def verify_tools():
             require(all(receipt.get("bytes", 0) > 0 and len(receipt.get("sha256", "")) == 64 for receipt in item.get("artifacts", [])), "%s has invalid artifact receipts" % item.get("tool"))
             require(EVIDENCE.is_dir(), "%s receipt evidence snapshot is unavailable" % item.get("tool"))
             if item.get("tool") == "mendelian_randomization":
-                require(item.get("receiptKind") == "isolated-adapter-v1", "MR requires an attested isolated public-fixture receipt")
-            if item.get("receiptKind") == "isolated-adapter-v1":
+                require(item.get("receiptKind") in {"isolated-adapter-v1", "worker-adapter-v2"}, "MR needs its retained public-fixture job record")
+            if item.get("receiptKind") in {"isolated-adapter-v1", "worker-adapter-v2"}:
                 retained = item.get("hostedReceipt") or {}
                 require(file_receipt(EVIDENCE, retained.get("path")) == retained, "hosted receipt bytes changed")
                 value = json.loads(read_owned(EVIDENCE, retained["path"], 1024 * 1024))

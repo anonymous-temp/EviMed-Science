@@ -605,7 +605,7 @@ test("a lesson the platform's reviewer taught is kept for the handbook, never as
   assert.deepEqual(await learning.approvedMethods("u1"), [], "never mounted");
   // The same lesson again replaces it rather than piling up.
   const again = await learning.recordHandbookCandidate("u1", { frontmatter: frontmatter(), body: `${BODY}\n\nRefined.`,
-    provenance: { origin: "inferred", runId: "run_2" } });
+    provenance: { origin: "inferred", runId: "run_2" }, capabilityId: "meta-analysis" });
   assert.equal(again.id, kept.id);
   assert.equal(again.revision, kept.revision + 1);
 });

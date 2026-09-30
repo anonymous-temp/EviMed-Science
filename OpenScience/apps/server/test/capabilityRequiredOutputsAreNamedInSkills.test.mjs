@@ -49,7 +49,8 @@ test("every required output path is named in the capability's skill stack", asyn
       }
     }
   }
-  assert.ok(required >= 60, `only ${required} required outputs were walked; the manifests changed shape`);
+  // Dataset scoping made its ten companion outputs optional on 2026-09-29.
+  assert.ok(required >= 50, `only ${required} required outputs were walked; the manifests changed shape`);
   assert.deepEqual(unnamed, [], `required outputs no skill text names:\n  ${unnamed.join("\n  ")}`);
 });
 

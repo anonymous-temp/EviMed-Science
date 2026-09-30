@@ -12,6 +12,7 @@ import { after, before, test } from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
 import { insertSource, memoryPlugin, pluginSource } from "./helpers/frontierFixtures.mjs";
 import { insertComposedItem } from "./helpers/frontierComposeFixtures.mjs";
+import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -27,15 +28,17 @@ const PASSWORD = "test-only-frontier-password";
 const PDF = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(128, 7)]);
 let context = null;
 
+let isolated;
 before(async () => {
   if (!databaseUrl) return;
+  isolated = await createGeoTestDatabase(databaseUrl, "fwave2");
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-frontier-wave2-"));
   const tokenFile = path.join(dataDir, "knowledge-plugin.token");
   await writeFile(tokenFile, "test-only-app-token\n", { mode: 0o600 });
   const plugin = memoryPlugin({ sources: [pluginSource("nejm")], entries: [] });
   const pdfRequests = [];
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl, operatorMetricsToken: "test-only-metrics-token",
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     operatorUsers: [accounts.operator], frontierEnabled: true, frontierAudience: "all",
     knowledgePluginUrl: "http://plugin.test:8080", knowledgePluginTokenFile: tokenFile, knowledgePluginFetch: plugin.fetchImpl,
     frontierEmbedder: { configured: false, modelKey: "none@1024", counters: {} },
@@ -65,10 +68,12 @@ before(async () => {
 });
 
 after(async () => {
-  if (!context) return;
-  await context.database.query("DELETE FROM evimed_control.users WHERE id = ANY($1::text[])", [Object.values(accounts)]);
-  await context.app.close();
-  await rm(context.dataDir, { recursive: true, force: true });
+  if (context) {
+    await context.database.query("DELETE FROM evimed_control.users WHERE id = ANY($1::text[])", [Object.values(accounts)]);
+    await context.app.close();
+    await rm(context.dataDir, { recursive: true, force: true });
+  }
+  await isolated?.drop();
 });
 
 const now = () => new Date();
@@ -80,7 +85,7 @@ test("/status offers what this deployment has, says personalization is off witho
   assert.equal(answer.status, 200);
   const status = (await answer.json()).data;
   assert.equal(status.personalization, "off", "a memory store without a model to read it with cannot personalize");
-  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true });
+  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true, weekly: true });
   const seen = (await database.query("SELECT last_seen_at FROM evimed_frontier.user_prefs WHERE user_id = $1", [accounts.reader])).rows[0];
   assert.ok(seen?.last_seen_at, "the page read marks the reader for the daily's audience");
   const forYou = await (await fetch(`${base}/api/frontier/for-you`, { headers: sessions.reader })).json();
@@ -107,7 +112,14 @@ test("the hot list and an event page; a merged event's old id answers 308 to the
   const coverage = await insertComposedItem(database, { sourceId: "stat", sourceType: "media", title: "Hot trial coverage", registryIds: ["NCT55555555"], clusterKeys: [],
     visibleAt: hoursAgo(3), timelineAt: hoursAgo(3) });
   const events = app.frontier.composer.events;
-  await events.clusterPending();
+  // This HTTP fixture describes one report and its coverage. NCT alone is
+  // now only a candidate, so provide the explicit semantic verdict here.
+  const previousEditor = events.editor;
+  const previousBudget = events.budgetReader;
+  events.editor = { available: true, judgeSameEvent: async ({ candidates }) => ({ verdicts: candidates.map(() => "yes"), error: null }) };
+  events.budgetReader = null;
+  try { await events.clusterPending(); }
+  finally { events.editor = previousEditor; events.budgetReader = previousBudget; }
   await events.computeHot();
   const hot = (await (await fetch(`${base}/api/frontier/hot`, { headers: sessions.reader })).json()).data;
   const event = (await database.query("SELECT e.public_id, e.heat FROM evimed_frontier.items i JOIN evimed_frontier.events e ON e.id = i.event_id WHERE i.id = $1", [paper.id])).rows[0];

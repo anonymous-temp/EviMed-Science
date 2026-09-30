@@ -1,0 +1,58 @@
+{
+  "runId": "run_15e6d7d53552ed9819b508ba91aff844",
+  "capability": "meta-analysis",
+  "capabilityVersion": "1.1.4",
+  "startedAt": "2026-09-29T08:06:46.171Z",
+  "finishedAt": "2026-09-29T09:48:39.096Z",
+  "sourceRevision": "233c033f36f15a5f85b8ca406932d329d918895d",
+  "sourceRevisionBasis": "Retained runtime container created at run start and immutable image revision label.",
+  "sourceRevisionComponents": {
+    "runtime": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_partial_meta_analysis_with_method_label_review",
+  "usableResults": [
+    "10 unique studies / 14 contrasts; weighted mean -273.88927892126054 reproduces using recorded tau-squared, Q 61.86874439537847 and I-squared 85.45307475049988 reproduce.",
+    "All 14 pooled input source file hashes match. Six quotes match as simple normalized substrings; five text quotes need more sophisticated source alignment; three PDF quotes were not independently extracted.",
+    "PRISMA accounting identities hold: 1531-145-660-66=660; 660-503=157; 157-98=59; 59-29=30."
+  ],
+  "limitations": [
+    "Primary CI half-width / recorded SE = 1.95996398454 despite DESIGN_AWARE_REML_HKSJ label; separate HKSJ sensitivity is archived.",
+    "No transfusion or symptomatic-VTE pooled result is delivered; main outcome remains useful with limitations.",
+    "This check did not re-estimate tau-squared or re-adjudicate trial identity, extraction eligibility or GRADE."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/txa-tka-meta/meta-analysis-report.md",
+      "sha256": "29c3acf6b73e927d991f0084bd1354590b0754a1b73a84aa57eda714bcd09cd1",
+      "bytes": 24509
+    },
+    {
+      "path": "deliverables/txa-tka-meta/meta-analysis-run.json",
+      "sha256": "495b9306c8210b92d067eb5b2052f2904a0ef54692ef5a0be23874245e34bb21",
+      "bytes": 5312
+    },
+    {
+      "path": "deliverables/txa-tka-meta/revision-notes.md",
+      "sha256": "baecf0491ca117e113ef252e9fad1f1f5fddf19f9cb9211b53cb03802342f1fc",
+      "bytes": 17696
+    }
+  ],
+  "transcriptSha256": "fe8ac93509b20be14ec23bc03a724750149d59009638389b73a660a0b8c4e7f0",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-meta-estimator-name-matches-interval.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-meta-verification-status-wording.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-meta-retrieval-denominator-wording.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

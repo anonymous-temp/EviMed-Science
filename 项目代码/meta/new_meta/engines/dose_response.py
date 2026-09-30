@@ -210,6 +210,7 @@ def run_dose_response(
             "p_value": nonlinear_p,
         },
         linear_sensitivity={
+            "executed_method": linear.execution_metadata().model_dump(mode="json"),
             "coefficient": linear.pooled_effect,
             "ci_lower": linear.ci_lower,
             "ci_upper": linear.ci_upper,

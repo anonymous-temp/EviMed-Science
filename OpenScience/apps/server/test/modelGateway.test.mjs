@@ -228,17 +228,13 @@ test("model gateway authenticates runtime, forces DeepSeek policy, and forwards 
   assert.equal(upstreamRequest.authorization, "Bearer server-only-test-secret");
   assert.equal(upstreamRequest.contentType, "application/json");
   assert.equal(upstreamRequest.body.model, "deepseek-v4-pro");
-  assert.deepEqual(upstreamRequest.body.thinking, { type: "enabled" });
-  assert.equal(upstreamRequest.body.reasoning_effort, "high");
+  assert.deepEqual(upstreamRequest.body.thinking, { type: "disabled" });
+  assert.equal(upstreamRequest.body.reasoning_effort, undefined);
   assert.equal(upstreamRequest.body.stream, false);
   assert.equal(upstreamRequest.body.tools[0].function.name, "lookup");
 });
 
-test("the thinking effort is the deployment's setting, not the caller's and not a literal", async (t) => {
-  // `reasoning_effort` was a literal `high` here, so the one experiment the
-  // clinical line's number-integrity failures called for — the same brief at
-  // `max` — needed a release. A caller still cannot pick it: the run is not
-  // trusted to raise its own budget.
+test("native thinking effort follows the request instead of the deployment default", async (t) => {
   let upstreamBody = null;
   const upstream = createServer(async (req, res) => {
     const chunks = [];
@@ -259,7 +255,7 @@ test("the thinking effort is the deployment's setting, not the caller's and not 
     body: JSON.stringify({ model: "x", messages: [{ role: "user", content: "hi" }], stream: false, reasoning_effort: "low" }),
   });
   assert.equal(response.status, 200);
-  assert.equal(upstreamBody.reasoning_effort, "max");
+  assert.equal(upstreamBody.reasoning_effort, "low");
 });
 
 test("model gateway preserves streaming response content type and chunks", async (t) => {

@@ -1,0 +1,17 @@
+{
+  "version": "geo-severity-initial/1",
+  "severity_basis": "initial",
+  "meaning": "Prospective potential harm from an information error; a local adaptation, not observed patient harm or an official NCC MERP conversion.",
+  "severities": {
+    "S0": "No material effect",
+    "S1": "Potentially misleading without expected injury",
+    "S2": "Could require monitoring or intervention",
+    "S3": "Could cause temporary harm",
+    "S4": "Could cause permanent harm or threaten life"
+  },
+  "missing": "Correct and unverifiable verdicts have no severity. Insufficient context or evidence remains missing, never S0.",
+  "sources": [
+    "https://www.nccmerp.org/types-medication-errors"
+  ],
+  "validation": "No independent pharmacist calibration has yet been supplied."
+}

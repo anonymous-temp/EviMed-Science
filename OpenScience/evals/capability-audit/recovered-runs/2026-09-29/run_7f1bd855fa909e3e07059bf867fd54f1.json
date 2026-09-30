@@ -1,0 +1,61 @@
+{
+  "runId": "run_7f1bd855fa909e3e07059bf867fd54f1",
+  "capability": "clinical-evidence-synthesis",
+  "capabilityVersion": "2.15.0",
+  "startedAt": "2026-09-29T06:37:17.642Z",
+  "finishedAt": "2026-09-29T07:26:08.161Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_trial_synthesis_with_specific_prose_corrections",
+  "usableResults": [
+    "All 47 evidence-matrix quotes match archived source text after whitespace normalization.",
+    "Active, post-trial and combined estimates are distinguished; 865 + 1001 = 1,866 total primary events and 876 / 1,866 = 46.95% additional post-trial events."
+  ],
+  "limitations": [
+    "Quote presence does not prove complete entailment of surrounding prose.",
+    "A correction notice was not retrieved; the report acknowledges this.",
+    "Twelve-month gap statement and compressed eligibility language contradict detailed sections."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/empa-kidney-durability/clinical-evidence-matrix.json",
+      "sha256": "9e5d67fde1a61318d6783a56af9c3c50bbe0f776ea0acb2ff522d0ba677a47d2",
+      "bytes": 95867
+    },
+    {
+      "path": "deliverables/empa-kidney-durability/clinical-evidence-report.md",
+      "sha256": "3dbb96a01f61e447d93e77a7af0340d219eca07e8d46a687d71d9986432f9e24",
+      "bytes": 44695
+    },
+    {
+      "path": "deliverables/empa-kidney-durability/revision-notes.md",
+      "sha256": "6b8839375c81334441bdae75b7878db84d9bc2df26c8cfbb528d51f8d2bdaa6b",
+      "bytes": 10687
+    },
+    {
+      "path": "deliverables/empa-kidney-durability/traceability-review.md",
+      "sha256": "af9ea4da0d06d273a2f69566490d1f5c585460895d16891064d7774c895b0620",
+      "bytes": 4320
+    }
+  ],
+  "transcriptSha256": "c67d78145adad49524f2df1923eba8a887def0e1aa86bbac86f739c22a6fe02b",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-ces-time-horizon-consistency.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-ces-eligibility-summary-preserves-bounds.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

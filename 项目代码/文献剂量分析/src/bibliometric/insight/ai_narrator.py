@@ -10,8 +10,9 @@ from typing import Optional
 
 import pandas as pd
 
+from bibliometric.analysis.statistics import trend_coverage_note
+
 from bibliometric.insight.templates import (
-    describe_key_findings,
     describe_trend,
     template_results_authors,
     template_results_authors_zh,
@@ -140,14 +141,11 @@ def _build_data_summary(query, articles, stats, networks) -> str:
         trend_lines = []
         for r in rows:
             line = f"  {r.get('year')}: {int(r.get('count', 0))}"
-            if r.get("is_partial"):
-                annualized = int(r.get("annualized_count", r.get("count", 0)))
-                line += f"  [PARTIAL YEAR — only Jan–present data; annualized estimate: ~{annualized}]"
             trend_lines.append(line)
         summary_parts.append(
             "[TRENDS DATA]\n" + "\n".join(trend_lines)
-            + "\n  [NOTE: Do NOT use partial-year data for trend comparisons. "
-            "Compare only complete years.]"
+            + "\n" + trend_coverage_note(stats)
+            + "\nCoverage metadata: " + json.dumps(stats.get("trend_coverage", {}), ensure_ascii=False)
         )
 
     # [AUTHORS DATA]
@@ -299,6 +297,9 @@ def _build_data_summary(query, articles, stats, networks) -> str:
         a_centrality = author_net.get("centrality", {})
         net_lines = [
             "[AUTHOR NETWORK DATA]",
+            f"  Selected graph scope: {json.dumps(author_net.get('scope', {}), ensure_ascii=False)}",
+            f"  Distinct author names in the selected corpus: {len({name for article in articles for name in article.get('authors_normalized', [])})}. Names are not verified individual identities.",
+            "  The selected graph cannot establish the presence or absence of communities among all authors.",
             f"  Nodes: {a_nodes}, Edges: {a_edges}, Density: {a_density:.4f}",
         ]
         if a_components:
@@ -432,7 +433,7 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
             "- 若Modularity Q < 0.1：须说明聚类不可靠，禁用\"紧密交织\"或\"结构良好\"等美化表述\n"
             "- 若Modularity Q < 0.3：聚类结构描述须谨慎，避免夸大主题边界\n"
             "- 若出现[CROSS-CHECK WARNING]：严格按其指示执行\n"
-            "- 若有[PARTIAL YEAR]或[NOTE]标注：禁止将该年份用于趋势对比\n"
+            "- 按检索范围与年份来源解释样本计数；不得从当前月份推造年化值或完整年度覆盖\n"
             "- 禁止捏造数据中未出现的具体研究名称、作者发现或临床试验结果\n"
             "- discussion中对解释性判断须使用模糊限定语（可能、提示、表明、有待验证）\n"
             "【最终提醒】输出语言=简体中文。禁止韩文，禁止日文，禁止英文正文。"
@@ -474,7 +475,7 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
             "- If Modularity Q < 0.1: state clustering is unreliable, do NOT use 'tightly interwoven' or 'well-structured'\n"
             "- If Modularity Q < 0.3: describe community structure as 'weak' or 'modest'\n"
             "- If a [CROSS-CHECK WARNING] appears, follow its instructions exactly\n"
-            "- If [PARTIAL YEAR] or [NOTE] about partial data appears, do NOT use that year for trend comparisons\n"
+            "- Interpret selected counts using query bounds and recorded-year provenance; do not infer calendar coverage or annualize from the current month\n"
             "- Do NOT fabricate specific study names, author findings, or clinical trial results not present in the data\n"
             "- In 'discussion', use hedging language (may, could, suggests, warrants) for interpretive claims"
         )
@@ -573,9 +574,9 @@ def _smart_template_narratives(
     maturity_insight = next(
         (i for i in insights if i.get("category") == "maturity"), None
     )
-    stage = "emerging"
+    stage = "unassessed"
     if maturity_insight:
-        stage = maturity_insight.get("evidence", {}).get("stage", "") or "emerging"
+        stage = maturity_insight.get("evidence", {}).get("stage", "") or "unassessed"
 
     kw_df = stats.get("top_keywords")
     top_keywords = []
@@ -591,40 +592,26 @@ def _smart_template_narratives(
     cite_stats = stats.get("citation_stats", {})
     h_index = cite_stats.get("h_index", 0)
 
-    # Build introduction
+    # Describe this corpus without inventing field-wide growth or a research gap.
     intro = (
-        f"The research landscape surrounding \"{query}\" has undergone significant "
-        f"evolution in recent years, reflecting broader trends in biomedical science "
-        f"and clinical practice. As the volume of published literature continues to "
-        f"grow, bibliometric analysis offers a systematic, quantitative approach to "
-        f"mapping the intellectual structure of a research field, identifying key "
-        f"contributors, and detecting emerging trends (Pritchard, 1969; Chen, 2006).\n\n"
-        f"Despite the increasing research output on this topic, no comprehensive "
-        f"bibliometric analysis has been conducted to systematically characterize "
-        f"the knowledge base, collaboration patterns, and thematic evolution. "
-        f"Understanding these dimensions is essential for researchers seeking to "
-        f"identify knowledge gaps, for funding agencies allocating resources, and "
-        f"for clinicians staying abreast of evolving evidence.\n\n"
-        f"This study aims to fill this gap by applying a multi-dimensional "
-        f"bibliometric approach to {n} publications indexed in PubMed/MEDLINE "
-        f"from {year_range}. Through co-occurrence network analysis, community "
-        f"detection, burst detection, and frontier identification, we provide a "
-        f"data-driven portrait of the field's current state and trajectory."
+        f'This analysis describes the selected corpus on "{query}": {n} publications '
+        f'with recorded years {year_range}. Bibliometric methods summarize its '
+        "publication counts and observed cooccurrence structure. "
+        + trend_coverage_note(stats)
     )
 
     # Build discussion
     disc_parts = []
 
-    # Paragraph 1: Overall landscape
-    article = "an" if stage[0] in "aeiou" else "a"
+    # A sample-based heuristic remains a hypothesis in every consumer.
     disc_parts.append(
-        f"This bibliometric analysis of {n} publications reveals {article} {stage} "
-        f"research field with {describe_trend(stats)} publication trajectory. "
-        f"The geographic distribution of research output shows {top_country} as "
-        f"the leading contributor, consistent with its dominant role in biomedical "
-        f"research globally. The multi-national collaboration network suggests "
-        f"growing international research interest in this area."
+        f"The selected corpus contains {n} publications with {describe_trend(stats)} distribution across recorded years. "
+        + (f"The {stage} maturity label is a sample-based hypothesis, not a measured field-wide stage. "
+           if stage != "unassessed" else "Field maturity was not evaluated. ")
+        + trend_coverage_note(stats)
     )
+    if top_country:
+        disc_parts.append(f"Within the selected records, {top_country} is the most frequently represented country.")
 
     # Paragraph 2: Knowledge structure
     if n_clusters > 0 and cluster_names:
@@ -696,9 +683,9 @@ def _smart_template_narratives(
             + " as research frontiers provides direction for future investigation. "
         )
     conclusion = (
-        f"This bibliometric analysis provides a comprehensive mapping of "
-        f"\"{query}\" research, spanning {n} publications from {year_range}. "
-        f"The analysis reveals {describe_key_findings(stats, networks, stage)}. "
+        f"This bibliometric analysis describes the selected corpus on "
+        f"\"{query}\": {n} publications with recorded years {year_range}. "
+        "Its counts and selected networks describe this sample, not the whole field. "
         f"{frontier_sentence}"
         f"As the field continues to evolve, periodic bibliometric reassessment "
         f"will be valuable for tracking progress and emerging directions.\n\n"
@@ -743,22 +730,19 @@ def _smart_template_narratives_zh(
     cite_stats = stats.get("citation_stats", {})
 
     intro = (
-        f"围绕\"{query}\"的研究近年来持续增长，反映了生物医学领域的整体发展趋势。"
-        f"文献计量分析作为一种系统化定量方法，能够全面揭示研究领域的知识结构、"
-        f"核心贡献者及主题演化规律（Pritchard, 1969; Chen, 2006）。\n\n"
-        f"尽管该主题的研究产出不断增加，目前仍缺乏系统性的文献计量学研究来梳理知识基础、"
-        f"合作模式和主题演变脉络，制约了研究者对该领域全貌的把握。\n\n"
-        f"本研究通过多维文献计量方法，对PubMed/MEDLINE数据库中{year_range}年间"
-        f"收录的{n}篇文献进行系统分析，采用共现网络分析、社区检测、爆发词识别和前沿评分等"
-        f"方法，从数据驱动视角描绘该领域的现状与发展轨迹。"
+        f'本分析围绕「{query}」选入{n}篇样本文献，记录年份为{year_range}。'
+        "文献计量方法用于概括样本文献数量及其已观测的共现关系。"
+        + trend_coverage_note(stats, "zh")
     )
 
-    disc_parts = []
-    disc_parts.append(
-        f"本次文献计量分析共纳入{n}篇文献，研究领域整体处于{stage_zh}阶段。"
-        f"从地理分布来看，{top_country}是发文量最高的国家，与其在全球生物医学研究中的"
-        f"主导地位相符。多国合作网络的形成表明，该领域已吸引广泛的国际研究关注。"
-    )
+    disc_parts = [
+        f"本次样本包含{n}篇文献。"
+        + (f"{stage_zh}阶段的判断属于基于样本模式的假设，不代表已测定的领域整体阶段。"
+           if stage != "unassessed" else "本次未评估领域整体成熟阶段。")
+        + trend_coverage_note(stats, "zh")
+    ]
+    if top_country:
+        disc_parts.append(f"在本次选入样本文献中，{top_country}出现频次最高。")
 
     if n_clusters > 0 and cluster_names:
         cluster_desc = "、".join(f'\"{c}\"' for c in cluster_names[:4])
@@ -804,8 +788,8 @@ def _smart_template_narratives_zh(
     else:
         frontier_sentence = ""
     conclusion = (
-        f"本次文献计量分析对\"{query}\"领域{year_range}年间的{n}篇文献进行了系统梳理，"
-        f"揭示了该领域的核心贡献者、知识聚类结构和新兴研究趋势。"
+        f"本次文献计量分析梳理了「{query}」的{n}篇样本文献，记录年份为{year_range}，"
+        "描述了样本中的名称频次及选入网络的连接结构；这些结果不能代表领域全貌。"
         f"{frontier_sentence}"
         f"随着领域的持续演进，定期开展文献计量再评估对追踪研究进展具有重要意义。\n\n"
         f"未来研究可考虑整合Scopus、Web of Science等多数据库的引用数据，"

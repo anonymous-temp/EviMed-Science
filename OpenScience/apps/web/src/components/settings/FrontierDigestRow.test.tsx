@@ -9,6 +9,8 @@ import { FrontierDigestRow } from "./FrontierDigestRow";
 
 const client = vi.hoisted(() => ({
   fetchFrontierDigestSwitch: vi.fn(),
+  fetchFrontierNotificationSwitch: vi.fn(),
+  setFrontierNotificationSwitch: vi.fn(),
   setFrontierDigestSwitch: vi.fn(),
 }));
 // Partial: the parsers stay real; the error words are the shared dictionary's.
@@ -72,4 +74,12 @@ describe("the daily's switch under 通知", () => {
     await waitFor(() => expect(useToastStore.getState().toasts.length).toBeGreaterThan(0));
     expect(screen.getByRole("switch", { name: "前沿日报" })).toHaveAttribute("aria-checked", "true");
   });
+});
+
+it("the weekly control saves only its named switch", async () => {
+  client.fetchFrontierNotificationSwitch.mockResolvedValue(false); client.setFrontierNotificationSwitch.mockResolvedValue(true);
+  render(<FrontierDigestRow feature="on" switchKey="frontierWeekly" label="前沿周刊" />);
+  const control = screen.getByRole("switch", { name: "前沿周刊" }); await waitFor(() => expect(control).toBeEnabled());
+  await userEvent.click(control); expect(client.setFrontierNotificationSwitch).toHaveBeenCalledWith("frontierWeekly", true);
+  await waitFor(() => expect(control).toHaveAttribute("aria-checked", "true"));
 });

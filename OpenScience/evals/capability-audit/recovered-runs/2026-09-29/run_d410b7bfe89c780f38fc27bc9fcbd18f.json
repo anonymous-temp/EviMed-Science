@@ -1,0 +1,62 @@
+{
+  "runId": "run_d410b7bfe89c780f38fc27bc9fcbd18f",
+  "capability": "mendelian-randomization",
+  "capabilityVersion": "1.2.0",
+  "startedAt": "2026-09-29T08:06:46.469Z",
+  "finishedAt": "2026-09-29T09:07:43.193Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_primary_and_sensitivity_mr_with_prose_corrections",
+  "usableResults": [
+    "Both 64-SNP analyses reproduce IVW beta and SE from their own input files within 1e-10.",
+    "Primary GCST90132314: OR 1.367260091631582; sensitivity GCST003116: OR 1.5331131616658547.",
+    "MR-PRESSO, radial, Steiger and environment/replay artifacts are present; shared exposure inputs mean these are not independent replications."
+  ],
+  "limitations": [
+    "The same distance-pruning, exposure-unit and metadata/sample-size limitations remain.",
+    "Prose assigns sample-overlap bias toward the null without a supporting run calculation; the first run correctly treats its direction as uncertain."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/bmi-cad-mr/mendelian-randomization-inputs.json",
+      "sha256": "6b2339b99082f7e8bd0716282aafa715e9320efa66b0bb68e97533067de724d2",
+      "bytes": 215
+    },
+    {
+      "path": "deliverables/bmi-cad-mr/mendelian-randomization-report.md",
+      "sha256": "f2bfd00510473a5d71c3ad82e6f5842575505e8018d9b4539cb22ea2e0d7a2ab",
+      "bytes": 24263
+    },
+    {
+      "path": "deliverables/bmi-cad-mr/mendelian-randomization-run.json",
+      "sha256": "7d47003cea37d7327bc6e67a2815765bdf0f8d673d7a9ffa28aeb17686782d0c",
+      "bytes": 24860
+    },
+    {
+      "path": "deliverables/bmi-cad-mr/revision-notes.md",
+      "sha256": "e1161ff877d12e2a591b2181e880c7e2219aa61247c8ab452b701acfc2f2ffe7",
+      "bytes": 1867
+    }
+  ],
+  "transcriptSha256": "7dcfb26ac9a9a90c3304089ca42e82a05972c30a0f7e45537c890a79326a6636",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-mr-unit-assumption-d410b7bf.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-mr-overlap-bias-direction-not-observed.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-mr-metadata-n-versus-variant-n.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

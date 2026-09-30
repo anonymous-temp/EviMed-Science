@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from mr_agent.source_context import repository_scale
+
 import json
 import logging
 import os
@@ -339,6 +341,7 @@ def _dict_to_gwas_entry(item: dict) -> GWASEntry | None:
         sample_size=safe_int(item.get("sample_size")),
         nsnp=safe_int(item.get("nsnp")),
         population=str(item.get("population", "")),
+        effect_scale=repository_scale(item, source=f"OpenGWAS:{gwas_id}"),
     )
 
 

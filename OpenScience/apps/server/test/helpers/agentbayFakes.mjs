@@ -12,10 +12,38 @@ import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { mockAcceptsBrowserSession } from "../../src/mockDshRuntime.mjs";
 import { createSessionBridge } from "../../../../deploy/runtime-dsh/evimed-session-bridge.mjs";
 
 const launcherScript = fileURLToPath(new URL("../../../../deploy/runtime-dsh/evimed-session.sh", import.meta.url));
+
+// The real launcher needs GNU find/base64. Keep exercising it on Linux; the
+// macOS SDK fake emits the same manifest wire from local lstat observations.
+async function localManifest(root, excluded) {
+  let first;
+  try { first = await fs.lstat(root, { bigint: true }); }
+  catch (error) { if (error.code !== "ENOENT") throw error; return gzipSync("").toString("base64") + "\n"; }
+  const lines = [];
+  const walk = async (directory, prefix = "") => {
+    for (const name of await fs.readdir(directory)) {
+      const relative = prefix ? `${prefix}/${name}` : name;
+      if (excluded.includes(relative)) continue;
+      const file = path.join(directory, name);
+      const info = await fs.lstat(file, { bigint: true });
+      if (info.dev !== first.dev || info.isSymbolicLink()) continue;
+      if (info.isDirectory()) await walk(file, relative);
+      else if (info.isFile()) {
+        const seconds = info.mtimeNs / 1_000_000_000n;
+        const nanos = (info.mtimeNs % 1_000_000_000n).toString().padStart(9, "0");
+        lines.push(`${seconds}.${nanos} ${info.size} ${relative}\n`);
+      }
+    }
+  };
+  await walk(root);
+  return gzipSync(lines.join("")).toString("base64") + "\n";
+}
+
 
 /** @param {http.Server} server @returns {Promise<number>} */
 export function listen(server) {
@@ -269,7 +297,10 @@ export function fakeAgentBay({ root, oss, report = null }) {
             return { success: true, exitCode: 0, stdout: '{"ok":true}\n' };
           }
           if (args[1] === "manifest") {
-            const stdout = execFileSync("bash", [launcherScript, "manifest", underRoot(state.dir, args[2]), ...args.slice(3)], { encoding: "utf8" });
+            const root = underRoot(state.dir, args[2]);
+            const stdout = process.platform === "linux"
+              ? execFileSync("bash", [launcherScript, "manifest", root, ...args.slice(3)], { encoding: "utf8" })
+              : await localManifest(root, args.slice(3));
             return { success: true, exitCode: 0, stdout };
           }
           if (args[1] === "log") return { success: true, exitCode: 0, stdout: "the kernel's last words" };

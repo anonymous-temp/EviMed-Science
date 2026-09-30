@@ -89,3 +89,20 @@ test("a value outside its range stops the start by the variable's name", () => {
     assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
   }
 });
+
+test("notification and safety scans have bounded operator settings passed through deployment", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const defaulted = configUnder({});
+  assert.equal(defaulted.frontierNotifyBatch, 50);
+  assert.equal(defaulted.frontierSafetyScanBatch, 100);
+  const configured = configUnder({ OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH: "17", OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH: "123" });
+  assert.equal(configured.frontierNotifyBatch, 17); assert.equal(configured.frontierSafetyScanBatch, 123);
+  for (const [name, invalid] of [["OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH", "201"], ["OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH", "501"], ["OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH", "1.5"], ["OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH", "0"]]) {
+    assert.throws(() => configUnder({ [name]: invalid }), new RegExp(name));
+  }
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  for (const [name, value] of [["OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH", 50], ["OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH", 100]]) {
+    assert.match(example, new RegExp(`^${name}=${value}$`, "m")); assert.match(compose, new RegExp(`^\\s+${name}:`, "m"));
+  }
+});

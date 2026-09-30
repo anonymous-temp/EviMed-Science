@@ -1000,7 +1000,7 @@ def test_pairwise_selection_unattended_leaves_out_an_unverified_row(tmp_path):
         protocol=protocol(), extracted_studies=studies, rob_results=[StudyRoB.model_validate(item) for item in rob])
     assert phase.status.value == "succeeded" and len(phase.data["effects"]) == 2
     audit = {row["row_id"]: row for row in project.load_json("effect_selection_audit.json", subdir="analysis")}
-    assert audit["paperC:0"]["decision"] == "excluded" and audit["paperC:0"]["reason"] == "unverified_in_unattended_run"
+    assert audit["paperC:0"]["decision"] == "excluded" and audit["paperC:0"]["reason"] == "analysis_judgment_unavailable"
     warning = next(item for item in project.load_json("pipeline_warnings.json") if item["code"] == "unverified_results_left_out")
     assert list(warning["context"]["results"]) == ["paperC:0"]
 

@@ -5,6 +5,7 @@
   "nativePlugins": [
     "evimed-runtime-ui",
     "evimed-plugin-probe",
+    "evimed-engine-context",
     "evimed-seam-probe",
     "evimed-evidence-store",
     "evimed-web",

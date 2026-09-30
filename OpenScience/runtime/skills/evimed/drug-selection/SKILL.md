@@ -1,6 +1,6 @@
 ---
 name: drug-selection
-description: Compare candidate medicines for a formulary decision using traceable EviMed evidence, explicit institutional criteria, reproducible scoring, and human committee review.
+description: Compare candidate medicines for a formulary decision using traceable evidence, qualitative comparison, and reproducible conditional scoring with an explicit rubric.
 ---
 
 # Drug Selection Evaluation
@@ -11,9 +11,9 @@ Unless the user requests another language, interact and write deliverables in Si
 
 ## 1. Bind the decision scope
 
-Require candidate medicines and one indication. First call `drug_selection_evaluation` with `action: requirements`. Ask once for the returned missing fields in one concise group. If the user does not provide them, continue the evidence comparison but leave affected items blank and withhold quantitative ranking. Capture population, jurisdiction, care setting, comparator, budget perspective, product specification, and decision date when material. Normalize every candidate with `drug_term_normalize`.
+Require candidate medicines and one indication. First call `drug_selection_evaluation` with `action: requirements`. Ask only for missing information that prevents identifying the comparison. Continue with a qualitative evidence comparison when a scoring rubric or other optional context is absent; leave affected fields explicit and withhold unsupported quantitative ranking. Capture population, jurisdiction, care setting, comparator, budget perspective, product specification, and decision date when material. Normalize every candidate with `drug_term_normalize`.
 
-Record the institution's criteria, domain definitions, weights, thresholds, and policy version. Never invent a rubric or silently use equal weights. If no approved quantitative rubric is supplied, perform a qualitative evidence comparison and withhold ranking.
+Record the institution's criteria, domain definitions, weights, thresholds, and policy version. Never invent a rubric or silently use equal weights. If no explicit quantitative rubric is supplied, perform a qualitative evidence comparison and withhold ranking. An attributable published rubric may be replayed as a named scenario, with its version and limitations; do not imply that the institution adopted it. Delivery of the evidence comparison does not require a committee approval step.
 
 ## 2. Retrieve and freeze evidence
 
@@ -34,7 +34,7 @@ Freeze the retrieval and provenance package in `evidence-snapshot.json` before a
 
 Use only these structured domains: `pharmaceutical_properties`, `effectiveness`, `safety`, `economics`, `appropriateness`, `accessibility`, `innovation`, and `other`. For each candidate and domain, record status, rationale, and `evidenceIds` that resolve to `evidence-snapshot.json`.
 
-Keep observed source facts, validated adapter calculations, user-supplied data, and agent interpretation separate. Numeric scores may only be carried from a validated adapter or an explicit institutional rubric. Preserve scale minimum/maximum, direction, weight, denominator, normalization rule, missing-data rule, and policy version. Never turn missing, conflicting, or unassessed data into zero.
+Keep observed source facts, validated adapter calculations, user-supplied data, and agent interpretation separate. Numeric scores may only be carried from a validated adapter or an explicit rubric. Identify whether its origin is institutional policy, user-supplied rules, or a sourced published scenario. Preserve scale minimum/maximum, direction, weight, denominator, normalization rule, missing-data rule, and policy version. Never turn missing, conflicting, or unassessed data into zero.
 
 Economics is comparable only when currency, price date, dosage basis, treatment duration, jurisdiction, and perspective are all explicit. Do not invent prices, budget impact, cost-effectiveness, thresholds, or product equivalence. When these prerequisites are incomplete, avoid a definitive ranking.
 

@@ -44,6 +44,11 @@ class MRContractTests(unittest.TestCase):
             outcomeSource=source,
         )
         self.server._validate(request, schema, "request")
+        declared = {**source, "effectScale": {"unit": "SD", "transformation": "inverse_normal", "evidence": "Provided data dictionary"},
+                    "columnMapping": {**source["columnMapping"], "samplesize": "variant_n"}}
+        self.server._validate({**request, "exposureSource": declared}, schema, "request")
+        with self.assertRaises(ValueError):
+            self.server._validate({**request, "exposureSource": {**declared, "effectScale": {"unit": "SD", "status": "repository_reported"}}}, schema, "request")
         for delta in (
             {"instrumentsPreclumped": "false"},
             {"columnMapping": {}},
@@ -57,7 +62,7 @@ class MRContractTests(unittest.TestCase):
                     "request",
                 )
         self.server._validate(
-            {**request, "outcomeSource": {"type": "opengwas", "gwasId": "ieu-a-7"}},
+            {**request, "outcomeSource": {"type": "opengwas", "gwasId": "ieu-a-7", "effectScale": {"unit": "SD", "evidence": "User declaration"}}},
             schema,
             "request",
         )
@@ -115,6 +120,16 @@ class MRContractTests(unittest.TestCase):
             "mendelian_randomization", error, {}, {}
         )
         self.assertEqual(normalized["error"]["code"], "mr_input_changed")
+
+    def test_partial_scientific_artifacts_preserve_the_original_failed_state(self):
+        error = self.server.failure("mr_interpretation_failed", "Interpretation incomplete.", False, "Incomplete job.", ["Inspect available partial outputs."])
+        artifacts = [{"kind": "json", "path": "mendelian-randomization-runs/mr-test/output/partial-research.json"}]
+        normalized = self.server._normalize_tool_result("mendelian_randomization", {**error, "artifacts": artifacts}, {}, {})
+        self.assertEqual(normalized["status"], "error")
+        self.assertEqual(normalized["error"]["code"], "mr_interpretation_failed")
+        self.assertEqual(normalized["artifacts"], artifacts)
+        self.assertNotIn("data", normalized)
+        self.assertNotIn("sources", normalized)
 
 
 if __name__ == "__main__":

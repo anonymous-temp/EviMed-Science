@@ -161,6 +161,11 @@ export class LearningWorker {
     renewal.unref();
     try {
       const result = await this.#execute(job);
+      if (result?.jobCompleted === true) {
+        this.lastError = null;
+        this.lastCompletedAt = this.now().toISOString();
+        return result;
+      }
       // A run that has not finished yet is not a job that has: the bounded run
       // keeps its own identity, and re-claiming later adopts it by dispatch id
       // rather than starting a second one.
@@ -232,7 +237,7 @@ export class LearningWorker {
         /** @type {any} */ (error).code = "consolidate_action_invalid";
         throw error;
       }
-      if (action === "evaluate") {
+      if (action === "evaluate" || (action === "optimize" && this.consolidation.handbookConsolidation?.evaluate)) {
         if (this.evaluating >= 1) {
           const error = new Error("Another paired evaluation is running; this one waits its turn.");
           /** @type {any} */ (error).code = "learning_evaluation_busy";

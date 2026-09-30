@@ -24,6 +24,8 @@
  * Refuses to follow symlinks and refuses to touch `current`.
  */
 import fsp from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -351,7 +353,9 @@ async function pruneImages(removable, apply) {
 /** @returns {boolean} true when this module was started as a program, not imported by a test. */
 function invokedDirectly() {
   const entry = process.argv[1];
-  return typeof entry === "string" && import.meta.url === new URL(`file://${path.resolve(entry)}`).href;
+  if (typeof entry !== "string") return false;
+  try { return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
 }
 
 async function main() {

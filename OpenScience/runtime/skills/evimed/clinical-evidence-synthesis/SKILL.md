@@ -1568,6 +1568,13 @@ population, scale, and setting at the first mention and keep it in every section
 table cell, and abstract line. Vary sentence structure instead; never vary a
 term.
 
+When a claim is repeated in the abstract, gaps or practice context, carry its
+population and time frame with it. Total follow-up duration is different from
+the period in which an effect was demonstrated; keep interval-specific results
+separate. Preserve eligibility alternatives, upper and lower bounds, thresholds
+and their AND/OR grouping when summarizing the studied population. If an input
+is unknown, qualify that part of the interpretation and keep the supported work.
+
 - 反例：`该药可改善心绞痛症状……本品的有效率为 76%……这一制剂的缓解率优于对照组。`
   为什么是反例：三个名字读起来像三种药；`有效率` 与 `缓解率` 在原文中是两个终点，换词把终点也一起换掉了，而引文仍指向同一处。
   正例：`速效救心丸组的心绞痛缓解率为 76%，对照组为 58% [11]。另一项试验报告速效救心丸组的缓解率为 68% [12]，两项试验的缓解率均以含服后 5 分钟内症状消失为判定标准。`

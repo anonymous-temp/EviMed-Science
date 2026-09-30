@@ -35,6 +35,8 @@
     # deployment-independent form the header asks for: the bundle names the
     # variable, the deployment sets it, and a laptop with neither gets a row
     # that registers nothing and boots.
+    - id: evimed-engine-context
+      name: '@evimed/dsh-socket/plugins/engine-context'
     - id: evimed-web
       name: '@evimed/dsh-socket/plugins/web'
       config:
@@ -157,6 +159,11 @@
 # mistake away from being unset.
 - id: session-telemetry-otel
   disabled: true
+
+# Keep the native browser alongside Files and document previews in hosted web.
+# It loads pages in the client iframe; it does not add a server-side URL proxy.
+- id: ui-sidebar-browser
+  disabled: false
 
 # Everything below arrived as a NEW DEFAULT in DSH 0.1.2 and had to be turned
 # back off. They were not found by reading a changelog: the image's

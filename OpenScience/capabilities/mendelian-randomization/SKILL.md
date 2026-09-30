@@ -21,8 +21,8 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
    heterogeneity, pleiotropy, Steiger direction, or sensitivity results. Those
    values must come from the deterministic MR engines and their files.
 4. Treat zero instruments, weak instruments, unresolved sample overlap,
-   harmonization failure, and missing sensitivity checks as analysis limits or
-   blockers. Statistical significance does not by itself establish a valid
+   harmonization failure, and missing sensitivity checks as limits on the
+   affected calculations; preserve available source rows and completed results. Statistical significance does not by itself establish a valid
    causal interpretation.
 
 ## Open GWAS Catalog sources (no OpenGWAS token)
@@ -39,8 +39,8 @@ with the roles swapped.
 
 The engine reads the catalogue's harmonised files itself: exposure variants at
 p < 5e-8, clumped by PLINK against an LD reference when the deployment has one,
-otherwise one variant per 10,000 kb window (stricter than r² < 0.001 clumping,
-but no LD was measured — say so), and the outcome's rows for the same variants;
+otherwise one variant per 10,000 kb window (a distance-based approximation;
+no LD was measured and independence is not established), and the outcome's rows for the same variants;
 a variant missing from the outcome is dropped, never proxied. Report both
 accessions and PubMed ids, and the ancestry and sample size as the catalogue
 states them (`mendelian-randomization-open-sources.json`; `sampleMetadata` has
@@ -68,7 +68,8 @@ count, a filename, or statistical significance.
 For a local source, pass `type: "local_file"`, `path`, `columnMapping`, and a
 JSON boolean `instrumentsPreclumped`. The mapping must explicitly name all seven
 keys: `snp`, `beta`, `se`, `effect_allele`, `other_allele`, `eaf`, and `pval`, each
-pointing to a distinct original header. Optional `sampleSize` and `population`
+pointing to a distinct original header. Optional `samplesize` maps a per-variant
+sample-size column without replacing those values by catalogue totals. Optional `sampleSize` and `population`
 are provider declarations, not independently verified repository metadata.
 `instrumentsPreclumped: true` requires `clumpingProvenance` identifying the source
 and instrument-selection method. Do not invent this statement or change a false
@@ -121,6 +122,35 @@ not display is written to the same convention, never with more digits.
 In `mendelian-randomization-run.json` each result has `display` (instruments
 and F statistics, Steiger, MR-PRESSO, Radial MR, contamination mixture), and
 each entry of `mr_results`, `heterogeneity` and `pleiotropy` has its own.
+
+Scientific scale and denominators. Each source can carry optional `effectScale`
+with `unit`, `transformation` and source-linked `evidence`; these are declarations,
+not proof of repository confirmation. Results preserve `exposure_scale` and
+`outcome_scale` with unknown, declared, repository-reported or conflicting status.
+Use only the documented unit and transformation. Unknown units mean per source
+exposure unit, never automatically per SD from the phenotype name, F statistic or
+coefficient. A documented SD applies to that exact transformed or original trait;
+retain beta, OR and CI unchanged. Preserve a declaration/repository conflict as a
+limitation rather than choosing a convenient unit.
+
+Keep catalogue sample totals distinct from `variant_sample_sizes` and the
+`originalVariantSampleSizes` recorded before any existing catalogue-N fill.
+Neither denominator establishes exact ancestry shares in the analyzed variants.
+`sample_overlap` records unknown or possible overlap from the prefix heuristic;
+this does not measure overlapping participants, independence, or the direction
+or magnitude of bias. Discuss directional mechanisms only conditionally with
+explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
+not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+
+A failed managed job may return top-level `artifacts` with `partial-research.json`,
+`partial-research.md` and bounded scientific CSV projections. Keep the original
+failed state and error code. Inspect only the returned public artifact paths;
+private diagnostics, runner logs and model responses are not deliverables. Use
+available primary numbers when explicitly marked available. With 0–2 candidate
+or retained variants, preserve observed source/selection/harmonized rows and
+state that unsupported downstream estimates were not computed. Candidate rows
+before clumping are not independently verified instruments. Missing modules are
+not negative findings, and an incomplete job is not a successful full analysis.
 
 Direction and outliers. `display.steiger.status` is `computed`,
 `not_computable` or `failed`; when the test was not computed, say that

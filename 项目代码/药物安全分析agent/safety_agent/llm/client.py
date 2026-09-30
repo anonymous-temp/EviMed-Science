@@ -72,10 +72,13 @@ class DeepSeekClient:
         if max_retries < 1:
             raise LLMError("max_retries must be >= 1")
         # The managed launcher supplies this fixed policy; it grants no permissions.
-        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
+        managed = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") in {"high-thinking", "managed-thinking"}
+        self._gateway_effort = os.getenv("LLM_REASONING_EFFORT", "high") if managed else None
+        if self._gateway_effort is not None and self._gateway_effort not in {"off", "low", "high", "max"}:
+            raise ValueError("Invalid managed reasoning effort")
         self._reasoning_reserve_tokens = int(os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096"))
         self._max_output_tokens = int(os.getenv("DEEPSEEK_MAX_OUTPUT_TOKENS", "384000"))
-        if self._gateway_high_thinking:
+        if self._gateway_effort in {"low", "high", "max"}:
             timeout = max(timeout, float(os.getenv("DEEPSEEK_PRO_TIMEOUT_SECONDS", "300")))
         self._flash_model = flash_model
         self._pro_model = pro_model
@@ -126,7 +129,7 @@ class DeepSeekClient:
         json_mode: bool = False,
     ) -> str:
         """One chat completion; returns the assistant message content."""
-        thinking_enabled = tier == "pro" or self._gateway_high_thinking
+        thinking_enabled = self._gateway_effort != "off" if self._gateway_effort is not None else tier == "pro"
         payload: dict[str, Any] = {
             "model": self.model_for(tier),
             "messages": messages,
@@ -137,7 +140,7 @@ class DeepSeekClient:
         if not thinking_enabled:
             payload["temperature"] = temperature
         else:
-            payload["reasoning_effort"] = "high"
+            payload["reasoning_effort"] = self._gateway_effort or "high"
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body = await self._complete_with_budget(payload)
@@ -160,7 +163,7 @@ class DeepSeekClient:
 
     async def _complete_with_budget(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Reserve managed reasoning output and retry a truncated answer once."""
-        if not self._gateway_high_thinking:
+        if self._gateway_effort not in {"low", "high", "max"}:
             return await self._post("/chat/completions", payload)
         answer_tokens = payload["max_tokens"]
         budget = min(

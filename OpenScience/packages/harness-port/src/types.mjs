@@ -47,7 +47,7 @@
 
 /**
  * A decision on entering one step.
- * @typedef {{ allow: true, messages?: readonly InjectedMessage[] } | { allow: false, code: string, reason: string }} StepDecision
+ * @typedef {{ allow: true, messages?: readonly InjectedMessage[], discardOnReject?: boolean, onEntered?: () => void | Promise<void> } | { allow: false, code: string, reason: string }} StepDecision
  */
 
 /**

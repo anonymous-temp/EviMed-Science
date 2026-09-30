@@ -45,7 +45,7 @@ const bundledEviMedMcpDir = path.resolve(
 
 /** DeepSeek's thinking-effort levels, exactly. Anything else is a typo that
  *  would otherwise ride to the provider on every call. */
-export const DEEPSEEK_REASONING_EFFORTS = Object.freeze(["low", "high", "max"]);
+export const DEEPSEEK_REASONING_EFFORTS = Object.freeze(["off", "low", "high", "max"]);
 
 /** @param {unknown} value */
 function parseReasoningEffort(value) {
@@ -298,6 +298,8 @@ function frontierSettings(overrides) {
     frontierLeaseMs: integer("frontierLeaseMs", "OPEN_SCIENCE_FRONTIER_LEASE_MS", 600_000, 60_000, 86_400_000),
     frontierModel: model,
     frontierDailyTime: dailyTime,
+    frontierNotifyBatch: integer("frontierNotifyBatch", "OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH", 50, 1, 200),
+    frontierSafetyScanBatch: integer("frontierSafetyScanBatch", "OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH", 100, 1, 500),
     frontierTimeZone: timeZone,
     // The pipeline's own model money per day (frontierPipeline.mjs gates on
     // it: past 80% only urgent items are edited, past 100% none); 0 is no
@@ -564,10 +566,9 @@ function mediaMarketSettings(overrides) {
  *   write. A second copy of one secret is a second thing to rotate.
  * - Both addresses are full endpoint URLs, and both must be https unless they
  *   are loopback: the key travels in an `Authorization` header on every call.
- * - **The rate is a deployment fact and has no default.** 0 — the default —
- *   means 「not configured」 and the module settles nothing while saying so. A
- *   guessed 灵豆-per-CNY rate would charge every user wrongly and look exactly
- *   like a working deployment, which is the one failure mode money cannot have.
+ * - The owner approved one credit per CNY on 2026-09-29. An explicit 0 still
+ *   means not configured. Settlement also requires the separate enabled
+ *   switch and actual billing endpoints; the conversion alone spends nothing.
  *
  * @param {Record<string, any>} overrides
  */
@@ -611,7 +612,7 @@ function evimedCreditsSettings(overrides) {
   if (enabled && keyFile && !path.isAbsolute(keyFile)) {
     throw new Error("OPEN_SCIENCE_EVIMED_API_KEY_FILE must be an absolute path when 灵豆 settlement is enabled.");
   }
-  const rateValue = read("evimedCreditsPerCny", "OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY", 0);
+  const rateValue = read("evimedCreditsPerCny", "OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY", 1);
   const rate = Number(rateValue);
   if (!Number.isFinite(rate) || rate < 0 || rate > 100_000) {
     throw new Error(`OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY must be a number from 0 to 100000, got ${JSON.stringify(rateValue)}.`);
@@ -1000,6 +1001,11 @@ export function loadConfig(overrides = {}) {
     });
     return loaded.error === "typesafe_api_key_file_not_regular" ? { value: "", source: "none", error: null } : loaded;
   })();
+  const toolUniverseSecret = preferredFileSecret(overrides, {
+    overrideValue: "toolUniverseApiToken", overrideFile: "toolUniverseApiTokenFile",
+    valueEnv: "OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN", fileEnv: "OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_FILE",
+    codePrefix: "tooluniverse_api_token", defaultFile: localSecretFile("tooluniverse.token"), allowGroupRead: true,
+  });
   const openVikingSecret = preferredFileSecret(overrides, {
     overrideValue: "openVikingApiKey",
     overrideFile: "openVikingApiKeyFile",
@@ -1181,11 +1187,10 @@ export function loadConfig(overrides = {}) {
     restoreDrillAck: overrides.restoreDrillAck ?? boolEnv("OPEN_SCIENCE_RESTORE_DRILL_ACK", false),
     authMode,
     devAuth,
-    // Whether anyone may create an account here. Off by default: a deployment
-    // that turns it on is choosing to be open, and that choice belongs to the
-    // operator rather than to whichever build happens to be running.
+    // The owner opened self-registration on 2026-09-29. A deployment can
+    // still explicitly disable it; existing account passwords stay unchanged.
     selfRegistrationEnabled:
-      overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", false),
+      overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", true),
     oidcIssuer: overrides.oidcIssuer ?? process.env.OPEN_SCIENCE_OIDC_ISSUER ?? "",
     oidcClientId: overrides.oidcClientId ?? process.env.OPEN_SCIENCE_OIDC_CLIENT_ID ?? "",
     oidcClientAuthMethod:
@@ -1599,7 +1604,7 @@ export function loadConfig(overrides = {}) {
     // read the same variable (deploy/web/docker-compose.yml), so one lever
     // moves both sides.
     engineModelGatewayEnabled:
-      overrides.engineModelGatewayEnabled ?? boolEnv("OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED", false),
+      overrides.engineModelGatewayEnabled ?? boolEnv("OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED", true),
     // Six hours: twice what the release audit allows one engine job
     // (`run_specialist_jobs.py --job-timeout-seconds`, 10800), and short enough
     // that a credential copied out of a job stops working the same day.
@@ -1664,10 +1669,15 @@ export function loadConfig(overrides = {}) {
         : `http://127.0.0.1:${port}/internal/model/v1`),
     // The ToolUniverse sidecar's MCP endpoint. Empty by default: a deployment
     // that does not run one emits no MCP row and is unchanged. The runtime
-    // container reaches this over the internal network; the sidecar, not the
-    // container, is what holds ToolUniverse's own credentials.
+    // control plane reaches this endpoint and holds its service credential.
+    // Runtimes receive only the workload-authenticated bridge address.
     toolUniverseMcpUrl:
       overrides.toolUniverseMcpUrl ?? process.env.OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL ?? "",
+    toolUniverseApiToken: toolUniverseSecret.value,
+    toolUniverseApiTokenError: toolUniverseSecret.error === "tooluniverse_api_token_file_not_regular" ? null : toolUniverseSecret.error,
+    toolUniverseGatewayInternalUrl: overrides.toolUniverseGatewayInternalUrl
+      ?? process.env.OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL
+      ?? (production ? "http://open-science-web:8787/internal/tooluniverse/v1/rpc" : `http://127.0.0.1:${port}/internal/tooluniverse/v1/rpc`),
     publicSourceGatewayInternalUrl:
       overrides.publicSourceGatewayInternalUrl ??
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL ??

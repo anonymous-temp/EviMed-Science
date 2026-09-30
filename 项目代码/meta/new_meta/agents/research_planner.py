@@ -183,7 +183,14 @@ class ResearchPlanner(BaseAgent):
                              f"for the {protocol.primary_outcome_type or 'declared'} primary outcome", level="warning")
                 normalize_protocol_method_fields(protocol)
                 validate_protocol_method(protocol)
-                receipt = self.check_scope(question, protocol, accept_deviations=True)
+                try:
+                    receipt = self.check_scope(question, protocol, accept_deviations=True)
+                except Exception as exc:
+                    from new_meta.core.protocol_scope import unverified_scope_receipt
+                    receipt = unverified_scope_receipt(question, protocol, exc)
+                    protocol._scope_receipt = receipt
+                    self.log(receipt["reason"], level="warning")
+                    return protocol
                 deviations = receipt.get("deviations") or []
                 outcome_roles_only = bool(deviations) and all(item["kind"] == "outcome_role" for item in deviations)
                 last_attempt = attempt == PLANNER_MAX_ATTEMPTS - 1

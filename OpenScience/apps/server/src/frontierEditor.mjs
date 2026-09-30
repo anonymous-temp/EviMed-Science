@@ -674,7 +674,9 @@ export function verifyWriting(answer, fields, input) {
 
 /**
  * @typedef {{ sourceName: string, titleRaw: string, titleZh?: string | null, summaryZh?: string | null,
- *             publishedAt?: string | null }} FrontierSameEventReport
+ *             publishedAt?: string | null, timelineAt?: string | null, identityKey?: string | null, doi?: string | null, pmid?: string | null,
+ *             registryIds?: string[] | null, sourceType?: string | null, evidenceType?: string | null, eventTitle?: string | null,
+ *             eventFirstAt?: string | null, eventLastAt?: string | null }} FrontierSameEventReport
  */
 
 /** @param {FrontierSameEventReport} report */
@@ -686,6 +688,16 @@ function reportForModel(report) {
     title: clip(report?.titleRaw, 300),
     ...(report?.titleZh && report.titleZh !== report.titleRaw ? { title_zh: clip(report.titleZh, 120) } : {}),
     ...(report?.summaryZh ? { summary: clip(report.summaryZh, 300) } : {}),
+    ...(report?.identityKey ? { identity_key: clip(report.identityKey, 240) } : {}),
+    ...(report?.doi ? { doi: clip(report.doi, 180) } : {}),
+    ...(report?.pmid ? { pmid: clip(report.pmid, 32) } : {}),
+    ...(report?.registryIds?.length ? { registry_ids: report.registryIds.slice(0, 8).map((id) => clip(id, 64)) } : {}),
+    ...(report?.evidenceType ? { evidence_type: clip(report.evidenceType, 80) } : {}),
+    ...(report?.sourceType ? { source_type: clip(report.sourceType, 40) } : {}),
+    ...(report?.eventTitle ? { event_title: clip(report.eventTitle, 200) } : {}),
+    ...(isoDay(report?.timelineAt) ? { timeline_date: isoDay(report.timelineAt) } : {}),
+    ...(isoDay(report?.eventFirstAt) ? { event_first_date: isoDay(report.eventFirstAt) } : {}),
+    ...(isoDay(report?.eventLastAt) ? { event_last_date: isoDay(report.eventLastAt) } : {}),
   };
 }
 

@@ -28,8 +28,8 @@
  */
 
 import { errorMessage } from '../src/runPolicy.mjs'
-import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onPreStep, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
-import { skillBodyDigestAsync } from '../src/digest.mjs'
+import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onPreStep, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
+import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod } from '../src/learnedMethods.mjs'
 
 const Schema = await configSchema()
@@ -185,6 +185,47 @@ export async function apply(ctx, config) {
       root: !isSubagentSession(payload?.agent),
     })))
   }
+
+  // Native inputs bypass shell dispatch. Only messages removed from this step's
+  // inbox are eligible; a queued future input is never selected from history.
+  if (config.recallUrl) {
+    /** @type {Set<string>} */ const attached = new Set()
+    ctx.effect(() => onPreStep(ctx, async (step, payload) => {
+      if (!step.root || !payload?.agent || !step.sessionId) return { allow: true }
+      const key = (/** @type {string} */ requestId) => JSON.stringify([step.sessionId, step.turn, requestId])
+      const inputs = await Promise.all(stepUserInputs(payload).filter(input => !attached.has(key(input.requestId)))
+        .map(async input => ({ requestId: input.requestId, textDigest: await sha256Hex(input.text) })))
+      if (!inputs.length) return { allow: true }
+      const response = await callControlPlane(ctx, config, 'handbook-context', { sessionId: step.sessionId, inputs })
+      if (!response.ok) {
+        ctx.get('evimedDiagnostics')?.degrade?.(`native handbook context not read: ${response.message}`)
+        return { allow: true }
+      }
+      const contexts = Array.isArray(response.data?.contexts) ? response.data.contexts : []
+      /** @type {{requestId:string,digest:string}[]} */ const receipts = []
+      let bytes = 0
+      for (const item of contexts.slice(0, 16)) {
+        if (!inputs.some(input => input.requestId === item?.requestId) || receipts.some(receipt => receipt.requestId === item.requestId)
+          || typeof item.context !== 'string' || !item.context || !/^[a-f0-9]{64}$/.test(item.digest)) continue
+        bytes += new TextEncoder().encode(item.context).length + 1
+        if (bytes > 8192) break
+        injectContext(payload.agent, item.context, name)
+        receipts.push({ requestId: item.requestId, digest: item.digest })
+      }
+      return { allow: true, discardOnReject: true, onEntered: async () => {
+        if (!receipts.length) return
+        for (const receipt of receipts) attached.add(key(receipt.requestId))
+        while (attached.size > 1000) {
+          const oldest = attached.values().next().value
+          if (oldest === undefined) break
+          attached.delete(oldest)
+        }
+        const acknowledged = await callControlPlane(ctx, config, 'handbook-attached', { sessionId: step.sessionId, receipts })
+        if (!acknowledged.ok) ctx.get('evimedDiagnostics')?.degrade?.(`native handbook attachment not recorded: ${acknowledged.message}`)
+      } }
+    }, payload => ({ first: false, root: !isSubagentSession(payload?.agent) })))
+  }
+
 }
 
 /**

@@ -16,7 +16,7 @@
 // whose path is exactly what the ledger's `evidence` field wants.
 //
 // It does not update the ledger. An acceptance that writes its own verdict is not
-// an acceptance; a human reads the result and the package, then edits the row.
+// an acceptance; the result and package are reviewed separately before the row changes.
 //
 // Usage:
 //   OPEN_SCIENCE_ACCEPTANCE_PASSWORD_FILE=<path> \
@@ -86,6 +86,8 @@ if (args.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 // reports failure for a run that was still going.
 const timeoutMs = Number(args["timeout-ms"] ?? 7_200_000);
 const pollMs = Number(args["poll-ms"] ?? 15_000);
+// Downloading partial results is best effort, with one budget for the whole capture.
+const artifactTimeoutMs = Number(args["artifact-timeout-ms"] ?? 30_000);
 
 /** @type {Record<string, string>} */
 let auth = {};
@@ -110,11 +112,11 @@ async function api(route, init = {}) {
  * killed the watcher while the run itself carried on to completion on the
  * server, unobserved. The run is the expensive part; the watcher is not, and it
  * must not be the fragile one.
- * @param {string} route
+ * @param {string} route @param {any} [init]
  */
-async function pollApi(route) {
+async function pollApi(route, init = {}) {
   try {
-    return await api(route);
+    return await api(route, init);
   } catch (error) {
     return { status: 0, body: null, response: null, error: String(error?.message ?? error) };
   }
@@ -135,8 +137,8 @@ const say = (message) => process.stdout.write(`${stamp()} ${message}\n`);
  */
 function renderBrief(brief) {
   const inputs = brief?.inputs ?? {};
-  // Only the clinical-evidence family phrases its brief as a `question` with
-  // PICO fields; the other harnesses declare the capability manifest's own
+  // PICO-style briefs phrase their request as a `question` with clinical
+  // fields; the other harnesses declare the capability manifest's own
   // input names (topic, drug, exposure, section, ...). Those render as one
   // `name: value` line each, in the brief's order, so the run receives every
   // declared input and nothing the harness made up.
@@ -172,12 +174,21 @@ function renderBrief(brief) {
     lines.push("\nDatasets:");
     for (const dataset of inputs.datasets) lines.push(`- ${typeof dataset === "string" ? dataset : JSON.stringify(dataset)}`);
   }
+  for (const [key, label] of [["studies", "Supplied study reports"], ["sourceNotes", "Supplied source notes"]]) {
+    if (!Array.isArray(inputs[key]) || !inputs[key].length) continue;
+    lines.push(`\n${label}:`);
+    for (const value of inputs[key]) lines.push(`- ${typeof value === "string" ? value : JSON.stringify(value)}`);
+  }
   return lines.join("\n").trim();
 }
 
 async function main() {
   if (!capabilityId) throw new Error("--capability is required");
   if (!briefId) throw new Error("--brief is required");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || !Number.isSafeInteger(pollMs) || pollMs < 1
+    || !Number.isSafeInteger(artifactTimeoutMs) || artifactTimeoutMs < 0) {
+    throw new Error("Timeout budgets must be nonnegative and --poll-ms must be a positive integer");
+  }
 
   const ledger = JSON.parse(await readFile(path.join(repoRoot, "evals", "acceptance-ledger.json"), "utf8"));
   const row = ledger.capabilities.find((/** @type {any} */ entry) => entry.id === capabilityId);
@@ -315,6 +326,7 @@ async function main() {
   // "it is still going, come and watch".
   let runId;
   let run;
+  let dispatchedAt = null;
   let promptSource = promptFile ? `file ${path.basename(promptFile)}` : "rendered brief";
   if (geoTrigger && geo) {
     // The GEO module's own run: 导出 or 让 AI 做, dispatched by its orchestrator
@@ -351,6 +363,7 @@ async function main() {
     say(`attached to run=${runId} (${run.status})`);
   } else {
     const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
+    dispatchedAt = stamp();
     const dispatched = await api("/api/agent-runs/dispatch", {
       method: "POST",
       body: JSON.stringify({ sessionId, dispatchId, text, automated: true }),
@@ -363,24 +376,36 @@ async function main() {
     say(`dispatched run=${runId} prompt=${text.length} chars`);
   }
 
+  sessionId = String(run.sessionId ?? sessionId);
   const deadline = Date.now() + timeoutMs;
-  const pending = new Set(["queued", "dispatching", "running"]);
+  const terminal = new Set(["succeeded", "failed", "canceled"]);
   let lastPhase = "";
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-    const list = await pollApi("/api/agent-runs");
+  let lastPollProblem = null;
+  while (!terminal.has(run.status) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollMs, deadline - Date.now())));
+    if (Date.now() >= deadline) break;
+    const list = await pollApi("/api/agent-runs", { signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, deadline - Date.now()))) });
     if (list.status !== 200) {
+      lastPollProblem = "poll_unavailable";
       say(list.error ? `poll could not reach the deployment (${list.error}); retrying` : `poll returned ${list.status}; retrying`);
       continue;
     }
     const found = list.body.data.find((/** @type {any} */ entry) => entry.id === runId);
-    if (!found) { say("run not in the list yet"); continue; }
+    if (!found) { lastPollProblem = "run_unavailable"; say("run not in the list yet"); continue; }
+    lastPollProblem = null;
     run = found;
+    sessionId = String(run.sessionId ?? sessionId);
     const phase = `${run.status}/${run.phase ?? "-"} msgs=${run.observedMessages ?? 0} tools=${run.observedToolCalls ?? 0} repairs=${run.attempts ?? 0}`;
     if (phase !== lastPhase) { say(phase); lastPhase = phase; }
-    if (!pending.has(run.status)) break;
   }
-  if (pending.has(run.status)) say(`TIMEOUT after ${Math.round(timeoutMs / 60000)} min; the run is still ${run.status}`);
+  const observedAt = stamp();
+  const observation = { status: terminal.has(run.status) ? "terminal" : "pending",
+    reason: terminal.has(run.status) ? "terminal" : lastPollProblem ?? "deadline" };
+  if (observation.status === "pending") {
+    say(`PENDING after ${Math.round(timeoutMs / 60000)} min; last observed run status=${run.status}. The run continues.`);
+    const quote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
+    say(`Resume: node scripts/ops/capability-acceptance.mjs --capability ${quote(capabilityId)} --brief ${quote(briefId)} --base ${quote(base)} --project ${quote(projectId)} --run ${quote(runId)}${args.insecure ? " --insecure" : ""}`);
+  }
 
   // A second run of one brief on one day gets its own directory: writing into
   // the first one replaced its run.json, and the record of a delivered or
@@ -398,7 +423,9 @@ async function main() {
     session: sessionId,
     runId,
     agentVersion: agent.version,
-    dispatchedAt: stamp(),
+    dispatchedAt: run.startedAt ?? run.createdAt ?? dispatchedAt,
+    observedAt,
+    observation,
     // What the run was asked: this driver's text when it dispatched, the run's
     // own record when the GEO module did or the run was started elsewhere.
     prompt: geoTrigger || attachRunId ? String(run.question ?? "") : text,
@@ -406,6 +433,8 @@ async function main() {
     ...(geo ? { geoProject: geo.id } : {}),
     outcome: {
       status: run.status,
+      startedAt: run.startedAt ?? null,
+      finishedAt: run.finishedAt ?? null,
       errorCode: run.errorCode ?? null,
       verification: run.verification ?? null,
       artifacts: run.artifacts ?? [],
@@ -425,8 +454,12 @@ async function main() {
   // worth keeping; which is which is already recorded above.
   const wanted = [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])];
   let saved = 0;
+  const captureDeadline = Date.now() + artifactTimeoutMs;
   for (const relative of wanted.slice(0, 40)) {
-    const read = await api("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }) });
+    const remaining = captureDeadline - Date.now();
+    if (remaining <= 0) { say("artifact capture budget exhausted; the observation and files already saved are preserved"); break; }
+    const read = await pollApi("/api/commands/read_artifact", { method: "POST", body: JSON.stringify({ path: relative }),
+      signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, remaining))) });
     if (read.status !== 200 || read.body?.data?.encoding !== "utf8") { say(`could not read ${relative} (${read.status})`); continue; }
     const target = path.join(outDir, "deliverable", relative.replace(/^(\.\.\/)+/, ""));
     await mkdir(path.dirname(target), { recursive: true });
@@ -440,12 +473,10 @@ async function main() {
   for (const notice of (run.qualityNotices ?? []).slice(0, 10)) say(`notice: ${typeof notice === "string" ? notice.slice(0, 300) : `[${notice?.severity ?? "advice"}] ${notice?.title ?? ""} — ${String(notice?.text ?? "").slice(0, 300)}`}`);
   say(`results: ${path.relative(repoRoot, outDir)}`);
 
-  // Release the runtime slot. Best effort: a held slot is an operational
-  // nuisance, not a reason to report the acceptance itself as failed.
-  await api("/api/commands/stop_runtime", { method: "POST", body: "{}" }).catch(() => null);
-
-  // `accepted` in the ledger means the gate accepted it. Anything else is not.
-  process.exit(run.status === "succeeded" && !run.verification ? 0 : 1);
+  // Watching a run never authorizes canceling it or another session sharing
+  // its project. The existing idle manager owns runtime reclamation.
+  // 3 is an unfinished observation, 1 a terminal non-acceptance, 2 a driver error.
+  process.exit(observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1);
 }
 
 main().catch((error) => {

@@ -82,10 +82,9 @@ export const LEARNED_METHOD_RECORD_TYPE = "learned-method";
  * It is about how to pass EviMed's checks, which is the capability's handbook
  * (the L2 loop, spec §19.17), not how this person works. Both methods the loop
  * learnt in production were of this kind and sat in the researcher's own list
- * as 「我的做法」 (audit 2026-09-26, L-G3). The L2 store and its pull-request
- * producer do not exist yet, so such a lesson is kept here, under its own
- * record type: never listed as the researcher's, never mounted, never exported
- * in a pack, and there for the handbook loop to read when it is built.
+ * as 「我的做法」 (audit 2026-09-26, L-G3). Such a lesson stays under its own
+ * record type: never listed as the researcher's or exported in a pack. The
+ * handbook loop applies it as a separate owner-scoped capability supplement.
  */
 export const HANDBOOK_CANDIDATE_RECORD_TYPE = "handbook-candidate";
 
@@ -98,8 +97,8 @@ export function learnedMethodId(name) {
 }
 
 /** @param {string} name @returns {string} */
-export function handbookCandidateId(name) {
-  return `method:handbook:${name}`;
+export function handbookCandidateId(name, capabilityId = "") {
+  return `method:handbook:${capabilityId ? `${capabilityId}:` : ""}${name}`;
 }
 
 /** @param {any} document @returns {boolean} */
@@ -340,27 +339,44 @@ export class LearningService {
   }
 
   /**
-   * Keep a lesson the platform's reviewer taught, outside the researcher's
-   * library (`HANDBOOK_CANDIDATE_RECORD_TYPE`).
-   *
-   * One record per method name, replaced in place by a later lesson of the
-   * same name: this is a staging shelf for the capability handbook, not a
-   * second method ledger, and nothing mounts, lists, exports or promotes what
-   * is on it. The same validation as a method, because the handbook loop will
-   * read it as one.
+   * Recheck a handbook with the same body, dependency and provenance rules as a method.
    * @param {string} userId
    * @param {{frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], display?: unknown, steps?: unknown, capabilityId?: string | null}} input
    */
+  async validateHandbook(userId, input) {
+    return this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
+  }
+
+  /** Queue exactly one application per owner, capability and reviewed content.
+   * @param {string} userId @param {any} candidate @param {{retryOf?:string,transactionClient?:any}} [options] */
+  async enqueueHandbook(userId, candidate, { retryOf, transactionClient = null } = {}) {
+    if (!this.jobs || candidate?.payload?.recordType !== HANDBOOK_CANDIDATE_RECORD_TYPE) return null;
+    const { capabilityId, contentDigest, provenance } = candidate.payload;
+    return this.jobs.enqueue(userId, "consolidate", {
+      ...(retryOf ? { retryOf } : {}),
+      action: "optimize", candidateId: candidate.id, candidateDigest: contentDigest,
+      candidateRevision: candidate.payload.candidateRevision ?? candidate.revision, capabilityId,
+      sourceRunId: provenance?.runId ?? null, sourceProjectId: provenance?.sourceProjectId ?? null,
+    }, { idempotencyKey: `handbook:${sha256(JSON.stringify([userId, candidate.id, capabilityId, contentDigest, retryOf ?? null]))}`, projectId: null, transactionClient });
+  }
+
+  /** One record per capability and name, separate from personal methods. Prior digest outcomes are preserved.
+   * @param {string} userId @param {any} input */
   async recordHandbookCandidate(userId, input) {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
     const name = String(input.frontmatter?.name ?? "");
-    const id = handbookCandidateId(name);
+    const id = handbookCandidateId(name, input.capabilityId ?? "");
     const current = await this.documents.get(userId, "method", productId(id, "method"));
+    if (current?.payload?.contentDigest === digest) {
+      await this.enqueueHandbook(userId, current);
+      return current;
+    }
     const steps = cleanMethodSteps(input.steps);
     const payload = {
       recordType: HANDBOOK_CANDIDATE_RECORD_TYPE,
-      // Never anything else: a handbook entry takes effect by a reviewed
-      // change to the capability, never by a status on this row.
+      candidateRevision: (current?.revision ?? 0) + 1,
+      dispositions: { ...(current?.payload?.dispositions ?? {}), [digest]: { state: "queued", at: this.now().toISOString() } },
+      // Applied supplements have a separate record type and revision history.
       status: "candidate",
       frontmatter: input.frontmatter,
       body: input.body,
@@ -375,7 +391,9 @@ export class LearningService {
       updatedAt: this.now().toISOString(),
     };
     await this.documents.put(userId, "method", id, payload, { expectedRevision: current?.revision ?? 0, projectId: null });
-    return this.documents.get(userId, "method", id);
+    const candidate = await this.documents.get(userId, "method", id);
+    await this.enqueueHandbook(userId, candidate);
+    return candidate;
   }
 
   /**
@@ -456,7 +474,7 @@ export class LearningService {
   /** @param {string} userId @param {string} methodId */
   async getMethod(userId, methodId) {
     const document = await this.documents.get(userId, "method", productId(methodId, "method"));
-    if (!document) throw new HttpError(404, "method_not_found", "The method is unavailable.");
+    if (!isLearnedMethod(document)) throw new HttpError(404, "method_not_found", "The method is unavailable.");
     return document;
   }
 

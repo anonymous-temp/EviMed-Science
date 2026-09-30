@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from new_meta.core.manuscript_facts import build_manuscript_facts
+from new_meta.core.pooling_method_text import describe_pooling_method, primary_method_text
 from new_meta.schemas.synthesis_result import SynthesisResultEnvelope
 
 
@@ -128,6 +129,19 @@ def build_method_manuscript(
         raise ValueError(
             f"method manuscript renderer is not implemented for {envelope.family.value}"
         )
+    from new_meta.core.autonomous_analysis import admitted_result_ids
+    if admitted_result_ids(project).intersection(envelope.input_result_ids):
+        # The fixed templates predate model selection with explicit uncertainty.
+        # A supported estimate is not an independently verified estimate.
+        manuscript = re.sub(r"\bverified\b", "source-supported", manuscript)
+        manuscript = manuscript.replace("来源引文未核验且未经人工裁决的结果行不合格", "缺少可用来源支持的数值不进入合并")
+        for phrase in ("经来源核验的", "来源已核验的", "来源已核验", "经核验的", "经核验", "已核验"):
+            manuscript = manuscript.replace(phrase, "有来源支持的" if phrase.endswith("的") else "有来源支持")
+    limitations = [row["message"] for row in facts.get("pipeline_warnings", [])
+                   if row.get("code") in {"analysis_assumptions", "partial_screening", "partial_extraction",
+                                           "risk_of_bias_unavailable", "protocol_scope_unverified"}]
+    if limitations:
+        manuscript += "\n\n## Evidence limitations\n\n" + "\n\n".join(limitations) + "\n"
     validation = _validate_method_manuscript(
         manuscript,
         envelope=envelope,
@@ -226,13 +240,14 @@ def _render_ipd_meta_en(*, protocol, studies, rob_results, prisma, search_query,
         if modification
         else ""
     )
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# Individual participant data meta-analysis of {protocol.pico.intervention} for {protocol.pico.outcome_primary}
 
 ## Abstract
 
 **Background:** This review estimated the treatment effect of {protocol.pico.intervention} versus {protocol.pico.comparator} for {protocol.pico.outcome_primary} using individual participant data from eligible parallel randomized trials.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified sources'} and fitted one participant-level {payload.get('diagnostics', {}).get('study_model', 'outcome-specific')} model per study. Study treatment coefficients were pooled by two-stage restricted maximum likelihood; Hartung-Knapp-Sidik-Jonkman and one-stage common-effect models were sensitivity analyses. Required model data were analyzed only when complete.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified sources'} and fitted one participant-level {payload.get('diagnostics', {}).get('study_model', 'outcome-specific')} model per study. Study treatment coefficients were pooled in two stages. {method_text} A one-stage common-effect model was also fitted as a sensitivity analysis. Required model data were analyzed only when complete.
 
 **Results:** {envelope.n_studies} studies contributed {payload.get('n_participants')} participants. The pooled {estimate.measure} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}{prediction_text}). Tau-squared was {float(payload.get('tau_squared') or 0):.4f} and I-squared was {float(payload.get('i_squared') or 0):.1f}%.
 
@@ -260,7 +275,7 @@ Treatment was coded 0/1 within every trial. The modeled covariates were {', '.jo
 
 ### Statistical analysis
 
-For each study, {'logistic regression estimated a log odds ratio' if estimate.measure == 'OR' else 'a Cox partial-likelihood model estimated a log hazard ratio' if estimate.measure == 'HR' else 'linear regression estimated a mean difference'}. Study coefficients and model-based variances were combined with inverse-variance random effects using restricted maximum likelihood. Wald intervals formed the primary result; Hartung-Knapp-Sidik-Jonkman inference was retained as a small-sample sensitivity. The one-stage sensitivity model used fixed study intercepts for binary or continuous outcomes and a study-stratified Cox model for time-to-event outcomes. The exact participant rows, dataset hashes, compiled method plan, study-level coefficients, and deterministic outputs were retained.
+For each study, {'logistic regression estimated a log odds ratio' if estimate.measure == 'OR' else 'a Cox partial-likelihood model estimated a log hazard ratio' if estimate.measure == 'HR' else 'linear regression estimated a mean difference'}. {method_text} The one-stage sensitivity model used fixed study intercepts for binary or continuous outcomes and a study-stratified Cox model for time-to-event outcomes. The exact participant rows, dataset hashes, compiled method plan, study-level coefficients, and deterministic outputs were retained.
 
 ## Results
 
@@ -324,13 +339,14 @@ def _render_ipd_meta_zh(*, protocol, studies, rob_results, prisma, search_query,
         else ""
     )
     study_model = payload.get("diagnostics", {}).get("study_model", "结局特异模型")
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# {protocol.pico.intervention}治疗{protocol.pico.outcome_primary}的个体参与者数据Meta分析
 
 ## 摘要
 
 **背景：** 本评价使用平行随机试验的个体参与者数据，估计{protocol.pico.intervention}相对于{protocol.pico.comparator}对{protocol.pico.outcome_primary}的治疗效果。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设来源')}，每项研究拟合一个参与者层面的{study_model}，再以两阶段限制性最大似然合并治疗系数；Hartung-Knapp-Sidik-Jonkman和单阶段共同效应模型为敏感性分析。所需模型数据必须完整。
+**方法：** 检索{('、'.join(protocol.databases) or '预设来源')}，每项研究拟合一个参与者层面的{study_model}，再以两阶段方法合并治疗系数。{method_text}另拟合单阶段共同效应敏感性模型。所需模型数据必须完整。
 
 **结果：** {envelope.n_studies}项研究共纳入{payload.get('n_participants')}名参与者。合并{estimate.measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}{prediction_text}），τ²={float(payload.get('tau_squared') or 0):.4f}，I²={float(payload.get('i_squared') or 0):.1f}%。
 
@@ -358,7 +374,7 @@ def _render_ipd_meta_zh(*, protocol, studies, rob_results, prisma, search_query,
 
 ### 统计分析
 
-每项研究采用{'Logistic回归估计log优势比' if estimate.measure == 'OR' else 'Cox部分似然模型估计log风险比' if estimate.measure == 'HR' else '线性回归估计均数差'}，再用限制性最大似然的逆方差随机效应模型合并研究系数及模型方差。主要结果采用Wald区间，HKSJ推断为小样本敏感性分析。二分类和连续结局的单阶段敏感性模型纳入固定研究截距，生存结局采用研究分层Cox模型。精确参与者行、数据集哈希、方法计划、研究系数和确定性输出均被保存。
+每项研究采用{'Logistic回归估计log优势比' if estimate.measure == 'OR' else 'Cox部分似然模型估计log风险比' if estimate.measure == 'HR' else '线性回归估计均数差'}，再合并研究系数及模型方差。{method_text}二分类和连续结局的单阶段敏感性模型纳入固定研究截距，生存结局采用研究分层Cox模型。精确参与者行、数据集哈希、方法计划、研究系数和确定性输出均被保存。
 
 ## 结果
 
@@ -424,6 +440,7 @@ def _render_dose_response_en(*, protocol, studies, rob_results, prisma, search_q
     curve_table = _dose_curve_table(envelope, zh=False)
     adjustment = (payload.get("diagnostics") or {}).get("observational_adjustment_set") or []
     nonlinearity = payload.get("nonlinearity") or {}
+    method_text = describe_pooling_method((envelope.engine_payload.get("linear_sensitivity") or {}).get("executed_method"), zh=False)
     return f"""# Dose-response association of {protocol.pico.intervention} with {protocol.pico.outcome_primary}: a systematic review and meta-analysis
 
 ## Abstract
@@ -456,7 +473,7 @@ For each study we retained the reference dose, non-reference category dose, unit
 
 ### Statistical analysis
 
-Ratio measures were analyzed on the log scale. Three restricted cubic spline knots were locked at {', '.join(f'{value:g}' for value in payload.get('knots') or [])} {payload.get('dose_unit')}. Each study required at least two non-reference categories with a positive-definite within-study covariance matrix. Generalized least squares produced two study-specific spline coefficients, which were pooled by multivariate restricted maximum likelihood. The second spline coefficient was tested with a one-degree-of-freedom Wald test for nonlinearity. A linear REML slope was the prespecified sensitivity analysis. Doses outside the observed range were not extrapolated.
+Ratio measures were analyzed on the log scale. Three restricted cubic spline knots were locked at {', '.join(f'{value:g}' for value in payload.get('knots') or [])} {payload.get('dose_unit')}. Each study required at least two non-reference categories with a positive-definite within-study covariance matrix. Generalized least squares produced two study-specific spline coefficients, which were pooled by multivariate restricted maximum likelihood. The second spline coefficient was tested with a one-degree-of-freedom Wald test for nonlinearity. Linear sensitivity: {method_text} Doses outside the observed range were not extrapolated.
 
 ## Results
 
@@ -495,6 +512,7 @@ def _render_dose_response_zh(*, protocol, studies, rob_results, prisma, search_q
     curve_table = _dose_curve_table(envelope, zh=True)
     adjustment = (payload.get("diagnostics") or {}).get("observational_adjustment_set") or []
     nonlinearity = payload.get("nonlinearity") or {}
+    method_text = describe_pooling_method((envelope.engine_payload.get("linear_sensitivity") or {}).get("executed_method"), zh=True)
     return f"""# {protocol.pico.intervention}与{protocol.pico.outcome_primary}的剂量-反应关系：系统评价与Meta分析
 
 ## 摘要
@@ -527,7 +545,7 @@ def _render_dose_response_zh(*, protocol, studies, rob_results, prisma, search_q
 
 ### 统计分析
 
-比值类效应在log尺度分析。限制性立方样条结点锁定为{('、'.join(f'{value:g}' for value in payload.get('knots') or []))} {payload.get('dose_unit')}。每项研究至少需要两个非参照分类及正定研究内协方差矩阵；先用广义最小二乘估计两个研究特异样条系数，再用多变量限制性最大似然合并。第二个样条系数采用1个自由度的Wald非线性检验；线性REML斜率为敏感性分析。不外推到观察范围之外。
+比值类效应在log尺度分析。限制性立方样条结点锁定为{('、'.join(f'{value:g}' for value in payload.get('knots') or []))} {payload.get('dose_unit')}。每项研究至少需要两个非参照分类及正定研究内协方差矩阵；先用广义最小二乘估计两个研究特异样条系数，再用多变量限制性最大似然合并。第二个样条系数采用1个自由度的Wald非线性检验；线性敏感性分析：{method_text}不外推到观察范围之外。
 
 ## 结果
 
@@ -739,13 +757,14 @@ def _render_complex_rct_en(*, protocol, studies, rob_results, prisma, search_que
     payload = envelope.engine_payload
     designs = payload.get("design_counts") or {}
     design_text = ", ".join(f"{key}: {value}" for key, value in sorted(designs.items()))
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# {protocol.pico.intervention} versus {protocol.pico.comparator} in complex randomized designs: a systematic review and meta-analysis
 
 ## Abstract
 
 **Background:** Cluster-randomized, crossover, and multi-arm trials require design-specific precision and dependency handling. This review estimated the effect of {protocol.pico.intervention} versus {protocol.pico.comparator} on {protocol.pico.outcome_primary} without treating correlated contrasts as independent.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified sources'}. Cluster-randomized trials contributed cluster-adjusted precision, crossover trials contributed paired effects, and dependent multi-arm contrasts were consolidated by generalized least squares using their within-study covariance. Independent study estimates were pooled by restricted maximum likelihood, with Hartung-Knapp sensitivity inference.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified sources'}. Cluster-randomized trials contributed cluster-adjusted precision, crossover trials contributed paired effects, and dependent multi-arm contrasts were consolidated by generalized least squares using their within-study covariance. {method_text}
 
 **Results:** {envelope.n_studies} independent studies contributed {payload.get('n_contrasts', envelope.n_studies)} contrasts. The pooled {_measure_label(estimate.measure, zh=False)} was {effect} (95% CI {lower} to {upper}){prediction}. Design composition was {design_text or 'not reported'}.
 
@@ -771,7 +790,7 @@ For every contrast we retained the reported effect, precision, design, treatment
 
 ### Statistical analysis
 
-Ratio measures were analyzed on the log scale. Correlated contrasts from the same multi-arm study were consolidated with generalized least squares before pooling, so each study contributed one independent estimate. Between-study variance was estimated by restricted maximum likelihood; the primary normal-theory interval and Hartung-Knapp sensitivity interval were retained, together with a prediction interval when estimable. Unresolved design dependencies caused analysis to stop rather than fall back to ordinary pairwise pooling.
+Ratio measures were analyzed on the log scale. Correlated contrasts from the same multi-arm study were consolidated with generalized least squares before pooling, so each study contributed one independent estimate. {method_text} Unresolved design dependencies caused analysis to stop rather than fall back to ordinary pairwise pooling.
 
 ## Results
 
@@ -810,13 +829,14 @@ def _render_complex_rct_zh(*, protocol, studies, rob_results, prisma, search_que
     rob_text = _rob_summary(rob_results, zh=True)
     certainty_text = _certainty_summary(certainty, zh=True)
     payload = envelope.engine_payload
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# 复杂随机设计中{protocol.pico.intervention}与{protocol.pico.comparator}的比较：系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 整群随机、交叉试验和多臂试验需要保留设计特异的精度与相关结构。本评价分析{protocol.pico.outcome_primary}，不把相关效应误当作独立观察。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设来源')}。整群随机试验使用整群校正后的精度，交叉试验使用配对效应，多臂试验依据研究内协方差用广义最小二乘合并相关对比；随后采用限制性最大似然合并独立研究，并保留Hartung-Knapp敏感性推断。
+**方法：** 检索{('、'.join(protocol.databases) or '预设来源')}。整群随机试验使用整群校正后的精度，交叉试验使用配对效应，多臂试验依据研究内协方差用广义最小二乘合并相关对比；随后合并独立研究。{method_text}
 
 **结果：** {envelope.n_studies}项独立研究提供{payload.get('n_contrasts', envelope.n_studies)}个对比。合并{_measure_label(estimate.measure, zh=True)}为{effect}（95% CI {lower}至{upper}）{prediction}。
 
@@ -842,7 +862,7 @@ def _render_complex_rct_zh(*, protocol, studies, rob_results, prisma, search_que
 
 ### 统计分析
 
-比值类效应在log尺度分析。多臂试验的相关对比先用广义最小二乘合并，使每项研究只贡献一个独立估计；研究间方差采用限制性最大似然估计，并保留Hartung-Knapp敏感性区间及可估计时的预测区间。若设计依赖关系未解决，分析直接停止，不降级为普通两两合并。
+比值类效应在log尺度分析。多臂试验的相关对比先用广义最小二乘合并，使每项研究只贡献一个独立估计；{method_text}若设计依赖关系未解决，分析直接停止，不降级为普通两两合并。
 
 ## 结果
 
@@ -1451,13 +1471,14 @@ def _render_nrsi_en(*, protocol, studies, rob_results, prisma, search_query, env
     tau2 = float(envelope.heterogeneity.get("tau_squared") or 0)
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     sensitivity = envelope.engine_payload.get("sensitivity", {}).get("HKSJ", {})
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# Adjusted association of {exposure} with {outcome}: a systematic review and meta-analysis of cohort studies
 
 ## Abstract
 
 **Background:** This review assessed the adjusted association of {exposure}, compared with {protocol.pico.comparator or 'the unexposed comparator'}, with {outcome} in {protocol.pico.population}.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and pooled source-verified adjusted {label}s from cohort studies. Every included model adjusted for the same canonical covariate set: {adjustment_text}. A random-effects model was estimated by restricted maximum likelihood; Hartung-Knapp inference was retained as a sensitivity analysis.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and pooled source-verified adjusted {label}s from cohort studies. Every included model adjusted for the same canonical covariate set: {adjustment_text}. {method_text}
 
 **Results:** {envelope.n_studies} studies were synthesized. The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. Between-study variance was tau-squared={tau2:.4f} and I-squared={i2:.1f}%.
 
@@ -1491,7 +1512,7 @@ For each result, the reported adjusted effect measure, point estimate, confidenc
 
 ### Statistical analysis
 
-Reported {label}s were analyzed on the log scale with inverse-variance weights. The between-study variance was estimated by restricted maximum likelihood. The pooled log effect and Wald interval were exponentiated; a prediction interval was reported when estimable. Hartung-Knapp-Sidik-Jonkman inference was computed as a sensitivity analysis. The primary analysis required one effect measure, one exact canonical adjustment set ({adjustment_text}), and one independent estimate per study. No claim was made that covariate adjustment removed unmeasured or residual confounding. The method plan, result identifiers, source locators, ledger head hash, and numerical outputs were retained for reproduction.
+Reported {label}s were analyzed on the log scale with inverse-variance weights. {method_text} The pooled log effect and interval were exponentiated. The primary analysis required one effect measure, one exact canonical adjustment set ({adjustment_text}), and one independent estimate per study. No claim was made that covariate adjustment removed unmeasured or residual confounding. The method plan, result identifiers, source locators, ledger head hash, and numerical outputs were retained for reproduction.
 
 ## Results
 
@@ -1503,7 +1524,7 @@ The synthesis included {envelope.n_studies} cohort studies.
 
 ### Pooled adjusted association
 
-The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. The REML estimate of tau-squared was {tau2:.4f}, with I-squared={i2:.1f}%. The Hartung-Knapp sensitivity estimate was {_effect(sensitivity.get('estimate'))} (95% CI {_effect(sensitivity.get('ci_lower'))} to {_effect(sensitivity.get('ci_upper'))}). Model convergence was {str(envelope.execution_converged).lower()}.
+The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. Reported tau-squared was {tau2:.4f}, with I-squared={i2:.1f}%. The prespecified sensitivity estimate was {_effect(sensitivity.get('estimate'))} (95% CI {_effect(sensitivity.get('ci_lower'))} to {_effect(sensitivity.get('ci_upper'))}).
 
 ### Risk of bias and certainty
 
@@ -1513,7 +1534,7 @@ The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(es
 
 This synthesis combines only source-verified adjusted estimates with a common declared adjustment set. That restriction aligns the reported models more closely than pooling whichever estimate happens to be available, but it cannot prove that the same causal estimand was identified in every study. Differences in covariate measurement, functional form, missing-data handling, exposure definition, and follow-up can remain important.
 
-The result is an adjusted association, not a randomized treatment effect. Residual and unmeasured confounding, selection mechanisms, exposure misclassification, outcome measurement, selective model choice, and dependent estimates can bias the pooled value. The prediction interval and Hartung-Knapp analysis should be considered alongside the primary interval; neither corrects confounding.
+The result is an adjusted association, not a randomized treatment effect. Residual and unmeasured confounding, selection mechanisms, exposure misclassification, outcome measurement, selective model choice, and dependent estimates can bias the pooled value. Available intervals and sensitivity results should be considered together; none corrects confounding.
 
 Future updates should preserve the exact model specification and covariate definitions, adjudicate incompatible estimates before analysis, and use an explicit covariance model before including multiple effects from one study.
 
@@ -1546,13 +1567,14 @@ def _render_nrsi_zh(*, protocol, studies, rob_results, prisma, search_query, env
     tau2 = float(envelope.heterogeneity.get("tau_squared") or 0)
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     sensitivity = envelope.engine_payload.get("sensitivity", {}).get("HKSJ", {})
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# {exposure}与{outcome}的调整后关联：队列研究系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 本评价分析{protocol.pico.population}中{exposure}相对于{protocol.pico.comparator or '未暴露对照'}与{outcome}的调整后关联。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并来源已核验的队列研究调整后风险比（{measure}）。所有模型采用同一规范化调整集：{adjustment_text}。以限制性最大似然估计随机效应模型，并以Hartung-Knapp推断作为敏感性分析。
+**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并来源已核验的队列研究调整后风险比（{measure}）。所有模型采用同一规范化调整集：{adjustment_text}。{method_text}
 
 **结果：** 共合并{envelope.n_studies}项研究，调整后{measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。研究间方差τ²={tau2:.4f}，I²={i2:.1f}%。
 
@@ -1586,7 +1608,7 @@ def _render_nrsi_zh(*, protocol, studies, rob_results, prisma, search_query, env
 
 ### 统计分析
 
-在log尺度对调整后风险比进行逆方差加权，以限制性最大似然估计研究间方差，将合并值及Wald区间指数变换回比值尺度，并在可估计时报告预测区间。Hartung-Knapp-Sidik-Jonkman推断作为敏感性分析。主要分析要求同一效应量、完全相同的规范化调整集（{adjustment_text}）以及每研究一个独立估计。协变量调整不能被解释为已消除未测量或残余混杂。方法计划、结果标识、来源位置、账本头哈希和数值输出均保留用于复现。
+在log尺度对调整后风险比进行逆方差加权，将合并值及区间指数变换回比值尺度。{method_text}主要分析要求同一效应量、完全相同的规范化调整集（{adjustment_text}）以及每研究一个独立估计。协变量调整不能被解释为已消除未测量或残余混杂。方法计划、结果标识、来源位置、账本头哈希和数值输出均保留用于复现。
 
 ## 结果
 
@@ -1598,7 +1620,7 @@ def _render_nrsi_zh(*, protocol, studies, rob_results, prisma, search_query, env
 
 ### 合并调整后关联
 
-合并调整后{measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。REML估计τ²={tau2:.4f}，I²={i2:.1f}%；Hartung-Knapp敏感性估计为{_effect(sensitivity.get('estimate'))}（95% CI {_effect(sensitivity.get('ci_lower'))}至{_effect(sensitivity.get('ci_upper'))}）。模型收敛状态为{str(envelope.execution_converged).lower()}。
+合并调整后{measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。报告τ²={tau2:.4f}，I²={i2:.1f}%；预设敏感性估计为{_effect(sensitivity.get('estimate'))}（95% CI {_effect(sensitivity.get('ci_lower'))}至{_effect(sensitivity.get('ci_upper'))}）。
 
 ### 偏倚风险与确定性
 
@@ -1608,7 +1630,7 @@ def _render_nrsi_zh(*, protocol, studies, rob_results, prisma, search_query, env
 
 本分析仅合并来源已核验、且声明相同调整集的估计。这比任意选择可用模型更接近共同目标量，但不能证明每项研究识别了完全相同的因果效应；协变量测量、函数形式、缺失数据处理、暴露定义和随访仍可能不同。
 
-结果属于调整后观察性关联，而非随机治疗效应。残余及未测量混杂、选择机制、暴露错分、结局测量、选择性模型报告和相关多估计均可能造成偏倚；预测区间和Hartung-Knapp分析不能纠正混杂。
+结果属于调整后观察性关联，而非随机治疗效应。残余及未测量混杂、选择机制、暴露错分、结局测量、选择性模型报告和相关多估计均可能造成偏倚；可用区间和敏感性结果不能纠正混杂。
 
 后续更新应保存精确模型设定和协变量定义，在分析前裁决不兼容估计，并在纳入同一研究多个效应前建立明确协方差模型。
 
@@ -1642,13 +1664,14 @@ def _render_prognostic_en(*, protocol, studies, rob_results, prisma, search_quer
     tau2 = float(envelope.heterogeneity.get("tau_squared") or 0)
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     sensitivity = envelope.engine_payload.get("sensitivity", {}).get("HKSJ", {})
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# Prognostic association of {factor} with {outcome}: a systematic review and meta-analysis
 
 ## Abstract
 
 **Background:** This review evaluated whether {factor}, compared with {protocol.pico.comparator or 'the reference level'}, was associated with {outcome} in {protocol.pico.population}.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and pooled source-verified adjusted {label}s from prognostic cohort studies at {horizon}. All estimates used the same canonical adjustment set: {adjustment_text}. Random effects were estimated by restricted maximum likelihood, with Hartung-Knapp inference as a sensitivity analysis.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and pooled source-verified adjusted {label}s from prognostic cohort studies at {horizon}. All estimates used the same canonical adjustment set: {adjustment_text}. {method_text}
 
 **Results:** {envelope.n_studies} studies were synthesized. The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. Between-study variance was tau-squared={tau2:.4f} and I-squared={i2:.1f}%.
 
@@ -1682,7 +1705,7 @@ The prognostic-factor definition and contrast, outcome definition, {horizon} hor
 
 ### Statistical analysis
 
-Source-verified adjusted {label}s were analyzed on the log scale with inverse-variance weights. Between-study variance was estimated by restricted maximum likelihood; pooled values and Wald intervals were exponentiated. A prediction interval was reported when estimable, and Hartung-Knapp-Sidik-Jonkman inference was retained as a sensitivity analysis. Exact canonical agreement was required for the adjustment set ({adjustment_text}). Pooling does not remove residual confounding or harmonize differently measured factors. The method plan, analysis set, result identifiers, source locators, ledger head hash, and outputs were retained for reproduction.
+Source-verified adjusted {label}s were analyzed on the log scale with inverse-variance weights. {method_text} Pooled values and intervals were exponentiated. Exact canonical agreement was required for the adjustment set ({adjustment_text}). Pooling does not remove residual confounding or harmonize differently measured factors. The method plan, analysis set, result identifiers, source locators, ledger head hash, and outputs were retained for reproduction.
 
 ## Results
 
@@ -1694,7 +1717,7 @@ The synthesis included {envelope.n_studies} prognostic cohort studies at {horizo
 
 ### Pooled prognostic association
 
-The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. REML tau-squared was {tau2:.4f}, with I-squared={i2:.1f}%. The Hartung-Knapp sensitivity estimate was {_effect(sensitivity.get('estimate'))} (95% CI {_effect(sensitivity.get('ci_lower'))} to {_effect(sensitivity.get('ci_upper'))}). Model convergence was {str(envelope.execution_converged).lower()}.
+The pooled adjusted {label} was {_effect(estimate.estimate)} (95% CI {_effect(estimate.ci_lower)} to {_effect(estimate.ci_upper)}){prediction}. Reported tau-squared was {tau2:.4f}, with I-squared={i2:.1f}%. The prespecified sensitivity estimate was {_effect(sensitivity.get('estimate'))} (95% CI {_effect(sensitivity.get('ci_lower'))} to {_effect(sensitivity.get('ci_upper'))}).
 
 ### Risk of bias and certainty
 
@@ -1737,13 +1760,14 @@ def _render_prognostic_zh(*, protocol, studies, rob_results, prisma, search_quer
     tau2 = float(envelope.heterogeneity.get("tau_squared") or 0)
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     sensitivity = envelope.engine_payload.get("sensitivity", {}).get("HKSJ", {})
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# 预后因素{factor}与{outcome}的关联：系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 本评价分析{protocol.pico.population}中{factor}相对于{protocol.pico.comparator or '参考水平'}与{outcome}的预后关联。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并{horizon}时来源已核验的预后队列研究调整后风险比（{estimate.measure}）。所有估计采用同一规范化调整集：{adjustment_text}。以限制性最大似然估计随机效应，并以Hartung-Knapp推断作为敏感性分析。
+**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并{horizon}时来源已核验的预后队列研究调整后风险比（{estimate.measure}）。所有估计采用同一规范化调整集：{adjustment_text}。{method_text}
 
 **结果：** 共纳入{envelope.n_studies}项研究，合并调整后{estimate.measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。τ²={tau2:.4f}，I²={i2:.1f}%。
 
@@ -1777,7 +1801,7 @@ def _render_prognostic_zh(*, protocol, studies, rob_results, prisma, search_quer
 
 ### 统计分析
 
-在log尺度对来源已核验的调整后风险比进行逆方差加权，以限制性最大似然估计研究间方差，并将合并值及Wald区间指数变换；可估计时报告预测区间，Hartung-Knapp-Sidik-Jonkman推断作为敏感性分析。调整集必须完全一致（{adjustment_text}）。统计合并不能消除残余混杂，也不能自动协调不同测量方式。方法计划、分析集、结果标识、来源位置、账本头哈希及输出均保留用于复现。
+在log尺度对来源已核验的调整后风险比进行逆方差加权，将合并值及区间指数变换。{method_text}调整集必须完全一致（{adjustment_text}）。统计合并不能消除残余混杂，也不能自动协调不同测量方式。方法计划、分析集、结果标识、来源位置、账本头哈希及输出均保留用于复现。
 
 ## 结果
 
@@ -1789,7 +1813,7 @@ def _render_prognostic_zh(*, protocol, studies, rob_results, prisma, search_quer
 
 ### 合并预后关联
 
-合并调整后{estimate.measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。REML估计τ²={tau2:.4f}，I²={i2:.1f}%；Hartung-Knapp敏感性估计为{_effect(sensitivity.get('estimate'))}（95% CI {_effect(sensitivity.get('ci_lower'))}至{_effect(sensitivity.get('ci_upper'))}）。模型收敛状态为{str(envelope.execution_converged).lower()}。
+合并调整后{estimate.measure}为{_effect(estimate.estimate)}（95% CI {_effect(estimate.ci_lower)}至{_effect(estimate.ci_upper)}）{prediction}。报告τ²={tau2:.4f}，I²={i2:.1f}%；预设敏感性估计为{_effect(sensitivity.get('estimate'))}（95% CI {_effect(sensitivity.get('ci_lower'))}至{_effect(sensitivity.get('ci_upper'))}）。
 
 ### 偏倚风险与确定性
 
@@ -1845,13 +1869,14 @@ def _render_prediction_slope_en(
         if estimate.estimate > 1
         else "an ideal average spread of predicted risks"
     )
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# Calibration slope of {model_id} version {model_version} for {protocol.pico.outcome_primary}: a systematic review and meta-analysis
 
 ## Abstract
 
 **Background:** This review summarized the external-validation calibration slope of {model_id} version {model_version} for {protocol.pico.outcome_primary} in {protocol.pico.population}.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified calibration slopes with reported precision at {horizon}. Slopes were pooled on their original scale using restricted maximum likelihood and Hartung-Knapp inference.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified calibration slopes with reported precision at {horizon}. Slopes were pooled on their original scale as follows. {method_text}
 
 **Results:** {envelope.n_studies} external validations, including {total_n} participants and {total_events} events when fully reported, were synthesized. The pooled calibration slope was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. Tau-squared was {tau2:.4f}.
 
@@ -1885,7 +1910,7 @@ The exact model identity and version, validation type, population, outcome, {hor
 
 ### Statistical analysis
 
-Calibration slopes were analyzed on the original scale, for which an approximately normal between-study distribution is recommended. Sampling variances came from source-reported standard errors or were restored from confidence limits. Between-study variance was estimated by restricted maximum likelihood. Hartung-Knapp inference with a t distribution was used for the mean slope, and the prediction interval followed metafor's t-based prediction method. No slope was reconstructed from sample size or event count alone. Exact inputs, precision sources, result identifiers, and outputs were retained for reproduction.
+Calibration slopes were analyzed on the original scale, for which an approximately normal between-study distribution is recommended. Sampling variances came from source-reported standard errors or were restored from confidence limits. {method_text} Hartung-Knapp inference with a t distribution was used for the mean slope, and the prediction interval followed metafor's t-based prediction method. No slope was reconstructed from sample size or event count alone. Exact inputs, precision sources, result identifiers, and outputs were retained for reproduction.
 
 ## Results
 
@@ -1897,7 +1922,7 @@ The synthesis included {envelope.n_studies} external validations of {model_id} v
 
 ### Pooled calibration slope
 
-The pooled calibration slope was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. Tau-squared={tau2:.4f}, with I-squared={i2:.1f}%. Model convergence was {str(envelope.execution_converged).lower()}. The point estimate indicates {direction}, while both confidence and prediction intervals include the ideal value of 1.
+The pooled calibration slope was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. Tau-squared={tau2:.4f}, with I-squared={i2:.1f}%.  The point estimate indicates {direction}, while both confidence and prediction intervals include the ideal value of 1.
 
 ### Risk of bias and certainty
 
@@ -1951,13 +1976,14 @@ def _render_prediction_slope_zh(
         if estimate.estimate > 1
         else "预测风险变化幅度平均理想"
     )
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# {model_id} {model_version}版预测{protocol.pico.outcome_primary}的校准斜率：系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 本评价汇总{model_id} {model_version}版在{protocol.pico.population}中的外部验证校准斜率。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，合并{horizon}时来源已核验且报告精度的校准斜率。在原始尺度采用限制性最大似然随机效应模型和Hartung-Knapp推断。
+**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，合并{horizon}时来源已核验且报告精度的校准斜率。在原始尺度合并。{method_text}
 
 **结果：** 共纳入{envelope.n_studies}项外部验证；完整报告时合计{total_n}名参与者和{total_events}个事件。合并校准斜率为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}；τ²={tau2:.4f}。
 
@@ -1991,7 +2017,7 @@ def _render_prediction_slope_zh(
 
 ### 统计分析
 
-校准斜率在原始尺度合并，该尺度通常具有较合理的研究间正态分布。抽样方差来自报告标准误或由置信限恢复；不根据样本量或事件数推算斜率精度。研究间方差以限制性最大似然估计，平均斜率采用Hartung-Knapp t推断，预测区间遵循metafor的t分布方法。精确输入、精度来源、结果标识和输出均保留用于复现。
+校准斜率在原始尺度合并，该尺度通常具有较合理的研究间正态分布。抽样方差来自报告标准误或由置信限恢复；不根据样本量或事件数推算斜率精度。{method_text}平均斜率采用Hartung-Knapp t推断，预测区间遵循metafor的t分布方法。精确输入、精度来源、结果标识和输出均保留用于复现。
 
 ## 结果
 
@@ -2003,7 +2029,7 @@ def _render_prediction_slope_zh(
 
 ### 合并校准斜率
 
-合并校准斜率为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}。τ²={tau2:.4f}，I²={i2:.1f}%；模型收敛状态为{str(envelope.execution_converged).lower()}。点估计提示{direction}，但置信区间和预测区间均包含理想值1。
+合并校准斜率为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}。τ²={tau2:.4f}，I²={i2:.1f}%；点估计提示{direction}，但置信区间和预测区间均包含理想值1。
 
 ### 偏倚风险与确定性
 
@@ -2057,13 +2083,14 @@ def _render_prediction_oe_en(
         if estimate.estimate < 1
         else "observed and expected event totals were equal on average"
     )
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# Calibration-in-the-large of {model_id} version {model_version} for {protocol.pico.outcome_primary}: a systematic review and meta-analysis
 
 ## Abstract
 
 **Background:** This review summarized calibration-in-the-large of {model_id} version {model_version} for {protocol.pico.outcome_primary} in {protocol.pico.population}.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified observed-to-expected event ratios from external validation cohorts at {horizon}. Log O:E ratios were pooled with a normal random-effects model using restricted maximum likelihood and Hartung-Knapp inference.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified observed-to-expected event ratios from external validation cohorts at {horizon}. Log O:E ratios were pooled with a normal random-effects model as follows. {method_text}
 
 **Results:** {envelope.n_studies} external validations, including {total_n} participants and {total_events} observed events when fully reported, were synthesized. The pooled observed-to-expected ratio was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. Tau-squared on the log O:E scale was {tau2:.4f}.
 
@@ -2097,7 +2124,7 @@ The exact model identity and version, validation type, population, outcome defin
 
 ### Statistical analysis
 
-The primary analysis followed the metamisc valmeta normal/log approach for O:E. For studies reporting observed events O, expected events E, and sample size N, the analysis value was log(O/E) with sampling variance (1-O/N)/O. Source-reported positive O:E ratios with standard errors or confidence limits could also be used. Studies with zero observed events required a source-reported estimate with restorable precision and were not assigned an arbitrary continuity correction. Between-study variance was estimated by restricted maximum likelihood. Hartung-Knapp inference used a t distribution for the pooled interval, and a t-based prediction interval was exponentiated back to the O:E scale. The exact model version, analysis set, result identifiers, precision source, ledger head hash, and outputs were retained for reproducibility.
+The primary analysis followed the metamisc valmeta normal/log approach for O:E. For studies reporting observed events O, expected events E, and sample size N, the analysis value was log(O/E) with sampling variance (1-O/N)/O. Source-reported positive O:E ratios with standard errors or confidence limits could also be used. Studies with zero observed events required a source-reported estimate with restorable precision and were not assigned an arbitrary continuity correction. {method_text} Hartung-Knapp inference used a t distribution for the pooled interval, and a t-based prediction interval was exponentiated back to the O:E scale. The exact model version, analysis set, result identifiers, precision source, ledger head hash, and outputs were retained for reproducibility.
 
 ## Results
 
@@ -2109,7 +2136,7 @@ The synthesis included {envelope.n_studies} external validations of {model_id} v
 
 ### Pooled calibration-in-the-large
 
-The pooled observed-to-expected ratio was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. On the log observed-to-expected ratio scale, tau-squared={tau2:.4f}, with I-squared={i2:.1f}%. Model convergence was {str(envelope.execution_converged).lower()}. Relative to the ideal value of 1, {direction}.
+The pooled observed-to-expected ratio was {pooled} (95% CI {lower} to {upper}); the 95% prediction interval was {pred_lower} to {pred_upper}. On the log observed-to-expected ratio scale, tau-squared={tau2:.4f}, with I-squared={i2:.1f}%.  Relative to the ideal value of 1, {direction}.
 
 ### Risk of bias and certainty
 
@@ -2165,13 +2192,14 @@ def _render_prediction_oe_zh(
         if estimate.estimate < 1
         else "实际事件总数与模型预期平均一致"
     )
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# {model_id} {model_version}版预测{protocol.pico.outcome_primary}的总体校准：系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 本评价汇总{model_id} {model_version}版在{protocol.pico.population}中预测{protocol.pico.outcome_primary}的总体校准。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，合并{horizon}时来源已核验的外部验证观察/预期事件比（O:E）。在log O:E尺度采用正态随机效应模型，以限制性最大似然估计研究间方差，并采用Hartung-Knapp推断。
+**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，合并{horizon}时来源已核验的外部验证观察/预期事件比（O:E）。在log O:E尺度采用正态随机效应模型，{method_text}
 
 **结果：** 共纳入{envelope.n_studies}项外部验证；完整报告时合计{total_n}名参与者和{total_events}个实际事件。合并观察/预期事件比为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}；log O:E尺度τ²={tau2:.4f}。
 
@@ -2205,7 +2233,7 @@ O:E不能描述整个风险范围内预测是否过于极端或保守，也不�
 
 ### 统计分析
 
-主要分析遵循metamisc valmeta的O:E正态/log方法。对报告实际事件O、预期事件E和样本量N的研究，分析值为log(O/E)，抽样方差为(1-O/N)/O；也可使用来源明确且具有标准误或置信限的正O:E。零实际事件研究必须报告可恢复精度的估计，不任意加入连续性校正。研究间方差以限制性最大似然估计；合并区间采用Hartung-Knapp t推断，t分布预测区间反变换回O:E尺度。模型版本、分析集、结果标识、精度来源、账本头哈希及输出均保留用于复现。
+主要分析遵循metamisc valmeta的O:E正态/log方法。对报告实际事件O、预期事件E和样本量N的研究，分析值为log(O/E)，抽样方差为(1-O/N)/O；也可使用来源明确且具有标准误或置信限的正O:E。零实际事件研究必须报告可恢复精度的估计，不任意加入连续性校正。{method_text}合并区间采用Hartung-Knapp t推断，t分布预测区间反变换回O:E尺度。模型版本、分析集、结果标识、精度来源、账本头哈希及输出均保留用于复现。
 
 ## 结果
 
@@ -2217,7 +2245,7 @@ O:E不能描述整个风险范围内预测是否过于极端或保守，也不�
 
 ### 合并总体校准
 
-合并观察/预期事件比为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}。log O:E尺度τ²={tau2:.4f}，I²={i2:.1f}%；模型收敛状态为{str(envelope.execution_converged).lower()}。相对于理想值1，{direction}。
+合并观察/预期事件比为{pooled}（95% CI {lower}至{upper}），95%预测区间为{pred_lower}至{pred_upper}。log O:E尺度τ²={tau2:.4f}，I²={i2:.1f}%；相对于理想值1，{direction}。
 
 ### 偏倚风险与确定性
 
@@ -2259,13 +2287,14 @@ def _render_prediction_en(*, protocol, studies, rob_results, prisma, search_quer
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     total_n = payload.get("total_participants") or "not fully reported"
     total_events = payload.get("total_events") or "not fully reported"
+    method_text = primary_method_text(envelope.engine_payload, zh=False)
     return f"""# External validation performance of {model_id} version {model_version} for {protocol.pico.outcome_primary}: a systematic review and meta-analysis
 
 ## Abstract
 
 **Background:** This review summarized external-validation discrimination of {model_id} version {model_version} for {protocol.pico.outcome_primary} in {protocol.pico.population}.
 
-**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified c-statistics from external validation cohorts at {horizon}. A normal random-effects model was fitted to the logit c-statistic using restricted maximum likelihood and Hartung-Knapp inference.
+**Methods:** We searched {', '.join(protocol.databases) or 'the prespecified bibliographic sources'} and synthesized source-verified c-statistics from external validation cohorts at {horizon}. A normal random-effects model was fitted to the logit c-statistic as follows. {method_text}
 
 **Results:** {envelope.n_studies} external validations, including {total_n} participants and {total_events} events when fully reported, were synthesized. The pooled c-statistic was {estimate.estimate:.3f} (95% CI {estimate.ci_lower:.3f} to {estimate.ci_upper:.3f}); the 95% prediction interval was {estimate.prediction_lower:.3f} to {estimate.prediction_upper:.3f}. Tau-squared on the logit scale was {tau2:.4f}.
 
@@ -2299,7 +2328,7 @@ The exact model identity and version, validation type, population, outcome defin
 
 ### Statistical analysis
 
-The primary model followed the metamisc valmeta normal/logit approach. Each c-statistic was transformed to a logit. Reported standard errors were transformed by the delta method; when absent, precision was restored first from reported confidence limits and then, if necessary, with Newcombe method 4 using sample size and event count. Between-study variance was estimated by restricted maximum likelihood. Hartung-Knapp inference with a t distribution was used for the pooled interval, and a t-based prediction interval was transformed back to the c-statistic scale. The exact model version, analysis set, result identifiers, precision source, ledger head hash, and outputs were retained for reproducibility.
+The primary model followed the metamisc valmeta normal/logit approach. Each c-statistic was transformed to a logit. Reported standard errors were transformed by the delta method; when absent, precision was restored first from reported confidence limits and then, if necessary, with Newcombe method 4 using sample size and event count. {method_text} Hartung-Knapp inference with a t distribution was used for the pooled interval, and a t-based prediction interval was transformed back to the c-statistic scale. The exact model version, analysis set, result identifiers, precision source, ledger head hash, and outputs were retained for reproducibility.
 
 ## Results
 
@@ -2311,7 +2340,7 @@ The synthesis included {envelope.n_studies} external validations of {model_id} v
 
 ### Pooled discrimination
 
-The pooled c-statistic was {estimate.estimate:.3f} (95% CI {estimate.ci_lower:.3f} to {estimate.ci_upper:.3f}); the 95% prediction interval was {estimate.prediction_lower:.3f} to {estimate.prediction_upper:.3f}. On the logit c-statistic scale, tau-squared={tau2:.4f}, with I-squared={i2:.1f}%. Model convergence was {str(envelope.execution_converged).lower()}.
+The pooled c-statistic was {estimate.estimate:.3f} (95% CI {estimate.ci_lower:.3f} to {estimate.ci_upper:.3f}); the 95% prediction interval was {estimate.prediction_lower:.3f} to {estimate.prediction_upper:.3f}. On the logit c-statistic scale, tau-squared={tau2:.4f}, with I-squared={i2:.1f}%.
 
 ### Risk of bias and certainty
 
@@ -2353,13 +2382,14 @@ def _render_prediction_zh(*, protocol, studies, rob_results, prisma, search_quer
     i2 = float(envelope.heterogeneity.get("i_squared") or 0)
     total_n = payload.get("total_participants") or "未完整报告"
     total_events = payload.get("total_events") or "未完整报告"
+    method_text = primary_method_text(envelope.engine_payload, zh=True)
     return f"""# {model_id} {model_version}版预测{protocol.pico.outcome_primary}的外部验证性能：系统评价与Meta分析
 
 ## 摘要
 
 **背景：** 本评价汇总{model_id} {model_version}版在{protocol.pico.population}中预测{protocol.pico.outcome_primary}的外部验证判别力。
 
-**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并{horizon}时来源已核验的外部验证C统计量。对logit C统计量建立正态随机效应模型，以限制性最大似然估计研究间方差，并采用Hartung-Knapp推断。
+**方法：** 检索{('、'.join(protocol.databases) or '预设文献来源')}，仅合并{horizon}时来源已核验的外部验证C统计量。对logit C统计量建立正态随机效应模型，{method_text}
 
 **结果：** 共纳入{envelope.n_studies}项外部验证；完整报告时合计{total_n}名参与者、{total_events}个事件。合并C统计量为{estimate.estimate:.3f}（95% CI {estimate.ci_lower:.3f}至{estimate.ci_upper:.3f}），95%预测区间为{estimate.prediction_lower:.3f}至{estimate.prediction_upper:.3f}；logit尺度τ²={tau2:.4f}。
 
@@ -2393,7 +2423,7 @@ def _render_prediction_zh(*, protocol, studies, rob_results, prisma, search_quer
 
 ### 统计分析
 
-主要模型遵循metamisc valmeta的正态/logit方法。将C统计量转换到logit尺度；报告标准误时采用delta法转换，缺失时依次由置信限及基于样本量和事件数的Newcombe方法4恢复精度。研究间方差用限制性最大似然估计，合并区间采用Hartung-Knapp t推断，预测区间也使用t分布，最后反变换回C统计量尺度。模型版本、分析集、结果标识、精度来源、账本头哈希和输出均保留用于复现。
+主要模型遵循metamisc valmeta的正态/logit方法。将C统计量转换到logit尺度；报告标准误时采用delta法转换，缺失时依次由置信限及基于样本量和事件数的Newcombe方法4恢复精度。{method_text}合并区间采用Hartung-Knapp t推断，预测区间也使用t分布，最后反变换回C统计量尺度。模型版本、分析集、结果标识、精度来源、账本头哈希和输出均保留用于复现。
 
 ## 结果
 
@@ -2405,7 +2435,7 @@ def _render_prediction_zh(*, protocol, studies, rob_results, prisma, search_quer
 
 ### 合并判别力
 
-合并C统计量为{estimate.estimate:.3f}（95% CI {estimate.ci_lower:.3f}至{estimate.ci_upper:.3f}），95%预测区间为{estimate.prediction_lower:.3f}至{estimate.prediction_upper:.3f}。logit C统计量尺度τ²={tau2:.4f}，I²={i2:.1f}%；模型收敛状态为{str(envelope.execution_converged).lower()}。
+合并C统计量为{estimate.estimate:.3f}（95% CI {estimate.ci_lower:.3f}至{estimate.ci_upper:.3f}），95%预测区间为{estimate.prediction_lower:.3f}至{estimate.prediction_upper:.3f}。logit C统计量尺度τ²={tau2:.4f}，I²={i2:.1f}%；
 
 ### 偏倚风险与确定性
 
@@ -2513,6 +2543,16 @@ def _validate_method_manuscript(
         )
     else:
         forbidden_terms = ("DerSimonian-Laird", "risk ratio", "odds ratio")
+    # DL is legitimate for a recorded optimizer fallback or HKSJ sensitivity.
+    # Keep the historical-family check when no actual execution supports it.
+    payload = envelope.engine_payload
+    executed = [payload.get("executed_method") or {}]
+    for item in [*(payload.get("sensitivity") or {}).values(), payload.get("hksj_sensitivity"),
+                 payload.get("linear_sensitivity"), payload.get("effect_modification")]:
+        if isinstance(item, dict):
+            executed.append(item.get("executed_method") or {})
+    if any(method.get("tau_estimator") == "DL" for method in executed):
+        forbidden_terms = tuple(term for term in forbidden_terms if term != "DerSimonian-Laird")
     forbidden = [term for term in forbidden_terms if term.lower() in manuscript.lower()]
     issues = []
     if missing_sections:

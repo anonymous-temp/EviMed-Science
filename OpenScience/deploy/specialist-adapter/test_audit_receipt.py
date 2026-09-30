@@ -1,8 +1,8 @@
-"""Signed MR receipt producer integration; fake analysis, real protected queue.
+"""MR worker observation integration; fake analysis, real protected queue.
 
-A temporary toy manifest and key exercise the exact fixture policy without
+A temporary toy manifest exercises the exact fixture policy without
 network/model calls or dependence on downloaded public data. They are never
-release trust anchors or release evidence.
+release evidence.
 """
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def completed(setup, monkeypatch, request=None):
 def wrapper(setup, result):
     _, _, _, _, arguments, _, _, _ = setup
     proof = result["data"]["auditReceipt"]
-    return {"schemaVersion": 1, "kind": "isolated-specialist-receipt",
+    return {"schemaVersion": 2, "kind": "specialist-worker-record",
         "tool": "mendelian_randomization", "startedJobId": result["data"]["jobId"],
         "scope": {"userId": "user1", "projectId": "project1", "activeWorkspace": ""},
         "request": arguments, "proof": proof,
@@ -117,7 +117,7 @@ def wrapper(setup, result):
             "jobStatus": result["data"]["jobStatus"], "artifacts": [row["path"] for row in result["artifacts"]]}}
 
 
-def test_terminal_public_pair_has_stored_signature_accepted_by_clean_verifier(tmp_path, monkeypatch):
+def test_terminal_public_pair_has_worker_record_accepted_by_clean_verifier(tmp_path, monkeypatch):
     setup = setup_audit(tmp_path, monkeypatch)
     service, _, _, workspace, arguments, receipts, public, _ = setup
     result, state_path = completed(setup, monkeypatch)
@@ -138,7 +138,7 @@ def test_terminal_public_pair_has_stored_signature_accepted_by_clean_verifier(tm
                                   expected=expected, trustedPublicKey=public)
 
 
-def test_health_reports_optional_signing_readiness_without_secret_paths(tmp_path, monkeypatch):
+def test_health_reports_job_record_readiness_without_secret_paths(tmp_path, monkeypatch):
     setup = setup_audit(tmp_path, monkeypatch)
     body = setup[1].get("/health").json()
     assert body["auditReceiptsReady"] is True
@@ -146,7 +146,7 @@ def test_health_reports_optional_signing_readiness_without_secret_paths(tmp_path
 
 
 @pytest.mark.parametrize("invalid", ["missing", "mode", "symlink", "non_ed25519"])
-def test_unavailable_signing_key_is_not_loaded_or_advertised(tmp_path, monkeypatch, invalid):
+def test_retired_signing_key_settings_do_not_affect_job_records(tmp_path, monkeypatch, invalid):
     setup = setup_audit(tmp_path, monkeypatch)
     key_file = setup[-1]
     if invalid == "missing":
@@ -162,8 +162,8 @@ def test_unavailable_signing_key_is_not_loaded_or_advertised(tmp_path, monkeypat
         key_file.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
     from evimed_specialist_adapter import audit_receipt
-    assert audit_receipt.signing_key() is None
-    assert setup[1].get("/health").json()["auditReceiptsReady"] is False
+    assert audit_receipt.analysis_credentials() == ({} if os.getenv("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE") else None)
+    assert setup[1].get("/health").json()["auditReceiptsReady"] is True
 
 
 def test_reversed_fixture_roles_never_receive_audit_attestation(tmp_path, monkeypatch):
@@ -218,7 +218,8 @@ def test_worker_receipts_keep_original_bytes_after_workspace_input_changes(tmp_p
     monkeypatch.setattr(service, "_mr_inputs", wrapped_helper)
     result, _ = completed(setup, monkeypatch)
     value = wrapper(setup, result)
-    receipts.verify_attestation(value["proof"], public)
+    assert value["proof"]["evidenceKind"] == "worker-observation"
+    assert "attestation" not in value["proof"]
     expected = next(row for row in value["proof"]["inputs"] if row["path"] == arguments["exposureSource"]["path"])
     assert expected["sha256"] != receipts.digest((workspace / expected["path"]).read_bytes())
     with pytest.raises(receipts.ReceiptError):
@@ -244,13 +245,11 @@ def test_signed_status_is_isolated_by_authenticated_account_and_project(tmp_path
         assert denied.status_code != 200 or denied.json()["status"] != "success"
 
 
-@pytest.mark.parametrize("attack", ["artifact_paths", "input_hash", "symlink_license", "hardlink_key"])
-def test_untrusted_or_unsafe_material_is_never_signed(tmp_path, monkeypatch, attack):
+@pytest.mark.parametrize("attack", ["artifact_paths", "input_hash", "symlink_license"])
+def test_untrusted_or_unsafe_material_has_no_job_observation(tmp_path, monkeypatch, attack):
     setup = setup_audit(tmp_path, monkeypatch)
     service = setup[0]
-    if attack == "hardlink_key":
-        os.link(setup[-1], setup[-1].with_suffix(".alias"))
-    elif attack == "symlink_license":
+    if attack == "symlink_license":
         target = (setup[3] / setup[4]["exposureSource"]["path"]).parent / "LICENSE"
         moved = target.with_suffix(".original")
         target.rename(moved)

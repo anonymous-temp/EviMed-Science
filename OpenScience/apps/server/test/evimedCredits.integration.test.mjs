@@ -343,3 +343,23 @@ test("a charge outlives the project it was made in", options, async () => {
   assert.equal(row?.credits, 100);
   assert.equal(row?.projectId, otherProject, "what it cost is a fact, and so is which project asked");
 });
+
+test("autopilot retry settlement charges the real owner once and never charges its unsent predecessor", options, async () => {
+  for (const suffix of ["", "-v1"]) for (const reversed of [false, true]) {
+    const logical = `episode-${randomUUID().replaceAll("-", "")}${suffix}`;
+    const runId = `run_${randomUUID()}`;
+    const oldId = `run_${randomUUID()}`;
+    const client = upstream();
+    const service = credits({ client, costs: { [logical]: 1.6, [runId]: 0.4 } });
+    const sent = { userId, projectId, runId, dispatchId: `${logical}-a2`, status: "succeeded", effectiveRouteReason: "autopilot:research" };
+    const old = { ...sent, runId: oldId, dispatchId: logical, status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" };
+    if (reversed) assert.equal((await service.settleRun(old)).credits, 0);
+    assert.deepEqual(await service.settleRun(sent), { status: "settled", credits: 200 });
+    assert.deepEqual(await service.settleRun(sent), { status: "settled", credits: 200, duplicate: true });
+    assert.equal((await service.settleRun(old)).credits, 0);
+    assert.equal(client.calls.length, 1);
+    assert.equal(client.calls[0].requestId, runId);
+    const saved = await service.settlementOf(userId, runId);
+    assert.equal(saved.credits, 200);
+  }
+});

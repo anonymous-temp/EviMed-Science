@@ -26,8 +26,9 @@
  *   finds in the source), and every sentence naming a medicine — the safety
  *   verdict needs verbatim evidence, and Jev lost the pharmacist's cautions
  *   outright (62/73 against the term matcher's 73/73);
- * - Jev switched off, refused, failed or over its per-request ceiling: the
- *   reviewer judges every sentence, which is what L1 did before Jev.
+ * - Jev switched off: the reviewer judges every sentence. A failed or
+ *   oversized batch sends only its unsettled sentences to the reviewer;
+ *   decisions already made for other complete sentence/source bonds remain.
  *
  * A Jev verdict never authorizes anything. It does not treat the state as
  * hostile (a passage telling the checker how to answer moved it, 2026-09-22),
@@ -36,7 +37,7 @@
  * function of the probabilities it returns, and the choice their maximum — and
  * an answer that disagrees with itself decides nothing (principle 5).
  *
- * One request per reply. TypeSafe's own notes say accuracy falls as the state
+ * At most four bounded batches per reply. TypeSafe's notes say accuracy falls as the state
  * fills with material a question does not need, so each sentence travels with
  * its own sources under its own key, and its question names that key by path
  * — the way the documentation points a question at a nested value.
@@ -45,6 +46,7 @@
  */
 
 import { acceptReplyVerdicts } from "@evimed/domain";
+import { estimateJevTokens, jevRequestLimits } from "./jevModel.mjs";
 
 /**
  * The question's options, in the form the probes measured best: a three-way
@@ -107,6 +109,33 @@ export function jevReplyRequest({ sentences, readable }) {
   return { state: { items }, questions, asked, medicine };
 }
 
+/** Split complete sentence/source bonds, never truncate a source to make it fit.
+ * @param {{sentences:readonly any[],readable:ReadonlyMap<number,string>,limits?:any,maxBatches?:number}} input */
+export function jevReplyBatches({ sentences, readable, limits = {}, maxBatches = 4 }) {
+  const request = jevReplyRequest({ sentences, readable });
+  const { maxRequest, maxState } = jevRequestLimits(limits);
+  const fits = (batch) => {
+    const size = estimateJevTokens(batch.state, batch.questions);
+    return size.total <= maxRequest && size.stateAndLongestQuestion <= maxState;
+  };
+  const empty = () => ({ state: { items: {} }, questions: {}, asked: [] });
+  const limit = Math.max(1, Math.min(4, Math.trunc(maxBatches) || 4));
+  const batches = [], skipped = [];
+  let current = empty();
+  for (const index of request.asked) {
+    const id = `S${index}`;
+    const singleton = { state: { items: { [id]: request.state.items[id] } }, questions: { [id]: request.questions[id] }, asked: [index] };
+    if (!fits(singleton)) { skipped.push(index); continue; }
+    const joined = { state: { items: { ...current.state.items, ...singleton.state.items } },
+      questions: { ...current.questions, ...singleton.questions }, asked: [...current.asked, index] };
+    if (current.asked.length && !fits(joined)) { batches.push(current); current = empty(); }
+    if (batches.length >= limit) { skipped.push(index); continue; }
+    current = current.asked.length ? joined : singleton;
+  }
+  if (current.asked.length) batches.push(current);
+  return { batches, skipped, medicine: request.medicine };
+}
+
 /**
  * The confidence a choice answer's own probabilities give it:
  * (k·p_max − 1)/(k − 1) over its k options (docs.typesafe.ai/confidence), and
@@ -160,7 +189,7 @@ export function jevDecisions(answers, { asked, threshold }) {
 
 /**
  * @typedef {object} JevPassSummary
- * @property {'off'|'none'|'answered'|'failed'|'too_large'} outcome
+ * @property {'off'|'none'|'answered'|'failed'|'too_large'|'partial'} outcome
  *   `none`: nothing Jev may settle (every cited sentence names a medicine or
  *   cites nothing readable), so no request was made
  * @property {string | null} code the failure's code, when it failed
@@ -168,6 +197,7 @@ export function jevDecisions(answers, { asked, threshold }) {
  * @property {number} decided sentences Jev settled
  * @property {number} escalated sentences Jev answered and the reviewer took
  * @property {number} medicine sentences never put to Jev because they name a medicine
+ * @property {JevPassSummary[]} [batches] Individual batch observations for a multi-batch reply
  */
 
 /**
@@ -180,16 +210,16 @@ export function jevDecisions(answers, { asked, threshold }) {
  *
  * @param {{
  *   sentences: readonly any[], references: readonly any[], readable: ReadonlyMap<number, string>,
- *   threshold: number,
+ *   threshold: number, jevLimits?: any,
  *   jev: null | ((request: { state: any, questions: Record<string, any> }) => Promise<{ answers: Record<string, any>, model: string, cost: number }>),
  *   reviewer: (input: { sentences: readonly any[], references: readonly any[] }) => Promise<{ value: any, model: string, cost: number }>,
  *   onJev?: (summary: JevPassSummary) => void,
  * }} input
- *   `onJev` hears how the first pass ended as soon as it has, before the
- *   reviewer is asked: a Jev call is spent even when the reviewer then fails
+ *   `onJev` hears each batch as soon as it ends, before the reviewer is asked.
+ *   A Jev call is spent even when the reviewer then fails
  * @returns {Promise<{ verdicts: any[], cost: number, models: string[], jev: JevPassSummary }>}
  */
-export async function judgeCitedSentences({ sentences, references, readable, threshold, jev, reviewer, onJev = () => {} }) {
+export async function judgeCitedSentences({ sentences, references, readable, threshold, jev, reviewer, onJev = () => {}, jevLimits = {} }) {
   /** @type {JevPassSummary} */
   const summary = { outcome: "off", code: null, asked: 0, decided: 0, escalated: 0, medicine: 0 };
   let cost = 0;
@@ -198,11 +228,17 @@ export async function judgeCitedSentences({ sentences, references, readable, thr
   /** @type {Map<number, any>} */
   const settled = new Map();
   if (jev) {
-    const request = jevReplyRequest({ sentences, readable });
-    summary.medicine = request.medicine.length;
-    summary.asked = request.asked.length;
-    summary.outcome = request.asked.length ? "answered" : "none";
-    if (request.asked.length) {
+    const plan = jevReplyBatches({ sentences, readable, limits: jevLimits });
+    /** @type {JevPassSummary[]} */
+    const observations = [];
+    const observe = (item) => {
+      const event = { ...item, medicine: observations.length ? 0 : plan.medicine.length };
+      observations.push(event);
+      onJev(event);
+    };
+    for (const request of plan.batches) {
+      /** @type {JevPassSummary} */
+      const batch = { outcome: "answered", code: null, asked: request.asked.length, decided: 0, escalated: 0, medicine: 0 };
       try {
         const answer = await jev({ state: request.state, questions: request.questions });
         cost += Number(answer.cost) || 0;
@@ -211,14 +247,25 @@ export async function judgeCitedSentences({ sentences, references, readable, thr
         for (const [index, confidence] of decided) {
           settled.set(index, { sentence: index, verdict: "supported", reason: "", evidence: "", safety: "none", by: "jev", confidence });
         }
-        summary.decided = decided.size;
-        summary.escalated = escalated.length;
+        batch.decided = decided.size;
+        batch.escalated = escalated.length;
       } catch (error) {
-        summary.code = String(/** @type {any} */ (error)?.code ?? "jev_failed").slice(0, 64);
-        summary.outcome = summary.code === "jev_request_too_large" ? "too_large" : "failed";
+        batch.code = String(/** @type {any} */ (error)?.code ?? "jev_failed").slice(0, 64);
+        batch.outcome = batch.code === "jev_request_too_large" ? "too_large" : "failed";
       }
+      observe(batch);
     }
-    onJev({ ...summary });
+    if (plan.skipped.length) observe({ outcome: "too_large", code: "jev_request_too_large", asked: plan.skipped.length, decided: 0, escalated: 0, medicine: 0 });
+    if (!observations.length) observe({ outcome: "none", code: null, asked: 0, decided: 0, escalated: 0, medicine: 0 });
+    Object.assign(summary, observations[0]);
+    if (observations.length > 1) {
+      summary.outcome = new Set(observations.map(item => item.outcome)).size > 1 ? "partial" : observations[0].outcome;
+      summary.code = observations.find(item => item.code)?.code ?? null;
+      summary.asked = observations.reduce((total, item) => total + item.asked, 0);
+      summary.decided = settled.size;
+      summary.escalated = observations.reduce((total, item) => total + item.escalated, 0);
+      summary.batches = observations;
+    }
   }
   const rest = sentences.filter((sentence) => !settled.has(sentence.index));
   /** @type {any[]} */

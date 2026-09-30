@@ -331,11 +331,15 @@ def build_manuscript_facts(
     grade_inputs_snapshot = _load_project_json(project, "grade_inputs_snapshot.json", subdir="analysis") or {}
     if compiled_method_active and not meta_results:
         estimator = str(synthesis_result.get("estimator") or "")
+        executed = synthesis_result.get("executed_method") or (synthesis_result.get("engine_payload") or {}).get("executed_method") or {}
         model_decision = {
             "schema_version": 1,
-            "primary_model": estimator,
-            "primary_engine_model": estimator,
-            "tau_estimator": estimator,
+            "executed_method": executed,
+            "requested_method": executed.get("requested_method"),
+            "planned_estimator": synthesis_result.get("planned_estimator"),
+            "primary_model": executed.get("model") or estimator,
+            "primary_engine_model": executed.get("model") or estimator,
+            "tau_estimator": executed.get("tau_estimator", "unknown"),
             "reason": "The prespecified compiled method for this review family determined the estimator.",
             "compiled_method": True,
         }
@@ -382,9 +386,13 @@ def build_manuscript_facts(
             "p_value": po.p_value,
             "i_squared": po.i_squared,
             "tau_squared": po.tau_squared,
+            "q_statistic": po.q_statistic,
+            "prediction_lower": po.prediction_interval[0] if po.prediction_interval else None,
+            "prediction_upper": po.prediction_interval[1] if po.prediction_interval else None,
             "model": actual_model or po.model,
             "engine_model": actual_model or po.model,
             "tau_estimator": po.tau_estimator,
+            "executed_method": po.execution_metadata().model_dump(mode="json"),
             "studies": [
                 {
                     "study_id": s.study_id,
@@ -466,7 +474,8 @@ def build_manuscript_facts(
                 "tau_squared": heterogeneity.get("tau_squared"),
                 "model": actual_model,
                 "engine_model": actual_model,
-                "tau_estimator": actual_model,
+                "tau_estimator": (model_decision.get("executed_method") or {}).get("tau_estimator", "unknown"),
+                "executed_method": model_decision.get("executed_method") or {},
                 "studies": method_study_rows,
             }
 
@@ -4118,10 +4127,21 @@ def _ensure_protocol_deviation_note(manuscript: str, facts: dict[str, Any]) -> t
 
 
 def _ensure_pipeline_warning_note(manuscript: str, facts: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
-    """Keep run warnings in structured outputs rather than the journal manuscript."""
+    """Keep evidence limitations visible; ordinary run diagnostics stay in sidecars."""
     warnings = facts.get("pipeline_warnings") or []
     if not warnings:
         return manuscript, []
+    evidence_codes = {"analysis_assumptions", "risk_of_bias_unavailable", "partial_screening", "partial_extraction",
+                      "protocol_scope_unverified"}
+    evidence_notes = [str(item.get("message") or "").strip() for item in warnings
+                      if item.get("code") in evidence_codes and item.get("message")]
+    missing = [note for note in evidence_notes if note not in manuscript]
+    if missing:
+        note = "\n\n## Evidence limitations\n\n" + "\n\n".join(dict.fromkeys(missing)) + "\n"
+        repaired = _insert_before_heading(manuscript, "## References", note)
+        if repaired == manuscript:
+            repaired = manuscript + note
+        return repaired, [_issue("evidence_limitations_note", "fixed", "Retained the stated analysis assumptions and missing evidence.")]
     if facts.get("report_type", "meta") != "evidence_gap":
         return manuscript, []
     normalized_manuscript = manuscript.casefold()

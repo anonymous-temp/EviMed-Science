@@ -237,3 +237,15 @@ def test_every_result_the_runner_writes_carries_the_jobs_spend(tmp_path):
     assert result["usage"] == {"requests": 1, "cacheHitTokens": 0, "cacheMissTokens": 90, "outputTokens": 9,
                                "model": "deepseek-flash"}
     provider_usage.reset()
+
+
+@pytest.mark.parametrize("effort", ["off", "low", "high", "max"])
+@pytest.mark.parametrize("tier", ["flash", "pro"])
+def test_managed_choice_reaches_request_payload(monkeypatch, effort, tier):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "managed-thinking")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+    client, api = _client(monkeypatch)
+    client.chat([{"role": "user", "content": "test"}], model_tier=tier)
+    request = api.requests[0]
+    assert request["extra_body"]["thinking"]["type"] == ("disabled" if effort == "off" else "enabled")
+    assert request.get("reasoning_effort") == (None if effort == "off" else effort)

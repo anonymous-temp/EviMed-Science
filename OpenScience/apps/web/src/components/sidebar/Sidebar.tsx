@@ -59,7 +59,7 @@ const NAV: NavItem[] = [
   { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
-  { to: "/app/autopilot", label: "主动科研", icon: <Orbit size={16} aria-hidden="true" /> },
+  { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
 ];
 
 /**

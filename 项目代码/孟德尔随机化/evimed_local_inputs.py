@@ -40,6 +40,7 @@ SOURCE_KEYS = {
     "path",
     "columnMapping",
     "sampleSize",
+    "effectScale",
     "population",
     "instrumentsPreclumped",
     "clumpingProvenance",
@@ -92,9 +93,13 @@ def relative_parts(value: Any) -> tuple[str, ...]:
 def _validate_source(source: Any) -> None:
     if not isinstance(source, dict):
         raise _invalid("Each GWAS source must be an object.")
+    scale = source.get("effectScale")
+    if "effectScale" in source and (not isinstance(scale, dict) or not scale or set(scale) - {"unit", "transformation", "evidence"}
+                              or any(not _text(value, 1000) for value in scale.values())):
+        raise _invalid("effectScale accepts only bounded unit, transformation and evidence declarations.")
     if source.get("type") == "opengwas":
         if (
-            set(source) != {"type", "gwasId"}
+            set(source) - {"effectScale"} != {"type", "gwasId"}
             or not isinstance(source["gwasId"], str)
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", source["gwasId"])
         ):
@@ -104,7 +109,7 @@ def _validate_source(source: Any) -> None:
         # One identifier the catalogue itself resolves: a study accession, or
         # the PubMed id of the paper when it has a single study with full
         # summary statistics. Never a trait name the engine would have to guess.
-        keys = set(source) - {"type"}
+        keys = set(source) - {"type", "effectScale"}
         if not (
             (keys == {"accession"} and isinstance(source["accession"], str)
              and re.fullmatch(r"GCST\d{6,9}", source["accession"]))
@@ -131,7 +136,8 @@ def _validate_source(source: Any) -> None:
     mapping = source["columnMapping"]
     if (
         not isinstance(mapping, dict)
-        or set(mapping) != set(STANDARD_MAPPING)
+        or not set(STANDARD_MAPPING) <= set(mapping)
+        or set(mapping) - set(STANDARD_MAPPING) - {"samplesize"}
         or any(not _text(value, 128) for value in mapping.values())
         or len(set(mapping.values())) != len(mapping)
     ):
@@ -447,7 +453,7 @@ def _normalize(contents: bytes, source: dict[str, Any]) -> tuple[bytes, int]:
         indexes = [headers.index(mapping[key]) for key in STANDARD_MAPPING]
         output = io.StringIO(newline="")
         writer = csv.writer(output, lineterminator="\n")
-        writer.writerow(STANDARD_MAPPING.values())
+        writer.writerow([*STANDARD_MAPPING.values(), *(["samplesize"] if "samplesize" in mapping else [])])
         seen: set[str] = set()
         for row in reader:
             if len(row) != len(headers):
@@ -460,6 +466,11 @@ def _normalize(contents: bytes, source: dict[str, Any]) -> tuple[bytes, int]:
                 raise MRInputError(
                     "mr_input_size_limit", "A GWAS input exceeds the 2000000-row limit."
                 )
+            if "samplesize" in mapping:
+                value = row[headers.index(mapping["samplesize"])].strip()
+                if value and (not math.isfinite(float(value)) or not 0 < float(value) <= 1e12):
+                    raise _invalid("Variant sample sizes must be positive finite numbers or empty.")
+                values.append(value)
             writer.writerow(values)
         if not seen:
             raise _invalid("GWAS input must contain at least one data row.")
@@ -531,7 +542,7 @@ def prepare_sources(
                             "preparedBytes": len(canonical),
                         }
                         prepared[f"{role}Source"].update(
-                            path=f"inputs/{role}.csv", columnMapping=dict(STANDARD_MAPPING)
+                            path=f"inputs/{role}.csv", columnMapping={**STANDARD_MAPPING, **({"samplesize": "samplesize"} if "samplesize" in source["columnMapping"] else {})}
                         )
                 if capture_bindings(workspace, request, data_root) != bindings:
                     raise MRInputError(
@@ -583,11 +594,12 @@ def _verify_prepared(
     parent: int, role: str, source: dict[str, Any], record: dict[str, Any]
 ) -> bytes:
     expected_path = f"inputs/{role}.csv"
-    if source.get("path") != expected_path or source.get("columnMapping") != STANDARD_MAPPING:
+    normalized_mapping = {**STANDARD_MAPPING, **({"samplesize": "samplesize"} if "samplesize" in record.get("columnMapping", {}) else {})}
+    if source.get("path") != expected_path or source.get("columnMapping") != normalized_mapping:
         raise _manifest_failure()
     original = {key: value for key, value in record.items() if key in SOURCE_KEYS}
     _validate_source(original)
-    expected_source = {**original, "path": expected_path, "columnMapping": STANDARD_MAPPING}
+    expected_source = {**original, "path": expected_path, "columnMapping": normalized_mapping}
     if source != expected_source or record.get("preparedPath") != expected_path:
         raise _manifest_failure()
     if (
@@ -631,6 +643,7 @@ def runner_sources(
     if not validate_request(request):
         return {}, {}
     from mr_agent.models import ColumnMapping, DataSource, DataSourceType
+    from mr_agent.source_context import declared_scale, unknown_scale
 
     require_remote_access(request, bool(os.getenv("OPENGWAS_JWT", "").strip()))
     if (
@@ -659,6 +672,7 @@ def runner_sources(
                         sources[role] = DataSource(
                             source_type=DataSourceType.OPENGWAS,
                             gwas_id=source["gwasId"],
+                            effect_scale=declared_scale(source.get("effectScale")),
                             trait_name=request[role],
                         )
                         continue
@@ -667,7 +681,8 @@ def runner_sources(
                     sources[role] = DataSource(
                         source_type=DataSourceType.LOCAL_FILE,
                         file_path=str(private_root / f"{role}.csv"),
-                        column_mapping=ColumnMapping(**STANDARD_MAPPING),
+                        column_mapping=ColumnMapping(**source["columnMapping"]),
+                        effect_scale=declared_scale(source.get("effectScale")),
                         trait_name=request[role],
                         sample_size=source.get("sampleSize"),
                         population=source.get("population"),
@@ -698,6 +713,7 @@ def open_catalog_sources(
     replay package re-run offline.
     """
     from mr_agent.models import ColumnMapping, DataSource, DataSourceType
+    from mr_agent.source_context import declared_scale, unknown_scale
     from mr_agent.tools import open_sumstats
 
     if (
@@ -707,10 +723,18 @@ def open_catalog_sources(
         or not isinstance(authority.get("sources"), dict)
     ):
         raise _manifest_failure()
+    from mr_agent.source_context import merge_scale
+    partial_error = None
     try:
         pair = (build or open_sumstats.build_pair)(request["exposureSource"], request["outcomeSource"])
     except open_sumstats.OpenSourceError as error:
-        raise MRInputError(error.code, str(error)) from None
+        if error.partial_pair is None:
+            raise MRInputError(error.code, str(error)) from None
+        pair, partial_error = error.partial_pair, error
+    for role in ("exposure", "outcome"):
+        samples = pair.record[role].setdefault("sampleMetadata", {}) or {}
+        samples["effectScale"] = merge_scale(declared_scale(request[f"{role}Source"].get("effectScale")), samples.get("effectScale") or unknown_scale())
+        pair.record[role]["sampleMetadata"] = samples
     try:
         absolute = output_root.absolute()
         with directory_fd(
@@ -738,6 +762,8 @@ def open_catalog_sources(
         if isinstance(error, MRInputError):
             raise
         raise _manifest_failure() from None
+    if partial_error is not None:
+        raise MRInputError(partial_error.code, str(partial_error)) from None
     mapping = ColumnMapping(**STANDARD_MAPPING, samplesize="samplesize", chr="chr", pos="pos")
     sources = {}
     for role in ("exposure", "outcome"):
@@ -748,16 +774,19 @@ def open_catalog_sources(
             file_path=str(private_root / OPEN_INPUT_NAMES[role]),
             column_mapping=mapping,
             trait_name=request[role],
-            population="; ".join(study.get("discoveryAncestry") or [])[:1000] or None,
+            population=open_sumstats.population_label(study),
             instruments_preclumped=role == "exposure",
             clumping_provenance=open_sumstats.provenance_sentence(pair.record)[:4000] if role == "exposure" else None,
             selection=open_sumstats.selection_record(pair.record) if role == "exposure" else None,
+            sample_size=(study.get("sampleMetadata") or {}).get("sampleSize"),
+            effect_scale=(study.get("sampleMetadata") or {}).get("effectScale") or unknown_scale(),
         )
     return sources, pair.record
 
 
 def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict[str, Any]) -> None:
     """Repository facts for catalogue sources, as the catalogue declares them."""
+    from mr_agent.source_context import unknown_scale
     by_accession = {record[role]["accession"]: role for role in ("exposure", "outcome")}
     for result in results:
         for label in ("exposure", "outcome"):
@@ -769,6 +798,10 @@ def bind_open_metadata(results: list[Any], record: dict[str, Any], request: dict
                 raise _manifest_failure()
             study = record[role]
             samples = study.get("sampleMetadata") or {}
+            setattr(result, f"{label}_scale", copy.deepcopy(samples.get("effectScale") or unknown_scale()))
+            own_sizes = (study.get("sampleSize") or {}).get("originalVariantSampleSizes")
+            if own_sizes:
+                result.source_variant_sample_sizes[label] = copy.deepcopy(own_sizes)
             setattr(result, f"{label}_metadata", {
                 "gwas_id": study["accession"],
                 "trait": study.get("trait") or request[role],
@@ -797,6 +830,7 @@ def bind_result_provenance(
     results: list[Any], provenance: dict[str, Any], request: dict[str, Any]
 ) -> None:
     """Attach supplied local declarations without inventing repository metadata."""
+    from mr_agent.source_context import declared_scale
     by_identifier = {
         f"{role}.csv": (role, record)
         for role, record in provenance.items()
@@ -811,6 +845,7 @@ def bind_result_provenance(
             if pair is None:
                 raise _manifest_failure()
             role, record = pair
+            setattr(result, f"{label}_scale", declared_scale(record.get("effectScale")))
             setattr(
                 result,
                 f"{label}_metadata",
@@ -829,6 +864,7 @@ def bind_result_provenance(
 def remote_metadata(sources: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Mixed-mode repository facts must come from the existing exact-ID client."""
     from mr_agent.tools import gwas
+    from mr_agent.source_context import merge_scale, unknown_scale
 
     metadata = {}
     for source in sources.values():
@@ -836,6 +872,10 @@ def remote_metadata(sources: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         try:
             metadata[source.gwas_id] = gwas.fetch_gwas_metadata(source.gwas_id)
+            metadata[source.gwas_id]["effect_scale"] = merge_scale(source.effect_scale, metadata[source.gwas_id].get("effect_scale") or unknown_scale())
+            source.effect_scale = copy.deepcopy(metadata[source.gwas_id]["effect_scale"])
+            source.sample_size = metadata[source.gwas_id]["sample_size"]
+            source.population = metadata[source.gwas_id]["population"]
         except gwas.OpenGwasAuthError:
             raise MRInputError(
                 "mr_input_remote_auth_required",
@@ -863,6 +903,8 @@ def bind_remote_metadata(results: list[Any], metadata: dict[str, dict[str, Any]]
                     "The MR result does not match verified remote metadata.",
                 )
             setattr(result, f"{role}_metadata", copy.deepcopy(entry))
+            from mr_agent.source_context import unknown_scale
+            setattr(result, f"{role}_scale", copy.deepcopy(entry.get("effect_scale") or unknown_scale()))
             setattr(result, f"sample_size_{role}", entry["sample_size"])
 
 

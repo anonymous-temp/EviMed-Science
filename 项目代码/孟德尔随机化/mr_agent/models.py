@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from mr_agent.source_context import unknown_scale, unknown_overlap
+
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -121,6 +123,7 @@ class DataSource(BaseModel):
     #: written verbatim to instrument-selection.json instead of the
     #: "provided by the supplier, not rechecked" declaration.
     selection: dict[str, Any] | None = None
+    effect_scale: dict[str, Any] = Field(default_factory=unknown_scale)
 
     @model_validator(mode="after")
     def require_preclumped_provenance(self) -> "DataSource":
@@ -148,6 +151,7 @@ class GWASEntry(BaseModel):
     sample_size: int | None = None
     nsnp: int | None = None
     population: str | None = None
+    effect_scale: dict[str, Any] = Field(default_factory=unknown_scale)
 
 
 # Every result that carries numbers carries `display` beside them: the strings
@@ -322,10 +326,18 @@ class MRAnalysisResult(BaseModel):
     # means every optional analysis ran; it is not the same as a list that was
     # never populated, which is why the R side always writes this field.
     skipped_analyses: list[str] = Field(default_factory=list)
+    analysis_status: Literal["completed", "partial", "failed"] = "completed"
+    analysis_error_code: str = ""
+    module_status: dict[str, Any] = Field(default_factory=dict)
     instrument_selection: dict[str, Any] = Field(default_factory=dict)
     #: Instruments that reached the analysis and why the rest did not (harmonisation.json).
     harmonisation: dict[str, Any] = Field(default_factory=dict)
     sample_overlap_warning: bool = False
+    exposure_scale: dict[str, Any] = Field(default_factory=unknown_scale)
+    outcome_scale: dict[str, Any] = Field(default_factory=unknown_scale)
+    sample_overlap: dict[str, Any] = Field(default_factory=unknown_overlap)
+    variant_sample_sizes: dict[str, Any] = Field(default_factory=dict)
+    source_variant_sample_sizes: dict[str, Any] = Field(default_factory=dict)
     sample_size_exposure: int | None = None
     sample_size_outcome: int | None = None
     exposure_metadata: dict[str, Any] = Field(default_factory=dict)

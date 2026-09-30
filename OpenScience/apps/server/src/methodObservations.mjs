@@ -380,3 +380,48 @@ export function runMethodObservations(input) {
     invokedWithoutMount,
   };
 }
+
+/** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
+ * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[]}} input */
+export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [] }) {
+  if (!run.id) return;
+  const started = Date.parse(String(run.startedAt ?? ""));
+  const finished = Date.parse(String(run.finishedAt ?? ""));
+  const inThisRun = (message) => typeof message?.time === "number" && Number.isFinite(message.time)
+    && Number.isFinite(started) && Number.isFinite(finished) && message.time >= started && message.time <= finished;
+  for (const mounted of run.capabilityHandbooks ?? []) {
+    if (mounted.ownerId !== userId || mounted.capabilityId !== run.effectiveAgentId) continue;
+    const items = (projection?.plan?.items ?? []).filter((item) => item.capability === mounted.capabilityId);
+    const sessionIds = new Set([run.sessionId, ...(projection?.subagents ?? [])
+      .filter((child) => items.some((item) => item.id === child.deliverableId)).map((child) => child.childSessionId)].filter(Boolean));
+    const used = sessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
+      (session.transcript?.messages ?? []).filter(inThisRun).some((message) => (message.parts ?? []).some((part) => {
+        if (part?.type !== "tool" || part?.status !== "completed") return false;
+        if (["read", "grep"].includes(part.tool)) {
+          const target = String(part.input?.path ?? part.input?.file_path ?? part.input?.filePath ?? "");
+          return target === mounted.path || target.endsWith(`/${mounted.path}`);
+        }
+        if (part.tool !== "bash") return false;
+        return String(part.input?.command ?? part.input?.cmd ?? "").split(/&&|\|\||[;|\n]/).some((segment) => {
+          const words = segment.trim().split(/\s+/);
+          return READING_PROGRAMS.has(words[0]?.split("/").pop() ?? "") && words.some((word) => word.replaceAll(/["']/g, "") === mounted.path);
+        });
+      })));
+    const outcomes = items.filter((item) => deliverableOutcome(item)).map((item) => ({ deliverableId: item.id, outcome: deliverableOutcome(item) }));
+    const observation = { runId: run.id, projectId: projectId ?? run.projectId ?? null, at: new Date().toISOString(),
+      contentDigest: mounted.contentDigest, attached: true, used, outcomes };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const row = await learning.documents.get(userId, "method", mounted.id);
+      if (row?.payload?.recordType !== "capability-handbook" || row.payload.capabilityId !== mounted.capabilityId
+        || row.payload.contentDigest !== mounted.contentDigest || row.payload.observations?.some((entry) => entry.runId === run.id)) break;
+      try {
+        await learning.documents.put(userId, "method", row.id, { ...row.payload,
+          observations: [...(row.payload.observations ?? []), observation].slice(-100),
+        }, { expectedRevision: row.revision, telemetry: true });
+        break;
+      } catch (error) {
+        if (error?.code !== "product_revision_conflict" || attempt === 4) throw error;
+      }
+    }
+  }
+}

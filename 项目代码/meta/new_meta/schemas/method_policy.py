@@ -131,6 +131,7 @@ class MethodExecutionResult(BaseModel):
     policy_version: str
     plan_fingerprint: str
     estimator: str
+    planned_estimator: str | None = None
     input_result_ids: list[str] = Field(default_factory=list)
     input_ledger_head_hash: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
     payload: dict[str, Any]

@@ -32,6 +32,38 @@ import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.
 import { HttpError } from "../src/security.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
+import { learningTriggersFor } from "../src/learningTriggers.mjs";
+
+test("specialist dispatch preserves managed GEO provenance for learning and relevance", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-managed-geo-provenance-"));
+  const project = { id: "brand-research", userId: "researcher", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_geo", mode: "specialist", agentId: "geo-content",
+    agentVersion: "2.0.0", runtimeAgent: "evimed-geo-content" };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000,
+  });
+  try {
+    const started = await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "geo-owned",
+      automated: true, effectiveRouteReason: "geo:content", effectiveAgentId: binding.agentId,
+      effectiveAgentVersion: binding.agentVersion, effectiveRuntimeAgent: binding.runtimeAgent },
+    async () => ({ accepted: true }));
+    const persisted = (await store.list(project)).find((run) => run.id === started.id);
+    assert.equal(persisted.effectiveRouteReason, "geo:content");
+    assert.equal(persisted.effectiveAgentId, binding.agentId, "the session still owns the capability binding");
+    assert.equal((await store.researcherRuns(project, { includeManaged: true })).length, 1);
+    assert.deepEqual(await store.researcherRuns(project), []);
+    assert.equal(await store.lastSessionId(project), null, "background work does not take over the last open conversation");
+    const completed = { ...persisted, status: "succeeded", artifacts: ["report.md"], transcript: { completeness: "complete" } };
+    assert.deepEqual(learningTriggersFor({ run: completed, runs: [completed], project }).map((lesson) => lesson.trigger), ["delivered"]);
+  } finally {
+    await store.cancelSession(project, binding.sessionId);
+    await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 /**
  * The version a capability ships at, read from its generated manifest: a
@@ -4752,7 +4784,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     unclassified,
     [],
     "these codes are emitted but classified neither recoverable nor terminal, so they silently fail runs; "
-      + `add each to one set in agentRuns.mjs: ${unclassified.join(", ")}`,
+      + `add each to one set in packages/domain/src/errorCodes.mjs: ${unclassified.join(", ")}`,
   );
 
   const both = [...emitted].filter((code) => (

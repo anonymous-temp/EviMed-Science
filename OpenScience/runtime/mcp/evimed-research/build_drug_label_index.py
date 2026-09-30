@@ -34,6 +34,7 @@ import posixpath
 import re
 import sqlite3
 import stat
+import sys
 import tempfile
 import time
 import zipfile
@@ -794,7 +795,9 @@ def build(source_root: Path, output: Path, datasets=DATASETS, scratch_dir: Path 
     try:
         import resource
 
-        report["peakMemoryMB"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        # ru_maxrss is bytes on macOS and KiB on Linux. Keep the report in MiB.
+        units_per_mib = 1024 * 1024 if sys.platform == "darwin" else 1024
+        report["peakMemoryMB"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / units_per_mib, 1)
     except (ImportError, AttributeError):
         pass
     return report

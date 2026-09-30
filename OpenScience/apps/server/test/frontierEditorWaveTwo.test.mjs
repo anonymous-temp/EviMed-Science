@@ -195,3 +195,15 @@ test("the Chinese abstract: a failed check is rewritten once with the issue name
   assert.equal(unavailable.verification, "pending");
   assert.equal(unavailable.error, "frontier_editor_unavailable", "no owner to bill, no call");
 });
+
+
+test("same event projection preserves trial milestone and exact work context", () => {
+  const input = JSON.parse(buildSameEventInput({ report: { sourceName: "Registry", titleRaw: "Trial results", identityKey: "reg:NCT01234567:results-posted:2026-09-22", registryIds: ["NCT01234567"], doi: "10.1000/results", pmid: "123", evidenceType: "rct", sourceType: "journal", timelineAt: "2026-09-22T01:00:00Z" }, candidates: [{ sourceName: "Registry", titleRaw: "Trial registered", identityKey: "reg:NCT01234567:registered:2026-01-01", registryIds: ["NCT01234567"], eventTitle: "Trial registration", eventFirstAt: "2026-01-01T00:00:00Z" }] }));
+  assert.equal(input.new.identity_key, "reg:NCT01234567:results-posted:2026-09-22");
+  assert.equal(input.new.doi, "10.1000/results");
+  assert.equal(input.new.pmid, "123");
+  assert.deepEqual(input.new.registry_ids, ["NCT01234567"]);
+  assert.equal(input.new.evidence_type, "rct");
+  assert.equal(input.new.timeline_date, "2026-09-22");
+  assert.equal(input.earlier[0].event_first_date, "2026-01-01");
+});

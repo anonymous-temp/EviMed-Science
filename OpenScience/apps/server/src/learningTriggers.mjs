@@ -48,16 +48,18 @@
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
  * `automated`, set by the dispatch body or the `x-evimed-automated` header),
- * an autopilot episode, the platform's internal capabilities, a trial of
+ * the platform's internal capabilities, a trial of
  * someone else's capsule, a paused account, and a run whose transcript is
  * incomplete, from which a lesson would be drawn on evidence the run cannot
  * see. There is no spending window or budget in the default configuration
  * (owner ruling of 2026-09-21); an operator can still set both.
+ * Researcher-owned GEO and proactive episodes participate by owner decision
+ * of 2026-09-29; their completion does not count as a new human visit.
  *
  * @module learningTriggers
  */
 
-import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
+import { METHOD_INDUCTION_MIN_TRAJECTORIES, isResearcherOwnedWork } from "@evimed/domain";
 import { isInternalProject } from "./internalProjects.mjs";
 import { memoryPausedFor } from "./researchMemory.mjs";
 import { TRANSCRIPT_RETENTION_DAYS } from "./runTranscripts.mjs";
@@ -128,12 +130,12 @@ export function routineCapability(run) {
 
 /**
  * Whether a run is the researcher's own work. What the platform did on its own
- * behalf is not: an evaluation cell, a probe or a harness (`automated`, set by
- * the dispatch body or the `x-evimed-automated` header), an autopilot episode.
+ * behalf is not: an evaluation cell, a probe or a harness. Managed GEO and
+ * proactive work belong to the researcher who commissioned them.
  * @param {any} run
  */
 function researcherRun(run) {
-  return run?.automated !== true && !String(run?.effectiveRouteReason ?? "").startsWith("autopilot:");
+  return isResearcherOwnedWork(run);
 }
 
 /**
@@ -222,9 +224,10 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
   projection = null, memoryResult = null, internalAgent = () => false }) {
   if (!run || !["succeeded", "failed"].includes(run.status)) return [];
   // Work the platform did on its own behalf is not the researcher's operation:
-  // an evaluation cell, a nightly autopilot episode, and the loop's own
+  // an evaluation cell and the loop's own
   // bounded runs (distillation learning from distillation is a hall of mirrors).
   if (!researcherRun(run)) return [];
+  if (project && isInternalProject(project.id)) return [];
   const agentId = String(run.effectiveAgentId ?? "");
   if (agentId && internalAgent(agentId)) return [];
   // A lesson drawn from an incomplete record rests on evidence the
@@ -414,4 +417,3 @@ export class LearningTriggers {
     return { queued, skipped: null };
   }
 }
-

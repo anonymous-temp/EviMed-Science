@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
+import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
 import { ResearchMemoryStore, memoryPausedFor } from "../src/researchMemory.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
@@ -40,6 +42,9 @@ before(async () => {
   if (!url) return;
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 8, databaseConnectionTimeoutMs: 5_000 });
   await createUsers([alpha, beta]);
+  await migrateProductStore(database);
+  await migrateNotifications(database);
+  await migrateUsageLedger(database);
   store = new ResearchMemoryStore({ memoryContextLimit: 8, memoryContextMaxChars: 20_000 }, { database });
 });
 

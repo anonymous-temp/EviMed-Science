@@ -1,0 +1,102 @@
+{
+  "runId": "run_9f9c612bac4ab90162b653703b357bfd",
+  "capability": "bibliometric-analysis",
+  "capabilityVersion": "1.1.1",
+  "startedAt": "2026-09-29T09:08:07.280Z",
+  "finishedAt": "2026-09-29T09:38:56.495Z",
+  "sourceRevision": null,
+  "sourceRevisionBasis": "Not recoverable from retained per-run ledger, state, transcript or job metadata; historical runtime container removed. Do not substitute current deployment revision.",
+  "sourceRevisionComponents": {
+    "runtime": null,
+    "controlPlaneAtRecovery": "233c033f36f15a5f85b8ca406932d329d918895d",
+    "specialistEngineAtJobTime": null
+  },
+  "recordedStatus": "succeeded",
+  "recordedVerification": null,
+  "reviewType": "observational_artifact_and_numeric_review",
+  "independentAcceptanceAssigned": false,
+  "reviewDisposition": "usable_descriptive_bibliometrics_with_coverage_limits",
+  "usableResults": [
+    "1,234 cleaned rows and unique PMIDs; year counts reproduce 234 in 2024, 602 in 2025, 93 in 2026.",
+    "2024-to-2025 growth recomputes to 157.264957%; citation coverage is 514/1,234 = 41.65316%.",
+    "Final report separates type annotations (743) from unique secondary-literature records (683); it discloses missing citations and entity normalization problems."
+  ],
+  "limitations": [
+    "Citation metrics and unique publication-type classification were not independently recomputed: recovered cleaned CSV lacks those fields.",
+    "The search is PubMed phrase-based and narrower than the conceptual inclusion description.",
+    "2026 issue-year records selected by a 2015-2025 publication-date query do not form a complete nine-month 2026 sample suitable for annualization."
+  ],
+  "schemaVersion": 1,
+  "recordKind": "historical_observation",
+  "reviewedAt": "2026-09-30",
+  "currentReleaseAcceptance": false,
+  "artifactDigests": [
+    {
+      "path": "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+      "sha256": "24f56a63792c56737ccc4685d90657a780490912be46dc0491685d906066c74f",
+      "bytes": 35436
+    },
+    {
+      "path": "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-run.json",
+      "sha256": "a4e6cb4072c710efab41d82769c03a2441a822ed26d397bb7dae7b6fb5f478f5",
+      "bytes": 5709
+    },
+    {
+      "path": "deliverables/glp1-obesity-bibliometric/revision-notes.md",
+      "sha256": "b0964f8c06025c68c5b690daac6fefef8bb2c13c43f5b0c0c490faa254d351ab",
+      "bytes": 15610
+    },
+    {
+      "path": "recheck2_glp1.py",
+      "sha256": "01be3062f786b0fa33f9b4a0dd8aaf6a92d79e79222e361ef3246e4c749ae7e5",
+      "bytes": 1976
+    },
+    {
+      "path": "recheck3_glp1.py",
+      "sha256": "53ab801791a7dc42ce4b5d57dc3bbbfef136c8413241f1e7c8479c44a9131f5c",
+      "bytes": 1483
+    },
+    {
+      "path": "recheck4_glp1.py",
+      "sha256": "b9c58ad1b01b8de55ad2c98d716905ec17464af695d2ee38449cbbc103140207",
+      "bytes": 2921
+    },
+    {
+      "path": "recheck5_glp1.py",
+      "sha256": "c38c4b17f01337018c9746206d4bb98e5139405fdbc9ce22d9b76ef0eaf32684",
+      "bytes": 1316
+    },
+    {
+      "path": "recheck_glp1.py",
+      "sha256": "35541bafdb1dfec9ad6134c28fb05e12d06ecb4b2d65388a11f1461a70d40462",
+      "bytes": 1117
+    },
+    {
+      "path": "refs2_glp1.py",
+      "sha256": "b4509fb56cc747855486f3f06f4f0f52764ba567eeedfbe445bd7cd375546ddf",
+      "bytes": 1121
+    },
+    {
+      "path": "refs_glp1.py",
+      "sha256": "8589d5c490656738255aacf12ceeb4e753092708db57d209023911e95da1bba6",
+      "bytes": 1122
+    },
+    {
+      "path": "trace_check_glp1.py",
+      "sha256": "84e078d229f0639323ab42edcbdaa5bb928c816631e408f49907f54c2aa28bdf",
+      "bytes": 1019
+    },
+    {
+      "path": "trace_numbers_glp1.py",
+      "sha256": "795cee7d046b24a0183db2abb6baadac58ba7f2f3f8e92a76e7ddf6b160da3c1",
+      "bytes": 3890
+    }
+  ],
+  "transcriptSha256": "d5a535f1f3b499c42a275250c2c991817afbb986a3a5d5433124f0558d7cd934",
+  "transcriptCompleteness": "complete",
+  "knownWritingIncidents": [
+    "../../../writing-incidents/cases/2026-09-29-recovered-biblio-selected-year-not-complete-calendar-sample.json",
+    "../../../writing-incidents/cases/2026-09-29-recovered-biblio-network-scope-of-conclusion.json"
+  ],
+  "retentionNote": "Original deliverables remain in the owning production project and the private recovery archive. This record retains reviewed metadata and digests, not raw transcripts or full source papers. Historical succeeded status is not a current-release acceptance verdict."
+}

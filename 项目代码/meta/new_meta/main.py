@@ -1089,6 +1089,19 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
     if phase.status is ExecutionStatus.SUCCEEDED:
         return
     project.save_json("method_delivery_status.json", phase, subdir="analysis")
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
+    if project_is_unattended(project):
+        from new_meta.core.partial_delivery import write_partial_report
+        if write_partial_report(project, phase):
+            package_path = create_artifact_package(project)
+            persist_release_decision(project, {
+                "schema_version": 1, "status": "ready_with_warnings", "ready_for_submission": False,
+                "requires_review": False, "deliverable": True, "verification": "unverified",
+                "summary": phase.summary + " Available evidence is delivered with limitations.",
+                "blocker_codes": [], "warning_codes": [phase.error_code or "partial_analysis"],
+                "next_actions": [], "artifacts": [str(package_path)],
+            })
+            raise SystemExit(0)
     if phase.status not in {ExecutionStatus.NEEDS_INPUT, ExecutionStatus.BLOCKED}:
         raise MethodDeliveryBlocked(phase)
     blocker_codes = [issue.code for issue in phase.issues if issue.blocking]
@@ -1111,11 +1124,21 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
 
 
 def _admit_cli_protocol(project, protocol, **kwargs):
-    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
+    from new_meta.core.method_planning import MethodCapabilityBlockedError, ProtocolInputRequired, admit_project_protocol
     try:
         return admit_project_protocol(project, protocol, **kwargs)
     except ProtocolInputRequired as exc:
         _require_cli_method_delivery(project, exc.phase)
+    except MethodCapabilityBlockedError as exc:
+        _require_cli_capability_delivery(project, exc)
+
+
+def _require_cli_capability_delivery(project, error):
+    from new_meta.schemas.phase_result import PhaseIssue, PhaseResult
+    phase = PhaseResult(run_id=project.base_dir.name, phase="synthesis", status="blocked",
+                        summary=str(error), error_code="method_capability_blocked",
+                        issues=[PhaseIssue(code="method_capability_blocked", message=str(error), blocking=True)])
+    _require_cli_method_delivery(project, phase)
 
 
 def _require_cli_primary_selection(project, selection_result):
@@ -1149,6 +1172,12 @@ def _require_cli_pairwise_rob(project, *, protocol, meta_results, extracted_stud
         return completed
     except PrimaryAlignmentRequired as exc:
         project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
+        from new_meta.core.primary_analysis_alignment import project_is_unattended, require_current_cached_alignment
+        if project_is_unattended(project) and exc.phase.error_code.startswith("pairwise_result_rob_"):
+            require_current_cached_alignment(project, protocol=protocol, meta_results=meta_results)
+            project.add_warning("synthesis", "Result-level risk of bias could not be completed; pooled estimates "
+                                "are retained with unknown risk of bias.", code="risk_of_bias_unavailable")
+            return []
         _require_cli_method_delivery(project, exc.phase)
 
 
@@ -3152,7 +3181,7 @@ def _ensure_cached_model_artifacts(
         return meta_results
     try:
         known_source_preferences = project.load_json("known_source_protocol_preferences.json", subdir="extraction") or {}
-        _, model_decision, model_sensitivity = build_model_decision_and_sensitivity(
+        _, _, model_sensitivity = build_model_decision_and_sensitivity(
             study_effects=study_effects,
             protocol=protocol,
             known_source_preferences=known_source_preferences,
@@ -3167,6 +3196,22 @@ def _ensure_cached_model_artifacts(
         )
         return meta_results
 
+    primary = meta_results.primary_outcome
+    # The retained numbers came from this stored execution. A successful fit
+    # today is only a recomputed sensitivity, never provenance for that result.
+    model_decision = {
+        **meta_results.model_decision,
+        "schema_version": 1,
+        "primary_model": primary.model,
+        "primary_engine_model": primary.model,
+        "tau_estimator": primary.tau_estimator,
+        "requested_method": primary.requested_method,
+        "executed_method": primary.execution_metadata().model_dump(mode="json"),
+        "reason": "Cached primary retained with its stored execution provenance; sensitivities were recomputed separately.",
+        "k": primary.n_studies,
+        "low_k_random_fallback": primary.fallback_reason == "fewer_than_three_studies",
+    }
+    model_sensitivity["origin"] = "recomputed_from_cached_study_effects"
     project.save_json("model_decision.json", model_decision, subdir="analysis")
     project.save_json("model_sensitivity.json", model_sensitivity, subdir="analysis")
     meta_results = meta_results.model_copy(update={
@@ -5270,6 +5315,12 @@ if __name__ == "__main__":
             except ReleaseBlockedError:
                 sys.exit(2)
         if isinstance(exc, MethodCapabilityBlockedError):
+            from new_meta.core.primary_analysis_alignment import project_is_unattended
+            if exc.project is not None and project_is_unattended(exc.project):
+                try:
+                    _require_cli_capability_delivery(exc.project, exc)
+                except ReleaseBlockedError:
+                    sys.exit(2)
             # A scope outside the validated capability set is a decision, not a
             # crash: write it where every other terminal state is written and
             # use the same exit code, so the caller reads a narrower capability

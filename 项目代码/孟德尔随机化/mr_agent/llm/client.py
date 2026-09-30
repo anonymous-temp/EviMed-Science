@@ -99,7 +99,10 @@ class LLMClient:
             "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
         )
         # The managed launcher supplies the gateway policy independently of logical tier.
-        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
+        managed = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") in {"high-thinking", "managed-thinking"}
+        self._gateway_effort = os.getenv("LLM_REASONING_EFFORT", "high") if managed else None
+        if self._gateway_effort is not None and self._gateway_effort not in {"off", "low", "high", "max"}:
+            raise ValueError("Invalid managed reasoning effort")
         self._client = None
         self._validate_key()
 
@@ -119,7 +122,7 @@ class LLMClient:
         raise ValueError(f"Unsupported DeepSeek model tier: {model_tier}")
 
     def _uses_reasoning(self, model_tier: str) -> bool:
-        return self._gateway_high_thinking or model_tier == "pro"
+        return self._gateway_effort != "off" if self._gateway_effort is not None else model_tier == "pro"
 
     def effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
         """Reserve room for enabled reasoning while preserving the answer budget."""
@@ -223,7 +226,7 @@ class LLMClient:
             },
         }
         if thinking_enabled:
-            kwargs["reasoning_effort"] = "high"
+            kwargs["reasoning_effort"] = self._gateway_effort or "high"
         else:
             kwargs["temperature"] = temperature
         if json_mode:

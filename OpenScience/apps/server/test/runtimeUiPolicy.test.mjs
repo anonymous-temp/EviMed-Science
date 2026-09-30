@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { connect as connectSocket } from "node:net";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, agentRuns = null, audit = undefined } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, agentRuns = null, audit = undefined } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, agentRuns, audit });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, agentRuns, audit });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -505,6 +505,15 @@ test("a workspace-file read is held to the workspace on both transports, and the
   f.manager.proxy = async (req, res) => { arrived.push([new URL(req.url, "http://ui.local").pathname, req.__openScienceProxyBody?.toString("utf8") ?? null]); res.writeHead(200); res.end("{}"); };
   const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
   assert.ok(root.startsWith("/"), "the fixture's workspace root is absolute");
+  for (const file of ["deliverables/report.md", "a.html", "img/b.png", "reports/report.html", "images/chart.png", "reports/chart.png"]) {
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "workspace content");
+  }
+  const escaped = path.join(f.dataDir, "private-files");
+  await mkdir(escaped);
+  await writeFile(path.join(escaped, "image.png"), "private bytes");
+  await writeFile(path.join(escaped, "report.html"), "private document");
+  await symlink(escaped, path.join(root, "linked"));
   const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
     method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
@@ -514,6 +523,8 @@ test("a workspace-file read is held to the workspace on both transports, and the
     ["workspaceFiles/readAll", { workspaceFileScopeId: "s", path: "deliverables/report.md" }],
     ["workspaceFiles/list", { workspaceFileScopeId: "s", path: root }],
     ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "img/b.png" }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "../images/chart.png", options: { baseFile: `${root}/reports/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "./chart.png", options: { baseFile: "reports/report.html" } }],
   ];
   for (const [index, [endpoint, args]] of inside.entries()) {
     assert.equal((await call(endpoint, args)).status, 200, `${endpoint} inside the workspace is forwarded`);
@@ -529,6 +540,12 @@ test("a workspace-file read is held to the workspace on both transports, and the
     ["workspaceFiles/readRelated", { workspaceFileScopeId: "s", path: `${root}/a.html`, relativePath: "/etc/hosts" }],
     ["workspaceFiles/read", {}],
     ["workspaceFiles/read", { workspaceFileScopeId: "s", path: `${root}/a\\b` }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: { baseFile: "/etc/report.html" } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "../private.png", options: { baseFile: `${root}/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "%2e%2e/private.png", options: { baseFile: `${root}/reports/report.html` } }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: [] }],
+    ["workspaceFiles/readBytes", { sessionId: "s", path: "image.png", options: { baseFile: `${root}/linked/report.html` } }],
+    ["workspaceFiles/readAll", { sessionId: "s", path: `${root}/linked/report.html` }],
   ];
   for (const [index, [endpoint, args]] of outside.entries()) {
     const response = await call(endpoint, args);
@@ -545,6 +562,48 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal((await c.next()).type, "end");
   assert.equal(arrived.length, inside.length, "nothing outside the workspace reached the runtime");
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
+});
+
+test("native Markdown media uses authenticated bounded workspace reads with inert content", async (t) => {
+  const f = await fixture(t, { maxFileBytes: 16 });
+  const project = await f.store.requireProject(f.user, "default");
+  await mkdir(path.join(project.workspaceDir, "figures"), { recursive: true });
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  await writeFile(path.join(project.workspaceDir, "figures", "图 表.png"), bytes);
+  await writeFile(path.join(project.workspaceDir, "large.png"), Buffer.alloc(32));
+  await writeFile(path.join(project.workspaceDir, "page.html"), "<h1>hello</h1>");
+  f.manager.runtimeWorkspaceRoot = () => "/workspace";
+  f.manager.proxy = async () => assert.fail("raw kernel file reads must not bypass the host's file boundary");
+  const media = (file, options = {}) => fetch(`${f.base}/api/file?path=${encodeURIComponent(file)}`, {
+    headers: { Cookie: f.cookie }, ...options,
+  });
+  const image = await media("/workspace/figures/图 表.png");
+  assert.equal(image.status, 200);
+  assert.deepEqual(Buffer.from(await image.arrayBuffer()), bytes);
+  assert.equal(image.headers.get("content-type"), "image/png");
+  assert.equal(image.headers.get("content-security-policy"), "sandbox; default-src 'none'");
+  assert.equal(image.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(image.headers.get("cache-control"), "private, no-store");
+  const head = await media("/workspace/figures/图 表.png", { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(head.headers.get("content-length"), String(bytes.length));
+  assert.equal(await head.text(), "");
+  assert.equal((await media("/workspace/page.html")).headers.get("content-security-policy"), "sandbox; default-src 'none'");
+  assert.equal((await media("/workspace/large.png")).status, 413);
+  assert.equal((await media("/workspace/figures/图 表.png", { headers: {} })).status, 401);
+  assert.equal((await media("/etc/passwd")).status, 403);
+  assert.equal((await media("/workspace/../outside.png")).status, 403);
+  assert.equal((await fetch(`${f.base}/api/file?path=/workspace/page.html&path=/etc/passwd`, { headers: { Cookie: f.cookie } })).status, 400);
+  const outside = path.join(f.dataDir, "outside");
+  await mkdir(outside);
+  await writeFile(path.join(outside, "private.png"), "private");
+  await symlink(outside, path.join(project.workspaceDir, "linked"));
+  await symlink(path.join(outside, "private.png"), path.join(project.workspaceDir, "final.png"));
+  for (const file of ["/workspace/linked/private.png", "/workspace/final.png"]) {
+    const rejected = await media(file);
+    assert.equal(rejected.status, 403);
+    assert.doesNotMatch(await rejected.text(), /private<|>private/);
+  }
 });
 
 test("a composer attachment reaches the kernel on both transports, held to the file ceiling", { timeout: 5000 }, async (t) => {
@@ -1234,4 +1293,82 @@ test("a notice page says what stopped the conversation in the shell's own words,
   const offPage = await off.text();
   assert.ok(offPage.includes("对话暂不可用"), offPage);
   for (const page of [cappedPage, offPage]) assert.ok(!page.includes("内核"), page);
+});
+
+test('native model selection permits only the certified Flash route and closed reasoning choices', async t => {
+  const f = await fixture(t);
+  const request = selected => fetch(`${f.base}/api/session/selectModel`, { method: 'POST', headers: {
+    cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
+  }, body: JSON.stringify({ type: 'client-request', rpcId: 'select-effort', method: 'session/selectModel',
+    payload: { args: { request: { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel, ...selected } } } }) });
+  assert.equal((await request({})).status, 200, 'native selection may omit an explicit effort');
+  for (const reasoningEffort of ['off', 'low', 'high', 'max']) assert.equal((await request({ reasoningEffort })).status, 200);
+  for (const invalid of [{ model: 'deepseek-v4-pro' }, { provider: 'other-provider' }, { reasoningEffort: 'unbounded' }, { apiKey: 'not-an-allowed-setting' }]) {
+    assert.equal((await request(invalid)).status, 403);
+  }
+  assert.equal(isDeniedRuntimeUiMethod('session/modelCatalog'), false);
+  assert.equal(isDeniedRuntimeUiMethod('session/initializeDefaultModel'), true);
+  assert.equal(isDeniedRuntimeUiMethod('credentials/set'), true);
+});
+
+test('native mux selection preserves the effort and rejects provider or metadata changes before forwarding', async t => {
+  const checked = [];
+  const f = await fixture(t, {}, {}, { authorizePrompt: async (_project, sessionId) => {
+    checked.push(sessionId);
+    if (sessionId === 'private-source') throw new HttpError(403, 'agent_background_only', 'Private source session.');
+  } });
+  const connection = f.connect();
+  assert.equal(await connection.opened, 101);
+  const selected = { sessionId: 's-one', provider: 'deepseek-official', model: f.config.deepseekModel };
+  for (const reasoningEffort of ['off', 'low', 'high', 'max']) {
+    connection.send(open(`effort-${reasoningEffort}`, 'session/selectModel', { request: { ...selected, reasoningEffort } }));
+    assert.equal((await connection.next()).type, 'item');
+    assert.equal(f.received.at(-1).payload.args.request.reasoningEffort, reasoningEffort);
+  }
+  const before = f.received.length;
+  for (const [index, invalid] of [{ provider: 'other' }, { model: 'deepseek-v4-pro' }, { reasoningEffort: 'medium' },
+    { providerSettings: {} }, { sessionId: 'private-source' }].entries()) {
+    const streamId = `invalid-${index}`;
+    connection.send(open(streamId, 'session/selectModel', { request: { ...selected, ...invalid } }));
+    assertNativeError(await connection.next(), streamId, index === 4 ? 'agent_background_only' : 'runtime_ui_model_selection_forbidden');
+    assert.equal((await connection.next()).type, 'end');
+  }
+  assert.equal(f.received.length, before);
+  assert.deepEqual(checked, ['s-one', 's-one', 's-one', 's-one', 'private-source']);
+});
+
+
+test("native HTTP and mux freeze context only for admitted prompts without rewriting identity or queue mode", async t => {
+  const frozen = [];
+  const f = await fixture(t, {}, {}, {
+    authorizePrompt: async (_project, sessionId) => { if (sessionId === "private") throw new HttpError(403, "agent_background_only", "Internal"); },
+    preparePrompt: async (project, request) => { frozen.push({ userId: project.userId, projectId: project.id, request: structuredClone(request) }); },
+  });
+  const forwarded = [];
+  f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody.toString("utf8")); res.writeHead(200); res.end("{}"); };
+  const request = { requestId: "actual-request-A", sessionId: "ordinary", mode: "queue", content: [{ type: "text", text: "Current A" }] };
+  const rpc = JSON.stringify({ type: "client-request", rpcId: "transport-only-id", method: "session/prompt", payload: { args: { request } } });
+  const post = body => fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body });
+  assert.equal((await post(rpc)).status, 200);
+  assert.deepEqual(forwarded, [rpc]);
+  assert.deepEqual(frozen, [{ userId: f.user.id, projectId: "default", request }]);
+  const denied = JSON.stringify({ type: "client-request", rpcId: "denied", method: "session/prompt", payload: { args: { request: { ...request, sessionId: "private" } } } });
+  assert.equal((await post(denied)).status, 403);
+  assert.equal(frozen.length, 1);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const steer = open("transport-B", "session/prompt", { request: { ...request, requestId: "actual-request-B", mode: "steer" } });
+  c.send(steer); assert.equal((await c.next()).type, "item");
+  assert.deepEqual(f.received.at(-1), steer);
+  assert.deepEqual(frozen[1].request, steer.payload.args.request);
+});
+
+test("failed native supplemental context never refuses an otherwise authorized prompt", async t => {
+  const audits = [];
+  const f = await fixture(t, {}, {}, { preparePrompt: async () => { throw new HttpError(503, "handbook_context_timeout", "Context timed out"); },
+    audit: async (event, detail) => audits.push({ event, ...detail }) });
+  const request = { type: "client-request", rpcId: "transport", method: "session/prompt",
+    payload: { args: { request: { requestId: "input", sessionId: "ordinary", mode: "queue", content: [{ type: "text", text: "Question" }] } } } };
+  const response = await fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(request) });
+  assert.equal(response.status, 200);
+  assert.ok(audits.some(item => item.code === "handbook_context_timeout"));
 });

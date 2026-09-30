@@ -172,7 +172,10 @@ class LLMService:
 
     def __init__(self):
         # The managed launcher supplies the gateway policy independently of logical tier.
-        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
+        managed = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") in {"high-thinking", "managed-thinking"}
+        self._gateway_effort = os.getenv("LLM_REASONING_EFFORT", "high") if managed else None
+        if self._gateway_effort is not None and self._gateway_effort not in {"off", "low", "high", "max"}:
+            raise ValueError("Invalid managed reasoning effort")
         self.client = None
         self._client_api_key = None
         self._credential_refresh_lock = asyncio.Lock()
@@ -307,7 +310,7 @@ class LLMService:
         raise ValueError(f"不支持的DeepSeek模型: {selected}")
 
     def _uses_reasoning(self, model_tier: str) -> bool:
-        return self._gateway_high_thinking or model_tier == "pro"
+        return self._gateway_effort != "off" if self._gateway_effort is not None else model_tier == "pro"
 
     def _effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
         """Reserve output room whenever reasoning is enabled."""
@@ -350,7 +353,7 @@ class LLMService:
             },
         }
         if thinking_enabled:
-            kwargs["reasoning_effort"] = "high"
+            kwargs["reasoning_effort"] = self._gateway_effort or "high"
         else:
             kwargs["temperature"] = temperature
         if json_mode:

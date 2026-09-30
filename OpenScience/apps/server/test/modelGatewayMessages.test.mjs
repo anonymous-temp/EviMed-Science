@@ -137,8 +137,8 @@ test("the kernel's Messages request reaches DeepSeek's Messages API under the de
   assert.equal(seen.headers.authorization, undefined);
   assert.equal(seen.headers["anthropic-version"], "2023-06-01");
   assert.equal(seen.body.model, "deepseek-flash", "the certified model, whatever the request named");
-  assert.deepEqual(seen.body.thinking, { type: "enabled" });
-  assert.deepEqual(seen.body.output_config, { effort: "high" });
+  assert.deepEqual(seen.body.thinking, { type: "disabled" });
+  assert.equal(seen.body.output_config, undefined);
   assert.equal(seen.body.system, "You are an AI agent powered by DeepSeek Harness.");
   assert.deepEqual(events.map((event) => event.type), ["reserve", "settle"]);
   assert.deepEqual(events[1].input.usage, { cacheHitTokens: 880, cacheMissTokens: 120, completionTokens: 57 });
@@ -242,4 +242,19 @@ test("Messages usage: a read from the cache is a hit, uncached input and cache w
   for (const chunk of messagesStream("y", 40).match(/[\s\S]{1,97}/g) ?? []) tail.observe(chunk);
   assert.equal(tail.finished(), true, "message_stop ends the stream the way [DONE] does");
   assert.deepEqual(tail.usage(), { promptTokens: 1000, completionTokens: 57, cacheHitTokens: 880, cacheMissTokens: 120 });
+});
+
+
+test("native Messages preserves the user's chosen effort, including off, without changing the certified model", async t => {
+  for (const effort of ["low", "max", "off"]) {
+    let seen;
+    const response = await call(t, (_req, res, body) => { seen = body; res.writeHead(200, { "content-type": "text/event-stream" }); res.end(messagesStream("ok")); }, [], {
+      body: kernelRequest({ model: "not-the-certified-model", thinking: { type: effort === "off" ? "disabled" : "enabled" },
+        output_config: effort === "off" ? undefined : { effort } }) });
+    assert.equal(response.status, 200);
+    await response.text();
+    assert.equal(seen.model, "deepseek-flash");
+    assert.equal(seen.thinking.type, effort === "off" ? "disabled" : "enabled");
+    assert.equal(seen.output_config?.effort, effort === "off" ? undefined : effort);
+  }
 });

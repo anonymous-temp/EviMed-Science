@@ -1,18 +1,13 @@
-"""Attest completed specialist jobs, from protected worker authority.
+"""Record completed specialist jobs from their admitted worker state.
 
-Two producers share one proof schema, one key and one signature: ``produce``
-attests the pinned public MR audit (its fixture is part of the proof), and
-``produce_job_receipt`` attests a completed job of any other engine the shared
-adapter runs. Both sign only for a worker whose analysis ran as the separate
-analysis UID (``analysis_credentials``), so no engine can read the key.
-
-This module also supplies the clean-checkout verifier's source evidence. The
-adapter package and full auditable agent tree are hashed with the same rules;
-installation paths, customer data, environment and keys are never evidence.
+No signing key or operator approval is required. Version 2 records describe
+observed source, request, input and artifact bytes; they do not claim independent
+or cryptographic verification. Historical signed records remain readable by the
+audit consumer, while new execution evidence uses ordinary protected job records.
+Installation paths, customer data, environment and keys are never source evidence.
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -95,51 +90,9 @@ def _read_file(root, relative, limit=MAX_FILE_BYTES, *, secret=False):
             os.close(descriptor)
 
 
-def signing_key():
-    """An absent or unsafe optional key never prevents ordinary MR analysis."""
-    name = os.environ.get("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", "")
-    if not name:
-        return None
-    try:
-        from cryptography.exceptions import UnsupportedAlgorithm
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        path = Path(name).absolute()
-        pem = _read_file(Path(path.anchor), path.relative_to(path.anchor).as_posix(), 8192, secret=True)
-        if not pem.startswith(b"-----BEGIN PRIVATE KEY-----\n"):
-            return None
-        try:
-            key = serialization.load_pem_private_key(pem, password=None)
-        except UnsupportedAlgorithm:
-            return None
-        return key if isinstance(key, Ed25519PrivateKey) else None
-    except (OSError, ValueError, TypeError, ImportError):
-        return None
-
-
-
 def analysis_credentials():
-    """Audit signing requires a Linux owner process with a separate analysis UID.
-
-    The runner receives neither this key path nor a privileged group. No-new-
-    privileges plus the UID change performed by Popen prevents regaining root at exec.
-    The existing unsigned deployment needs no privilege-changing capability.
-    """
-    name = os.environ.get("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", "")
-    if not name:
-        return None
-    if sys.platform != "linux" or os.geteuid() != 0:
-        raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable")
-    try:
-        process = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
-        if int(process["CapEff"].strip(), 16) & ((1 << 6) | (1 << 7)) != ((1 << 6) | (1 << 7)) or process["NoNewPrivs"].strip() != "1":
-            raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable")
-        path = Path(name).absolute()
-        # The descriptor read also verifies owner, link count, mode and size.
-        _read_file(Path(path.anchor), path.relative_to(path.anchor).as_posix(), 8192, secret=True)
-    except (OSError, KeyError, ValueError):
-        raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable") from None
-    return {"user": 65532, "group": 65532, "extra_groups": [], "umask": 0o007}
+    """Compatibility hook: ordinary analysis never needs an audit identity or key."""
+    return None
 
 
 def _load_manifest():
@@ -147,11 +100,8 @@ def _load_manifest():
 
 
 def ready(fixture=True):
-    """Whether a completed job would be signed; the MR audit also needs its fixture."""
-    if signing_key() is None:
-        return False
+    """Whether the retained job observation can include its declared public fixture."""
     try:
-        analysis_credentials()
         if fixture:
             _fixture_contract(_load_manifest())
         return True
@@ -259,14 +209,11 @@ def _receipt_rows(rows):
 
 
 def produce(state, outcome, data_root):
-    """Sign once at completion, never from status or client-supplied receipts."""
-    key = signing_key()
-    if key is None:
-        return None
+    """Record once at completion, never reconstruct evidence from a status response."""
     try:
         request, fixture, inputs, files = _fixture_contract(_load_manifest())
         if (state["status"] != "succeeded" or state["request"] != request
-                or outcome.get("analysisIsolated") is not True or outcome.get("cleanupError")):
+                or outcome.get("cleanupError")):
             return None
         if _receipt_rows(outcome.get("inputReceipts")) != _receipt_rows(inputs):
             return None
@@ -291,22 +238,16 @@ def produce(state, outcome, data_root):
             "jobStatus": "succeeded", "scope": scope, "requestSha256": digest(canonical(request)),
             **state["sourceEvidence"], "inputs": _receipt_rows(outcome["inputReceipts"]),
             "artifacts": artifacts, "completedAt": state["finishedAt"], "fixture": fixture}
-        return _attest(proof, key)
+        return _worker_observation(proof)
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         # Optional audit eligibility is narrower than normal MR eligibility.
         return None
 
 
-def _attest(proof, key):
-    """Sign the canonical proof in place; None when it would not fit a receipt."""
-    from cryptography.hazmat.primitives import serialization
-    body = canonical(proof)
-    if len(body) > MAX_RECEIPT_BYTES:
-        return None
-    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    proof["attestation"] = {"algorithm": "Ed25519", "keyId": "ed25519-" + digest(public),
-                            "signature": base64.b64encode(key.sign(body)).decode("ascii")}
-    return proof
+def _worker_observation(proof):
+    """A bounded worker observation, explicitly not a cryptographic attestation."""
+    record = {**proof, "schemaVersion": 2, "evidenceKind": "worker-observation"}
+    return record if len(canonical(record)) <= MAX_RECEIPT_BYTES else None
 
 
 def job_scope(state, data_root):
@@ -320,20 +261,14 @@ def job_scope(state, data_root):
 
 
 def produce_job_receipt(state, *, tool, output_prefix, inputs, artifacts, data_root):
-    """Sign a completed job of a shared-adapter engine, once, from its worker.
+    """Record a completed shared-adapter job, once, from its worker.
 
-    The MR audit's proof schema without its public fixture. ``inputs`` and
-    ``artifacts`` are the worker's own rows -- the bytes it handed the isolated
-    engine and the bytes it published from it -- never a re-read of files a
-    caller can write. ``requestSha256`` was fixed at admission over the request
-    as the caller sent it. Returns None, signing nothing, whenever the job or
-    its rows are not exactly what a receipt may attest.
+    Input and artifact rows describe the worker's private stage. The request
+    digest was fixed at admission. Missing evidence affects this observation,
+    never the useful job output itself.
     """
-    key = signing_key()
-    if key is None:
-        return None
     try:
-        if state["status"] != "succeeded" or state.get("analysisIsolated") is not True:
+        if state["status"] != "succeeded":
             return None
         rows = _receipt_rows(artifacts)
         if ([row["path"] for row in rows] != sorted(row["path"] for row in state["artifacts"])
@@ -345,7 +280,7 @@ def produce_job_receipt(state, *, tool, output_prefix, inputs, artifacts, data_r
         proof = {"schemaVersion": 1, "tool": tool, "jobId": state["jobId"], "jobStatus": "succeeded",
             "scope": job_scope(state, data_root), "requestSha256": request_sha, **state["sourceEvidence"],
             "inputs": _receipt_rows(inputs) if inputs else [], "artifacts": rows, "completedAt": state["finishedAt"]}
-        return _attest(proof, key)
+        return _worker_observation(proof)
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         return None
 

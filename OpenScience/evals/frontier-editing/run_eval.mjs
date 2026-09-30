@@ -26,6 +26,7 @@ const { values } = parseArgs({
     runs: { type: "string", default: "3" },
     "key-file": { type: "string", default: resolve(here, "../../../.evimed-local/secrets/deepseek.api-key") },
     only: { type: "string" },
+    kind: { type: "string", default: "all" },
     editor: { type: "string", default: resolve(here, "../../apps/server/src/frontierEditor.mjs") },
   },
 });
@@ -40,10 +41,11 @@ const editor = new FrontierEditor({ deepseekProviderEnabled: true, deepseekApiKe
   { owner: { userId: "eval", projectId: "eval" } });
 const allowedLanes = FRONTIER_LANES.filter((lane) => lane !== "mixed");
 const wanted = (/** @type {{ id: string }} */ item) => !values.only || item.id === values.only;
+if (!["all", "lane", "same-event"].includes(values.kind)) throw new Error("--kind must be all, lane, or same-event");
 
 /** @type {any[]} */
 const results = [];
-for (const item of cases.lane.filter(wanted)) {
+for (const item of (values.kind === "same-event" ? [] : cases.lane.filter(wanted))) {
   const answers = [];
   for (let run = 0; run < runs; run += 1) {
     const screened = await editor.screen([{ key: "1", ...item.screen, allowedLanes }]);
@@ -56,7 +58,7 @@ for (const item of cases.lane.filter(wanted)) {
   results.push({ kind: "lane", id: item.id, passed, runs, answers, why: item.why });
   console.log(`${passed === runs ? "PASS" : "FAIL"} lane ${item.id} ${passed}/${runs} ${JSON.stringify(answers)}`);
 }
-for (const item of cases.same_event.filter(wanted)) {
+for (const item of (values.kind === "lane" ? [] : cases.same_event.filter(wanted))) {
   const answers = [];
   for (let run = 0; run < runs; run += 1) {
     const judged = await editor.judgeSameEvent({ report: item.report, candidates: item.candidates });

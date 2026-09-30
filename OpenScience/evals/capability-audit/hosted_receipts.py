@@ -1,13 +1,10 @@
-"""Audit-only retained proof for an isolated specialist adapter.
+"""Retained specialist worker observations, with historical receipt support.
 
-This is deliberately a different schema from legacy workspace .jobs files.
-An authenticated terminal response must supply data.auditReceipt from protected
-job state; a driver must never manufacture that proof from its own checkout.
-Status-only responses remain insufficient; only a protected signed receipt qualifies.
-Ed25519 verification requires cryptography and a digest-pinned public PEM. The
-signature covers canonical(proof without attestation); keyId is "ed25519-"
-followed by SHA-256 of the raw 32-byte public key. No receipt-provided key is
-trusted, and no signing private key belongs in this module or its output.
+An authenticated terminal response supplies data.auditReceipt from protected job
+state. Version 2 records need no signing key: readers verify their request, scope,
+source and retained file bindings without claiming cryptographic attestation.
+Version 1 signed records remain readable against the pinned historical public
+key. Neither reader needs a private key or a human approval step.
 """
 from __future__ import annotations
 
@@ -158,20 +155,19 @@ def write_new(root, relative, blob):
         os.close(descriptor)
 
 
+def meta_observation(repo=REPO):
+    location = repo.parent / "项目代码/meta/new_meta/evimed_job_observation.py"
+    spec = importlib.util.spec_from_file_location("hosted_meta_observation", location)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def current_evidence(tool, repo=REPO):
-    # Every engine the shared adapter runs signs its receipts over the same
-    # evidence formula since 2026-09-29 (the whole engine tree plus the
-    # adapter); MR was the only one before. Meta runs outside the adapter and
-    # keeps the legacy rule until it signs receipts of its own.
+    # Each producer and the consumer share the source formula. Meta ships in
+    # its own image; all observations are unsigned, non-gating job records.
     if tool == "meta_analysis":
-        location = repo / "runtime/mcp/evimed-research/execution_evidence.py"
-        spec = importlib.util.spec_from_file_location("hosted_legacy_execution_evidence", location)
-        legacy = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(legacy)
-        adapter = repo / "deploy/specialist-adapter"
-        return {"executionEvidence": legacy.execution_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool],
-                    adapter / "evimed_specialist_adapter/service.py"),
-                "adapterEvidence": legacy.source_tree_evidence(adapter)}
+        return meta_observation(repo).current_evidence(repo.parent / "项目代码/meta")
     adapter = repo / "deploy/specialist-adapter/evimed_specialist_adapter"
     location = adapter / "audit_receipt.py"
     spec = importlib.util.spec_from_file_location("hosted_audit_execution_evidence", location)
@@ -180,11 +176,16 @@ def current_evidence(tool, repo=REPO):
     return module.current_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool], adapter)
 
 
-def request_inputs(request):
+def request_inputs(request, workspace=None):
     sources = [request[key] for key in ("exposureSource", "outcomeSource") if key in request]
     paths = [relative_path(source["path"]) for source in sources if isinstance(source, dict) and source.get("type") == "local_file"]
     if request.get("manuscript"):
         paths.append(relative_path(request["manuscript"]))
+    if request.get("userPdfDirectory") or request.get("ipdData"):
+        try:
+            paths.extend(meta_observation().request_inputs(request, workspace))
+        except (OSError, ValueError, TypeError, KeyError):
+            raise ReceiptError("hosted_receipt_input_binding_invalid") from None
     return paths
 
 
@@ -218,12 +219,18 @@ def validate_public_mr_fixture(request, proof, workspace):
 
 def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, trustedPublicKey=None):
     """One eligibility check used by capture, resume, harvest and clean replay."""
-    if not isinstance(value, dict) or value.get("schemaVersion") != 1 or value.get("kind") != "isolated-specialist-receipt":
+    if not isinstance(value, dict) or (value.get("schemaVersion"), value.get("kind")) not in {
+        (1, "isolated-specialist-receipt"), (2, "specialist-worker-record")
+    }:
         raise ReceiptError("hosted_receipt_schema_invalid")
     proof = value.get("proof")
     if not isinstance(proof, dict):
         raise ReceiptError("hosted_receipt_missing:auditReceipt")
-    required = {"schemaVersion", "tool", "jobId", "jobStatus", "scope", "requestSha256", "executionEvidence", "adapterEvidence", "inputs", "artifacts", "completedAt", "attestation"}
+    observation = proof.get("schemaVersion") == 2 and proof.get("evidenceKind") == "worker-observation"
+    if observation != (value["schemaVersion"] == 2):
+        raise ReceiptError("hosted_receipt_schema_invalid")
+    required = {"schemaVersion", "tool", "jobId", "jobStatus", "scope", "requestSha256", "executionEvidence", "adapterEvidence", "inputs", "artifacts", "completedAt"}
+    required.add("evidenceKind" if observation else "attestation")
     if tool == "mendelian_randomization":
         required.add("fixture")
     for key in sorted(required):
@@ -231,7 +238,7 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
             raise ReceiptError("hosted_receipt_missing:" + key)
     if set(proof) - required - {"releaseStatus", "adapterImageDigest", "adapterRevision"}:
         raise ReceiptError("hosted_receipt_private_or_unknown_fields")
-    if proof["schemaVersion"] != 1 or proof["tool"] != tool or value.get("tool") != tool:
+    if proof["schemaVersion"] not in ({2} if observation else {1}) or proof["tool"] != tool or value.get("tool") != tool:
         raise ReceiptError("hosted_receipt_identity_invalid")
     if not isinstance(proof["jobId"], str) or not re.fullmatch(r"[a-z][a-z0-9-]{7,100}", proof["jobId"]):
         raise ReceiptError("hosted_receipt_job_invalid")
@@ -239,7 +246,8 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
         raise ReceiptError("hosted_receipt_not_terminal")
     if value.get("startedJobId") != proof["jobId"]:
         raise ReceiptError("hosted_receipt_started_job_mismatch")
-    verify_attestation(proof, trustedPublicKey)
+    if not observation:
+        verify_attestation(proof, trustedPublicKey)
     scope = proof["scope"]
     if (not isinstance(scope, dict) or set(scope) != {"userId", "projectId", "activeWorkspace"}
             or scope != value.get("scope")
@@ -275,7 +283,7 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
         for row in rows:
             if not isinstance(row, dict) or set(row) != {"path", "bytes", "sha256"} or file_receipt(workspace, row["path"]) != row:
                 raise ReceiptError("hosted_receipt_artifact_changed")
-    if sorted(row["path"] for row in proof["inputs"]) != sorted(request_inputs(request)):
+    if sorted(row["path"] for row in proof["inputs"]) != sorted(request_inputs(request, workspace)):
         raise ReceiptError("hosted_receipt_input_binding_invalid")
     if sorted(response.get("artifacts", [])) != sorted(row["path"] for row in proof["artifacts"]):
         raise ReceiptError("hosted_receipt_artifact_binding_invalid")
@@ -291,7 +299,9 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
 def capture_receipt(workspace, tool, request, response, scope, *, expected_job_id, expected=None, trustedPublicKey=None):
     data = response.get("data") or {}
     proof = data.get("auditReceipt")
-    value = {"schemaVersion": 1, "kind": "isolated-specialist-receipt", "tool": tool,
+    observation = isinstance(proof, dict) and proof.get("schemaVersion") == 2
+    value = {"schemaVersion": 2 if observation else 1,
+        "kind": "specialist-worker-record" if observation else "isolated-specialist-receipt", "tool": tool,
         "startedJobId": expected_job_id,
         "scope": scope, "request": request, "proof": proof,
         "response": {"status": response.get("status"), "jobId": data.get("jobId"), "jobStatus": data.get("jobStatus"),

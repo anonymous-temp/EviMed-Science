@@ -15,7 +15,7 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, isResearcherRun, readRunStateProjection, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -25,13 +25,16 @@ import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvalua
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { HandbookConsolidation } from "./handbookConsolidation.mjs";
+import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
+import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { runMethodObservations } from "./methodObservations.mjs";
+import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
-import { archivedLessonRun, ensureLearningProject, preserveProjectLessons } from "./learningPreservation.mjs";
+import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -72,6 +75,7 @@ import {
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
 import { MEMORY_KIND_LABELS_ZH, migrateResearchMemory } from "./researchMemoryPersistence.mjs";
@@ -84,6 +88,7 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
+import { createEngineExecutionContextResolver } from "./engineExecutionContext.mjs";
 import { createEngineModelTokenHandler, ENGINE_MODEL_TOKEN_PATH } from "./modelGatewayEngineTokens.mjs";
 import { ALERT_RECEIVER_PATH, createAlertReceiver } from "./alertReceiver.mjs";
 import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
@@ -130,8 +135,10 @@ import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
-import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
-  verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
+import { cancelAutopilotVerification, AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
+  autopilotLogicalDispatchId, isUnsentAutopilotLeaseLoss, verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
+import { runUsageKeys } from "./runUsage.mjs";
+import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
@@ -149,6 +156,8 @@ import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // the two reader actions, and the composer the worker ticks.
 import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
+import { FrontierWeekly } from "./frontierWeekly.mjs";
+import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
@@ -174,6 +183,7 @@ import { tickParse as tickGeoParse } from "./geoJudge.mjs";
 import { tickMetrics as tickGeoMetrics } from "./geoMetricsJob.mjs";
 import { tickErrors as tickGeoErrors } from "./geoErrors.mjs";
 import { GeoMarketStore } from "./geoMarketStore.mjs";
+import { GeoMarketOperations } from "./geoMarketOperations.mjs";
 import { cancelOrder as cancelGeoOrder, clearStop as clearGeoMarketStop, confirmTopup as confirmGeoTopup, markOrderLost as markGeoOrderLost,
   marketStatus as geoMarketStatus, noteCitation as noteGeoCitation, resolveUnknownOrder as resolveGeoUnknownOrder, setBudget as setGeoBudget,
   tickCatalogue as tickGeoCatalogue, tickOrders as tickGeoOrders, tickPoll as tickGeoPoll, tickReconcile as tickGeoReconcile,
@@ -770,7 +780,7 @@ function memoryRecallRejection(error) {
 export const RUN_USAGE_START_SLACK_MS = 10 * 60_000;
 
 export function runUsageFrom(summaries, run) {
-  const parts = [summaries.get(run.id), run.dispatchId && run.dispatchId !== run.id ? summaries.get(run.dispatchId) : null].filter(Boolean);
+  const parts = runUsageKeys(run).map(id => summaries.get(id)).filter(Boolean);
   if (parts.length === 0) return null;
   const started = Date.parse(run.startedAt ?? run.createdAt ?? "");
   const firsts = parts.map((part) => Date.parse(part.firstRequestAt ?? "")).filter(Number.isFinite);
@@ -1413,7 +1423,8 @@ export function createWebApiApp(overrides = {}) {
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles } | null} */
+   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
     const client = new KnowledgePluginClient({
@@ -1440,6 +1451,10 @@ export function createWebApiApp(overrides = {}) {
     const events = new FrontierEvents({ database: productDatabase, editor, embedder, config, budget });
     const daily = new FrontierDaily({ database: productDatabase, jobs: productJobs, notifications: notificationService, editor, events, config,
       owner: () => editor.owner, budget, workerId: randomId("frontier-daily-") });
+    const weekly = new FrontierWeekly({ database: productDatabase, jobs: productJobs, owner: () => editor.owner, config,
+      workerId: randomId("frontier-weekly-") });
+    const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
+      notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
     const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
@@ -1451,7 +1466,7 @@ export function createWebApiApp(overrides = {}) {
         for (const listed of await store.listProjects(user)) {
           if (isInternalProject(listed.id)) continue;
           const project = await store.requireProject(user, listed.id);
-          for (const run of await agentRuns.researcherRuns(project)) runs.push({ projectId: project.id, run });
+          for (const run of await agentRuns.researcherRuns(project, { includeManaged: true })) runs.push({ projectId: project.id, run });
         }
         return runs;
       } });
@@ -1463,8 +1478,8 @@ export function createWebApiApp(overrides = {}) {
       } : null,
       ...(overrides.frontierPdfTransport ? { pdfTransport: overrides.frontierPdfTransport } : {}) });
     const service = new FrontierService({ database: productDatabase, config, vocabulary, ingest, embedder,
-      dimension: config.kbEmbeddingDimension, budget, events, daily, profiles, actions });
-    const composer = new FrontierComposer({ events, daily, profiles,
+      dimension: config.kbEmbeddingDimension, budget, events, daily, weekly, profiles, actions });
+    const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     const worker = new FrontierWorker({
@@ -1479,7 +1494,7 @@ export function createWebApiApp(overrides = {}) {
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles };
+    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
@@ -1722,7 +1737,7 @@ export function createWebApiApp(overrides = {}) {
       // Settled spend at the moment the run ended, under both of its ids: a
       // bounded runtime's calls carry its dispatch id, everything else the run's.
       const spent = usageLedger
-        ? await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean))
+        ? await usageLedger.summaryRuns(project.userId, runUsageKeys(run))
         : null;
       const read = await readRunStateProjection(project, project.workspaceDir, run);
       const evidence = read.state === "read" ? read.projection?.evidence?.byStatus ?? {} : {};
@@ -1757,7 +1772,7 @@ export function createWebApiApp(overrides = {}) {
     const user = await store.userById(userId);
     if (!user) return "kernel";
     const run = (await agentRuns.list(await store.requireProject(user, projectId)))
-      .find((item) => item.id === runId || item.dispatchId === runId);
+      .find((item) => runUsageKeys(item).includes(runId));
     if (!run) return "kernel";
     const purpose = usagePurposeOfRun(run);
     runPurposes.set(key, purpose);
@@ -1775,6 +1790,8 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
   // what the pump was given when a second kernel without a downlink could be
   // selected; there is one kernel now and it always publishes one.
+  /** @type {NativeHandbookContext | null} */
+  let nativeHandbookContext = null;
   const runtimeEventPump = new RuntimeEventPump({
     runEvents,
     isDshKernel: true,
@@ -1802,11 +1819,15 @@ export function createWebApiApp(overrides = {}) {
       // kernel's own parentage, which is what makes this a branch (decision 6).
       const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
       const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
-      return agentRuns.adoptRuntimeSession(full, sessionId, {
+      const run = await agentRuns.adoptRuntimeSession(full, sessionId, {
         transcript,
-        routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
+        routeTurn: async (text, input) => (await nativeHandbookContext?.routeFor(full, sessionId, input?.requestIds, text))
+          ?? routeAdoptedInput(full, sessionId, text),
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
+      await recordNativeSessionHandbooks(full, sessionId);
+      return run;
+
     },
     // The pump has already authenticated the runtime and attributed root and
     // child sessions to one project-scoped run. Feed that kernel-owned
@@ -2040,7 +2061,7 @@ export function createWebApiApp(overrides = {}) {
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
     // What the run has spent so far, for its progress aggregate (C5).
     readRunUsage: async (project, run) => (usageLedger
-      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, [run.id, run.dispatchId].filter(Boolean)), run)
+      ? runUsageFrom(await usageLedger.summaryRuns(project.userId, runUsageKeys(run)), run)
       : null),
     // rt: asked right before the delivery gate reads a run's files, so a
     // remote runtime's host copy is brought up to date first (plan §3.1 #4).
@@ -2090,7 +2111,7 @@ export function createWebApiApp(overrides = {}) {
       runAttribution.delete(`${project.userId}\0${project.id}`);
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
-      if (frontier && !isInternalProject(project.id) && isResearcherRun(run)) frontier.profiles.noteConversation(project.userId, run);
+      if (frontier && !isInternalProject(project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
       if (geo && !isInternalProject(project.id)) {
@@ -2138,45 +2159,40 @@ export function createWebApiApp(overrides = {}) {
       // An independent verification is not an episode: it owns its own bounded
       // runtime scope and folds into one claim, not into a digest fold.
       //
-      // It is identified by its dispatch id, which is the one thing about the
-      // run the dispatch layer cannot rewrite. The route reason cannot be used:
-      // `AgentRunStore.dispatch` replaces the caller's value with
-      // "session-binding" for every specialist-mode session, so keying on it
-      // meant this whole fold never ran. The id is a reserved shape
-      // (`episode-<32 hex>-v<n>`) that `/runs` refuses from a client, and
-      // `recordVerification` still requires the named episode to hold a claim
-      // carrying exactly this verification id, which is the ownership evidence.
+      // Reserved verifier IDs survive retries; the logical ID belongs to the
+      // claim and budget, while the actual attempt owns its scratch directory.
       const verifiedEpisodeId = autopilotService ? verificationEpisodeId(run.dispatchId) : null;
       if (verifiedEpisodeId) {
-        const verdict = await readVerificationVerdict(project, run);
-        const spent = usageLedger ? await usageLedger.summaryRun(project.userId, run.dispatchId).catch(() => null) : null;
-        await autopilotService.recordVerification(project.userId, {
-          episodeId: verifiedEpisodeId, verificationId: run.dispatchId, runId: run.id,
-          costCny: spent?.actualCost ?? 0,
-          // Whether the separation was a fence or only a prompt. The scratch
-          // workspace reaches the container on the direct path and not through
-          // the privileged controller, whose start payload carries only
-          // `{userId, projectId, activeWorkspace}` — so this deployment's mode
-          // is what decides, and the tier a claim may reach follows it.
-          isolated: config.runtimeControllerMode !== "socket",
-          ...verdict,
-        }).catch(error => securityAudit(config, "autopilot.verification.record", "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code : "autopilot_verification_failed",
-        }));
-        if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
-          await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.runtime.release", "failed", {
+        const verificationId = autopilotLogicalDispatchId(run.dispatchId);
+        if (isUnsentAutopilotLeaseLoss(run)) {
+          await autopilotService.recordUnsentAttempt(project.userId, verifiedEpisodeId, { projectId: project.id, run, verificationId });
+        } else {
+          const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
+          const verdict = await readVerificationVerdict(project, run);
+          const spent = usageLedger ? await usageLedger.summaryRun(project.userId, verificationId).catch(() => null) : null;
+          await autopilotService.recordVerification(project.userId, {
+            episodeId: verifiedEpisodeId, verificationId, runId: run.id,
+            costCny: spent?.actualCost ?? 0,
+            isolated: config.runtimeControllerMode !== "socket",
+            ...verdict,
+          }).catch(error => securityAudit(config, "autopilot.verification.record", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
-            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+            code: typeof error?.code === "string" ? error.code : "autopilot_verification_failed",
+          }));
+          let released = !cleanupTarget;
+          if (cleanupTarget?.runId === verificationId) {
+            released = await runtimeManager.endBoundedRuntime(project, verificationId, cleanupTarget.generation).catch(error => {
+              return securityAudit(config, "autopilot.runtime.release", "failed", {
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+              }).then(() => false);
+            });
+          }
+          if (released) await discardVerificationScratch(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
           }));
         }
-        // Last, and only after the verdict is in the claim: the scratch the run
-        // was given exists to be thrown away, and it is inside the tree the
-        // project's quota measures.
-        await discardVerificationScratch(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
-          userId: project.userId, projectId: project.id, runId: run.id,
-          code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
-        }));
       }
       const autopilotOwned = await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
@@ -2226,6 +2242,8 @@ export function createWebApiApp(overrides = {}) {
         await credits.service.settleRun({
           userId: project.userId, projectId: project.id, runId: run.id,
           dispatchId: run.dispatchId ?? null,
+          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          effectiveRouteReason: run.effectiveRouteReason,
           capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
           subject: run.title ?? run.question ?? null,
         });
@@ -2339,6 +2357,17 @@ export function createWebApiApp(overrides = {}) {
           // It runs inside the transcript write on purpose: it needs the same
           // sessions, and both must finish before the run's container is let go.
           await recordMethodUse({ project, run, sessions });
+          if (learningService && config.learningEnabled && !evaluationRun && !isInternalProject(project.id)) {
+            const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
+            if (!state.learning && !state.trial) {
+              await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
+                run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+              }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
+              }));
+            }
+          }
         } catch (error) {
           await securityAudit(config, "run.transcript.persist", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
@@ -2521,6 +2550,24 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  const ownedContextDependencies = {
+    learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
+    paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
+    audit: (event, status, detail) => securityAudit(config, event, status, detail),
+  };
+  const prepareOwnedResearchContext = createOwnedResearchContext(ownedContextDependencies);
+  const selectOwnedHandbooks = createOwnedHandbookSelector(ownedContextDependencies);
+  if (learningService && config.learningEnabled) nativeHandbookContext = new NativeHandbookContext({
+    route: routeAdoptedInput,
+    select: (project, session, route) => selectOwnedHandbooks(project, session, {}, route),
+    budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
+    attached: recordNativeSessionHandbooks,
+    allowed: async (project, sessionId) => {
+      if (!config.learningEnabled || isInternalProject(project.id)) return false;
+      const state = await memoryPausedFor(researchMemory, project.userId, project.id, sessionId);
+      return !state.learning && !state.trial;
+    },
+  });
   if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
     config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,
     registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
@@ -2559,7 +2606,14 @@ export function createWebApiApp(overrides = {}) {
         return user ? store.requireProject(user, projectId) : null;
       },
     });
+    const handbookConsolidation = agentRegistry.then((registry) => new HandbookConsolidation({
+      learning: learningService, jobs: productJobs, registry,
+      resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
+      enabled: async (userId, projectId) => config.learningEnabled
+        && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
+    }));
     const consolidation = new MethodConsolidation({
+      handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
       learning: learningService, jobs: productJobs,
@@ -2662,6 +2716,9 @@ export function createWebApiApp(overrides = {}) {
       maintain: async () => {
         await store.loadUsers();
         for (const user of [...store.users.values()]) {
+          await handbookConsolidation.then((handbooks) => handbooks.reconcile(user.id)).catch((error) => securityAudit(config, "handbook.reconcile", "failed", {
+            userId: user.id, code: typeof error?.code === "string" ? error.code : "handbook_reconcile_unavailable",
+          }));
           // One project's unreadable directory must not stop the sweep: the
           // point of a retention policy is that it runs, and a policy that
           // stops at the first awkward project is a policy that protects the
@@ -2685,6 +2742,37 @@ export function createWebApiApp(overrides = {}) {
     });
   }
   if (autopilotService && config.autopilotEnabled) {
+    const assertAutopilotDispatchAllowed = async (input, user) => {
+      try { await input.assertDispatchAllowed?.(); }
+      catch (error) {
+        // This guard runs before the prompt, so its rejection cannot be an
+        // unknown running turn or a scientific failure.
+        error.definitivelyRejected = true;
+        if (["autopilot_paused", "autopilot_stopped"].includes(error?.code) && !input.verificationId) {
+          await autopilotService.markEpisodeCanceled(user.id, input.episodeId).catch((failure) => securityAudit(config, "autopilot.start.cancel", "failed", {
+            userId: user.id, projectId: input.projectId, code: failure?.code ?? "autopilot_cancellation_unrecorded",
+          }));
+        }
+        throw error;
+      }
+    };
+    const checkAutopilotBalance = async (input, user, selected) => {
+      const record = async (result) => autopilotService.recordBalanceCheck(user.id, input.episodeId, {
+        ...result, capabilityId: selected.id, checkedAt: new Date().toISOString(),
+      }, input.verificationId ? { verificationId: input.verificationId } : {}).catch((error) => securityAudit(config, "autopilot.balance.record", "failed", {
+        userId: user.id, projectId: input.projectId, code: typeof error?.code === "string" ? error.code : "autopilot_balance_unrecorded",
+      }));
+      let permission;
+      try {
+        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id) : { allowed: true, reason: "not_enabled" };
+      } catch (error) {
+        await record({ allowed: false, reason: typeof error?.code === "string" ? error.code : "balance_check_unavailable" });
+        throw error;
+      }
+      await record(permission);
+      // A pause or lease change during the balance request cannot start work.
+      await assertAutopilotDispatchAllowed(input, user);
+    };
     autopilotWorker = new AutopilotWorker({
       jobs: productJobs,
     service: autopilotService,
@@ -2694,10 +2782,15 @@ export function createWebApiApp(overrides = {}) {
     // runtime idle that long would yield its slot. Not the idle timeout: that
     // is how long a runtime stays warm (twelve hours), not how long work lasts.
     busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleYieldAfterMs) + 60_000)),
-    cancelDispatched: async ({ userId, projectId, sessionId, episodeId }) => {
+    cancelDispatched: async ({ userId, projectId, sessionId, episodeId, runId, verificationId, dispatchId, runtimeGeneration }) => {
       const user = await store.userById(userId);
       if (!user) return;
       const project = await store.requireProject(user, projectId);
+      if (verificationId) {
+        return cancelAutopilotVerification({ runtimeManager, agentRuns }, verificationRunProject(project, dispatchId), {
+          episodeId, verificationId, dispatchId, runId, sessionId, runtimeGeneration,
+        });
+      }
       let cancellationError = null;
       try { await runtimeManager.cancelRuntimeSession(project, sessionId); }
       catch (error) { cancellationError = error; }
@@ -2740,6 +2833,9 @@ export function createWebApiApp(overrides = {}) {
       const user = await store.userById(verification.userId);
       if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
       const project = await store.requireProject(user, verification.projectId);
+      const previous = await inspectAutopilotDispatch({ service: autopilotService, agentRuns }, project, verification);
+      if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId, dispatchId: previous.replay.dispatchId, runtimeGeneration: null };
+      const dispatchId = verification.dispatchId ?? verification.verificationId;
       const agenda = await autopilotService.get(user.id, verification.agendaId);
       const brief = verificationBrief(verification);
       const prompt = verificationPrompt(brief);
@@ -2758,7 +2854,13 @@ export function createWebApiApp(overrides = {}) {
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-      const scoped = verificationRunProject(project, verification.verificationId);
+      await checkAutopilotBalance(verification, user, selected);
+      await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, verification, previous.unsent);
+      if (previous.unsent) await discardVerificationScratch(project, previous.unsent.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
+        userId: project.userId, projectId: project.id, runId: previous.unsent.id,
+        code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
+      }));
+      const scoped = verificationRunProject(project, dispatchId);
       await withProjectStorageMutation(project, async () => {
         // `docker run --mount type=bind` refuses a source that does not exist,
         // so the directory is made before the runtime is reserved.
@@ -2776,26 +2878,31 @@ export function createWebApiApp(overrides = {}) {
       // agenda actually hits -- the project's runtime busy with something else,
       // the project over its storage quota -- are raised by this call, and a
       // handler that started after it swept nothing on exactly those.
+      let cleanupTarget = null;
       try {
         const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, {
           runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
         });
+        cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(scoped);
         await researchSessions.put(scoped, session.id, {
           mode: "specialist", agentId: selected.id, agentVersion: selected.version,
         });
         const run = await agentRuns.dispatch(scoped, {
           sessionId: session.id,
-          dispatchId: verification.verificationId,
+          dispatchId,
           question: prompt,
           effectiveAgentId: selected.id,
           effectiveAgentVersion: selected.version,
           effectiveRuntimeAgent: selected.runtimeAgent,
-          // Recorded only if the session is not specialist-bound; the dispatch
-          // layer substitutes "session-binding" for one that is. Nothing reads
-          // it back — the completion fold identifies a verification by its
-          // dispatch id — but the caller still says what it dispatched.
+          // Binding fixes capability identity while preserving this verified
+          // control-plane dispatch reason.
           effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
+          await assertAutopilotDispatchAllowed(verification, user);
+          await autopilotService.recordVerificationDispatched(user.id, verification.episodeId, {
+            verificationId: verification.verificationId, dispatchId, runId: dispatchedRun.id,
+            sessionId: session.id, runtimeGeneration: cleanupTarget?.generation ?? null,
+          });
           const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
             query: prompt, memories: [], specialists: [],
             routedSpecialist: {
@@ -2807,6 +2914,7 @@ export function createWebApiApp(overrides = {}) {
             secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
             runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
           });
+          await assertAutopilotDispatchAllowed(verification, user);
           return runtimeManager.dispatchPrompt(scoped, session.id, {
             // The question first: the kernel names a session after the start
             // of its first message, and a marker first named it
@@ -2818,15 +2926,24 @@ export function createWebApiApp(overrides = {}) {
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
-        return { runId: run.id, sessionId: session.id };
+        return { runId: run.id, sessionId: session.id, dispatchId, runtimeGeneration: cleanupTarget?.generation ?? null };
       } catch (error) {
-        await runtimeManager.endBoundedRuntime(scoped, verification.verificationId).catch(() => {});
+        // A lost lease has no authority to stop or clean the next owner's work.
+        if (error?.code === "product_job_lease_lost") throw error;
+        const existing = (await agentRuns.list(project)).find(run => run.dispatchId === dispatchId);
+        if (existing && !(existing.dispatchStatus === "rejected" && ["autopilot_paused", "autopilot_stopped"].includes(existing.errorCode))) {
+          return { runId: existing.id, sessionId: existing.sessionId, dispatchId: existing.dispatchId, runtimeGeneration: cleanupTarget?.generation ?? null };
+        }
+        let released = !cleanupTarget;
+        if (cleanupTarget?.runId === verification.verificationId) {
+          released = await runtimeManager.endBoundedRuntime(scoped, verification.verificationId, cleanupTarget.generation);
+        }
         // A dispatch that failed leaves the same directory behind as one that
         // ran, and no completion fold is ever called for it. The dispatch
         // failure is the one that travels; this one is recorded, because a
         // scratch directory nobody removed is invisible until the quota walk
         // trips over it.
-        await discardVerificationScratch(project, verification.verificationId)
+        if (released) await discardVerificationScratch(project, dispatchId)
           .catch(scratchError => securityAudit(config, "autopilot.verification.scratch", "failed", {
             userId: project.userId, projectId: project.id,
             code: typeof scratchError?.code === "string" ? scratchError.code : "verification_scratch_remove_failed",
@@ -2838,6 +2955,9 @@ export function createWebApiApp(overrides = {}) {
         const user = await store.userById(episode.userId);
         if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
         const project = await store.requireProject(user, episode.projectId);
+        const previous = await inspectAutopilotDispatch({ service: autopilotService, agentRuns }, project, episode);
+        if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
+        const dispatchId = episode.dispatchId ?? episode.episodeId;
         const agenda = await autopilotService.get(user.id, episode.agendaId);
         if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
           dailyLimit: Number(agenda.payload.dailyBudgetCny) || 0,
@@ -2849,6 +2969,8 @@ export function createWebApiApp(overrides = {}) {
         // here and ran adverse-event analysis instead.
         const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
+        await checkAutopilotBalance(episode, user, selected);
+        await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
         const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
         const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
         const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
@@ -2857,13 +2979,16 @@ export function createWebApiApp(overrides = {}) {
           weeklyLimit,
           runLimit: Number(episode.budgetCny),
         });
+        const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
+        const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
+          ? runtimeManager.endBoundedRuntime(project, episode.episodeId, cleanupTarget.generation) : false;
         try {
           await researchSessions.put(project, session.id, {
             mode: "specialist", agentId: selected.id, agentVersion: selected.version,
           });
           const run = await agentRuns.dispatch(project, {
             sessionId: session.id,
-            dispatchId: episode.dispatchId,
+            dispatchId,
             question: episode.prompt,
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
@@ -2871,9 +2996,17 @@ export function createWebApiApp(overrides = {}) {
             effectiveRouteReason: `autopilot:${episode.taskType}`,
             ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
+            // Record the attempt before checking the lease: a refusal now has
+            // durable proof of no prompt for the next owner to reclaim.
+            if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
             } catch (error) {
+              if (["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+                await autopilotService.markEpisodeCanceled(user.id, episode.episodeId);
+                error.definitivelyRejected = true;
+                throw error;
+              }
               await autopilotService.queueDispatchedCancellation(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
               throw error;
             }
@@ -2886,7 +3019,7 @@ export function createWebApiApp(overrides = {}) {
               // outcome than an episode that did not run.
               throw memoryRecallRejection(error);
             }
-            const prepared = await prepareResearchContext(project, binding, config, {
+            const prepared = await prepareOwnedResearchContext(project, binding, {
               query: episode.prompt,
               memories,
               specialists: [],
@@ -2897,7 +3030,7 @@ export function createWebApiApp(overrides = {}) {
                 skill: selected.skill,
                 companionSkills: selected.companionSkills,
               },
-            });
+            }, dispatchedRun);
             // What the episode was handed, in its ledger entry as a chat run's
             // is (2026-09-26 audit, M-8): the memory file and the usage
             // counter proved the recall happened while the ledger said nothing.
@@ -2909,6 +3042,7 @@ export function createWebApiApp(overrides = {}) {
               runId: episode.episodeId, dailyLimit,
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
+            if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             return runtimeManager.dispatchPrompt(project, session.id, {
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
@@ -2922,7 +3056,12 @@ export function createWebApiApp(overrides = {}) {
           }
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
-          const existing = (await agentRuns.list(project)).find((run) => run.dispatchId === episode.dispatchId);
+          if (error?.code === "product_job_lease_lost") throw error;
+          if (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+            await releaseOwnRuntime();
+            throw error;
+          }
+          const existing = (await agentRuns.list(project)).find((run) => run.dispatchId === dispatchId);
           if (existing) {
             if (existing.status !== "running") return { runId: existing.id, sessionId: session.id };
             const currentEpisode = await autopilotService.getEpisode(user.id, episode.episodeId).catch(() => null);
@@ -2939,7 +3078,7 @@ export function createWebApiApp(overrides = {}) {
                 return { runId: existing.id, sessionId: session.id };
               } catch (queueError) {
                 let releaseError = null;
-                try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+                try { await releaseOwnRuntime(); }
                 catch (failure) { releaseError = failure; }
                 const failures = [bindingError, queueError, releaseError].filter(Boolean);
                 const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot run identity could not be persisted."));
@@ -2949,7 +3088,7 @@ export function createWebApiApp(overrides = {}) {
             }
           }
           let releaseError = null;
-          try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+          try { await releaseOwnRuntime(); }
           catch (failure) { releaseError = failure; }
           if (releaseError) {
             const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError([error, releaseError], "Autopilot initialization and runtime release failed."));
@@ -2967,10 +3106,11 @@ export function createWebApiApp(overrides = {}) {
     users: store, agentRuns, runtimeManager, usageLedger, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
+    frontierDeliveryPolicy: (item) => frontier?.notifications.deliveryAllowed(item) ?? Promise.resolve(false),
     steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate,
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -2991,6 +3131,7 @@ export function createWebApiApp(overrides = {}) {
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
+  const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
@@ -3003,7 +3144,9 @@ export function createWebApiApp(overrides = {}) {
   const engineUsageHandler = createEngineUsageHandler({ config, usageLedger, attributeRun });
   // An engine job's credential for the model gateway, asked for by its
   // adapter at admission (gap E4; OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED).
-  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun });
+  const engineModelTokenHandler = createEngineModelTokenHandler({ config, runtimeManager, attributeRun,
+    resolveExecutionContext: createEngineExecutionContextResolver({ config, store, agentRuns, runtimeManager }),
+  });
   // The evaluation corpus needs both arms to see byte-identical upstream
   // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
   // knob is set in production, and setting the replay one makes a miss a named
@@ -3134,10 +3277,17 @@ export function createWebApiApp(overrides = {}) {
     const running = /** @type {GeoOrchestrator} */ (orchestrator);
     geoParts.orchestrator = running;
     geoParts.exporter = { export: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ kind) => running.requestExport(user, project, kind) };
+    const marketOperations = new GeoMarketOperations({ database: productDatabase, ready: () => marketDeps.store.ready(), timeZone: geoTimeZone });
     geoParts.market = {
+      orders: (/** @type {Record<string,string>} */ input) => marketOperations.orders(input),
+      topups: (/** @type {Record<string,string>} */ input) => marketOperations.topups(input),
+      settlement: (/** @type {Record<string,string>} */ input) => marketOperations.settlement(input),
       configured: () => marketClient.configured === true,
       balance: () => marketClient.balance(),
-      status: () => geoMarketStatus(marketDeps),
+      status: async () => {
+        const [status, counts] = await Promise.all([geoMarketStatus(marketDeps), marketOperations.counts()]);
+        return { ...status, ...marketOperations.periodDefaults(), operationsAvailable: true, counts, problemOrders: counts.problemOrders };
+      },
       setBudget: (/** @type {any} */ user, /** @type {any} */ project, /** @type {{ totalCny: number, dailyCny: number }} */ budget) =>
         setGeoBudget(marketDeps, { userId: String(user.id), geoProjectId: project.id, ...budget }),
       cancelOrder: (/** @type {any} */ user, /** @type {any} */ project, /** @type {string} */ orderId) =>
@@ -3212,11 +3362,11 @@ export function createWebApiApp(overrides = {}) {
         let memories = [];
         try { memories = await memorySubstrate.recall(user.id, brief, { projectId: project.id, sessionId: session.id }); }
         catch (error) { throw memoryRecallRejection(error); }
-        const prepared = await prepareResearchContext(project, binding, config, {
+        const prepared = await prepareOwnedResearchContext(project, binding, {
           query: brief, memories, specialists: [],
           routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
             skill: selected.skill, companionSkills: selected.companionSkills },
-        });
+        }, dispatchedRun);
         // Recorded like a chat run's recall, for the reason the episode's is.
         if (prepared.memories.length > 0) {
           await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
@@ -3327,6 +3477,27 @@ export function createWebApiApp(overrides = {}) {
    * the question out of the session's own transcript instead of a request body.
    * @param {Record<string, any>} project @param {string} sessionId @param {string} text
    */
+  /** Join only confirmed, current-input attachments to a kernel-owned run. */
+  async function recordNativeHandbookAttachments(project, run) {
+    if (!nativeHandbookContext || !run?.kernelRequestIds?.length) return run;
+    try {
+      const receipts = await nativeHandbookContext.receipts(project, run);
+      const fresh = receipts.filter(item => !(run.capabilityHandbooks ?? []).some(previous => previous.id === item.id && previous.contentDigest === item.contentDigest));
+      return fresh.length ? await agentRuns.recordLearning(project, run.id, { appendCapabilityHandbooks: fresh }) ?? run : run;
+    } catch (error) {
+      await securityAudit(config, "handbook.native.attach", "failed", { userId: project.userId, projectId: project.id, runId: run.id,
+        code: typeof error?.code === "string" ? error.code : "handbook_attachment_unavailable" });
+      return run;
+    }
+  }
+
+  async function recordNativeSessionHandbooks(project, sessionId, requestIds = null) {
+    for (const run of (await agentRuns.list(project)).filter(item => item.sessionId === sessionId
+      && (!requestIds || requestIds.some(id => item.kernelRequestIds?.includes(id))))) {
+      await recordNativeHandbookAttachments(project, run);
+    }
+  }
+
   async function routeAdoptedInput(project, sessionId, text) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
@@ -3422,7 +3593,7 @@ export function createWebApiApp(overrides = {}) {
       } catch (error) {
         throw memoryRecallRejection(error);
       }
-      const prepared = await prepareResearchContext(project, session, config, {
+      const prepared = await prepareOwnedResearchContext(project, session, {
         query: text,
         memories,
         specialists: routableAgents,
@@ -3431,7 +3602,7 @@ export function createWebApiApp(overrides = {}) {
           ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
             skill: routed.skill, companionSkills: routed.companionSkills }
           : null,
-      });
+      }, dispatchedRun);
       if (prepared.mountedSkills.length > 0 || prepared.memories.length > 0) {
         await agentRuns.recordLearning(project, dispatchedRun.id, {
           ...(prepared.mountedSkills.length > 0 ? { mountedSkills: prepared.mountedSkills } : {}),
@@ -3535,7 +3706,9 @@ export function createWebApiApp(overrides = {}) {
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
+    const gateway = pathname === TOOL_UNIVERSE_GATEWAY_PATH
+      ? toolUniverseGatewayHandler
+      : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
       : isModelGatewayPath(pathname)
       ? modelGatewayHandler
@@ -4104,7 +4277,7 @@ export function createWebApiApp(overrides = {}) {
         // A ledger that cannot be read leaves the runs without the field
         // rather than the list without its runs.
         if (usageLedger && runs.length > 0) {
-          const summaries = await usageLedger.summaryRuns(ctx.project.userId, runs.flatMap((run) => [run.id, run.dispatchId]).filter(Boolean))
+          const summaries = await usageLedger.summaryRuns(ctx.project.userId, [...new Set(runs.flatMap(runUsageKeys))])
             .catch(() => null);
           if (summaries) runs = runs.map((run) => { const usage = runUsageFrom(summaries, run); return usage ? { ...run, usage } : run; });
         }
@@ -4368,7 +4541,7 @@ export function createWebApiApp(overrides = {}) {
           const answerPackage = !contextSpecialist && !routedSpecialist && session.mode === "open-domain"
             ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID)
             : null;
-          const prepared = await prepareResearchContext(ctx.project, session, config, {
+          const prepared = await prepareOwnedResearchContext(ctx.project, session, {
             query: text,
             memories,
             specialists: session.mode === "open-domain" ? routableAgents : [],
@@ -4384,7 +4557,7 @@ export function createWebApiApp(overrides = {}) {
                   companionSkills: contextSpecialist.companionSkills,
                 }
               : routedSpecialist,
-          });
+          }, dispatchedRun);
           // Before the prompt goes out, like the brief: a mount the ledger has
           // not recorded cannot be told apart from one that never happened.
           // The same rule for what was recalled: a memory this dispatch used
@@ -5051,7 +5224,7 @@ export function createWebApiApp(overrides = {}) {
         // Under both ids a run's calls can carry: its own, which the gateway
         // stamps on an interactive run's calls, and its dispatch id, which a
         // bounded runtime (autopilot, verification) was minted for.
-        const summaries = await Promise.all([...new Set([run.id, run.dispatchId].filter(Boolean))]
+        const summaries = await Promise.all([...new Set(runUsageKeys(run))]
           .map((id) => usageLedger.summaryRun(ctx.project.userId, id)));
         const total = (field) => summaries.reduce((sum, item) => sum + (Number(item[field]) || 0), 0);
         const models = [...new Set(summaries.map((item) => item.modelId).filter(Boolean))];
@@ -5200,6 +5373,7 @@ export function createWebApiApp(overrides = {}) {
     agentRegistry,
     usageLedger,
     authorizePrompt: assertPublicSessionPrompt,
+    preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
     // on that run — the learning loop's in-run correction signal.
@@ -5244,28 +5418,12 @@ export function createWebApiApp(overrides = {}) {
 
   const scheduleAutopilot = async () => {
     if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
-    const schedule = async () => {
-      const result = await productDatabase.query(`SELECT user_id,id,payload FROM evimed_product.documents
-        WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active' AND payload->>'enabled'='true'
-        ORDER BY updated_at,id LIMIT 100`);
-      const now = new Date();
-      for (const row of result.rows) {
-        try {
-          const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-            timeZone: row.payload.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
-          }).formatToParts(now).map((part) => [part.type, part.value]));
-          const date = `${parts.year}-${parts.month}-${parts.day}`;
-          if (Number(parts.hour) >= Number(row.payload.scheduleHour) && row.payload.lastScheduledDate !== date) {
-            await autopilotService.schedule(row.user_id, row.id, { date });
-          }
-        } catch (error) {
-          await securityAudit(config, "autopilot.schedule", "failed", {
-            userId: row.user_id, agendaId: row.id,
-            code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
-          });
-        }
-      }
-    };
+    const schedule = () => autopilotService.scheduleActive(productDatabase, async (row, error) => {
+      await securityAudit(config, "autopilot.schedule", "failed", {
+        userId: row.user_id, agendaId: row.id,
+        code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
+      });
+    });
     autopilotScheduleRun = maintenanceMutation(schedule)
       .catch((error) => {
         if (error?.code === "maintenance_active") return null;
@@ -5552,6 +5710,7 @@ export function createWebApiApp(overrides = {}) {
     agentRuns,
     server,
     runtimeUi,
+    runtimeEventPump,
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
@@ -7173,6 +7332,7 @@ async function readinessAuth(config, store) {
   if (config.production && config.bootstrapPasswordSource === "environment") {
     throw readinessFailure("bootstrap_password_environment_forbidden");
   }
+  const bootstrapUser = await store.bootstrapUserState();
   if (config.production && config.bootstrapPassword) {
     if (config.bootstrapPassword !== config.bootstrapPassword.trim() || /[\r\n\0]/.test(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_invalid");
@@ -7180,14 +7340,9 @@ async function readinessAuth(config, store) {
     if (/^(?:replace(?:-with)?|change-?me|example|placeholder|test)(?:[-_ ]|$)/i.test(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_placeholder");
     }
-    // Six, not sixteen. Lowered on 2026-09-04 at the operator's instruction,
-    // knowing what it allows: this deployment answers on a bare public IP with
-    // a valid certificate, so the bootstrap account is reachable by anything
-    // that scans the address space, and six bytes is inside every dictionary.
-    // The floor is kept rather than removed because an empty or one-character
-    // password is a different thing from a short one somebody chose.
-    if (Buffer.byteLength(config.bootstrapPassword, "utf8") < 6) {
-      throw readinessFailure("bootstrap_password_too_short", { minimumBytes: 6 });
+    // New credentials share the same floor; existing accounts need no password reset.
+    if (!["present", "deleted"].includes(bootstrapUser) && !meetsPasswordMinimum(config.bootstrapPassword)) {
+      throw readinessFailure("bootstrap_password_too_short", { minimumCharacters: MIN_PASSWORD_LENGTH });
     }
   }
   const users = await store.loginUserCount();
@@ -7200,7 +7355,6 @@ async function readinessAuth(config, store) {
   // seeding should have created it and did not, which is a fault; "deleted"
   // means an operator removed it on purpose, which is not — but both have to be
   // visible, because either way the configured administrator does not exist.
-  const bootstrapUser = await store.bootstrapUserState();
   if (bootstrapUser === "absent") throw readinessFailure("bootstrap_user_missing", { bootstrapUser });
   return { mode: "local", sessionTtlMs, bootstrapPasswordSource: config.bootstrapPasswordSource, bootstrapUser, ...withEvimed };
 }

@@ -30,7 +30,7 @@ test("every host release script parses", async () => {
 
 test("the switch moves `current` first and runs compose through it", async () => {
   const text = await code("host-release-switch.sh");
-  const moved = text.indexOf('mv -T "${ROOT}/current.next" "${ROOT}/current"');
+  const moved = text.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');
   const entered = text.indexOf('cd "${ROOT}/current/OpenScience/deploy/web"');
   const composed = text.indexOf('"${COMPOSE[@]}" config --hash');
   assert.ok(moved > 0 && entered > moved && composed > entered, "current is moved, then entered, then compose runs");
@@ -135,4 +135,36 @@ test("a delta may move the community skills but not a bundle pin the profile see
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("MR full and delta images install the same pinned PLINK executable", async () => {
+  const full = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile"), "utf8");
+  const pin = full.match(/^ARG MR_PLINK_VERSION=(\S+)$/m)?.[1];
+  assert.ok(pin, "the image declares one exact Debian PLINK package version");
+  assert.match(full, /"plink1\.9=\$\{MR_PLINK_VERSION\}"/);
+  assert.match(full, /plink1\.9 --version/);
+  const delta = await code("host-engine-delta.sh");
+  assert.match(delta, /if \[ "\$service" = "evimed-mr-agent" \]/);
+  assert.match(delta, /sed -n 's\/\^ARG MR_PLINK_VERSION=\/\/p'/);
+  assert.match(delta, /apt-get install -y --no-install-recommends plink1\.9=%s/);
+  assert.match(delta, /plink1\.9 --version/);
+});
+
+test("a release's configured profiles are honored while an explicit operator override wins", async () => {
+  const source = await code("host-release-switch.sh");
+  const line = source.split("\n").find(value => value.startsWith("export COMPOSE_PROFILES="));
+  assert.ok(line);
+  const directory = await mkdtemp(path.join(tmpdir(), "release-profiles-"));
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(path.join(directory, "OpenScience/deploy/web"), { recursive: true });
+  const envFile = path.join(directory, "OpenScience/deploy/web/.env");
+  try {
+    await writeFile(envFile, "COMPOSE_PROFILES=backup,monitoring,receipt,web-search,tooluniverse\n");
+    const probe = async (profiles = "") => (await run("bash", ["-c", `${line}\nprintf '%s' "$COMPOSE_PROFILES"`],
+      { env: { ...process.env, REL: directory, COMPOSE_PROFILES: profiles } })).stdout;
+    assert.equal(await probe(), "backup,monitoring,receipt,web-search,tooluniverse");
+    assert.equal(await probe("web-search"), "web-search");
+    await writeFile(envFile, "UNRELATED_SETTING=1\n");
+    assert.equal(await probe(), "backup,monitoring,receipt,web-search");
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

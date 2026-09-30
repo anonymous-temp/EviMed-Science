@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-geo-nonexclusive-subtype-definitions",
+  "genre": "unsupported-inference",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_e9a3ba42cefb2937da6e48337d714881/workspace/deliverables/geo-insight/geo-insight.md",
+  "line": 86,
+  "verbatim": "亚型按说明书适应症与临床维度切分：按适应症切出的四个亚型互不重叠；\"老年与多重用药\"与\"慢性肾脏病或中度肝病等慎用人群\"是横切的年龄与安全性维度，会与适应症亚型同时存在（例如一位 78 岁、合并肾功能下降的支架术后患者同时落在三个亚型里），因此这两行不与前四行互斥，也不用于分人群规模加总。",
+  "whyItIsWrong": "ACS/PCI and recent-MI rows are called mutually exclusive without an exclusion rule that makes these categories disjoint.",
+  "caughtBy": "reviewer",
+  "note": "Either define disjoint membership rules or label overlapping subtypes; avoid summing their populations. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_e9a3ba42cefb2937da6e48337d714881",
+  "artifactSha256": "21721c66b78610de1445379f258f8a2b1072570ae10db21d955c2684ce35fd60",
+  "sourceRevision": null
+}

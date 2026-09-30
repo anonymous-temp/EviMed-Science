@@ -231,7 +231,8 @@ def test_the_keyless_overlay_takes_the_key_out_of_every_adapter_and_needs_the_le
     base = yaml.safe_load((root / "deploy/web/docker-compose.yml").read_text())
     adapters = {name for name, service in base["services"].items()
                 if (service.get("build") or {}).get("dockerfile") == "OpenScience/deploy/specialist-adapter/Dockerfile"}
-    assert set(overlay["services"]) == adapters and len(adapters) == 5
+    adapters.add("evimed-meta-agent")
+    assert set(overlay["services"]) == adapters and len(adapters) == 6
     for name in adapters:
         service = overlay["services"][name]
         assert service["volumes"] == [{"type": "bind", "source": "/dev/null",
@@ -240,6 +241,46 @@ def test_the_keyless_overlay_takes_the_key_out_of_every_adapter_and_needs_the_le
         # The base file routes the same lever to the adapter and names where
         # the credential is asked for.
         environment = base["services"][name]["environment"]
-        assert environment["EVIMED_ENGINE_MODEL_GATEWAY"] == "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}"
+        assert environment["EVIMED_ENGINE_MODEL_GATEWAY"] == "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}"
         assert environment["EVIMED_ENGINE_MODEL_TOKEN_URL"].endswith("/internal/engines/v1/model-token}")
     assert "OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED" in base["services"]["open-science-web"]["environment"]
+
+
+def test_job_policy_is_signed_forwarded_and_overrides_container_defaults(tmp_path, monkeypatch):
+    context = {"v": 1, "sessionId": "s-low", "callId": "call-1", "rootCallId": "call-1",
+               "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "low"}
+    sent = []
+    def opener(request, timeout=None):
+        sent.append(json.loads(request.data))
+        return _Answer({"data": {"token": JOB_TOKEN, "baseUrl": GATEWAY,
+                                "modelPolicy": {"reasoningEffort": "low", "source": "session", "sessionId": "s-low"}}})
+    credential = engine_model.request_credential(url=TOKEN_URL, secret="s" * 40, workload_token="w.t.v",
+        kind="peer-review", job_id="review-20260929-policy", execution_context=context, opener=opener)
+    assert sent[0]["executionContext"] == context
+    module, _, _, _ = _load_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    for name, value in credential.items(): monkeypatch.setenv(name, value)
+    child = module._child_environment()
+    assert child["LLM_REASONING_EFFORT"] == "low"
+    assert child["LLM_ENABLE_THINKING"] == "true"
+    assert child["LLM_API_KEY"] == JOB_TOKEN
+    assert "LLM_API_KEY_FILE" not in child
+
+
+def test_off_is_a_valid_job_policy_without_forcing_thinking():
+    env = engine_model.child_environment(JOB_TOKEN, GATEWAY, {"reasoningEffort": "off", "source": "session"})
+    assert env["LLM_REASONING_EFFORT"] == "off"
+    assert env["LLM_ENABLE_THINKING"] == "false"
+
+
+def test_context_and_policy_reject_non_scalar_protocol_values():
+    import pytest
+    context = {"v": 1, "sessionId": "s-one", "callId": "call-1", "rootCallId": "call-1",
+               "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "low"}
+    for key, values in {"v": [True, "1"], "model": [[], {}], "reasoningEffort": [[], {}, True, "medium"]}.items():
+        for value in values:
+            with pytest.raises(engine_model.EngineModelUnavailable):
+                engine_model.validate_context({**context, key: value})
+    for value in ([], {}, True, "medium", None):
+        with pytest.raises(engine_model.EngineModelUnavailable):
+            engine_model.model_policy({"reasoningEffort": value})

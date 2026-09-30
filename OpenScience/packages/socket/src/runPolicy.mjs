@@ -591,6 +591,7 @@ export function childReport(outcome) {
  * @param {{
  *   contractKind: string,
  *   files: Map<string, string>,
+ *   packagePath?: string,
  *   expectedOutputs?: readonly {path: string, required: boolean}[],
  *   briefText?: string | null,
  *   matrix?: any,

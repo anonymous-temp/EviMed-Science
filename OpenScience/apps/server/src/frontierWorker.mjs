@@ -243,11 +243,24 @@ export class FrontierWorker {
     const entries = await this.database.query(`DELETE FROM evimed_frontier.entries WHERE id IN (
       SELECT id FROM evimed_frontier.entries WHERE state IN ('screened-out', 'dropped', 'backfill', 'failed') AND received_at < $1::timestamptz
       ORDER BY received_at LIMIT ${RETENTION_BATCH})`, [before(30)]);
-    const itemChanges = await this.database.query(`DELETE FROM evimed_frontier.item_changes WHERE seq IN (
-      SELECT seq FROM evimed_frontier.item_changes WHERE changed_at < $1::timestamptz ORDER BY changed_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
+    // DELETE takes ROW EXCLUSIVE before the advisory lock, incompatible with
+    // the scanner's SHARE lock. Both use table -> advisory order, so pruning
+    // cannot race its checkpoint or deadlock by upgrading a shared table lock.
+    const itemChanges = await this.database.query(`WITH scan_lock AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(hashtext('frontier-safety-scan'))
+    ), removed AS (
+      DELETE FROM evimed_frontier.item_changes WHERE seq IN (
+        SELECT seq FROM evimed_frontier.item_changes,scan_lock WHERE changed_at < $1::timestamptz ORDER BY changed_at LIMIT ${RETENTION_BATCH})
+      RETURNING seq
+    ), watermark AS (
+      INSERT INTO evimed_frontier.meta(key,value)
+        SELECT 'safety_pruned_through',to_jsonb(max(seq)::text) FROM removed HAVING count(*)>0
+      ON CONFLICT(key) DO UPDATE SET value=to_jsonb(greatest((evimed_frontier.meta.value#>>'{}')::bigint,(excluded.value#>>'{}')::bigint)::text),updated_at=clock_timestamp()
+      RETURNING key
+    ) SELECT count(*)::integer AS removed FROM removed`, [before(90)]);
     const hotSnapshots = await this.database.query(`DELETE FROM evimed_frontier.hot_snapshots WHERE taken_at IN (
       SELECT taken_at FROM evimed_frontier.hot_snapshots WHERE taken_at < $1::timestamptz ORDER BY taken_at LIMIT ${RETENTION_BATCH})`, [before(90)]);
-    const removed = { entries: entries.rowCount ?? 0, itemChanges: itemChanges.rowCount ?? 0, hotSnapshots: hotSnapshots.rowCount ?? 0 };
+    const removed = { entries: entries.rowCount ?? 0, itemChanges: Number(itemChanges.rows?.[0]?.removed ?? 0), hotSnapshots: hotSnapshots.rowCount ?? 0 };
     for (const [key, value] of Object.entries(removed)) this.retentionTotals[key] += value;
     return removed;
   }

@@ -920,3 +920,13 @@ test("children the caller seeds are fetched even though the parent log names non
   assert.equal(collected[1].capability, "clinical-evidence-synthesis", "the capability travels with the child, for the corpus");
   assert.equal(collected[2].label, "subagent", "a child with no label still has a usable one");
 });
+
+test("stopping a logical autopilot scope preserves the real attempt, not its unsent predecessor", () => {
+  const logical = `episode-${"a".repeat(32)}-v1`;
+  const old = { id: "old", dispatchId: logical, status: "failed", dispatchStatus: "rejected", errorCode: "product_job_lease_lost" };
+  const sent = { id: "new", dispatchId: `${logical}-a2`, status: "succeeded" };
+  assert.deepEqual(runsToReadBeforeStop([old, sent], { boundedRunId: logical }), [sent]);
+  assert.deepEqual(runsToReadBeforeStop([old, { ...sent, transcript: {} }], { boundedRunId: logical }), []);
+  assert.deepEqual(runsToReadBeforeStop([old, sent], { boundedRunId: logical, captured: id => id === "new" }), []);
+  assert.deepEqual(runsToReadBeforeStop([sent], { boundedRunId: logical.slice(0, -3) }), []);
+});

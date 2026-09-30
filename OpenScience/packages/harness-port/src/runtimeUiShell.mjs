@@ -79,9 +79,10 @@ export const EVIMED_FAVICON = evimedFavicon();
  * placement, and a renamed class upstream costs the rule, not the page.
  *
  * @param {string} pin the kernel version the selectors were read against
+ * @param {boolean} [operator] whether the host exposes operator statistics
  * @returns {string}
  */
-export function shellStylesheet(pin) {
+export function shellStylesheet(pin, operator = false) {
   return [
     `/* evimed-shell: selectors read against dsh-client ${pin} */`,
     // Accessible names in both shipped languages, from the kernel's own
@@ -114,19 +115,14 @@ export function shellStylesheet(pin) {
     // upload carrier (`__DSH_FILE_UPLOAD__`, runtimeUiTransport.mjs). It was
     // hidden here until 2026-09-22, when uploads were refused on this surface.
 
-    // The kernel's instruments, for every account (整改方案 §5.3): no
-    // consumer research product shows a reader tokens, decode speed or cache
-    // hits. The session statistics under the composer — 「N 轮 N 步 · tok/s」,
-    // 「token · 缓存命中」 and the dialog each opens — are one row with a
-    // stable data attribute (`StatsPills`, `data-composer-stats`); hidden, it
-    // stays in the document, where `walk:ui` still reads it as proof the frame
-    // loaded.
-    '[data-composer-stats]{display:none !important}',
+    // Operators retain native statistics by the owner's 2026-09-29 decision.
+    // This changes presentation only; the proxy still owns session authorization.
+    operator ? '' : '[data-composer-stats]{display:none !important}',
     // A finished turn's footer (`data-turn-tail`) keeps copy, branch and its
     // time. Its usage pill (「用量 860K tok」) and duration pill (「用时 …」,
     // with tok/s and TTFT behind it) are the footer's only dialog triggers,
     // each in a wrapper of its own.
-    '[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}',
+    operator ? '' : '[data-turn-tail] span:has(> button[aria-haspopup="dialog"]){display:none !important}',
     // A tool row that renders nothing — the delivery gate's own calls, which
     // the 运行 view still lists — leaves its call row holding one empty
     // outlet; the flow item goes too, so the transcript keeps no gap for it.
@@ -297,7 +293,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const style = doc.createElement('style');
     style.setAttribute('data-evimed-shell', '');
     style.setAttribute('data-evimed-kernel', String(kit.vocabulary?.kernelPin ?? ''));
-    style.textContent = shellStylesheet(String(kit.vocabulary?.kernelPin ?? ''));
+    style.textContent = shellStylesheet(String(kit.vocabulary?.kernelPin ?? ''), target.__EVIMED_FRAME__?.operator === true);
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');
   }

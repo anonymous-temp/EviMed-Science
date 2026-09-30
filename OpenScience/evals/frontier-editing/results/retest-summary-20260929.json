@@ -1,0 +1,21 @@
+{
+  "at": "2026-09-29T14:29:07.483Z",
+  "surface": "live FrontierEditor same-event judgments",
+  "model": "deepseek-flash",
+  "evidence": "run-20260929T142907Z.json",
+  "caseCount": 11,
+  "originalProductionCases": 8,
+  "explicitSyntheticControls": 3,
+  "judgments": 33,
+  "passed": 33,
+  "negativeJudgments": 18,
+  "falseMerges": 0,
+  "positiveJudgments": 15,
+  "missedMatches": 0,
+  "falseMergeRateOnThisCorpus": 0.0,
+  "scope": "Small targeted corpus, three repeated judgments per pair. This is not a population false-merge-rate estimate and does not establish a <5% production rate. Historical event aliases were not migrated.",
+  "codeHashes": {
+    "apps/server/src/frontierEvents.mjs": "f2b6d6cafe63bda605871c5d93373340c79d27ed410d7ab4d8ecd570f7ae08f8",
+    "apps/server/src/frontierEditor.mjs": "deda5c2fefc315668a220a7cb391462963ee5402fd016e8fa10ba8aeb2c18f12"
+  }
+}

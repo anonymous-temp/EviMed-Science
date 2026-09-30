@@ -174,12 +174,41 @@ def original_project_topic(project):
                                     code="protocol_scope_original_missing", project=project) from exc
 
 
+
+def unverified_scope_receipt(topic, protocol, error):
+    """Record unavailable scope checking without inventing an assessment."""
+    phase = getattr(error, "phase", None)
+    diagnostics = getattr(phase, "data", None) or getattr(error, "scope_check_data", {})
+    return {"schema_version": 1, "status": "unverified", "assessor": "unavailable",
+            "topic_sha256": digest(topic), "protocol_sha256": protocol_hash(protocol),
+            "original_question": topic,
+            **{key: diagnostics[key] for key in ("scope_check_attempts", "scope_check_attempts_omitted")
+               if key in diagnostics},
+            "reason": "Independent scope checking could not complete; the executable model proposal is retained.",
+            "error_type": type(error).__name__, "deviations": []}
+
+
+def _persist_unverified_scope(project, protocol, receipt):
+    _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(receipt, ensure_ascii=False, indent=2).encode())
+    protocol._scope_receipt = receipt
+    project.clear_warnings(code="protocol_scope_unverified")
+    project.add_warning("protocol", receipt["reason"], code="protocol_scope_unverified")
+    return receipt
+
 def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_recheck=True):
     """Use only a current runtime assessment; stale or legacy proposals are rechecked."""
     from new_meta.core.protocol_scope_sources import SOURCE_ASSESSOR, validate_scope_source_provenance
 
     topic = original_project_topic(project)
+    from new_meta.core.primary_analysis_alignment import project_is_unattended
     candidates = [protocol._scope_receipt]
+    if project_is_unattended(project):
+        saved = project.load_json("protocol_scope.json", subdir="analysis")
+        for receipt in [protocol._scope_receipt, saved]:
+            if (isinstance(receipt, dict) and receipt.get("status") == "unverified"
+                    and receipt.get("topic_sha256") == digest(topic)
+                    and receipt.get("protocol_sha256") == protocol_hash(protocol)):
+                return _persist_unverified_scope(project, protocol, receipt)
     recorded = frozenset()
     disk_unverified = False
     try:
@@ -241,11 +270,18 @@ def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_rech
         planner = ResearchPlanner()
     try:
         receipt = planner.check_scope(topic, protocol, **({"accepted_fields": recorded} if recorded else {}))
-    except ProtocolInputRequired as exc:
-        raise exc.persist(project)
+    except Exception as exc:
+        if project_is_unattended(project):
+            receipt = unverified_scope_receipt(topic, protocol, exc)
+        elif isinstance(exc, ProtocolInputRequired):
+            raise exc.persist(project)
+        else:
+            raise
     if original_project_topic(project) != topic:
         raise ProtocolInputRequired("Original question changed during scope assessment; restart with the intended question.",
                                     code="protocol_scope_original_changed", protocol=protocol, project=project)
+    if receipt.get("status") == "unverified":
+        return _persist_unverified_scope(project, protocol, receipt)
     _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(receipt, ensure_ascii=False, indent=2).encode())
     protocol._scope_receipt = receipt
     record_scope_deviations(project, receipt)

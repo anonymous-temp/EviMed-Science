@@ -261,7 +261,8 @@ check("REML tau2 reasonable", abs(reml.tau_squared - re.tau_squared) < 0.1,
 
 # HKSJ — should produce WIDER CI than DL
 hksj = random_effects_hksj(studies, "MD", "test")
-check("HKSJ tau_estimator", hksj.tau_estimator == "HKSJ")
+check("HKSJ uses DL tau estimation", hksj.tau_estimator == "DL")
+check("HKSJ interval method", hksj.ci_method == "modified_hksj_t")
 hksj_width = hksj.ci_upper - hksj.ci_lower
 dl_width = re.ci_upper - re.ci_lower
 check("HKSJ CI wider than DL", hksj_width >= dl_width * 0.99,

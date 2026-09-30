@@ -1,0 +1,13 @@
+{
+  "id": "2026-09-29-recovered-adr-worked-formula-matches-table",
+  "genre": "number-prose-divergence",
+  "observedIn": ".planning/platform-followups-20260929/recovered-evidence/runs/run_430c49d1aa809913ab106b2e56cb0009/workspace/deliverables/adr-osimertinib-cardiotox/safety-report.md",
+  "line": 38,
+  "verbatim": "期望数按未校正的单元格计算：(a+b)(a+c)/N [1]。本次以与引擎同一算式独立重算全部 13 行，重算值与输出值逐行一致（例如 cardiac failure：7,957 × 49,431 / 13,840,535 = 28.450，输出 28.450）[1]。",
+  "whyItIsWrong": "Worked expected-count example uses 7957*49431/N = 28.450, but 49431 is c; that expression gives 28.418154861788217. The correct (a+b)*(a+c)/N uses 49486 and gives 28.449774665502453.",
+  "caughtBy": "reviewer",
+  "note": "Generate narrative worked examples from the same explicit input cells used for tables; vary a, zero cells and rounding. Keep the supported artifacts and calculations; correct or qualify the affected statement only. No human approval is required.",
+  "runId": "run_430c49d1aa809913ab106b2e56cb0009",
+  "artifactSha256": "67cede52efd54d44784cefd9f59ef035ad3fc79d231934f8cd464e6198320a3b",
+  "sourceRevision": null
+}

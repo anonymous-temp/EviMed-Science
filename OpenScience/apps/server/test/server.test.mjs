@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
+import { hashPassword } from "../src/security.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
 const productionReadinessReady = {
@@ -305,6 +306,7 @@ test("specialty agent catalog requires authentication and exposes only public me
       "peer-review",
       "research-grant-development",
       "research-topic-selection",
+      "statistical-analysis",
     ]);
     assert.equal(body.data[0].title, "Drug Safety Analysis");
     assert.deepEqual(body.data[0].estimatedMinutes, [20, 40]);
@@ -1096,6 +1098,27 @@ test("the configured bootstrap account is created when it is absent, not only wh
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("existing bootstrap passwords remain usable after the character policy changes", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const legacyPassword = "😀😁😂😃";
+    await app.store.loadUsers();
+    const user = app.store.users.get("alice");
+    assert.ok(user);
+    user.passwordHash = hashPassword(legacyPassword);
+    await app.store.saveUsers();
+    app.store.config.production = true;
+    app.store.config.bootstrapPasswordSource = "file";
+    app.store.config.bootstrapPassword = legacyPassword;
+    const login = await fetch(`${base}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "alice", password: legacyPassword }),
+    });
+    assert.equal(login.status, 200);
+    const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+    assert.equal(ready.checks.auth.ok, true, "a password policy change must not require a reset");
+  });
 });
 
 test("local authentication bootstraps from a no-follow password file", async () => {
@@ -2949,7 +2972,7 @@ test("no cap configured refuses no dispatch, whatever the account has spent", as
   });
 });
 
-test("self-registration is off unless the deployment turns it on", async () => {
+test("self-registration can be explicitly disabled by the deployment", async () => {
   await withAuthApp(async ({ base }) => {
     const methods = await (await fetch(`${base}/api/auth/methods`)).json();
     assert.deepEqual(methods.data, { mode: "local", selfRegistration: false });
@@ -2961,7 +2984,7 @@ test("self-registration is off unless the deployment turns it on", async () => {
     });
     assert.equal(refused.status, 403);
     assert.equal((await refused.json()).code, "self_registration_disabled");
-  });
+  }, { selfRegistrationEnabled: false });
 });
 
 test("registering creates the account, signs it in, and gives it its own space", async () => {
@@ -2994,7 +3017,7 @@ test("registering creates the account, signs it in, and gives it its own space",
     });
     assert.equal(again.status, 409);
     assert.equal((await again.json()).code, "user_exists");
-  }, { selfRegistrationEnabled: true });
+  });
 });
 
 test("an account changes its own password with the current one, and signs in with the new one", async () => {
@@ -3033,6 +3056,39 @@ test("an account changes its own password with the current one, and signs in wit
     // The session that made the change is still signed in.
     assert.equal((await fetch(`${base}/api/me`, { headers: { Cookie: cookie } })).status, 200);
   });
+});
+
+test("six-character passwords work for registration and changes without resetting existing accounts", async () => {
+  await withAuthApp(async ({ base }) => {
+    const register = (username, password) => fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    for (const [username, password] of [["too-short", "abc12"], ["five-symbols", "😀😁😂😃😄"]]) {
+      const response = await register(username, password);
+      assert.equal(response.status, 400);
+      assert.equal((await response.json()).code, "weak_password");
+    }
+    const registered = await register("six-character", "abc123");
+    assert.equal(registered.status, 201);
+    const cookie = String(registered.headers.get("set-cookie") ?? "").split(";")[0];
+    const csrfToken = (await registered.json()).data.csrfToken;
+    const changed = await fetch(`${base}/api/auth/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie, "X-Open-Science-CSRF": csrfToken },
+      body: JSON.stringify({ currentPassword: "abc123", newPassword: "xyz789" }),
+    });
+    assert.equal(changed.status, 200);
+    for (const [username, password] of [["six-character", "xyz789"], ["alice", "correct horse battery staple"]]) {
+      const login = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      assert.equal(login.status, 200);
+    }
+  }, { selfRegistrationEnabled: true });
 });
 
 test("registration refuses a weak password and a name the store cannot hold", async () => {

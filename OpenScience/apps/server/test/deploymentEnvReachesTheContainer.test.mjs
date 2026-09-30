@@ -60,6 +60,9 @@ const hostSideOnly = {
  *  written to prove: a documented lever that no service receives is a knob that
  *  does nothing and says nothing. */
 const operatorLevers = {
+  // Both launch paths must install the optional MCP; its private token stays on web.
+  OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED: ["open-science-web"],
   // The way back to server-side repair rounds, off by default since
   // 2026-09-17. A lever that does not arrive leaves an operator believing the
@@ -573,3 +576,47 @@ test("the MR engine reads EBI through the web API's node, with its credentials, 
   ]);
 });
 
+
+test("all six engines use the gateway by default and have a keyless overlay", async () => {
+  const base = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"));
+  const overlay = YAML.parse(await readFile(path.join(deployDir, "docker-compose.engine-keyless.yml"), "utf8"));
+  assert.equal(loadConfig({ rootDir: repoRoot }).engineModelGatewayEnabled, true);
+  for (const name of ["meta", "mr", "bibliometric", "research-topic", "peer-review", "drug-safety"]) {
+    const id = `evimed-${name}-agent`;
+    assert.equal(base.services[id].environment.EVIMED_ENGINE_MODEL_GATEWAY, "${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}");
+    assert.match(base.services[id].environment.EVIMED_ENGINE_MODEL_TOKEN_URL, /internal\/engines\/v1\/model-token/);
+    assert.equal(overlay.services[id].volumes[0].source, "/dev/null");
+    assert.equal(overlay.services[id].volumes[0].target, "/run/secrets/deepseek-api-key");
+  }
+});
+
+test("only MR receives the read-only ancestry reference and its actual clumping executable", async () => {
+  const base = (await composeFiles()).find(({ name }) => name === "docker-compose.yml");
+  const services = YAML.parse(base.text).services;
+  const mr = services["evimed-mr-agent"];
+  assert.equal(mr.environment.EVIMED_MR_PLINK_BIN, "/usr/bin/plink1.9");
+  const target = mr.environment.EVIMED_MR_LD_REFERENCE_DIR;
+  assert.equal(target, "/opt/evimed/mr-ld-reference");
+  const mount = mr.volumes.find((value) => value.target === target);
+  assert.deepEqual(mount, { type: "bind", source: "${OPEN_SCIENCE_MR_LD_REFERENCE_HOST_DIR:-/dev/null}",
+    target, read_only: true, bind: { create_host_path: false } });
+  for (const [name, service] of Object.entries(services)) {
+    if (name !== "evimed-mr-agent") assert.ok(!service.volumes?.some((value) => value.target === target), name);
+  }
+});
+
+test("ToolUniverse service authentication stays between web and the bounded sidecar", async () => {
+  const base = (await composeFiles()).find(({ name }) => name === "docker-compose.yml");
+  const services = YAML.parse(base.text).services;
+  const sidecar = services.tooluniverse;
+  const web = services["open-science-web"];
+  assert.deepEqual(sidecar.profiles, ["tooluniverse"]);
+  assert.equal(sidecar.mem_limit, "512m");
+  assert.equal(sidecar.memswap_limit, "512m");
+  assert.equal(sidecar.cpus, 1);
+  assert.deepEqual(sidecar.healthcheck.test, ["CMD", "python", "/opt/evimed-tooluniverse/sidecar.py", "check", "--full"]);
+  assert.equal(sidecar.environment.TOOLUNIVERSE_API_TOKEN_FILE, web.environment.OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_FILE);
+  const holders = Object.entries(services).filter(([, service]) => service.volumes?.some(volume => volume.target === "/run/secrets/tooluniverse-api-token")).map(([name]) => name).sort();
+  assert.deepEqual(holders, ["open-science-web", "tooluniverse"]);
+  for (const holder of holders) assert.equal(services[holder].volumes.find(volume => volume.target === "/run/secrets/tooluniverse-api-token").read_only, true);
+});

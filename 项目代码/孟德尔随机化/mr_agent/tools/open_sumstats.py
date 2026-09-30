@@ -43,6 +43,7 @@ from __future__ import annotations
 import base64
 import bisect
 import contextlib
+import copy
 import csv
 import errno
 import gzip
@@ -72,6 +73,8 @@ from datetime import datetime, timezone
 from http import client as http_client
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
+
+from .ld_reference import LDReference, ReferenceUnavailable, load_reference, resolve_population
 
 import yaml
 
@@ -104,10 +107,11 @@ class OpenSourceError(RuntimeError):
     what tells a missing directory (404, a fact about the study) from an outage.
     """
 
-    def __init__(self, code: str, message: str, *, status: int | None = None):
+    def __init__(self, code: str, message: str, *, status: int | None = None, partial_pair=None):
         super().__init__(message)
         self.code = code
         self.status = status
+        self.partial_pair = partial_pair
 
 
 def _sleep(seconds: float) -> None:
@@ -763,7 +767,7 @@ class CatalogStudy:
     accession: str
     trait: str
     pubmed_id: str
-    ancestry: list[str]
+    ancestry: list[Any]
     initial_sample_size: str
     efo_traits: list[str]
     summary_stats_url: str
@@ -800,7 +804,7 @@ def _study_from_payload(payload: dict[str, Any]) -> CatalogStudy:
         accession=str(payload.get("accession_id") or ""),
         trait=str(payload.get("disease_trait") or ""),
         pubmed_id=str(payload.get("pubmed_id") or ""),
-        ancestry=[str(item) for item in ancestry] if isinstance(ancestry, list) else [str(ancestry)],
+        ancestry=copy.deepcopy(ancestry) if isinstance(ancestry, list) else [ancestry],
         initial_sample_size=str(payload.get("initial_sample_size") or ""),
         efo_traits=[
             str(item.get("efo_trait") if isinstance(item, dict) else item) for item in efo
@@ -924,17 +928,21 @@ def read_sample_metadata(study: CatalogStudy, http: _Http) -> dict[str, Any]:
         return {"source": study.metadata_url, "reason": f"the metadata file could not be read ({error.code})"}
     except (yaml.YAMLError, UnicodeDecodeError):
         return {"source": study.metadata_url, "reason": "the metadata file is not readable YAML"}
+    from mr_agent.source_context import repository_scale
+    scale = repository_scale(payload if isinstance(payload, dict) else {}, source=study.metadata_url)
     samples = payload.get("samples") if isinstance(payload, dict) else None
     if not isinstance(samples, list) or not samples:
-        return {"source": study.metadata_url, "reason": "the metadata file lists no samples"}
+        return {"source": study.metadata_url, "reason": "the metadata file lists no samples", "effectScale": scale}
     designs = {sample.get("case_control_study") if isinstance(sample, dict) else None for sample in samples}
     record = {
         "source": study.metadata_url,
         "samples": len(samples),
+        "effectScale": scale,
         "sampleSize": _sample_total(samples, "sample_size"),
         "caseControlStudy": designs.pop() if len(designs) == 1 and designs <= {True, False} else None,
         "caseCount": _sample_total(samples, "case_count"),
         "controlCount": _sample_total(samples, "control_count"),
+        "ancestrySamples": [sample.get("sample_ancestry_category") if isinstance(sample, dict) else None for sample in samples],
     }
     if record["sampleSize"] is None:
         record["reason"] = "not every sample in the metadata file states its sample_size"
@@ -948,6 +956,8 @@ def with_study_sample_size(rows: list["Variant"], samples: dict[str, Any]) -> tu
     an n column left it empty, and the test failed. Filling a study-level value
     into each row is what TwoSampleMR's add_metadata() does for OpenGWAS.
     """
+    from mr_agent.source_context import variant_sample_summary
+    original_sizes = variant_sample_summary([row.n for row in rows], scope="selected_source_rows_before_catalogue_fill")
     total = samples.get("sampleSize")
     own = sum(1 for row in rows if row.n is not None)
     filled = [
@@ -956,6 +966,7 @@ def with_study_sample_size(rows: list["Variant"], samples: dict[str, Any]) -> tu
     ]
     return filled, {
         "rowsWithOwnSampleSize": own,
+        "originalVariantSampleSizes": original_sizes,
         "rowsGivenStudySampleSize": 0 if total is None else len(rows) - own,
         "studySampleSize": total,
     }
@@ -1674,13 +1685,15 @@ def distance_clump(variants: list[Variant], window_kb: int = CLUMP_WINDOW_KB) ->
     return kept
 
 
-def ld_reference() -> tuple[str, str] | None:
-    """(plink binary, bfile prefix) when a local LD reference is configured."""
-    bfile = os.getenv("EVIMED_MR_LD_BFILE", "").strip()
-    plink = os.getenv("EVIMED_MR_PLINK_BIN", "").strip() or (shutil.which("plink") or "")
-    if not bfile or not plink or not Path(f"{bfile}.bed").is_file() or not os.access(plink, os.X_OK):
-        return None
-    return plink, bfile
+def ld_reference(choice: dict[str, Any]) -> tuple[LDReference | None, str | None]:
+    """Select an observed population prefix, never an unlabelled global BFILE."""
+    directory = os.getenv("EVIMED_MR_LD_REFERENCE_DIR", "").strip()
+    legacy = os.getenv("EVIMED_MR_LD_BFILE", "").strip()
+    plink = os.getenv("EVIMED_MR_PLINK_BIN", "").strip() or shutil.which("plink1.9") or shutil.which("plink")
+    reference, reason = load_reference(choice, directory or (str(Path(legacy).parent) if legacy else None), plink)
+    if reference and not directory and legacy and Path(legacy).resolve() != Path(reference.bfile):
+        return None, "ld_reference_population_mismatch"
+    return reference, reason
 
 
 def plink_clump(variants: list[Variant], plink: str, bfile: str) -> tuple[list[Variant], int]:
@@ -1851,26 +1864,46 @@ def _build_pair(
         raise OpenSourceError(
             "mr_open_no_instruments",
             f"{exposure.accession} has {len(candidates)} variant(s) at p < {p_threshold:g}; at least 3 are needed.",
+            partial_pair=OpenPair(candidates, [], {"schemaVersion": 1, "analysisStatus": "not_computed",
+                "exposure": {**exposure.record(), "read": exposure_read}, "outcome": outcome.record(),
+                "instrumentSelection": {"stage": "candidates_before_clumping", "ldChecked": False, "pThreshold": p_threshold, "genomeWideSignificantVariants": len(candidates)}}),
         )
 
-    reference = ld_reference()
+    exposure.samples = read_sample_metadata(exposure, http)
+    outcome.samples = read_sample_metadata(outcome, http)
+    exposure_population = resolve_population(exposure.samples, exposure.ancestry)
+    outcome_population = resolve_population(outcome.samples, outcome.ancestry)
+    reference, fallback_reason = ld_reference(exposure_population)
+    clumping = None
     if reference is not None:
-        instruments, absent = plink_clump(candidates, *reference)
-        clumping = {
-            "method": "plink_ld_clumping", "r2": CLUMP_R2, "windowKb": CLUMP_WINDOW_KB,
-            "reference": Path(reference[1]).name, "variantsAbsentFromReference": absent,
-            "ldChecked": True,
-        }
-    else:
+        try:
+            reference.assert_current()
+            instruments, absent = plink_clump(candidates, reference.plink, reference.bfile)
+            reference.assert_current()
+            clumping = {
+                "method": "plink_ld_clumping", "r2": CLUMP_R2, "windowKb": CLUMP_WINDOW_KB,
+                "reference": reference.population, "referenceReceipt": reference.record(),
+                "referenceSelection": exposure_population, "variantsAbsentFromReference": absent,
+                "ldChecked": True,
+            }
+        except (OpenSourceError, ReferenceUnavailable, OSError, subprocess.SubprocessError) as error:
+            fallback_reason = error.code if isinstance(error, OpenSourceError) else str(error) if isinstance(error, ReferenceUnavailable) else "mr_open_clumping_failed"
+    if clumping is None:
         instruments = distance_clump(candidates)
         clumping = {
             "method": "distance_pruning", "windowKb": CLUMP_WINDOW_KB, "ldChecked": False,
-            "note": "No LD reference was configured: the most significant variant per 10,000 kb window was "
-                    "kept. This is stricter than r2 < 0.001 clumping within 10,000 kb and does not measure LD.",
+            "fallbackReason": fallback_reason, "referenceSelection": exposure_population,
+            **({"attemptedReference": reference.record()} if reference else {}),
+            "note": "No usable ancestry-matched LD operation completed; the most significant variant per "
+                    "10,000 kb window was kept as an approximation. Distance pruning does not measure LD "
+                    "or establish instrument independence.",
         }
     if len(instruments) < 3:
         raise OpenSourceError(
-            "mr_open_no_instruments", f"{len(instruments)} instrument(s) remained after clumping; at least 3 are needed."
+            "mr_open_no_instruments", f"{len(instruments)} instrument(s) remained after clumping; at least 3 are needed.",
+            partial_pair=OpenPair(instruments, [], {"schemaVersion": 1, "analysisStatus": "not_computed",
+                "exposure": {**exposure.record(), "read": exposure_read}, "outcome": outcome.record(),
+                "instrumentSelection": {"stage": "selected_after_clumping", "pThreshold": p_threshold, "genomeWideSignificantVariants": len(candidates), "afterClumping": len(instruments), **clumping}})
         )
 
     wanted = [(variant.snp, variant.chrom, variant.pos) for variant in instruments]
@@ -1890,8 +1923,6 @@ def _build_pair(
             matches.setdefault(variant.snp, variant)
     outcome_rows = [matches[variant.snp] for variant in instruments if variant.snp in matches]
     missing = [variant.snp for variant in instruments if variant.snp not in matches]
-    exposure.samples = read_sample_metadata(exposure, http)
-    outcome.samples = read_sample_metadata(outcome, http)
     instruments, exposure_sizes = with_study_sample_size(instruments, exposure.samples)
     outcome_rows, outcome_sizes = with_study_sample_size(outcome_rows, outcome.samples)
 
@@ -1899,8 +1930,8 @@ def _build_pair(
         "schemaVersion": 1,
         "dataSource": "gwas_catalog",
         "retrievedAt": _now(),
-        "exposure": {**exposure.record(), "read": exposure_read, "sampleSize": exposure_sizes},
-        "outcome": {**outcome.record(), "read": outcome_read, "sampleSize": outcome_sizes},
+        "exposure": {**exposure.record(), "read": exposure_read, "sampleSize": exposure_sizes, "referencePopulation": exposure_population},
+        "outcome": {**outcome.record(), "read": outcome_read, "sampleSize": outcome_sizes, "referencePopulation": outcome_population},
         "instrumentSelection": {
             "pThreshold": p_threshold,
             "genomeWideSignificantVariants": len(candidates),
@@ -1938,9 +1969,10 @@ def selection_record(record: dict[str, Any]) -> dict[str, Any]:
         "mode": "gwas_catalog",
         "source": record["exposure"]["accession"],
         "provenance": provenance_sentence(record),
-        "ld_rechecked": False,
+        "ld_rechecked": bool(selection.get("ldChecked")),
         **{key: selection[key] for key in (
             "method", "pThreshold", "genomeWideSignificantVariants", "afterClumping", "windowKb", "ldChecked",
+            "referenceReceipt", "referenceSelection", "fallbackReason", "attemptedReference", "variantsAbsentFromReference", "note",
         ) if key in selection},
         **({"r2": selection["r2"], "reference": selection["reference"]}
            if selection.get("method") == "plink_ld_clumping" else {}),
@@ -1955,10 +1987,25 @@ def provenance_sentence(record: dict[str, Any]) -> str:
         how = (f"PLINK clumping r2<{selection['r2']} within {selection['windowKb']} kb against the "
                f"{selection['reference']} LD reference")
     else:
-        how = f"distance pruning, one variant per {selection['windowKb']} kb window, no LD reference"
+        how = (f"distance pruning, one variant per {selection['windowKb']} kb window, LD not measured "
+               f"({selection.get('fallbackReason') or 'reference unavailable'})")
     return (
         f"GWAS Catalog {exposure['accession']} (PMID {exposure['pubmedId']}), harmonised file "
         f"{exposure['harmonisedFile']}; variants at p<{selection['pThreshold']:g} "
         f"({selection['genomeWideSignificantVariants']}) selected by {how} "
         f"({selection['afterClumping']} kept); read {record['retrievedAt']}."
     )
+
+
+def population_label(study: dict[str, Any]) -> str | None:
+    """Retain observed sample groups in downstream reports, including mixtures."""
+    samples = study.get("sampleMetadata") or {}
+    groups = samples.get("ancestrySamples")
+    if isinstance(groups, list) and any(group is not None for group in groups):
+        labels = []
+        for group in groups:
+            values = group if isinstance(group, list) else [group]
+            labels.append(" / ".join(value if isinstance(value, str) else "unknown" for value in values) or "unknown")
+        return "; ".join(dict.fromkeys(labels))[:1000] or None
+    values = study.get("discoveryAncestry") or []
+    return "; ".join(value if isinstance(value, str) else json.dumps(value, ensure_ascii=False) for value in values)[:1000] or None

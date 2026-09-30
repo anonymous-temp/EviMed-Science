@@ -652,6 +652,30 @@ export async function readFileNoFollow(rootDir, file, options = undefined) {
   }
 }
 
+/** Read the originally measured file bytes and reject concurrent changes. Callers bound its size first. */
+export async function readStableFileHandle(handle, initialStat) {
+  const size = initialStat.size;
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new HttpError(409, "file_changed", "File changed while it was being read.");
+  }
+  const buffer = Buffer.alloc(size);
+  let offset = 0;
+  while (offset < size) {
+    const { bytesRead } = await handle.read(buffer, offset, size - offset, offset);
+    if (bytesRead === 0) throw new HttpError(409, "file_changed", "File changed while it was being read.");
+    offset += bytesRead;
+  }
+  const finalStat = await handle.stat();
+  if (
+    finalStat.size !== initialStat.size ||
+    finalStat.mtimeMs !== initialStat.mtimeMs ||
+    finalStat.ctimeMs !== initialStat.ctimeMs
+  ) {
+    throw new HttpError(409, "file_changed", "File changed while it was being read.");
+  }
+  return buffer;
+}
+
 export async function writeFileAtomicNoFollow(rootDir, file, data, options = {}) {
   const { root, target } = scopedParts(rootDir, file);
   if (target === root) throw new HttpError(400, "not_a_file", "path is not a file.");

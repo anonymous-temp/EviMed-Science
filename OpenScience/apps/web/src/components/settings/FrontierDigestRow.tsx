@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
-import { fetchFrontierDigestSwitch, setFrontierDigestSwitch, type FrontierFeature } from "@/lib/frontierClient";
+import { fetchFrontierDigestSwitch, setFrontierDigestSwitch, fetchFrontierNotificationSwitch, setFrontierNotificationSwitch, type FrontierNotificationSwitch, type FrontierFeature } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
 import { PanelRow } from "@/components/ui/Panel";
@@ -19,7 +19,7 @@ type SwitchState = { kind: "loading" } | { kind: "ready"; enabled: boolean } | {
  * `features.frontier`, read by the section and passed in): a switch for a
  * module the reader cannot see would be a setting for nothing.
  */
-export function FrontierDigestRow({ feature }: { feature: FrontierFeature }) {
+export function FrontierDigestRow({ feature, switchKey = "frontier", label = "前沿日报" }: { feature: FrontierFeature; switchKey?: FrontierNotificationSwitch; label?: string }) {
   const [state, setState] = useState<SwitchState>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -28,36 +28,36 @@ export function FrontierDigestRow({ feature }: { feature: FrontierFeature }) {
     if (feature !== "on") return;
     let active = true;
     setState({ kind: "loading" });
-    fetchFrontierDigestSwitch().then(
+    (switchKey === "frontier" ? fetchFrontierDigestSwitch() : fetchFrontierNotificationSwitch(switchKey)).then(
       (enabled) => { if (active) setState({ kind: "ready", enabled }); },
       (error: unknown) => { if (active) setState({ kind: "error", message: webErrorMessage(error, { fallback: "无法读取推送设置，请稍后重试。" }) }); },
     );
     return () => { active = false; };
-  }, [feature, attempt]);
+  }, [feature, attempt, switchKey]);
 
   const toggle = useCallback(async () => {
     if (state.kind !== "ready" || busy) return;
     const next = !state.enabled;
     setBusy(true);
     try {
-      const enabled = await setFrontierDigestSwitch(next);
+      const enabled = await (switchKey === "frontier" ? setFrontierDigestSwitch(next) : setFrontierNotificationSwitch(switchKey, next));
       setState({ kind: "ready", enabled });
-      toast.success(enabled ? "已开启前沿日报推送" : "已关闭前沿日报推送");
+      toast.success(`${enabled ? "已开启" : "已关闭"}${label}推送`);
     } catch (error) {
       toast.error(webErrorMessage(error, { fallback: "推送设置没有保存成功，请稍后重试。" }));
     } finally {
       setBusy(false);
     }
-  }, [state, busy]);
+  }, [state, busy, switchKey, label]);
 
   if (feature !== "on") return null;
   return (
     <PanelRow
-      label="前沿日报"
+      label={label}
       description={state.kind === "error" ? <span role="alert">{state.message}</span> : undefined}
       control={state.kind === "error"
         ? <Button variant="text" onClick={() => setAttempt((value) => value + 1)}>重试</Button>
-        : <Switch label="前沿日报" checked={state.kind === "ready" && state.enabled} disabled={state.kind !== "ready" || busy} onChange={() => void toggle()} />}
+        : <Switch label={label} checked={state.kind === "ready" && state.enabled} disabled={state.kind !== "ready" || busy} onChange={() => void toggle()} />}
     />
   );
 }

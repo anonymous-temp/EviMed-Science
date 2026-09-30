@@ -368,7 +368,7 @@ def default_method_registry() -> MethodRegistry:
             supported_designs=["parallel_rct"],
             supported_outcome_types=["dichotomous", "binary", "continuous", "time_to_event"],
             supported_effect_measures=["OR", "MD", "HR"],
-            primary_estimators={"default": "TWO_STAGE_IPD_REML_HKSJ"},
+            primary_estimators={"default": "TWO_STAGE_IPD_REML"},
             sensitivity_estimators=["ONE_STAGE_COMMON_EFFECT", "HKSJ"],
             required_diagnostics=[
                 "participant_clustering", "missing_data", "treatment_covariate_interaction",

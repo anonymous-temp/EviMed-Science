@@ -26,6 +26,8 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'
+
 
 // toolNames — 22 exports
 export {
@@ -712,13 +714,14 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 7 exports: what a metered model request was for (X1)
+// usagePurpose — 8 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
   isUsagePurpose,
   usagePurpose,
   usagePurposeOfRun,
+  isResearcherOwnedWork,
   LEARNING_AGENT_IDS,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
 } from './src/usagePurpose.mjs'
@@ -955,3 +958,6 @@ export {
   standardName,
   wilsonInterval,
 } from './src/geoMetrics.mjs'
+export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
+
+export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";

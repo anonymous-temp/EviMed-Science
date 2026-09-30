@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "mendelian-randomization",
-  "version": "sha256:9281f855b08764d288cd1e8e0a1ed91c99140ffeea7604b0aedb2c77e29bc5dc",
+  "version": "sha256:14d3567dee3bc9fa3f01e79140f5b12673228ee0e9151fb98b14fa3b7842c124",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 21,
@@ -930,6 +930,11 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128
+                      },
+                      "samplesize": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
                       }
                     },
                     "additionalProperties": false,
@@ -942,6 +947,27 @@
                       "eaf",
                       "pval"
                     ]
+                  },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "sampleSize": {
                     "type": "integer",
@@ -979,6 +1005,27 @@
                       "opengwas"
                     ]
                   },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "gwasId": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
@@ -999,6 +1046,27 @@
                       "gwas_catalog"
                     ]
                   },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "accession": {
                     "type": "string",
                     "pattern": "^GCST\\d{6,9}$"
@@ -1018,6 +1086,27 @@
                     "enum": [
                       "gwas_catalog"
                     ]
+                  },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "pubmedId": {
                     "type": "string",
@@ -1086,6 +1175,11 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 128
+                      },
+                      "samplesize": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
                       }
                     },
                     "additionalProperties": false,
@@ -1098,6 +1192,27 @@
                       "eaf",
                       "pval"
                     ]
+                  },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "sampleSize": {
                     "type": "integer",
@@ -1135,6 +1250,27 @@
                       "opengwas"
                     ]
                   },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "gwasId": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
@@ -1155,6 +1291,27 @@
                       "gwas_catalog"
                     ]
                   },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "accession": {
                     "type": "string",
                     "pattern": "^GCST\\d{6,9}$"
@@ -1174,6 +1331,27 @@
                     "enum": [
                       "gwas_catalog"
                     ]
+                  },
+                  "effectScale": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "transformation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false
                   },
                   "pubmedId": {
                     "type": "string",

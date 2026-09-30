@@ -454,6 +454,8 @@ services:
       OPEN_SCIENCE_FRONTIER_LEASE_MS:
       OPEN_SCIENCE_FRONTIER_MODEL:
       OPEN_SCIENCE_FRONTIER_DAILY_TIME:
+      OPEN_SCIENCE_FRONTIER_NOTIFY_BATCH:
+      OPEN_SCIENCE_FRONTIER_SAFETY_SCAN_BATCH:
       OPEN_SCIENCE_FRONTIER_TIMEZONE:
       OPEN_SCIENCE_FRONTIER_DAILY_BUDGET_CNY:
       OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY:
@@ -491,7 +493,8 @@ services:
       # its own currency. Value-less: unset keeps the module off, and off means
       # no routes, no schema, no refused start and no charge. The key is the
       # EviMed one bound above (OPEN_SCIENCE_EVIMED_API_KEY_FILE) — one secret,
-      # one rotation. The rate has no default: without it nothing settles.
+      # one rotation. The owner-approved conversion is one credit per CNY;
+      # settlement still requires its separate enabled switch and real endpoint.
       OPEN_SCIENCE_EVIMED_CREDITS_ENABLED:
       OPEN_SCIENCE_EVIMED_CREDITS_URL:
       OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL:
@@ -531,7 +534,7 @@ services:
       OPEN_SCIENCE_SECURITY_HEADERS: ${OPEN_SCIENCE_SECURITY_HEADERS:-true}
       OPEN_SCIENCE_CORS_ORIGINS: ${OPEN_SCIENCE_CORS_ORIGINS:-}
       OPEN_SCIENCE_AUTH_MODE: ${OPEN_SCIENCE_AUTH_MODE:-local}
-      OPEN_SCIENCE_SELF_REGISTRATION_ENABLED: ${OPEN_SCIENCE_SELF_REGISTRATION_ENABLED:-0}
+      OPEN_SCIENCE_SELF_REGISTRATION_ENABLED: ${OPEN_SCIENCE_SELF_REGISTRATION_ENABLED:-1}
       OPEN_SCIENCE_DEV_AUTH: ${OPEN_SCIENCE_DEV_AUTH:-false}
       OPEN_SCIENCE_BOOTSTRAP_USER: ${OPEN_SCIENCE_BOOTSTRAP_USER:-admin}
       OPEN_SCIENCE_BOOTSTRAP_PASSWORD: ${OPEN_SCIENCE_BOOTSTRAP_PASSWORD:-}
@@ -602,11 +605,11 @@ services:
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-flash}
       # The specialist engines' model calls through the gateway (gap E4): the
-      # five adapters below read the same variable, so one line in .env moves
-      # both sides. Value-less, so config.mjs's defaults (off, six hours) hold.
+      # six adapters below read the same variable, so one line in .env moves
+      # both sides. Value-less, so config.mjs's defaults (on, six hours) hold.
       OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:
       OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS:
-      # The thinking budget of every managed call (low / high / max). Absent
+      # Initial thinking default (off / low / high / max); sessions can select their own. Absent
       # here it would be a knob that changes nothing, which is the shape the
       # deploymentEnvReachesTheContainer test exists to refuse.
       OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
@@ -670,6 +673,8 @@ services:
       # pay a connection timeout for a tool set it will never get. Set it
       # together with the `tooluniverse` profile, not before.
       OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-}
+      OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_FILE: /run/secrets/tooluniverse-api-token
+      OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/tooluniverse/v1/rpc}
       OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: /run/secrets/materials-project-api-key
       OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT: ${OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT:-true}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
@@ -846,6 +851,10 @@ services:
       OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED:
       OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED:
     volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/tooluniverse-api-token
+        read_only: true
       - open-science-data:/data
       - open-science-backups:/backups:ro
       - open-science-runtime-control:/run/open-science-controller:ro
@@ -987,6 +996,8 @@ services:
       # from here, signed with the workload secret above. `-`, not `:-`: set
       # empty in .env, it stays empty and no report is sent.
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
+      EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
@@ -1069,7 +1080,7 @@ services:
       # each job asks the control plane for a model credential of its own and
       # the engine calls the model gateway with it; the key above is then not
       # read (docker-compose.engine-keyless.yml removes it from the container).
-      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
       EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
       # One credential, one host variable. This read `${OPENGWAS_JWT}` while
       # the control plane read `${OPEN_SCIENCE_OPENGWAS_JWT}`, so setting the
@@ -1088,6 +1099,8 @@ services:
       # volume, not the tmpfs: every release recreates this container, and on
       # 2026-09-28 each one threw away scans that had cost tens of minutes.
       EVIMED_MR_OPEN_CACHE_DIR: /var/cache/evimed-mr-open
+      EVIMED_MR_PLINK_BIN: /usr/bin/plink1.9
+      EVIMED_MR_LD_REFERENCE_DIR: /opt/evimed/mr-ld-reference
       # EBI through the Tokyo node, the one the web service uses: measured
       # from this host on 2026-09-28, ftp.ebi.ac.uk gave ~19 KB/s direct and
       # ~358 KB/s through the node. Only *.ebi.ac.uk goes through it; empty
@@ -1100,6 +1113,14 @@ services:
     volumes:
       - open-science-data:/data
       - evimed-mr-open-cache:/var/cache/evimed-mr-open
+      # Verified ancestry panels and manifest only. Without a configured
+      # directory the engine records an explicit distance-pruning fallback.
+      - type: bind
+        source: ${OPEN_SCIENCE_MR_LD_REFERENCE_HOST_DIR:-/dev/null}
+        target: /opt/evimed/mr-ld-reference
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
         target: /run/secrets/deepseek-api-key
@@ -1111,9 +1132,8 @@ services:
       # The node's credentials, the web service's host file (root:10002 0440 on
       # the production host). This container runs as root with no capabilities,
       # so it reads the file as its owner, as the web container does; no mode
-      # change is needed. Under docker-compose.specialist-audit.yml the analysis
-      # drops to uid 65532, cannot read it, and records the proxy as unusable
-      # (edge_proxy_credentials_unavailable) and goes direct.
+      # change is needed. The workload's authenticated proxy access is
+      # independent of the unsigned specialist observation record.
       - type: bind
         source: ${OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_HOST_FILE:-/dev/null}
         target: /run/secrets/edge-proxy-credentials
@@ -1138,21 +1158,12 @@ services:
     networks: [default, runtime-internal]
     restart: unless-stopped
 
-  # ToolUniverse (Apache-2.0, mims-harvard) as a sidecar MCP server.
-  #
-  # Deliberately not installed into the runtime image: its ~2,700 tools call
-  # their upstreams directly and read credentials from the environment, and the
-  # runtime container is built to do neither. Here it keeps its own egress and
-  # its own keys while the runtime keeps holding none, reaching it over the
-  # internal network by MCP streamable-http.
+  # Restricted ToolUniverse clinical APIs. The initial profile uses public
+  # providers without API keys; only web holds the private service credential.
+  # Runtimes call the workload-authenticated control-plane bridge.
   tooluniverse:
     image: ${TOOLUNIVERSE_IMAGE:-evimed-tooluniverse:1.4.1}
-    # Behind a profile until its authentication is wired. The server refuses to
-    # bind a non-loopback address without `TOOLUNIVERSE_API_TOKEN`, and the MCP
-    # row that mounts it (`dshProfilePatch.toolUniverseRows`) sends no headers,
-    # so switching the token on here alone would produce a sidecar every call is
-    # rejected by. Starting it unconditionally is what stopped this stack's
-    # first bring-up: it had never been started on this host.
+    # Enabled only after authenticated MCP and catalogue acceptance succeeds.
     build:
       context: ../..
       dockerfile: deploy/tooluniverse/Dockerfile
@@ -1163,43 +1174,18 @@ services:
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
     profiles: ["tooluniverse"]
     environment:
-      # ToolUniverse reads its credentials under its own names. Every one is
-      # optional to the server's start: an absent key disables the tools that
-      # need it rather than failing the sidecar, which is why none of these is
-      # a `:?required` binding.
-      NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
-      SEMANTIC_SCHOLAR_API_KEY: ${OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY:-}
-      FDA_API_KEY: ${OPEN_SCIENCE_OPENFDA_API_KEY:-}
-      UMLS_API_KEY: ${OPEN_SCIENCE_UMLS_API_KEY:-}
-      OMIM_API_KEY: ${OPEN_SCIENCE_OMIM_API_KEY:-}
-      BIOGRID_API_KEY: ${OPEN_SCIENCE_BIOGRID_API_KEY:-}
-      DISGENET_API_KEY: ${OPEN_SCIENCE_DISGENET_API_KEY:-}
-      # Academic-tier sources. Free for research in a not-for-profit
-      # setting; COSMIC additionally requires registration with an
-      # organisational address. Absent keys simply leave their tools
-      # unregistered, which is the licensing control: a source we hold no
-      # entitlement for is not reachable rather than reachable-and-unlicensed.
-      ALPHA_GENOME_API_KEY: ${OPEN_SCIENCE_ALPHA_GENOME_API_KEY:-}
-      COSMIC_API_KEY: ${OPEN_SCIENCE_COSMIC_API_KEY:-}
-      BRENDA_EMAIL: ${OPEN_SCIENCE_BRENDA_EMAIL:-}
-      BRENDA_PASSWORD: ${OPEN_SCIENCE_BRENDA_PASSWORD:-}
-      PHARMVAR_API_KEY: ${OPEN_SCIENCE_PHARMVAR_API_KEY:-}
-      ADDGENE_API_KEY: ${OPEN_SCIENCE_ADDGENE_API_KEY:-}
-      OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-}
-      NVIDIA_API_KEY: ${OPEN_SCIENCE_NVIDIA_API_KEY:-}
-      USPTO_API_KEY: ${OPEN_SCIENCE_USPTO_API_KEY:-}
-      HF_TOKEN: ${OPEN_SCIENCE_HF_TOKEN:-}
-      # Not passed on purpose: OPENAI_API_KEY, AZURE_OPENAI_API_KEY and
-      # GEMINI_API_KEY would let this sidecar call a model of its own. Every
-      # model call in this deployment goes through our gateway, on the
-      # certified model, against the run's budget.
+      TOOLUNIVERSE_API_TOKEN_FILE: /run/secrets/tooluniverse-api-token
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_TOOLUNIVERSE_API_TOKEN_HOST_FILE:-/dev/null}
+        target: /run/secrets/tooluniverse-api-token
+        read_only: true
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/mcp', timeout=3)"]
+      test: ["CMD", "python", "/opt/evimed-tooluniverse/sidecar.py", "check", "--full"]
       interval: 30s
       timeout: 10s
       retries: 3
-      # Loading 2,700 tool definitions takes longer than a web app's boot.
-      start_period: 120s
+      start_period: 30s
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true
@@ -1209,15 +1195,16 @@ services:
     # started on this host, so the stack's first bring-up stopped on it. `/tmp`
     # alone is not enough: the path it wants is under HOME.
     tmpfs:
-      - "/tmp:rw,nosuid,nodev,size=512m"
+      - "/tmp:rw,nosuid,nodev,size=64m"
       # uid/gid, not just a mode: a tmpfs mounts root-owned, and the image runs
       # as uid 10001, so the first thing the server does in its own HOME is a
       # permission error rather than a read-only one. Both failures print at the
       # same place and the second reads like the first was not fixed.
       - "/home/tooluniverse:rw,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700"
-    cpus: 1.5
-    mem_limit: 3g
-    pids_limit: 512
+    cpus: 1
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
     networks: [default, runtime-internal]
     restart: unless-stopped
 
@@ -1252,7 +1239,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
-      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
       EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
@@ -1306,7 +1293,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
-      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
       EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
@@ -1355,7 +1342,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
-      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
       EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
     volumes:
       - open-science-data:/data
@@ -1404,7 +1391,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LLM_MODEL: deepseek-flash
-      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-false}
+      EVIMED_ENGINE_MODEL_GATEWAY: ${OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED:-true}
       EVIMED_ENGINE_MODEL_TOKEN_URL: ${OPEN_SCIENCE_ENGINE_MODEL_TOKEN_INTERNAL_URL:-http://open-science-web:8787/internal/engines/v1/model-token}
       # openFDA answers, kept per FAERS data release (the client refetches
       # anything cached from a superseded quarter): on its own volume, so a
@@ -1507,6 +1494,9 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE: direct
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/sources/v1/fetch}
+      # Profile composition runs here; the sidecar credential stays on web.
+      OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-}
+      OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/tooluniverse/v1/rpc}
       OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET: /run/open-science-controller/controller.sock
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}

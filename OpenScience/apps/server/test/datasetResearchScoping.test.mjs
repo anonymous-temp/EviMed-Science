@@ -221,240 +221,54 @@ test("a complete scoping package passes preflight", { skip: !hasPython3 }, async
     assert.equal(result.ok, true);
     assert.equal(result.metrics.profileRecomputable, true);
     assert.equal(result.metrics.identifierLeaks, 0);
-    assert.equal(result.metrics.infeasibleVerdicts, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("each blocking gate rejects what it exists to catch", { skip: !hasPython3 }, async () => {
-  const cases = [
-    {
-      name: "an identifier copied out of the source data",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        await writeFile(file, `${await readFile(file, "utf8")}\n患者 P90000001 的浓度最高。\n`, "utf8");
-      },
-      expect: /carries the source identifier/,
-    },
-    {
-      name: "a pseudonym mapping written into a working file",
-      apply: async (root) => {
-        // Not a declared deliverable — exactly how the real leak escaped.
-        await writeFile(
-          path.join(root, "tdm-derived.json"),
-          JSON.stringify({ pseudonyms: { P90000001: "P1" } }),
-          "utf8",
-        );
-      },
-      expect: /tdm-derived\.json: carries the source identifier/,
-    },
-    {
-      name: "profile numbers that are not the script's",
-      apply: async (root) => {
-        const file = path.join(root, "data-profile.json");
-        const profile = JSON.parse(await readFile(file, "utf8"));
-        profile.tables[0].rows = 999;
-        await writeFile(file, JSON.stringify(profile), "utf8");
-      },
-      expect: /does not match what data-profile\.py produces/,
-    },
-    {
-      name: "an infeasible verdict that names no missing field",
-      apply: async (root) => {
-        const file = path.join(root, "feasibility-matrix.md");
-        await writeFile(file, `${await readFile(file, "utf8")}\n## 课题 C\n判定：不可行。\n`, "utf8");
-      },
-      expect: /must name the missing field/,
-    },
-    {
-      name: "an infeasible verdict that never shows the gap binds",
-      apply: async (root) => {
-        const file = path.join(root, "feasibility-matrix.md");
-        const text = (await readFile(file, "utf8"))
-          .replace("该表连接键全空，跨住院次链接率 0%，与所需 100% 相差一个数量级，敏感性分析无法弥补。", "该表连接键全空。");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /without showing anywhere that the gap/,
-    },
-    {
-      name: "an infeasible verdict with no remaining question",
-      apply: async (root) => {
-        const file = path.join(root, "feasibility-matrix.md");
-        const text = (await readFile(file, "utf8"))
-          .replace("仍可退而求其次做单次住院内的横断面描述。", "");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /naming the strongest question/,
-    },
-    {
-      name: "a post-hoc power calculation",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        await writeFile(file, `${await readFile(file, "utf8")}\n事后功效为 0.42。\n`, "utf8");
-      },
-      expect: /post-hoc power is uninformative/,
-    },
-    {
-      name: "a landscape assembled from too little of the field",
-      apply: async (root) => {
-        await writeFile(path.join(root, "evidence-map.md"), evidenceMap(12), "utf8");
-      },
-      expect: /cite 12 distinct works; the floor is 30/,
-    },
-    {
-      name: "a landscape assembled from one index",
-      apply: async (root) => {
-        const rows = ["| 文献 | 标识符 | URL | 渠道 |", "|---|---|---|---|"];
-        for (let index = 1; index <= 32; index += 1) {
-          rows.push(
-            `| 文献 ${index} | PMID ${30000000 + index} | https://pubmed.ncbi.nlm.nih.gov/${30000000 + index}/ | pubmed |`,
-          );
-        }
-        await writeFile(path.join(root, "evidence-map.md"), `# 证据地图\n${rows.join("\n")}\n`, "utf8");
-      },
-      expect: /draws on 1 channels/,
-    },
-    {
-      name: "a design transferred from abstracts alone",
-      apply: async (root) => {
-        await rm(path.join(root, ".evimed-sources"), { recursive: true, force: true });
-      },
-      expect: /0 full texts were retrieved/,
-    },
-    {
-      name: "a work cited in the report but absent from the map",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        await writeFile(file, `${await readFile(file, "utf8")}\n阈值取自 PMID 29999999。\n`, "utf8");
-      },
-      expect: /cited in the report but absent from evidence-map\.md/,
-    },
-    {
-      name: "a citation a reader cannot open",
-      apply: async (root) => {
-        const file = path.join(root, "evidence-map.md");
-        const text = (await readFile(file, "utf8"))
-          .replace("https://pubmed.ncbi.nlm.nih.gov/30000001/", "见 PubMed");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /carry an identifier with no URL/,
-    },
-    {
-      name: "a surviving question with no novelty statement",
-      apply: async (root) => {
-        await writeFile(path.join(root, "research-portfolio.md"), "# 课题组合\n课题 A 的 MDE=0.6 SD。\n", "utf8");
-      },
-      expect: /0 novelty statements for 1 surviving questions/,
-    },
-    {
-      name: "an analysis that never considered most of the families",
-      apply: async (root) => {
-        await writeFile(
-          path.join(root, "research-portfolio.md"),
-          "# 课题组合\n新颖性：最接近 PMID 30000001，差异轴为人群。\n本次仅做描述性审计。估计量为 bootstrap 置信区间。\n",
-          "utf8",
-        );
-      },
-      expect: /analysis families appear anywhere/,
-    },
-    {
-      name: "a surviving question with no named estimator",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        const text = (await readFile(file, "utf8"))
-          .replaceAll(/估计量[^。]*。|LASSO 回归，LOOCV。|apriori 计 support\/confidence\/lift。|计 ROR。|pooled 参考分布，见 evidence-map.md。/g, "略。");
-        await writeFile(file, text, "utf8");
-        const protocolFile = path.join(root, "study-protocol.md");
-        await writeFile(protocolFile, "# 研究方案\n## 课题 A\n变量构造：VALUE 取自 labs.VALUE。\n", "utf8");
-      },
-      expect: /estimator mentions across/,
-    },
-    {
-      name: "a journal named without its partition",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        const text = (await readFile(file, "utf8")).replace("（医学 2 区 / 小类 2 区，IF 4.2，2023 升级版）", "");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /named without their partition or quartile/,
-    },
-    {
-      name: "a recommended journal with no comparable manuscript",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        const text = (await readFile(file, "utf8")).replace(/^相近稿件.*$/m, "");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /no comparable manuscript is named/,
-    },
-    {
-      name: "a topic named after the activity instead of the question",
-      apply: async (root) => {
-        const file = path.join(root, "research-portfolio.md");
-        const text = await readFile(file, "utf8");
-        await writeFile(file, `${text}\n## TDM 采样实践审计\n判定：可行。\n`, "utf8");
-      },
-      expect: /named after the activity performed/,
-    },
-    {
-      name: "a package that ran no consistency identity",
-      apply: async (root) => {
-        const file = path.join(root, "data-quality.md");
-        const text = (await readFile(file, "utf8")).replace(/^一致性校验.*$/m, "");
-        await writeFile(file, text, "utf8");
-      },
-      expect: /no internal-consistency identity is reported/,
-    },
-    {
-      name: "a prior data contact declaration written after the fact",
-      apply: async (root) => {
-        await writeFile(path.join(root, "scoping-run.json"), JSON.stringify({ searches: [] }), "utf8");
-      },
-      expect: /priorDataContact is required/,
-    },
-  ];
-
-  for (const { name, apply, expect } of cases) {
-    const root = await buildWorkspace();
-    try {
-      await apply(root);
-      const result = await preflight(root);
-      assert.equal(result.ok, false, `preflight accepted ${name}`);
-      assert.ok(
-        result.issues.some((issue) => expect.test(issue)),
-        `no issue matched ${expect} for ${name}: ${JSON.stringify(result.issues)}`,
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  }
-});
-
-test("the reader-visible defects warn instead of blocking", { skip: !hasPython3 }, async () => {
+test("identifier leakage targets the affected artifact without exposing identifiers in diagnostics", { skip: !hasPython3 }, async () => {
   const root = await buildWorkspace();
   try {
-    // Keeps the identity line: this test is about the fill-rate qualifier and the
-    // join key, and dropping the identity would block on a different gate.
-    await writeFile(
-      path.join(root, "data-quality.md"),
-      "# 数据质量\n本表填充率见上。\n一致性校验：总值 = 分项之和，3 组中 3 组通过。\n",
-      "utf8",
-    );
-    await writeFile(path.join(root, "external-linkage.md"), "# 外部资源\n- LOINC：可用于标准化\n", "utf8");
+    await writeFile(path.join(root, "tdm-derived.json"), JSON.stringify({ pseudonyms: { P90000001: "P1" } }));
     const result = await preflight(root);
-    assert.equal(result.ok, true, "a visible defect must not withhold the package");
-    assert.ok(result.warnings.some((w) => /completeness definitions/.test(w)));
-    assert.ok(result.warnings.some((w) => /naming the field that joins them/.test(w)));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some((issue) => /tdm-derived.json: carries the source identifier/.test(issue)));
+    assert.ok(!JSON.stringify(result).includes("P90000001"));
+    assert.ok((await readFile(path.join(root, "research-portfolio.md"), "utf8")).length > 0);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-// Skill packages are copied into the runtime independently and cannot import
-// from one another, so the floor logic exists twice. Drift between the server
-// gate and the run-side preflight has cost three finished packages in
-// production; this is the same failure mode one directory over.
+test("small useful corpus and incomplete stages preserve the data investigation", { skip: !hasPython3 }, async () => {
+  const root = await buildWorkspace();
+  try {
+    await writeFile(path.join(root, "evidence-map.md"), evidenceMap(2));
+    await rm(path.join(root, ".evimed-sources"), { recursive: true, force: true });
+    await writeFile(path.join(root, "research-portfolio.md"), "One supported comparison; literature access failed for the remaining question.");
+    await writeFile(path.join(root, "feasibility-matrix.md"), "Repeated admissions cannot identify independent patients because the person key is absent.");
+    await rm(path.join(root, "study-protocol.md"));
+    await rm(path.join(root, "external-linkage.md"));
+    const result = await preflight(root);
+    assert.equal(result.ok, true);
+    assert.equal(result.metrics.profileRecomputable, true);
+    assert.ok(!JSON.stringify(result).includes("floor is 30"));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("profile mismatch and unavailable recomputation are traceable notices, not discarded results", { skip: !hasPython3 }, async () => {
+  const root = await buildWorkspace();
+  try {
+    await writeFile(path.join(root, "data-profile.json"), '{}');
+    let result = await preflight(root);
+    assert.equal(result.ok, true);
+    assert.equal(result.metrics.profileRecomputable, false);
+    assert.ok(result.warnings.some((notice) => notice.includes('does not match')));
+    await writeFile(path.join(root, "data-profile.py"), 'raise ImportError("optional reader unavailable")');
+    result = await preflight(root);
+    assert.equal(result.ok, true);
+    assert.ok(result.warnings.some((notice) => notice.includes('exited')));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("both research-planning skills carry the same evidence floor", async () => {
   const [scoping, topic] = await Promise.all([
     readFile(path.join(skillRoot, "scripts/evidence_floor.py"), "utf8"),

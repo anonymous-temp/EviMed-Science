@@ -1,0 +1,70 @@
+{
+  "at": "2026-09-29T14:27:50.131Z",
+  "kind": "deterministic-no-adjudicator-control",
+  "note": "Assigned cosine 0.99; no model or embedding call. Measures safe fallback only, not production accuracy. Existing labeled cases remain the input for the separate live same-event evaluator.",
+  "total": 11,
+  "negativePairs": 6,
+  "positivePairs": 5,
+  "falseMerges": 0,
+  "falseMergeRate": 0,
+  "unmatchedPositivePairs": 5,
+  "modelCalls": 0,
+  "modelErrorRate": null,
+  "results": [
+    {
+      "id": "ema-opinions-two-medicines",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "ema-opinions-cosentyx-pradaxa",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "ema-epar-two-biosimilars",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "chp-two-mpox-cases",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "nejm-trial-and-its-editorial",
+      "expectedSame": true,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "nejm-blinatumomab-editorial",
+      "expectedSame": true,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "ema-sodium-oxybate-referral-and-news",
+      "expectedSame": true,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "cochrane-review-and-news",
+      "expectedSame": true,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "synthetic-trial-distinct-milestones",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "synthetic-organization-different-drugs",
+      "expectedSame": false,
+      "joinedWithoutJudge": false
+    },
+    {
+      "id": "synthetic-exact-paper-press-coverage",
+      "expectedSame": true,
+      "joinedWithoutJudge": false
+    }
+  ]
+}

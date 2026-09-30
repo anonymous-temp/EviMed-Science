@@ -76,7 +76,7 @@ def test_length_retry_keeps_provider_ordinals_and_valid_nonmatch(planner, monkey
 
 
 @pytest.mark.parametrize("damage", ["duplicate_json_key", "invalid_json", "truncated_json", "observer_failure"])
-def test_observation_failure_is_terminal_for_the_outer_planner(planner, monkeypatch, damage):
+def test_observation_failure_retains_an_unverified_executable_plan(planner, monkeypatch, damage):
     protocol = proposal()
     generated = []
     raw_calls = []
@@ -96,12 +96,11 @@ def test_observation_failure_is_terminal_for_the_outer_planner(planner, monkeypa
         return chat_response(raw, "length" if damage == "truncated_json" else "stop")
 
     monkeypatch.setattr(planner.llm.client.chat.completions, "create", create)
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(TOPIC)
-    assert caught.value.phase.error_code == "protocol_scope_unverified"
+    receipt = planner.run(TOPIC)._scope_receipt
+    assert receipt["status"] == "unverified"
     assert len(generated) == len(raw_calls) == 1
-    assert caught.value.phase.data["scope_check_attempts"][0]["raw_content"] == raw_calls[0]
-    assert protocol._scope_receipt == {}
+    assert receipt["scope_check_attempts"][0]["raw_content"] == raw_calls[0]
+    assert "assessment" not in receipt
 
 
 def test_duplicate_field_counts_include_a_malformed_sibling_before_resolution(planner, monkeypatch):
@@ -185,7 +184,7 @@ def test_missing_provider_content_can_recover_without_fabricated_json_null(plann
     assert replay_scope_sources(TOPIC, protocol, provenance).model_dump(mode="json") == receipt["assessment"]
 
 
-def test_missing_content_exhaustion_is_terminal_after_existing_provider_budget(planner, monkeypatch):
+def test_missing_content_exhaustion_preserves_plan_after_existing_provider_budget(planner, monkeypatch):
     import new_meta.core.llm as llm_module
 
     protocol = proposal()
@@ -194,9 +193,9 @@ def test_missing_content_exhaustion_is_terminal_after_existing_provider_budget(p
     monkeypatch.setattr(llm_module, "LLM_MAX_RETRIES", 2)
     monkeypatch.setattr(planner, "call_llm_structured", lambda *args, **kwargs: generated.append(True) or protocol)
     monkeypatch.setattr(planner.llm.client.chat.completions, "create", lambda **kwargs: calls.append(kwargs) or chat_response(None))
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(TOPIC)
-    attempts = caught.value.phase.data["scope_check_attempts"]
+    receipt = planner.run(TOPIC)._scope_receipt
+    assert receipt["status"] == "unverified"
+    attempts = receipt["scope_check_attempts"]
     assert len(calls) == 2 and len(generated) == 1
     assert all(row["raw_content"] is None and "reference_response" not in row for row in attempts)
     assert all(row["validation"]["code"] == "scope_response_missing_content" for row in attempts)
@@ -215,7 +214,7 @@ def test_model_json_null_is_not_treated_as_missing_sdk_content(planner, monkeypa
 
 
 @pytest.mark.parametrize("endpoint", ["chat", "responses"])
-def test_actual_sdk_bad_usage_is_terminal_for_planning_and_preserves_negative(planner, monkeypatch, endpoint):
+def test_actual_sdk_bad_usage_preserves_plan_and_negative_observation(planner, monkeypatch, endpoint):
     protocol = proposal()
     protocol.pico.comparator = "Active treatments"
     generated = []
@@ -235,11 +234,10 @@ def test_actual_sdk_bad_usage_is_terminal_for_planning_and_preserves_negative(pl
         return httpx.Response(200, json=sdk_json_response(endpoint, json.dumps(response), usage))
 
     attach_sdk_transport(planner.llm, monkeypatch, endpoint, handler)
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(TOPIC)
-    assert caught.value.phase.error_code == "protocol_scope_unverified"
+    receipt = planner.run(TOPIC)._scope_receipt
+    assert receipt["status"] == "unverified"
     assert len(generated) == len(calls) == 1
-    attempts = caught.value.phase.data["scope_check_attempts"]
+    attempts = receipt["scope_check_attempts"]
     assert len(attempts) == 1 and attempts[0]["reference_response"] == calls[0]
     assert next(row for row in attempts[0]["resolved_assessment"]["fields"] if row["field"] == "pico.comparator")["status"] == "mismatch"
-    assert protocol._scope_receipt == {}
+    assert "assessment" not in receipt

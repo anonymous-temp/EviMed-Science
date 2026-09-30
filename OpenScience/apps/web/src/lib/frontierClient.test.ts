@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "./apiClient";
 import {
   addFrontierFollow,
+  fetchFrontierNotificationSwitch,
+  setFrontierNotificationSwitch,
   fetchFrontierDaily,
   fetchFrontierEvent,
   fetchFrontierForYou,
@@ -360,3 +362,21 @@ describe("the card's facts on the wire", () => {
   });
 });
 
+
+
+it("sends the owned follow as a scoped feed filter", async () => {
+  fetchMock.mockResolvedValue(reply(200, { data: { items: [], nextCursor: null, version: 1, mode: "list" } }));
+  await listFrontierItems({ view: "all", follow: "7" });
+  expect(new URL(requested()[0].url, "http://localhost").searchParams.get("follow")).toBe("7");
+});
+
+it("weekly and safety settings preserve each other, quiet hours, channels and legacy defaults", async () => {
+  const current = { quietHours: { start: "23:00", end: "07:00" }, digestTime: "09:30", channels: ["in-app", "feishu"], revision: 7,
+    switches: { notify: true, question: true, review: true, frontier: false, frontierWeekly: false, frontierSafety: true } };
+  fetchMock.mockResolvedValueOnce(reply(200, { data: { ...current, switches: { frontier: false } } }));
+  await expect(fetchFrontierNotificationSwitch("frontierWeekly")).resolves.toBe(false);
+  fetchMock.mockResolvedValueOnce(reply(200, { data: current })).mockResolvedValueOnce(reply(200, { data: { ...current, switches: { ...current.switches, frontierWeekly: true } } }));
+  await expect(setFrontierNotificationSwitch("frontierWeekly", true)).resolves.toBe(true);
+  expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body))).toEqual({ quietHours: current.quietHours, digestTime: current.digestTime, channels: current.channels,
+    switches: { ...current.switches, frontierWeekly: true }, expectedRevision: 7 });
+});

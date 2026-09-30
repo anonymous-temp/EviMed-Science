@@ -159,16 +159,23 @@ test("an unchanged list is a 304 without a list query; a reader's own change or 
   const statements = [];
   const patched = [];
   const connect = database.pool.connect;
-  database.pool.connect = async function recordingConnect(...args) {
-    const client = await connect.apply(this, args);
+  const recordClient = (client) => {
+    if (patched.includes(client)) return client;
     const clientQuery = client.query;
-    // Every argument forwarded: the pool itself calls query with a callback.
     client.query = function recordingQuery(...queryArgs) {
       statements.push(String(queryArgs[0]?.text ?? queryArgs[0]));
       return clientQuery.apply(this, queryArgs);
     };
     patched.push(client);
     return client;
+  };
+  database.pool.connect = function recordingConnect(...args) {
+    const callback = args.at(-1);
+    if (typeof callback === "function") {
+      args[args.length - 1] = (error, client, release) => callback(error, client ? recordClient(client) : client, release);
+      return connect.apply(this, args);
+    }
+    return connect.apply(this, args).then(recordClient);
   };
   try {
     const again = await service.listItems(reader, params(), first.etag);

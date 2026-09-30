@@ -1,3 +1,4 @@
+import { reasoningFields } from "./modelReasoningPolicy.mjs";
 // The production model is certified end to end, not merely configured: the
 // release gate exercises the whole tool chain against it and signs a receipt
 // naming it, readiness refuses to serve on any other, and the runtime refuses
@@ -422,8 +423,7 @@ function normalizedRequest(body, config) {
   return {
     ...body,
     model: config.deepseekModel,
-    thinking: { type: "enabled" },
-    reasoning_effort: config.deepseekReasoningEffort ?? "high",
+    ...reasoningFields(body, "chat", config),
     stream,
     ...(body.max_tokens == null && body.max_completion_tokens == null
       ? { max_completion_tokens: configuredOutputLimit } : {}),
@@ -566,8 +566,7 @@ function normalizedMessagesRequest(body, config) {
   return {
     ...body,
     model: config.deepseekModel,
-    thinking: { type: "enabled" },
-    output_config: { effort: config.deepseekReasoningEffort ?? "high" },
+    ...reasoningFields(body, "messages", config),
     stream: body.stream === true,
     max_tokens: body.max_tokens ?? configuredOutputLimit,
   };
@@ -970,7 +969,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
         caller = engineCaller(token, route, config);
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
-      let normalized = route.normalize(body, config);
+      const requestConfig = caller.engine
+        ? { ...config, modelGatewayTrustedEffort: caller.reasoningEffort ?? config.deepseekReasoningEffort ?? "high" } : config;
+      let normalized = route.normalize(body, requestConfig);
       const scoped = caller.engine ? { request: normalized, scope: null } : consumeBudgetScope(normalized, caller, config);
       normalized = scoped.request;
       modelName = normalized.model;

@@ -51,11 +51,11 @@ test("the migration creates the whole schema and a second run changes nothing", 
   const first = open();
   const capabilities = await migrateFrontier(first, { dimension: 1024 });
   const created = await inventory(first);
-  // 21 tables every deployment has, and the vector table where pgvector exists.
-  assert.equal(created.tables.length, capabilities.vector ? 22 : 21, created.tables.join());
+  // 22 tables (including weekly digests), plus the optional vector table.
+  assert.equal(created.tables.length, capabilities.vector ? 23 : 22, created.tables.join());
   for (const table of ["sources", "entries", "items", "item_keys", "item_texts", "item_mentions", "item_links", "glossary",
     "events", "event_aliases", "event_links", "event_items", "event_revisions", "hot_snapshots", "dailies", "item_changes",
-    "meta", "user_state", "user_follows", "user_profiles", "user_prefs"]) {
+    "meta", "user_state", "user_follows", "user_profiles", "user_prefs", "weeklies"]) {
     assert.ok(created.tables.includes(table), `${table} was not created`);
   }
   for (const index of ["frontier_items_timeline_idx", "frontier_items_selected_idx", "frontier_items_lane_idx",

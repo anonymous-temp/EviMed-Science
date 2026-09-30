@@ -144,8 +144,7 @@ _LABELS_ZH = {
     "annual_title": "年度发文趋势",
     "annual_xlabel": "年份",
     "annual_ylabel": "发文量",
-    "complete_years": "完整年份",
-    "partial_year": "不完整年份（部分数据）",
+    "selected_records": "样本文献",
     "top_authors": "主要作者",
     "top_institutions": "主要机构",
     "top_journals": "主要期刊",
@@ -166,8 +165,7 @@ _LABELS_EN = {
     "annual_title": "Annual Publication Trend",
     "annual_xlabel": "Year",
     "annual_ylabel": "Number of Publications",
-    "complete_years": "Complete years",
-    "partial_year": "Partial year (incomplete)",
+    "selected_records": "Selected records",
     "top_authors": "Top Authors",
     "top_institutions": "Top Institutions",
     "top_journals": "Top Journals",
@@ -229,39 +227,13 @@ def _plot_annual_trend(df: pd.DataFrame, fig_dir: Path, L: dict) -> list[str]:
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    # 分离完整年份和不完整年份
-    has_partial = "is_partial" in df.columns
-    if has_partial:
-        complete_mask = ~df["is_partial"]
-        partial_mask = df["is_partial"]
-        complete_years = years[complete_mask]
-        complete_counts = counts[complete_mask]
-        partial_years = years[partial_mask]
-        partial_counts = counts[partial_mask]
-    else:
-        complete_years = years
-        complete_counts = counts
-        partial_years = pd.Series([], dtype=float)
-        partial_counts = pd.Series([], dtype=float)
-
-    # 绘制柱状图（完整年份：蓝色，不完整年份：橙色）
-    if not complete_years.empty:
-        bars1 = ax.bar(complete_years, complete_counts, color='#2E86AB', alpha=0.7,
-               width=0.6, label=L.get("complete_years", "Complete years"), zorder=2)
-        # 添加数值标签
-        for bar in bars1:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                   f'{int(height)}', ha='center', va='bottom', fontsize=10)
-
-    if has_partial and not partial_years.empty:
-        bars2 = ax.bar(partial_years, partial_counts, color='#FF9800', alpha=0.7,
-               width=0.6, label=L.get("partial_year", "Partial year"), zorder=2)
-        # 添加数值标签
-        for bar in bars2:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                   f'{int(height)}', ha='center', va='bottom', fontsize=10)
+    # A query's selected records do not establish complete calendar coverage.
+    bars = ax.bar(years, counts, color='#2E86AB', alpha=0.7, width=0.6,
+                  label=L.get("selected_records", "Selected records"), zorder=2)
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width() / 2, height,
+                f'{int(height)}', ha='center', va='bottom', fontsize=10)
 
     # 设置坐标轴标签（加大字号）
     ax.set_xlabel(L["annual_xlabel"], fontsize=12, fontweight='bold')
@@ -288,8 +260,7 @@ def _plot_annual_trend(df: pd.DataFrame, fig_dir: Path, L: dict) -> list[str]:
         ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
     # 添加图例
-    if has_partial and not partial_years.empty:
-        ax.legend(loc="upper left", fontsize=10, framealpha=0.9)
+    ax.legend(loc="upper left", fontsize=10, framealpha=0.9)
 
     # 移除顶部和右侧边框
     ax.spines['top'].set_visible(False)

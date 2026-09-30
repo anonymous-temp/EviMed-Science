@@ -256,13 +256,13 @@ def _section_signals(add, result: AnalysisResult) -> None:
         "任一单元格为 0 时按 Haldane-Anscombe 法(+0.5)校正并在 CSV 中标记。"
     )
     add("")
-    add("| ADR (PT) | 来源 | a | ROR [95%CI] | PRR [95%CI] | χ² | IC (IC025) | EBGM (EB05) | 信号 |")
-    add("|---|---|---|---|---|---|---|---|---|")
+    add("| ADR (PT) | 来源 | a | E | ROR [95%CI] | PRR [95%CI] | χ² | IC (IC025) | EBGM (EB05) | 信号 |")
+    add("|---|---|---|---|---|---|---|---|---|---|")
     for row in result.signals:
         shown = row.display
         add(
             f"| {row.reaction} | {'指定' if row.source == 'user-specified' else 'top'} "
-            f"| {shown['a']} "
+            f"| {shown['a']} | {shown['expected_count'] or '—'} "
             f"| {shown['ror']} [{shown['ror_ci95_lower']}, {shown['ror_ci95_upper']}] "
             f"| {shown['prr']} [{shown['prr_ci95_lower']}, {shown['prr_ci95_upper']}] "
             f"| {shown['chi2']} | {shown['ic']} ({shown['ic025']}) "
@@ -270,6 +270,11 @@ def _section_signals(add, result: AnalysisResult) -> None:
             f"| {'**是**' if row.is_signal else '否'} |"
         )
     add("")
+    example = next((row for row in result.signals if row.expected_count_calculation["worked_example"] is not None), None)
+    if example is not None:
+        add(f"期望数演算示例（{example.reaction}）：{example.expected_count_calculation['worked_example']}。")
+        add("E 使用未经连续性校正的报告数及其行、列边际；比值指标的零格校正不改变这些原始计数。")
+        add("")
     add(
         "全精度数值见同目录 signals.csv(与本表同源)。"
         "信号≠因果,详见第 8 节局限性声明。"

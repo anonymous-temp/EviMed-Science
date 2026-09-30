@@ -421,7 +421,7 @@ test("the config lever is off by default and every knob is checked at load", () 
     process.env = { NODE_ENV: "production", OPEN_SCIENCE_AUTH_MODE: "local" };
     const off = loadConfig({ rootDir: repoRoot });
     assert.equal(off.evimedCreditsEnabled, false);
-    assert.equal(off.evimedCreditsPerCny, 0, "a guessed rate would charge every user wrongly");
+    assert.equal(off.evimedCreditsPerCny, 1, "the owner approved one credit per CNY; settlement remains separately disabled");
     assert.deepEqual([off.evimedCreditsUrl, off.evimedCreditsBalanceUrl], ["", ""]);
     assert.equal(off.evimedCreditsTimeoutMs, 10_000);
     assert.equal(off.evimedCreditsPollMs, 60_000);

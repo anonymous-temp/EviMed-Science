@@ -30,6 +30,8 @@ _SYSTEM_PROMPT = (
     "引用指标数值时最多保留 3 位小数,报告数用整数;"
     "2) 不得给出因果关系结论,不得把报告数解释为发生率,必须使用「报告」「信号」「筛查」等措辞;"
     "3) 不得给出用药建议或临床决策;"
+    "期望数的演算只引用 expected_count_calculation 中的原始边际数与算式。"
+    "年度报告数不是报告延迟分析；未分析的变化原因只能作为待检验假设，不得宣称已证实;"
     "4) 只输出 JSON,不要输出任何额外解释。"
     "输出 JSON 格式:"
     "{\"overview\":\"总览段\",\"demographics\":\"人口学段\",\"outcomes\":\"结局段\","
@@ -51,6 +53,7 @@ def build_interpretation_context(
         "drug": drug,
         "total_faers_reports": overview.total_reports,
         "yearly_counts": [b.model_dump() for b in overview.yearly],
+        "yearly_count_interpretation": overview.yearly_count_interpretation,
         "sex_distribution": [b.model_dump() for b in overview.sex],
         "age_distribution": [b.model_dump() for b in overview.age_buckets],
         "outcome_distribution": [b.model_dump() for b in overview.outcomes],

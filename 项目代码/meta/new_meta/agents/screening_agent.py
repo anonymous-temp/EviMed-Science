@@ -292,9 +292,11 @@ class ScreeningAgent(BaseAgent):
         project.save_json("full_text_screening.json", ft_results, subdir="screening")
         if any(row.get("decision") == "review_required" for row in ft_results):
             error = ScreeningReviewRequired(ft_results, project)
-            persist_incomplete_phase(project, error.phase, step="ft_screening",
-                                     status_path="screening/full_text_screening_status.json")
-            raise error
+            from new_meta.core.primary_analysis_alignment import project_is_unattended
+            if not project_is_unattended(project):
+                persist_incomplete_phase(project, error.phase, step="ft_screening",
+                                         status_path="screening/full_text_screening_status.json")
+                raise error
 
         included_ft = [r for r in ft_results if r["decision"] == "include"]
         excluded_ft = [r for r in ft_results if r["decision"] == "exclude"]
@@ -325,6 +327,8 @@ class ScreeningAgent(BaseAgent):
             status=ExecutionStatus.SUCCEEDED, summary="Full-text screening completed for every assessed source.",
             metrics={"assessed": len(papers), "included": len(final_included), "excluded": len(final_excluded)},
         ), subdir="screening")
+        from new_meta.core.extraction_status import require_complete_screening
+        require_complete_screening(project)
         project.save_json("prisma_flow.json", project.prisma.to_dict())
 
         return final_included, final_excluded

@@ -327,6 +327,7 @@ for (thresh in thresholds) {{
     }})
 }}
 
+if (!is.null(exposure_dat)) write.csv(exposure_dat, file.path(output_dir, "selected-source-rows.csv"), row.names=FALSE)
 if (is.null(exposure_dat) || nrow(exposure_dat) < 3) {{
     if (nzchar(last_extraction_error)) {{
         mr_fail("analysis_failed", sprintf(
@@ -367,6 +368,7 @@ harmonisation <- list(
     retained = sum(dat$mr_keep %in% TRUE))
 write(toJSON(harmonisation, auto_unbox=TRUE), file.path(output_dir, "harmonisation.json"))
 dat <- dat[dat$mr_keep == TRUE, ]
+write.csv(dat, file.path(output_dir, "harmonised-rows.csv"), row.names=FALSE)
 if (nrow(dat) < 3) {{
     mr_fail("insufficient_harmonised_snps", "Insufficient harmonized SNPs (< 3)")
 }}
@@ -426,6 +428,7 @@ harmonisation <- list(
     retained = sum(dat$mr_keep %in% TRUE))
 write(toJSON(harmonisation, auto_unbox=TRUE), file.path(output_dir, "harmonisation.json"))
 dat <- dat[dat$mr_keep == TRUE, ]
+write.csv(dat, file.path(output_dir, "harmonised-rows.csv"), row.names=FALSE)
 if (nrow(dat) < 3) {{
     mr_fail("insufficient_harmonised_snps", "Insufficient harmonized SNPs (< 3)")
 }}
@@ -478,6 +481,7 @@ exposure_dat <- format_data(
 
 # Filter by p-value threshold
 exposure_dat <- exposure_dat[exposure_dat$pval.exposure < {pval_threshold}, ]
+write.csv(exposure_dat, file.path(output_dir, "selected-source-rows.csv"), row.names=FALSE)
 if (nrow(exposure_dat) < 3) {{
     mr_fail("no_instruments", "Insufficient IVs after p-value filtering (< 3)")
 }}
@@ -485,6 +489,7 @@ if (nrow(exposure_dat) < 3) {{
 # Clump via LD reference or explicitly supplied instrument selection
 {clumping_block}
 
+write.csv(exposure_dat, file.path(output_dir, "selected-source-rows.csv"), row.names=FALSE)
 if (nrow(exposure_dat) < 3) {{
     mr_fail("no_instruments", "Insufficient IVs after clumping (< 3)")
 }}
@@ -609,6 +614,7 @@ for (thresh in thresholds) {{
     }})
 }}
 
+if (!is.null(exposure_dat)) write.csv(exposure_dat, file.path(output_dir, "selected-source-rows.csv"), row.names=FALSE)
 if (is.null(exposure_dat) || nrow(exposure_dat) < 3) {{
     if (nzchar(last_extraction_error)) {{
         mr_fail("analysis_failed", sprintf(
@@ -682,6 +688,7 @@ mvdat <- mv_harmonise_data(mv_exposures, mv_outcome)
 # MVMR-IVW
 mvmr_res <- mv_multiple(mvdat)
 mvmr_df <- as.data.frame(mvmr_res$result)
+mvmr_df$method <- "Multivariable IVW"
 write.csv(mvmr_df, file.path(output_dir, "mr_results.csv"), row.names=FALSE)
 
 # MVMR sensitivity via MVMR package

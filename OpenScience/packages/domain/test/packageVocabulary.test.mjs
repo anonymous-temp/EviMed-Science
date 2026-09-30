@@ -58,3 +58,16 @@ test('the 2026-09-27 drug-selection package is named for the field names its rep
   assert.equal(found.length, 1)
   assert.match(found[0].message, /not_assessed/)
 })
+
+
+test('data-analysis reports may name source columns while explicit runtime leakage is still reported', () => {
+  for (const kind of ['statistical-analysis-package', 'dataset-scoping-package']) {
+    const file = kind === 'statistical-analysis-package' ? 'statistical-report.md' : 'dataset-scoping-report.md'
+    const { verdict, found } = notices(kind, {
+      [file]: 'We compare `mean radius`, `age_years` and `studyArm`. The run used evimed_submit_deliverable.',
+      'analysis-results.json': JSON.stringify({ analyses: [{ status: 'complete', estimate: 2 }], features: { 'mean radius': 14, age_years: 60, studyArm: 'control' } }),
+    })
+    assert.deepEqual(found, [])
+    assert.ok(verdict.issues.some(issue => issue.code === 'runtime_leakage'))
+  }
+})

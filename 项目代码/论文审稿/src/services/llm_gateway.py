@@ -124,7 +124,10 @@ class LLMGateway:
         self.max_retries = max_retries
         self.timeout = timeout
         # The managed launcher supplies the gateway policy independently of logical tier.
-        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
+        managed = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") in {"high-thinking", "managed-thinking"}
+        self._gateway_effort = os.getenv("LLM_REASONING_EFFORT", "high") if managed else None
+        if self._gateway_effort is not None and self._gateway_effort not in {"off", "low", "high", "max"}:
+            raise ValueError("Invalid managed reasoning effort")
         self._cache: Dict[str, Any] = {}
         self.pro_reasoning_reserve_tokens = int(
             os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096")
@@ -159,7 +162,7 @@ class LLMGateway:
         return {}
 
     def _uses_reasoning(self, model_tier: ModelTier) -> bool:
-        return self._gateway_high_thinking or model_tier != ModelTier.FAST
+        return self._gateway_effort != "off" if self._gateway_effort is not None else model_tier != ModelTier.FAST
 
     def _effective_max_tokens(self, model_tier: ModelTier, answer_tokens: int) -> int:
         """Reserve output room for enabled reasoning without exceeding the API cap."""
@@ -323,7 +326,7 @@ class LLMGateway:
                 "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
             }
             if thinking_enabled:
-                payload["reasoning_effort"] = "high"
+                payload["reasoning_effort"] = self._gateway_effort or "high"
             else:
                 payload["temperature"] = temperature
 
@@ -438,7 +441,7 @@ class LLMGateway:
                 "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
             }
             if thinking_enabled:
-                payload["reasoning_effort"] = "high"
+                payload["reasoning_effort"] = self._gateway_effort or "high"
             else:
                 payload["temperature"] = temperature
 

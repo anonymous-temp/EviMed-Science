@@ -99,23 +99,12 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "aa6e2d1f22d7edb805470500b8092ae154bcac5779538e8dd26febc1c67cb8f9",
-  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config over a profile seeded on a host with no container runtime (npm --before=2026-09-24T15:18:11.337Z, Node 22.22.0, pnpm 11.7.0, the image's own pin and seed scripts, the same six `dsh plugin add` arguments deploy/runtime-dsh/install-runtime.sh uses)",
-  // Recorded on 2026-09-28 for the move to 0.1.7-rc.2: 160 -> 191 rows. Not
-  // from the release image — this machine has no Docker — so the seeding was
-  // calibrated first: the same procedure at 0.1.5-rc.2 reproduced the previous
-  // committed baseline (sha256 50ccdc6e…d835) byte for byte. All 43 invariants
-  // hold on the new composition. The release image's own `diff -u` against
-  // this file is what would catch a platform-dependent row, and its first
-  // build is where this hash is confirmed or replaced from the image.
-  // Re-recorded the same day by the same procedure, after the same seeding at
-  // HEAD first reproduced the previous file (sha256 07cc9946…efbe3) byte for
-  // byte: the socket patch disabled `mcp-resources` and the four upstream
-  // preset rows, and the dump moved by exactly those five `disabled: true`
-  // lines and their provenance headers. Still 191 rows. This re-recording ran
-  // on Node 24.18.0, not the 22.22.0 named above; the calibration on that same
-  // Node reproducing the previous file byte for byte is what shows the dump
-  // does not depend on it.
+  sha256: "7be9d965af9d023ec517541157b316b36b129f39238f5165f220b3a42f129341",
+  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside runtime image sha256:19c3650b40e402f31a97570df361ff02d86b55e872e9b4028dd5f257424d9933 with the reviewed native Browser socket override on 2026-09-30",
+  // Re-recorded on 2026-09-30 in a disposable network-isolated container.
+  // The image's own seeded profile and installed kernel resolve the candidate
+  // patch: 192 rows remain; only the native Browser disabled flag changes. The complete
+  // runtime delta independently byte-compares this dump before its boot smoke.
 };
 
 /**

@@ -223,3 +223,53 @@ test("the first pass is counted as soon as it ends, even when the reviewer then 
   assert.deepEqual(quiet, []);
 });
 
+
+test("oversized aggregate support checks split without truncating or crossing each sentence's sources", async () => {
+  const { jevReplyBatches } = await import("../src/replyCheckJev.mjs");
+  const { estimateJevTokens } = await import("../src/jevModel.mjs");
+  const input = Array.from({ length: 3 }, (_, index) => ({ index, sentence: `Finding ${index}`, numbers: [index + 1], medicines: [] }));
+  const sources = new Map(input.map(item => [item.index + 1, `Source ${item.index}: ${"evidence ".repeat(300)}`]));
+  const one = jevReplyRequest({ sentences: input.slice(0, 1), readable: sources });
+  const limits = { reviewJevMaxRequestTokens: 64000, reviewJevMaxStateTokens: estimateJevTokens(one.state, one.questions).stateAndLongestQuestion + 5 };
+  const result = jevReplyBatches({ sentences: input, readable: sources, limits });
+  assert.equal(result.batches.length, 3);
+  assert.deepEqual(result.skipped, []);
+  for (const [index, batch] of result.batches.entries()) {
+    assert.deepEqual(Object.keys(batch.state.items), [`S${index}`]);
+    assert.equal(batch.state.items[`S${index}`].sources[`[${index + 1}]`], sources.get(index + 1));
+    assert.ok(estimateJevTokens(batch.state, batch.questions).stateAndLongestQuestion <= limits.reviewJevMaxStateTokens);
+  }
+});
+
+test("a failed Jev batch preserves other settlements and counts each batch once", async () => {
+  const { estimateJevTokens } = await import("../src/jevModel.mjs");
+  const input = Array.from({ length: 3 }, (_, index) => ({ index, sentence: `Finding ${index}`, numbers: [index + 1], medicines: [] }));
+  const sources = new Map(input.map(item => [item.index + 1, `Source ${item.index}: ${"evidence ".repeat(300)}`]));
+  const one = jevReplyRequest({ sentences: input.slice(0, 1), readable: sources });
+  const seen = [], reviewed = [];
+  const result = await judgeCitedSentences({ sentences: input, references: input.map(item => ({ number: item.index + 1 })), readable: sources,
+    threshold: .8, jevLimits: { reviewJevMaxRequestTokens: 64000, reviewJevMaxStateTokens: estimateJevTokens(one.state, one.questions).stateAndLongestQuestion + 5 },
+    jev: async request => { const id = Object.keys(request.questions)[0]; if (id === "S1") throw Object.assign(new Error("Unavailable"), { code: "jev_upstream_error" });
+      return { answers: { [id]: SURE }, model: "jev", cost: .01 }; },
+    reviewer: async request => { reviewed.push(request); return { value: { verdicts: [] }, model: "reviewer", cost: .1 }; }, onJev: summary => seen.push(summary),
+  });
+  assert.deepEqual(seen.map(item => item.outcome), ["answered", "failed", "answered"]);
+  assert.deepEqual(reviewed[0].sentences.map(item => item.index), [1]);
+  assert.deepEqual(result.verdicts.filter(item => item.by === "jev").map(item => item.sentence), [0, 2]);
+  assert.equal(result.jev.outcome, "partial");
+  assert.ok(Math.abs(result.cost - .12) < 1e-9);
+});
+
+test("one unshrinkable source and the bounded batch ceiling fall back without losing any sentence", async () => {
+  const { jevReplyBatches } = await import("../src/replyCheckJev.mjs");
+  const { estimateJevTokens } = await import("../src/jevModel.mjs");
+  const input = Array.from({ length: 7 }, (_, index) => ({ index, sentence: `Finding ${index}`, numbers: [index + 1], medicines: index === 6 ? ["medicine"] : [] }));
+  const sources = new Map(input.map(item => [item.index + 1, "evidence ".repeat(item.index === 2 ? 2000 : 300)]));
+  const one = jevReplyRequest({ sentences: input.slice(0, 1), readable: sources });
+  const result = jevReplyBatches({ sentences: input, readable: sources, maxBatches: 2,
+    limits: { reviewJevMaxRequestTokens: 64000, reviewJevMaxStateTokens: estimateJevTokens(one.state, one.questions).stateAndLongestQuestion + 5 } });
+  assert.equal(result.batches.length, 2);
+  assert.deepEqual(result.medicine, [6]);
+  const indices = [...result.batches.flatMap(batch => batch.asked), ...result.skipped].sort((a, b) => a - b);
+  assert.deepEqual(indices, [0, 1, 2, 3, 4, 5]);
+});

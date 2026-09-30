@@ -68,8 +68,11 @@ def discover_analysis_set_candidates(project, plan: MethodPlan) -> AnalysisSetCa
     }
     groups: dict[tuple[str, str, str, str], list[ResultEntity]] = {}
     entities = [ResultEntity.model_validate(payload) for payload in ledger.current_entities(kind=EntityKind.RESULT)]
+    from new_meta.core.autonomous_analysis import admitted_result_ids
+    model_selected = admitted_result_ids(project)
     entities = [entity for entity in entities
-                if entity.evidence_state in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}
+                if (entity.evidence_state in {EvidenceState.VERIFIED, EvidenceState.ADJUDICATED}
+                    or entity.entity_id in model_selected)
                 and _entity_matches_plan(entity, plan)]
     left_out = _unattended_left_out(project, plan, [entity.entity_id for entity in entities])
     # Unattended, every result still here has a verified match to the protocol's
