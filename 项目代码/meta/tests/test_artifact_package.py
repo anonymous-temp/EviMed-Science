@@ -8550,7 +8550,8 @@ def test_submission_readiness_flags_overlong_chinese_interpretive_sentences(tmp_
     assert readability_gate["check_status"] == "fail" and readability_gate["status"] == "warn"  # advisory since 2026-09-29: core.release_tiers
 
 
-def test_submission_readiness_warns_when_no_benchmark_is_attached(tmp_path: Path) -> None:
+def test_no_benchmark_attached_is_a_note_and_the_package_reads_ready(tmp_path: Path) -> None:
+    """A benchmark comparison is optional (2026-09-29); its absence used to warn on every package."""
     project = Project("submission readiness no benchmark", output_dir=tmp_path / uuid4().hex)
     project.save_text(
         "draft.md",
@@ -8628,12 +8629,14 @@ def test_submission_readiness_warns_when_no_benchmark_is_attached(tmp_path: Path
         readiness = json.loads(zf.read("review/submission_readiness_review.json"))
 
     benchmark_gate = next(gate for gate in readiness["gates"] if gate["id"] == "benchmark")
-    assert benchmark_gate["status"] == "warn"
+    assert benchmark_gate["status"] == "pass"
+    assert benchmark_gate["detail"] == "No benchmark attached (informational)."
     assert readiness["passed"] is True
-    assert readiness["status"] == "ready_with_warnings"
+    assert readiness["status"] == "ready"
     assert manifest["submission"]["passed"] is True
-    assert manifest["submission"]["status"] == "ready_with_warnings"
-    assert manifest["submission"]["warning_gates"] == 1
+    assert manifest["submission"]["status"] == "ready"
+    assert manifest["submission"]["warning_gates"] == 0
+    assert manifest["release"]["status"] == "ready"
 
 
 def test_submission_readiness_warns_when_manuscript_polish_guard_rejected_edits(tmp_path: Path) -> None:
@@ -8854,8 +8857,9 @@ def test_submission_readiness_passes_for_rejected_polish_candidate_when_final_te
     assert "manual_review_items=0" in polish_gate["detail"]
     assert polish_gate.get("next_actions", []) == []
     assert readiness["passed"] is True
-    assert readiness["status"] == "ready_with_warnings"
-    assert manifest["submission"]["status"] == "ready_with_warnings"
+    # Its only warning was "no benchmark attached", informational since 2026-09-29.
+    assert readiness["status"] == "ready"
+    assert manifest["submission"]["status"] == "ready"
     assert manifest["review"]["manuscript_polish_fact_guard_issues"] == 1
 
 

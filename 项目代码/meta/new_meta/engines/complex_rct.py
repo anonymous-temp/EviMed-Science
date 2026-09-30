@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
 from new_meta.schemas.meta_result import StudyEffect
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 _RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
@@ -109,7 +110,7 @@ def run_complex_rct(
         for item in subgroup_variables or []
     ]
     if len(rows) < 2:
-        raise ValueError("complex RCT synthesis requires at least two contrasts")
+        raise InsufficientStudiesError("complex RCT synthesis requires at least two contrasts")
     measures = {item.measure.upper() for item in rows}
     if len(measures) != 1:
         raise ValueError("all complex RCT contrasts must use the same effect measure")
@@ -152,7 +153,7 @@ def run_complex_rct(
     for item in prepared:
         grouped[item["record"].study_id].append(item)
     if len(grouped) < 2:
-        raise ValueError("complex RCT synthesis requires at least two independent studies")
+        raise InsufficientStudiesError("complex RCT synthesis requires at least two independent studies")
 
     effects: list[StudyEffect] = []
     study_effects: list[dict[str, Any]] = []

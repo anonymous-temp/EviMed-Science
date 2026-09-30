@@ -7,6 +7,7 @@ import numpy as np
 from pydantic import BaseModel, Field, model_validator
 from scipy import optimize, stats
 from scipy.special import expit, gammaln, logsumexp
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 class PrevalenceStudy(BaseModel):
@@ -54,7 +55,7 @@ def run_prevalence(
         for item in studies
     ]
     if len(studies) < 2:
-        raise ValueError("prevalence synthesis requires at least two studies")
+        raise InsufficientStudiesError("prevalence synthesis requires at least two studies")
     if model == "fixed":
         return _fixed_binomial(studies)
     if model != "random":

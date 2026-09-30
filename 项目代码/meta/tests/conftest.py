@@ -36,11 +36,11 @@ def forbid_unmocked_protocol_scope_calls(monkeypatch):
     original_structured = LLMClient.structured_output
     original_call = LLMClient._call
 
-    def guarded(self, topic, protocol):
+    def guarded(self, topic, protocol, **kwargs):
         if (getattr(self.llm.structured_output, "__func__", None) is original_structured
                 and getattr(self.llm._call, "__func__", None) is original_call):
             raise AssertionError("Provide a mocked independent scope response or a scope receipt; live scope-model calls are forbidden in unit tests")
-        return original_check(self, topic, protocol)
+        return original_check(self, topic, protocol, **kwargs)
 
     monkeypatch.setattr(ResearchPlanner, "check_scope", guarded)
 

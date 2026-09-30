@@ -4892,6 +4892,33 @@ def main():
                 auto_resolve_uncertainty=False,
                 prepare_result_rob=prepare_method_result_rob,
             )
+        from new_meta.core.pipeline_runner import compiled_synthesis_falls_back_to_narrative
+
+        if compiled_synthesis_falls_back_to_narrative(method_delivery.phase, unattended=bool(args.skip_confirm)):
+            # Too few independent studies to pool (production 0928b/0928c, one
+            # contrast from one trial), or unattended nothing verified: the
+            # evidence is the answer. Write the narrative / evidence-gap report
+            # exactly as the pairwise route does, instead of stopping before a
+            # manuscript and leaving the run to restart.
+            project.save_json("method_delivery_status.json", method_delivery.phase, subdir="analysis")
+            project.add_warning(
+                "synthesis",
+                f"{method_delivery.phase.summary} A narrative synthesis was written instead of a pooled estimate.",
+                code=str(method_delivery.phase.error_code or "insufficient_studies_for_synthesis"),
+            )
+            _write_narrative_manuscript_from_artifacts(
+                project,
+                args,
+                model,
+                protocol=protocol,
+                search_query=search_query,
+                extracted_studies=extracted_studies,
+                rob_results=rob_results,
+                included_papers=included_papers,
+                prisma_data=project.prisma.to_dict(),
+                lang=_lang,
+            )
+            return
         if method_delivery.phase.status is not ExecutionStatus.SUCCEEDED:
             _require_cli_method_delivery(project, method_delivery.phase)
         if method_delivery.decisions and not args.skip_confirm:

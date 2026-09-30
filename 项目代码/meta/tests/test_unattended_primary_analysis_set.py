@@ -119,10 +119,13 @@ def test_interactively_the_strata_are_offered_as_before(tmp_path: Path):
     assert PipelineRunner(project).run_compiled_method_synthesis().status.value == "needs_input"
 
 
-def test_one_study_reporting_the_primary_outcome_still_blocks(tmp_path: Path):
+def test_one_study_reporting_the_primary_outcome_is_too_few_to_pool(tmp_path: Path):
+    # The synthesis still does not pool one study; since 2026-09-29 its stop is
+    # typed, and the CLI writes the narrative report for it (test_refusal_is_recorded).
     project, _ = _project(tmp_path, _production_studies()[1:2], unattended=True)  # 39673144 alone
     phase = PipelineRunner(project).run_compiled_method_synthesis()
     assert phase.status.value == "blocked"
+    assert phase.error_code == "insufficient_studies_for_synthesis"
     assert phase.summary.startswith(
         "Complex RCT synthesis requires at least 2 contrasts from at least 2 independent studies; "
         "the selected analysis set has 1 contrast(s) from 1 study/studies.")

@@ -231,13 +231,26 @@ def test_three_semantic_replans_keep_bounded_diagnostics_and_compact_feedback(mo
 
     monkeypatch.setattr(planner, "call_llm_structured", generate)
     monkeypatch.setattr(planner.llm, "structured_output", check)
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(topic)
+    # Since 2026-09-29 a scope the attempts cannot repair is recorded and the
+    # review continues (it used to refuse, delivering nothing); the diagnostics
+    # carried between attempts stay bounded.
+    from new_meta.agents.research_planner import _ScopeDiagnostics
+
+    seen = []
+    original_attach = _ScopeDiagnostics.attach
+
+    def observe(self, error):
+        attached = original_attach(self, error)
+        seen.append(list(self.attempts))
+        return attached
+
+    monkeypatch.setattr(_ScopeDiagnostics, "attach", observe)
+    approved = planner.run(topic)
+    assert [item["field"] for item in approved._scope_receipt["deviations"]] == ["pico.comparator"]
     assert len(generation_prompts) == 3
-    attempts = caught.value.phase.data["scope_check_attempts"]
+    attempts = seen[-1]
     assert len(attempts) <= SCOPE_DIAGNOSTIC_MAX_ATTEMPTS
     assert len(json.dumps(attempts, ensure_ascii=False).encode()) <= SCOPE_DIAGNOSTIC_MAX_BYTES
-    assert caught.value.phase.data["scope_check_attempts_omitted"] > 0
     for prompt in generation_prompts[1:]:
         feedback = prompt.split("Validation feedback (not new user intent):\n", 1)[1]
         assert "pico.comparator" in feedback and "mismatch" in feedback
@@ -339,13 +352,16 @@ def test_later_method_normalization_failure_retains_prior_scope_assessments(monk
 
     monkeypatch.setattr(planner, "call_llm_structured", lambda *args, **kwargs: next(proposals))
     monkeypatch.setattr(planner.llm, "structured_output", check)
-    with pytest.raises(ProtocolInputRequired) as caught:
-        planner.run(TOPIC)
-    assert caught.value.phase.error_code == "protocol_method_input_required"
-    assert caught.value.phase.data["proposal"]["review_family"] == "unrecognized_family"
-    attempts = caught.value.phase.data["scope_check_attempts"]
-    assert [record["reference_response"] for record in attempts] == calls
-    assert all(record["protocol_sha256"] == protocol_hash(initial) for record in attempts)
+    # The later proposals cannot be executed; since 2026-09-29 the first,
+    # scope-checked proposal continues with its deviation recorded instead of
+    # the run refusing at step 1. Its assessment is the one the checker gave.
+    approved = planner.run(TOPIC)
+    assert approved is initial
+    receipt = approved._scope_receipt
+    assert [item["field"] for item in receipt["deviations"]] == ["pico.comparator"]
+    assert receipt["protocol_sha256"] == protocol_hash(initial)
+    assert [row["field"] for row in receipt["assessment"]["fields"] if row["status"] != "match"] == ["pico.comparator"]
+    assert len(calls) >= 1
 
 
 @pytest.mark.parametrize("status", ["mismatch", "uncertain"])

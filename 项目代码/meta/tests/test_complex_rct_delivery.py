@@ -359,11 +359,13 @@ def test_compiled_rct_minimum_inputs_return_typed_outcomes(tmp_path, selected_st
     project, _, _, _, _, phase = _prepared_project(tmp_path, selected_studies)
     assert phase.status.value == expected_status
     if expected_status == "blocked":
-        assert phase.error_code == "method_execution_blocked"
-        assert phase.issues[0].blocking is True
+        # Too few studies is evidence, not a defect (2026-09-29): its own code,
+        # which the CLI answers with the narrative report instead of a stop.
+        from new_meta.core.pipeline_runner import INSUFFICIENT_STUDIES_CODE, compiled_synthesis_falls_back_to_narrative
+        assert phase.error_code == INSUFFICIENT_STUDIES_CODE
+        assert compiled_synthesis_falls_back_to_narrative(phase, unattended=False)
         assert "requires at least 2" in phase.summary
         assert "selected" in phase.summary
-        assert phase.next_actions[0].action_id == "resolve_method_inputs"
     if expected_status != "succeeded":
         assert not project.get_path("method_result.json", subdir="analysis").exists()
         assert not project.get_path("synthesis_result.json", subdir="analysis").exists()

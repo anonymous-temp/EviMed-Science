@@ -349,6 +349,11 @@ def build_manuscript_facts(
     pipeline_warnings = _load_project_json(project, "pipeline_warnings.json") or []
     if not isinstance(pipeline_warnings, list):
         pipeline_warnings = []
+    scope_receipt = _load_project_json(project, "protocol_scope.json", subdir="analysis") or {}
+    protocol_deviations = {
+        "deviations": [item for item in scope_receipt.get("deviations") or [] if isinstance(item, dict)],
+        "outcome_roles": scope_receipt.get("outcome_roles") or {},
+    } if isinstance(scope_receipt, dict) and scope_receipt.get("deviations") else {}
     search_source_counts_display = _source_counts(search_source_counts)
     source_names = _source_names(search_source_counts, prisma_data, search_query=search_query)
     extracted_label_by_id = _study_label_lookup(extracted_studies)
@@ -595,6 +600,7 @@ def build_manuscript_facts(
             "warnings": text_source_warnings,
         },
         "pipeline_warnings": pipeline_warnings,
+        "protocol_deviations": protocol_deviations,
         "evidence_readiness": evidence_readiness,
         "writing_constraints": {
             "human_review_claims_allowed": False,
@@ -652,6 +658,9 @@ def validate_and_repair_manuscript(manuscript: str, facts: dict[str, Any]) -> tu
 
     repaired, pipeline_warning_issues = _ensure_pipeline_warning_note(repaired, facts)
     issues.extend(pipeline_warning_issues)
+
+    repaired, deviation_issues = _ensure_protocol_deviation_note(repaired, facts)
+    issues.extend(deviation_issues)
 
     repaired, pub_bias_issues = _repair_publication_bias_claims(repaired, facts)
     issues.extend(pub_bias_issues)
@@ -4023,6 +4032,89 @@ def _manuscript_or_requested_language_is_zh(manuscript: str, facts: dict[str, An
     cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", str(manuscript or "")))
     latin_words = len(re.findall(r"\b[A-Za-z][A-Za-z'-]*\b", str(manuscript or "")))
     return bool(cjk_chars and cjk_chars >= latin_words)
+
+
+_SCOPE_FIELD_LABELS = {
+    "research_question": ("research question", "研究问题"),
+    "pico.population": ("population", "研究人群"),
+    "pico.intervention": ("intervention", "干预措施"),
+    "pico.comparator": ("comparator", "对照"),
+    "study_design": ("study design", "研究设计"),
+    "study_designs": ("study designs", "研究设计"),
+    "inclusion_criteria": ("inclusion criteria", "纳入标准"),
+    "exclusion_criteria": ("exclusion criteria", "排除标准"),
+    "date_range": ("search period", "检索时间范围"),
+    "language": ("publication language", "文献语言"),
+    "effect_measure": ("effect measure", "效应量"),
+    "subgroup_variables": ("subgroup analyses", "亚组分析"),
+    "interventions": ("interventions", "干预措施"),
+}
+
+
+def protocol_deviation_note(facts: dict[str, Any], *, zh: bool) -> str:
+    """The Methods paragraph that states where the protocol differs from the question.
+
+    Rendered from the recorded scope deviations (analysis/protocol_scope.json),
+    never typed by the writer: which outcome is analysed as primary, which as
+    secondary, and why; and every other field the protocol could not match.
+    """
+    record = facts.get("protocol_deviations") or {}
+    deviations = [item for item in record.get("deviations") or [] if isinstance(item, dict)]
+    if not deviations:
+        return ""
+    roles = record.get("outcome_roles") or {}
+    sentences: list[str] = []
+    if roles and any(item.get("kind") == "outcome_role" for item in deviations):
+        primary = str(roles.get("primary") or "").strip()
+        secondary = [str(item).strip() for item in roles.get("secondary") or [] if str(item).strip()]
+        if zh:
+            sentences.append(
+                "独立范围核查认为方案中各结局的角色与原始问题不完全一致。本方案只容纳一个主要结局："
+                f"以“{primary}”作为主要结局"
+                + (f"，{'；'.join(secondary)}作为次要结局分析" if secondary else "")
+                + "。"
+            )
+        else:
+            sentences.append(
+                "An independent scope check found the outcome roles of the protocol not fully consistent with "
+                f"the question. The protocol holds one primary outcome: {primary} was analysed as the primary "
+                "outcome" + (f", and {'; '.join(secondary)} as secondary outcomes" if secondary else "") + "."
+            )
+    others = sorted({str(item.get("field") or "").split("[", 1)[0] for item in deviations
+                     if item.get("kind") != "outcome_role"})
+    if others:
+        labels = [(_SCOPE_FIELD_LABELS.get(field) or (field, field))[1 if zh else 0] for field in others]
+        if zh:
+            sentences.append(
+                f"独立范围核查认为方案的{'、'.join(labels)}与原始问题不完全一致；在有限次数的方案修订后仍未消除，"
+                "本综述按方案执行并将其列为方法学局限。"
+            )
+        else:
+            sentences.append(
+                f"An independent scope check found the protocol's {', '.join(labels)} not fully consistent with "
+                "the original question, and the bounded protocol revisions did not resolve it; the review "
+                "followed the protocol and reports this as a methodological limitation."
+            )
+    heading = "### 方案偏离" if zh else "### Protocol deviations"
+    body = "".join(sentences) if zh else " ".join(sentences)
+    return f"\n{heading}\n\n{body}\n\n"
+
+
+def _ensure_protocol_deviation_note(manuscript: str, facts: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Keep the recorded protocol deviations at the end of Methods, once."""
+    zh = _manuscript_or_requested_language_is_zh(manuscript, facts)
+    note = protocol_deviation_note(facts, zh=zh)
+    if not note or note.strip() in manuscript:
+        return manuscript, []
+    repaired = manuscript
+    for heading in (("## 结果", "## Results") if zh else ("## Results", "## 结果")):
+        repaired = _insert_before_heading(manuscript, heading, note)
+        if repaired != manuscript:
+            break
+    if repaired == manuscript:
+        return manuscript, []
+    return repaired, [_issue("protocol_deviation_note", "fixed",
+                             "Stated the recorded protocol deviations at the end of Methods.")]
 
 
 def _ensure_pipeline_warning_note(manuscript: str, facts: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:

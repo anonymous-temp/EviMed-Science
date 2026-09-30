@@ -10,6 +10,7 @@ from scipy.stats import t
 
 from new_meta.engines.meta_engine import random_effects_reml
 from new_meta.schemas.meta_result import StudyEffect
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 class PredictionPerformanceRecord(BaseModel):
@@ -128,7 +129,7 @@ def run_prediction_performance(
         for item in records
     ]
     if len(rows) < 3:
-        raise ValueError("prediction-performance synthesis requires at least three studies")
+        raise InsufficientStudiesError("prediction-performance synthesis requires at least three studies")
     if len({item.study_id for item in rows}) != len(rows):
         raise ValueError("one independent validation estimate per study is required")
     identities = {(item.model_id, item.model_version) for item in rows}

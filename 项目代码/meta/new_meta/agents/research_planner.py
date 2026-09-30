@@ -11,7 +11,7 @@ from new_meta.core.method_registry import MethodInputError
 from new_meta.core.llm import LLMOutputError, parse_source_json
 from new_meta.core.primary_analysis_alignment import digest
 from new_meta.core.protocol_scope import (
-    protocol_hash, scope_fields, scope_receipt,
+    protocol_hash, scope_fields, scope_receipt, scope_refusal,
 )
 from new_meta.core.protocol_scope_sources import (
     SOURCE_ASSESSOR, SCOPE_BATCH_SIZE, compose_scope_batch, evaluate_scope_references,
@@ -155,8 +155,20 @@ class ResearchPlanner(BaseAgent):
         return self._plan(question, prompt)
 
     def _plan(self, question, prompt):
+        """Plan within bounded attempts; a scope the attempts cannot repair is recorded, not refused.
+
+        A scope non-match is sent back as feedback while attempts remain -
+        once for outcome-role fields (``protocol_scope.OUTCOME_ROLE_FIELDS``),
+        which a one-primary protocol often cannot satisfy - and is otherwise
+        recorded as a deviation: the review continues with the last
+        scope-checked proposal. A refusal at step 1 delivered nothing
+        (2026-09-28: ~42 minutes of restarts in one project). Only a proposal
+        the method compiler cannot execute, or a scope check that could not be
+        completed, still refuses.
+        """
         original_prompt = prompt
         last_error = None
+        fallback = None
         scope_diagnostics = _ScopeDiagnostics()
         from new_meta.config import PLANNER_MAX_ATTEMPTS
         for attempt in range(PLANNER_MAX_ATTEMPTS):
@@ -171,10 +183,16 @@ class ResearchPlanner(BaseAgent):
                              f"for the {protocol.primary_outcome_type or 'declared'} primary outcome", level="warning")
                 normalize_protocol_method_fields(protocol)
                 validate_protocol_method(protocol)
-                protocol._scope_receipt = self.check_scope(question, protocol)
-                self.log(f"Protocol generated — PICO: P={protocol.pico.population}, "
-                         f"I={protocol.pico.intervention}, C={protocol.pico.comparator}, "
-                         f"O={protocol.pico.outcome_primary}")
+                receipt = self.check_scope(question, protocol, accept_deviations=True)
+                deviations = receipt.get("deviations") or []
+                outcome_roles_only = bool(deviations) and all(item["kind"] == "outcome_role" for item in deviations)
+                last_attempt = attempt == PLANNER_MAX_ATTEMPTS - 1
+                if deviations and not (last_attempt or (outcome_roles_only and attempt >= 1)):
+                    fallback = (protocol, receipt)
+                    findings = [field for field in receipt["assessment"]["fields"] if field["status"] != "match"]
+                    raise scope_refusal(protocol, findings)
+                protocol._scope_receipt = receipt
+                self._log_generated(protocol, receipt)
                 return protocol
             except MethodInputError as exc:
                 last_error = ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol)
@@ -199,12 +217,28 @@ class ResearchPlanner(BaseAgent):
             prompt = original_prompt + "\n\nValidation feedback (not new user intent):\n" + _correction_feedback(last_error)
             prompt += ("\nRepair only representation or scope drift relative to the ORIGINAL question. "
                        "Never drop unsupported requested designs or other explicit requirements to pass validation.")
+        if fallback is not None:
+            protocol, receipt = fallback
+            protocol._scope_receipt = receipt
+            self.log("Planning attempts are spent; continuing with the last scope-checked proposal and "
+                     "recording its deviations: " + ", ".join(item["field"] for item in receipt["deviations"]),
+                     level="warning")
+            self._log_generated(protocol, receipt)
+            return protocol
         if isinstance(last_error, ProtocolInputRequired):
             raise last_error
         raise scope_diagnostics.attach(RuntimeError(
             f"PICO extraction failed after {PLANNER_MAX_ATTEMPTS} attempts: {last_error}")) from last_error
 
-    def check_scope(self, question, protocol):
+    def _log_generated(self, protocol, receipt):
+        self.log(f"Protocol generated — PICO: P={protocol.pico.population}, "
+                 f"I={protocol.pico.intervention}, C={protocol.pico.comparator}, "
+                 f"O={protocol.pico.outcome_primary}")
+        for item in receipt.get("deviations") or []:
+            self.log(f"Recorded protocol deviation on {item['field']} ({item['kind']}): {item['rationale'][:200]}",
+                     level="warning")
+
+    def check_scope(self, question, protocol, *, accept_deviations=False, accepted_fields=frozenset()):
         """Observe every provider response before any retry can replace a judgment."""
         snapshot = ResearchProtocol.model_validate(protocol.model_dump())
         snapshot_hash = protocol_hash(snapshot)
@@ -330,7 +364,8 @@ class ResearchPlanner(BaseAgent):
             if protocol_hash(protocol) != snapshot_hash:
                 raise ValueError("Protocol changed during independent scope assessment")
             merged = ProtocolScopeAssessment(fields=verified)
-            receipt = scope_receipt(question, snapshot, merged)
+            receipt = scope_receipt(question, snapshot, merged, accept_all=accept_deviations,
+                                    accepted_fields=accepted_fields)
             provenance = scope_source_provenance(catalogue, responses, field_origins)
             validate_scope_source_provenance(question, snapshot, merged, provenance)
             receipt.update(assessor=SOURCE_ASSESSOR, source_provenance=provenance)

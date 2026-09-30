@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from new_meta.engines.meta_engine import random_effects_hksj, random_effects_reml
 from new_meta.schemas.meta_result import StudyEffect
+from new_meta.engines.errors import InsufficientStudiesError
 
 
 _RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
@@ -60,7 +61,7 @@ def run_adjusted_effects(records: list[AdjustedEffectRecord]) -> AdjustedEffects
         for item in records
     ]
     if len(rows) < 2:
-        raise ValueError("adjusted-effects synthesis requires at least two studies")
+        raise InsufficientStudiesError("adjusted-effects synthesis requires at least two studies")
     if any(not item.adjusted for item in rows):
         raise ValueError("NRSI/prognostic synthesis accepts adjusted estimates only")
     if any(not item.adjusted_covariates for item in rows):
