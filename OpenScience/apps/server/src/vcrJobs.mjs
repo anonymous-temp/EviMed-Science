@@ -88,7 +88,7 @@ import path from "node:path";
 
 import {
   VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES,
-  canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor,
+  canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -112,6 +112,16 @@ export const VCR_JOB_MAX_RESUBMITS = 2;
 export const VCR_JOB_PURPOSE = "vcr";
 /** How long after a cancel the engine's partial result is still looked for. */
 export const VCR_CANCEL_RECOVERY_MINUTES = 15;
+
+/** The persisted control-plane result, including every stage's diagnostics.
+ * This identity is distinct from the engine's signed canonical output payload.
+ * @param {any} result */
+export function vcrRecordedResultHash(result) {
+  return createHash("sha256").update(canonicalScenarioJson({
+    id: result.id, version: result.version, executionId: result.executionId,
+    output: JSON.parse(vcrResultOutputPayload(result)), diagnostics: result.diagnostics ?? {},
+  })).digest("hex");
+}
 
 /** The value source of each table a job may hand on, by the method that wrote it. */
 export const VCR_DERIVED_SOURCES = Object.freeze({
@@ -236,7 +246,9 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  */
 export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null, planned = null } = {}) {
   const entry = { ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)) };
-  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages: [entry] } };
+  const stageResult = { ...stage, stale: false, conclusion: incoming.conclusion, counts: incoming.counts,
+    measures: incoming.measures, diagnostics: incoming.diagnostics, tables: incoming.tables };
+  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages: [entry], stageResults: { [stage.stage]: stageResult } } };
 
   const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
@@ -265,6 +277,10 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const counts = { ...object(prior.counts) };
   for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
   const kept = [...current, ...carried];
+  const keptNames = new Set(kept.map((each) => String(each.stage)));
+  const stageResults = Object.fromEntries(Object.entries(object(object(prior.diagnostics).stageResults))
+    .filter(([name]) => keptNames.has(name)).map(([name, value]) => [name, { ...object(value), stale: carried.some((each) => each.stage === name) }]));
+  stageResults[stage.stage] = stageResult;
   const conclusions = kept.length ? [incoming.conclusion, ...kept.map((each) => each.conclusion)] : [prior.conclusion, incoming.conclusion];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
@@ -274,7 +290,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
     ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
   /** @type {Record<string, any>} */
-  const diagnostics = { ...prior.diagnostics, ...incoming.diagnostics, stages: [...current, ...carried, entry] };
+  const diagnostics = { ...prior.diagnostics, ...incoming.diagnostics, stages: [...current, ...carried, entry], stageResults };
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {
@@ -797,6 +813,7 @@ export class VcrJobs {
     const ended = String(result.status);
     return this.finish(String(row.id), {
       status: ended, result: { ...result, tables }, signed: answer.signed === true, cpuSeconds, leaseOwner: owner, leaseAttempt: Number(row.attempts),
+      verifiedStage: JSON.parse(vcrResultOutputPayload(result)),
       outputHash: vcrComputedOutputHash(result),
       // A run the engine refused or stopped says why in its issues: the reason it
       // names is the job's own error, not a bare 「failed」 (a partial result
@@ -908,6 +925,8 @@ export class VcrJobs {
         result: { ...object(result), jobId: frozen.jobId, scenarioHash: String(row.scenario_hash ?? "") },
         signed: false,
         local: true,
+        verifiedStage: JSON.parse(vcrResultOutputPayload(result)),
+        outputHash: vcrComputedOutputHash(result),
         startedAt,
         leaseOwner: owner, leaseAttempt: Number(row.attempts),
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0),
@@ -1041,7 +1060,7 @@ export class VcrJobs {
    *
    * @param {string} jobId
    * @param {{ status: string, result?: Record<string, any> | null, error?: Record<string, any> | null, signed?: boolean,
-   *   local?: boolean, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null }} outcome
+   *   local?: boolean, verifiedStage?: Record<string, any>, cpuSeconds?: number, startedAt?: string | null, leaseOwner?: string | null, leaseAttempt?: number | null, outputHash?: string | null }} outcome
    */
   async finish(jobId, outcome) {
     const row = await this.#row(jobId);
@@ -1083,6 +1102,7 @@ export class VcrJobs {
           replicates: result.replicates === undefined ? (row.replicates == null ? null : Number(row.replicates)) : result.replicates,
           outputHash: outcome.outputHash ?? result?.manifest?.outputHash ?? null,
           receipt: { signed: outcome.signed === true, local: outcome.local === true, status,
+            ...(outcome.verifiedStage ? { stageVerified: true, stageOutput: outcome.verifiedStage } : {}),
             ...(detail.engineJobId ? { engineJobId: String(detail.engineJobId) } : {}), ...(partial ? { partial: true } : {}) },
           cpuSeconds: Number(outcome.cpuSeconds ?? result?.manifest?.cpuSeconds ?? 0),
           startedAt: outcome.startedAt ?? result?.manifest?.startedAt ?? null,
@@ -1137,6 +1157,13 @@ export class VcrJobs {
           models: [...models, ...carried.filter((entry) => entry.name !== "method")],
           supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
         }, { client });
+        if (outcome.verifiedStage) {
+          const proof = { recordedResultId: recorded.id, recordedResultVersion: recorded.version,
+            recordedResultHash: vcrRecordedResultHash(recorded) };
+          const updated = (await client.query(`UPDATE ${VCR_SCHEMA}.executions SET receipt=receipt || $2::jsonb WHERE id=$1 RETURNING receipt`,
+            [execution.id, JSON.stringify(proof)])).rows[0];
+          execution.receipt = updated.receipt;
+        }
       }
       const finished = (await client.query(`UPDATE ${VCR_SCHEMA}.jobs
         SET state = $2, finished_at = now(), lease_owner = NULL, lease_until = NULL, updated_at = now(),
@@ -1229,7 +1256,8 @@ export class VcrJobs {
         jobId: String(row.id), studyId: String(row.study_id), userId: String(row.user_id), method: String(row.method),
         methodVersion: String(row.method_version ?? ""), scenarioHash: String(row.scenario_hash ?? ""), inputs: list(row.inputs),
         environment: object(result.manifest), seed: Number(result.seed ?? row.seed ?? 0), replicates: result.replicates ?? null,
-        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, canceled: true, partial: true, status: "canceled" },
+        outputHash: result?.manifest?.outputHash ?? null, receipt: { signed, canceled: true, partial: true, status: "canceled",
+          stageVerified: true, stageOutput: JSON.parse(vcrResultOutputPayload(result)) },
         cpuSeconds: Number(result?.manifest?.cpuSeconds ?? 0), startedAt: result?.manifest?.startedAt ?? null,
         finishedAt: result?.manifest?.finishedAt ?? this.now().toISOString(),
       }, { client });
@@ -1239,6 +1267,10 @@ export class VcrJobs {
         diagnostics: { ...object(result.diagnostics), partial: true, canceled: true }, tables: list(result.tables),
         tiers, models, supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
       }, { client });
+      const proof = { recordedResultId: recorded.id, recordedResultVersion: recorded.version, recordedResultHash: vcrRecordedResultHash(recorded) };
+      const updated = (await client.query(`UPDATE ${VCR_SCHEMA}.executions SET receipt=receipt || $2::jsonb WHERE id=$1 RETURNING receipt`,
+        [execution.id, JSON.stringify(proof)])).rows[0];
+      execution.receipt = updated.receipt;
       await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('partial', true),
         cpu_seconds_used = GREATEST(cpu_seconds_used, $2::numeric) WHERE id = $1`, [String(row.id), Number(result?.manifest?.cpuSeconds ?? 0)]);
       this.counters.partial += 1;

@@ -124,3 +124,20 @@ test("only synthetic and reconstructed tables are handed from one job to the nex
   assert.equal(VCR_DERIVED_SOURCES["evidence.reconstruct_km"], "reconstructed");
   assert.equal(VCR_DERIVED_SOURCES["comparator.entropy_balance"], undefined, "a patient-level table reaches the engine by grant and snapshot alone");
 });
+
+test("null and alternative stages retain their own operating characteristics, Monte Carlo errors and tables", () => {
+  const stage = (name) => ({ stage: name, jobId: `job_${name}`, method: "design.simulate", methodVersion: "1.1.0" });
+  const result = (pet, expected, law) => ({ conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0 },
+    measures: [{ name: "early_stop_probability", value: pet, mcse: 0.001 }, { name: "expected_sample_size", value: expected, mcse: 0.01 }],
+    diagnostics: { isNullScenario: law === "null", analyticCheck: { withinThreeMcse: true, law } },
+    tables: [{ name: "replicates", sha256: (law === "null" ? "a" : "b").repeat(64) }] });
+  const nullResult = vcrMergeStageResult(null, result(0.7361, 15.014, "null"), stage("simulation_null"));
+  const merged = vcrMergeStageResult(/** @type {any} */ (nullResult), result(0.1493, 26.163, "alternative"), stage("simulation"));
+  const phases = merged.diagnostics.stageResults;
+  assert.equal(phases.simulation_null.measures[0].value, 0.7361);
+  assert.equal(phases.simulation.measures[0].value, 0.1493);
+  assert.equal(phases.simulation_null.measures[1].mcse, 0.01);
+  assert.equal(phases.simulation_null.diagnostics.analyticCheck.law, "null");
+  assert.equal(phases.simulation.diagnostics.analyticCheck.law, "alternative");
+  assert.notEqual(phases.simulation_null.tables[0].sha256, phases.simulation.tables[0].sha256);
+});
