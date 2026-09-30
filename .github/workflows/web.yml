@@ -365,6 +365,13 @@ jobs:
       - name: Install the engine service's Python requirements
         run: python3 -m pip install -r ../项目代码/vcr-engine/requirements.txt pytest==8.4.2 httpx==0.28.1
 
+      - name: TEMPORARY what R sees of python
+        run: |
+          which python3
+          python3 -c "import pyarrow, sys; print('direct:', pyarrow.__file__, sys.prefix)"
+          Rscript --no-init-file -e 'cat("LD:", Sys.getenv("LD_LIBRARY_PATH"), "\n"); cat("PYTHONPATH/HOME:", Sys.getenv("PYTHONPATH"), Sys.getenv("PYTHONHOME"), "\n"); cat("PATH:", Sys.getenv("PATH"), "\n"); print(system2("python3", c("-c", shQuote("import sys; print(sys.executable, sys.prefix, sys.path)"))))'
+          Rscript --no-init-file -e 'print(system2("python3", c("-c", shQuote("import pyarrow.parquet; print(1)")), stdout = TRUE, stderr = TRUE))'
+
       # `shell: bash` is what makes the pipe to `tee` fail with the suite: the
       # default `bash -e` has no pipefail.
       - name: Run every numeric acceptance case
