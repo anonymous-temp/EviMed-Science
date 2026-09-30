@@ -38,8 +38,15 @@ decrypt_tmp_dir=""
 tmp=""
 
 cleanup() {
-  rm -rf "$tmp"
-  rm -rf "$decrypt_tmp_dir"
+  local original_status=$? cleanup_failed=0
+  if [ -n "$tmp" ] && [ -d "$tmp" ] && [ ! -L "$tmp" ]; then
+    python3 "$SCRIPT_DIR/backup_integrity.py" prepare-cleanup "$tmp" || cleanup_failed=1
+  fi
+  rm -rf "$tmp" || cleanup_failed=1
+  # Always attempt this even if a staging directory could not be removed.
+  rm -rf "$decrypt_tmp_dir" || cleanup_failed=1
+  if [ "$original_status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then exit 1; fi
+  return "$original_status"
 }
 trap cleanup EXIT
 
@@ -95,12 +102,15 @@ fi
 
 # Verify the complete staged tree before installing it; the private manifest
 # is removed only after every path, type, size and content hash agrees.
-python3 "$SCRIPT_DIR/backup_integrity.py" "$tmp"
+# BSD tar can leave an implicitly created private directory at 0755. Restore
+# ordinary archived modes after verification; never reinstate setuid/setgid bits.
+permissions="$(python3 "$SCRIPT_DIR/backup_integrity.py" "$tmp" "$archive_for_restore")"
 
 if [ -e "$target" ]; then
   rm -rf "$target"
 fi
 mv "$tmp" "$target"
+python3 "$SCRIPT_DIR/backup_integrity.py" finish-root-mode "$target" "$permissions"
 # `$tmp` has been moved, so cleanup must not remove it — but the decrypted
 # archive still has to go. Disarming the whole trap took `decrypt_tmp_dir` with
 # it, and only the SUCCESS path reaches this line: a failing restore exited with

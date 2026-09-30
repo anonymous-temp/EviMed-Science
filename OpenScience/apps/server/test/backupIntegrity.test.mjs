@@ -280,3 +280,101 @@ for (const location of ["existing", "leaf-symlink", "parent-symlink"]) {
     assert.equal((await readdir(f.root)).some(name => name.startsWith(".backup-verification-") || name.startsWith(".open-science-restore")), false);
   });
 }
+
+for (const encrypted of [false, true]) test(`restore retains ordinary private modes and strips special bits (${encrypted ? "encrypted" : "plain"})`, async t => {
+  const f = await fixture(t, 0, encrypted);
+  const privateDir = path.join(f.data, "protected-state");
+  await mkdir(privateDir, { mode: 0o700 });
+  await writeFile(path.join(privateDir, "secret-fixture"), "synthetic private material", { mode: 0o600 });
+  for (const mode of [0o4755, 0o2755, 0o1755]) {
+    const name = path.join(f.data, `special-${mode}`);
+    await writeFile(name, "non-executed permission fixture"); await chmod(name, mode);
+  }
+  const archive = await capture(f);
+  const target = path.join(f.root, "restored");
+  await execute("bash", [path.join(ops, "restore-data.sh"), archive, target], { env: f.env });
+  assert.equal((await stat(path.join(target, "protected-state"))).mode & 0o7777, 0o700);
+  assert.equal((await stat(path.join(target, "protected-state/secret-fixture"))).mode & 0o7777, 0o600);
+  for (const mode of [0o4755, 0o2755, 0o1755]) assert.equal((await stat(path.join(target, `special-${mode}`))).mode & 0o7777, 0o755);
+});
+
+for (const encrypted of [false, true]) test(`a read-only archive root is installed before its final mode is restored (${encrypted ? "encrypted" : "plain"})`, async t => {
+  const f = await fixture(t, 1, encrypted);
+  const target = path.join(f.root, "restored");
+  await chmod(f.data, 0o500);
+  try {
+    const archive = await capture(f);
+    await mkdir(target); await writeFile(path.join(target, "old"), "previous target");
+    await execute("bash", [path.join(ops, "restore-data.sh"), archive, target], { env: { ...f.env, OPEN_SCIENCE_RESTORE_REPLACE: "true" } });
+    assert.equal((await stat(target)).mode & 0o7777, 0o500);
+    assert.equal(await readFile(path.join(target, "pharmacy.sqlite"), "utf8"), "synthetic pharmacy fixture\n");
+    assert.equal((await readdir(f.root)).some(name => name.startsWith(".open-science-restore.")), false);
+  } finally {
+    await chmod(f.data, 0o700);
+    await chmod(target, 0o700).catch(() => {});
+    for (const name of await readdir(f.root)) if (name.startsWith(".open-science-restore.")) await chmod(path.join(f.root, name), 0o700);
+  }
+});
+
+for (const encrypted of [false, true]) test(`failed restore removes restrictive staging and decrypted archives (${encrypted ? "encrypted" : "plain"})`, async t => {
+  const f = await fixture(t, 0, encrypted);
+  const protectedDir = path.join(f.data, "protected");
+  await mkdir(protectedDir); await writeFile(path.join(protectedDir, "data"), "synthetic private bytes", { mode: 0o600 });
+  await chmod(protectedDir, 0o500);
+  const target = path.join(f.root, "existing");
+  const decryptTmp = path.join(f.root, "decrypt-tmp");
+  try {
+    const archive = await capture(f);
+    await mkdir(target); await writeFile(path.join(target, "kept"), "existing data");
+    await mkdir(decryptTmp);
+    const receipt = path.join(f.root, "already-present-receipt"); await writeFile(receipt, "must not replace");
+    await assert.rejects(execute("bash", [path.join(ops, "restore-data.sh"), archive, target], {
+      env: { ...f.env, TMPDIR: decryptTmp, OPEN_SCIENCE_RESTORE_REPLACE: "true", OPEN_SCIENCE_RESTORE_VERIFICATION_FILE: receipt },
+    }));
+    assert.equal(await readFile(path.join(target, "kept"), "utf8"), "existing data");
+    assert.equal((await readdir(f.root)).some(name => name.startsWith(".open-science-restore.")), false);
+    assert.deepEqual(await readdir(decryptTmp), []);
+  } finally {
+    await chmod(protectedDir, 0o700);
+    for (const name of await readdir(f.root)) if (name.startsWith(".open-science-restore.")) {
+      await chmod(path.join(f.root, name), 0o700); await chmod(path.join(f.root, name, "protected"), 0o700).catch(() => {});
+    }
+  }
+});
+
+test("staging cleanup restores owner access without following an outside link", async t => {
+  const f = await fixture(t, 0);
+  const staging = path.join(f.root, ".open-science-restore.123");
+  const protectedDir = path.join(staging, "protected");
+  const outside = path.join(f.root, "outside");
+  await mkdir(protectedDir, { recursive: true }); await writeFile(path.join(protectedDir, "data"), "private fixture");
+  await mkdir(outside); await writeFile(path.join(outside, "kept"), "not staging");
+  await symlink(outside, path.join(staging, "outside-link"));
+  await chmod(protectedDir, 0o000); await chmod(outside, 0o500);
+  try {
+    await execute("python3", [path.join(ops, "backup_integrity.py"), "prepare-cleanup", staging]);
+    assert.equal((await stat(protectedDir)).mode & 0o777, 0o700);
+    assert.equal((await stat(outside)).mode & 0o777, 0o500);
+    await rm(staging, { recursive: true });
+    assert.equal(await readFile(path.join(outside, "kept"), "utf8"), "not staging");
+  } finally { await chmod(outside, 0o700); await chmod(protectedDir, 0o700).catch(() => {}); }
+});
+
+for (const encrypted of [false, true]) test(`install failure cleans already restricted staging (${encrypted ? "encrypted" : "plain"})`, async t => {
+  const f = await fixture(t, 0, encrypted);
+  const restricted = path.join(f.data, "protected");
+  await mkdir(restricted); await writeFile(path.join(restricted, "data"), "private fixture"); await chmod(restricted, 0o500);
+  const target = path.join(f.root, "not-installed");
+  try {
+    const archive = await capture(f);
+    const bin = path.join(f.root, "bin"), temporary = path.join(f.root, "decrypt-tmp");
+    await mkdir(bin); await mkdir(temporary);
+    await writeFile(path.join(bin, "mv"), "#!/bin/sh\nexit 37\n", { mode: 0o700 });
+    await assert.rejects(execute("bash", [path.join(ops, "restore-data.sh"), archive, target], {
+      env: { ...f.env, TMPDIR: temporary, PATH: `${bin}:${process.env.PATH}` },
+    }), error => error.code === 37);
+    assert.equal((await readdir(f.root)).some(name => name.startsWith(".open-science-restore.")), false);
+    assert.deepEqual(await readdir(temporary), []);
+    await assert.rejects(stat(target), { code: "ENOENT" });
+  } finally { await chmod(restricted, 0o700); }
+});

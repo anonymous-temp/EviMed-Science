@@ -63,7 +63,7 @@ def unique_object(pairs):
 
 def check_archive(filename):
     """Check actual tar members, including aliases and duplicates, before tar writes."""
-    seen = set()
+    seen = {}
     with tarfile.open(filename, mode="r|gz") as archive:
         for member in archive:
             name = member.name
@@ -80,12 +80,122 @@ def check_archive(filename):
                 raise IntegrityError("backup_inventory_unsupported_entry")
             if name in seen:
                 raise IntegrityError("backup_inventory_duplicate_archive_entry")
-            seen.add(name)
+            seen[name] = (member.isdir(), member.mode & 0o777)
             if len(seen) > MAX_MANIFEST_ENTRIES + 1:
                 raise IntegrityError("backup_inventory_limit_exceeded")
             if name.split("/")[0] == MANIFEST_NAME and (
                     name != MANIFEST_NAME or not member.isfile() or member.size > MAX_MANIFEST_BYTES):
                 raise IntegrityError("backup_inventory_invalid")
+    return seen
+
+
+def restore_ordinary_modes(root_fd, filename):
+    """Restore archived rwx permissions through held descriptors, never special bits."""
+    modes = check_archive(filename)
+    modes.pop(MANIFEST_NAME, None)  # verify_tree has already removed this private file.
+    root_metadata = os.fstat(root_fd)
+    root_mode = modes.get(".", (True, stat.S_IMODE(root_metadata.st_mode) & 0o777))[1]
+    # macOS cannot install a directory after it has become owner-read-only.
+    # Keep the staging root private and writable until the shell has moved it.
+    os.fchmod(root_fd, 0o700)
+
+    def walk(directory, prefix):
+        for name in os.listdir(directory):
+            relative = f"{prefix}/{name}" if prefix else name
+            before = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            is_directory = stat.S_ISDIR(before.st_mode)
+            if not (is_directory or stat.S_ISREG(before.st_mode)):
+                raise IntegrityError("backup_inventory_unsupported_entry")
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            if is_directory:
+                flags |= os.O_DIRECTORY
+            child = os.open(name, flags, dir_fd=directory)
+            try:
+                if identity(os.fstat(child)) != identity(before):
+                    raise IntegrityError("backup_inventory_changed")
+                if is_directory:
+                    walk(child, relative)
+                archived = modes.get(relative)
+                if archived is not None:
+                    if archived[0] != is_directory:
+                        raise IntegrityError("backup_inventory_type_mismatch")
+                    os.fchmod(child, archived[1])
+                else:
+                    # Implicit tar parent directories have no recorded mode.
+                    # Keep their ordinary permissions, never inherited special bits.
+                    os.fchmod(child, stat.S_IMODE(os.fstat(child).st_mode) & 0o777)
+            finally:
+                os.close(child)
+
+    walk(root_fd, "")
+    return {"mode": root_mode, "dev": root_metadata.st_dev, "ino": root_metadata.st_ino}
+
+
+def finish_root_mode(directory, encoded):
+    """Finalize only the installed root whose inode was verified before rename."""
+    recorded = json.loads(encoded, object_pairs_hook=unique_object)
+    if (not isinstance(recorded, dict) or set(recorded) != {"mode", "dev", "ino"}
+            or any(type(value) is not int for value in recorded.values())
+            or not 0 <= recorded["mode"] <= 0o777):
+        raise IntegrityError("backup_inventory_permissions_invalid")
+    root = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        current = os.fstat(root)
+        if (current.st_dev, current.st_ino) != (recorded["dev"], recorded["ino"]):
+            raise IntegrityError("backup_inventory_changed")
+        os.fchmod(root, recorded["mode"])
+    finally:
+        os.close(root)
+
+
+def make_staging_writable(directory):
+    """Permit cleanup of our owned staging directories without following links."""
+    def open_owned(parent, name):
+        before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if not stat.S_ISDIR(before.st_mode) or before.st_uid != os.geteuid():
+            raise IntegrityError("backup_inventory_cleanup_unowned")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        try:
+            child = os.open(name, flags, dir_fd=parent)
+        except PermissionError:
+            if hasattr(os, "O_PATH"):
+                held = os.open(name, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                try:
+                    current = os.fstat(held)
+                    if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
+                        raise IntegrityError("backup_inventory_changed")
+                    os.chmod(f"/proc/self/fd/{held}", 0o700)
+                finally:
+                    os.close(held)
+            else:
+                os.chmod(name, 0o700, dir_fd=parent, follow_symlinks=False)
+            child = os.open(name, flags, dir_fd=parent)
+        current = os.fstat(child)
+        if (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino):
+            os.close(child)
+            raise IntegrityError("backup_inventory_changed")
+        os.fchmod(child, 0o700)
+        return child
+
+    def walk(parent):
+        for name in os.listdir(parent):
+            if not stat.S_ISDIR(os.stat(name, dir_fd=parent, follow_symlinks=False).st_mode):
+                continue
+            child = open_owned(parent, name)
+            try:
+                walk(child)
+            finally:
+                os.close(child)
+
+    parent = os.open(os.path.dirname(directory), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        root = open_owned(parent, os.path.basename(directory))
+        try:
+            walk(root)
+        finally:
+            os.close(root)
+    finally:
+        os.close(parent)
 
 
 def read_manifest(root_fd):
@@ -329,15 +439,28 @@ def write_receipt(receipt, *, root_fd=None):
 
 
 def main(arguments):
+    if len(arguments) == 2 and arguments[0] == "prepare-cleanup":
+        make_staging_writable(arguments[1])
+        return
+    if len(arguments) == 3 and arguments[0] == "finish-root-mode":
+        finish_root_mode(arguments[1], arguments[2])
+        return
     if len(arguments) == 2 and arguments[0] == "check-archive":
         check_archive(arguments[1])
         return
-    if len(arguments) != 1:
+    if len(arguments) not in (1, 2):
         raise IntegrityError("backup_inventory_cli_invalid")
     root = os.open(arguments[0], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         receipt = verify_tree(root)
+        # A pre-existing/invalid receipt must fail while the staged tree is
+        # still writable; restrictive customer modes are applied afterwards.
         write_receipt(receipt, root_fd=root)
+        permissions = None
+        if len(arguments) == 2:
+            permissions = restore_ordinary_modes(root, arguments[1])
+        if permissions is not None:
+            print(json.dumps(permissions))
     finally:
         os.close(root)
     links = f"; {receipt['links']} workspace link(s) recorded in the archive manifest, not restored" if receipt.get("links") else ""
