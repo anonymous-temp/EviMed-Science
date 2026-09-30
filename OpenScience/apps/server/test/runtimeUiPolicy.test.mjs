@@ -418,7 +418,7 @@ test("native follow responses have an independent 32 MiB budget and preserve lat
   const result = Promise.race([c.next(), once(c.ws, "close").then(([code, reason]) => ({ closed: code, reason: String(reason) }))]);
   [...f.peers][0].send(wire);
   const received = await result;
-  assert.equal(received.type, "item", `follow failed: ${JSON.stringify(received)}`);
+  assert.equal(received.type, "item", `follow failed: ${received.closed} ${received.reason}`);
   assert.deepEqual(received.value, snapshot);
   c.send({ type: "cancel", streamId: "follow" });
   assert.equal((await c.next()).type, "end");

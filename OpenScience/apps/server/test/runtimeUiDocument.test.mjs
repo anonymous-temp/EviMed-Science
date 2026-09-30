@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from "@evimed/domain";
 
 // Unmodified published @deepseek-ai/dsh-web-frontend@0.1.5-rc.2 dist/index.html.
 const publishedHtml = await readFile(new URL("./fixtures/dsh/rc1/index.html", import.meta.url), "utf8");
@@ -64,4 +66,13 @@ test("with the shared asset path, revisioned plugin bundles move there too, and 
   // The per-project path serves build assets only; plugins stay with the frame there.
   const perProject = rebaseRuntimeUiDocument(Buffer.from(source), { "content-type": "text/html" }, prefix, "/__evimed/a/default/").toString();
   assert.ok(perProject.includes(`src="${prefix}plugins/??bootstrap&rev=abcdef012345"`));
+});
+
+
+test("bootstrap always injects the trusted response ceiling over frame input", async () => {
+  const { runtimeUiBootstrapSource } = await import("../src/runtimeUiDocument.mjs");
+  const sandbox = {};
+  runInNewContext(runtimeUiBootstrapSource({ muxResponseMaxBytes: Number.MAX_SAFE_INTEGER }, function () {}), sandbox);
+  assert.equal(sandbox.__EVIMED_FRAME__.muxResponseMaxBytes, RUNTIME_UI_MUX_RESPONSE_MAX_BYTES);
+  assert.ok(Object.isFrozen(sandbox.__EVIMED_FRAME__));
 });

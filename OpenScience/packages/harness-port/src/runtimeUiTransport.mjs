@@ -2,7 +2,7 @@
  * Browser-only official transport hooks. Keep the installer self-contained:
  * the control plane serializes it into the parser-blocking frame bootstrap.
  * No module import, browser fetch replacement, or Host-ownership claim is used.
- * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string}} frame
+ * @param {{version:number, frameId:string, projectId:string, prefix:string, shellOrigin:string, assets?:string, muxResponseMaxBytes:number}} frame
  *   `assets`, when present, is the path every frame shares for the kernel
  *   application's content-addressed files (`/__evimed/k/`): a plugin bundle
  *   named by revision loads from there, so the browser keeps one copy for
@@ -13,13 +13,20 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   if (frame?.version !== 1 || !/^\/__evimed\/f\/[A-Za-z0-9_-]+\/$/.test(frame.prefix)
     || frame.prefix !== `/__evimed/f/${frame.frameId}/`) throw new Error('Invalid runtime frame');
   if (frame.assets !== undefined && frame.assets !== '/__evimed/k/') throw new Error('Invalid runtime frame');
+  if (!Number.isSafeInteger(frame.muxResponseMaxBytes) || frame.muxResponseMaxBytes <= 0) throw new Error('Invalid runtime receive limit');
   if (target.__DSH_TRANSPORT__) throw new Error('Runtime transport already installed');
   const origin = target.location.origin;
   const nativeFetch = target.fetch.bind(target);
   const streams = new Map();
   const MAX_STREAMS = 128;
   const MAX_ITEMS = 128;
-  const MAX_BYTES = 2 * 1024 * 1024;
+  const MAX_SEND_BYTES = 2 * 1024 * 1024;
+  // Injected by the control plane from the same vocabulary as the proxy's
+  // response cap. This function reaches the page as source, not an import.
+  const MAX_RECEIVE_BYTES = frame.muxResponseMaxBytes;
+  let receiveQueuedBytes = 0;
+  /** @param {string} value */
+  const byteLength = (value) => new TextEncoder().encode(value).byteLength;
   /** @type {any} */ let carrier;
   /** @type {Promise<any> | undefined} */ let connecting;
   /** @type {(() => void) | undefined} */ let cancelConnect;
@@ -60,7 +67,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   /** @param {any} socket @param {any} message */
   function send(socket, message) {
     const bytes = JSON.stringify(message);
-    if (bytes.length > MAX_BYTES || socket.bufferedAmount > MAX_BYTES || socket.readyState !== 1) {
+    if (byteLength(bytes) > MAX_SEND_BYTES || socket.bufferedAmount > MAX_SEND_BYTES || socket.readyState !== 1) {
       const error = failure('Runtime carrier send limit');
       lose(socket, error);
       throw error;
@@ -109,8 +116,10 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
       socket.addEventListener('close', () => stop(failure('Runtime carrier closed')));
       socket.addEventListener('message', (/** @type {any} */ event) => {
         if (carrier !== socket) return;
+        if (typeof event.data !== 'string') { stop(failure('Malformed runtime carrier frame')); return; }
+        const bytes = byteLength(event.data);
+        if (bytes > MAX_RECEIVE_BYTES) { stop(failure('Runtime carrier frame limit')); return; }
         try {
-          if (typeof event.data !== 'string' || event.data.length > MAX_BYTES) throw failure('Runtime carrier frame limit');
           const message = JSON.parse(event.data);
           const validId = record(message) && typeof message.streamId === 'string' && message.streamId.length > 0;
           const item = message?.type === 'item' && (exact(message, ['type', 'streamId']) || exact(message, ['type', 'streamId', 'value']));
@@ -119,7 +128,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
             && exact(message.error, ['code', 'message', 'details'])
             && typeof message.error.code === 'string' && typeof message.error.message === 'string' && record(message.error.details);
           if (!validId || (!item && !end && !remoteError)) throw failure('Malformed runtime carrier frame');
-          streams.get(message.streamId)?.push(message, event.data.length);
+          streams.get(message.streamId)?.push(message, bytes);
         } catch { stop(failure('Malformed runtime carrier frame')); }
       });
     });
@@ -186,16 +195,20 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
       /** @type {any} */ let socket;
       let opened = false;
       let terminal = false;
+      const clearQueue = () => {
+        receiveQueuedBytes -= queuedBytes;
+        queue.length = 0; queuedBytes = 0;
+      };
       const inbox = {
         /** @param {any} reason */
-        fail(reason) { failed = true; error = reason; queue.length = 0; queuedBytes = 0; wake?.(); },
+        fail(reason) { failed = true; error = reason; clearQueue(); wake?.(); },
         /** @param {any} message @param {number} bytes */
         push(message, bytes) {
           if (failed || terminal) return;
-          if (queue.length >= MAX_ITEMS || queuedBytes + bytes > MAX_BYTES) {
+          if (queue.length >= MAX_ITEMS || receiveQueuedBytes + bytes > MAX_RECEIVE_BYTES) {
             lose(socket, failure('Runtime stream receive limit')); return;
           }
-          queue.push({ message, bytes }); queuedBytes += bytes; wake?.();
+          queue.push({ message, bytes }); queuedBytes += bytes; receiveQueuedBytes += bytes; wake?.();
         },
       };
       const abort = () => inbox.fail(signal.reason ?? failure('Runtime stream cancelled'));
@@ -219,13 +232,14 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           if (!queue.length) await new Promise(resolve => { wake = () => resolve(undefined); });
           wake = undefined;
           if (failed) throw error;
-          const { message, bytes } = queue.shift(); queuedBytes -= bytes;
+          const { message, bytes } = queue.shift(); queuedBytes -= bytes; receiveQueuedBytes -= bytes;
           if (message.type === 'item') { yield message.value; continue; }
           terminal = true;
           if (message.type === 'error') throw failure(message.error.message, message.error);
           return;
         }
       } finally {
+        clearQueue();
         streams.delete(id); signal.removeEventListener('abort', abort);
         if (opened && !terminal && socket?.readyState === 1) send(socket, { type: 'cancel', streamId: id });
         if (endpoint === '$events' && socket) lose(socket, failure('Runtime event generation ended'));
