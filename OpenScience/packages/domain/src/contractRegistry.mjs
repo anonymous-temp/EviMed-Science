@@ -170,6 +170,7 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @typedef {object} GateInput
  * @property {string} contractKind
  * @property {Map<string, string>} files          relative path inside the deliverable dir -> text
+ * @property {string} [packagePath]              trusted workspace-relative deliverable directory
  * @property {readonly {path: string, required: boolean}[]} [expectedOutputs]
  * @property {string | null} [briefText]          the dispatcher's copy of the question
  * @property {any} [matrix]
@@ -255,7 +256,11 @@ function proseHygieneIssues(input, proseFiles) {
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
     }
-    const named = packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
+    // A data report must identify its actual columns and coding. Arbitrary
+    // scientific JSON keys cannot distinguish those names from internal schema
+    // vocabulary. Explicit runtime leakage above remains checked for every kind.
+    const dataReport = input.contractKind === 'statistical-analysis-package' || input.contractKind === 'dataset-scoping-package'
+    const named = dataReport ? null : packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
     if (named) {
       issues.push(issue(
         'report_package_vocabulary',

@@ -1924,6 +1924,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const matrix = parseJson(files.get('clinical-evidence-matrix.json'))
     const verdict = gateDeliverable({
       contractKind: item.contractKind,
+      packagePath: `${workspaceLayout.deliverablesDir}/${item.id}`,
       files,
       expectedOutputs,
       briefText: entry.briefText,

@@ -12,7 +12,7 @@ const fingerprint = (value) => record(value) && typeof value.path === 'string' &
 /**
  * Absent outputs and failed calculations cannot invalidate completed work.
  * Hash shapes are checked here; the execution helper hashes the actual bytes.
- * @param {{files: Map<string, string>}} input
+ * @param {{files: Map<string, string>, packagePath?: string}} input
  * @returns {{issues: import('./contractRegistry.mjs').GateIssue[], metrics: Record<string, unknown>}}
  */
 export function statisticalAnalysisFindings(input) {
@@ -20,7 +20,10 @@ export function statisticalAnalysisFindings(input) {
   const issues = []
   const metrics = { statisticalComplete: 0, statisticalPartial: 0, statisticalUnsupported: 0, statisticalExecutions: 0 }
   /** @param {import('./contractRegistry.mjs').GateIssue[]} target @param {string} check @param {string} path @param {string} message */
-  const notice = (target, check, path, message) => target.push({ code: 'statistical_analysis_notice', severity: 'advisory', check, path, message })
+  const notice = (target, check, path, message) => {
+    if (target.some(item => item.check === check && item.path === path && item.message === message)) return
+    target.push({ code: 'statistical_analysis_notice', severity: 'advisory', check, path, message })
+  }
   /** @param {string} path @param {string} check @returns {any} */
   const read = (path, check) => {
     if (!input.files.has(path)) return null
@@ -42,7 +45,7 @@ export function statisticalAnalysisFindings(input) {
       if (analysis.status === 'complete') metrics.statisticalComplete += 1
       else if (analysis.status === 'unsupported') metrics.statisticalUnsupported += 1
       else metrics.statisticalPartial += 1
-      if (analysis.status === 'complete' && Object.hasOwn(analysis, 'estimate') && !finite(analysis.estimate)) {
+      if (analysis.status === 'complete' && Object.hasOwn(analysis, 'estimate') && (analysis.estimate == null || (typeof analysis.estimate === 'number' && !finite(analysis.estimate)))) {
         notice(issues, 'statistical-finite-results', resultPath, `${id}: the complete estimate is not finite; describe the affected calculation as unavailable.`)
       }
       if (record(analysis.interval) && ['lower', 'upper'].some((bound) => Object.hasOwn(analysis.interval, bound) && !finite(analysis.interval[bound]))) {
@@ -58,6 +61,15 @@ export function statisticalAnalysisFindings(input) {
       if (counts.some((n) => !finite(n) || n < 0)) notice(issues, 'statistical-results-shape', resultPath, `${id}: sample counts must be nonnegative finite numbers.`)
     }
   }
+  /** Receipt paths may be workspace-relative; map them only through this package's known root.
+   * @param {string} scriptPath */
+  const includesScript = (scriptPath) => {
+    if (!scriptPath || scriptPath.startsWith('/') || scriptPath.includes('\\') || scriptPath.split('/').includes('..')) return false
+    if (input.files.has(scriptPath)) return true
+    const root = input.packagePath
+    return typeof root === 'string' && root.length > 0 && scriptPath.startsWith(`${root}/`)
+      && input.files.has(scriptPath.slice(root.length + 1))
+  }
   const receipt = read(receiptPath, provenance)
   if (input.files.has(receiptPath) && receipt !== undefined) {
     if (!record(receipt) || !Array.isArray(receipt.executions) || !receipt.executions.length) {
@@ -69,7 +81,7 @@ export function statisticalAnalysisFindings(input) {
         if (!fingerprint(execution.script) || !Array.isArray(execution.inputs) || !execution.inputs.length || execution.inputs.some((entry) => !fingerprint(entry))) {
           notice(issues, 'statistical-execution-provenance', receiptPath, 'An execution lacks real source/script SHA-256 fingerprints and paths.')
         }
-        if (record(execution.script) && typeof execution.script.path === 'string' && !input.files.has(execution.script.path)) {
+        if (record(execution.script) && typeof execution.script.path === 'string' && !includesScript(execution.script.path)) {
           notice(issues, 'statistical-execution-provenance', receiptPath, `The linked script ${execution.script.path} is not included in the package.`)
         }
         if (!Array.isArray(execution.argv) || !execution.argv.length || execution.argv.some((value) => typeof value !== 'string') || !record(execution.versions) || typeof execution.versions.interpreter !== 'string' || !execution.versions.interpreter || !record(execution.versions.libraries) || !Number.isInteger(execution.exitCode) || !timestamp(execution.startedAt) || !timestamp(execution.endedAt)) {

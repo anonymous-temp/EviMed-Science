@@ -91,3 +91,25 @@ test('literal null receipt is a shape notice distinct from an absent or unparsab
     assert.ok(result.issues.some((issue) => issue.check === 'statistical-execution-provenance'))
   }
 })
+
+
+test('categorical estimates are not failed numerical calculations, while null and overflow estimates stay visible', () => {
+  const result = verdict({ 'analysis-results.json': '{"analyses":[{"id":"coding","status":"complete","estimate":"0 = malignant, 1 = benign"},{"id":"logical","status":"complete","estimate":true},{"id":"missing","status":"complete","estimate":null},{"id":"overflow","status":"complete","estimate":1e400}]}' })
+  assert.ok(!result.issues.some(issue => /^(coding|logical):/.test(issue.message)))
+  for (const id of ['missing', 'overflow']) assert.ok(result.issues.some(issue => issue.check === 'statistical-finite-results' && issue.message.startsWith(id)))
+})
+
+test('receipt paths resolve only within the known package and repeated missing paths produce one notice', () => {
+  const fingerprint = { sha256: 'a'.repeat(64), path: 'analysis.py' }
+  const execution = { script: fingerprint, inputs: [{ ...fingerprint, path: 'data.csv' }], argv: ['python', 'analysis.py'],
+    versions: { interpreter: 'Python 3.12', libraries: {} }, exitCode: 0,
+    startedAt: '2026-09-29T00:00:00Z', endedAt: '2026-09-29T00:01:00Z', sourcesUnchanged: true, output: { observedWrite: true } }
+  /** @param {string} scriptPath */
+  const check = (scriptPath) => runGate({ contractKind: 'statistical-analysis-package', packagePath: 'deliverables/current', files: new Map([
+    ['analysis.py', 'print(2)'], ['scripts/nested.py', 'print(3)'],
+    ['analysis-run.json', JSON.stringify({ executions: [1, 2].map(() => ({ ...execution, script: { ...fingerprint, path: scriptPath } })) })],
+    ['analysis-results.json', results([{ status: 'complete', estimate: 2 }])],
+  ]) }).issues.filter(issue => issue.message.includes('not included in the package'))
+  for (const script of ['analysis.py', 'deliverables/current/analysis.py', 'deliverables/current/scripts/nested.py']) assert.deepEqual(check(script), [])
+  for (const script of ['deliverables/other/analysis.py', 'deliverables/current/../other/analysis.py', 'scripts/analysis.py']) assert.equal(check(script).length, 1)
+})
