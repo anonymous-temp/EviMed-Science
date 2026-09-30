@@ -2728,14 +2728,30 @@
   "_why_enabled_20260930": "Protected publisher response replayed against actual normalized entries; evidence and coverage semantics: registry/research/source-expansion-2026-09-30.json."
  },
  "openalex-medicine-most-cited-30d": {
-  "enabled": false,
-  "disabled_reason": "probe_json_api_family_unmapped_openalex",
-  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex."
+  "enabled": true,
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex.",
+  "access": "json-api",
+  "egress": "direct",
+  "config": {
+   "family": "openalex",
+   "lookback_days": 30,
+   "max_pages": 1,
+   "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:{since:%Y-%m-%d},to_publication_date:{today:%Y-%m-%d},type:article%7Creview&sort=cited_by_count:desc&per-page=50"
+  },
+  "_why_enabled_20260930": "Public OpenAlex works verified after applying current-date and article/review query scope. Official contract: https://help.openalex.org/api/filtering/ . Captures and replay in source-expansion-2026-09-30.json."
  },
  "openalex-medicine-newest": {
-  "enabled": false,
-  "disabled_reason": "probe_json_api_family_unmapped_openalex",
-  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex."
+  "enabled": true,
+  "_why_disabled_20260930": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex.",
+  "access": "json-api",
+  "egress": "direct",
+  "config": {
+   "family": "openalex",
+   "lookback_days": 7,
+   "max_pages": 1,
+   "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:{since:%Y-%m-%d},to_publication_date:{today:%Y-%m-%d},type:article%7Creview&sort=publication_date:desc&per-page=50"
+  },
+  "_why_enabled_20260930": "Public OpenAlex works verified after applying current-date and article/review query scope. Official contract: https://help.openalex.org/api/filtering/ . Captures and replay in source-expansion-2026-09-30.json."
  },
  "pbac-outcomes-australia": {
   "enabled": true,
