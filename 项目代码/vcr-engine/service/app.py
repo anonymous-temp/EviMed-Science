@@ -834,17 +834,29 @@ class Engine:
             raise Refusal(404, "job_not_found")
         # Serialize with submit before retaining the authenticated cancellation:
         # its response may precede a delayed POST /jobs under the same identity.
+        marker_error = None
         with self.lock:
             job = self.jobs.get(job_id)
             if job is None and self._on_disk(job_id) is not None:
                 return False
-            self._keep_cancellation(job_id)
+            try:
+                self._keep_cancellation(job_id)
+            except Refusal as exc:
+                # Durable-stop uncertainty is visible, but disk failure must
+                # never prevent stopping physical work we already hold.
+                marker_error = exc
         if job is None:
+            if marker_error is not None:
+                raise marker_error
             return True
         with job.lock:
             if job.state in TERMINAL:
+                if marker_error is not None:
+                    raise marker_error
                 return False
             if job.state == "canceling":
+                if marker_error is not None:
+                    raise marker_error
                 return True
             if job.state == "queued":
                 job.state, job.error, job.finished_at = "canceled", "canceled", time.time()
@@ -863,6 +875,8 @@ class Engine:
             self._record_finished(job)
         else:
             threading.Thread(target=self._escalate, args=(job,), name="vcr-engine-cancel", daemon=True).start()
+        if marker_error is not None:
+            raise marker_error
         return True
 
     def discard(self, job_id: str) -> None:

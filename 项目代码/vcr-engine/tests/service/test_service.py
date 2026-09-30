@@ -17,6 +17,7 @@ pinned library are present.
 from __future__ import annotations
 
 import hashlib
+import errno
 import hmac
 import json
 import os
@@ -29,6 +30,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
@@ -698,6 +700,19 @@ class TableRouteTest(EngineCase):
 
 
 class CancelAndLimitsTest(EngineCase):
+    def test_marker_disk_failure_still_stops_known_physical_work(self) -> None:
+        client = self.client()
+        client.post("/jobs", json=self.job("diskfull", "sleep_ignore"))
+        self.wait_for_file(self.stub / "grandchild-diskfull.txt")
+        grandchild = int((self.stub / "grandchild-diskfull.txt").read_text())
+        with patch.object(engine_app, "write_atomically", side_effect=OSError(errno.ENOSPC, "Disk full")):
+            response = client.post("/jobs/diskfull/cancel")
+            self.assertEqual(response.status_code, 503, "durable cancellation uncertainty remains visible")
+            state = self.wait_for(client, "diskfull")
+        self.assertEqual(state["state"], "canceled")
+        self.assertFalse(alive(grandchild), "marker failure must not leave descendants running")
+        self.assertFalse((self.work / ".canceled-diskfull").exists(), "missing durable proof is never invented")
+
     def test_cancel_before_acceptance_survives_restart_and_refuses_a_late_submit(self) -> None:
         client = self.client()
         self.assertEqual(client.post("/jobs/notaccepted/cancel").json(), {"canceled": True})
