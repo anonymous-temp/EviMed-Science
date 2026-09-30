@@ -566,7 +566,7 @@ export const VCR_STEP_CAPABILITIES = Object.freeze({
 })
 
 /** Data-source formats the data plane accepts in the first version (§8.1). */
-export const VCR_SOURCE_FORMATS = frozen(['csv', 'tsv', 'parquet', 'xlsx', 'json'])
+export const VCR_SOURCE_FORMATS = frozen(['csv', 'tsv', 'xlsx', 'json'])
 /** The three analysis tables every snapshot derives (ADaM shapes, §8.1). */
 export const VCR_ANALYSIS_TABLES = frozen(['subject', 'longitudinal', 'events'])
 export const VCR_ANALYSIS_TABLE_LABELS_ZH = Object.freeze({ subject: '受试者级表', longitudinal: '长表', events: '事件表' })

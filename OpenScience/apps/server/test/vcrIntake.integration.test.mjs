@@ -217,6 +217,11 @@ test("CS-40 the map is validated as a whole before anything is frozen: a bad map
 
 test("PA-10 uploads are refused by name: format, size, encoding, and a column named twice", options, async () => {
   const study = await seedStudy();
+  await assert.rejects(
+    () => vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "Unsupported source", format: "parquet" }),
+    (error) => error.code === VCR_DATA_PLANE_CODES.payloadInvalid && /csv.*tsv.*xlsx.*json/.test(error.message),
+    "Source registration must not promise a format the upload route cannot read",
+  );
   const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "上传检查" });
   const refused = async (/** @type {string} */ name, /** @type {string | Buffer} */ body, /** @type {string} */ code, /** @type {Record<string, any>} */ extra = {}) => {
     await assert.rejects(() => upload(study, source.id, name, body, extra), (error) => error.code === code, `${name}: expected ${code}`);
