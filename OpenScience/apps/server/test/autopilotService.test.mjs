@@ -166,6 +166,7 @@ test("seven days without reading pauses before scheduling or checking the spendi
   const { service, jobs, usage } = fixture({ now: () => at });
   const agenda = await service.create("user-one", agendaInput);
   const active = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["prior-episode"], costCny: 0, claims: [] });
   let allowances = 0;
   usage.assertWithinLimits = async () => { allowances++; };
   at = new Date("2026-09-13T01:00:00Z");
@@ -181,6 +182,7 @@ test("the real worker and service stop a queued episode that becomes inactive be
   const agenda = await service.create("user-one", agendaInput);
   await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
   const scheduled = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["prior-episode"], costCny: 0, claims: [] });
   at = new Date("2026-09-13T01:00:00Z");
   let dispatched = 0;
   let result;
@@ -205,6 +207,7 @@ test("a real digest open extends the window while explicit resume does not inven
   const digest = await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["episode-one"], costCny: 0, claims: [] });
   at = new Date("2026-09-12T01:00:00Z");
   await service.markDigestOpened("user-one", digest.id);
+  await service.createDigest("user-one", agenda.id, { date: "2026-09-12", episodeIds: ["next-episode"], costCny: 0, claims: [] });
   at = new Date("2026-09-13T01:00:00Z");
   assert.ok(await service.schedule("user-one", agenda.id, { date: "2026-09-13" }));
   at = new Date("2026-09-19T01:00:00Z");

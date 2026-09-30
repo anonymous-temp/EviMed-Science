@@ -624,13 +624,33 @@ export class AutopilotService {
     throw new HttpError(409, "autopilot_activity_conflict", "Research activity changed repeatedly; reopen the digest to retry.");
   }
 
+  /** New calendar tasks cannot have unread results before their first result exists. */
+  async daysWithoutReading(userId, agenda) {
+    if (Number(agenda.payload.schemaVersion ?? 1) < 2) return daysWithoutActivity(agenda, this.now());
+    let oldest = Infinity;
+    let cursor = null;
+    do {
+      const page = await this.documents.list(userId, "digest", { projectId: agenda.projectId,
+        filter: { agendaId: agenda.id, openedAt: null }, limit: 100, cursor });
+      for (const digest of page.items) {
+        if (digest.payload.agendaId !== agenda.id || digest.payload.openedAt) continue;
+        const at = Date.parse(digest.payload.createdAt ?? digest.createdAt);
+        if (Number.isFinite(at)) oldest = Math.min(oldest, at);
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    if (!Number.isFinite(oldest)) return 0;
+    const activity = [oldest, Date.parse(agenda.payload.lastDigestOpenedAt), Date.parse(agenda.payload.lastStartedAt)].filter(Number.isFinite);
+    return Math.max(0, Math.floor((this.now().getTime() - Math.max(...activity)) / 86_400_000));
+  }
+
   /** The same inactivity guard runs before enqueueing and immediately before dispatch. */
   async checkInactivity(userId, agendaId) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const agenda = await this.get(userId, agendaId);
       if (!agenda.payload.enabled || agenda.payload.status !== "active") return agenda;
       const verdict = directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0,
-        daysSinceDigestOpened: daysWithoutActivity(agenda, this.now()), userRejected: userRejected(agenda) });
+        daysSinceDigestOpened: await this.daysWithoutReading(userId, agenda), userRejected: userRejected(agenda) });
       if (!["pause-thread", "park"].includes(verdict.action)) return agenda;
       try {
         return await this.documents.put(userId, "agenda", agenda.id, {
@@ -1280,15 +1300,17 @@ export class AutopilotService {
     const date = manual ? agendaLocalDate(schedule.timeZone, this.now()) : text(input.date, "episode date", 10);
     if (!validAgendaDate(date)) throw new HttpError(400, "autopilot_payload_invalid", "Episode date is invalid.");
     if (input.scheduleVersion !== undefined && input.scheduleVersion !== (agenda.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The task schedule changed; retry from its current version.");
-    // The compatibility /schedule endpoint and pre-upgrade workers used a date
-    // key. Probe that identity before the first versioned occurrence so rolling
-    // upgrades cannot duplicate an already queued day.
-    const legacyEpisode = !manual && input.occurrence && (agenda.payload.scheduleVersion ?? 1) === 1
-      ? await this.documents.get(userId, "episode", `episode-${hash(`${userId}:${agenda.id}:${date}`).slice(0, 32)}`) : null;
-    const legacy = !manual && (!input.occurrence || !agenda.payload.schedule || Boolean(legacyEpisode));
+    // Version one shares the legacy date identity in either call order and
+    // under concurrent old/new timer requests. Updated calendars require their
+    // exact occurrence; an old date-only client must use explicit run-now.
+    const version = agenda.payload.scheduleVersion ?? 1;
+    if (!manual && version > 1 && !input.occurrence) {
+      throw new HttpError(400, "autopilot_payload_invalid", "An updated calendar needs its scheduled occurrence; use run-now for manual work.");
+    }
+    const legacy = !manual && (version === 1 || !agenda.payload.schedule);
     const identity = manual ? `manual:${input.requestId}` : legacy ? date : `schedule:${input.scheduleVersion}:${input.occurrence.key}`;
     const episodeId = `episode-${hash(`${userId}:${agenda.id}:${identity}`).slice(0, 32)}`;
-    const existingEpisode = legacyEpisode ?? await this.documents.get(userId, "episode", episodeId);
+    const existingEpisode = await this.documents.get(userId, "episode", episodeId);
     if (manual && existingEpisode && (existingEpisode.payload.trigger !== trigger
       || (trigger === "follow-up" && (existingEpisode.payload.followUpNote !== input.note || existingEpisode.payload.replyToEpisodeId !== (input.episodeId ?? null))))) {
       throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
@@ -1401,7 +1423,7 @@ export class AutopilotService {
       if (attempt === 0) this.revision(agenda, input.expectedRevision);
       const failures = status === "failed" ? Number(agenda.payload.consecutiveFailures ?? 0) + 1 : 0;
       const without = gatedClaims === 0 ? Number(agenda.payload.episodesWithoutGatedClaim ?? 0) + 1 : 0;
-      const daysSinceDigestOpened = daysWithoutActivity(agenda, this.now());
+      const daysSinceDigestOpened = await this.daysWithoutReading(userId, agenda);
       const verdict = directionVerdict({ episodesWithoutGatedClaim: without, consecutiveFailures: failures, daysSinceDigestOpened, userRejected: userRejected(agenda) });
       const paused = ["pause-type", "pause-thread", "park"].includes(verdict.action);
       try {

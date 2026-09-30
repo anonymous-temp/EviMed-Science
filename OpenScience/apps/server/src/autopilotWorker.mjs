@@ -159,13 +159,15 @@ export class AutopilotWorker {
       this.lastError = code;
       if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code)) {
         await holdsLease();
-        const retry = job.attempts < Number(job.maxAttempts ?? 3);
+        const unstartedResource = code === "runtime_busy" || code === "runtime_limit_exceeded";
+        const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))
           : code === "runtime_busy" ? this.busyDelayMs : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];
         const at = new Date();
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.
-        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: code === "credits_exhausted" ? "Proactive research is waiting for account credits." : "The previous dispatch is still settling." }, { retry, delayMs: retry ? delayMs : 0 });
+        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: code === "credits_exhausted" ? "Proactive research is waiting for account credits." : "The previous dispatch is still settling." },
+          { retry, delayMs: retry ? delayMs : 0, ...(unstartedResource ? { refundAttempt: true } : {}) });
         await this.service.recordResourceDeferral(job.userId, job.payload.episodeId, {
           jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,
           ...(job.kind === "verify" ? { verificationId: job.payload.verificationId } : {}),
