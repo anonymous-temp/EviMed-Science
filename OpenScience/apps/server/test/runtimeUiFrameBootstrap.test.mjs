@@ -62,6 +62,7 @@ test("a researcher's frame carries no operator flag and no switched-off bodies b
   const f = await bootstrapFor(t);
   const frame = await frameObject(f);
   assert.equal(frame.operator, false);
+  assert.equal(frame.muxResponseMaxBytes, 32 * 1024 * 1024);
   assert.deepEqual([...frame.off], []);
   assert.ok(Object.isFrozen(frame));
 });
