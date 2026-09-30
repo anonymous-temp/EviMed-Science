@@ -1,0 +1,62 @@
+{
+  "exit_code": 0,
+  "input_hash_unchanged": true,
+  "script_hash_unchanged": true,
+  "changes": [
+    {
+      "path": "/meta/environment/python",
+      "original": "3.11.2",
+      "replay": "3.10.19",
+      "absolute_difference": null
+    },
+    {
+      "path": "/meta/environment/platform",
+      "original": "Linux-7.0.0-30-generic-x86_64-with-glibc2.36",
+      "replay": "macOS-26.3-arm64-arm-64bit",
+      "absolute_difference": null
+    },
+    {
+      "path": "/meta/environment/numpy",
+      "original": "2.2.6",
+      "replay": "2.0.2",
+      "absolute_difference": null
+    },
+    {
+      "path": "/meta/environment/scipy",
+      "original": "1.15.3",
+      "replay": "1.13.1",
+      "absolute_difference": null
+    },
+    {
+      "path": "/analyses/3/pValue",
+      "original": 8.465940572262422e-96,
+      "replay": 8.465940572262181e-96,
+      "absolute_difference": 2.4117350656296166e-109
+    },
+    {
+      "path": "/comparison/sensitivity/0/p_value",
+      "original": 8.465940572262422e-96,
+      "replay": 8.465940572262181e-96,
+      "absolute_difference": 2.4117350656296166e-109
+    },
+    {
+      "path": "/comparison/comparative_p_value_orders/pooled_p",
+      "original": 8.465940572262422e-96,
+      "replay": 8.465940572262181e-96,
+      "absolute_difference": 2.4117350656296166e-109
+    },
+    {
+      "path": "/comparison/diagnostics/shapiro_benign/W",
+      "original": 0.9966531507162536,
+      "replay": 0.996653150716253,
+      "absolute_difference": 5.551115123125783e-16
+    },
+    {
+      "path": "/comparison/diagnostics/shapiro_benign/p",
+      "original": 0.6679930583301221,
+      "replay": 0.667993058329974,
+      "absolute_difference": 1.4810375148499588e-13
+    }
+  ],
+  "maximum_numeric_difference": 1.4810375148499588e-13
+}

@@ -1,0 +1,40 @@
+{
+  "input_sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+  "n": 569,
+  "n_malignant": 212,
+  "n_benign": 357,
+  "mean_difference": 5.316306379155435,
+  "ci95": [
+    4.845165154122917,
+    5.787447604187953
+  ],
+  "t": 22.208797758464517,
+  "df": 289.71273805158006,
+  "p": 1.684459125958371e-64,
+  "p_value_orders": 31.298785261560347,
+  "exhaustive_count_max": 507,
+  "all_optimal_intervals": [
+    {
+      "lower_inclusive": 15.04,
+      "upper_exclusive": 15.05,
+      "n_correct": 507
+    }
+  ],
+  "reported_threshold_count": 507,
+  "nearby_threshold_count": 506,
+  "threshold_15_04_within_reported_interval": false,
+  "reported_interval": [
+    15.045,
+    15.05
+  ],
+  "script_outputs": [
+    "schemaVersion",
+    "meta",
+    "analyses",
+    "profile",
+    "target_coding",
+    "comparison",
+    "figures",
+    "self_checks"
+  ]
+}

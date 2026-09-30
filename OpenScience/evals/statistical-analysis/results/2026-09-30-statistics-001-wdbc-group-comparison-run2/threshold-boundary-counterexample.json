@@ -1,0 +1,58 @@
+{
+  "operator": "malignant if mean radius > threshold, otherwise benign",
+  "near_boundary_rows": [
+    {
+      "source_row_index": 94,
+      "mean_radius": 15.06,
+      "target": 0
+    },
+    {
+      "source_row_index": 500,
+      "mean_radius": 15.04,
+      "target": 1
+    },
+    {
+      "source_row_index": 514,
+      "mean_radius": 15.05,
+      "target": 0
+    }
+  ],
+  "counts": [
+    {
+      "threshold": 15.03,
+      "correct": 506,
+      "false_benign": 51,
+      "false_malignant": 12
+    },
+    {
+      "threshold": 15.039999999999997,
+      "correct": 506,
+      "false_benign": 51,
+      "false_malignant": 12
+    },
+    {
+      "threshold": 15.04,
+      "correct": 507,
+      "false_benign": 51,
+      "false_malignant": 11
+    },
+    {
+      "threshold": 15.045,
+      "correct": 507,
+      "false_benign": 51,
+      "false_malignant": 11
+    },
+    {
+      "threshold": 15.049999999999997,
+      "correct": 507,
+      "false_benign": 51,
+      "false_malignant": 11
+    },
+    {
+      "threshold": 15.05,
+      "correct": 506,
+      "false_benign": 52,
+      "false_malignant": 11
+    }
+  ]
+}

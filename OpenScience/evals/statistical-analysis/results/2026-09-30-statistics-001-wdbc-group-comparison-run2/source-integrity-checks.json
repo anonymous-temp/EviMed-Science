@@ -1,0 +1,42 @@
+{
+  "captures": 3,
+  "artifacts": [
+    {
+      "file": ".evimed-sources/web-pages/5708c228e27f2738/4dd695c04c17eb7c0cd9d7924040b9628810a87188d59a9129e4bbf8ab793e63/page.md",
+      "expected": "4fe99aaf05d800bb20d9b979c5347aeeb535e2fc522fdf8703963ef34472da11",
+      "actual": "4fe99aaf05d800bb20d9b979c5347aeeb535e2fc522fdf8703963ef34472da11",
+      "matches": true
+    },
+    {
+      "file": ".evimed-sources/web-pages/5708c228e27f2738/4dd695c04c17eb7c0cd9d7924040b9628810a87188d59a9129e4bbf8ab793e63/source.json",
+      "expected": "da2661b76bbdc9359a76bc18fcaeab85aaec4d77aa4b9a47a2ef420cdd517094",
+      "actual": "da2661b76bbdc9359a76bc18fcaeab85aaec4d77aa4b9a47a2ef420cdd517094",
+      "matches": true
+    },
+    {
+      "file": ".evimed-sources/pubmed/PMID23776836/1e85d6277d3b38c89cc080b51c6612b816f2f6e021d4a580035cac2b0cae21f0/abstract.md",
+      "expected": "b3c9b4da121c8dc3b2a0641366c20e08e94ee2cd8247b778bccabc8b6c83a760",
+      "actual": "b3c9b4da121c8dc3b2a0641366c20e08e94ee2cd8247b778bccabc8b6c83a760",
+      "matches": true
+    },
+    {
+      "file": ".evimed-sources/pubmed/PMID23776836/1e85d6277d3b38c89cc080b51c6612b816f2f6e021d4a580035cac2b0cae21f0/source.json",
+      "expected": "dc5d403fd9984537b39153a78485114b5433c91ad57ba3b8f11b9d0133cd0cba",
+      "actual": "dc5d403fd9984537b39153a78485114b5433c91ad57ba3b8f11b9d0133cd0cba",
+      "matches": true
+    },
+    {
+      "file": ".evimed-sources/pubmed/PMID34729351/ecc4c7e557c5d3702bf412802497918cbd052e8e6651e26e393f8ed6c5d57322/abstract.md",
+      "expected": "649460cc4ca61de8e0c2b86da82f4259abac8288021ebc8ce3644b98e9f743be",
+      "actual": "649460cc4ca61de8e0c2b86da82f4259abac8288021ebc8ce3644b98e9f743be",
+      "matches": true
+    },
+    {
+      "file": ".evimed-sources/pubmed/PMID34729351/ecc4c7e557c5d3702bf412802497918cbd052e8e6651e26e393f8ed6c5d57322/source.json",
+      "expected": "c81c5549017d2a3c0518c9238fb2664264cfa13e5ea5cf0d040f324b73cbcb61",
+      "actual": "c81c5549017d2a3c0518c9238fb2664264cfa13e5ea5cf0d040f324b73cbcb61",
+      "matches": true
+    }
+  ],
+  "all_match": true
+}

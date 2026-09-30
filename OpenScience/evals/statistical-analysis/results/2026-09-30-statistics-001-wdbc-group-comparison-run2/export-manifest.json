@@ -1,0 +1,46 @@
+{
+  "run_id": "run_6b630afe140deee843183a37a6753b56",
+  "workspace": "/data/users/cdss-access/projects/acceptance-t21-statistical-analysis-5ad89da42cc5/workspace",
+  "files": [
+    {
+      "file": "package-and-sources.tgz",
+      "size": 163702,
+      "sha256": "020fd1160c6e4bf25de12f26725d7317d8d547ab0ca8bee4054f5b9b58603594"
+    },
+    {
+      "file": "driver-results.tgz",
+      "size": 23727,
+      "sha256": "ac7a5a242b9840b55e76414d8ae2d29f5713199405dbf2304c3df94aa2c2930f"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/analysis-run.json",
+      "size": 36526,
+      "sha256": "77e2c9cc72b65473d45b6945d7bca6524d1d3847d24e5c29239c13ae575c0837"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/analysis.py",
+      "size": 42714,
+      "sha256": "60023e9102d757b5888ba338e7bcb69b9e4bdad01ecfef4f409376ec022b2abd"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/statistical-report.md",
+      "size": 26871,
+      "sha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/analysis-results.json",
+      "size": 23641,
+      "sha256": "d44b8fc9b5bf1d5cc6ab077bfaaa3a10aa376c8b4978ee9098568eb135440f6f"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/figures/mean-radius-by-diagnosis.png",
+      "size": 53073,
+      "sha256": "690424889e65e0599e971f1d971499a56b9fff342bac33008086209b3d62340b"
+    },
+    {
+      "file": "deliverables/wdbc-mean-radius/figures/mean-radius-distribution.png",
+      "size": 29414,
+      "sha256": "6df0fc9cf3d457b7bb97a780f653f790a4731ee98b7d80ea1248082d0b95b9e3"
+    }
+  ]
+}

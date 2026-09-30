@@ -1,0 +1,10 @@
+{
+  "comparison": "Exact Decimal values, malignant iff value > threshold",
+  "maximum_correct": 507,
+  "optimal_intervals": [
+    {
+      "lower_inclusive": "15.04",
+      "upper_exclusive": "15.05"
+    }
+  ]
+}

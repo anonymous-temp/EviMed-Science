@@ -408,16 +408,17 @@
       "evalHarness": "evals/statistical-analysis",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",
+        "at": "2026-09-30T04:58:38Z",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/statistical-analysis/fixtures/source-manifest.json",
-        "evals/statistical-analysis/expected.json"
+        "evals/statistical-analysis/expected.json",
+        "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt"
       ],
-      "note": "Three public-data briefs and independent Python/R numeric references are present. Offline regression and reference checks do not establish a capability delivery; real DSH + DeepSeek sessions remain pending."
+      "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress."
     }
   ]
 }

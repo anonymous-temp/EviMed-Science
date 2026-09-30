@@ -1,0 +1,39 @@
+LIVE REPAIR EVALUATION — STATISTICAL ANALYSIS
+Run: run_6b630afe140deee843183a37a6753b56
+Terminal outcome: succeeded; 2026-09-30T04:58:36.645Z; 1,179,301 ms (19m39.3s).
+Evaluation scope: frozen exported delivery, unchanged public CSV, preserved sources, original evaluation. Read-only on production; local replay only. No product edits or further live prompts.
+
+VERDICT
+Preserve the complete, useful delivery. Core numerical analysis and reproducibility PASS. The repair substantially corrects the initial findings but scientific-writing consistency is PARTIAL, with the residual issues below. No failed run, whole-package replacement, additional delivery gate, or manual adjudication is justified.
+
+CHECKED REPAIRS
+- Comparative p values: now correctly 31.3 orders of magnitude, independently 31.298785261560347 (report:91).
+- Displayed classification rule >15.04 now reproduces 507/569; >15.05 gives 506/569. In-sample fitting and lack of validation are stated in section 4.6.
+- Source metadata now correctly establishes numeric coding (report:21); phenotype checks are described as consistency checks in most passages.
+- Glass delta now correctly identifies the benign SD denominator and explains why the result is larger, without calling it conservative (report:127).
+- Actual six IQR flags and their groups/values are listed; invented large-malignant-tumour story is removed (report:163).
+- Reproducibility scope distinguishes structured analysis/figures from prose and runner receipt (report:7,211,219).
+- Literature section now limits two papers to their abstracts and the introductory WDBC paper to bibliographic provenance (report:169-173). The saved sources were read and their abstract statements agree with these bounded summaries.
+
+INDEPENDENT EVIDENCE
+independent-checks.json was computed from csv.DictReader plus Python statistics and explicit Welch-Satterthwaite formulas; SciPy supplies the t distribution. It does not import the generated script.
+569 records; malignant=212; benign=357; mean difference=5.316306379155435; CI=[4.845165154122917,5.787447604187953]; t=22.208797758464517; df=289.71273805158006; p=1.684459125958371e-64.
+Input SHA256=30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971; unchanged from initial run.
+Separate unchanged-script replay in replay-workspace, using /Users/wangzeyuan/Desktop/EviMedScience/项目代码/meta/.venv/bin/python, exited 0. Script and input hashes unchanged. Maximum numerical JSON difference=1.4810375148499588e-13 (cross-version floating-point), with primary results agreeing. See replay-checks.json and replay.stdout.txt.
+Six execution receipts preserved; latest script/results/input hashes match exported bytes; exit 0 and observed results write. See receipt-checks.json.
+All 3 captures / 6 source artifacts match capture fingerprints. See source-integrity-checks.json.
+The run's recorded quality notices now contain only the independent-review summary. Initial vocabulary/categorical-estimate/script-path advisories are absent in this recorded outcome; this does not itself establish scientific correctness.
+
+RESIDUAL FINDINGS (paths below relative to this frozen export)
+P2 — Wrong threshold plateau boundary remains in the generated script and narrative.
+  deliverables/wdbc-mean-radius/analysis.py:458 uses the lowest midpoint candidate as plateau_lo, instead of the observed lower endpoint. It emits [15.045,15.05), while independent exhaustive evaluation gives [15.04,15.05). Report:144 then says displayed 15.04 is inside that plateau, which is false. The displayed rule/count is now correct; only the interval calculation and dependent explanation need correction (or proportional removal of this optional threshold discussion).
+  Reproduction: enumerate unique observed radii t and count sum(malignant>t)+sum(benign<=t). The only maximum interval begins at 15.04, with 507 correct until but not including 15.05. independent-checks.json records both intervals and false for reported threshold membership. Exact endpoint ties: serialized row 500 has radius 15.04 and target 1 (benign), and row 514 has radius 15.05 and target 0 (malignant). No other rows tie either boundary. threshold-boundary-counterexample.json records 506 immediately below 15.04, 507 at 15.04 and immediately below 15.05, and 506 at 15.05.
+P2 — Fitted-rule caveat was appended without removing the contradictory denial.
+  deliverables/wdbc-mean-radius/statistical-report.md:183 says "No classifier was fitted, no discrimination ... was assessed" and immediately describes an exploratory fitted cut-point. analysis.py:427 and its threshold note retain "No model was fitted". A data-selected threshold is a simple fitted classifier; retain the accurate unvalidated in-sample caveat and remove the categorical denial. No change to primary inference needed.
+P2 — Residual attribution blanket still includes a paper whose methods were not read.
+  deliverables/wdbc-mean-radius/statistical-report.md:175 says the cited records are all different pipelines and "none uses this feature definition on this dataset", despite :173 identifying reference [3] as the dataset's introductory extraction paper and :169 limiting evidence to bibliography. Limit that comparison to the two actually read abstracts [1]-[2], or qualify it. No additional retrieval required to preserve the primary result.
+P3 — Coding verification wording is not yet consistent across all outputs.
+  deliverables/wdbc-mean-radius/statistical-report.md:27 says the checks "rule out a mislabelled file". Phenotype direction/class sizes cannot prove file identity; report:21 already gives the sufficient metadata basis. analysis.py:211-216 retains comments saying a phenotype majority vote establishes the malignant label, contradicting its later epistemic-status text. Change these bounded claims to consistency with supplied encoding.
+
+LIMITS
+This is a repair evaluation of one WDBC comparison, not validation of all statistical designs. It does not confirm unknown patient clustering, physical units, clinical prediction, or full-text paper claims. Core estimates remain valid under the explicitly stated independent-row assumption. Minor wording/method refinements outside the original incident classes were not promoted into new acceptance gates.
