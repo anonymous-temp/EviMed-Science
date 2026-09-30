@@ -91,6 +91,20 @@ const MAX_LOCATIONS_KEPT = 200;
 /** A registry id, as a path segment. Anything else is refused before a request. */
 const REGISTRY_ID = /^[A-Za-z][A-Za-z0-9-]{2,63}$/;
 
+/** Public coverage never copies an arbitrary transport error or adapter payload. */
+const COVERAGE_REASONS = new Set([
+  "timeout", "request_failed", "response_too_large", "registry_answer_unreadable",
+  "registry_record_unreadable", "registry_not_found", "evimed_trials_unavailable",
+  "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT",
+]);
+
+/**
+ * @typedef {{ key: string, label: string, configured: boolean,
+ *   coverage: "structured" | "list_only" | "unsupported",
+ *   availability: "not_queried" | "available" | "unavailable",
+ *   reason: string | null, lastCheckedAt: string | null }} RegistryCoverage
+ */
+
 /**
  * The quantities every trial registry is missing, with the reason a page
  * prints. A caller that wants one of these gets 「不可得」 and a source to ask,
@@ -837,6 +851,27 @@ export function createTrialRegistryClient({
   const attempts = Math.max(1, Math.min(6, Math.floor(maxAttempts)));
   const counters = { searches: 0, records: 0, requests: 0, retried: 0, unavailable: 0, notFound: 0 };
   let lastError = /** @type {string | null} */ (null);
+  const configured = Boolean(origin) && typeof fetchImpl === "function";
+  const chictrConfigured = typeof chictrAdapter === "function";
+  /** @type {RegistryCoverage[]} */
+  const sourceCoverage = [
+    { key: "clinicaltrials.gov", label: "ClinicalTrials.gov", configured, coverage: "structured",
+      availability: configured ? "not_queried" : "unavailable", reason: configured ? null : "registry_not_configured", lastCheckedAt: null },
+    { key: "chictr", label: "ChiCTR", configured: chictrConfigured, coverage: "list_only",
+      availability: chictrConfigured ? "not_queried" : "unavailable", reason: chictrConfigured ? null : "registry_not_configured", lastCheckedAt: null },
+    ...[["cde", "CDE"], ["ctis", "CTIS"], ["ictrp", "WHO ICTRP"]].map(([key, label]) => /** @type {RegistryCoverage} */ ({
+      key, label, configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null,
+    })),
+  ];
+
+  /** @param {string} key @param {"available" | "unavailable"} availability @param {string | null} [reason] @param {string} [checkedAt] */
+  function observed(key, availability, reason = null, checkedAt = now().toISOString()) {
+    const source = sourceCoverage.find((entry) => entry.key === key);
+    if (!source) return;
+    source.availability = availability;
+    source.reason = reason === null ? null : COVERAGE_REASONS.has(reason) || /^http_[45]\d{2}$/.test(reason) ? reason : "request_failed";
+    source.lastCheckedAt = checkedAt;
+  }
 
   /**
    * One GET, retried inside one deadline and never throwing a network error
@@ -882,19 +917,28 @@ export function createTrialRegistryClient({
     return { ok: false, reason: lastError ?? "request_failed" };
   }
 
-  /** @param {string} reason */
-  function unavailable(reason) {
+  /** @param {string} reason @param {string | null} [registry] */
+  function unavailable(reason, registry = null) {
     counters.unavailable += 1;
+    if (registry) observed(registry, "unavailable", reason);
     return { status: REGISTRY_UNAVAILABLE, reason, items: [], total: null, nextPageToken: null };
   }
 
   return {
-    get configured() { return Boolean(origin) && typeof fetchImpl === "function"; },
-    get chictrConfigured() { return typeof chictrAdapter === "function"; },
+    get configured() { return configured; },
+    get chictrConfigured() { return chictrConfigured; },
+    /**
+     * No I/O: lastCheckedAt is the last completed operation observed by this
+     * client in this process, not persisted registry health or a study search.
+     * A new client starts configured sources at not_queried; callers own their
+     * copy. List-only coverage describes candidates, not complete study data.
+     * @returns {RegistryCoverage[]}
+     */
+    coverage() { return sourceCoverage.map((source) => ({ ...source })); },
     status() {
       return {
-        configured: Boolean(origin) && typeof fetchImpl === "function",
-        chictrConfigured: typeof chictrAdapter === "function",
+        configured,
+        chictrConfigured,
         counters: { ...counters },
         lastError,
       };
@@ -928,9 +972,12 @@ export function createTrialRegistryClient({
       if (text(pageToken)) parameters.set("pageToken", text(pageToken));
 
       const answer = await getJson(`${origin}/studies?${parameters.toString()}`, Date.now() + timeoutMs);
-      if (!answer.ok) return unavailable(answer.reason);
-      const studies = Array.isArray(answer.body?.studies) ? answer.body.studies : [];
+      if (!answer.ok) return unavailable(answer.reason, "clinicaltrials.gov");
+      const studies = Array.isArray(answer.body?.studies) ? answer.body.studies
+        : answer.body?.studies === undefined && answer.body?.totalCount === 0 ? [] : null;
+      if (!studies) return unavailable("registry_answer_unreadable", "clinicaltrials.gov");
       const retrievedAt = now().toISOString();
+      observed("clinicaltrials.gov", "available", null, retrievedAt);
       return {
         status: "ok",
         registry: "clinicaltrials.gov",
@@ -974,12 +1021,16 @@ export function createTrialRegistryClient({
       counters.records += 1;
       const answer = await getJson(`${origin}/studies/${encodeURIComponent(id)}?format=json`, Date.now() + timeoutMs);
       if (!answer.ok) {
-        if (answer.reason === REGISTRY_NOT_FOUND) return { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND, registryId: id };
-        return { ...unavailable(answer.reason), registryId: id };
+        if (answer.reason === REGISTRY_NOT_FOUND) {
+          observed("clinicaltrials.gov", "available");
+          return { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND, registryId: id };
+        }
+        return { ...unavailable(answer.reason, "clinicaltrials.gov"), registryId: id };
       }
       const retrievedAt = now().toISOString();
       const built = ctgovPrecedent(answer.body, { retrievedAt });
-      if (!built.precedent.registryId) return { ...unavailable("registry_record_unreadable"), registryId: id };
+      if (!built.precedent.registryId) return { ...unavailable("registry_record_unreadable", "clinicaltrials.gov"), registryId: id };
+      observed("clinicaltrials.gov", "available", null, retrievedAt);
       return { status: "ok", ...built };
     },
 
@@ -992,11 +1043,12 @@ export function createTrialRegistryClient({
     async searchChictr({ query, limit = 20 } = { query: "" }) {
       if (typeof chictrAdapter !== "function") return unavailable("registry_not_configured");
       counters.searches += 1;
-      const retrievedAt = now().toISOString();
       try {
         const answer = await chictrAdapter({ query: text(query), limit: Math.max(1, Math.min(100, Math.floor(limit))) });
         const items = Array.isArray(answer?.items) ? answer.items : Array.isArray(answer) ? answer : null;
-        if (!items) return unavailable("registry_answer_unreadable");
+        if (!items) return unavailable("registry_answer_unreadable", "chictr");
+        const retrievedAt = now().toISOString();
+        observed("chictr", "available", null, retrievedAt);
         return {
           status: "ok",
           registry: "chictr",
@@ -1007,7 +1059,7 @@ export function createTrialRegistryClient({
         };
       } catch (error) {
         lastError = text(/** @type {any} */ (error)?.code) || "request_failed";
-        return unavailable(lastError);
+        return unavailable(lastError, "chictr");
       }
     },
   };

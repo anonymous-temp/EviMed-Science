@@ -49,6 +49,151 @@ function upstream(script) {
 
 const noSleep = async () => {};
 
+test("registry coverage names configured, missing and unsupported sources without making a request", async () => {
+  const { fetchImpl, seen } = upstream(() => { throw new Error("coverage must not query"); });
+  const client = createTrialRegistryClient({ fetchImpl, now: () => { throw new Error("coverage must not claim a check time"); } });
+  const coverage = client.coverage();
+  assert.deepEqual(coverage, [
+    { key: "clinicaltrials.gov", label: "ClinicalTrials.gov", configured: true, coverage: "structured", availability: "not_queried", reason: null, lastCheckedAt: null },
+    { key: "chictr", label: "ChiCTR", configured: false, coverage: "list_only", availability: "unavailable", reason: "registry_not_configured", lastCheckedAt: null },
+    ...[["cde", "CDE"], ["ctis", "CTIS"], ["ictrp", "WHO ICTRP"]].map(([key, label]) => ({
+      key, label, configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null,
+    })),
+  ]);
+  assert.equal((await client.searchChictr({ query: "lung cancer" })).reason, "registry_not_configured");
+  assert.deepEqual(client.coverage(), coverage, "a missing credential is not an observed network check");
+  coverage[0].availability = "available";
+  coverage.pop();
+  assert.equal(client.coverage()[0].availability, "not_queried", "callers cannot mutate observed state");
+  assert.equal(client.coverage().length, 5);
+  assert.deepEqual(seen, []);
+  const unconfigured = createTrialRegistryClient({ baseUrl: "", fetchImpl });
+  assert.equal(unconfigured.coverage()[0].reason, "registry_not_configured");
+  assert.equal(unconfigured.coverage()[0].configured, false);
+});
+
+test("CT.gov coverage distinguishes failure, zero matches and a missing record, then recovers", async () => {
+  let answer = { status: 503 };
+  let checkedAt = AT;
+  const { fetchImpl } = upstream(() => answer);
+  const client = createTrialRegistryClient({ fetchImpl, maxAttempts: 1, now: () => new Date(checkedAt) });
+  const otherSources = client.coverage().slice(1);
+  assert.equal((await client.search({ term: "lung cancer" })).status, REGISTRY_UNAVAILABLE);
+  assert.deepEqual(client.coverage()[0], {
+    key: "clinicaltrials.gov", label: "ClinicalTrials.gov", configured: true, coverage: "structured",
+    availability: "unavailable", reason: "http_503", lastCheckedAt: AT,
+  });
+  checkedAt = "2026-09-28T00:01:00.000Z";
+  answer = { body: { studies: [], totalCount: 0 } };
+  const empty = await client.search({ term: "lung cancer" });
+  assert.equal(empty.status, "ok");
+  assert.equal(empty.total, 0);
+  assert.equal(client.coverage()[0].availability, "available");
+  assert.equal(client.coverage()[0].reason, null);
+  assert.equal(client.coverage()[0].lastCheckedAt, checkedAt);
+  const beforeInvalidId = client.coverage();
+  assert.equal((await client.record("../../etc/passwd")).reason, "registry_id_invalid");
+  assert.deepEqual(client.coverage(), beforeInvalidId, "local refusal is not a registry observation");
+  checkedAt = "2026-09-28T00:02:00.000Z";
+  answer = { status: 404 };
+  assert.equal((await client.record("NCT00000000")).status, REGISTRY_NOT_FOUND);
+  assert.equal(client.coverage()[0].availability, "available", "a missing study is not an outage");
+  assert.equal(client.coverage()[0].lastCheckedAt, checkedAt);
+  answer = { body: {} };
+  assert.equal((await client.record("NCT02296125")).reason, "registry_record_unreadable");
+  assert.equal(client.coverage()[0].availability, "unavailable");
+  answer = { body: FLAURA };
+  assert.equal((await client.record("NCT02296125")).status, "ok");
+  assert.equal(client.coverage()[0].availability, "available");
+  assert.equal(client.coverage()[0].reason, null);
+  assert.deepEqual(client.coverage().slice(1), otherSources, "CT.gov activity says nothing about other sources");
+});
+
+test("CT.gov unreadable search payloads do not become successful zero-match coverage", async () => {
+  let body = {};
+  const client = createTrialRegistryClient({ fetchImpl: upstream(() => ({ body })).fetchImpl, now: () => new Date(AT) });
+  for (body of [{}, { studies: "invalid", totalCount: 0 }]) {
+    const answer = await client.search({});
+    assert.equal(answer.status, REGISTRY_UNAVAILABLE);
+    assert.equal(answer.total, null);
+    assert.equal(client.coverage()[0].reason, "registry_answer_unreadable");
+  }
+  body = { totalCount: 0 };
+  assert.equal((await client.search({})).total, 0, "an explicit zero without studies is a valid empty page");
+  assert.equal(client.coverage()[0].availability, "available");
+});
+
+test("ChiCTR coverage observes only completed adapter calls and keeps list-only coverage after recovery", async () => {
+  let body = { items: [], total: 0 };
+  let failure = null;
+  let checkedAt = AT;
+  const client = createTrialRegistryClient({
+    fetchImpl: upstream(() => { throw new Error("ChiCTR must not query CT.gov"); }).fetchImpl,
+    now: () => new Date(checkedAt),
+    chictrAdapter: async () => { if (failure) throw failure; return body; },
+  });
+  assert.equal(client.coverage()[1].availability, "not_queried");
+  assert.equal(client.coverage()[1].lastCheckedAt, null);
+  const otherSources = client.coverage().filter((row) => row.key !== "chictr");
+  assert.equal((await client.searchChictr({ query: "lung cancer" })).total, 0);
+  assert.equal(client.coverage()[1].availability, "available");
+  assert.equal(client.coverage()[1].lastCheckedAt, AT);
+  checkedAt = "2026-09-28T00:01:00.000Z";
+  failure = Object.assign(new Error("refused"), { code: "http_403" });
+  assert.equal((await client.searchChictr({ query: "lung cancer" })).status, REGISTRY_UNAVAILABLE);
+  assert.equal(client.coverage()[1].reason, "http_403");
+  assert.equal(client.coverage()[1].lastCheckedAt, checkedAt);
+  failure = null;
+  body = { total: 0 };
+  assert.equal((await client.searchChictr({ query: "lung cancer" })).reason, "registry_answer_unreadable");
+  assert.equal(client.coverage()[1].availability, "unavailable");
+  body = { items: [{ registrationNo: "ChiCTR2100000001", sampleSize: 96 }] };
+  const recovered = await client.searchChictr({ query: "lung cancer" });
+  assert.equal(recovered.status, "ok");
+  assert.equal(recovered.items[0].extractions[0].historicalBaseline, false);
+  assert.equal(client.coverage()[1].coverage, "list_only");
+  assert.equal(client.coverage()[1].availability, "available");
+  assert.equal(client.coverage()[1].reason, null);
+  assert.deepEqual(client.coverage().filter((row) => row.key !== "chictr"), otherSources);
+});
+
+test("coverage exposes only bounded reason codes and no transport or adapter details", async () => {
+  const sensitive = "https://private.example/?credential=do-not-display";
+  const fail = async () => { throw Object.assign(new Error(sensitive.repeat(100)), { code: sensitive }); };
+  const client = createTrialRegistryClient({ baseUrl: sensitive, fetchImpl: fail, chictrAdapter: fail, maxAttempts: 1 });
+  await client.search({});
+  await client.searchChictr({ query: "lung cancer" });
+  assert.equal(client.coverage()[0].reason, "request_failed");
+  assert.equal(client.coverage()[1].reason, "request_failed");
+  assert.equal(JSON.stringify(client.coverage()).includes(sensitive), false);
+});
+
+test("a pending request has no check timestamp and a new client inherits no previous availability", async () => {
+  let complete;
+  const pending = new Promise((resolve) => { complete = resolve; });
+  let checkedAt = AT;
+  const options = {
+    fetchImpl: upstream(() => ({ body: { studies: [], totalCount: 0 } })).fetchImpl,
+    chictrAdapter: async () => pending,
+    now: () => new Date(checkedAt),
+  };
+  const client = createTrialRegistryClient(options);
+  const searching = client.searchChictr({ query: "lung cancer" });
+  await client.search({});
+  assert.equal(client.coverage()[0].availability, "available");
+  assert.equal(client.coverage()[1].availability, "not_queried");
+  assert.equal(client.coverage()[1].lastCheckedAt, null);
+  checkedAt = "2026-09-28T00:01:00.000Z";
+  complete({ items: [], total: 0 });
+  await searching;
+  assert.equal(client.coverage()[1].lastCheckedAt, checkedAt, "timestamp is observed at completion");
+  const restarted = createTrialRegistryClient(options);
+  for (const row of restarted.coverage().slice(0, 2)) {
+    assert.equal(row.availability, "not_queried");
+    assert.equal(row.lastCheckedAt, null);
+  }
+});
+
 test("the reduction keeps the design modules and drops everything a design parameter cannot come from", () => {
   const withNoise = {
     ...FLAURA,
