@@ -4784,7 +4784,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     unclassified,
     [],
     "these codes are emitted but classified neither recoverable nor terminal, so they silently fail runs; "
-      + `add each to one set in agentRuns.mjs: ${unclassified.join(", ")}`,
+      + `add each to one set in packages/domain/src/errorCodes.mjs: ${unclassified.join(", ")}`,
   );
 
   const both = [...emitted].filter((code) => (

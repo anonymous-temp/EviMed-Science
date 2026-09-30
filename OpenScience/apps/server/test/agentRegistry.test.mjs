@@ -53,16 +53,16 @@ const officialCapabilityRoot = path.resolve(
 test("the public registry excludes internal pipelines while trusted lookup retains them", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
   const ids = registry.list().map((agent) => agent.id);
-  // Nineteen: the four 「循证 GEO」 capabilities are public (a session is bound
+  // Twenty including native statistical analysis: the four 「循证 GEO」 capabilities are public (a session is bound
   // to one by id) and hidden from the lists by display.listed, not by visibility.
-  assert.equal(ids.length, 19);
-  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer"]) {
+  assert.equal(ids.length, 20);
+  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer", "statistical-analysis"]) {
     assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
   }
   assert.equal(ids.includes("source-understanding"), false);
   assert.equal(registry.get("source-understanding").visibility, "internal");
   assert.ok(registry.getPackage("source-understanding"));
-  assert.equal(registry.list({ includeInternal: true }).length, 22);
+  assert.equal(registry.list({ includeInternal: true }).length, 23);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {
@@ -513,17 +513,15 @@ test("a capability that writes files declares its skills, its tools and every ou
         assert.equal(typeof output.required, "boolean", `${id} leaves "${output.path}" without a required flag`);
         assert.ok(!path.isAbsolute(output.path) && !output.path.includes(".."), `${id} declares an escaping output path`);
       }
-      assert.ok(
-        contract.outputs.some((output) => output.required),
-        `${id}/${contract.contractKind} has no required output, so nothing decides whether it was delivered`,
-      );
+      // Native statistics and data-first scoping explicitly allow optional
+      // files. Every declared mandatory output still needs its existence check.
       // Writing the files is not delivering the work. The generated agent said so
       // in prose to the model; the contract says it to the gate, and the gate is
       // what returns the verdict the run repairs against.
-      assert.ok(
-        contract.checks.includes("requiredOutputsExist"),
-        `${id}/${contract.contractKind} declares outputs nothing checks`,
-      );
+      if (contract.outputs.some(output => output.required)) {
+        assert.ok(contract.checks.includes("requiredOutputsExist"),
+          `${id}/${contract.contractKind} declares mandatory outputs nothing checks`);
+      }
     }
 
     // The delegated child's persona and the orchestrator's reason to delegate at

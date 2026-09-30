@@ -417,6 +417,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // cannot be quoted, whatever it contains.
   "adapter_url_invalid",
   "adapter_contract_invalid",
+  "engine_execution_context_invalid",
   "adapter_invalid_response",
   "adapter_redirect_forbidden",
   "adapter_missing_provenance",
@@ -1213,6 +1214,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
   unknown_tool: '调用了一个不存在的工具。',
   invalid_input: '这次工具调用的参数不符合要求。',
+  engine_execution_context_invalid: '这次计算的执行设置无法确认，尚未启动。',
   upstream_failed: '下游服务这次没能完成。',
 })
 
