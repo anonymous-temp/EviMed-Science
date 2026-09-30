@@ -40,6 +40,7 @@ item has no stable id of its own, so the external key is its link (or ``fields.i
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import replace
@@ -51,6 +52,7 @@ from selectolax.parser import HTMLParser, Node
 
 from ..fetch import detect_challenge
 from ..model import FetchError, FetchResult, NormalizedEntry, ParseOutput, RequestSpec, SourceConfig, SourceState
+from ..normalize import canonical_url
 from .base import decode_body, plan_from_template
 from .common import (
     PMID_IN_URL,
@@ -191,7 +193,7 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             if not row_id:
                 dropped["id"] += 1
                 continue
-            link = absolute_url(base, base)
+            link = canonical_url(base)
             derived = True
         if not link and config.get("link_template"):
             link = absolute_url(_fill(config["link_template"], item, encode=True), link_prefix)
@@ -207,7 +209,7 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
         if allowed and not host_allowed(link, allowed):
             dropped["host"] += 1
             continue
-        key = f"{base}::{row_id}" if source_page_link else (
+        key = f"{canonical_url(base)}::{row_id}" if source_page_link else (
             link if derived else str(item.get("id") or link))
         if key in seen:
             continue
@@ -229,6 +231,8 @@ def list_entries(text: str, *, source: SourceConfig, base: str) -> tuple[list[No
             pmid=found.group(1) if found else None,
             registry=registry_ids(title, summary),
             defects=["link-derived"] if derived else [],
+            identity_hint=(f"{config['identity_prefix']}:{hashlib.sha256(key.encode('utf-8')).hexdigest()[:40]}"
+                           if source_page_link else None),
             feed_summary=True,
         ))
         if source_page_link:
@@ -274,6 +278,8 @@ class HtmlListAdapter:
             source_page_link = config.get("link_to_source_page") is True
             if source_page_link and not selectors.get("id"):
                 problems.append("link_to_source_page requires selectors.id for stable record identity")
+            if source_page_link and not re.fullmatch(r"fda:[A-Za-z0-9-]{2,40}", str(config.get("identity_prefix") or "")):
+                problems.append("link_to_source_page requires an FDA event identity_prefix (fda:<namespace>)")
             for key in ("item", "title", "link"):
                 if not selectors.get(key) and not (key == "link" and (config.get("link_template") or source_page_link)):
                     problems.append(f"selectors.{key} missing")
