@@ -714,6 +714,29 @@ def parse_fda_advisory_calendar(result: FetchResult, source: SourceConfig, now: 
     return ParseOutput(entries=entries, notes=["source-modified-time"])
 
 
+def parse_openalex(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    """OpenAlex work metadata; the registry supplies the field/date/type query."""
+    payload = load_json(result, "openalex")
+    records = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(records, list):
+        raise FetchError("parse-error", "openalex_records_missing")
+    entries = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        identifier = str(record.get("id") or "")
+        title = clean_markup(record.get("title") or record.get("display_name"))
+        if not re.fullmatch(r"https://openalex\.org/W\d+", identifier) or not title:
+            continue
+        doi = normalize_doi(record.get("doi"))
+        published, precision = parse_date(record.get("publication_date"))
+        facts = {"publication_types": ["Retracted Publication"]} if record.get("is_retracted") is True else {}
+        entries.append(make_entry(external_key=identifier, url=f"https://doi.org/{doi}" if doi else identifier,
+                                  title=title, doi=doi, published_at=published, precision=precision,
+                                  language=record.get("language") or source.language, facts=facts))
+    return ParseOutput(entries=entries)
+
+
 FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]] = {
     "openfda-enforcement": parse_openfda_enforcement,
     "openfda-shortages": parse_openfda_shortages,
@@ -729,6 +752,7 @@ FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]
     "prepare-registry": parse_prepare_registry,
     "star-rating": parse_star_rating,
     "fda-advisory-calendar": parse_fda_advisory_calendar,
+    "openalex": parse_openalex,
 }
 
 # Rows the registry still labels ``generic`` are recognised by host (the three P0 ones).
