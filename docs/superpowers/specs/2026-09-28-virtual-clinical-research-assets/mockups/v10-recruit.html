@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>匹配与招募 · 转诊 · EV-201 二线 NSCLC</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页渲染：外壳随内容增高 */
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  html, body { height: auto; }
+  body { position: relative; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+
+  /* ── 研究页页头（v08–v10 共用，保持一致） ── */
+  .shead { display: flex; align-items: center; gap: 10px; padding: 26px 0 16px; }
+  .shead .tag { font-weight: 500; }
+  .shead h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.005em; margin-right: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(7, 1fr); padding: 14px 18px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--e1); }
+  .stp { position: relative; padding-top: 20px; }
+  .stp::before { content: ""; position: absolute; top: 6px; left: 14px; right: -2px; height: 2px; background: var(--n-150); }
+  .stp.done::before { background: var(--brand-300); }
+  .stp:last-child::before { display: none; }
+  .stp .k { position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--n-200); background: var(--surface); }
+  .stp.done .k { background: var(--accent); box-shadow: none; }
+  .stp.done .k::after { content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 6.5px; border-right: 1.8px solid #fff; border-bottom: 1.8px solid #fff; transform: rotate(45deg); }
+  .stp.cur .k { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--brand-100); }
+  .stp .n { font-weight: 600; font-size: 14px; }
+  .stp .m { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .stp.cur .m { color: var(--brand-700); font-weight: 500; }
+  .navrow { display: flex; align-items: flex-end; gap: 16px; margin-top: 18px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+
+  /* ── 来源标签 ── */
+  .og { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; line-height: 1; color: var(--text-2); background: var(--surface-2); white-space: nowrap; font-weight: 400; }
+  .og i { display: inline-block; flex: none; }
+  .og.obs i { width: 6px; height: 6px; border-radius: 3px; background: var(--n-600); }
+  .og.pred i { width: 10px; height: 7px; border-radius: 2px; background: var(--brand-100); box-shadow: inset 0 0 0 1px var(--brand-300); }
+
+  /* ── 匹配与招募：子页签 + 数据来源 ── */
+  .subrow { display: flex; align-items: center; gap: 12px; margin: 16px 0 14px; }
+  .src { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-3); }
+  .src b { color: var(--text-2); font-weight: 500; }
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .box h3 { font-size: 16px; line-height: 24px; display: flex; align-items: center; gap: 8px; }
+  .box h3 .sp { flex: 1; }
+
+  /* 转诊台账 */
+  .pipe { padding: 16px 20px 16px; }
+  .flow { display: flex; align-items: stretch; margin-top: 12px; }
+  .cell { flex: 1; min-width: 0; padding: 10px 10px 10px 12px; border-radius: 10px; }
+  .cell .l { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .cell .v { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .cell .w { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .cell.at .v { color: var(--attn-strong); }
+  .cell.you { background: var(--brand-50); box-shadow: inset 0 0 0 1px var(--brand-200); }
+  .cell.you .w { color: var(--brand-700); font-weight: 500; }
+  .cell.in .v { color: var(--brand-700); }
+  .cell.mu .v { color: var(--text-2); }
+  .chev { width: 14px; flex: none; display: grid; place-items: center; color: var(--n-300); }
+  .gsep { width: 1px; background: var(--line); margin: 6px 12px; flex: none; }
+  .ogrp { display: flex; flex: 3.3; }
+  .ogrp .cap { font-size: 12px; color: var(--text-3); }
+
+  /* 入组预测 */
+  .g2 { display: grid; grid-template-columns: 1fr 368px; gap: 16px; margin-top: 16px; align-items: stretch; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); font-weight: 400; align-items: center; }
+  .legend i { display: inline-block; width: 16px; height: 2px; margin-right: 6px; vertical-align: 3px; }
+  svg.chart { display: block; margin-top: 10px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+  .fc .kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 0; box-shadow: inset 0 -1px 0 var(--line); align-items: baseline; }
+  .fc .kv .k { font-size: 13px; color: var(--text-3); }
+  .fc .kv .v { font-size: 20px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; letter-spacing: -.01em; }
+  .fc .kv .v small { font-size: 13px; font-weight: 500; color: var(--text-3); letter-spacing: 0; margin-left: 2px; }
+  .fc .kv .v .se { font-size: 12px; font-weight: 400; color: var(--text-3); margin-left: 4px; }
+  .fc .kv .d { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+  .fc .kv .v.hl { color: var(--brand-700); }
+  .four { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 12px; border-radius: 10px; background: var(--surface-1); }
+  .four div { padding: 8px 10px; }
+  .four span { display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .four b { display: block; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; white-space: nowrap; }
+  .four b.m { color: var(--text-3); font-weight: 500; }
+  .basis { margin-top: 14px; font-size: 12px; line-height: 20px; color: var(--text-3); }
+  .basis b { display: block; font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 2px; }
+
+  .commit { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; box-shadow: inset 0 1px 0 var(--line); }
+  .commit .cl { font-size: 12px; color: var(--text-3); margin-right: 4px; }
+  .commit .cm { display: inline-flex; align-items: baseline; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--line-strong); font-size: 13px; line-height: 30px; }
+  .commit .cm b { font-weight: 600; }
+  .commit .cm span { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  /* 中心 */
+  .sites { margin-top: 16px; }
+  table.st2 { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.st2 th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-3); padding: 9px 12px; background: var(--surface-1); white-space: nowrap; }
+  table.st2 th:first-child { border-radius: 8px 0 0 8px; } table.st2 th:last-child { border-radius: 0 8px 8px 0; }
+  table.st2 td { padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+  table.st2 tr:last-child td { border-bottom: 0; }
+  table.st2 .r { text-align: right; }
+  table.st2 .num { font-variant-numeric: tabular-nums; }
+  table.st2 td.nm b { display: block; font-weight: 600; font-size: 13px; }
+  table.st2 td.nm span { font-size: 12px; color: var(--text-3); }
+  .ss { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .ss i { width: 8px; height: 8px; border-radius: 4px; flex: none; }
+  .ss.on i { background: var(--accent); }
+  .ss.mid i { background: var(--surface); box-shadow: inset 0 0 0 2px var(--accent); }
+  .ss.off i { background: var(--surface); box-shadow: inset 0 0 0 2px var(--n-300); }
+  .ss small { font-size: 12px; color: var(--text-3); }
+  .mut { color: var(--text-4); }
+  tr.warn td { background: #FFFBF3; }
+  tr.warn td:first-child { box-shadow: inset 3px 0 0 #E9A94F; }
+  .late { color: var(--attn-strong); font-weight: 500; }
+  .enr { display: inline-flex; align-items: center; gap: 8px; }
+  .enr .bt { width: 64px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .enr .bt i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+</style></head>
+<body data-nav="vcr" data-recent="a">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="wrapx">
+      <!-- 研究页页头（v08–v10 共用） -->
+      <div class="shead">
+        <h1>EV-201 二线 NSCLC：单臂 II 期还是随机</h1>
+        <span class="tag outline">T0 公开资料</span>
+        <span class="tag outline">研究设计支持</span>
+        <span class="sp"></span>
+        <a class="btn secondary"><svg data-i="message-square" class="i xs"></svg>对话</a>
+        <a class="ibtn"><svg data-i="ellipsis"></svg></a>
+      </div>
+      <div class="rail">
+        <div class="stp done"><span class="k"></span><div class="n">定义</div><div class="m">研究定义 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">证据</div><div class="m">12 张假设卡</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">人群</div><div class="m">人群 v3</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">患者</div><div class="m">虚拟患者集 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">对照</div><div class="m">文献对照</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">试验</div><div class="m">4 个方案</div></div>
+        <div class="stp cur"><span class="k"></span><div class="n">匹配</div><div class="m">进行中</div></div>
+      </div>
+      <div class="navrow">
+        <nav class="tabs"><a>总览</a><a>人群</a><a>虚拟患者</a><a>对照</a><a>试验</a><a class="on">匹配与招募</a><a>数据与证据</a></nav>
+      </div>
+
+      <div class="subrow">
+        <nav class="seg"><a>匹配</a><a class="on">转诊</a><a>中心</a><a>随访</a></nav>
+        <span class="sp"></span>
+        <div class="src"><svg data-i="building-2" class="i xs"></svg><span>合作方：<b>某招募机构</b></span><span>·</span><span>目标随机 <b class="num">180</b> 例</span><span class="tag outline" style="margin-left:2px">T1 基线与招募资料</span><span>·</span><span>更新于 9月28日 08:00</span></div>
+      </div>
+
+      <!-- 转诊台账 -->
+      <section class="box pipe">
+        <h3>转诊进度<span class="t12 muted" style="font-weight:400">757 人在册</span><span class="sp"></span><a class="btn sm ghost"><svg data-i="list" class="i xs"></svg>台账明细</a></h3>
+        <div class="flow">
+          <div class="cell"><div class="l">候选</div><div class="v">57</div><div class="w">AI 匹配</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell at"><div class="l">待补证</div><div class="v">612</div><div class="w">AI 跟进</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell you"><div class="l">可联系</div><div class="v">9</div><div class="w">4 人待你确认</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell"><div class="l">已联系</div><div class="v">21</div><div class="w">协调员</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell"><div class="l">有意向</div><div class="v">14</div><div class="w">协调员</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell"><div class="l">已转诊</div><div class="v">12</div><div class="w">待中心响应</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell"><div class="l">中心已响应</div><div class="v">10</div><div class="w">中心</div></div>
+          <span class="chev"><svg data-i="chevron-right" class="i xs"></svg></span>
+          <div class="cell"><div class="l">筛选中</div><div class="v">6</div><div class="w">中心</div></div>
+          <span class="gsep"></span>
+          <div class="cell in"><div class="l">已入组</div><div class="v">11</div><div class="w">8 个中心</div></div>
+          <div class="cell mu"><div class="l">筛选失败</div><div class="v">4</div><div class="w">原因已记录</div></div>
+          <div class="cell mu"><div class="l">退出</div><div class="v">1</div><div class="w">原因已记录</div></div>
+        </div>
+      </section>
+
+      <div class="g2">
+        <!-- 入组预测与实际 -->
+        <section class="box">
+          <h3>实际入组 11 例，略快于预测的 9.8 例；12月15日前完成的概率 61%</h3>
+          <div class="legend" style="margin-top:8px">
+            <span><i style="background:#1A1F25;height:2.5px"></i>实际入组（观察）</span>
+            <span><i style="background:#5690DD;height:1.5px"></i>预测中位</span>
+            <span><i style="background:#DDE9F9;height:10px;vertical-align:-1px;border-radius:2px"></i>80% 预测区间（P10–P90）</span>
+            <span><i style="background:repeating-linear-gradient(90deg,#1A1F25 0 4px,transparent 4px 7px);height:1.5px"></i>目标与计划完成日</span>
+          </div>
+          <svg class="chart" viewBox="0 0 752 362" width="100%">
+            <!-- 网格 -->
+            <g stroke="#E4E8EC"><line x1="48" y1="227" x2="740" y2="227"/><line x1="48" y1="140" x2="740" y2="140"/></g>
+            <g font-size="12" fill="#646D77" text-anchor="end"><text x="40" y="318">0</text><text x="40" y="231">60</text><text x="40" y="144">120</text><text x="40" y="57">180</text></g>
+            <text x="48" y="14" font-size="12" fill="#939CA6">累计随机例数</text>
+            <!-- 80% 预测区间（P10–P90） -->
+            <path d="M48,314 L56.6,314 L65.3,314 L74,313.7 L82.6,313 L91.3,311.9 L99.9,310.5 L108.6,308.6 L117.2,306.3 L125.9,303.6 L134.5,300.5 L143.2,297 L151.8,293.1 L160.4,288.8 L169.1,284.1 L177.8,279 L186.4,273.6 L195.1,268.3 L203.7,263 L212.3,257.6 L221,252.3 L229.7,247 L238.3,241.7 L247,236.3 L255.6,231 L264.3,225.7 L272.9,220.3 L281.6,215 L290.2,209.7 L298.9,204.4 L307.5,199 L316.2,193.7 L324.8,188.4 L333.4,183 L342.1,177.7 L350.8,172.4 L359.4,167.1 L368.1,161.7 L376.7,156.4 L385.4,151.1 L394,145.7 L402.7,140.4 L411.3,135.1 L419.9,129.8 L428.6,124.4 L437.3,119.1 L445.9,113.8 L454.6,108.5 L463.2,103.1 L471.9,97.8 L480.5,92.5 L489.2,87.1 L497.8,81.8 L506.5,76.5 L515.1,71.2 L523.8,65.8 L532.4,60.5 L541,55.2 L549.7,53 L740,53 L731.4,53 L722.7,56.9 L714.1,60.7 L705.4,64.5 L696.8,68.4 L688.1,72.2 L679.5,76.1 L670.8,79.9 L662.1,83.7 L653.5,87.6 L644.9,91.4 L636.2,95.2 L627.6,99.1 L618.9,102.9 L610.3,106.8 L601.6,110.6 L593,114.4 L584.3,118.3 L575.6,122.1 L567,125.9 L558.4,129.8 L549.7,133.6 L541,137.5 L532.4,141.3 L523.8,145.1 L515.1,149 L506.5,152.8 L497.8,156.6 L489.2,160.5 L480.5,164.3 L471.9,168.2 L463.2,172 L454.6,175.8 L445.9,179.7 L437.3,183.5 L428.6,187.3 L419.9,191.2 L411.3,195 L402.7,198.9 L394,202.7 L385.4,206.5 L376.7,210.4 L368.1,214.2 L359.4,218 L350.8,221.9 L342.1,225.7 L333.4,229.6 L324.8,233.4 L316.2,237.2 L307.5,241.1 L298.9,244.9 L290.2,248.7 L281.6,252.6 L272.9,256.4 L264.3,260.3 L255.6,264.1 L247,267.9 L238.3,271.8 L229.7,275.6 L221,279.4 L212.3,283.1 L203.7,286.6 L195.1,289.9 L186.4,293 L177.8,295.8 L169.1,298.5 L160.4,300.9 L151.8,303.2 L143.2,305.2 L134.5,307 L125.9,308.6 L117.2,310 L108.6,311.2 L99.9,312.2 L91.3,312.9 L82.6,313.5 L74,313.9 L65.3,314 L56.6,314 L48,314 Z" fill="#DDE9F9"/>
+            <!-- 预测中位 -->
+            <path d="M48,314 L56.6,314 L65.3,314 L74,313.8 L82.6,313.3 L91.3,312.5 L99.9,311.4 L108.6,310 L117.2,308.3 L125.9,306.3 L134.5,304.1 L143.2,301.5 L151.8,298.6 L160.4,295.5 L169.1,292 L177.8,288.3 L186.4,284.2 L195.1,279.9 L203.7,275.3 L212.3,270.7 L221,266.2 L229.7,261.6 L238.3,257 L247,252.5 L255.6,247.9 L264.3,243.3 L272.9,238.8 L281.6,234.2 L290.2,229.6 L298.9,225.1 L307.5,220.5 L316.2,215.9 L324.8,211.4 L333.4,206.8 L342.1,202.2 L350.8,197.6 L359.4,193.1 L368.1,188.5 L376.7,183.9 L385.4,179.4 L394,174.8 L402.7,170.2 L411.3,165.7 L419.9,161.1 L428.6,156.5 L437.3,152 L445.9,147.4 L454.6,142.8 L463.2,138.3 L471.9,133.7 L480.5,129.1 L489.2,124.6 L497.8,120 L506.5,115.4 L515.1,110.9 L523.8,106.3 L532.4,101.7 L541,97.2 L549.7,92.6 L558.4,88 L567,83.5 L575.6,78.9 L584.3,74.3 L593,69.8 L601.6,65.2 L610.3,60.6 L618.9,56.1 L624.7,53 L740,53" fill="none" stroke="#5690DD" stroke-width="1.6"/>
+            <!-- 目标 180 例 -->
+            <line x1="48" y1="53" x2="740" y2="53" stroke="#1A1F25" stroke-width="1.1" stroke-dasharray="5 4"/>
+            <text x="540" y="46" font-size="12" fill="#1A1F25" text-anchor="end">目标 180 例</text>
+            <!-- 末例入组：80% 预测区间与中位 -->
+            <line x1="544.6" y1="24" x2="731.4" y2="24" stroke="#8FB5EA" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="624.7" cy="24" r="4.5" fill="#fff" stroke="#0A5DC1" stroke-width="2"/>
+            <text x="534" y="28" font-size="12" fill="#0A4DA0" text-anchor="end">末例入组 80% 预测区间 2027年9月～2028年2月 · 中位 11月</text>
+            <!-- 计划完成日 -->
+            <line x1="652.5" y1="36" x2="652.5" y2="314" stroke="#1A1F25" stroke-width="1.1" stroke-dasharray="5 4"/>
+            <rect x="470" y="246" width="174" height="42" rx="8" fill="#fff" stroke="#E4E8EC"/>
+            <text x="481" y="263" font-size="12" fill="#646D77">计划完成 2027年12月15日</text>
+            <text x="481" y="280" font-size="12" fill="#1A1F25" font-weight="600">按期完成概率 61%</text>
+            <!-- 今天 -->
+            <line x1="148.3" y1="214" x2="148.3" y2="314" stroke="#939CA6" stroke-dasharray="2 3"/>
+            <text x="153" y="224" font-size="12" fill="#646D77">今天 9月28日</text>
+            <!-- 实际（阶梯，观察） -->
+            <path d="M48,314 L82.7,314 L82.7,312.6 L94.8,312.6 L94.8,311.1 L105.1,311.1 L105.1,309.6 L112.1,309.6 L112.1,308.2 L119,308.2 L119,306.8 L125.9,306.8 L125.9,305.3 L131.1,305.3 L131.1,303.9 L136.3,303.9 L136.3,302.4 L139.7,302.4 L139.7,300.9 L143.2,300.9 L143.2,299.5 L146.7,299.5 L146.7,298.1 L148.3,298.1" fill="none" stroke="#1A1F25" stroke-width="2.2" stroke-linejoin="round"/>
+            <circle cx="148.3" cy="298.1" r="3.5" fill="#1A1F25"/>
+            <!-- 放大：7月–9月 -->
+            <g>
+              <rect x="56" y="66" width="222" height="136" rx="8" fill="#fff" stroke="#E4E8EC"/>
+              <text x="68" y="85" font-size="12" fill="#646D77">放大 · 7月–9月</text>
+              <circle cx="72" cy="101" r="3.5" fill="#1A1F25"/>
+              <text x="80" y="105" font-size="12" fill="#1A1F25" font-weight="600">实际 11</text>
+              <circle cx="140" cy="101" r="3" fill="#fff" stroke="#5690DD" stroke-width="1.6"/>
+              <text x="148" y="105" font-size="12" fill="#0A4DA0">预测 9.8</text>
+              <g transform="translate(70 112) scale(0.9 0.68)">
+                <path d="M0,96 L6.7,96 L13.3,96 L20,96 L26.7,96 L33.3,96 L40,95.8 L46.7,95.3 L53.3,94.7 L60,93.9 L66.7,92.8 L73.3,91.5 L80,90 L86.7,88.3 L93.3,86.4 L100,84.3 L106.7,81.9 L113.3,79.4 L120,76.6 L126.7,73.6 L133.3,70.4 L140,67 L146.7,63.4 L153.3,59.6 L160,55.5 L166.7,51.3 L173.3,46.8 L180,42.1 L186.7,37.2 L193.3,32.1 L200,26.8 L200,60.1 L193.3,62.8 L186.7,65.5 L180,68 L173.3,70.5 L166.7,72.8 L160,75 L153.3,77.1 L146.7,79.1 L140,81 L133.3,82.7 L126.7,84.4 L120,85.9 L113.3,87.4 L106.7,88.7 L100,89.9 L93.3,91 L86.7,92 L80,92.9 L73.3,93.7 L66.7,94.3 L60,94.9 L53.3,95.3 L46.7,95.7 L40,95.9 L33.3,96 L26.7,96 L20,96 L13.3,96 L6.7,96 L0,96 Z" fill="#DDE9F9"/>
+                <line x1="0" y1="48" x2="200" y2="48" stroke="#E4E8EC" vector-effect="non-scaling-stroke"/>
+                <path d="M0,96 L6.7,96 L13.3,96 L20,96 L26.7,96 L33.3,96 L40,95.8 L46.7,95.5 L53.3,95 L60,94.4 L66.7,93.6 L73.3,92.7 L80,91.6 L86.7,90.4 L93.3,89 L100,87.4 L106.7,85.7 L113.3,83.8 L120,81.8 L126.7,79.6 L133.3,77.2 L140,74.7 L146.7,72.1 L153.3,69.2 L160,66.3 L166.7,63.1 L173.3,59.8 L180,56.4 L186.7,52.8 L193.3,49" fill="none" stroke="#5690DD" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+                <path d="M0,96 L66.8,96 L66.8,91.2 L90.1,91.2 L90.1,86.4 L110.1,86.4 L110.1,81.6 L123.4,81.6 L123.4,76.8 L136.8,76.8 L136.8,72 L150.1,72 L150.1,67.2 L160.1,67.2 L160.1,62.4 L170.1,62.4 L170.1,57.6 L176.8,57.6 L176.8,52.8 L183.5,52.8 L183.5,48 L190.1,48 L190.1,43.2 L193.3,43.2" fill="none" stroke="#1A1F25" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+                <line x1="0" y1="96" x2="200" y2="96" stroke="#BAC2CA" vector-effect="non-scaling-stroke"/>
+              </g>
+              <text x="252" y="148" font-size="12" fill="#939CA6">10</text>
+              <circle cx="244" cy="141.4" r="3.5" fill="#1A1F25"/>
+              <circle cx="244" cy="145.3" r="2.8" fill="#fff" stroke="#5690DD" stroke-width="1.6"/>
+              <g font-size="12" fill="#939CA6" text-anchor="middle"><text x="130" y="194">8月</text><text x="190" y="194">9月</text></g>
+            </g>
+            <!-- 横轴 -->
+            <line x1="48" y1="314" x2="740" y2="314" stroke="#BAC2CA"/>
+            <g stroke="#BAC2CA"><line x1="48" y1="314" x2="48" y2="318"/><line x1="117.2" y1="314" x2="117.2" y2="318"/><line x1="186.4" y1="314" x2="186.4" y2="318"/><line x1="255.6" y1="314" x2="255.6" y2="318"/><line x1="324.8" y1="314" x2="324.8" y2="318"/><line x1="394" y1="314" x2="394" y2="318"/><line x1="463.2" y1="314" x2="463.2" y2="318"/><line x1="532.4" y1="314" x2="532.4" y2="318"/><line x1="601.6" y1="314" x2="601.6" y2="318"/><line x1="670.8" y1="314" x2="670.8" y2="318"/><line x1="740" y1="314" x2="740" y2="318"/></g>
+            <g font-size="12" fill="#646D77" text-anchor="middle">
+              <text x="48" y="334">7月</text><text x="117.2" y="334">9月</text><text x="186.4" y="334">11月</text><text x="255.6" y="334">1月</text><text x="324.8" y="334">3月</text><text x="394" y="334">5月</text><text x="463.2" y="334">7月</text><text x="532.4" y="334">9月</text><text x="601.6" y="334">11月</text><text x="670.8" y="334">1月</text><text x="740" y="334" text-anchor="end">3月</text>
+            </g>
+            <g font-size="12" fill="#939CA6"><text x="48" y="354">2026 年</text><text x="255.6" y="354" text-anchor="middle">2027 年</text><text x="670.8" y="354" text-anchor="middle">2028 年</text></g>
+          </svg>
+          <div class="commit">
+            <span class="cl">对外承诺</span>
+            <div class="cm"><b>激进</b><span>P25 · 2027年10月中旬</span></div>
+            <div class="cm"><b>平衡</b><span>P50 · 2027年11月下旬</span></div>
+            <div class="cm"><b>保守</b><span>P80 · 2028年1月中旬</span></div>
+            <span class="sp" style="flex:1"></span>
+            <span class="t12 muted">计划日 12月15日 ≈ P61</span>
+          </div>
+        </section>
+
+        <!-- 预测要点 -->
+        <section class="box fc">
+          <h3>入组预测<span class="sp"></span><span class="og pred"><i></i>预测</span></h3>
+          <div class="kv"><span class="k">末例入组（中位）</span><span class="v">2027年11月</span><span class="d">80% 预测区间 2027-09～2028-02</span></div>
+          <div class="kv"><span class="k">12月15日前完成</span><span class="v hl">61<small>%</small><span class="se">±0.7</span></span><span class="d">±0.7 为蒙特卡洛标准误 · 计划完成日 2027-12-15</span></div>
+          <div class="kv"><span class="k">至今入组 · 实际 / 预测</span><span class="v">11<small>/ 9.8 例</small></span><span class="d"><span class="og obs"><i></i>观察</span>实际 11 例 · 80% 预测区间 7–13 例</span></div>
+          <div class="kv"><span class="k">已启动中心</span><span class="v">19<small>/ 30</small></span><span class="d">另有 6 个启动中 · 首个中心 7月15日启动</span></div>
+          <div class="four">
+            <div><span>真实患者</span><b>11</b></div>
+            <div><span>事件数</span><b class="m">不可见</b></div>
+            <div><span>有效样本量</span><b class="m">—</b></div>
+            <div><span>生成记录</span><b>0</b></div>
+          </div>
+          <div class="basis"><b>预测依据</b>Poisson–Gamma 入组 v1.0 · 5,000 次模拟 · 种子已记录<br>30 个中心，前 4 个月内启动 · 每中心每月 0.42 例<br>筛选失败率 38%（合作方漏斗）· 9月27日按实际入组重算</div>
+        </section>
+      </div>
+
+      <!-- 中心 -->
+      <section class="box sites">
+        <h3>中心<span class="t12 muted" style="font-weight:400">已启动 19 · 启动中 6 · 待启动 5</span><span class="sp"></span><a class="btn sm ghost">全部 30 个<svg data-i="chevron-right" class="i xs"></svg></a></h3>
+        <table class="st2">
+          <thead><tr><th style="width:196px">中心</th><th style="width:172px">状态</th><th class="r" style="width:100px">容量</th><th class="r" style="width:120px">在研竞争研究</th><th class="r" style="width:90px">已转诊</th><th class="r" style="width:90px">待响应</th><th style="width:150px">已入组</th><th>最后核实</th></tr></thead>
+          <tbody>
+            <tr><td class="nm"><b>中心 01</b><span>上海 · 肿瘤专科医院</span></td><td><span class="ss on"><i></i>已启动<small>7月15日</small></span></td><td class="r num">每月 3 例</td><td class="r num">2 项</td><td class="r num">9</td><td class="r num">1</td><td><span class="enr"><span class="bt"><i style="width:27%"></i></span><span class="num">3</span></span></td><td class="num">9月27日</td></tr>
+            <tr><td class="nm"><b>中心 02</b><span>广州 · 综合医院</span></td><td><span class="ss on"><i></i>已启动<small>7月22日</small></span></td><td class="r num">每月 2 例</td><td class="r num">1 项</td><td class="r num">7</td><td class="r num">1</td><td><span class="enr"><span class="bt"><i style="width:18%"></i></span><span class="num">2</span></span></td><td class="num">9月26日</td></tr>
+            <tr><td class="nm"><b>中心 03</b><span>杭州 · 肿瘤专科医院</span></td><td><span class="ss on"><i></i>已启动<small>8月5日</small></span></td><td class="r num">每月 2 例</td><td class="r num">3 项</td><td class="r num">5</td><td class="r num">2</td><td><span class="enr"><span class="bt"><i style="width:9%"></i></span><span class="num">1</span></span></td><td class="num">9月27日</td></tr>
+            <tr><td class="nm"><b>中心 04</b><span>成都 · 综合医院</span></td><td><span class="ss on"><i></i>已启动<small>8月19日</small></span></td><td class="r num">每月 2 例</td><td class="r num">1 项</td><td class="r num">4</td><td class="r num">1</td><td><span class="enr"><span class="bt"><i style="width:9%"></i></span><span class="num">1</span></span></td><td class="num">9月24日</td></tr>
+            <tr><td class="nm"><b>中心 05</b><span>武汉 · 综合医院</span></td><td><span class="ss on"><i></i>已启动<small>9月2日</small></span></td><td class="r num">每月 1 例</td><td class="r num">2 项</td><td class="r num">2</td><td class="r num">1</td><td class="mut">0</td><td class="num">9月23日</td></tr>
+            <tr><td class="nm"><b>中心 06</b><span>济南 · 肿瘤专科医院</span></td><td><span class="ss mid"><i></i>启动中<small>合同审核</small></span></td><td class="r num">每月 2 例</td><td class="r mut">无</td><td class="r mut">—</td><td class="r mut">—</td><td class="mut">—</td><td class="num">9月20日</td></tr>
+            <tr class="warn"><td class="nm"><b>中心 07</b><span>长沙 · 综合医院</span></td><td><span class="ss on"><i></i>已启动<small>9月9日</small></span></td><td class="r num">每月 2 例</td><td class="r mut">无</td><td class="r num">2</td><td class="r num late">2</td><td class="mut">0</td><td><span class="late">9月25日 · 3 天未回复</span><a class="btn sm tinted" style="margin-left:10px;height:26px"><svg data-i="bell" class="i xs"></svg>提醒</a></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script src="shell.js"></script><script src="icons.js"></script>
+</body></html>

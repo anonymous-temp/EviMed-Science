@@ -1,0 +1,133 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>七步流程与对象血缘</title>
+<meta name="shot" content="1512x760"><link rel="stylesheet" href="base.css"><style>
+  body { background: #fff; }
+  .wrap { position: relative; width: 1440px; height: 700px; margin: 40px auto 0; }
+  .ttl { position: absolute; left: 0; top: 0; font-size: 18px; line-height: 26px; font-weight: 600; color: var(--text); }
+  /* 左侧行标 */
+  .gl { position: absolute; left: 0; width: 140px; font-size: 12px; line-height: 18px; font-weight: 600; color: var(--text-3); letter-spacing: .06em; }
+  .tier { position: absolute; left: 0; width: 140px; height: 26px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+  .tier b { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; min-width: 18px; }
+  /* 数据档位带 */
+  .lane { position: absolute; left: 150px; width: 1290px; height: 26px; }
+  .lane.rule::before { content: ""; position: absolute; left: 0; right: 0; top: 12.5px; height: 1px; background: repeating-linear-gradient(90deg, var(--n-200) 0 3px, transparent 3px 7px); }
+  .t0 { position: absolute; left: 0; top: 0; height: 26px; width: 1290px; border-radius: 7px; background: var(--surface-2); overflow: hidden; }
+  .t0 .h { position: absolute; top: 0; bottom: 0; left: 1115px; right: 0; background: repeating-linear-gradient(135deg, var(--n-150) 0 4px, var(--n-50) 4px 9px); box-shadow: inset 1px 0 0 #fff; }
+  .cell { position: absolute; top: 0; height: 26px; width: 162px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+  .cell.h { color: var(--text-2); font-weight: 500; }
+  .cell.h span { background: var(--n-50); padding: 0 6px; border-radius: 4px; }
+  .seg { position: absolute; top: 0; height: 26px; width: 162px; border-radius: 7px; background: #fff; box-shadow: inset 0 0 0 1px var(--line-strong); display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+  .seg svg { color: var(--text-3); }
+  /* 七步 */
+  .step { position: absolute; top: 236px; width: 162px; height: 92px; border-radius: 12px; background: var(--brand-50); box-shadow: inset 0 0 0 1.5px var(--brand-200); padding: 14px 14px 0; }
+  .step .no { width: 24px; height: 24px; border-radius: 12px; background: var(--brand-600); color: #fff; font-size: 13px; font-weight: 600; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+  .step .nm { margin-top: 10px; font-size: 16px; line-height: 24px; font-weight: 600; color: var(--brand-900); white-space: nowrap; }
+  /* 产出对象 */
+  .obj { position: absolute; top: 374px; width: 162px; height: 76px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--line-strong); padding: 0 14px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .obj .o { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--text); white-space: nowrap; }
+  .obj .o svg { color: var(--text-3); }
+  .obj .o.sub { padding-left: 24px; }
+  /* 回流标注 */
+  .back { position: absolute; top: 483px; left: 889px; transform: translateX(-50%); height: 26px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 13px; background: #fff; box-shadow: inset 0 0 0 1px var(--brand-200); font-size: 13px; font-weight: 500; color: var(--brand-700); white-space: nowrap; }
+  .back svg { color: var(--brand-500); }
+  /* 全程引用带 */
+  .band { position: absolute; left: 150px; top: 540px; width: 1290px; height: 58px; border-radius: 12px; background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 14px; color: var(--text-2); }
+  .band .it { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; color: var(--text); }
+  .band .it svg { color: var(--text-3); }
+  .band .dot { color: var(--text-4); }
+  .band .note { color: var(--text-3); }
+  svg.links { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .lg { position: absolute; left: 150px; top: 634px; display: flex; gap: 22px; font-size: 12px; color: var(--text-2); align-items: center; }
+  .lg span { display: inline-flex; align-items: center; gap: 8px; }
+</style></head>
+<body>
+<div class="wrap">
+  <div class="ttl">虚拟临研 · 七步与对象血缘</div>
+
+  <!-- 数据档位带：每一步能在哪一档数据上运行 -->
+  <div class="tier" style="top:60px"><b>T0</b>公开资料</div>
+  <div class="tier" style="top:94px"><b>T1</b>基线与招募资料</div>
+  <div class="tier" style="top:128px"><b>T2</b>完整治疗与纵向结局</div>
+  <div class="tier" style="top:162px"><b>T3</b>随机试验个体数据</div>
+
+  <div class="lane" style="top:60px">
+    <div class="t0"><div class="h"></div></div>
+    <div class="cell" style="left:0">方案草稿</div>
+    <div class="cell" style="left:188px">文献 · 试验登记</div>
+    <div class="cell" style="left:376px">情景人群 · 文献人群</div>
+    <div class="cell" style="left:564px">情景模型 · 文献模型</div>
+    <div class="cell" style="left:752px">文献对照</div>
+    <div class="cell" style="left:940px">先例参数仿真</div>
+    <div class="cell h" style="left:1128px"><span>仅先例</span></div>
+  </div>
+  <div class="lane rule" style="top:94px">
+    <div class="seg" style="left:376px"><svg data-i="lock-open" class="i xs"></svg>真实队列</div>
+    <div class="seg" style="left:1128px"><svg data-i="lock-open" class="i xs"></svg>双向匹配 · 转诊</div>
+  </div>
+  <div class="lane rule" style="top:128px">
+    <div class="seg" style="left:752px"><svg data-i="lock-open" class="i xs"></svg>真实外部对照</div>
+  </div>
+  <div class="lane rule" style="top:162px">
+    <div class="seg" style="left:752px"><svg data-i="lock-open" class="i xs"></svg>预后校正</div>
+  </div>
+
+  <!-- 七步 -->
+  <div class="gl" style="top:273px">七步</div>
+  <div class="step" style="left:150px"><div class="no">1</div><div class="nm">定义问题</div></div>
+  <div class="step" style="left:338px"><div class="no">2</div><div class="nm">找证据、定参数</div></div>
+  <div class="step" style="left:526px"><div class="no">3</div><div class="nm">构建人群</div></div>
+  <div class="step" style="left:714px"><div class="no">4</div><div class="nm">生成虚拟患者</div></div>
+  <div class="step" style="left:902px"><div class="no">5</div><div class="nm">设计对照</div></div>
+  <div class="step" style="left:1090px"><div class="no">6</div><div class="nm">模拟试验</div></div>
+  <div class="step" style="left:1278px"><div class="no">7</div><div class="nm">匹配、招募与校准</div></div>
+
+  <!-- 产出对象 -->
+  <div class="gl" style="top:403px">产出对象</div>
+  <div class="obj" style="left:150px"><div class="o"><svg data-i="file-text" class="i"></svg>研究定义</div></div>
+  <div class="obj" style="left:338px"><div class="o"><svg data-i="library" class="i"></svg>试验先例</div><div class="o"><svg data-i="clipboard-list" class="i"></svg>假设卡</div></div>
+  <div class="obj" style="left:526px"><div class="o"><svg data-i="users" class="i"></svg>人群版本</div></div>
+  <div class="obj" style="left:714px"><div class="o"><svg data-i="activity" class="i"></svg>虚拟患者集</div></div>
+  <div class="obj" style="left:902px"><div class="o"><svg data-i="git-compare" class="i"></svg>对照设计</div></div>
+  <div class="obj" style="left:1090px"><div class="o"><svg data-i="flask-conical" class="i"></svg>试验情景</div></div>
+  <div class="obj" style="left:1278px"><div class="o"><svg data-i="user-check" class="i"></svg>匹配评估 · 转诊</div><div class="o sub">校准记录</div></div>
+
+  <svg class="links" width="1440" height="700" viewBox="0 0 1440 700">
+    <defs>
+      <marker id="ab" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#0A5DC1"/></marker>
+      <marker id="ag" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#939CA6"/></marker>
+      <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#2A72D0"/></marker>
+    </defs>
+    <!-- 七步链 -->
+    <g stroke="#0A5DC1" stroke-width="2" fill="none" marker-end="url(#ab)">
+      <path d="M316 282 H334"/><path d="M504 282 H522"/><path d="M692 282 H710"/><path d="M880 282 H898"/><path d="M1068 282 H1086"/><path d="M1256 282 H1274"/>
+    </g>
+    <!-- 步骤 → 产出 -->
+    <g stroke="#939CA6" stroke-width="1.25" fill="none" marker-end="url(#ag)">
+      <path d="M231 331 V370"/><path d="M419 331 V370"/><path d="M607 331 V370"/><path d="M795 331 V370"/><path d="M983 331 V370"/><path d="M1171 331 V370"/><path d="M1359 331 V370"/>
+    </g>
+    <!-- 对象血缘：下游引用上游的某一版 -->
+    <g stroke="#BAC2CA" stroke-width="1.25" fill="none" marker-end="url(#ag)">
+      <path d="M316 412 H334"/><path d="M504 412 H522"/><path d="M692 412 H710"/><path d="M880 412 H898"/><path d="M1068 412 H1086"/><path d="M1256 412 H1274"/>
+    </g>
+    <!-- 回流：7 → 2 -->
+    <path d="M1359 453 V484 Q1359 496 1347 496 H431 Q419 496 419 484 V456" stroke="#2A72D0" stroke-width="1.75" fill="none" marker-end="url(#ar)"/>
+  </svg>
+
+  <div class="back"><svg data-i="rotate-ccw" class="i xs"></svg>实际入组与筛选结果回流，校准参数</div>
+
+  <div class="band">
+    <span class="it"><svg data-i="clipboard-list" class="i"></svg>假设与证据</span><span class="dot">·</span>
+    <span class="it"><svg data-i="database" class="i"></svg>数据快照</span><span class="dot">·</span>
+    <span class="it"><svg data-i="boxes" class="i"></svg>模型与方法</span>
+    <span class="note">（全程引用，改动沿血缘链标记过期）</span>
+  </div>
+
+  <div class="lg">
+    <span><svg width="26" height="10" viewBox="0 0 26 10"><path d="M1 5 H20" stroke="#0A5DC1" stroke-width="2"/><path d="M19 1 L25 5 L19 9z" fill="#0A5DC1"/></svg>七步流程</span>
+    <span><svg width="26" height="10" viewBox="0 0 26 10"><path d="M1 5 H20" stroke="#939CA6" stroke-width="1.25"/><path d="M19 1.5 L25 5 L19 8.5z" fill="#939CA6"/></svg>产出与血缘（下游引用上游的某一版）</span>
+    <span><svg width="26" height="10" viewBox="0 0 26 10"><path d="M25 5 H6" stroke="#2A72D0" stroke-width="1.75"/><path d="M7 1 L1 5 L7 9z" fill="#2A72D0"/></svg>回流校准</span>
+    <span><i style="display:inline-block;width:22px;height:12px;border-radius:3px;background:var(--surface-2)"></i>可运行</span>
+    <span><i style="display:inline-block;width:22px;height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--line-strong)"></i>更高档位解锁</span>
+  </div>
+</div>
+<div class="render-note">设计稿渲染</div>
+<script src="icons.js"></script></body></html>

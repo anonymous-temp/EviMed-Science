@@ -1,0 +1,282 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>虚拟临研 · 模型与方法</title>
+<meta name="shot" content="full"><link rel="stylesheet" href="base.css"><style>
+  /* 整页渲染：外壳随内容增高 */
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  html, body { height: auto; }
+  body { position: relative; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+  .phead { padding: 28px 0 20px; }
+  /* 四个主要动作：本页唯一的品牌时刻（与首页一致） */
+  .acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .act { display: grid; grid-template-columns: 44px 1fr 16px; gap: 14px; align-items: center; padding: 24px 18px 24px 20px; border-radius: 14px;
+    background: linear-gradient(180deg, #F3F7FD 0%, #FFFFFF 78%); box-shadow: 0 0 0 1px var(--brand-100), 0 1px 2px rgba(10, 93, 193, .06); }
+  .act .ic { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(145deg, #1B6BD0, #0A3F86); color: #fff; display: grid; place-items: center; box-shadow: 0 4px 12px rgba(10, 93, 193, .22); }
+  .act .ic svg { width: 22px; height: 22px; stroke-width: 1.6; }
+  .act h3 { font-size: 16px; line-height: 22px; }
+  .act p { margin-top: 2px; font-size: 13px; line-height: 20px; color: var(--text-3); white-space: nowrap; }
+  .act .go { color: var(--brand-400); }
+  /* 页签 */
+  .navrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 32px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+  .dd { height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; border-radius: 8px; font-size: 13px; color: var(--text-2); margin-bottom: 5px; }
+  .dd svg { color: var(--text-3); }
+
+  /* 筛选 */
+  .frow { display: flex; align-items: center; gap: 8px; margin: 16px 0 16px; }
+  .chip b { font-weight: 600; margin-left: 2px; font-variant-numeric: tabular-nums; }
+  .chip.zero { color: var(--text-4); }
+  .srch { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; width: 240px; height: 32px; padding: 0 12px; border-radius: 8px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--text-4); font-size: 13px; }
+
+  .lay { display: grid; grid-template-columns: 1fr 452px; gap: 16px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .box h3 { font-size: 16px; line-height: 24px; display: flex; align-items: center; gap: 8px; }
+  .box h3 .cnt { font-size: 13px; color: var(--text-3); font-weight: 500; }
+  .box h3 .sp { flex: 1; }
+  .gh { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 10px; }
+  .gh .n { font-weight: 500; color: var(--text-3); }
+  .gh .sp { flex: 1; }
+  .gh .hint { font-size: 12px; font-weight: 400; color: var(--text-3); }
+
+  /* 参考仿真器 */
+  .sims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .sim { padding: 14px 14px 12px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+  .sim .t { display: flex; align-items: center; gap: 10px; }
+  .mi { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); flex: none; }
+  .mi.b { background: var(--brand-50); color: var(--brand-600); }
+  .sim b { display: block; font-size: 14px; font-weight: 600; line-height: 20px; }
+  .sim .v { font-size: 12px; color: var(--text-3); }
+  .sim .f { margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+  .pass { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-weight: 500; font-size: 12px; white-space: nowrap; }
+  .pass svg { stroke-width: 2; }
+
+  /* 文献模型 */
+  .lm { display: grid; grid-template-columns: 32px 1fr auto; gap: 4px 12px; padding: 14px 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+  .lm + .lm { margin-top: 10px; }
+  .lm.on { background: var(--brand-50); box-shadow: inset 0 0 0 1px var(--brand-200); }
+  .lm .nm { font-size: 14px; font-weight: 600; line-height: 22px; }
+  .lm.on .nm { color: var(--brand-800); }
+  .lm .nm small { font-weight: 400; color: var(--text-3); font-size: 13px; margin-left: 6px; }
+  .lm .l2, .lm .l3 { grid-column: 2 / 4; font-size: 13px; line-height: 20px; color: var(--text-2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .lm .l3 { color: var(--text-3); font-size: 12px; }
+  .lm .rt { display: flex; gap: 6px; align-items: center; }
+  .tier { font-weight: 500; }
+  .use { display: inline-flex; align-items: center; gap: 4px; }
+  .empty { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); background: repeating-linear-gradient(135deg, var(--surface) 0 8px, var(--surface-1) 8px 16px); font-size: 13px; color: var(--text-3); }
+  .empty b { color: var(--text-2); font-weight: 500; }
+
+  /* 方法包 */
+  table.mp { width: 100%; border-collapse: collapse; }
+  table.mp th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-3); padding: 8px 10px; background: var(--surface-1); white-space: nowrap; }
+  table.mp th:first-child { border-radius: 8px 0 0 8px; } table.mp th:last-child { border-radius: 0 8px 8px 0; }
+  table.mp td { padding: 11px 10px; font-size: 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  table.mp tr:last-child td { border-bottom: 0; }
+  table.mp td.nm { font-weight: 500; }
+  table.mp .vv { color: var(--text-3); font-variant-numeric: tabular-nums; }
+  table.mp .ep { color: var(--text-2); }
+  table.mp .u { color: var(--text-3); font-size: 12px; }
+
+  .og { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; line-height: 1; color: var(--text-2); background: var(--surface-2); white-space: nowrap; vertical-align: 1px; }
+  .og i { display: inline-block; flex: none; }
+  .og.rec i { width: 10px; height: 0; border-top: 1.5px dashed var(--n-500); }
+  /* 可信度要求 */
+  table.cr { width: 100%; border-collapse: collapse; }
+  table.cr th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-3); padding: 8px 10px; background: var(--surface-1); white-space: nowrap; }
+  table.cr th:first-child { border-radius: 8px 0 0 8px; } table.cr th:last-child { border-radius: 0 8px 8px 0; }
+  table.cr td { padding: 10px 10px; font-size: 13px; line-height: 20px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.cr tr:last-child td { border-bottom: 0; }
+  table.cr td.rk { white-space: nowrap; font-weight: 600; }
+  table.cr td.ev { color: var(--text-2); }
+  table.cr td.us { white-space: nowrap; }
+  table.cr tr.here td { background: var(--brand-50); }
+  table.cr tr.here td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .here-tag { display: block; margin-top: 0; font-size: 12px; font-weight: 500; color: var(--brand-700); }
+  /* 模型卡 */
+  .card2 { padding: 20px 20px 16px; }
+  .mh { display: flex; align-items: flex-start; gap: 12px; }
+  .mh .mi { width: 40px; height: 40px; border-radius: 11px; }
+  .mh h2 { font-size: 18px; line-height: 26px; font-weight: 600; }
+  .mh .sub { font-size: 13px; color: var(--text-3); margin-top: 1px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .kv2 { display: grid; grid-template-columns: 100px 1fr; }
+  .kv2 > div { padding: 10px 0; box-shadow: inset 0 -1px 0 var(--line); font-size: 13px; line-height: 20px; }
+  .kv2 > .k { color: var(--text-3); }
+  .kv2 > .v { color: var(--text); }
+  .kv2 .s { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .sect { margin-top: 18px; font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .sect .sp { flex: 1; }
+  table.vt { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.vt td { padding: 8px 0; font-size: 13px; line-height: 20px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.vt td:first-child { width: 96px; color: var(--text-3); }
+  table.vt td.st { width: 84px; }
+  table.vt tr:last-child td { border-bottom: 0; }
+  .none { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-strong); white-space: nowrap; }
+  .qc { font-size: 12px; color: var(--text-3); line-height: 18px; margin-top: 2px; }
+  svg.chart { display: block; margin-top: 8px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+  .clg { display: flex; gap: 12px; font-size: 12px; color: var(--text-2); margin-top: 6px; }
+  .clg i { display: inline-block; width: 14px; height: 0; margin-right: 5px; vertical-align: 3px; }
+  ul.lim { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 21px; color: var(--text-2); }
+  ul.lim li + li { margin-top: 3px; }
+  .twin { margin-top: 16px; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px; background: var(--surface-1); }
+  .twin .t { font-size: 13px; line-height: 20px; }
+  .twin .t b { font-weight: 600; }
+  .twin .t span { display: block; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .mfoot { margin-top: 14px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+</style></head>
+<body data-nav="vcr" data-recent="">
+<div class="app"><aside class="side" data-shell></aside><main class="main">
+  <div class="wrapx">
+    <div class="phead"><h1>虚拟临研</h1><span class="sp"></span><a class="btn primary"><svg data-i="plus" class="i xs"></svg>新建研究</a></div>
+
+    <section class="acts">
+      <a class="act"><span class="ic"><svg data-i="users"></svg></span><div><h3>创建虚拟队列</h3><p>人群定义与筛选流程</p></div><svg data-i="arrow-up-right" class="i go"></svg></a>
+      <a class="act"><span class="ic"><svg data-i="activity"></svg></span><div><h3>创建虚拟患者</h3><p>个体轨迹与不确定性</p></div><svg data-i="arrow-up-right" class="i go"></svg></a>
+      <a class="act"><span class="ic"><svg data-i="git-compare"></svg></span><div><h3>构建合成对照</h3><p>对照、诊断或缺口清单</p></div><svg data-i="arrow-up-right" class="i go"></svg></a>
+      <a class="act"><span class="ic"><svg data-i="flask-conical"></svg></span><div><h3>模拟临床试验</h3><p>方案对比与成功把握</p></div><svg data-i="arrow-up-right" class="i go"></svg></a>
+    </section>
+
+    <div class="navrow">
+      <nav class="tabs"><a>研究<span class="cnt">5</span></a><a class="on">模型与方法</a><a>试验先例</a></nav>
+      <span class="sp"></span>
+      <a class="dd">最近更新<svg data-i="chevron-down" class="i xs"></svg></a>
+    </div>
+
+    <div class="frow">
+      <div class="chips">
+        <a class="chip on">全部<b>10</b></a>
+        <a class="chip">参考仿真器<b>3</b></a>
+        <a class="chip">文献模型<b>2</b></a>
+        <a class="chip zero">数据模型<b>0</b></a>
+        <a class="chip zero">验证模型<b>0</b></a>
+        <a class="chip">方法包<b>5</b></a>
+      </div>
+      <span class="srch"><svg data-i="search" class="i xs"></svg>搜索模型、终点或方法</span>
+    </div>
+
+    <div class="lay">
+      <div class="col">
+        <!-- 参考仿真器 -->
+        <section class="box">
+          <div class="gh">参考仿真器<span class="n">3</span><span class="sp"></span><span class="tag outline tier">情景模型</span><span class="hint">最高预期用途 探索</span></div>
+          <div class="sims">
+            <div class="sim"><div class="t"><span class="mi"><svg data-i="chart-line"></svg></span><div><b>连续终点</b><span class="v">线性混合模型 · v1.0</span></div></div>
+              <div class="f"><span class="tag">模型风险 无</span><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 12/12</span></div></div>
+            <div class="sim"><div class="t"><span class="mi"><svg data-i="percent"></svg></span><div><b>二分类终点</b><span class="v">logistic 模型 · v1.0</span></div></div>
+              <div class="f"><span class="tag">模型风险 无</span><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 12/12</span></div></div>
+            <div class="sim"><div class="t"><span class="mi"><svg data-i="timer"></svg></span><div><b>事件时间终点</b><span class="v">参数生存模型 · v1.0</span></div></div>
+              <div class="f"><span class="tag">模型风险 无</span><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 12/12</span></div></div>
+          </div>
+        </section>
+
+        <!-- 文献模型 -->
+        <section class="box">
+          <div class="gh">文献模型<span class="n">2</span></div>
+          <div class="lm on">
+            <span class="mi b"><svg data-i="timer"></svg></span>
+            <div class="nm">二线 NSCLC 多西他赛组 PFS<small>Weibull · v1.2</small></div>
+            <div class="rt"><span class="tag outline tier">文献模型</span><span class="tag">研究设计支持</span></div>
+            <div class="l2">来源 3 项重建试验（伪个体 801 例）<span class="muted">·</span>事件时间 · 0–24 个月<span class="muted">·</span>外部验证 无</div>
+            <div class="l3">适用：EGFR/ALK 阴性晚期 NSCLC，一线含铂化疗 ± 免疫治疗后进展，多西他赛单药<span class="use"><svg data-i="users-round" class="i xs"></svg>EV-201</span></div>
+          </div>
+          <div class="lm">
+            <span class="mi"><svg data-i="chart-line"></svg></span>
+            <div class="nm">成人 2 型糖尿病 HbA1c 轨迹<small>线性混合模型 · v1.2</small></div>
+            <div class="rt"><span class="tag outline tier">文献模型</span><span class="tag">研究设计支持</span></div>
+            <div class="l2">来源 9 项试验<span class="muted">·</span>连续 · 52 周<span class="muted">·</span>外部验证 无</div>
+            <div class="l3">适用：HbA1c 7.5–10.5%、BMI 25–40<span class="use"><svg data-i="users-round" class="i xs"></svg>GLP-1 周制剂 III 期</span></div>
+          </div>
+          <div class="empty" style="margin-top:10px"><svg data-i="database" class="i"></svg><span><b>数据模型 0 · 验证模型 0</b>　接入授权的个体数据后可拟合、做外部验证</span><span class="sp" style="flex:1"></span><a class="btn sm secondary">接入数据</a></div>
+        </section>
+
+        <!-- 方法包 -->
+        <section class="box">
+          <div class="gh">方法包<span class="n">5</span></div>
+          <table class="mp">
+            <thead><tr><th>方法</th><th>版本</th><th>支持的终点</th><th>数值验证</th><th>用在</th></tr></thead>
+            <tbody>
+              <tr><td class="nm">熵平衡加权</td><td class="vv">v1.0</td><td class="ep">连续 · 二分类 · 事件时间</td><td><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 7/7</span></td><td class="u">真实外部对照</td></tr>
+              <tr><td class="nm">RMST 差</td><td class="vv">v1.0</td><td class="ep">事件时间</td><td><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 6/6</span></td><td class="u">文献对照 · 外部对照</td></tr>
+              <tr><td class="nm">组序贯设计（rpact）</td><td class="vv">4.x</td><td class="ep">连续 · 二分类 · 事件时间</td><td><span class="pass"><svg data-i="check" class="i xs"></svg>与 gsDesign 交叉核对</span></td><td class="u">试验 · 方案 C</td></tr>
+              <tr><td class="nm">Poisson–Gamma 入组</td><td class="vv">v1.0</td><td class="ep">入组时间</td><td><span class="pass"><svg data-i="check" class="i xs"></svg>数值用例 5/5</span></td><td class="u">入组预测</td></tr>
+              <tr><td class="nm">Guyot 重建</td><td class="vv">v1.0</td><td class="ep">事件时间</td><td><span class="pass"><svg data-i="check" class="i xs"></svg>往返测试通过</span></td><td class="u">文献对照 · 文献模型</td></tr>
+            </tbody>
+          </table>
+        </section>
+        <!-- 可信度要求 -->
+        <section class="box">
+          <div class="gh">可信度要求（按用途）<span class="sp"></span><span class="hint">证据不够时，结果的预期用途自动降一级</span></div>
+          <table class="cr">
+            <thead><tr><th style="width:120px">模型风险</th><th>至少要有的证据</th><th style="width:150px">最高预期用途</th></tr></thead>
+            <tbody>
+              <tr><td class="rk">无<div class="t12 muted" style="font-weight:400">参考仿真</div></td><td class="ev">代码验证（对照解析解）、种子可复现</td><td class="us">探索</td></tr>
+              <tr class="here"><td class="rk">低<div class="here-tag">文献模型 2 个</div></td><td class="ev">上一级 + 输入可溯源 + 敏感性分析</td><td class="us">研究设计支持</td></tr>
+              <tr><td class="rk">中</td><td class="ev">上一级 + 独立外部验证 + 模型锁定 + 模型分析计划与报告</td><td class="us">指定研究分析</td></tr>
+              <tr><td class="rk">高</td><td class="ev">上一级 + 前瞻性验证 + 完整可信度证据 + 独立复核 + 监管沟通记录</td><td class="us">申报准备（仅准备稿）</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <!-- 右：展开的模型卡 -->
+      <section class="box card2">
+        <div class="mh">
+          <span class="mi b"><svg data-i="timer" class="i l"></svg></span>
+          <div><h2>二线 NSCLC 多西他赛组 PFS</h2><div class="sub">Weibull · v1.2 · 9月27日 · 来自 EV-201 证据参数化</div></div>
+          <span class="sp" style="flex:1"></span><a class="ibtn"><svg data-i="ellipsis"></svg></a>
+        </div>
+        <div class="badges"><span class="tag outline tier">可信度层级 · 文献模型</span><span class="tag">模型风险 低</span><span class="tag brand">最高预期用途 · 研究设计支持</span></div>
+
+        <div class="kv2" style="margin-top:12px">
+          <div class="k">适用人群</div><div class="v">EGFR/ALK 阴性晚期 NSCLC，一线含铂化疗 ± 免疫治疗后进展，接受多西他赛单药<span class="s">适用范围等于来源试验人群 · 含中国人群研究 1 项</span></div>
+          <div class="k">终点</div><div class="v">无进展生存期（研究者评估，RECIST 1.1）</div>
+          <div class="k">时间范围</div><div class="v">0–24 个月，不外推</div>
+          <div class="k">输入范围</div><div class="v">人群层面模型，无个体协变量<span class="s">ECOG 0–1 · 既往 1 线治疗</span></div>
+          <div class="k">参数</div><div class="v">形状 1.18（95% 置信区间 1.05–1.32）<span class="og rec" style="margin-left:6px"><i></i>重建</span><span class="s">拟合自重建伪个体 801 例，其中事件 620</span></div>
+        </div>
+
+        <div class="sect">Weibull 拟合落在 3 条重建曲线之间<span class="sp"></span></div>
+        <svg class="chart" viewBox="0 0 412 158" width="100%">
+          <g stroke="#E4E8EC"><line x1="34" y1="12" x2="399" y2="12"/><line x1="34" y1="72" x2="399" y2="72"/></g>
+          <g font-size="12" fill="#646D77" text-anchor="end"><text x="37" y="16">100%</text><text x="37" y="76">50%</text><text x="37" y="136">0</text></g>
+          <g transform="translate(8 0)">
+          <path d="M34,12 L41.6,18.1 L49.2,25.4 L56.8,32.9 L64.4,40.3 L72,47.4 L79.6,54.2 L87.2,60.6 L94.8,66.7 L102.4,72.4 L110,77.6 L117.6,82.5 L125.2,87.1 L132.8,91.2 L140.4,95 L148,98.6 L155.6,101.8 L163.2,104.7 L170.8,107.4 L178.4,109.8 L186,112.1 L193.6,114.1 L201.2,115.9 L208.8,117.5 L216.4,119 L224,120.4 L231.6,121.6 L239.2,122.7 L246.8,123.7 L254.4,124.6 L262,125.4 L269.6,126.1 L277.2,126.7 L284.8,127.3 L292.4,127.8 L300,128.3 L307.6,128.7 L315.2,129.1 L322.8,129.4 L330.4,129.7 L338,129.9 L345.6,130.2 L353.2,130.4 L360.8,130.6 L368.4,130.7 L376,130.9 L383.6,131 L391.2,131.1 L398.8,131.2 L398.8,131.8 L391.2,131.7 L383.6,131.7 L376,131.6 L368.4,131.5 L360.8,131.5 L353.2,131.4 L345.6,131.3 L338,131.2 L330.4,131 L322.8,130.9 L315.2,130.7 L307.6,130.5 L300,130.3 L292.4,130 L284.8,129.7 L277.2,129.4 L269.6,129 L262,128.5 L254.4,128 L246.8,127.4 L239.2,126.8 L231.6,126 L224,125.1 L216.4,124.1 L208.8,123 L201.2,121.8 L193.6,120.3 L186,118.7 L178.4,116.9 L170.8,114.8 L163.2,112.5 L155.6,109.9 L148,106.9 L140.4,103.7 L132.8,100 L125.2,96 L117.6,91.5 L110,86.5 L102.4,81.1 L94.8,75.1 L87.2,68.5 L79.6,61.4 L72,53.8 L64.4,45.7 L56.8,37.1 L49.2,28.2 L41.6,19.5 L34,12 Z" fill="#DDE9F9"/>
+          <g fill="none" stroke-width="1.4" stroke-dasharray="4 3">
+            <path d="M34,12 L55.3,12 L55.3,32.7 L76.6,32.7 L76.6,58.3 L97.8,58.3 L97.8,78.7 L119.1,78.7 L119.1,90.8 L140.4,90.8 L140.4,104.6 L161.7,104.6 L161.7,116.1 L183,116.1 L183,121.4 L204.2,121.4 L204.2,128.5 L268.1,128.5 L268.1,132 L338,132" stroke="#5A626B"/>
+            <path d="M34,12 L55.3,12 L55.3,30.3 L76.6,30.3 L76.6,49.9 L97.8,49.9 L97.8,70.7 L119.1,70.7 L119.1,83 L140.4,83 L140.4,96.6 L161.7,96.6 L161.7,104 L183,104 L183,111.4 L204.2,111.4 L204.2,112.9 L225.5,112.9 L225.5,119.9 L246.8,119.9 L246.8,123.3 L310.6,123.3 L310.6,126.2 L331.9,126.2 L331.9,129.1 L338,129.1" stroke="#8A939C"/>
+            <path d="M34,12 L55.3,12 L55.3,22.5 L76.6,22.5 L76.6,52.6 L97.8,52.6 L97.8,70.3 L119.1,70.3 L119.1,87.3 L140.4,87.3 L140.4,95.5 L161.7,95.5 L161.7,105.5 L183,105.5 L183,112.6 L204.2,112.6 L204.2,121.4 L225.5,121.4 L225.5,123.2 L268.1,123.2 L268.1,126.1 L310.6,126.1 L310.6,129.1 L374.5,129.1 L374.5,132" stroke="#B4BCC5"/>
+          </g>
+          <path d="M34,12 L41.6,18.8 L49.2,26.8 L56.8,34.9 L64.4,42.9 L72,50.5 L79.6,57.7 L87.2,64.5 L94.8,70.8 L102.4,76.7 L110,82.1 L117.6,87 L125.2,91.5 L132.8,95.7 L140.4,99.4 L148,102.8 L155.6,105.9 L163.2,108.7 L170.8,111.2 L178.4,113.5 L186,115.5 L193.6,117.4 L201.2,119 L208.8,120.5 L216.4,121.8 L224,122.9 L231.6,124 L239.2,124.9 L246.8,125.7 L254.4,126.5 L262,127.1 L269.6,127.7 L277.2,128.2 L284.8,128.7 L292.4,129.1 L300,129.4 L307.6,129.7 L315.2,130 L322.8,130.3 L330.4,130.5 L338,130.7 L345.6,130.8 L353.2,131 L360.8,131.1 L368.4,131.2 L376,131.3 L383.6,131.4 L391.2,131.5 L398.8,131.5" fill="none" stroke="#2A72D0" stroke-width="1.8"/>
+          <line x1="34" y1="132" x2="399" y2="132" stroke="#BAC2CA"/>
+          <g font-size="12" fill="#646D77" text-anchor="middle"><text x="34" y="150">0</text><text x="125.2" y="150">6</text><text x="216.4" y="150">12</text><text x="307.6" y="150">18</text><text x="398.8" y="150" text-anchor="end">24 个月</text></g>
+          </g>
+        </svg>
+        <div class="clg"><span><i style="border-top:1.5px dashed var(--comp-1)"></i>重建 KM（3 项）</span><span><i style="border-top:2px solid #2A72D0"></i>Weibull 拟合</span><span><i style="height:8px;background:#DDE9F9;vertical-align:-1px;border-radius:2px"></i>95% 置信区间</span></div>
+
+        <div class="sect">验证表<span class="sp"></span></div>
+        <table class="vt">
+          <tr><td>外部验证</td><td class="st"><span class="none">无</span></td><td>尚无独立数据</td></tr>
+          <tr><td>时间外验证</td><td class="st"><span class="none">无</span></td><td>—</td></tr>
+          <tr><td>内部 · 重建质控</td><td class="st"><span class="tag ok"><svg data-i="check" class="i xs"></svg>通过</span></td><td>3 条曲线均复现原文<div class="qc">风险人数最大差 2 人 · 事件数差 1.8% · 中位数差 2.4% · |Δlog HR| 0.03</div></td></tr>
+        </table>
+
+        <div class="kv2" style="margin-top:6px">
+          <div class="k">不确定性方法</div><div class="v">参数自助法 2,000 次，种子已记录<span class="s">超出 24 个月或输入范围时拒绝预测</span></div>
+        </div>
+
+        <div class="sect">已知局限</div>
+        <ul class="lim">
+          <li>来源试验的既往免疫治疗比例低于本研究人群</li>
+          <li>重建数据不含个体协变量，不能做基线条件化预测</li>
+          <li>来源为 2021–2024 年的 3 项试验，中国人群仅 1 项</li>
+        </ul>
+
+        <div class="twin"><span class="none" style="margin-top:-1px">不适用</span><div class="t"><b>「数字孪生」标签</b><span>缺更新机制与外部验证</span></div></div>
+        <div class="mfoot"><svg data-i="users-round" class="i xs"></svg>被 1 个研究使用 · EV-201<span class="sp" style="flex:1"></span><a class="btn sm secondary"><svg data-i="copy" class="i xs"></svg>用于新研究</a></div>
+      </section>
+    </div>
+  </div>
+</main></div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script src="shell.js"></script><script src="icons.js"></script></body></html>

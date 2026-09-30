@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>虚拟患者 · GLP-1 周制剂 III 期</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页截图：外壳随内容增高 */
+  html, body { height: auto; }
+  body { position: relative; min-height: 100vh; }
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+
+  /* ── 研究页页头（v04–v07 共用，逐字相同） ── */
+  .shead { display: flex; align-items: center; gap: 10px; padding: 24px 0 16px; }
+  .shead h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.005em; margin-right: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(7, 1fr); padding: 14px 18px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--e1); }
+  .stp { position: relative; padding-top: 20px; }
+  .stp::before { content: ""; position: absolute; top: 6px; left: 14px; right: -2px; height: 2px; background: var(--n-150); }
+  .stp.done::before { background: var(--brand-300); }
+  .stp:last-child::before { display: none; }
+  .stp .k { position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--n-200); background: var(--surface); }
+  .stp.done .k { background: var(--accent); box-shadow: none; }
+  .stp.done .k::after { content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 6.5px; border-right: 1.8px solid #fff; border-bottom: 1.8px solid #fff; transform: rotate(45deg); }
+  .stp.wait .k { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--brand-100); }
+  .stp .n { font-weight: 600; font-size: 14px; }
+  .stp .m { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .stp.wait .m { color: var(--brand-700); font-weight: 500; }
+  .navrow { display: flex; align-items: flex-end; gap: 6px; margin-top: 16px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+  .dd { height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; font-size: 13px; color: var(--text-2); margin-bottom: 5px; white-space: nowrap; }
+  .dd b { color: var(--text); font-weight: 500; }
+  .dd svg { color: var(--text-3); }
+  .dd.pill { box-shadow: inset 0 0 0 1px var(--line-strong); border-radius: 15px; padding: 0 10px; }
+  .headline { margin: 18px 0 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; line-height: 26px; font-weight: 500; color: var(--n-900); }
+  .headline > svg { color: var(--brand-600); }
+  .headline .hl { color: var(--brand-700); font-weight: 600; }
+  .headline .at { color: var(--attn-strong); font-weight: 600; }
+
+  /* ── 通用 ── */
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .ctitle { font-size: 16px; line-height: 24px; font-weight: 600; }
+  .o { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--text-3); background: var(--surface-2); line-height: 1; white-space: nowrap; vertical-align: 1px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); font-weight: 400; align-items: center; flex-wrap: wrap; }
+  .lk { display: inline-block; width: 16px; height: 2px; margin-right: 6px; vertical-align: 3px; border-radius: 1px; }
+  .lb { display: inline-block; width: 16px; height: 10px; margin-right: 6px; vertical-align: -1px; border-radius: 2px; }
+  .predtag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-strong); white-space: nowrap; }
+  svg.ch { display: block; font-family: var(--font-sans); }
+
+  /* 模型条 */
+  .mrow { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 10px 14px; border-radius: 12px; background: var(--surface); box-shadow: var(--e1); }
+  .mchip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 8px; background: var(--brand-50); color: var(--brand-800); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .mchip svg { color: var(--brand-600); }
+  .mchip .lv { font-weight: 500; color: var(--brand-700); }
+  .scope { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+  .scope .dot { width: 3px; height: 3px; border-radius: 2px; background: var(--n-300); }
+  .usecap { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--line-strong); font-size: 13px; color: var(--text-2); white-space: nowrap; }
+  .usecap b { color: var(--text); font-weight: 600; }
+
+  /* 布局 */
+  .g1 { display: grid; grid-template-columns: 776px 408px; gap: 16px; }
+  .g2 { display: grid; grid-template-columns: 380px 380px 408px; gap: 16px; margin-top: 16px; }
+  .chead { display: flex; align-items: center; gap: 10px; }
+  .chead .sp { flex: 1; }
+
+  /* 虚拟患者卡 */
+  .vp h3 { font-size: 18px; line-height: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+  .vpsrc { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .bl { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; margin-top: 12px; }
+  .bl .it { display: flex; align-items: baseline; gap: 6px; padding: 7px 0; box-shadow: inset 0 -1px 0 var(--line); font-size: 13px; }
+  .bl .it .k { color: var(--text-3); width: 44px; flex: none; }
+  .bl .it .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bl .it .o { margin-left: auto; }
+  .inscope { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--text-2); }
+  .inscope svg { color: var(--ok); }
+  .pair { margin-top: 12px; padding: 12px 12px 8px; border-radius: 12px; background: var(--surface-1); }
+  .pair .t { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .cf { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; line-height: 18px; color: var(--text-2); }
+  .cf svg { color: var(--text-3); flex: none; margin-top: 1px; }
+
+  /* 敏感性 */
+  .tor { margin-top: 10px; }
+
+  /* 四个数 */
+  .band { display: grid; grid-template-columns: repeat(4, 1fr) 1.6fr; margin-top: 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--e1); }
+  .band .c4 { padding: 14px 18px; position: relative; }
+  .band .c4 + .c4::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--line); }
+  .band .lab { font-size: 12px; color: var(--text-3); }
+  .band .val { font-size: 22px; line-height: 30px; font-weight: 600; margin-top: 2px; }
+  .band .val.na { color: var(--text-4); }
+  .band .sub { font-size: 12px; color: var(--text-3); }
+</style></head>
+<body data-nav="vcr" data-recent="c">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="wrapx">
+      <!-- 研究页页头 · 开始 -->
+      <div class="shead">
+        <h1>GLP-1 周制剂 III 期：样本量与脱落情景</h1>
+        <span class="tag outline">T0 公开资料</span>
+        <span class="tag outline">研究设计支持</span>
+        <span class="sp"></span>
+        <a class="btn secondary"><svg data-i="message-square" class="i xs"></svg>对话</a>
+        <a class="ibtn"><svg data-i="ellipsis"></svg></a>
+      </div>
+      <div class="rail">
+        <div class="stp done"><span class="k"></span><div class="n">定义</div><div class="m">研究定义 v1</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">证据</div><div class="m">9 项试验</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">人群</div><div class="m">人群 v3</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">患者</div><div class="m">2,000 名</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">对照</div><div class="m">同期安慰剂</div></div>
+        <div class="stp wait"><span class="k"></span><div class="n">试验</div><div class="m">进行中</div></div>
+        <div class="stp"><span class="k"></span><div class="n">匹配</div><div class="m">未开始</div></div>
+      </div>
+      <!-- 研究页页头 · 结束 -->
+
+      <div class="navrow">
+        <nav class="tabs"><a>总览</a><a>人群</a><a class="on">虚拟患者</a><a>对照</a><a>试验</a><a>匹配与招募</a><a>数据与证据</a></nav>
+        <span class="sp"></span>
+        <a class="dd"><b>虚拟患者集 v1</b>（人群 v3）<svg data-i="chevron-down" class="i xs"></svg></a>
+        <a class="dd">对照 · 试验两种情景<svg data-i="chevron-down" class="i xs"></svg></a>
+      </div>
+
+      <div class="mrow">
+        <span class="mchip"><svg data-i="chart-spline" class="i xs"></svg>文献模型 · 成人 2 型糖尿病 HbA1c 轨迹 <span class="lv">v1.2</span></span>
+        <span class="scope"><span>适用：HbA1c 7.5–10.5%</span><i class="dot"></i><span>52 周</span><i class="dot"></i><span>BMI 25–40</span><i class="dot"></i><span>来源 9 项试验</span></span>
+        <span class="sp"></span>
+        <span class="usecap"><svg data-i="shield-check" class="i xs"></svg>预期用途上限：<b>研究设计支持</b></span>
+      </div>
+
+      <div class="headline"><svg data-i="sparkles" class="i"></svg><span>按文献模型推演 52 周：试验情景 HbA1c 平均 <span class="hl">−1.4%</span>，对照情景 −0.3%；个体差异大，两种情景的 80% 预测区间有重叠。</span></div>
+
+      <div class="g1">
+        <section class="box">
+          <div class="chead"><span class="ctitle">两种情景在前 12 周拉开，个体之间的差异随时间变大</span><span class="sp"></span><span class="o">预测</span><span class="o">合成</span></div>
+          <div class="legend" style="margin-top:8px">
+            <span><i class="lk" style="background:#0A5DC1;height:2.5px"></i>试验情景（周制剂 + 二甲双胍）</span>
+            <span><i class="lk" style="background:#5A626B;height:2.5px"></i>对照情景（安慰剂 + 二甲双胍）</span>
+            <span><i class="lb" style="background:#DDE9F9;box-shadow:inset 0 0 0 1px #BCD3F3"></i>80% 预测区间</span>
+            <span><i class="lk" style="background:#8FB5EA;height:1.5px;width:10px;margin-right:2px"></i><i class="lk" style="background:#B4BCC5;height:1.5px;width:10px"></i>个体轨迹 · 各 10 条</span>
+          </div>
+          <svg id="traj" class="ch" viewBox="0 0 736 432" width="736" height="432" style="margin-top:6px"></svg>
+        </section>
+
+        <section class="box vp">
+          <div class="chead"><h3>VP-0412</h3><span class="o">合成</span><span class="sp"></span><a class="ibtn" style="width:28px;height:28px"><svg data-i="shuffle" class="i xs"></svg></a></div>
+          <div class="vpsrc">来源：批量合成（人群 v3）· 虚拟患者集 v1 · 种子已记录</div>
+          <div class="bl">
+            <div class="it"><span class="k">年龄</span><span class="v">56 岁</span><span class="o">合成</span></div>
+            <div class="it"><span class="k">性别</span><span class="v">女</span><span class="o">合成</span></div>
+            <div class="it"><span class="k">BMI</span><span class="v">29.8</span><span class="o">合成</span></div>
+            <div class="it"><span class="k">HbA1c</span><span class="v">8.6%</span><span class="o">合成</span></div>
+            <div class="it"><span class="k">eGFR</span><span class="v">78</span><span class="o">合成</span></div>
+            <div class="it"><span class="k">病程</span><span class="v">7 年</span><span class="o">合成</span></div>
+          </div>
+          <div class="inscope"><svg data-i="circle-check" class="i xs"></svg>在模型适用范围内（HbA1c、BMI 均在范围内）</div>
+          <div class="pair">
+            <div class="t">同一组随机数，两种假设<span class="sp" style="flex:1"></span><span class="t12 muted" style="font-weight:400">52 周差 −1.1%</span></div>
+            <svg id="vp" class="ch" viewBox="0 0 344 176" width="344" height="176" style="margin-top:4px"></svg>
+          </div>
+          <div class="cf"><svg data-i="info" class="i xs"></svg><span>同一虚拟患者在两种假设下的推演，个体的两个结局不可能同时被观察到。</span></div>
+        </section>
+      </div>
+
+      <div class="g2">
+        <section class="box">
+          <div class="chead"><span class="ctitle">52 周低血糖：试验情景略高</span></div>
+          <div style="margin-top:6px"><span class="predtag"><svg data-i="chart-spline" class="i xs"></svg>模型预测，非观察</span></div>
+          <svg id="hypo" class="ch" viewBox="0 0 340 150" width="340" height="150" style="margin-top:8px"></svg>
+        </section>
+        <section class="box">
+          <div class="chead"><span class="ctitle">需要补救治疗：对照情景 52 周约 16%</span></div>
+          <div style="margin-top:6px"><span class="predtag"><svg data-i="chart-spline" class="i xs"></svg>模型预测，非观察</span></div>
+          <svg id="resc" class="ch" viewBox="0 0 340 142" width="340" height="142" style="margin-top:8px"></svg>
+          <div class="t12 muted" style="margin-top:2px">浅色带为 80% 预测区间</div>
+        </section>
+        <section class="box">
+          <div class="chead"><span class="ctitle">哪些假设影响最大</span><span class="sp"></span><span class="t12 muted">试验情景 52 周 HbA1c 变化</span></div>
+          <svg id="tor" class="ch tor" viewBox="0 0 368 176" width="368" height="176"></svg>
+        </section>
+      </div>
+
+      <section class="band">
+        <div class="c4"><div class="lab">真实患者数</div><div class="val num">0</div><div class="sub">T0 · 无患者级数据</div></div>
+        <div class="c4"><div class="lab">事件数</div><div class="val na">—</div><div class="sub">设计阶段</div></div>
+        <div class="c4"><div class="lab">有效样本量</div><div class="val na">—</div><div class="sub">设计阶段</div></div>
+        <div class="c4"><div class="lab">生成记录数</div><div class="val num">2,000</div><div class="sub">虚拟患者 · 每人两种情景</div></div>
+        <div class="c4"><div class="lab">模型参数来源</div><div class="val num" style="font-size:18px">9 项试验</div><div class="sub">组间差 −1.1%（汇总效应）</div></div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(svg, tag, a, text) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; }
+  function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var r = rng(412), gauss = function () { var u = 1 - r(), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  var BLUE = "#0A5DC1", GREY = "#5A626B", TXT3 = "#646D77", LINE = "#E4E8EC";
+  // 均值轨迹（%）：试验 52 周 −1.4，对照 −0.3
+  var mT = function (t) { return -1.63 * (1 - Math.exp(-t / 6.5)) + 0.0044 * t; };
+  var mC = function (t) { return -0.45 * (1 - Math.exp(-t / 6)) + 0.0029 * t; };
+  // 80% 预测区间半宽：随 √t 变宽；52 周时试验 ±0.9，对照 −0.8 / +0.9
+  var sb = 0.6919, se = 0.12, z = 1.2816;
+  var hw = function (t, k) { var g = Math.sqrt(t / 52), h = t > 0 ? 1 : 0; return z * Math.sqrt(Math.pow(sb * k * g, 2) + Math.pow(se * h, 2)); };
+  var visits = [0, 4, 8, 12, 16, 20, 26, 32, 40, 46, 52];
+
+  // ── 主图 ──
+  (function () {
+    var s = document.getElementById("traj");
+    var X0 = 52, X1 = 620, Y0 = 18, H = 376, vmax = 1.2, vmin = -2.8;
+    var x = function (t) { return X0 + (X1 - X0) * t / 52; };
+    var y = function (v) { return Y0 + H * (vmax - v) / (vmax - vmin); };
+    [1, 0.5, 0, -0.5, -1, -1.5, -2, -2.5].forEach(function (v) {
+      el(s, "line", { x1: X0, x2: X1, y1: y(v), y2: y(v), stroke: v === 0 ? "#BAC2CA" : LINE, "stroke-width": 1 });
+      el(s, "text", { x: X0 - 8, y: y(v) + 4, "font-size": 12, fill: TXT3, "text-anchor": "end" }, (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1));
+    });
+    [0, 13, 26, 39, 52].forEach(function (t) { el(s, "text", { x: x(t), y: Y0 + H + 20, "font-size": 12, fill: TXT3, "text-anchor": "middle" }, t === 0 ? "基线" : t + " 周"); });
+    el(s, "text", { x: X0 - 44, y: Y0 - 2, "font-size": 12, fill: TXT3 }, "HbA1c 较基线变化（%）");
+    // 区间带
+    function band(m, kLo, kHi, fill, op) {
+      var up = [], lo = [];
+      for (var t = 0; t <= 52; t += 1) { up.push(x(t) + "," + y(m(t) + hw(t, kHi))); lo.unshift(x(t) + "," + y(m(t) - hw(t, kLo))); }
+      el(s, "polygon", { points: up.concat(lo).join(" "), fill: fill, opacity: op });
+    }
+    band(mC, 0.889, 1, "#E4E8EC", 0.85);
+    band(mT, 1, 1, "#DDE9F9", 0.75);
+    // 20 条个体轨迹：同一组随机数用于两种情景
+    var B = [-1.05, -0.62, -0.38, -0.2, -0.05, 0.12, 0.3, 0.52, 0.78, 1.1];
+    var E = B.map(function () { return visits.map(function (t) { return t === 0 ? 0 : se * gauss(); }); });
+    E[3][visits.length - 1] = 0; // VP-0412
+    window.__vp = { b: -0.2, e: E[3] };
+    function path(m, b, e, kneg) { return visits.map(function (t, i) { var d = b < 0 ? b * kneg : b; return (i ? "L" : "M") + x(t).toFixed(1) + " " + y(m(t) + d * Math.sqrt(t / 52) + e[i]).toFixed(1); }).join(""); }
+    B.forEach(function (b, i) { if (i !== 3) el(s, "path", { d: path(mC, b, E[i], 0.889), fill: "none", stroke: "#939CA6", "stroke-width": 1, opacity: 0.55 }); });
+    B.forEach(function (b, i) { if (i !== 3) el(s, "path", { d: path(mT, b, E[i], 1), fill: "none", stroke: "#5690DD", "stroke-width": 1, opacity: 0.5 }); });
+    // 均值线
+    function mean(m, c) { var d = ""; for (var t = 0; t <= 52; t += 1) d += (t ? "L" : "M") + x(t).toFixed(1) + " " + y(m(t)).toFixed(1); el(s, "path", { d: d, fill: "none", stroke: c, "stroke-width": 2.5, "stroke-linecap": "round" }); }
+    mean(mC, GREY); mean(mT, BLUE);
+    // VP-0412
+    el(s, "path", { d: path(mC, -0.2, E[3], 0.889), fill: "none", stroke: "#3E454D", "stroke-width": 1.6, "stroke-dasharray": "0", opacity: 0.9 });
+    el(s, "path", { d: path(mT, -0.2, E[3], 1), fill: "none", stroke: "#0A4DA0", "stroke-width": 1.6, opacity: 0.95 });
+    var v52T = mT(52) - 0.2, v52C = mC(52) - 0.2 * 0.889;
+    el(s, "circle", { cx: x(52), cy: y(v52T), r: 3.5, fill: "#fff", stroke: "#0A4DA0", "stroke-width": 1.6 });
+    el(s, "circle", { cx: x(52), cy: y(v52C), r: 3.5, fill: "#fff", stroke: "#3E454D", "stroke-width": 1.6 });
+    el(s, "text", { x: x(46), y: y(v52T) + 17, "font-size": 11, fill: "#0A4DA0", "text-anchor": "middle", "font-weight": 600 }, "VP-0412");
+    // 端点标注
+    function endLab(v, lo, hi, c, name, dy) {
+      var yy = y(v) + dy;
+      el(s, "text", { x: X1 + 12, y: yy - 2, "font-size": 13, fill: "#1A1F25", "font-weight": 600 }, name + " " + (v < 0 ? "−" : "") + Math.abs(v).toFixed(1) + "%");
+      el(s, "text", { x: X1 + 12, y: yy + 14, "font-size": 11, fill: TXT3 }, lo + "–" + hi);
+      el(s, "rect", { x: X1 + 2, y: y(v) - 1, width: 6, height: 2.5, fill: c });
+    }
+    endLab(mC(52), "−1.1", "0.6", GREY, "对照", -6);
+    endLab(mT(52), "−2.3", " −0.5", BLUE, "试验", 4);
+  })();
+
+  // ── VP-0412 两种情景 ──
+  (function () {
+    var s = document.getElementById("vp"), e = window.__vp.e;
+    var X0 = 34, X1 = 262, Y0 = 10, H = 140, vmax = 0.6, vmin = -2.6;
+    var x = function (t) { return X0 + (X1 - X0) * t / 52; };
+    var y = function (v) { return Y0 + H * (vmax - v) / (vmax - vmin); };
+    [0, -1, -2].forEach(function (v) {
+      el(s, "line", { x1: X0, x2: X1, y1: y(v), y2: y(v), stroke: v === 0 ? "#BAC2CA" : LINE, "stroke-width": 1 });
+      el(s, "text", { x: X0 - 6, y: y(v) + 4, "font-size": 11, fill: TXT3, "text-anchor": "end" }, v === 0 ? "0" : "−" + Math.abs(v));
+    });
+    [0, 26, 52].forEach(function (t) { el(s, "text", { x: x(t), y: Y0 + H + 16, "font-size": 11, fill: TXT3, "text-anchor": t === 0 ? "start" : t === 52 ? "end" : "middle" }, t === 0 ? "基线" : t + " 周"); });
+    // 个体条件预测带（80%）：52 周 ±0.8
+    function band(m, d, fill) {
+      var up = [], lo = [];
+      for (var t = 0; t <= 52; t += 2) { var w = 0.8 * Math.sqrt(t / 52); up.push(x(t) + "," + y(m(t) + d * Math.sqrt(t / 52) + w)); lo.unshift(x(t) + "," + y(m(t) + d * Math.sqrt(t / 52) - w)); }
+      el(s, "polygon", { points: up.concat(lo).join(" "), fill: fill, opacity: 0.8 });
+    }
+    band(mC, -0.2 * 0.889, "#E4E8EC"); band(mT, -0.2, "#DDE9F9");
+    function p(m, d) { return visits.map(function (t, i) { return (i ? "L" : "M") + x(t).toFixed(1) + " " + y(m(t) + d * Math.sqrt(t / 52) + e[i]).toFixed(1); }).join(""); }
+    el(s, "path", { d: p(mC, -0.2 * 0.889), fill: "none", stroke: GREY, "stroke-width": 2 });
+    el(s, "path", { d: p(mT, -0.2), fill: "none", stroke: BLUE, "stroke-width": 2 });
+    var vt = mT(52) - 0.2, vc = mC(52) - 0.2 * 0.889;
+    el(s, "text", { x: X1 + 8, y: y(vc) + 4, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "对照 −0.5%");
+    el(s, "text", { x: X1 + 8, y: y(vt) + 4, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "试验 −1.6%");
+    el(s, "text", { x: X1 + 8, y: y(vc) + 19, "font-size": 10.5, fill: TXT3 }, "−1.3–0.3");
+    el(s, "text", { x: X1 + 8, y: y(vt) + 19, "font-size": 10.5, fill: TXT3 }, "−2.4– −0.8");
+  })();
+
+  // ── 低血糖（二分类）──
+  (function () {
+    var s = document.getElementById("hypo");
+    var X0 = 64, X1 = 324, v1 = 6;
+    var x = function (v) { return X0 + (X1 - X0) * v / v1; };
+    [0, 2, 4, 6].forEach(function (v) {
+      el(s, "line", { x1: x(v), x2: x(v), y1: 10, y2: 112, stroke: LINE, "stroke-width": 1 });
+      el(s, "text", { x: x(v), y: 130, "font-size": 12, fill: TXT3, "text-anchor": "middle" }, v + "%");
+    });
+    function row(yy, name, p, lo, hi, c, fill) {
+      el(s, "text", { x: 0, y: yy + 4, "font-size": 13, fill: "#3E454D" }, name);
+      el(s, "rect", { x: x(lo), y: yy - 7, width: x(hi) - x(lo), height: 14, rx: 3, fill: fill });
+      el(s, "circle", { cx: x(p), cy: yy, r: 5, fill: "#fff", stroke: c, "stroke-width": 2.2 });
+      el(s, "text", { x: x(hi) + 8, y: yy + 4, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, p.toFixed(1) + "%");
+      el(s, "text", { x: x(p), y: yy + 24, "font-size": 11, fill: TXT3, "text-anchor": "middle" }, "80% 预测区间 " + lo.toFixed(1) + "–" + hi.toFixed(1));
+    }
+    row(30, "对照情景", 2.4, 1.3, 3.9, GREY, "#E4E8EC");
+    row(80, "试验情景", 3.1, 1.8, 4.8, BLUE, "#DDE9F9");
+    el(s, "text", { x: X1, y: 148, "font-size": 11, fill: TXT3, "text-anchor": "end" }, "52 周内至少 1 次低血糖的比例");
+  })();
+
+  // ── 需要补救治疗（事件时间，累积比例）──
+  (function () {
+    var s = document.getElementById("resc");
+    var X0 = 34, X1 = 262, Y0 = 22, H = 100, vmax = 25;
+    var x = function (t) { return X0 + (X1 - X0) * t / 52; };
+    var y = function (v) { return Y0 + H * (vmax - v) / vmax; };
+    [0, 10, 20].forEach(function (v) {
+      el(s, "line", { x1: X0, x2: X1, y1: y(v), y2: y(v), stroke: v === 0 ? "#BAC2CA" : LINE, "stroke-width": 1 });
+      el(s, "text", { x: X0 - 6, y: y(v) + 4, "font-size": 11, fill: TXT3, "text-anchor": "end" }, v + "%");
+    });
+    [0, 26, 52].forEach(function (t) { el(s, "text", { x: x(t), y: Y0 + H + 16, "font-size": 11, fill: TXT3, "text-anchor": t === 0 ? "start" : t === 52 ? "end" : "middle" }, t === 0 ? "基线" : t + " 周"); });
+    var F = function (t, lam) { return 100 * (1 - Math.exp(-Math.pow(t / lam, 1.6))); };
+    function curve(lam, loK, hiK, c, fill) {
+      var up = [], lo = [], d = "";
+      for (var t = 0; t <= 52; t += 1) { var f = F(t, lam); up.push(x(t) + "," + y(f * hiK)); lo.unshift(x(t) + "," + y(f * loK)); d += (t ? "L" : "M") + x(t).toFixed(1) + " " + y(f).toFixed(1); }
+      el(s, "polygon", { points: up.concat(lo).join(" "), fill: fill, opacity: 0.85 });
+      el(s, "path", { d: d, fill: "none", stroke: c, "stroke-width": 2 });
+    }
+    curve(154.9, 11 / 16, 22 / 16, GREY, "#E4E8EC");
+    curve(383.8, 2 / 4, 7 / 4, BLUE, "#DDE9F9");
+    el(s, "text", { x: X1 + 8, y: y(16) + 4, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "对照 16%");
+    el(s, "text", { x: X1 + 8, y: y(16) + 19, "font-size": 10.5, fill: TXT3 }, "11–22");
+    el(s, "text", { x: X1 + 8, y: y(4) + 2, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "试验 4%");
+    el(s, "text", { x: X1 + 8, y: y(4) + 17, "font-size": 10.5, fill: TXT3 }, "2–7");
+    el(s, "text", { x: 0, y: 10, "font-size": 11, fill: TXT3 }, "累积比例（%）");
+  })();
+
+  // ── 龙卷风图：试验情景 52 周 HbA1c 变化，基准 −1.4 ──
+  (function () {
+    var s = document.getElementById("tor");
+    var X0 = 128, X1 = 352, vmin = -1.8, vmax = -1.0;
+    var x = function (v) { return X0 + (X1 - X0) * (v - vmin) / (vmax - vmin); };
+    var rows = [
+      ["处理效应", "−0.8～−1.4", -1.7, -1.1, "−1.4", "−0.8"],
+      ["基线斜率", "−0.1～−0.5", -1.6, -1.2, "−0.5", "−0.1"],
+      ["脱落率", "8%～16%", -1.45, -1.35, "8%", "16%"],
+      ["基线 HbA1c 分布", "均值 8.0～8.4%", -1.43, -1.37, "8.4%", "8.0%"]
+    ];
+    [-1.8, -1.6, -1.4, -1.2, -1.0].forEach(function (v) {
+      el(s, "line", { x1: x(v), x2: x(v), y1: 6, y2: 150, stroke: v === -1.4 ? "#1A1F25" : LINE, "stroke-width": v === -1.4 ? 1.2 : 1 });
+      el(s, "text", { x: x(v), y: 168, "font-size": 12, fill: v === -1.4 ? "#1A1F25" : TXT3, "text-anchor": "middle", "font-weight": v === -1.4 ? 600 : 400 }, "−" + Math.abs(v).toFixed(1));
+    });
+    rows.forEach(function (rw, i) {
+      var yy = 22 + i * 36;
+      el(s, "text", { x: 0, y: yy, "font-size": 13, fill: "#1A1F25" }, rw[0]);
+      el(s, "text", { x: 0, y: yy + 15, "font-size": 11, fill: TXT3 }, rw[1]);
+      el(s, "rect", { x: x(rw[2]), y: yy - 8, width: x(-1.4) - x(rw[2]), height: 16, fill: "#2A72D0", rx: 0 });
+      el(s, "rect", { x: x(-1.4), y: yy - 8, width: x(rw[3]) - x(-1.4), height: 16, fill: "#BCD3F3" });
+      if (x(-1.4) - x(rw[2]) > 26) el(s, "text", { x: x(rw[2]) + 5, y: yy + 4, "font-size": 11, fill: "#fff" }, rw[4]);
+      else el(s, "text", { x: x(rw[2]) - 4, y: yy + 4, "font-size": 11, fill: TXT3, "text-anchor": "end" }, rw[4]);
+      if (x(rw[3]) - x(-1.4) > 26) el(s, "text", { x: x(rw[3]) - 5, y: yy + 4, "font-size": 11, fill: "#0A4DA0", "text-anchor": "end" }, rw[5]);
+      else el(s, "text", { x: x(rw[3]) + 4, y: yy + 4, "font-size": 11, fill: TXT3 }, rw[5]);
+    });
+  })();
+})();
+</script>
+<script src="shell.js"></script><script src="icons.js"></script>
+</body></html>
