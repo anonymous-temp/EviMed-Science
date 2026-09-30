@@ -28,6 +28,8 @@ import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
+const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package'])
+
 /**
  * Every check a gate verdict can attribute a finding to.
  *
@@ -259,7 +261,7 @@ function proseHygieneIssues(input, proseFiles) {
     // A data report must identify its actual columns and coding. Arbitrary
     // scientific JSON keys cannot distinguish those names from internal schema
     // vocabulary. Explicit runtime leakage above remains checked for every kind.
-    const dataReport = input.contractKind === 'statistical-analysis-package' || input.contractKind === 'dataset-scoping-package'
+    const dataReport = NATIVE_DATA_CONTRACTS.has(input.contractKind)
     const named = dataReport ? null : packageVocabularyInProse(body, vocabulary ??= packageVocabulary(input))
     if (named) {
       issues.push(issue(
@@ -553,8 +555,9 @@ function structuredOutputIssues(input) {
         { severity: 'advisory', path, check: 'structured-output' }))
       continue
     }
-    // Native execution has its own provenance contributor, not a specialist job.
-    if (input.contractKind === 'statistical-analysis-package' && path === 'analysis-run.json') continue
+    // Native data analysis/scoping has no specialist engine job to name. Its
+    // JSON must still parse; optional execution details are checked separately.
+    if (NATIVE_DATA_CONTRACTS.has(input.contractKind)) continue
     if (!path.endsWith('-run.json')) continue
     const receipt = json(input, path)
     if (!isRecord(receipt)) {

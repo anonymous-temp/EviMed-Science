@@ -136,3 +136,11 @@ test('the finding is advisory: a package with unsupported numbers is still deliv
   assert.ok(verdict.issues.some((/** @type {any} */ entry) => entry.code === 'dataset_number_unsupported'))
   assert.equal(verdict.metrics.datasetNumbersUnsupported, 1)
 })
+
+
+test('native scoping provenance requires no invented specialist job while malformed JSON stays visible', () => {
+  const result = gate({ 'scoping-run.json': JSON.stringify({ executionMode: 'native', status: 'completed', inputs: ['data/patients.csv'], scripts: ['data-profile.py'] }) })
+  assert.ok(!result.issues.some(issue => issue.code.startsWith('deliverable_run_receipt_')))
+  const malformed = gate({ 'scoping-run.json': '{broken' })
+  assert.ok(malformed.issues.some(issue => issue.code === 'deliverable_json_unparseable'))
+})

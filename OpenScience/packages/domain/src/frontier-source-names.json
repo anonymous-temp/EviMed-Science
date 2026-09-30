@@ -117,7 +117,6 @@
     "Amgen Inc.": "安进",
     "Gilead Sciences, Inc.": "吉利德",
     "AbbVie Inc.": "艾伯维",
-    "Moderna, Inc.": "莫德纳",
     "BioNTech SE": "BioNTech",
     "Takeda Pharmaceutical Company": "武田",
     "Boehringer Ingelheim": "勃林格殷格翰",
@@ -126,6 +125,7 @@
     "信达生物制药": "信达生物"
   },
   "sources": {
+    "moderna-news": "莫德纳资讯",
     "ctgov-phase3-new-registrations": "ClinicalTrials.gov",
     "ctgov-results-first-posted": "ClinicalTrials.gov",
     "ctgov-china-interventional": "ClinicalTrials.gov",
