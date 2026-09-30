@@ -1,4 +1,3 @@
-from dataclasses import replace
 from datetime import datetime, timezone
 import gzip
 import json
@@ -18,6 +17,8 @@ NOW = datetime(2026, 9, 30, tzinfo=timezone.utc)
 @pytest.mark.parametrize('sid', ['openalex-medicine-newest', 'openalex-medicine-most-cited-30d'])
 def test_openalex_real_bounded_medical_work_lists(sid):
     source = SOURCES[sid]
+    assert 'to_publication_date:{today:%Y-%m-%d}' in source.config['url']
+    assert 'type:article%7Creview' in source.config['url']
     body = gzip.decompress((ROOT / f'tests/fixtures/source-expansion-20260930/{sid}-bounded.body.gz').read_bytes())
     payload = json.loads(body)
     result = FetchResult(RequestSpec(source.config['url']), source.config['url'], 200, {'content-type': 'application/json'}, body, NOW)

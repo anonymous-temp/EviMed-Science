@@ -7025,6 +7025,110 @@
       "detail": "Observed protected probe outcome: parse-error; json_api_family_unmapped_generic.",
       "evidence": [
         {
+          "group": "api-original",
+          "id": "moderna-news",
+          "at": "2026-09-30T02:46:01.406998+00:00",
+          "access": "json-api",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 2.87,
+          "captures": [
+            {
+              "url": "https://news.modernatx.com",
+              "status": 200,
+              "sha256": "4b22c7c6bd91dd048f02b6d823e282c5a1eca68da48dd6d792e9e88c87a57d39",
+              "headers": {
+                "content-type": "text/html;charset=utf-8"
+              },
+              "file": "moderna-news-api-original-0.body.gz",
+              "bytes": 179845
+            }
+          ]
+        },
+        {
+          "group": "api-bounded",
+          "id": "moderna-news",
+          "at": "2026-09-30T02:54:33.810043+00:00",
+          "access": "html-list",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 5.53,
+          "captures": [
+            {
+              "url": "https://news.modernatx.com",
+              "status": 200,
+              "sha256": "4b22c7c6bd91dd048f02b6d823e282c5a1eca68da48dd6d792e9e88c87a57d39",
+              "headers": {
+                "content-type": "text/html;charset=utf-8"
+              },
+              "file": "moderna-news-api-bounded-0.body.gz",
+              "bytes": 179845
+            }
+          ]
+        },
+        {
+          "group": "iframe",
+          "id": "moderna-news",
+          "at": "2026-09-30T02:57:07.873355+00:00",
+          "access": "html-list",
+          "egress": "direct",
+          "outcome": "readable",
+          "entries": 0,
+          "samples": [],
+          "seconds": 1.99,
+          "captures": [
+            {
+              "url": "https://feeds.issuerdirect.com/news.html?symbol=MRNA&news_template=plain&headline_size=16&exclude_headlines=Global%20AI,Tectonic%20Therapeutic,Platform%20Biotech%20Models%20Draw&text_color=376586&link_color=053f68&per_page=10&starttime=2026-01-01&endtime=2026-12-31",
+              "status": 200,
+              "sha256": "47816e0951b94fa1f35371c0c7e3d1ca3b396c9f8fa0449fb61363dd9a17268a",
+              "headers": {
+                "content-type": "text/html"
+              },
+              "file": "moderna-news-iframe-0.body.gz",
+              "bytes": 7765
+            }
+          ]
+        },
+        {
+          "group": "publisher-js",
+          "id": "moderna-news",
+          "at": "2026-09-30T02:58:52.179191+00:00",
+          "access": "html-list",
+          "egress": "direct",
+          "outcome": "readable",
+          "entries": 0,
+          "samples": [],
+          "seconds": 4.4,
+          "captures": [
+            {
+              "url": "https://feeds.issuerdirect.com/assets/js/news.js",
+              "status": 200,
+              "sha256": "6b550a53e649069cbe54152c03633ccc10bdf6c417b6b8ae1a3334f814c57cd4",
+              "headers": {
+                "content-type": "application/javascript"
+              },
+              "file": "moderna-news-publisher-js-0.body.gz",
+              "bytes": 58783
+            }
+          ]
+        },
+        {
           "group": "previous",
           "id": "moderna-news",
           "at": "2026-09-29T14:14:35.103703+00:00",
@@ -7997,10 +8101,101 @@
     },
     {
       "id": "openalex-medicine-most-cited-30d",
-      "decision": "deferred",
-      "reason": "probe_json_api_family_unmapped_openalex",
-      "detail": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex.",
+      "decision": "enabled",
+      "kind": "entry-list",
+      "captureGroup": "api-bounded",
+      "entries": 50,
+      "dated": 50,
+      "samples": [
+        {
+          "index": 0,
+          "title": "cis-Diamminedichloroplatinum(II)-induced DNA adducts in peripheral leukocytes from seven cancer patients: Quantitative immunochemical detection of the adduct induction and removal after a single dose of cis-diamminedichloroplatinum(II)",
+          "url": "https://doi.org/10.82135/tno-230308",
+          "date": "2026-09-28T00:00:00+00:00",
+          "summary": null
+        },
+        {
+          "index": 25,
+          "title": "Prenatal stress and gestational epigenetic age: no evidence of associations based on a large prospective multi-cohort study",
+          "url": "https://doi.org/10.1038/s41398-026-04405-8",
+          "date": "2026-09-08T00:00:00+00:00",
+          "summary": null
+        },
+        {
+          "index": 49,
+          "title": "Clinical pathways for cognitively unimpaired individuals with Alzheimer's disease neuropathological change",
+          "url": "https://doi.org/10.1016/s1474-4422(26)00248-6",
+          "date": "2026-09-09T00:00:00+00:00",
+          "summary": null
+        }
+      ],
+      "config": {
+        "family": "openalex",
+        "lookback_days": 30,
+        "max_pages": 1,
+        "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:{since:%Y-%m-%d},to_publication_date:{today:%Y-%m-%d},type:article%7Creview&sort=cited_by_count:desc&per-page=50"
+      },
+      "access": "json-api",
+      "egress": "direct",
       "evidence": [
+        {
+          "group": "api-original",
+          "id": "openalex-medicine-most-cited-30d",
+          "at": "2026-09-30T02:46:01.418733+00:00",
+          "access": "json-api",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 3.02,
+          "captures": [
+            {
+              "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:2026-08-31&sort=cited_by_count:desc&per-page=50",
+              "status": 200,
+              "sha256": "9d6512cecd9af09215d6791583df988c5662192e2435cf031ce7df0b81da07c6",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "file": "openalex-medicine-most-cited-30d-api-original-0.body.gz",
+              "bytes": 592691
+            }
+          ]
+        },
+        {
+          "group": "api-bounded",
+          "id": "openalex-medicine-most-cited-30d",
+          "at": "2026-09-30T02:54:33.813634+00:00",
+          "access": "json-api",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 3.76,
+          "captures": [
+            {
+              "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:2026-08-31,to_publication_date:2026-09-30,type:article%7Creview&sort=cited_by_count:desc&per-page=50",
+              "status": 200,
+              "sha256": "027396c0525480752347d55915f7ec21405273c0b519c2170a9d5013a9b87766",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "file": "openalex-medicine-most-cited-30d-api-bounded-0.body.gz",
+              "bytes": 1473503
+            }
+          ]
+        },
         {
           "group": "previous",
           "id": "openalex-medicine-most-cited-30d",
@@ -8014,10 +8209,101 @@
     },
     {
       "id": "openalex-medicine-newest",
-      "decision": "deferred",
-      "reason": "probe_json_api_family_unmapped_openalex",
-      "detail": "Observed protected probe outcome: parse-error; json_api_family_unmapped_openalex.",
+      "decision": "enabled",
+      "kind": "entry-list",
+      "captureGroup": "api-bounded",
+      "entries": 50,
+      "dated": 50,
+      "samples": [
+        {
+          "index": 0,
+          "title": "ASAP CRN Cloud Release",
+          "url": "https://doi.org/10.5281/zenodo.8384742",
+          "date": "2026-09-30T00:00:00+00:00",
+          "summary": null
+        },
+        {
+          "index": 25,
+          "title": "The Integration, Utility, and Ethical Challenges of Artificial Intelligence Tools in Academic Libraries",
+          "url": "https://doi.org/10.5281/zenodo.22933810",
+          "date": "2026-09-30T00:00:00+00:00",
+          "summary": null
+        },
+        {
+          "index": 49,
+          "title": "Association of Serum Asprosin, Chemerin, and Omentin-1 Levels with Insulin Resistance and Oxidative Stress in Adults with Obesity: A Comparative Cross-Sectional Study",
+          "url": "https://doi.org/10.5281/zenodo.23016753",
+          "date": "2026-09-30T00:00:00+00:00",
+          "summary": null
+        }
+      ],
+      "config": {
+        "family": "openalex",
+        "lookback_days": 7,
+        "max_pages": 1,
+        "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:{since:%Y-%m-%d},to_publication_date:{today:%Y-%m-%d},type:article%7Creview&sort=publication_date:desc&per-page=50"
+      },
+      "access": "json-api",
+      "egress": "direct",
       "evidence": [
+        {
+          "group": "api-original",
+          "id": "openalex-medicine-newest",
+          "at": "2026-09-30T02:46:01.412405+00:00",
+          "access": "json-api",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 1.71,
+          "captures": [
+            {
+              "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:2026-09-23&sort=publication_date:desc&per-page=50",
+              "status": 200,
+              "sha256": "ea45b6053990cc9c6b63d5e0b1967a5f0671242aa82aec800ab90a4658f06cf6",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "file": "openalex-medicine-newest-api-original-0.body.gz",
+              "bytes": 564007
+            }
+          ]
+        },
+        {
+          "group": "api-bounded",
+          "id": "openalex-medicine-newest",
+          "at": "2026-09-30T02:54:33.813055+00:00",
+          "access": "json-api",
+          "egress": "direct",
+          "attempts": [
+            {
+              "egress": "direct",
+              "outcome": "readable",
+              "status": 200
+            }
+          ],
+          "outcome": "readable",
+          "usedEgress": "direct",
+          "seconds": 1.88,
+          "captures": [
+            {
+              "url": "https://api.openalex.org/works?filter=primary_topic.field.id:fields/27,from_publication_date:2026-09-23,to_publication_date:2026-09-30,type:article%7Creview&sort=publication_date:desc&per-page=50",
+              "status": 200,
+              "sha256": "d6103a8ac177916aa9f55f00e425aa6c22bc13eb15368168307a850d642f35e6",
+              "headers": {
+                "content-type": "application/json"
+              },
+              "file": "openalex-medicine-newest-api-bounded-0.body.gz",
+              "bytes": 748876
+            }
+          ]
+        },
         {
           "group": "previous",
           "id": "openalex-medicine-newest",
