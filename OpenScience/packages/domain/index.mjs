@@ -26,6 +26,29 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+/** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
+/** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
+/** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */
+/** @typedef {import('./src/extensions.mjs').ExtensionProofIdentity} ExtensionProofIdentity */
+
+export {
+  EXTENSION_EXECUTION_CLASSES,
+  EXTENSION_EVIDENCE_STATES,
+  EXTENSION_APPLY_PHASES,
+  EXTENSION_PRODUCT_KINDS,
+  EXTENSION_JOB_KINDS,
+  EXTENSION_SAAS_CASE_IDS,
+  ExtensionContractError,
+  canonicalExtensionCoordinate,
+  validateExtensionInstallRequest,
+  validateSkillWriteRequest,
+  personalSkillName,
+  extensionGenerationIdentity,
+  validateExtensionProofIdentity,
+  extensionProofDigest,
+  qualifyExtensionProof,
+} from './src/extensions.mjs'
+
 export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'
 
 
@@ -107,7 +130,7 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 24 exports
+// errorCodes — 25 exports
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
@@ -116,6 +139,7 @@ export {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,

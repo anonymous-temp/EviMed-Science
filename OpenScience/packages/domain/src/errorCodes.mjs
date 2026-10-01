@@ -1256,7 +1256,13 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
  * return" and once as "what a researcher can be shown" — is what keeps the
  * second list from being derived by accident and drifting.
  */
+export const EXTENSION_ERROR_CODES = Object.freeze([
+  'extension_contract_invalid', 'extension_proof_untrusted',
+  'extension_proof_stale', 'extension_proof_incomplete',
+])
+
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
+  ...EXTENSION_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
@@ -1323,6 +1329,10 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  extension_contract_invalid: '扩展信息格式不正确，请检查后重新提交。',
+  extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
+  extension_proof_stale: '扩展或运行环境版本已变化，兼容记录需要重新核对。',
+  extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
@@ -2047,6 +2057,8 @@ export function errorCodeOutcome(code) {
   // nothing to share yet, an account that is not here, a missing password —
   // never as a verdict on a run.
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
+  // Optional extension refusals affect that operation, not research delivery.
+  if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
