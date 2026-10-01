@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "cowork-portable",
+  "repository": "https://github.com/Jesse-njx/dsh-cowork",
+  "commit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+  "sourceArchiveSha256": "20e4b808fe3c97f5de3546fee200e22cc6639ffa47eef497c5c855e3cc26046c",
+  "upstreamLockSha256": "778574f95773f5297e3725434ea7067ad6cdd6c44314e2d10c0bcc3142e797c9",
+  "license": "MIT",
+  "executionClass": "isolated-tool",
+  "operations": {
+    "doc_read": {"formats": ["xlsx", "ipynb", "docx", "pdf"], "identity": "owned opaque resource ID"},
+    "doc_write": {"formats": ["xlsx", "ipynb"], "mode": "create", "identity": "owned new target ID", "codeExecution": false}
+  },
+  "resourceClasses": ["public", "aggregate"],
+  "requires": {"network": "none", "rootfs": "read-only", "user": "10001:10001", "memory": "512m", "cpus": 1, "pids": 64, "inputBytes": 8388608, "outputBytes": 8388608},
+  "servingKernelVendorImports": false,
+  "canonicalIntakeReplacement": false,
+  "docxPdfExportProvider": false,
+  "saasQualification": "unverified",
+  "activation": "not-wired"
+}
