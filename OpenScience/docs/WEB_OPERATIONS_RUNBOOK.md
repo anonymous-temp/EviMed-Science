@@ -825,13 +825,15 @@ enabling a source proves a successful fetch. Frontier model work respects the
 daily ceiling, so title-only publications and deferred edits can remain after
 the acceptance budget is spent.
 
-Scientific review of actual published outputs withdrew six identified erroneous
+Scientific review of actual published outputs withdrew twelve identified erroneous
 items through authenticated `/api/frontier/ops/items/:id/withdraw` calls. Source
 material and the withdrawal reasons remain preserved. The final sweep found no
 remaining published occurrence of the identified testosterone mistranslation.
+The dexamethasone sweep retained the one original source that explicitly names
+the sodium-phosphate formulation while withdrawing unsupported salt assignments.
 The erroneous generated drug name was corrected through the existing glossary
-seeder's `handRows`/`applyRows` path: one replacement and one form-specific new
-entry, leaving 2,510 other rows unchanged. Generated glossary names are now
+seeder's `handRows`/`applyRows` path: two replacements and one form-specific new
+entry, leaving 2,509 other rows unchanged. Generated glossary names are now
 candidates, not mandatory translations; even hand-kept names must match the
 source's actual substance, salt, ester and formulation. Prompt changes do not
 constitute independent scientific verification or silently retranslate cached
@@ -851,7 +853,7 @@ verified archive checksums, successful clone cleanup, and no omitted file
 content. Writers were quiesced for the separate snapshots and resumed after
 verification; the snapshots are not one cross-component atomic transaction.
 The file-backup unit now keeps `OPEN_SCIENCE_BACKUP_STRICT=true`. The receipt is
-`build/evidence-20261001/final-cutover-tools/final-content-backup.json`.
+`build/evidence-20261001/final-cutover-tools/final-content-backup-v2.json`.
 
 For rollback, stop writers and check for later operator changes before restoring
 the saved environment/units and restarting the retained controller/API and
