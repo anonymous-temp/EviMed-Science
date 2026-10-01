@@ -773,6 +773,9 @@ function upstreamUrl(base, production = false) {
   return parsed;
 }
 
+// Streaming control-plane callers share the gateway's provider URL policy.
+export { upstreamUrl as deepSeekChatUrl };
+
 function mappedUpstreamStatus(status) {
   if (status === 429) return 429;
   if ([400, 408, 413, 422].includes(status)) return status;

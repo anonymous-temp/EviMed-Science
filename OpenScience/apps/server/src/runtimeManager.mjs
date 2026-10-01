@@ -1950,7 +1950,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       screeningBatchSize: config.screeningBatchSize,
     },
     flags: {
-      hosted: Boolean(config.production),
+      // The browser proxy enforces hosted method restrictions in test deployments too.
+      hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
       // Read from config, not written as literals. `requiredEnforcement` in
       // this same object literal already did, which is what makes this a local
       // omission rather than an architectural one: an operator could set
@@ -2539,7 +2540,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // container's env that nothing reads, which is the same defect as a
           // row reading a name nobody sends, pointing the other way.
           flags: {
-            hosted: Boolean(config.production),
+            hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),

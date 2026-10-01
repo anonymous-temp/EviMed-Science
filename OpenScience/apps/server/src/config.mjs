@@ -429,13 +429,13 @@ function geoSettings(overrides) {
 }
 
 /**
- * The independent reviewer (plan 2026-09-22, tiered review): a model of
- * another family than the kernel's, called by the control plane on a
+ * The reviewer (plan 2026-09-22, tiered review), called by the control plane on a
  * submitted deliverable (L2/L3) and on a cited or medicine-naming reply (L1).
  *
  * - Off by default, like every module that calls a paid model: it needs
  *   PostgreSQL for its ledger of findings and answers, and the operator's
- *   DashScope key.
+ *   selected provider's key. DashScope preserves the cross-family default;
+ *   an explicit DeepSeek deployment reuses the control plane's DeepSeek key.
  * - The model and endpoint default to the pin in `deps-version.json`
  *   (`dashscope.review`), recorded off the live wire; a deployment may name
  *   another model, and the price list decides whether it can be billed.
@@ -461,10 +461,19 @@ function reviewSettings(overrides) {
     }
     return number;
   };
-  const pin = depsVersions.dashscope?.review ?? {};
+  const provider = String(read("reviewProvider", "OPEN_SCIENCE_REVIEW_PROVIDER", "dashscope")).trim();
+  if (!["dashscope", "deepseek"].includes(provider)) {
+    throw new Error("OPEN_SCIENCE_REVIEW_PROVIDER must be dashscope or deepseek.");
+  }
+  const pin = provider === "deepseek"
+    ? { apiBase: overrides.deepseekBaseUrl ?? process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL ?? depsVersions.deepseek.apiBase, model: "deepseek-v4-pro", thinkingBudget: 16_000 }
+    : depsVersions.dashscope?.review ?? {};
   const model = String(read("reviewModel", "OPEN_SCIENCE_REVIEW_MODEL", pin.model ?? "")).trim();
   if (!/^[a-z0-9][a-z0-9.-]{1,63}$/.test(model)) {
     throw new Error(`OPEN_SCIENCE_REVIEW_MODEL must be a model id, got ${JSON.stringify(model)}.`);
+  }
+  if (provider === "deepseek" && !supportedDeepSeekModels.has(model)) {
+    throw new Error("OPEN_SCIENCE_REVIEW_MODEL must be a certified DeepSeek model.");
   }
   const apiBase = String(read("reviewApiBase", "OPEN_SCIENCE_REVIEW_API_BASE", pin.apiBase ?? "")).trim().replace(/\/+$/, "");
   let parsed = null;
@@ -474,6 +483,7 @@ function reviewSettings(overrides) {
   }
   return {
     reviewEnabled: reviewConfigured(overrides),
+    reviewProvider: provider,
     reviewModel: model,
     reviewApiBase: apiBase,
     reviewEditorTimeoutMs: integer("reviewEditorTimeoutMs", "OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS", 900_000, 60_000, 3_600_000),

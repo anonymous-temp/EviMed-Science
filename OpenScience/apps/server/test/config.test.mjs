@@ -11,6 +11,16 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("review provider selects compatible defaults and refuses invalid provider/model pairs", () => {
+  const config = loadConfig({ rootDir: repoRoot, reviewProvider: "deepseek", deepseekApiKey: "test-key" });
+  assert.equal(config.reviewProvider, "deepseek");
+  assert.equal(config.reviewModel, "deepseek-v4-pro");
+  assert.equal(config.reviewApiBase, "https://api.deepseek.com");
+  assert.equal(config.dashscopeApiKey, "");
+  assert.throws(() => loadConfig({ rootDir: repoRoot, reviewProvider: "unknown" }), /OPEN_SCIENCE_REVIEW_PROVIDER/);
+  assert.throws(() => loadConfig({ rootDir: repoRoot, reviewProvider: "deepseek", reviewModel: "qwen3.8-max-0902" }), /certified DeepSeek/);
+});
+
 async function withoutRuntimeEnvironment(run) {
   const names = ["OPEN_SCIENCE_RUNTIME_MODE", "OPEN_SCIENCE_OPENCODE_BIN"];
   const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
