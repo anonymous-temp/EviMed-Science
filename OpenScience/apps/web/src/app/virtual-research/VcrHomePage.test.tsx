@@ -147,7 +147,8 @@ describe("招募待办 and 最近复核", () => {
     expect(within(todos).getByText("中心 07 的资料还没有核实过")).toBeInTheDocument();
     expect(within(todos).getByRole("link", { name: "去确认" })).toHaveAttribute("href", "/app/virtual-research/std_1/matching");
     expect(screen.getByText("最近复核")).toBeInTheDocument();
-    expect(screen.getByText("统计复核：假设卡「orr_control」v1")).toBeInTheDocument();
+    expect(screen.getByText("统计复核：假设卡「orr_control」v1 · 已复核")).toBeInTheDocument();
+    expect(screen.queryByText(/u_stat/)).toBeNull();
   });
 
   // Only where the server sent them: a recruiting role, not everyone's column.

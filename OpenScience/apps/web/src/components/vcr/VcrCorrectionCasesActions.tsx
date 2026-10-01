@@ -32,7 +32,7 @@ export function VcrCorrectionCasesActions({ studyId }: { studyId: string }) {
       {dataset?.cases.some(item => item.partition === 'held_out') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void replay()}>重放留出案例</Button>}
       {dataset?.selection.more && dataset.selection.nextCursor && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void exportCases(dataset.selection.nextCursor ?? '0')}>导出下一页</Button>}
     </div>
-    {busy && <p role="status" className="text-caption text-text-3">正在处理纠正案例…</p>}
+    {busy && <p role="status" className="text-caption text-text-3">正在处理纠正案例</p>}
     {error && <p role="alert" className="text-caption text-error">{error}</p>}
     {dataset?.cases.length === 0 && <p className="text-caption text-text-3">还没有可导出的已冻结纠正案例。</p>}
     {!!dataset?.selection.legacyUnfrozen && <p className="text-caption text-text-3">部分纠正没有完整输入快照，未纳入本次导出。</p>}

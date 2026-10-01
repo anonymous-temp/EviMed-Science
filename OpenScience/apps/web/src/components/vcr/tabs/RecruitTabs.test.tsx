@@ -628,12 +628,13 @@ describe("数据与证据 — the card's §6.1 fields", () => {
     expect(screen.queryByText("下游结果随版本重算")).toBeNull();
   });
 
-  it("says who countersigned which version, and when", async () => {
+  it("shows the reviewed version and time without inventing an unavailable display name", async () => {
     drawTab(<DataTab studyId={STUDY_ID} study={study()} />, dataPath("orr_control"));
     await screen.findByRole("heading", { name: "对照组 ORR" });
-    // The presenter names the reviewer as the store recorded it (an account id), then the day.
-    expect(within(detail()).getByText("已复核（u_stat 昨天）")).toBeInTheDocument();
-    expect(screen.getByText("统计复核 · u_stat · 昨天 · 针对版本 1")).toBeInTheDocument();
+    // A missing display name stays absent; immutable account ids are not names.
+    expect(within(detail()).getByText("已复核（昨天）")).toBeInTheDocument();
+    expect(screen.getByText("统计复核 · 昨天 · 针对版本 1")).toBeInTheDocument();
+    expect(screen.queryByText(/u_stat/)).toBeNull();
     // A card already countersigned offers no second countersignature.
     expect(screen.queryByRole("button", { name: "签注复核" })).toBeNull();
   });
