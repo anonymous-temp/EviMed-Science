@@ -222,3 +222,15 @@ test("the install script refuses what it does not know before touching anything"
   assert.equal(session.status, 64, "the session phase belongs to the AgentBay image");
   assert.match(session.stderr, /belongs to the AgentBay image/);
 });
+
+test("the runtime tool verification cannot pass after any required tool fails", async () => {
+  const { script } = await sources();
+  const phase = definedInstallPhases(script).get("verify-tools");
+  assert.ok(phase);
+  for (const failed of ["pandoc", "test", "rg", "python"]) {
+    const commands = ["pandoc", "test", "rg", "python"].map(name => `${name}() { return ${name === failed ? 73 : 0}; }`).join("\n");
+    const result = spawnSync("bash", ["-c", `set -e\n${commands}\nRscript() { echo unexpected-fallthrough; }\nverify() {\n${phase}\n}\nverify`], { encoding: "utf8" });
+    assert.equal(result.status, 73, `${failed} must fail the phase, not only its intermediate command`);
+    assert.doesNotMatch(result.stdout, /unexpected-fallthrough/);
+  }
+});

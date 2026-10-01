@@ -435,6 +435,14 @@ test("every example in the skill is a shape the platform accepts: the objects bu
   const kinds = new Set();
   for (const { kind, body } of blocks) {
     kinds.add(kind);
+    if (kind === "curve_receipt") {
+      assert.equal(body.what, "comparator");
+      assert.equal(body.data.route, "literature_control");
+      assert.equal(typeof body.data.configuration?.provenance?.receiptId, "string");
+      assert.equal(body.data.configuration.curve, undefined, "a receipt example cannot invent a digitized curve");
+      assert.equal(body.data.configuration.provenance.kind, undefined, "a caller-authored source label is not a receipt");
+      continue; // vcrSkillExamples verifies the authorized receipt through the real source and write services.
+    }
     if (kind.startsWith("object:")) {
       const objectKind = kind.slice("object:".length);
       const row = { id: `${objectKind}_example`, version: 1, ...body, ...(objectKind === "design_grid" ? { truthScenarios: body.truthScenarios } : {}) };
@@ -455,7 +463,7 @@ test("every example in the skill is a shape the platform accepts: the objects bu
         cpuSecondsLimit: 60, inputs: [], scenario: body }), [], kind);
     }
   }
-  for (const wanted of ["object:population", "object:patient_set", "object:comparator", "object:trial_scenario", "object:design_grid", "design_analytic"]) {
+  for (const wanted of ["object:population", "object:patient_set", "object:comparator", "object:trial_scenario", "object:design_grid", "design_analytic", "curve_receipt"]) {
     assert.ok(kinds.has(wanted), `the skill has an example of ${wanted}`);
   }
   // The skill speaks to the model in its own words: no plan section numbers, no acceptance-case ids, no retired spellings.

@@ -254,7 +254,9 @@ browser() {
 verify_tools() {
   set -x
   pandoc --version
-  test -x /usr/bin/chromium && rg --version && python -m playwright --version
+  test -x /usr/bin/chromium
+  rg --version
+  python -m playwright --version
   Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
 }
 
