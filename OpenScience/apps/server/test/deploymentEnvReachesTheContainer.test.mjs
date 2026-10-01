@@ -23,6 +23,7 @@
 // deliver an empty string, which `Number("")` turns into 0 and a validating
 // parser turns into a startup failure.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -60,6 +61,7 @@ const hostSideOnly = {
  *  written to prove: a documented lever that no service receives is a knob that
  *  does nothing and says nothing. */
 const operatorLevers = {
+  OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   // Both launch paths must install the optional MCP; its private token stays on web.
   OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ["open-science-web", "open-science-runtime-controller"],
@@ -619,4 +621,30 @@ test("ToolUniverse service authentication stays between web and the bounded side
   const holders = Object.entries(services).filter(([, service]) => service.volumes?.some(volume => volume.target === "/run/secrets/tooluniverse-api-token")).map(([name]) => name).sort();
   assert.deepEqual(holders, ["open-science-web", "tooluniverse"]);
   for (const holder of holders) assert.equal(services[holder].volumes.find(volume => volume.target === "/run/secrets/tooluniverse-api-token").read_only, true);
+});
+
+
+test("runtime UI proxy settings reach both processes after real Compose base and API-only interpolation", {
+  skip: spawnSync("docker",["compose","version"],{stdio:"ignore"}).status !== 0 && "Docker Compose CLI required",
+}, async () => {
+  const base=path.join(deployDir,"docker-compose.yml"),apiOnly=path.join(deployDir,"docker-compose.api-only.yml");
+  const source=await readFile(base,"utf8");
+  const env={...process.env};
+  // Supply only synthetic required values; never load an operator's .env.
+  for(const match of source.matchAll(/\$\{([A-Z0-9_]+):\?/g))
+    env[match[1]]=match[1].endsWith("_HOST_FILE") ? "/tmp/evimed-env-forwarding-fixture" : "fixture";
+  env.OPEN_SCIENCE_DOCKER_SOCKET_GID="0";
+  for(const overlay of [false,true])for(const value of [undefined,"true","false"]){
+    if(value===undefined)delete env.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED;
+    else env.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED=value;
+    const result=spawnSync("docker",["compose","--env-file","/dev/null","--profile","full-product","-f",base,
+      ...(overlay ? ["-f",apiOnly] : []),"config","--format","json","--no-env-resolution"],
+      {env,encoding:"utf8",timeout:30000,maxBuffer:4*1024*1024});
+    assert.equal(result.status,0,"Compose configuration must succeed without starting any service");
+    const services=JSON.parse(result.stdout).services;
+    const expected=value ?? (overlay ? "false" : "");
+    for(const name of ["open-science-web","open-science-runtime-controller"])
+      assert.equal(services[name].environment.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED,expected,
+        `${name} receives ${String(value)} in ${overlay ? "API-only" : "base"}`);
+  }
 });

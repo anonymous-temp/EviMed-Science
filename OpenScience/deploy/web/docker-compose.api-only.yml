@@ -104,6 +104,8 @@ services:
   # Not started unless a profile names them, which nothing in this shape does.
   open-science-runtime-controller:
     profiles: ["full-product"]
+    environment:
+      OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-false}
   evimed-meta-agent:
     profiles: ["full-product"]
   evimed-mr-agent:
