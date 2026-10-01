@@ -1258,7 +1258,7 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
  */
 export const EXTENSION_ERROR_CODES = Object.freeze([
   'extension_contract_invalid', 'extension_proof_untrusted',
-  'extension_proof_stale', 'extension_proof_incomplete',
+  'extension_proof_stale', 'extension_proof_incomplete', 'extension_access_denied', 'extension_storage_capacity',
 ])
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
@@ -1333,6 +1333,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
   extension_proof_stale: '扩展或运行环境版本已变化，兼容记录需要重新核对。',
   extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
+  extension_access_denied: '你没有执行这个扩展操作的权限，请检查项目和连接授权。',
+  extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
