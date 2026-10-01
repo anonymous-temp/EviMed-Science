@@ -15,10 +15,38 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { MaintenanceService } from "../src/maintenanceService.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const NEW = "1cf308956b6e";
 const PROJECT = "web";
+
+// These are actual public API payloads, not the service's internal cached state.
+async function maintenanceResponse(requestId, activeTasks = 0) {
+  const lease = {
+    request_id: requestId,
+    requested_at: new Date(),
+    expires_at: new Date(Date.now() + 3_600_000),
+  };
+  const database = {
+    async query(sql) {
+      if (sql.includes("FROM evimed_product.maintenance_lease")) return { rows: [lease] };
+      if (sql.includes("FROM evimed_product.jobs")) return { rows: [{ running_jobs: 0, pending_prompts: 0, active_sessions: 0 }] };
+      throw new Error(`Unexpected maintenance fixture query: ${sql}`);
+    },
+    async transaction(operation) { return operation(database); },
+  };
+  const service = new MaintenanceService(database, {
+    migrate: async () => {},
+    inspectActivity: async () => ({
+      activeCommands: 0, activeTasks, backgroundOperations: 0, runningAgentRuns: 0,
+      runtimes: { busy: 0, idle: 0, unknown: 0 },
+    }),
+    setTimer: () => ({ unref() {} }),
+    clearTimer: () => {},
+  });
+  return { data: { ...await service.status(), activity: await service.activity() } };
+}
 
 const FAKE_DOCKER = String.raw`#!/usr/bin/env node
 const fs = require("fs");
@@ -85,10 +113,29 @@ if (command === "exec") {
   if (rest[0] === "printenv") { out(state.runtimeImage + "\n"); process.exit(0); }
   const script = rest.join(" ");
   if (script.includes("/api/ready")) { out((state.ready ?? "ok 27 - backup=ok") + "\n"); process.exit(0); }
-  if (script.includes("/api/ops/maintenance?activity=1")) { out((state.activity ?? "0 0 0") + "\n"); process.exit(0); }
+  if (script.includes("/api/ops/maintenance?activity=1") && state.activity !== undefined) { out(state.activity + "\n"); process.exit(0); }
   if (script.includes("/api/ops/maintenance")) {
-    if (state.maintenanceReleaseFails) process.exit(1);
-    state.releasedMaintenance = rest.at(-2); save(); process.exit(0);
+    // Execute the switch's actual Node validation, replacing only the HTTP boundary.
+    // A canned "0 0 0" would never catch a public-status contract mismatch.
+    const payload = script.includes("?activity=1") ? state.maintenanceStatus : (state.releaseMaintenanceStatus ?? state.maintenanceStatus);
+    const bootstrap = "global.fetch = " + (async (_url, options = {}) => {
+        const fs = require("node:fs");
+        const state = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_STATE, "utf8"));
+        if (options.method !== "POST") return { ok: true, json: async () => JSON.parse(process.env.FAKE_MAINTENANCE_RESPONSE) };
+        const body = JSON.parse(options.body);
+        if (state.maintenanceReleaseFails || body.requestId !== JSON.parse(process.env.FAKE_MAINTENANCE_RESPONSE).data.lease?.requestId)
+          return { ok: false, json: async () => ({}) };
+        state.releasedMaintenance = body.requestId;
+        fs.writeFileSync(process.env.FAKE_DOCKER_STATE, JSON.stringify(state));
+        return { ok: true, json: async () => ({ data: { state: "open", lease: null } }) };
+      }).toString() + ";";
+    const result = require("node:child_process").spawnSync(process.execPath, ["-e", bootstrap + rest[2], ...rest.slice(3)], {
+      encoding: "utf8",
+      env: { ...process.env, FAKE_MAINTENANCE_RESPONSE: JSON.stringify(payload),
+        OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: "fixture-only", OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: "",
+        OPEN_SCIENCE_RELEASE_MANIFEST_FILE: state.manifestFile, OPEN_SCIENCE_SOURCE_REVISION: state.revision },
+    });
+    out(result.stdout ?? ""); process.stderr.write(result.stderr ?? ""); process.exit(result.status ?? 1);
   }
   if (script.includes("/api/health")) process.exit(state.healthExit ?? 0);
   process.exit(1);
@@ -121,7 +168,10 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
-  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({ runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill] }));
+  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
+    app: { releaseId: `evimed-${NEW}-1` }, source: { revision: NEW },
+    runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
+  }));
   await writeFile(path.join(web, ".env"), "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\n");
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
@@ -135,6 +185,9 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   const container = (service, hash, binds, extra = {}) => ({ service, hash, running: true, startedAt: old, workingDir: through, binds, stale: false, ...extra });
   const state = {
     current,
+    maintenanceStatus: await maintenanceResponse("release-content-1"),
+    manifestFile: path.join(web, "release-manifest.json"),
+    revision: NEW,
     runtimeImage: `open-science-runtime:x-${NEW}`,
     restartDoesNotHelp,
     walkExit,
@@ -432,5 +485,71 @@ test("a maintenance switch refuses unknown activity and preserves the lease when
       assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`));
       if (scenario.activity) assert.doesNotMatch(result.stdout, /=== current -> /);
     } finally { await rm(root, { recursive: true, force: true }); }
+  }
+});
+
+test("the public MaintenanceService idle/draining contract governs both phases of the switch", { skip }, async () => {
+  const idle = await maintenanceResponse("release-content-1");
+  const draining = await maintenanceResponse("release-content-1", 1);
+  assert.equal(idle.data.state, "idle");
+  assert.equal(draining.data.state, "draining");
+  assert.equal(draining.data.blockers.activeTasks, 1);
+  for (const [before, after, expected] of [[draining, idle, 3], [idle, draining, 0]]) {
+    const { root } = await host();
+    try {
+      const stateFile = path.join(root, "docker-state.json");
+      const state = JSON.parse(await readFile(stateFile, "utf8"));
+      await writeFile(stateFile, JSON.stringify({ ...state, maintenanceStatus: before, releaseMaintenanceStatus: after }));
+      const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+      assert.equal(result.code, expected, result.stdout + result.stderr);
+      const final = JSON.parse(await readFile(stateFile, "utf8"));
+      if (expected === 3) {
+        assert.doesNotMatch(result.stdout, /=== current -> /);
+        assert.equal(final.releasedMaintenance, undefined);
+      } else {
+        assert.equal(final.releasedMaintenance, "release-content-1", "new-instance activity does not prevent the owned lease from being resumed");
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+});
+
+test("a leased switch fails closed on another owner, expired or invalid expiry, and incomplete or nonzero counts", { skip }, async () => {
+  const idle = await maintenanceResponse("release-content-1");
+  const corrupt = (edit) => {
+    const value = structuredClone(idle);
+    edit(value.data);
+    return value;
+  };
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  const invalidLeases = [
+    corrupt((data) => { data.lease.requestId = "another-deployment"; }),
+    corrupt((data) => { data.lease.expiresAt = expired; }),
+    corrupt((data) => { delete data.lease.expiresAt; }),
+    corrupt((data) => { data.state = "maintenance"; }),
+  ];
+  const invalidCounts = [
+    corrupt((data) => { delete data.activity.activeDatabaseSessions; }),
+    corrupt((data) => { delete data.blockers.activeDatabaseSessions; }),
+    corrupt((data) => { data.activity = {}; }),
+    corrupt((data) => { data.blockers.activeCommands = 1; }),
+    corrupt((data) => { data.activity.unknown = 1; }),
+    corrupt((data) => { data.activity.activeTasks = "0"; }),
+  ];
+  for (const phase of ["before", "after"]) {
+    for (const payload of phase === "before" ? [...invalidLeases, ...invalidCounts] : invalidLeases) {
+      const { root } = await host();
+      try {
+        const stateFile = path.join(root, "docker-state.json");
+        const state = JSON.parse(await readFile(stateFile, "utf8"));
+        const field = phase === "before" ? "maintenanceStatus" : "releaseMaintenanceStatus";
+        await writeFile(stateFile, JSON.stringify({ ...state, [field]: payload }));
+        const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+        assert.equal(result.code, phase === "before" ? 3 : 1, `${phase}: ${JSON.stringify(payload)}\n${result.stdout}${result.stderr}`);
+        assert.equal(JSON.parse(await readFile(stateFile, "utf8")).releasedMaintenance, undefined);
+        const calls = await readFile(path.join(root, "docker.log"), "utf8");
+        assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`), "a rejected lease is never followed by a mint");
+        if (phase === "before") assert.doesNotMatch(result.stdout, /=== current -> /);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
   }
 });

@@ -135,9 +135,14 @@ ACTIVITY=$(docker exec "$WEB_CONTAINER" node -e '
     .then((r) => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
     .then((body) => {
       const a = body.data.activity;
-      if (process.argv[1] && (body.data.state !== "maintenance" || body.data.lease?.requestId !== process.argv[1]
-        || Date.parse(body.data.lease.expiresAt) <= Date.now()
-        || Object.values(a).some((value) => !Number.isSafeInteger(value) || value !== 0))) throw new Error("maintenance is not owned and drained");
+      const counts = ["activeMutations", "activeCommands", "activeTasks", "backgroundOperations", "runningAgentRuns",
+        "runningProductJobs", "pendingPromptAdmissions", "activeDatabaseSessions", "busyRuntimes", "unknownRuntimes", "unknown"];
+      const drained = (values) => values && counts.every((key) => values[key] === 0)
+        && Object.values(values).every((value) => Number.isSafeInteger(value) && value === 0);
+      const expiresAt = Date.parse(body.data.lease?.expiresAt);
+      if (process.argv[1] && (body.data.state !== "idle" || body.data.lease?.requestId !== process.argv[1]
+        || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
+        || !drained(a) || !drained(body.data.blockers))) throw new Error("maintenance is not owned and drained");
       console.log([a.runningAgentRuns, a.runningProductJobs, a.busyRuntimes].join(" "));
     })
     .catch((error) => { console.log("unknown " + error.message); });' "$MAINTENANCE_REQUEST_ID" 2>/dev/null || echo "unknown no-web-container")
@@ -290,7 +295,9 @@ if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
       const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
       const beforeResponse = await fetch(endpoint, { headers, signal: AbortSignal.timeout(10000) });
       const before = await beforeResponse.json();
-      if (!beforeResponse.ok || before.data?.state !== "maintenance" || before.data.lease?.requestId !== process.argv[1]) throw new Error();
+      const expiresAt = Date.parse(before.data?.lease?.expiresAt);
+      if (!beforeResponse.ok || !["idle", "draining"].includes(before.data?.state) || before.data.lease?.requestId !== process.argv[1]
+        || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error();
       const response = await fetch(endpoint, {
         method: "POST", headers, body: JSON.stringify({ action: "release", requestId: process.argv[1] }), signal: AbortSignal.timeout(10000)
       });
