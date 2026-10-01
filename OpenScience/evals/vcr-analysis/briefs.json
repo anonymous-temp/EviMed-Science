@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-analysis",
+  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临研」's analysis steps, chosen for the specific way an analysis goes wrong while looking finished — a weighted comparison whose effective sample size nobody looked at, a simulation whose null scenario was never run, a synthetic cohort quietly counted as patients. mustDo / mustNotDo are the rubric; the deterministic half (the four counts apart, an mcse on every simulated measure, a named interval kind, a not-estimable verdict with its rule) is the three vcr contracts in @evimed/domain plus this capability's preflight.",
+  "briefs": [
+    {
+      "id": "vcr-analysis-001-three-designs-nsclc",
+      "title": "三个方案并排：单臂 + 文献对照、2:1 随机、1:1 随机加一次期中分析",
+      "why": "The ordinary full case (plan §10.3): the question a sponsor actually asks before a go/no-go. The failure that looks like success is a power table with no Monte-Carlo error and no null scenario — every number in it looks exact and none of them can be told from noise.",
+      "inputs": {
+        "step": "trial",
+        "endpointType": "time_to_event",
+        "designs": ["single_arm_external", "two_arm_fixed", "group_sequential"],
+        "targetMcse": 0.001,
+        "dataTier": "T0"
+      },
+      "mustDo": [
+        "Queue every design through vcr_simulate and report only what the engine returned.",
+        "Run a null-effect scenario for each design and report the type-I error from it.",
+        "Report every simulated measure with its Monte-Carlo standard error.",
+        "Compute the fixed design's sample size and the sequential boundaries analytically first, then cross-check them by simulation, and say so when the two differ by more than three Monte-Carlo standard errors.",
+        "State assurance separately from power, and say that it averages over the assumption's whole distribution rather than one point value.",
+        "State the four counts apart for every design, with generatedRecords for the simulated arms and realPatients null at T0.",
+        "Name the interval kind for every interval printed.",
+        "Say which design is dominated only if a saved comparison goal makes it decidable, and say whose goal it is."
+      ],
+      "mustNotDo": [
+        "Type a power, a sample size or an event count that no job returned.",
+        "Present a simulated number without its Monte-Carlo standard error.",
+        "Call one design 'best' without a written comparison goal.",
+        "Count the simulated records of the external-control arm as real patients.",
+        "Fill a measure the engine could not compute with a 0."
+      ],
+      "gradedOn": "Whether a statistician could take the operating-characteristics table and reproduce the ordering, and whether every number in the prose came from a job."
+    },
+    {
+      "id": "vcr-analysis-002-external-control-feasibility",
+      "title": "「这个单臂试验能不能用外部对照？」（附数据字典，T2）",
+      "why": "The feasibility question, and the one where the honest answer is most often 「不可估计」. The failure mode is an effect estimate produced anyway: entropy balancing converges on a degenerate solution, the effective sample size collapses, and a hazard ratio with a tight interval comes out of a comparison that is not one.",
+      "inputs": {
+        "step": "comparator",
+        "comparatorRoute": "external_control",
+        "endpointType": "time_to_event",
+        "dataTier": "T2"
+      },
+      "mustDo": [
+        "Check ICH E10's four conditions before choosing a route, and say which of them hold.",
+        "Go through the FDA externally-controlled-trials draft's ten comparability dimensions one by one and record a finding for each.",
+        "Queue the weighting through vcr_simulate and read the diagnostics back: overlap, standardized differences after weighting, effective sample size.",
+        "Return conclusion not_estimable with the deterministic rule that fired and a gap list when any of the seven rules is triggered, and treat that as a finished result.",
+        "State the estimand the weighting answers (ATT by default) and say what changing it would mean.",
+        "Keep realPatients and effectiveSampleSize apart, and never let the effective sample size exceed the real patients it weights.",
+        "Name the interval kind, and use a bootstrap interval where weights were estimated."
+      ],
+      "mustNotDo": [
+        "Produce an effect estimate when a not-estimable rule fired.",
+        "Report an effective sample size larger than the number of real patients weighted.",
+        "Use a synthetic or literature-derived cohort as if it were a real external control.",
+        "Describe the comparison as 「可比」 without the standardized differences that support it.",
+        "Drop a comparability dimension because the data says nothing about it — say the data says nothing."
+      ],
+      "gradedOn": "Whether the run reached a defensible verdict — including 「不可估计」 with its gaps — rather than an estimate it could not support."
+    },
+    {
+      "id": "vcr-analysis-003-synthetic-cohort-for-sharing",
+      "title": "「把我们上传的队列生成一份可以外发的合成数据」",
+      "why": "The single-step data request. Two things go wrong quietly: the synthetic rows get counted as patients somewhere downstream, and the package ships with no leakage assessment, so nobody can tell whether a real person is recoverable from it.",
+      "inputs": {
+        "step": "population",
+        "populationDefinition": { "kind": "empirical_synthetic", "source": "uploaded cohort" },
+        "dataTier": "T2"
+      },
+      "mustDo": [
+        "Queue the synthesis through vcr_simulate (synthesize_population) and report only what the engine returned.",
+        "Ship a quality report with fidelity, utility and disclosure-risk sections.",
+        "Set allowedUses to the uses a synthetic population may carry, and say in the report that a real external control is not one of them.",
+        "State generatedRecords and realPatients apart, and say plainly that generating more records does not create patients.",
+        "Give the screening waterfall with 「无法判断」 counted separately at every step.",
+        "Say which fields could not be synthesised faithfully and what that costs a downstream analysis."
+      ],
+      "mustNotDo": [
+        "Report the synthetic row count as a sample size.",
+        "Deliver without a disclosure-risk assessment.",
+        "Let a 'design' or 'shared_preview' use be read as permission to use the cohort as an external control.",
+        "Fold 「无法判断」 into 「排除」 in the waterfall.",
+        "Quote a fidelity metric the engine did not return."
+      ],
+      "gradedOn": "Whether a data-protection reviewer could read the quality report and decide whether the file may leave the building."
+    }
+  ]
+}

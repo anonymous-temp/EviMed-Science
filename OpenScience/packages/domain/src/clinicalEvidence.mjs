@@ -5,6 +5,7 @@
 // exactly one file rather than one file plus a loader.
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
 import { claimAppraisalFindings } from "./appraisalStructure.mjs";
+import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -361,6 +362,7 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "claim-numeric-support",
   "claim-artifact-path",
   "claim-quote-verbatim",
+  "claim-explicit-quote-verbatim",
   "claim-source-url",
   "report-claim-unresolved",
   "matrix-claim-uncited",
@@ -2214,6 +2216,35 @@ function supportQuoteIssue(artifactText, label, artifactPath, quote) {
 }
 
 /**
+ * The quotation bonds a reader is shown, in verification order. A synthesized
+ * claim's nested sources keep their indexes; an optional explicit top-level
+ * bond follows them unless that same path and quote are already listed.
+ * Different quotations of one document stay separate. Canonical paths are
+ * only a deduplication key, never permission to verify an invalid source path.
+ * @template {Record<string, any>} C
+ * @param {C} claim
+ * @returns {Array<C | (C extends { supportingSources?: (infer S)[] } ? S : never)>}
+ */
+export function claimEvidenceSources(claim) {
+  if (claim?.claimType === "derived") return [];
+  if (claim?.claimType !== "synthesized") return [claim];
+  const sources = Array.isArray(claim.supportingSources) ? claim.supportingSources : [];
+  // Neither field is required for a synthesis: only a supplied path + quote
+  // asserts an additional bond that can be checked.
+  // A reader retains the declared path separately when it is unsafe to open.
+  // Keeping that bond visible must never make the path eligible to read.
+  const declaredPath = claim.artifactPath ?? claim.declaredArtifactPath;
+  if (!nonEmpty(declaredPath) || !nonEmpty(claim.supportQuote)) return sources;
+  const artifactPath = normalizeWorkspacePath(declaredPath);
+  const quote = claim.supportQuote.trim();
+  const duplicate = artifactPath !== null && sources.some((source) =>
+    normalizeWorkspacePath(source?.artifactPath ?? source?.declaredArtifactPath) === artifactPath
+    && typeof source?.supportQuote === "string" && source.supportQuote.trim() === quote,
+  );
+  return duplicate ? sources : [...sources, claim];
+}
+
+/**
  * Whether each claim's quotation is in the source it names, per claim, for a
  * reader (2026-09-17).
  *
@@ -2257,9 +2288,7 @@ export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
       let sources = [];
       let status = "derived";
       if (claimType !== "derived") {
-        sources = claimType === "synthesized"
-          ? (Array.isArray(claim.supportingSources) ? claim.supportingSources : []).map(sourceStatus)
-          : [sourceStatus(claim)];
+        sources = claimEvidenceSources(claim).map(sourceStatus);
         status = worst.find((candidate) => sources.some((source) => source.status === candidate)) ?? "no_quote";
       }
       counts[status] = (counts[status] ?? 0) + 1;
@@ -3295,6 +3324,16 @@ function auditClaimEvidence(value, label, context) {
       sourceDomains,
       issues,
     });
+    // The optional legacy bond adds information, never another independent
+    // supporting source or a numeric anchor. Its finding is advisory: a false
+    // quote is visible as MUST FIX / ⚠, and the package remains deliverable.
+    if (claimEvidenceSources(value).at(-1) === value) {
+      issues.region("claim-explicit-quote-verbatim");
+      const quoteProblem = !validSourceArtifactPath(value.artifactPath)
+        ? `${label}.supportQuote could not be checked: its artifactPath is not a preserved .evimed-sources/ path.`
+        : supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
+      if (quoteProblem) issues.push(`MUST FIX — ${quoteProblem}`);
+    }
     return;
   }
   if (claimType === "derived") {

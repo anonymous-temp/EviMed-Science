@@ -1,0 +1,15 @@
+# Optional status-only mount for the existing host PostgreSQL timer's VCR
+# recovery-set cycle. Neither the web nor regular backup container receives
+# the host timer's authority or additional source roots.
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_VCR_BACKUP_STATE_FILE: /run/vcr-backup-status/state.json
+      OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS: ${OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS:-90000}
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR:?set the host VCR backup status directory}
+        target: /run/vcr-backup-status
+        read_only: true
+        bind:
+          create_host_path: false

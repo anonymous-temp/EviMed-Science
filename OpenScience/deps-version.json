@@ -1,5 +1,16 @@
 {
   "$comment": "The single definition of every version we track upstream. A Dockerfile ARG, a seam manifest, a peerDependency and a release manifest that each carried their own copy meant 'bump the pin' was four edits and one of them was always missed. Tests assert every derived copy equals the value here; the nightly compatibility matrix is one job that loops over these keys.",
+  "$runtimeTools": {
+    "pandoc": {
+      "version": "2.17.1.1",
+      "debSha256": {
+        "amd64": "2efe7a91a77be4248f8a2e38fb4e89f9b4d44b1d5be8200349c49d23d9f9bf4e",
+        "arm64": "c3e589625476c130862e2ae4dc3309e8ef752d9258da1f4fa734904f4342459e"
+      },
+      "source": "https://github.com/jgm/pandoc/releases/tag/2.17.1.1",
+      "notes": "The document renderer's tested Linux version. Both runtime images and CI install the official architecture-specific Debian package through the same digest-checked renderer phase. Tool metadata is separate from the service contracts polled by the upstream matrix."
+    }
+  },
   "dsh": {
     "version": "0.1.7-rc.2",
     "cordis": "4.0.4",

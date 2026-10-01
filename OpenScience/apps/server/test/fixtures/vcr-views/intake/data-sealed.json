@@ -1,0 +1,851 @@
+{
+  "headline": null,
+  "status": [
+    {
+      "label": "患者级数据",
+      "value": "1 个快照"
+    }
+  ],
+  "assumptions": [],
+  "reviews": [],
+  "selectedId": null,
+  "precedents": [],
+  "precedentSources": null,
+  "precedentNote": null,
+  "snapshots": [
+    {
+      "id": "snp_1",
+      "label": "快照 v1",
+      "at": "9 月 27 日 16:00",
+      "rows": 120,
+      "quality": [
+        {
+          "label": "一致性",
+          "value": "10 项",
+          "passed": false
+        },
+        {
+          "label": "完整性",
+          "value": "0 项",
+          "passed": true
+        },
+        {
+          "label": "合理性",
+          "value": "0 项",
+          "passed": true
+        },
+        {
+          "label": "重复",
+          "value": "1 项",
+          "passed": false
+        },
+        {
+          "label": "关联质量",
+          "value": "0 项",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "intake": {
+    "available": true,
+    "message": null,
+    "formats": [
+      "csv",
+      "tsv",
+      "json",
+      "xlsx"
+    ],
+    "maxBytes": 52428800,
+    "canManage": true,
+    "seal": {
+      "required": true,
+      "planFrozenAt": null,
+      "outcomeFirstReadAt": null,
+      "ordered": false,
+      "fields": [],
+      "fieldsRead": [],
+      "note": "分析计划尚未冻结：结局字段仍处于封存状态。"
+    },
+    "options": {
+      "roles": [
+        {
+          "value": "subject_key",
+          "label": "受试者编号"
+        },
+        {
+          "value": "arm",
+          "label": "治疗分组"
+        },
+        {
+          "value": "covariate",
+          "label": "基线协变量"
+        },
+        {
+          "value": "outcome_time",
+          "label": "结局：时间"
+        },
+        {
+          "value": "outcome_event",
+          "label": "结局：事件"
+        },
+        {
+          "value": "time_zero",
+          "label": "时间零点"
+        },
+        {
+          "value": "measurement",
+          "label": "纵向测量值"
+        },
+        {
+          "value": "visit_date",
+          "label": "测量日期"
+        },
+        {
+          "value": "other",
+          "label": "其他（不进入分析表）"
+        }
+      ],
+      "timeKinds": [
+        {
+          "value": "occurred_at",
+          "label": "发生时间"
+        },
+        {
+          "value": "recorded_at",
+          "label": "记录时间"
+        },
+        {
+          "value": "visible_at",
+          "label": "平台可见时间"
+        }
+      ],
+      "missingReasons": [
+        {
+          "value": "not_measured",
+          "label": "未测量"
+        },
+        {
+          "value": "not_recorded",
+          "label": "未记录"
+        },
+        {
+          "value": "not_shared",
+          "label": "未共享"
+        },
+        {
+          "value": "restricted_in_trial",
+          "label": "试验期间受限"
+        },
+        {
+          "value": "out_of_window",
+          "label": "在观察窗外"
+        },
+        {
+          "value": "pending_result",
+          "label": "待出结果"
+        },
+        {
+          "value": "not_applicable",
+          "label": "不适用"
+        }
+      ],
+      "valueSources": [
+        {
+          "value": "observed",
+          "label": "观察"
+        },
+        {
+          "value": "extracted",
+          "label": "抽取"
+        },
+        {
+          "value": "calculated",
+          "label": "计算"
+        },
+        {
+          "value": "imputed",
+          "label": "插补"
+        }
+      ],
+      "memberRoles": [
+        {
+          "value": "lead",
+          "label": "研究负责人"
+        },
+        {
+          "value": "clinical_reviewer",
+          "label": "临床复核"
+        },
+        {
+          "value": "statistical_reviewer",
+          "label": "统计复核"
+        },
+        {
+          "value": "data_manager",
+          "label": "数据管理"
+        },
+        {
+          "value": "recruiter",
+          "label": "招募协调员"
+        },
+        {
+          "value": "site",
+          "label": "中心"
+        },
+        {
+          "value": "viewer",
+          "label": "只读查看者"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "id": "src_1",
+        "name": "合作方基线",
+        "ownerParty": "合作方医院",
+        "mine": false,
+        "readable": true,
+        "canGrant": false,
+        "status": "frozen",
+        "statusLabel": "已冻结",
+        "valueSource": "observed",
+        "valueSourceLabel": "观察",
+        "allowedUses": [
+          "vcr",
+          "matching"
+        ],
+        "window": "2020-01-01 至 不限",
+        "retention": "保留至 2030-01-01；五年",
+        "upload": {
+          "formats": [
+            "csv",
+            "tsv",
+            "json",
+            "xlsx"
+          ],
+          "maxBytes": 52428800,
+          "maxText": "50 MB"
+        },
+        "files": [
+          {
+            "id": "sfl_1",
+            "name": "cohort.csv",
+            "role": "data",
+            "roleLabel": "数据文件",
+            "format": "csv",
+            "size": "1.6 KB",
+            "rows": 40,
+            "columnCount": 8,
+            "at": "9 月 27 日 13:01",
+            "latest": true,
+            "columns": [
+              {
+                "name": "PATIENT_NO",
+                "type": "text",
+                "filled": 1,
+                "distinct": 40,
+                "identifying": true
+              },
+              {
+                "name": "ARM",
+                "type": "text",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": false
+              },
+              {
+                "name": "AGE",
+                "type": "integer",
+                "filled": 1,
+                "distinct": 10,
+                "identifying": false
+              },
+              {
+                "name": "SEX",
+                "type": "text",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": false
+              },
+              {
+                "name": "ECOG",
+                "type": "integer",
+                "filled": 1,
+                "distinct": 4,
+                "identifying": false
+              },
+              {
+                "name": "OS_MONTHS",
+                "type": "number",
+                "filled": 1,
+                "distinct": 40,
+                "identifying": false
+              },
+              {
+                "name": "OS_DEAD",
+                "type": "integer",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": false
+              },
+              {
+                "name": "DIAG_DATE",
+                "type": "date",
+                "filled": 1,
+                "distinct": 9,
+                "identifying": false
+              }
+            ],
+            "entries": null,
+            "sheets": [],
+            "sheetUsed": null,
+            "subjectKey": null,
+            "visibleAt": null
+          },
+          {
+            "id": "sfl_2",
+            "name": "visits.csv",
+            "role": "data",
+            "roleLabel": "数据文件",
+            "format": "csv",
+            "size": "1.9 KB",
+            "rows": 80,
+            "columnCount": 3,
+            "at": "9 月 27 日 13:02",
+            "latest": true,
+            "columns": [
+              {
+                "name": "PATIENT_NO",
+                "type": "text",
+                "filled": 1,
+                "distinct": 40,
+                "identifying": true
+              },
+              {
+                "name": "VISIT_DT",
+                "type": "date",
+                "filled": 1,
+                "distinct": 17,
+                "identifying": false
+              },
+              {
+                "name": "SBP",
+                "type": "integer",
+                "filled": 1,
+                "distinct": 45,
+                "identifying": false
+              }
+            ],
+            "entries": null,
+            "sheets": [],
+            "sheetUsed": null,
+            "subjectKey": null,
+            "visibleAt": null
+          },
+          {
+            "id": "sfl_3",
+            "name": "dictionary.csv",
+            "role": "dictionary",
+            "roleLabel": "数据字典",
+            "format": "csv",
+            "size": "151 字节",
+            "rows": 6,
+            "columnCount": 3,
+            "at": "9 月 27 日 13:03",
+            "latest": null,
+            "columns": [],
+            "entries": 6,
+            "sheets": [],
+            "sheetUsed": null,
+            "subjectKey": null,
+            "visibleAt": null
+          }
+        ],
+        "fieldMap": {
+          "state": "confirmed",
+          "stateLabel": "已确认",
+          "hash": "fcf170a78dd00685c22cbf5879c9c62b6ae17df11d2c0d5c666620856d69003f",
+          "by": "AI 提议",
+          "confirmedBy": "view-manager",
+          "confirmedAt": "9 月 27 日 15:00",
+          "columns": [
+            {
+              "role": "covariate",
+              "type": "integer",
+              "unit": "year",
+              "alias": "age",
+              "codes": {},
+              "range": [
+                18,
+                100
+              ],
+              "table": "cohort.csv",
+              "column": "AGE",
+              "concept": "age",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "arm",
+              "type": null,
+              "unit": null,
+              "alias": "arm",
+              "codes": {
+                "control": [
+                  "CTL"
+                ],
+                "treated": [
+                  "TRT"
+                ]
+              },
+              "range": null,
+              "table": "cohort.csv",
+              "column": "ARM",
+              "concept": "treatment_arm",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": "not_recorded"
+            },
+            {
+              "role": "time_zero",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "DIAG_DATE",
+              "concept": "diagnosis_date",
+              "outcome": false,
+              "required": false,
+              "timeKind": "occurred_at",
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "covariate",
+              "type": null,
+              "unit": null,
+              "alias": "ecog",
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "ECOG",
+              "concept": "performance_status",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "outcome_event",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "OS_DEAD",
+              "concept": "overall_survival_event",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": "OS",
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "outcome_time",
+              "type": null,
+              "unit": "month",
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "OS_MONTHS",
+              "concept": "overall_survival",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": "OS",
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "subject_key",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "PATIENT_NO",
+              "concept": "",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": true,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "covariate",
+              "type": null,
+              "unit": null,
+              "alias": "sex",
+              "codes": {},
+              "range": null,
+              "table": "cohort.csv",
+              "column": "SEX",
+              "concept": "sex",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "subject_key",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "visits.csv",
+              "column": "PATIENT_NO",
+              "concept": "",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": true,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "measurement",
+              "type": null,
+              "unit": "mmHg",
+              "alias": null,
+              "codes": {},
+              "range": [
+                60,
+                260
+              ],
+              "table": "visits.csv",
+              "column": "SBP",
+              "concept": "systolic_bp",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": "SBP",
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "visit_date",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "visits.csv",
+              "column": "VISIT_DT",
+              "concept": "",
+              "outcome": false,
+              "required": false,
+              "timeKind": "occurred_at",
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            }
+          ],
+          "issues": []
+        },
+        "grants": [
+          {
+            "id": "grt_1",
+            "grantee": "view-owner",
+            "granteeLabel": "view-owner",
+            "role": "lead",
+            "fields": [
+              "AGE",
+              "ARM",
+              "SEX"
+            ],
+            "fieldMode": "allow",
+            "window": null,
+            "purposes": [
+              "vcr"
+            ],
+            "revoked": false,
+            "revokedAt": null,
+            "createdAt": "9 月 27 日 17:01"
+          },
+          {
+            "id": "grt_2",
+            "grantee": "role:viewer",
+            "granteeLabel": "角色：只读查看者",
+            "role": null,
+            "fields": [],
+            "fieldMode": "allow",
+            "window": null,
+            "purposes": [
+              "vcr"
+            ],
+            "revoked": true,
+            "revokedAt": "昨天 00:00",
+            "createdAt": "9 月 27 日 17:02"
+          }
+        ]
+      },
+      {
+        "id": "src_2",
+        "name": "医院随访表",
+        "ownerParty": null,
+        "mine": true,
+        "readable": true,
+        "canGrant": true,
+        "status": "profiled",
+        "statusLabel": "已上传",
+        "valueSource": "extracted",
+        "valueSourceLabel": "抽取",
+        "allowedUses": [
+          "vcr"
+        ],
+        "window": null,
+        "retention": null,
+        "upload": {
+          "formats": [
+            "csv",
+            "tsv",
+            "json",
+            "xlsx"
+          ],
+          "maxBytes": 52428800,
+          "maxText": "50 MB"
+        },
+        "files": [
+          {
+            "id": "sfl_4",
+            "name": "followup.csv",
+            "role": "data",
+            "roleLabel": "数据文件",
+            "format": "csv",
+            "size": "38 字节",
+            "rows": 2,
+            "columnCount": 3,
+            "at": "9 月 27 日 13:04",
+            "latest": true,
+            "columns": [
+              {
+                "name": "PATIENT_NO",
+                "type": "text",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": true
+              },
+              {
+                "name": "ARM",
+                "type": "text",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": false
+              },
+              {
+                "name": "DEAD",
+                "type": "integer",
+                "filled": 1,
+                "distinct": 2,
+                "identifying": false
+              }
+            ],
+            "entries": null,
+            "sheets": [],
+            "sheetUsed": null,
+            "subjectKey": null,
+            "visibleAt": null
+          }
+        ],
+        "fieldMap": {
+          "state": "proposed",
+          "stateLabel": "待确认",
+          "hash": "e79b988872f435455069db80228909bf6bb3df5a13cc7b9ad8c0f97e48478f11",
+          "by": "人工填写",
+          "confirmedBy": null,
+          "confirmedAt": null,
+          "columns": [
+            {
+              "role": "arm",
+              "type": null,
+              "unit": null,
+              "alias": "arm",
+              "codes": {},
+              "range": null,
+              "table": "followup.csv",
+              "column": "ARM",
+              "concept": "",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": null,
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            },
+            {
+              "role": "outcome_event",
+              "type": null,
+              "unit": null,
+              "alias": null,
+              "codes": {},
+              "range": null,
+              "table": "followup.csv",
+              "column": "DEAD",
+              "concept": "",
+              "outcome": false,
+              "required": false,
+              "timeKind": null,
+              "parameter": "OS",
+              "identifier": false,
+              "codingSystem": null,
+              "missingReason": null
+            }
+          ],
+          "issues": [
+            {
+              "code": "subject_key_missing",
+              "message": "followup.csv 要派生分析表，需要标出哪一列是受试者编号。",
+              "table": "followup.csv",
+              "column": null
+            },
+            {
+              "code": "outcome_pair_incomplete",
+              "message": "结局 OS 需要恰好一列时间和一列事件（现在是 0 列时间、1 列事件）。",
+              "table": "followup.csv",
+              "column": null
+            }
+          ]
+        },
+        "grants": []
+      }
+    ],
+    "snapshots": [
+      {
+        "id": "snp_1",
+        "sourceId": "src_1",
+        "version": 1,
+        "label": "快照 v1",
+        "at": "9 月 27 日 16:00",
+        "rows": 120,
+        "columnCount": 11,
+        "valueSource": "观察",
+        "files": [
+          "cohort.csv",
+          "visits.csv"
+        ],
+        "sealed": true,
+        "sealedFields": [
+          "OS_DEAD",
+          "OS_MONTHS"
+        ],
+        "sealedUntil": null,
+        "findings": 11,
+        "quality": [
+          {
+            "label": "一致性",
+            "value": "10 项",
+            "passed": false
+          },
+          {
+            "label": "完整性",
+            "value": "0 项",
+            "passed": true
+          },
+          {
+            "label": "合理性",
+            "value": "0 项",
+            "passed": true
+          },
+          {
+            "label": "重复",
+            "value": "1 项",
+            "passed": false
+          },
+          {
+            "label": "关联质量",
+            "value": "0 项",
+            "passed": true
+          }
+        ],
+        "tables": [
+          {
+            "shape": "events",
+            "label": "事件表",
+            "rows": 40,
+            "columns": [
+              "USUBJID",
+              "PARAMCD",
+              "AVAL",
+              "CNSR",
+              "STARTDT"
+            ],
+            "issues": 0,
+            "outcomeBearing": true
+          },
+          {
+            "shape": "longitudinal",
+            "label": "长表",
+            "rows": 80,
+            "columns": [
+              "USUBJID",
+              "PARAMCD",
+              "AVAL",
+              "ADT"
+            ],
+            "issues": 0,
+            "outcomeBearing": false
+          },
+          {
+            "shape": "subject",
+            "label": "受试者级表",
+            "rows": 40,
+            "columns": [
+              "USUBJID",
+              "age",
+              "arm",
+              "ecog",
+              "sex"
+            ],
+            "issues": 0,
+            "outcomeBearing": false
+          }
+        ]
+      }
+    ]
+  },
+  "decisions": [],
+  "evidenceNote": null
+}

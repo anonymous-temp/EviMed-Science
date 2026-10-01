@@ -1,0 +1,556 @@
+{
+  "headline": "4 张假设卡，其中 3 张由 AI 设定、还没有复核。",
+  "status": [
+    {
+      "label": "试验先例",
+      "value": "3 项"
+    },
+    {
+      "label": "假设卡",
+      "value": "4 张"
+    },
+    {
+      "label": "患者级数据",
+      "value": "未接入"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "asm_1",
+      "key": "control_median_pfs",
+      "name": "对照组中位 PFS",
+      "value": {
+        "value": 4.1,
+        "text": null,
+        "unit": "个月",
+        "source": "aggregate",
+        "interval": {
+          "kind": "prediction",
+          "low": 3,
+          "high": 5.6,
+          "level": 80
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": {
+          "kind": "assumption",
+          "title": "对照组中位 PFS",
+          "fields": [
+            {
+              "label": "合并方法",
+              "value": "随机效应（REML）"
+            },
+            {
+              "label": "I²",
+              "value": "41%"
+            },
+            {
+              "label": "纳入的研究数",
+              "value": "7"
+            }
+          ],
+          "quote": "多西他赛组中位 PFS 为 3.9 个月（95% CI 3.4–4.4）",
+          "quoteSource": "NCT09900001，第 6 页，表 2",
+          "ref": {
+            "kind": "assumption",
+            "id": "asm_1",
+            "tab": "data"
+          }
+        }
+      },
+      "summary": "7 项 · 预测区间 3.0–5.6",
+      "isKey": true,
+      "version": 1,
+      "sourceType": "外部证据",
+      "sourceKind": "external_evidence",
+      "applicability": "二线 NSCLC，多西他赛单药；含中国人群的研究",
+      "sensitivity": "敏感性范围 3–5.6",
+      "review": null,
+      "edit": {
+        "pointValue": 4.1,
+        "unit": "个月",
+        "note": "7 项随机效应汇总",
+        "endpoint": "PFS",
+        "applicability": {
+          "region": "含中国人群的研究",
+          "calibre": "overall",
+          "population": "二线 NSCLC，多西他赛单药"
+        }
+      },
+      "detail": {
+        "subtitle": "PFS · 汇总口径：全部研究",
+        "stats": [
+          {
+            "label": "研究数",
+            "value": "7"
+          },
+          {
+            "label": "I²",
+            "value": "41%"
+          },
+          {
+            "label": "τ²",
+            "value": "0.02"
+          }
+        ],
+        "forest": [
+          {
+            "id": "evd_1",
+            "label": "NCT09900001",
+            "note": "docetaxel",
+            "n": 425,
+            "value": 3.9,
+            "low": 3.4,
+            "high": 4.4,
+            "weight": null,
+            "highlighted": false,
+            "pooled": false,
+            "prediction": false
+          },
+          {
+            "id": "evd_2",
+            "label": "NCT09900002",
+            "note": "docetaxel",
+            "n": 288,
+            "value": 4.3,
+            "low": 3.7,
+            "high": 4.9,
+            "weight": null,
+            "highlighted": false,
+            "pooled": false,
+            "prediction": false
+          },
+          {
+            "id": "evd_3",
+            "label": "CTR20990001",
+            "note": "docetaxel",
+            "n": 420,
+            "value": 4,
+            "low": 3.3,
+            "high": 4.2,
+            "weight": null,
+            "highlighted": true,
+            "pooled": false,
+            "prediction": false
+          },
+          {
+            "id": "pooled",
+            "label": "随机效应合并",
+            "note": null,
+            "n": null,
+            "value": 4.1,
+            "low": 3.6,
+            "high": 4.6,
+            "weight": null,
+            "highlighted": false,
+            "pooled": true,
+            "prediction": false
+          },
+          {
+            "id": "prediction",
+            "label": "预测区间",
+            "note": null,
+            "n": null,
+            "value": 4.1,
+            "low": 3,
+            "high": 5.6,
+            "weight": null,
+            "highlighted": false,
+            "pooled": false,
+            "prediction": true
+          }
+        ],
+        "forestNote": "汇总口径与理由已记在卡上。",
+        "distribution": {
+          "family": "lognormal",
+          "note": null,
+          "points": []
+        },
+        "quote": "多西他赛组中位 PFS 为 3.9 个月（95% CI 3.4–4.4）",
+        "quoteSource": "NCT09900001，第 6 页，表 2",
+        "quoteLink": "https://example.org/NCT09900001",
+        "usedBy": [
+          {
+            "id": "trial_scenario:scn_1@1",
+            "label": "方案 A 单臂 + 文献对照",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_2@2",
+            "label": "方案 B 2:1 随机",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_3@3",
+            "label": "方案 C 1:1 随机 + 一次期中分析",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_4@4",
+            "label": "方案 D 1:1 随机 无期中",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "patient_set:pts_1@1",
+            "label": "虚拟患者集 v1",
+            "note": null,
+            "tab": "patients"
+          }
+        ],
+        "versions": [
+          {
+            "version": 1,
+            "at": "昨天 09:07",
+            "text": "7 项随机效应汇总",
+            "note": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "asm_3",
+      "key": "dropout_annual",
+      "name": "脱落率",
+      "value": {
+        "value": 10,
+        "text": null,
+        "unit": "%/年",
+        "source": "aggregate",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": {
+          "kind": "assumption",
+          "title": "脱落率",
+          "fields": [
+            {
+              "label": "纳入的研究数",
+              "value": "5"
+            }
+          ],
+          "quote": null,
+          "quoteSource": null,
+          "ref": {
+            "kind": "assumption",
+            "id": "asm_3",
+            "tab": "data"
+          }
+        }
+      },
+      "summary": "5 项",
+      "isKey": false,
+      "version": 1,
+      "sourceType": "外部证据",
+      "sourceKind": "external_evidence",
+      "applicability": null,
+      "sensitivity": null,
+      "review": null,
+      "edit": {
+        "pointValue": 10,
+        "unit": "%/年",
+        "note": null,
+        "endpoint": null,
+        "applicability": {}
+      },
+      "detail": {
+        "subtitle": null,
+        "stats": [
+          {
+            "label": "研究数",
+            "value": "5"
+          }
+        ],
+        "forest": [],
+        "forestNote": null,
+        "distribution": null,
+        "quote": null,
+        "quoteSource": null,
+        "quoteLink": null,
+        "usedBy": [],
+        "versions": [
+          {
+            "version": 1,
+            "at": "昨天 09:28",
+            "text": "脱落率 = 10",
+            "note": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "asm_4",
+      "key": "orr_control",
+      "name": "对照组 ORR",
+      "value": {
+        "value": 12.4,
+        "text": null,
+        "unit": "%",
+        "source": "aggregate",
+        "interval": {
+          "kind": "prediction",
+          "low": 7.9,
+          "high": 18.6,
+          "level": 80
+        },
+        "mcse": null,
+        "review": "reviewed",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": {
+          "kind": "assumption",
+          "title": "对照组 ORR",
+          "fields": [
+            {
+              "label": "合并方法",
+              "value": "随机效应（REML）"
+            },
+            {
+              "label": "纳入的研究数",
+              "value": "9"
+            }
+          ],
+          "quote": null,
+          "quoteSource": null,
+          "ref": {
+            "kind": "assumption",
+            "id": "asm_4",
+            "tab": "data"
+          }
+        }
+      },
+      "summary": "9 项 · 预测区间 7.9–18.6",
+      "isKey": false,
+      "version": 1,
+      "sourceType": "外部证据",
+      "sourceKind": "external_evidence",
+      "applicability": null,
+      "sensitivity": null,
+      "review": {
+        "by": null,
+        "at": "昨天",
+        "version": 1,
+        "kind": "统计复核"
+      },
+      "edit": {
+        "pointValue": 12.4,
+        "unit": "%",
+        "note": "9 项汇总",
+        "endpoint": null,
+        "applicability": {}
+      },
+      "detail": {
+        "subtitle": null,
+        "stats": [
+          {
+            "label": "研究数",
+            "value": "9"
+          }
+        ],
+        "forest": [],
+        "forestNote": null,
+        "distribution": null,
+        "quote": null,
+        "quoteSource": null,
+        "quoteLink": null,
+        "usedBy": [],
+        "versions": [
+          {
+            "version": 1,
+            "at": "昨天 09:21",
+            "text": "9 项汇总",
+            "note": "已复核"
+          }
+        ]
+      }
+    },
+    {
+      "id": "asm_2",
+      "key": "target_hr",
+      "name": "目标 HR",
+      "value": {
+        "value": 0.6,
+        "text": null,
+        "unit": null,
+        "source": "assumed",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": {
+          "kind": "assumption",
+          "title": "目标 HR",
+          "fields": [],
+          "quote": null,
+          "quoteSource": null,
+          "ref": {
+            "kind": "assumption",
+            "id": "asm_2",
+            "tab": "data"
+          }
+        }
+      },
+      "summary": "情景假设",
+      "isKey": true,
+      "version": 1,
+      "sourceType": "情景假设",
+      "sourceKind": "scenario",
+      "applicability": null,
+      "sensitivity": "敏感性范围 0.5–0.75",
+      "review": null,
+      "edit": {
+        "pointValue": 0.6,
+        "unit": null,
+        "note": "情景假设；敏感性范围 0.50–0.75",
+        "endpoint": null,
+        "applicability": {}
+      },
+      "detail": {
+        "subtitle": null,
+        "stats": [],
+        "forest": [],
+        "forestNote": null,
+        "distribution": {
+          "family": "lognormal",
+          "note": "设计先验",
+          "points": []
+        },
+        "quote": null,
+        "quoteSource": null,
+        "quoteLink": null,
+        "usedBy": [
+          {
+            "id": "trial_scenario:scn_1@1",
+            "label": "方案 A 单臂 + 文献对照",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_2@2",
+            "label": "方案 B 2:1 随机",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_3@3",
+            "label": "方案 C 1:1 随机 + 一次期中分析",
+            "note": null,
+            "tab": "trial"
+          },
+          {
+            "id": "trial_scenario:scn_4@4",
+            "label": "方案 D 1:1 随机 无期中",
+            "note": null,
+            "tab": "trial"
+          }
+        ],
+        "versions": [
+          {
+            "version": 1,
+            "at": "昨天 09:14",
+            "text": "情景假设；敏感性范围 0.50–0.75",
+            "note": null
+          }
+        ]
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "id": "rvw_1",
+      "reviewerKind": "human",
+      "role": "statistical",
+      "label": "人工统计复核",
+      "state": "已复核",
+      "status": "done",
+      "current": true,
+      "by": null,
+      "configuredModel": null,
+      "configurationRevision": null,
+      "inputDigest": null,
+      "at": "2026-09-27T01:07:00.000Z",
+      "note": "审查意见供参考，不代表实证验证。",
+      "findings": []
+    }
+  ],
+  "selectedId": null,
+  "precedents": [
+    {
+      "id": "pre_1",
+      "registryId": "CTR20990001",
+      "registry": "CDE 登记",
+      "title": "多西他赛对照 III 期（中国人群）",
+      "population": "非小细胞肺癌",
+      "design": "PHASE3 · RANDOMIZED · 开放",
+      "planned": 420,
+      "actual": 426,
+      "sites": 38,
+      "plannedMonths": null,
+      "actualMonths": 22,
+      "perSitePerMonth": 0.51,
+      "usedFor": "中位生存时间"
+    },
+    {
+      "id": "pre_2",
+      "registryId": "NCT09900002",
+      "registry": "ClinicalTrials.gov",
+      "title": "多西他赛对照 II 期",
+      "population": "非小细胞肺癌",
+      "design": "PHASE3 · RANDOMIZED · 开放",
+      "planned": 288,
+      "actual": 279,
+      "sites": 22,
+      "plannedMonths": null,
+      "actualMonths": 14,
+      "perSitePerMonth": 0.906,
+      "usedFor": "中位生存时间"
+    },
+    {
+      "id": "pre_3",
+      "registryId": "NCT09900001",
+      "registry": "ClinicalTrials.gov",
+      "title": "多西他赛二线 NSCLC 随机 III 期",
+      "population": "非小细胞肺癌",
+      "design": "PHASE3 · RANDOMIZED · 开放",
+      "planned": 425,
+      "actual": 421,
+      "sites": 38,
+      "plannedMonths": null,
+      "actualMonths": 20,
+      "perSitePerMonth": 0.554,
+      "usedFor": "中位生存时间"
+    }
+  ],
+  "precedentSources": "3 项试验先例",
+  "precedentNote": null,
+  "snapshots": [],
+  "intake": {
+    "available": false,
+    "message": "本部署未配置数据平面目录：T0 档以外的数据接入暂不可用。",
+    "formats": [],
+    "maxBytes": null,
+    "seal": null,
+    "sources": [],
+    "snapshots": []
+  },
+  "decisions": [
+    {
+      "id": "dec_1",
+      "at": "今天 09:07",
+      "text": "在成功把握尽量高、样本量尽量少的目标下选哪个方案"
+    }
+  ],
+  "evidenceNote": null
+}

@@ -31,12 +31,16 @@ function leaseFromRow(row) {
   if (!id || !Number.isFinite(requestedAt.getTime()) || !Number.isFinite(expiresAt.getTime()) || expiresAt <= requestedAt) {
     throw maintenanceError(503, "maintenance_state_invalid", "Maintenance state is unavailable.");
   }
-  return { requestId: id, requestedAt: requestedAt.toISOString(), expiresAt: expiresAt.toISOString() };
+  if (row.durable_hold !== undefined && typeof row.durable_hold !== 'boolean') {
+    throw maintenanceError(503, "maintenance_state_invalid", "Maintenance state is unavailable.");
+  }
+  return { requestId: id, requestedAt: requestedAt.toISOString(), expiresAt: expiresAt.toISOString(),
+    ...(row.durable_hold ? { durableHold: true } : {}) };
 }
 
 async function activeLease(client) {
-  const result = await client.query(`SELECT request_id,requested_at,expires_at
-    FROM evimed_product.maintenance_lease WHERE singleton=true AND expires_at>clock_timestamp()`);
+  const result = await client.query(`SELECT request_id,requested_at,expires_at,durable_hold
+    FROM evimed_product.maintenance_lease WHERE singleton=true AND (durable_hold OR expires_at>clock_timestamp())`);
   if (result.rows.length > 1) throw maintenanceError(503, "maintenance_state_invalid", "Maintenance state is unavailable.");
   return leaseFromRow(result.rows[0]);
 }
@@ -68,7 +72,8 @@ function normalizedActivity(raw, activeMutations, databaseActivity) {
     activeTasks: count(raw?.activeTasks),
     backgroundOperations: count(raw?.backgroundOperations),
     runningAgentRuns: count(raw?.runningAgentRuns),
-    runningProductJobs: count(databaseActivity?.running_jobs),
+    runningProductJobs: count(databaseActivity?.running_jobs) === null || count(raw?.heavyWorkJobs ?? 0) === null
+      ? null : count(databaseActivity.running_jobs) + count(raw?.heavyWorkJobs ?? 0),
     pendingPromptAdmissions: count(databaseActivity?.pending_prompts),
     activeDatabaseSessions: count(databaseActivity?.active_sessions),
     busyRuntimes: count(runtimes?.busy),
@@ -92,7 +97,8 @@ function normalizedActivity(raw, activeMutations, databaseActivity) {
   return { ...values, unknown: 0 };
 }
 
-/** A durable expiring maintenance lease. Admission locks are short; customer work runs outside them. */
+/** Expiring maintenance with an explicit protective hold for physical operations.
+ * Admission locks are short; customer work runs outside them. */
 export class MaintenanceService {
   constructor(database, {
     inspectActivity = async () => ({
@@ -147,7 +153,9 @@ export class MaintenanceService {
     if (this.timer) this.clearTimer(this.timer);
     this.timer = null;
     if (!lease) return;
-    const delay = Math.max(1, Date.parse(lease.expiresAt) - this.now().getTime());
+    // A protective hold has no expiry. Poll for an explicit release by
+    // another replica using the existing timer; never infer release from age.
+    const delay = lease.durableHold ? 1000 : Math.max(1, Date.parse(lease.expiresAt) - this.now().getTime());
     this.timer = this.setTimer(async () => {
       this.timer = null;
       try { await this.refresh(); }
@@ -191,10 +199,28 @@ export class MaintenanceService {
       const result = await client.query(`INSERT INTO evimed_product.maintenance_lease(singleton,request_id,requested_at,expires_at)
         VALUES (true,$1,clock_timestamp(),clock_timestamp()+($2::integer*interval '1 second'))
         ON CONFLICT(singleton) DO UPDATE SET request_id=excluded.request_id,requested_at=excluded.requested_at,expires_at=excluded.expires_at
-        WHERE evimed_product.maintenance_lease.expires_at<=clock_timestamp()
+        WHERE (NOT evimed_product.maintenance_lease.durable_hold AND evimed_product.maintenance_lease.expires_at<=clock_timestamp())
           OR evimed_product.maintenance_lease.request_id=excluded.request_id
-        RETURNING request_id,requested_at,expires_at`, [id, ttl]);
+        RETURNING request_id,requested_at,expires_at,durable_hold`, [id, ttl]);
       if (!result.rows[0]) throw maintenanceError(409, "maintenance_conflict", "Another maintenance request owns the active lease.");
+      return leaseFromRow(result.rows[0]);
+    });
+    this.updateCache(lease);
+    return this.status();
+  }
+
+  /** Establish before starting a physical capture. Renewal cannot clear it;
+   * the authenticated owner releases only after physical stop is proved. */
+  async hold(input) {
+    const id = requestId(input?.requestId);
+    await this.migrate(this.database);
+    const lease = await this.database.transaction(async client => {
+      await exclusiveLock(client);
+      const current = await activeLease(client);
+      if (!current || current.requestId !== id) throw maintenanceError(409, 'maintenance_conflict', 'The active maintenance request does not match.');
+      const result = await client.query(`UPDATE evimed_product.maintenance_lease SET durable_hold=true
+        WHERE singleton=true AND request_id=$1 RETURNING request_id,requested_at,expires_at,durable_hold`, [id]);
+      if (!result.rows[0]) throw maintenanceError(409, 'maintenance_conflict', 'Maintenance changed before the protective hold.');
       return leaseFromRow(result.rows[0]);
     });
     this.updateCache(lease);
@@ -215,7 +241,7 @@ export class MaintenanceService {
           WHERE singleton=true AND request_id=$1 RETURNING request_id,requested_at,expires_at`, [id]);
         if (!deleted.rows[0]) throw maintenanceError(409, "maintenance_conflict", "Maintenance lease changed before release.");
       } else {
-        await client.query("DELETE FROM evimed_product.maintenance_lease WHERE singleton=true AND expires_at<=clock_timestamp()");
+        await client.query("DELETE FROM evimed_product.maintenance_lease WHERE singleton=true AND NOT durable_hold AND expires_at<=clock_timestamp()");
       }
     });
     this.updateCache(null);

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>EV-201 二线 NSCLC 研究设计包</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页渲染：外壳随内容增高 */
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; background: var(--surface); }
+  html, body { height: auto; }
+  body { position: relative; }
+  .render-note { position: absolute; }
+
+  .topbar { box-shadow: inset 0 -1px 0 var(--line); }
+  .back { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 8px; margin-left: -8px; border-radius: 8px; color: var(--text-2); font-weight: 500; }
+  .back svg { color: var(--text-3); }
+  .lay { display: grid; grid-template-columns: 720px 256px; gap: 56px; justify-content: center; padding: 36px 0 64px; }
+
+  /* 文档头 */
+  .kick { display: flex; align-items: center; gap: 8px; }
+  h1.t { font-family: var(--font-serif); font-size: 30px; line-height: 40px; font-weight: 600; margin-top: 12px; color: var(--n-900); letter-spacing: -.005em; }
+  .by { margin-top: 10px; font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .status { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr 1.45fr 1.1fr; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+  .status > div { padding: 12px 14px; }
+  .status > div + div { box-shadow: inset 1px 0 0 var(--line); }
+  .status span.l { display: block; font-size: 12px; color: var(--text-3); font-weight: 600; letter-spacing: .02em; margin-bottom: 4px; }
+  .status .v { font-size: 14px; line-height: 21px; color: var(--text); }
+  .status .v small { display: block; font-size: 12px; line-height: 18px; color: var(--text-3); margin-top: 2px; }
+  .rv { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+  .rv.no { color: var(--attn-strong); }
+  .rv.no i { width: 8px; height: 8px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--attn); }
+  .rv.ok { color: var(--ok); }
+  .rv.na { color: var(--text-2); }
+
+  /* 正文 */
+  .doc h2 { font-size: 18px; line-height: 26px; margin-top: 34px; display: flex; align-items: baseline; gap: 10px; color: var(--n-900); }
+  .doc h2 .no { font-variant-numeric: tabular-nums; color: var(--text-3); font-weight: 600; min-width: 14px; }
+  .doc p { margin-top: 10px; font-size: 16px; line-height: 29px; color: var(--n-800); }
+  .doc p b { font-weight: 600; color: var(--n-900); }
+  .inl { display: grid; grid-template-columns: 96px 1fr; margin-top: 10px; border-radius: 10px; background: var(--surface-1); padding: 4px 14px; }
+  .inl > div { padding: 8px 0; font-size: 14px; line-height: 22px; box-shadow: inset 0 -1px 0 var(--line); }
+  .inl > div:nth-last-child(-n+2) { box-shadow: none; }
+  .inl .k { color: var(--text-3); font-size: 13px; }
+  .inl .mono2 { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); margin-left: 6px; }
+  .og { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; line-height: 1; color: var(--text-2); background: var(--surface-2); white-space: nowrap; vertical-align: 1px; }
+  .og i { display: inline-block; flex: none; }
+  .og.obs i { width: 6px; height: 6px; border-radius: 3px; background: var(--n-600); }
+  .og.agg i, .og.rec i { width: 10px; height: 0; border-top: 1.5px dashed var(--n-500); }
+  .og.asm i { width: 6px; height: 6px; transform: rotate(45deg); box-shadow: inset 0 0 0 1.4px var(--n-500); }
+  .og.syn i { width: 10px; height: 7px; border-radius: 2px; background: var(--brand-100); box-shadow: inset 0 0 0 1px var(--brand-300); }
+  table.ar { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  table.ar th { text-align: left; font-size: 12px; color: var(--text-3); font-weight: 500; padding: 8px 10px; background: var(--surface-1); white-space: nowrap; }
+  table.ar th:first-child { border-radius: 8px 0 0 8px; } table.ar th:last-child { border-radius: 0 8px 8px 0; }
+  table.ar td { padding: 10px 10px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 21px; }
+  table.ar td.v { font-variant-numeric: tabular-nums; }
+  table.ar td.v small { display: block; font-size: 12px; color: var(--text-3); line-height: 18px; }
+  table.ar td.s { font-size: 13px; color: var(--text-2); }
+  table.ar td.s .og { margin-right: 6px; }
+  .tn { margin-top: 8px; font-size: 12px; color: var(--text-3); }
+  .tag.xs { height: 20px; padding: 0 7px; }
+
+  /* 由结果渲染的数字 */
+  .rn { border-bottom: 1.5px dotted var(--brand-400); padding-bottom: 1px; font-variant-numeric: tabular-nums; }
+  .rn sup { font-size: 11px; line-height: 0; color: var(--brand-600); font-weight: 600; margin-left: 1px; font-family: var(--font-sans); }
+  .rn.sel { background: var(--brand-50); border-radius: 4px; box-shadow: 0 0 0 2px var(--brand-50); border-bottom-color: var(--brand-600); }
+  .four { display: grid; grid-template-columns: 1.1fr 1fr 1fr 1.2fr; margin-top: 16px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line); }
+  .four div { padding: 10px 14px; }
+  .four div + div { box-shadow: inset 1px 0 0 var(--line); }
+  .four span { display: block; font-size: 12px; color: var(--text-3); }
+  .four b { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .four b.m { color: var(--text-3); font-weight: 500; }
+  .fig { margin-top: 16px; display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: center; padding: 14px 16px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line); }
+  .fig svg { display: block; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+  .fig .cap b { display: block; font-size: 14px; line-height: 22px; font-weight: 600; }
+  .fig .cap span { display: block; margin-top: 6px; font-size: 13px; line-height: 21px; color: var(--text-2); }
+  .fig .cap a { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 13px; color: var(--brand-700); font-weight: 500; }
+  .next { margin-top: 36px; padding-top: 16px; box-shadow: inset 0 1px 0 var(--line); display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-3); }
+  .next a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
+
+  /* 右栏 */
+  .rail2 { position: relative; }
+  .rail2 .card { padding: 16px; }
+  .rail2 h4 { font-size: 13px; color: var(--text-3); font-weight: 600; margin-bottom: 10px; }
+  .toc a { display: flex; gap: 8px; padding: 5px 0 5px 12px; font-size: 13px; line-height: 20px; color: var(--text-2); box-shadow: inset 2px 0 0 var(--line); }
+  .toc a span { width: 12px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+  .toc a.on { color: var(--brand-700); box-shadow: inset 2px 0 0 var(--accent); font-weight: 500; }
+  .toc a.on span { color: var(--brand-600); }
+  .pnote { position: absolute; left: 0; right: 0; padding: 14px 16px; border-radius: 12px; background: var(--surface); box-shadow: var(--e2); }
+  .pnote .h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .pnote .big { margin-top: 8px; font-size: 22px; line-height: 28px; font-weight: 600; color: var(--brand-700); font-variant-numeric: tabular-nums; }
+  .pnote .big small { font-size: 13px; color: var(--text-3); font-weight: 500; margin-left: 4px; }
+  .pnote .rows { margin-top: 8px; }
+  .pnote .rows div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 12px; line-height: 18px; box-shadow: inset 0 -1px 0 var(--line); }
+  .pnote .rows div:last-child { box-shadow: none; }
+  .pnote .rows span { color: var(--text-3); white-space: nowrap; }
+  .pnote .rows b { font-weight: 500; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+  .pnote a { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 12px; color: var(--brand-700); font-weight: 500; }
+</style></head>
+<body data-nav="vcr" data-recent="a">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="topbar">
+      <a class="back"><svg data-i="arrow-left" class="i xs"></svg>EV-201 二线 NSCLC</a>
+      <span class="sp"></span>
+      <a class="btn sm ghost"><svg data-i="share-2" class="i xs"></svg>分享</a>
+      <a class="btn sm primary">下载<svg data-i="chevron-down" class="i xs"></svg></a>
+    </div>
+    <div class="lay">
+      <article class="doc">
+        <div class="kick"><span class="tag brand">研究包</span><span class="t12 muted">虚拟临研 · 设计阶段</span></div>
+        <h1 class="t">EV-201 二线 NSCLC 研究设计包</h1>
+        <div class="by">生成于 2026年9月28日 · 研究包 v2 · 运行 #12</div>
+
+        <section class="status">
+          <div><span class="l">预期用途</span><div class="v">研究设计支持</div></div>
+          <div><span class="l">统计复核</span><div class="v"><span class="rv no"><i></i>未复核</span></div></div>
+          <div><span class="l">临床复核</span><div class="v"><span class="rv ok"><svg data-i="check" class="i xs"></svg>已复核</span><small>李主任，9月27日，针对人群 v3</small></div></div>
+          <div><span class="l">结局封存</span><div class="v"><span class="rv na">不适用</span><small>设计阶段</small></div></div>
+        </section>
+
+        <h2 id="s1"><span class="no">1</span>研究与分析概要</h2>
+        <p>EV-201 是一种 PD-1/VEGF 双特异性抗体。本研究包回答它在二线 EGFR/ALK 阴性晚期非小细胞肺癌中，II 期应采用单臂加文献对照，还是随机对照。目标人群为一线含铂化疗 ± 免疫治疗后进展的患者，对照为多西他赛；主要终点无进展生存期，次要终点客观缓解率。包内比较方案 A–D 的运行特征，只用于研究设计，不用于疗效推断。</p>
+
+        <h2 id="s2"><span class="no">2</span>输入清单</h2>
+        <div class="inl">
+          <div class="k">研究对象</div><div>研究定义 v2 · 人群 v3 · 虚拟患者集 v2 · 假设卡 12 张</div>
+          <div class="k">模型</div><div>二线 NSCLC 多西他赛组 PFS · Weibull v1.2（文献模型）</div>
+          <div class="k">方法包</div><div>rpact 4.x · Poisson–Gamma 入组 v1.0 · Guyot 重建 v1.0 · RMST 差 v1.0</div>
+          <div class="k">数据快照</div><div>未接入患者级数据（T0 公开资料）</div>
+        </div>
+
+        <h2 id="s3"><span class="no">3</span>假设登记表</h2>
+        <table class="ar">
+          <thead><tr><th style="width:150px">参数</th><th style="width:210px">取值</th><th>来源</th><th style="width:118px">复核</th></tr></thead>
+          <tbody>
+            <tr><td>对照组中位 PFS</td><td class="v">4.1 个月<small>预测区间 3.0–5.6</small></td><td class="s"><span class="og agg"><i></i>汇总</span>7 项随机效应，I² 41%</td><td><span class="tag attn xs">AI 设定</span></td></tr>
+            <tr><td>对照组 ORR</td><td class="v">12.4%<small>预测区间 7.9–18.6%</small></td><td class="s"><span class="og agg"><i></i>汇总</span>9 项</td><td><span class="tag ok xs">已复核</span><div class="t12 muted" style="margin-top:2px">王统计师 9/27</div></td></tr>
+            <tr><td>目标 HR</td><td class="v">0.60<small>敏感性范围 0.50–0.75</small></td><td class="s"><span class="og asm"><i></i>假设</span>情景假设</td><td><span class="tag attn xs">AI 设定</span></td></tr>
+            <tr><td>脱落率</td><td class="v">10% / 年</td><td class="s"><span class="og agg"><i></i>汇总</span>5 项</td><td><span class="tag outline xs">复核后有变更</span></td></tr>
+            <tr><td>每中心每月入组</td><td class="v">0.42 例<small>Gamma α=2.1，β=5.0</small></td><td class="s"><span class="og agg"><i></i>汇总</span>先例弱先验</td><td><span class="tag attn xs">AI 设定</span></td></tr>
+            <tr><td>筛选失败率</td><td class="v">38%</td><td class="s"><span class="og obs"><i></i>观察</span>合作方漏斗 2023–2026，1,186 例筛选</td><td><span class="tag ok xs">已复核</span></td></tr>
+          </tbody>
+        </table>
+        <div class="tn">其余 6 张（RMST、分布形状、评估间隔、I 类错误、期中时点、中心数）见附表 A；每张卡附原文位置</div>
+
+        <h2 id="s4"><span class="no">4</span>人群与对照定义</h2>
+        <p>时间零点为「一线治疗后首次影像进展日」，入排条件按方案 v2 的 I1–I8、E1–E6。对照采用<b>文献对照</b>（有限制地估计）：3 条多西他赛 KM 曲线经 Guyot 重建并全部通过质控，合并 12 个月 RMST 5.9 个月。<b>真实外部对照不可估计</b>，缺同期治疗记录、结局评估频率和 ECOG（缺失 38%）三项数据。</p>
+
+        <h2 id="s5"><span class="no">5</span>结果</h2>
+        <p>按当前 12 张假设卡，方案 B（2:1 随机，180 例，事件数 <span class="rn">138<sup>1</sup></span>）的成功把握为 <span class="rn sel">71%<sup>2</sup></span>（蒙特卡洛标准误 0.4 个百分点），高于单臂方案 A 的 <span class="rn">58%<sup>3</sup></span>（±0.4）；方案 C（1:1 随机加一次期中分析，220 例）为 <span class="rn">74%<sup>4</sup></span>（±0.4），比方案 B 高 <span class="rn">3 个百分点<sup>5</sup></span>，但末例入组中位晚 <span class="rn">3.2 个月<sup>6</sup></span>，成本多约 <span class="rn">700 万元<sup>7</sup></span>。方案 B 在目标 HR 0.60 下的功效为 <span class="rn">81%<sup>8</sup></span>（±0.3），零假设情景下 I 类错误为 <span class="rn">2.47%<sup>9</sup></span>（±0.11），末例入组中位 <span class="rn">16.4 个月<sup>10</sup></span>（80% 预测区间 13.9–19.3）。方案 A 对对照组 ORR 的假设很敏感：若对照组真实 ORR 为预测区间上限 18.6%，药物无效时仍有 <span class="rn">21.5%<sup>11</sup></span> 的概率判为成功。方案 D 被方案 C 占优，未列入比较。</p>
+        <div class="four">
+          <div><span>方案 B · 真实患者数</span><b>0</b></div>
+          <div><span>事件数</span><b class="m">—</b></div>
+          <div><span>有效样本量</span><b class="m">—</b></div>
+          <div><span>生成记录数</span><b>约 648 万<span class="og syn" style="font-weight:400"><i></i>合成</span></b></div>
+        </div>
+        <div class="fig">
+          <svg viewBox="0 0 340 204" width="340" height="204">
+            <g stroke="#E4E8EC"><line x1="36" y1="24" x2="330" y2="24"/><line x1="36" y1="74.7" x2="330" y2="74.7"/><line x1="36" y1="125.3" x2="330" y2="125.3"/></g>
+            <line x1="36" y1="176" x2="330" y2="176" stroke="#BAC2CA"/>
+            <g font-size="12" fill="#646D77" text-anchor="end"><text x="30" y="28">80%</text><text x="30" y="78.7">70%</text><text x="30" y="129.3">60%</text><text x="30" y="180">50%</text></g>
+            <g font-size="12" fill="#646D77" text-anchor="middle"><text x="36" y="194">6</text><text x="134" y="194">12</text><text x="232" y="194">18</text><text x="322" y="194" text-anchor="end">24 个月</text></g>
+            <defs><pattern id="hx" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="#BAC2CA" stroke-width="1.4"/></pattern></defs>
+            <!-- D：被占优 -->
+            <circle cx="297.3" cy="59.5" r="15.4" fill="url(#hx)" stroke="#BAC2CA" stroke-width="1.2"/>
+            <text x="297.3" y="91" font-size="12" fill="#939CA6" text-anchor="middle">D 被占优</text>
+            <!-- C -->
+            <circle cx="258.1" cy="54.4" r="14.9" fill="#D6DCE2" stroke="#8A939C" stroke-width="1.2"/>
+            <text x="258.1" y="58.6" font-size="12" font-weight="600" fill="#3E454D" text-anchor="middle">C</text>
+            <!-- A -->
+            <circle cx="129.1" cy="135.5" r="8.4" fill="#D6DCE2" stroke="#8A939C" stroke-width="1.2"/>
+            <text x="143" y="139.7" font-size="12" font-weight="600" fill="#3E454D">A</text>
+            <!-- B -->
+            <circle cx="205.8" cy="69.6" r="13.7" fill="#0A5DC1"/>
+            <text x="205.8" y="73.8" font-size="12" font-weight="600" fill="#fff" text-anchor="middle">B</text>
+          </svg>
+          <div class="cap"><b>图 1　成功把握与末例入组时间</b><span>横轴为末例入组中位，纵轴为成功把握，气泡面积为成本。方案 B 与 C 的成功把握相差 3 个百分点，B 少用 40 例、早 3.2 个月。</span><a>打开图表<svg data-i="arrow-up-right" class="i xs"></svg></a></div>
+        </div>
+        <div class="next"><span>下一节</span><a>6　图表<svg data-i="arrow-right" class="i xs"></svg></a></div>
+      </article>
+
+      <aside class="rail2">
+        <section class="card">
+          <h4>目录</h4>
+          <nav class="toc">
+            <a class="on"><span>1</span>研究与分析概要</a>
+            <a><span>2</span>输入清单</a>
+            <a><span>3</span>假设登记表</a>
+            <a><span>4</span>人群与对照定义</a>
+            <a><span>5</span>结果</a>
+            <a><span>6</span>图表</a>
+            <a><span>7</span>执行记录</a>
+            <a><span>8</span>验证与局限</a>
+            <a><span>9</span>决策记录</a>
+          </nav>
+        </section>
+        <section class="pnote" id="pnote">
+          <div class="h"><svg data-i="link" class="i xs"></svg>数字 2 的来源</div>
+          <div class="big">71%<small>成功把握 · 方案 B</small></div>
+          <div class="rows">
+            <div><span>结果文件</span><b>方案 B 运行特征</b></div>
+            <div><span>取值</span><b>0.712</b></div>
+            <div><span>蒙特卡洛标准误</span><b>0.004</b></div>
+            <div><span>备择情景</span><b>16,000 次</b></div>
+            <div><span>运行</span><b>#12 · 种子已记录</b></div>
+          </div>
+          <a>查看运行配置<svg data-i="arrow-up-right" class="i xs"></svg></a>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script src="shell.js"></script><script src="icons.js"></script>
+<script>
+  // 让“数字来源”卡片与第 5 节对齐（设计稿里固定位置）
+  function place() {
+    var n = document.getElementById('pnote'), s = document.getElementById('s5'), r = document.querySelector('.rail2');
+    if (n && s && r) n.style.top = (s.getBoundingClientRect().top - r.getBoundingClientRect().top + 38) + 'px';
+  }
+  place(); if (document.fonts) document.fonts.ready.then(place);
+</script>
+</body></html>

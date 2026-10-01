@@ -1,0 +1,27 @@
+{
+  "headline": null,
+  "status": [
+    {
+      "label": "患者级数据",
+      "value": "未接入"
+    }
+  ],
+  "assumptions": [],
+  "reviews": [],
+  "selectedId": null,
+  "precedents": [],
+  "precedentSources": null,
+  "precedentNote": null,
+  "snapshots": [],
+  "intake": {
+    "available": false,
+    "message": "本部署未配置数据平面目录：T0 档以外的数据接入暂不可用。",
+    "formats": [],
+    "maxBytes": null,
+    "seal": null,
+    "sources": [],
+    "snapshots": []
+  },
+  "decisions": [],
+  "evidenceNote": null
+}

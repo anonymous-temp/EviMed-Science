@@ -8,13 +8,13 @@ export const PRODUCT_KINDS = Object.freeze([
   // project. Its own kind rather than a field on `method`, because it is a
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
-  "method-trial",
+  "method-trial", "document-export",
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify"]);
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS evimed_product.maintenance_lease (
   expires_at timestamptz(3) NOT NULL CHECK (expires_at > requested_at)
 );
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-maintenance-lease-v1') ON CONFLICT DO NOTHING;
+ALTER TABLE evimed_product.maintenance_lease ADD COLUMN IF NOT EXISTS durable_hold boolean NOT NULL DEFAULT false;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-01-maintenance-durable-hold-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.documents (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   kind text NOT NULL CONSTRAINT product_documents_kind_check CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")})),
@@ -206,6 +208,38 @@ BEGIN
   END IF;
 END $migration$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-22-frontier-job-kinds-v1') ON CONFLICT DO NOTHING;
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='documents' AND c.conname='product_documents_kind_check'
+      AND pg_get_constraintdef(c.oid) LIKE '%document-export%') THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $migration$;
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
+      AND pg_get_constraintdef(c.oid) LIKE '%document-export%') THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $migration$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-30-document-export-v1') ON CONFLICT DO NOTHING;
+DO $migration$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
+      AND pg_get_constraintdef(c.oid) LIKE '%study-review%') THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $migration$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-01-study-review-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
   id text PRIMARY KEY,
   user_id text NOT NULL,

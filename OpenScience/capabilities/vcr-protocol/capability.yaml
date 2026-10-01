@@ -1,0 +1,98 @@
+# Capability manifest — the only definition of this capability.
+#
+# Step 1 of a 「虚拟临研」 study (build plan 2026-09-28 §4): turning a sentence or
+# an uploaded protocol into a research definition somebody could act on — PICO,
+# the estimand's five attributes, the primary endpoint and its type, the
+# intended use — and turning the eligibility text into structured criteria that
+# a machine can evaluate and a person can check against the sentence it came
+# from.
+#
+# Public so a study's conversation can be bound to it, and kept off 科研工具 and
+# the kernel's own tool list by `display.listed: false` — `visibility: internal`
+# would make that binding answer 403. It is entered only from 「虚拟临研」.
+id: vcr-protocol
+version: 1.0.0
+title: Virtual Clinical Research Protocol
+category: Study Design
+description: Step 1 of a virtual clinical research study — a versioned research definition (PICO, estimand,
+  primary endpoint and its type, intended use) drafted from one sentence or an uploaded protocol, plus the
+  eligibility text structured criterion by criterion with the original wording and its locator kept beside each one.
+whenToUse: 「虚拟临研」研究的第一步交给我：把一句话或上传的方案草稿变成研究定义卡（PICO、估计目标的五要素、主要终点及其类型、预期用途），并把入排条件逐条结构化、保留原文与出处。用户要完整流程时，对话里也只委派我这一步；定义写好后平台自己按顺序安排证据、人群、对照、试验与匹配，不要在同一次对话里委派后面的步骤。
+persona: |
+  你是虚拟临床研究的方案分析师。你先把要回答的问题写清楚——治谁、比什么、看什么终点、用什么估计目标——再谈别的；
+  入排条件每一条都指回方案里的原句，改写不得比原文更宽也不更严。能自己定的默认值你直接定，写进定义卡并标「AI 设定」，
+  不去打扰用户；只有连要研究哪个人群都认不准时才问一句。你不产生数字：样本量、事件数、把握度一律来自 vcr_simulate 排的作业。
+safetyClass: general
+skills:
+- vcr-protocol
+- citation-integrity
+tools:
+- mcp__evimed__vcr_read
+- mcp__evimed__vcr_write
+- mcp__evimed__vcr_simulate
+- mcp__evimed__trial_registry_record
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__literature_search
+- mcp__evimed__guideline_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__locate_quote
+- mcp__evimed__term_normalize
+- mcp__evimed__kb_search
+- mcp__evimed__web_read
+produces:
+- contractKind: vcr-study-package
+  outputs:
+  - path: study-definition.md
+    required: true
+  - path: criteria.json
+    required: true
+  - path: results.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - question
+  optional:
+  - protocolText
+  - dataTier
+  - intendedUse
+  - endpointType
+  - registryId
+autopilot:
+  # Scheduling is the 虚拟临研 module's own (its orchestrator dispatches this
+  # run); the autopilot allocator has no VCR task type.
+  taskTypes: []
+  costClass: medium
+  unattendedInputs:
+  - question
+estimatedMinutes:
+- 5
+- 30
+dataSources:
+- clinical-trials
+- literature
+- guidelines
+starterPrompts:
+- 把这份方案草稿的研究问题和入排条件整理出来。
+
+display:
+  title: "研究定义与入排结构化"
+  category: "虚拟临研"
+  description: "把一句话或一份方案变成研究定义卡，并把入排条件逐条结构化、保留原文。"
+  listed: false
+  starterPrompts:
+  - "EV-201 二线 NSCLC 单臂 II 期：把研究问题和估计目标写清楚。"
+  - "这份方案草稿的入排条件帮我逐条结构化，保留原文出处。"
+  - "PFS 预计 HR 0.70、对照中位 6 个月：先把研究定义写出来。"
+  materials: "一句研究问题就够；有方案草稿或登记号会更准"
+  estimatedMinutes:
+    min: 5
+    max: 30
+  outputs:
+  - "研究定义卡（PICO、估计目标、主要终点、预期用途）"
+  - "逐条结构化的入排条件与原文出处"
+  knownLimits:
+  - "定义卡里的值先生效、后复核，全部带「AI 设定」标签，随时可改。"
+  - "这一步不产生任何统计量；样本量与把握度由后面的仿真作业算。"

@@ -1,0 +1,15 @@
+# 虚拟临研 · EviMed（Vue）外壳补丁 3/4：页面标题
+#
+# What the embedded page is called, for a reader and for a screen reader.
+#
+# Apply from the Vue repository root:  git apply 03-page-titles.patch
+--- a/src/components/science/ScienceSubApp.vue
++++ b/src/components/science/ScienceSubApp.vue
+@@ -109,6 +109,7 @@
+   memory: '记忆胶囊',
+   autopilot: '主动科研',
+   frontier: '前沿动态',
++  vcr: '虚拟临研',
+   geo: '循证 GEO',
+   capabilities: '科研工具',
+   inbox: '通知',

@@ -406,6 +406,41 @@ test("oversized mux messages terminate without reaching the kernel", { timeout: 
   assert.deepEqual(f.received, []);
 });
 
+test("native follow responses have an independent 32 MiB budget and preserve later streams", { timeout: 10000 }, async (t) => {
+  const f = await fixture(t, { maxJsonBytes: 2 * 1024 * 1024 });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open("follow", "session/follow", { sessionId: "large-session", limit: 500, minTurns: 2 }));
+  await c.next();
+  const snapshot = { type: "snapshot", records: Array.from({ length: 2900 }, (_, index) => ({ id: `record-${index}`, content: "研".repeat(2050) })) };
+  const large = { type: "item", streamId: "follow", value: snapshot };
+  const wire = JSON.stringify(large);
+  assert.ok(Buffer.byteLength(wire) > 17 * 1024 * 1024);
+  const result = Promise.race([c.next(), once(c.ws, "close").then(([code, reason]) => ({ closed: code, reason: String(reason) }))]);
+  [...f.peers][0].send(wire);
+  const received = await result;
+  assert.equal(received.type, "item", `follow failed: ${received.closed} ${received.reason}`);
+  assert.deepEqual(received.value, snapshot);
+  c.send({ type: "cancel", streamId: "follow" });
+  assert.equal((await c.next()).type, "end");
+  c.send(open("small", "session/page", { sessionId: "other-session" }));
+  assert.equal((await c.next()).value.reached, "session/page");
+  assert.equal(c.ws.readyState, WebSocket.OPEN);
+});
+
+test("upstream UTF-8 payload overflow closes with the named 1009 limit", { timeout: 10000 }, async (t) => {
+  const f = await fixture(t);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open("follow", "session/follow")); await c.next();
+  const limit = 32 * 1024 * 1024;
+  const wire = JSON.stringify({ type: "item", streamId: "follow", value: "研".repeat(Math.ceil(limit / 3)) });
+  assert.ok(wire.length < limit); assert.ok(Buffer.byteLength(wire) > limit);
+  const closed = once(c.ws, "close");
+  [...f.peers][0].send(wire);
+  const [code, reason] = await closed;
+  assert.equal(code, 1009); assert.equal(String(reason), "runtime_ui_response_limit");
+  await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
+});
+
 test("mux connection quotas are held until close and then released", { timeout: 5000 }, async (t) => {
   const f = await fixture(t, { maxRuntimeProxyConnections: 1, maxRuntimeProxyConnectionsPerProject: 1 });
   const first = f.connect();

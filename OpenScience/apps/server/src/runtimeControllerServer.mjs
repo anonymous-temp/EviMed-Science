@@ -1,3 +1,4 @@
+import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -326,6 +327,7 @@ async function prepareControllerSocket(socketPath) {
 
 export function createRuntimeController(overrides = {}) {
   const config = loadConfig(overrides);
+  const documents = createDocumentRenderController(config);
   const runtimeChildren = new Map();
   const runtimeOwners = new Map();
   // The last words of each runtime container, kept past its own death. A
@@ -588,6 +590,19 @@ export function createRuntimeController(overrides = {}) {
         });
         return;
       }
+      if (req.method === "POST" && ["/v1/document/render", "/v1/document/cancel"].includes(url.pathname)) {
+        const payload = await readJson(req, 4096);
+        assertExactKeys(payload, ["ownerId", "projectId", "exportId", "attemptId", "inputDigest"]);
+        const abort = new AbortController();
+        const disconnected = () => { if (!res.writableEnded) abort.abort(); };
+        res.once("close", disconnected);
+        if (req.aborted || res.destroyed) abort.abort();
+        try {
+          const result = url.pathname.endsWith("/cancel") ? await documents.cancel(payload) : await documents.render(payload, abort.signal);
+          if (!res.destroyed) sendJson(res, 200, { data: result });
+        } finally { res.removeListener("close", disconnected); }
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/docker/info") {
         sendJson(res, 200, { data: dockerInfo(config) });
         return;
@@ -679,6 +694,7 @@ export function createRuntimeController(overrides = {}) {
       return socketPath;
     },
     async close() {
+      await documents.close();
       await Promise.allSettled(
         [...runtimeChildren.keys()].map(async (containerName) => {
           const child = runtimeChildren.get(containerName);

@@ -1,3 +1,9 @@
+import { DocumentExportService, freezeArtifactDocument } from "./documentExport.mjs";
+import { DocumentExportWorker } from "./documentExportWorker.mjs";
+import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
+import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
+import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
 import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
@@ -13,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
+import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
@@ -114,6 +121,7 @@ import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierG
 import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
 import { ReviewService, replyOfRun, reviewMetricFamilies } from "./reviewService.mjs";
 import { providerRefusalMetricFamily } from "./providerRefusals.mjs";
+import { createVcrReviewAdapter } from "./vcrReview.mjs";
 import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
@@ -177,6 +185,18 @@ import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 import { GeoOrchestrator, geoRunId } from "./geoOrchestrator.mjs";
 import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
 import { createGeoNotifier } from "./geoNotify.mjs";
+// 「虚拟临研」 (build plan 2026-09-28 §11.2). Composed in one call
+// (`vcrComposition.mjs`) so the seven packages behind it never reach this
+// file; off, or without a product database, the whole module is absent and
+// every route answers 404 `vcr_not_enabled`.
+import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarnings } from "./vcrComposition.mjs";
+import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
+import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
+import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
+import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
+import { createVcrNotifier } from "./vcrNotify.mjs";
+import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
+import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
 import { enqueueRound as enqueueGeoRound, geoMeasureState, tickProbe as tickGeoProbe } from "./geoProbeQueue.mjs";
 import { tickParse as tickGeoParse } from "./geoJudge.mjs";
@@ -507,6 +527,8 @@ function requestIdFor(req) {
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
   if (pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)) return `${CAPSULE_GATEWAY_PATH}/:action`;
+  if (pathname === "/api/document-exports") return pathname;
+  if (pathname.startsWith("/api/document-exports/")) return "/api/document-exports/:id/:action/:format";
   if (pathname === "/api/capsules") return pathname;
   if (pathname.startsWith("/api/capsules/")) return "/api/capsules/:id/:action";
   if (pathname === "/api/inbox") return pathname;
@@ -577,6 +599,8 @@ function routePattern(pathname) {
   ) return pathname;
   if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;
   if (pathname.startsWith(`${GEO_GATEWAY_PATH}/`)) return geoGatewayRoutePattern(pathname);
+  if (pathname.startsWith(`${VCR_GATEWAY_PATH}/`)) return vcrGatewayRoutePattern(pathname);
+  if (pathname === "/api/vcr" || pathname.startsWith("/api/vcr/")) return vcrRoutePattern(pathname);
   return pathname === "/" ? "/" : "/static";
 }
 
@@ -1588,6 +1612,16 @@ export function createWebApiApp(overrides = {}) {
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
     };
   }
+  // 「虚拟临研」: one call, seven packages (vcrComposition.mjs). Null when the
+  // module is off or this deployment has no product database — the schema is
+  // the module, and a half-running module is worse than an absent one.
+  const vcr = composeVcr({
+    config, productDatabase, projectStore: store,
+    audit: (event, status, details) => securityAudit(config, event, status, details),
+    report: (code) => process.stderr.write(`vcr: ${code}\n`),
+    fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
+  });
+
   /**
    * The newest run of a GEO project's control-plane project that holds the
    * deliverable (or the run named, when it does).
@@ -1626,6 +1660,74 @@ export function createWebApiApp(overrides = {}) {
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
     get exporter() { return geo?.exporter ?? null; },
+  });
+  const documentController = overrides.documentExportController ?? new RuntimeControllerClient(config);
+  const vcrDocumentAdapter = vcr ? createVcrDocumentAdapter({ vcr, store }) : null;
+  const documentExportService = productDocuments && productJobs ? new DocumentExportService({
+    config, documents: productDocuments, jobs: productJobs, controller: documentController,
+    resolveSource: async (user, request) => {
+      if (request.source?.studyId) {
+        if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        return vcrDocumentAdapter.resolve(user, request);
+      }
+      const project = await store.requireProject(user, request.projectId);
+      const source = request.source ?? {};
+      return { project, reference: { artifactId: source.artifactId, root: source.root ?? "workspace", workspace: project.activeWorkspace ?? "" },
+        ...await freezeArtifactDocument(project, source) };
+    },
+    authorize: async (user, payload) => {
+      if (payload.source.studyId) {
+        if (!vcrDocumentAdapter) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        const { project } = await vcrDocumentAdapter.authorize(user, payload.source);
+        if (project.id !== payload.projectId || project.userId !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+      } else {
+        if (user.id !== payload.ownerId) throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        await store.requireProject(user, payload.projectId);
+      }
+    },
+  }) : null;
+  const documentExportWorker = documentExportService ? new DocumentExportWorker({ service: documentExportService, jobs: productJobs,
+    controller: documentController, admission: client => heavyWorkAdmission(client, "render"),
+    report: code => process.stderr.write(`document export: ${code}\n`) }) : null;
+  const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
+  const vcrRoutes = createVcrRoutes({
+    // The platform's store answers the session and the CSRF check; every
+    // question about a study goes to the module's own (review CS-1).
+    store, vcrStore: vcr?.store ?? null, service: vcr?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
+    audit: (event, status, details) => securityAudit(config, event, status, details),
+    projects: {
+      create: (user, name) => createResearcherProject(user, { name }),
+      // A study whose row (or first conversation) could not be made takes the
+      // project the same request made with it, and the study row if one got as
+      // far as existing, in the one transaction a project deletion is.
+      remove: (user, projectId) => store.deleteProject(user, projectId, {
+        beforeDelete: async (client) => { if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+      }),
+      // The study's first conversation, bound to a 虚拟临研 capability before
+      // the study has a step to run: the binding is what puts the module's
+      // chip on the composer and what makes the router honour the choice.
+      bindSession: async (user, projectId, capabilityId) => {
+        const sessionId = randomId("vcr-");
+        const agent = (await agentRegistry)?.get?.(capabilityId ?? "vcr-protocol") ?? null;
+        if (!agent) return { sessionId, bound: false };
+        const project = await store.requireProject(user, projectId);
+        await researchSessions.put(project, sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version });
+        return { sessionId, bound: true };
+      },
+      latestSessionId: async (user, projectId) => {
+        const project = await store.requireProject(user, projectId);
+        return (await researchSessions.list(project))[0]?.sessionId ?? null;
+      },
+    },
+    get orchestrator() { return vcr?.orchestrator ?? null; },
+    get jobs() { return vcr?.jobs ?? null; },
+    get exporter() { return vcr?.exporter ?? null; },
+    get members() { return vcr?.members ?? null; },
+    // The referral ledger's acts, the first human stop among them
+    // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.
+    get matching() { return vcr?.contact ?? null; },
+    // A person's re-judgment and countersignature of a matching assessment.
+    get assessments() { return vcr?.matching ?? null; },
   });
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
@@ -1978,7 +2080,7 @@ export function createWebApiApp(overrides = {}) {
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({
-      config, database: productDatabase, usageLedger, runtimeManager, store, agentRegistry,
+      config, database: productDatabase, jobs: productJobs, usageLedger, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
       notifications: notificationService,
       imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
@@ -1994,6 +2096,7 @@ export function createWebApiApp(overrides = {}) {
     });
     review = { service, worker };
   }
+  if (vcr) vcr.review = createVcrReviewAdapter({ vcr, reviewService: review?.service ?? null });
   const reviewRoutes = createReviewRoutes({ store, service: review?.service ?? null, config });
   // 灵豆 settlement (evimedCreditsService.mjs, fusion plan §9.6): composed when
   // switched on and a product database exists. With it off the routes answer
@@ -2218,6 +2321,24 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
+      // A 虚拟临研 run (dispatch id `vcr-…`): its bounded runtime is let go,
+      // then the orchestrator folds it into the study's steps — the same order
+      // a GEO run takes below. Released whether or not the orchestrator is
+      // composed: the reservation belongs to the dispatch, not to the module.
+      if (String(run.dispatchId ?? "").startsWith("vcr-")) {
+        if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
+          await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "vcr.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          }));
+        }
+        if (vcr?.orchestrator) {
+          await vcr.orchestrator.onRunFinished(project, run).catch((/** @type {any} */ error) => securityAudit(config, "vcr.run.complete", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "vcr_run_completion_failed",
+          }));
+        }
+      }
       // A GEO run (dispatch id `geo-…`): its bounded runtime is let go, then
       // the orchestrator folds it into the program's steps.
       if (geo?.orchestrator && String(run.dispatchId ?? "").startsWith("geo-")) {
@@ -3219,6 +3340,12 @@ export function createWebApiApp(overrides = {}) {
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
   // runtime's own project is; off, they answer `geo_disabled` (geoGateway.mjs).
+  // 「虚拟临研」's runtime channel: the token decides the account and the study,
+  // a read answers aggregates and structure only, and a write refuses item by
+  // item (build plan §11.2 layer 3).
+  const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
+    vcr, report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
+  });
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
@@ -3321,6 +3448,116 @@ export function createWebApiApp(overrides = {}) {
         topups: () => tickGeoTopups(marketDeps),
       },
     });
+  }
+
+  // 「虚拟临研」's orchestrator and worker, composed after the run dispatcher
+  // exists. The division is GEO's and the reason is the same: the steps that
+  // *think* are runs of the module's capabilities, and the steps that
+  // *compute* are platform jobs, so a two-hour simulation never holds the
+  // researcher's one run slot (build plan §11.2, attachment E §2.2).
+  if (vcr) {
+    const vcrAudit = (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) =>
+      securityAudit(config, event, status, details);
+    vcr.notifier = notificationService
+      ? createVcrNotifier({ notifications: notificationService, store: vcr.store, config, audit: vcrAudit })
+      : null;
+    vcr.jobs.notifier = vcr.notifier;
+    const orchestrator = new VcrOrchestrator({
+      store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal,
+      queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
+      queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
+      dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
+      latestSessionId: async ({ userId, projectId }) => {
+        const owner = await store.userById(userId);
+        if (!owner) return null;
+        return (await researchSessions.list(await store.requireProject(owner, projectId)))[0]?.sessionId ?? null;
+      },
+      report: (code) => process.stderr.write(`vcr orchestrator: ${code}\n`),
+    });
+    vcr.orchestrator = orchestrator;
+    vcr.exporter = { requestExport: (user, study, kind) => orchestrator.requestExport(user, study, kind) };
+    vcr.service.attach({ jobs: vcr.jobs, seal: vcr.seal });
+    vcr.worker = new VcrWorker({
+      pollMs: config.vcrPollMs ?? 5_000, leaseMs: config.vcrLeaseMs ?? 900_000,
+      canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+      report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
+      // `matching` is the deferral recheck loop: a washout that ends is re-judged on
+      // its own day, not when someone next opens the study.
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching }),
+    });
+    // The catalogue the 模型与方法 page reads: three reference simulators and
+    // the engine's own method list, seeded once, idempotently.
+    void seedVcrCatalogue({ store: vcr.store, engine: vcr.engine, methodValidationFile: config.vcrMethodValidationFile, report: (code) => process.stderr.write(`vcr catalogue: ${code}\n`) })
+      .then((seeded) => { vcr.service.engineMismatch = seeded?.engineMismatch ?? null; })
+      .catch(() => {});
+  }
+
+  /**
+   * One 虚拟临研 run: the same dispatch as a GEO step — a bounded runtime, a
+   * session bound to the capability, `automated` — in the study's own project,
+   * so it shows under that project and takes that project's one run slot. A
+   * deterministic step is not a run and does not come through here.
+   * @param {{ userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   */
+  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief }) {
+    const user = await store.userById(userId);
+    if (!user) throw new HttpError(404, "vcr_study_not_found", "The study's account is unavailable.");
+    const project = await store.requireProject(user, projectId);
+    const ledger = await agentRuns.list(project);
+    const replay = ledger.find((run) => run.dispatchId === dispatchId);
+    if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status };
+    if (ledger.some((run) => run.status === "running")) throw new HttpError(409, "runtime_busy", "The project has a run in progress; the step waits.");
+    if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
+      throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
+    }
+    const selected = (await agentRegistry)?.get?.(capabilityId) ?? null;
+    if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临研 capability is not installed on this deployment.");
+    const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "vcr", invalidCode: "vcr_unavailable" }, config);
+    if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
+    const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
+    const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
+    try {
+      await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
+      const run = await agentRuns.dispatch(project, {
+        sessionId: session.id, dispatchId, automated: true, question: brief,
+        effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
+        ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
+      }, async (binding, dispatchedRun, repairText = null) => {
+        const promptText = typeof repairText === "string" && repairText.trim() ? repairText : brief;
+        let memories = [];
+        try { memories = await memorySubstrate.recall(user.id, brief, { projectId: project.id, sessionId: session.id }); }
+        catch (error) { throw memoryRecallRejection(error); }
+        const prepared = await prepareResearchContext(project, binding, config, {
+          query: brief, memories, specialists: [],
+          routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
+            skill: selected.skill, companionSkills: selected.companionSkills },
+        });
+        if (prepared.memories.length > 0) {
+          await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
+        }
+        const marker = interactive ? null : issueModelGatewayBudgetMarker({
+          secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id, runId: dispatchId, ...budget.scope,
+        });
+        return runtimeManager.dispatchPrompt(project, session.id, {
+          // The mark always, open runtime or not: a brief the orchestrator
+          // wrote is never the researcher's words.
+          text: `${promptText}\n\n<evimed-vcr-run>${vcrRunId(dispatchId)}</evimed-vcr-run>${marker ? `\n\n${marker}` : ""}`,
+          system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+          model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: !interactive,
+          requestId: dispatchedRun.kernelRequestIds?.at(-1),
+        });
+      });
+      return { runId: run.id, sessionId: session.id, status: run.status };
+    } catch (error) {
+      const recorded = (await agentRuns.list(project).catch(() => [])).find((run) => run.dispatchId === dispatchId);
+      if (recorded?.status === "running") return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      // The run did not start, so nothing will ever finish it and release the
+      // bounded runtime reserved for it: let it go here, as a GEO step does,
+      // or the project's one runtime slot stays held until the idle sweep.
+      if (!interactive) await runtimeManager.endBoundedRuntime(project, dispatchId).catch(() => {});
+      if (recorded) return { runId: recorded.id, sessionId: recorded.sessionId ?? session.id, status: recorded.status };
+      throw error;
+    }
   }
 
   /**
@@ -3449,11 +3686,14 @@ export function createWebApiApp(overrides = {}) {
           frontier?.worker.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
+          vcr?.worker?.status?.().running,
+          documentExportWorker?.running,
         ].filter(Boolean).length;
         return {
           activeCommands,
           activeTasks: taskManager.statsAll().active,
           backgroundOperations,
+          heavyWorkJobs: await heavyWorkBlockerCount(productDatabase),
           runningAgentRuns,
           runtimes: { busy, idle, unknown },
         };
@@ -3734,7 +3974,9 @@ export function createWebApiApp(overrides = {}) {
                   ? reviewGatewayHandler
                   : pathname.startsWith(`${GEO_GATEWAY_PATH}/`)
                     ? geoGatewayHandler
-                    : null;
+                    : pathname.startsWith(`${VCR_GATEWAY_PATH}/`)
+                      ? vcrGatewayHandler
+                      : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -3778,10 +4020,12 @@ export function createWebApiApp(overrides = {}) {
         let data;
         if (action === "request") {
           data = await maintenanceService.request({ requestId: body.requestId, ttlSeconds: body.ttlSeconds });
+        } else if (action === "hold") {
+          data = await maintenanceService.hold({ requestId: body.requestId });
         } else if (action === "release") {
           data = await maintenanceService.release({ requestId: body.requestId });
         } else {
-          throw new HttpError(400, "maintenance_request_invalid", "Maintenance action must be request or release.");
+          throw new HttpError(400, "maintenance_request_invalid", "Maintenance action must be request, hold or release.");
         }
         sendJson(res, 200, { data });
         return;
@@ -3822,6 +4066,8 @@ export function createWebApiApp(overrides = {}) {
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
+      if (await documentExportRoutes(req, res)) return;
+      if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
 
@@ -3841,7 +4087,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -3870,6 +4116,7 @@ export function createWebApiApp(overrides = {}) {
           frontier,
           review,
           geo,
+          vcr,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
           alertReceiver,
         });
@@ -4082,6 +4329,7 @@ export function createWebApiApp(overrides = {}) {
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
+              vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               openList: openListConnector
                 ? await openListConnector.storageStatus({ allowStale: true }).then((status) => status.storage === "mounted", () => false)
                 : false },
@@ -4832,19 +5080,31 @@ export function createWebApiApp(overrides = {}) {
         let memoryIndexPurge = null;
         /** @type {string[]} */
         let geoScreenshots = [];
+        /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
+        let vcrArtifacts = null;
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
+            if (client) await documentExportService?.cancelProject(id, null, client);
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
+            // And its 虚拟临研 rows, on the same terms: the schema outlives the
+            // switch, so an account deleted while the module is off still
+            // leaves nothing behind. The audit rows stay — they are the record
+            // that the studies existed (plan §11.3).
+            if (client) vcrArtifacts = (await deleteVcrUserRows(client, id)).artifacts;
           },
         });
         // The screenshots only those rows referenced, now that they are gone.
         await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
+        // And the patient-level files and engine job directories the study rows
+        // named, once the deletion has committed (best effort, reported).
+        await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
+          report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
@@ -4971,12 +5231,16 @@ export function createWebApiApp(overrides = {}) {
           if (productDatabase) await migrateProductStore(productDatabase);
           /** @type {string[]} */
           let geoScreenshots = [];
+          /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
+          let vcrArtifacts = null;
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
+              if (client) await documentExportService?.cancelProject(user.id, project.id, client);
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
               if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
+              if (client) vcrArtifacts = (await deleteVcrProjectRows(client, user.id, project.id)).artifacts;
               // The learning jobs filed under it move to the learning project,
               // with what the waiting ones need to still be learnt (L-G1).
               // Learned methods are the account's and are not touched at all.
@@ -4995,6 +5259,8 @@ export function createWebApiApp(overrides = {}) {
           });
           // The screenshots only those rows referenced, once the deletion has committed.
           await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
+          await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
+            report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
           return;
@@ -5560,7 +5826,7 @@ export function createWebApiApp(overrides = {}) {
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
     for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, credits?.worker]) {
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -5598,6 +5864,8 @@ export function createWebApiApp(overrides = {}) {
       frontier?.worker.start();
       review?.worker.start();
       geo?.worker?.start?.();
+      vcr?.worker?.start?.();
+      documentExportWorker?.start();
       credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -5697,6 +5965,9 @@ export function createWebApiApp(overrides = {}) {
     // 「循证 GEO」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
+    // 「虚拟临研」, on the same terms.
+    vcr,
+    vcrService: vcr?.service ?? null,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -5766,6 +6037,8 @@ export function createWebApiApp(overrides = {}) {
       await frontier?.worker.close();
       await review?.worker.close();
       await geo?.worker?.close?.();
+      await vcr?.worker?.close?.();
+      await documentExportWorker?.close();
       await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
@@ -6561,8 +6834,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, learning = null, alertReceiver = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, learning = null, alertReceiver = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -6837,6 +7110,11 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
+  // running, awaiting_budget — the second human stop), studies, the service's
+  // and the job queue's counters, the worker's loops (vcrComposition.mjs).
+  const vcrSnapshot = vcr ? await vcrMetricsSnapshot(vcr) : null;
+  for (const family of vcrMetricFamilies(Boolean(vcr), vcrSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
@@ -6971,7 +7249,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -7010,6 +7288,11 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
       : { required: false, enabled: false })),
     // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
+    // 虚拟临研: red only for its own invariants (vcrService.mjs `vcrReadiness`).
+    // A missing engine or data plane is a warning, not a failure — the module
+    // runs the T0 journey end to end without either (plan §3.2).
+    vcr: await readinessCheck(async () => withVcrEngineWarnings(
+      withVcrWorkerWarnings(await vcrReadiness({ config, vcr, database: productDatabase }), vcr?.worker ?? null), config)),
   };
   checks.saasProfile = await readinessCheck(() => readinessSaasProfile(config, checks));
   return {
@@ -7749,7 +8032,8 @@ export async function readinessBackup(config, database = null) {
   if (mode === "external") {
     if (!config.backupExternalAck) throw readinessFailure("backup_external_unconfirmed");
     if (!config.restoreDrillAck) throw readinessFailure("restore_drill_unconfirmed");
-    return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database) };
+    return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database),
+      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}) };
   }
 
   const backupDir = String(config.backupDir ?? "").trim();
@@ -7841,6 +8125,7 @@ export async function readinessBackup(config, database = null) {
     encrypted: true,
     schedulerHealthy: true,
     postgres: await postgresBackupReadiness(config, database),
+    ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
   };
 }
 

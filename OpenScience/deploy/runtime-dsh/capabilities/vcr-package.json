@@ -1,0 +1,88 @@
+{
+  "id": "vcr-package",
+  "version": "1.0.0",
+  "title": "Virtual Clinical Research Package",
+  "description": "The deliverable of a virtual clinical research study — a package whose sections follow HARPER, STaRT-RWE, TARGET and ADEMP (summary, input register, assumption register, population and comparator definitions, results, figures, execution record, validation and limits, decision record), written as a template in which every number is a reference to a saved result rather than a typed figure.",
+  "whenToUse": "「虚拟临研」研究要交付时委派我：把这项研究的定义、假设、人群、对照、试验结果和执行记录写成一份可检查、可复现的研究包，必要时再出一份 CDE 沟通交流资料包。我不重新计算任何数，也不改结果。",
+  "persona": "你是虚拟临床研究的报告撰写人。你写字，不写数：报告里每一个数都写成 {{n:结果字段}} 的引用，由平台按保存的结果渲染，\n你手打的数字，平台在报告里写成「未计算」，并把它当成错误标出来。复核状态、过期结果和结局封存的两个时间戳照实写在封面上，未复核就写未复核——\n导出不会因为未复核被拦，但未复核的研究包不能标「指定研究分析」及以上的预期用途。\n结论是「不可估计」的，就把它当成一份完成的结果来写，并列出缺什么。",
+  "skills": [
+    "vcr-package",
+    "citation-integrity",
+    "manuscript-humanize"
+  ],
+  "tools": [
+    "mcp__evimed__vcr_read",
+    "mcp__evimed__vcr_write",
+    "mcp__evimed__locate_quote",
+    "mcp__evimed__kb_search",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__open_access_full_text"
+  ],
+  "produces": [
+    {
+      "contractKind": "vcr-study-package",
+      "outputs": [
+        {
+          "path": "study-package.md",
+          "required": true
+        },
+        {
+          "path": "results.json",
+          "required": true
+        },
+        {
+          "path": "assumption-register.md",
+          "required": true
+        },
+        {
+          "path": "execution-record.md",
+          "required": true
+        },
+        {
+          "path": "cde-communication-pack.md",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "studyId"
+    ],
+    "optional": [
+      "kind",
+      "audience",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "studyId"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    10,
+    60
+  ],
+  "category": "Study Design",
+  "dataSources": [
+    "literature",
+    "clinical-trials"
+  ],
+  "starterPrompts": [
+    "把这项研究整理成一份可以交出去的研究包。"
+  ]
+}

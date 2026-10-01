@@ -150,7 +150,10 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // that every such file is in the image. A deployment's bind mount still
 // overrides it; the shipped record is deliberately dated 1970 so every
 // plugin reads as unknown until the nightly matrix writes a real one.
-export const WEB_DOCKERFILE_SHA256 = "sha256:fc65d3036ebbb28eb7676900211c21e7806dfad491cf89762c8b3379e87c3e0a";
+// 2026-09-30: repinned for one added line — the image now carries scripts/vcr, the
+// 「虚拟临研」 snapshot profiler the data plane runs as a child process; without it
+// every snapshot profile fails on a missing file the first time the module meets data.
+export const WEB_DOCKERFILE_SHA256 = "sha256:9c4b08468f83e73749383283de15554a56b211d3fcf4b4a8edb48ea4e089df84";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

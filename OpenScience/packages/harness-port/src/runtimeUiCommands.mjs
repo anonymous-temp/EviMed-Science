@@ -54,6 +54,15 @@
  * so the controls sit where the chip does: in the hero seat, and under the
  * composer once the conversation has started.
  *
+ * A 虚拟临研 conversation reads 「虚拟临研」 on its chip the same way and, once
+ * the shell has found the study this conversation belongs to (`vcr`), carries
+ * two optional controls beside the chip — 起点 (自动 / 队列 / 患者 / 对照 / 试验)
+ * and 预期用途 (默认「探索」) — which report a change back (`vcr-options`) for
+ * the shell to write to the study, and six single-task starters: a short name
+ * on each pill and a whole sentence into the composer, never sent. There is
+ * no form; anything the reader does not say the platform sets and labels
+ * 「AI 设定」 (plan §9.3).
+ *
  * Picking a tool binds this conversation to it through the shell
  * (`bind-capability`), which is the control plane's own deterministic route —
  * the same one the capabilities page has always used. It no longer writes
@@ -101,12 +110,23 @@ export function capabilityOptions(capabilities, hidden = []) {
  * module hides its capabilities from 科研工具 with a display flag, and the
  * chip must still say what the conversation runs.
  * @param {any[]} capabilities @param {unknown} id
- * @param {{ title?: string, capabilities?: readonly string[] } | null} [geo] the vocabulary's GEO entry
+ * @param {{ title?: string, capabilities?: readonly string[] } | null |
+ *   readonly ({ title?: string, capabilities?: readonly string[], geo?: boolean, vcr?: boolean } | null)[]} [modules]
+ *   the vocabulary's module entries (GEO's, 虚拟临研's); one entry is accepted
+ *   as itself, because that is what every caller passed before the second
+ *   module existed.
  */
-export function toolPageModel(capabilities, id, geo = null) {
+export function toolPageModel(capabilities, id, modules = null) {
   const key = String(id ?? '');
-  if (geo && typeof geo.title === 'string' && Array.isArray(geo.capabilities) && geo.capabilities.includes(key)) {
-    return { id: key, title: geo.title, category: '', summary: '', outputs: [], limits: [], materials: '', starters: [], geo: true };
+  const entries = Array.isArray(modules) ? modules : [modules];
+  for (const entry of entries) {
+    if (!entry || typeof entry.title !== 'string' || !Array.isArray(entry.capabilities)) continue;
+    if (!entry.capabilities.includes(key)) continue;
+    // `geo: true` and `vcr: true` are what draw a module's composer controls,
+    // so each is the entry's to claim rather than this function's to assume: a
+    // module with neither is only a chip.
+    return { id: key, title: entry.title, category: '', summary: '', outputs: [], limits: [], materials: '', starters: [],
+      geo: entry.geo === true, vcr: entry.vcr === true, module: true };
   }
   const entry = (Array.isArray(capabilities) ? capabilities : []).find((candidate) => candidate && candidate.id === key && !candidate.internal);
   if (!entry) return null;
@@ -188,11 +208,17 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   const { text: textStyle, textButton } = frameStyles();
   const catalogue = kit.frame.capabilities.filter((/** @type {any} */ entry) => !entry.internal);
   const knowledgeDir = String(kit.vocabulary?.knowledgeDir || '.evimed-knowledge');
-  /** @type {{ title: string, capabilities: readonly string[] } | null} */
-  const geo = kit.vocabulary?.geo && Array.isArray(kit.vocabulary.geo.capabilities) ? kit.vocabulary.geo : null;
-  const geoIds = geo ? geo.capabilities : [];
+  /** @type {{ title: string, capabilities: readonly string[], geo?: boolean } | null} */
+  const geo = kit.vocabulary?.geo && Array.isArray(kit.vocabulary.geo.capabilities)
+    ? { ...kit.vocabulary.geo, geo: true } : null;
+  /** @type {{ title: string, capabilities: readonly string[], vcr?: boolean } | null} */
+  const vcr = kit.vocabulary?.vcr && Array.isArray(kit.vocabulary.vcr.capabilities)
+    ? { ...kit.vocabulary.vcr, vcr: true } : null;
+  // Hidden from `/工具` for the same reason in both cases: a module's
+  // capabilities are entered from its own sidebar row, never picked here.
+  const geoIds = [...(geo ? geo.capabilities : []), ...(vcr ? vcr.capabilities : [])];
   /** @param {string | null} id */
-  const modelOf = (id) => (id ? toolPageModel(catalogue, id, geo) : null);
+  const modelOf = (id) => (id ? toolPageModel(catalogue, id, [geo, vcr]) : null);
 
   // Which tool this conversation runs. The control plane owns the answer — it
   // binds the session and tells the frame — and this holds the optimistic one
@@ -244,7 +270,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   ctx.effect(() => kit.hub.on('capability', (/** @type {any} */ data) => {
     setTool(data && typeof data.capabilityId === 'string' ? data.capabilityId : null);
   }), 'evimed-commands: bound capability');
-  ctx.effect(() => kit.hub.on('session', () => { setTool(null); setGeoOptions(null); }), 'evimed-commands: capability follows the conversation');
+  ctx.effect(() => kit.hub.on('session', () => { setTool(null); setGeoOptions(null); setVcrOptions(null); }), 'evimed-commands: capability follows the conversation');
 
   // 循证 GEO's two options for the project this conversation belongs to —
   // 覆盖周期 and AI 引擎 — and its single-step starters, as the shell reads them
@@ -276,6 +302,39 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!geoOptions.value) return;
     setGeoOptions({ ...geoOptions.value, ...patch });
     kit.hub.send('geo-options', { sessionId: currentSession(), ...patch });
+  };
+
+  // 虚拟临研's two options for the study this conversation belongs to — 起点 and
+  // 预期用途 — and its single-task starters, as the shell reads them from the
+  // control plane (`vcr`). Same contract as GEO's: the frame shows them and
+  // reports a change (`vcr-options`); the shell writes it to the study. A
+  // control that was refused comes back as the value the study holds.
+  /** @type {{ value: any }} */
+  const vcrOptions = { value: null };
+  /** @type {Set<() => void>} */
+  const vcrListeners = new Set();
+  /** @param {any} value */
+  function setVcrOptions(value) {
+    if (vcrOptions.value === value) return;
+    vcrOptions.value = value;
+    for (const listener of [...vcrListeners]) { try { listener(); } catch { /* a listener must not stop the others */ } }
+  }
+  const useVcrOptions = () => React.useSyncExternalStore(
+    (/** @type {() => void} */ listener) => { vcrListeners.add(listener); return () => { vcrListeners.delete(listener); }; },
+    () => vcrOptions.value, () => vcrOptions.value,
+  );
+  ctx.effect(() => kit.hub.on('vcr', (/** @type {any} */ data) => {
+    setVcrOptions(data && typeof data === 'object' && Array.isArray(data.starters) ? data : null);
+  }), 'evimed-commands: 虚拟临研 options');
+  /**
+   * A changed option, shown at once and sent to the shell, which writes it to
+   * the study and answers with what the study now holds.
+   * @param {{ start?: string, intendedUse?: string }} patch
+   */
+  const changeVcr = (patch) => {
+    if (!vcrOptions.value) return;
+    setVcrOptions({ ...vcrOptions.value, ...patch });
+    kit.hub.send('vcr-options', { sessionId: currentSession(), ...patch });
   };
 
   /**
@@ -395,12 +454,38 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
             }))));
     };
 
-    /** The chip, and beside it a GEO conversation's two options. */
+    /**
+     * 起点 and 预期用途, for a 虚拟临研 conversation whose study the shell has
+     * found. Both optional: a study that is never touched here starts from
+     * 自动 and is for 探索. Each is a native select, worded as the pill reads
+     * (「起点：自动」), so the chosen value is what the control shows. 预期用途
+     * is the lead's to change (`canSetUse`), so a reader who is not the lead
+     * is not offered a control the server would refuse.
+     */
+    const VcrControls = () => {
+      const id = useTool();
+      const options = useVcrOptions();
+      const model = modelOf(id);
+      if (!model || !model.vcr || !options || !options.controls) return null;
+      const startOptions = Array.isArray(options.startOptions) ? options.startOptions : [];
+      const useOptions = Array.isArray(options.useOptions) ? options.useOptions : [];
+      return h('span', { 'data-evimed-vcr-options': '', style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0 } },
+        startOptions.length ? h('select', {
+          'aria-label': '起点', value: String(options.start ?? ''), style: { ...optionStyle, appearance: 'auto' },
+          onChange: (/** @type {any} */ event) => changeVcr({ start: String(event.target.value) }),
+        }, startOptions.map((/** @type {{ id: string, label: string }} */ choice) => h('option', { key: choice.id, value: choice.id }, `起点：${choice.label}`))) : null,
+        options.canSetUse && useOptions.length ? h('select', {
+          'aria-label': '预期用途', value: String(options.intendedUse ?? ''), style: { ...optionStyle, appearance: 'auto' },
+          onChange: (/** @type {any} */ event) => changeVcr({ intendedUse: String(event.target.value) }),
+        }, useOptions.map((/** @type {{ id: string, label: string }} */ choice) => h('option', { key: choice.id, value: choice.id }, `预期用途：${choice.label}`))) : null);
+    };
+
+    /** The chip, and beside it a module conversation's own options. */
     const DockedChip = () => {
       const model = modelOf(useTool());
-      if (!model || !model.geo) return h(ToolChip, { docked: true });
+      if (!model || (!model.geo && !model.vcr)) return h(ToolChip, { docked: true });
       return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px', minWidth: 0, maxWidth: '100%', marginTop: '8px' } },
-        h(ToolChip), h(GeoControls));
+        h(ToolChip), h(GeoControls), h(VcrControls));
     };
     kit.guarded('tool chip', () => kit.occupy({ slot: 'conversation.composer.dock', id: 'evimed-tool', order: 10 }, DockedChip));
 
@@ -414,12 +499,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      */
     const Starters = () => {
       const id = useTool();
-      const options = useGeoOptions();
+      const geoState = useGeoOptions();
+      const vcrState = useVcrOptions();
       const model = modelOf(id);
       if (!model) return null;
-      // 循证 GEO's single steps: a short name on the pill, a whole sentence
-      // into the composer — never sent.
-      if (model.geo) {
+      // A module's single steps (循证 GEO's, 虚拟临研's single tasks): a short
+      // name on the pill, a whole sentence into the composer — never sent.
+      if (model.geo || model.vcr) {
+        const options = model.geo ? geoState : vcrState;
         const starters = options && Array.isArray(options.starters) ? options.starters : [];
         if (!starters.length) return null;
         return h('div', {
@@ -452,7 +539,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return h('div', {
         'data-evimed-hero-tools': model.id,
         style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
-      }, h(ToolChip), h(GeoControls), h(Starters));
+      }, h(ToolChip), h(GeoControls), h(VcrControls), h(Starters));
     };
     kit.guarded('hero tools', () => kit.occupy({ slot: 'conversation.hero.agentPreset', priority: -1 }, HeroTools));
   }

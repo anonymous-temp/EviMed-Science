@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -73,6 +73,8 @@ system() {
     ${browser} \
     curl \
     fonts-noto-cjk \
+    fonts-texgyre-math \
+    libgmp10 \
     git \
     gzip \
     python-is-python3 \
@@ -85,8 +87,34 @@ system() {
     tar \
     util-linux \
     xz-utils \
+    zlib1g \
     "${session_packages[@]}"
   rm -rf /var/lib/apt/lists/*
+}
+
+# The same tested Pandoc on Debian, Ubuntu and CI. Distribution packages vary
+# by base (Ubuntu 22.04 carries 2.9), so verify the official release bytes before
+# installing them, then verify the executable rather than trusting dpkg alone.
+renderer() {
+  set -x
+  local arch="${TARGETARCH:-$(dpkg --print-architecture)}"
+  local checksum
+  case "${arch}" in
+    amd64) checksum="${PANDOC_SHA256_AMD64:?missing amd64 Pandoc digest}" ;;
+    arm64) checksum="${PANDOC_SHA256_ARM64:?missing arm64 Pandoc digest}" ;;
+    *) echo "Unsupported Pandoc architecture=${arch}" >&2; exit 1 ;;
+  esac
+  test -n "${PANDOC_VERSION:?missing Pandoc version}"
+  local temporary
+  temporary="$(mktemp -d)"
+  curl --http1.1 --fail --show-error --location --retry 5 --retry-all-errors \
+    --connect-timeout 20 --max-time 600 \
+    "${GITHUB_DOWNLOAD_PREFIX:-}https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-${arch}.deb" \
+    -o "${temporary}/pandoc.deb"
+  printf '%s  %s\n' "${checksum}" "${temporary}/pandoc.deb" | sha256sum -c -
+  dpkg -i "${temporary}/pandoc.deb"
+  rm -rf "${temporary}"
+  test "$(pandoc --version | head -n 1)" = "pandoc ${PANDOC_VERSION}"
 }
 
 # Node and uv. Node is here because DSH is a Node program; the sandbox backend
@@ -225,7 +253,10 @@ browser() {
 
 verify_tools() {
   set -x
-  test -x /usr/bin/chromium && rg --version && python -m playwright --version
+  pandoc --version
+  test -x /usr/bin/chromium
+  rg --version
+  python -m playwright --version
   Rscript -e 'stopifnot(getRversion() >= "4.0.0", abs(mean(c(1, 2, 3)) - 2) < 1e-12)'
 }
 
@@ -274,6 +305,8 @@ PY
 }
 
 office_smoke() {
+  install -d -m 0755 /opt/evimed/export
+  install -m 0644 /usr/local/share/evimed/skills/office/shared/render_document.py /opt/evimed/export/render_document.py
   set -x
   export MPLBACKEND=Agg
   tmp="$(mktemp -d)"
@@ -285,8 +318,21 @@ office_smoke() {
   test -s "${tmp}/power/power-analysis.md"
   test -s "${tmp}/power/power-curve.csv"
   test -s "${tmp}/power/power-curve.png"
-  python3 /usr/local/share/evimed/skills/office/docx/scripts/create_docx.py --text "EviMed" --output "${tmp}/document.docx"
-  python3 /usr/local/share/evimed/skills/office/pdf/scripts/create_pdf.py --text "EviMed" --output "${tmp}/document.pdf"
+  python3 /usr/local/share/evimed/skills/office/docx/scripts/create_docx.py --text "# 循证研究 EviMed
+
+中文结论 95% CI；缺失值：未计算。
+
+| 指标 | 结果 |
+| --- | --- |
+| 示例 | 12.5 |" --output "${tmp}/document.docx"
+  python3 /usr/local/share/evimed/skills/office/pdf/scripts/create_pdf.py --text "# 循证研究 EviMed
+
+中文结论 95% CI；缺失值：未计算。
+
+| 指标 | 结果 |
+| --- | --- |
+| 示例 | 12.5 |" --output "${tmp}/document.pdf"
+  python3 /usr/local/share/evimed/skills/office/shared/test_render_document.py
   python3 /usr/local/share/evimed/skills/office/pptx/scripts/create_pptx.py --title "EviMed" --body "Evidence" --output "${tmp}/presentation.pptx"
   printf 'name,value\ncontrol,1\n' > "${tmp}/input.csv"
   python3 /usr/local/share/evimed/skills/office/xlsx/scripts/create_xlsx.py --input "${tmp}/input.csv" --output "${tmp}/workbook.xlsx"
@@ -422,6 +468,7 @@ session() {
 
 case "${phase}" in
   system) system ;;
+  renderer) renderer ;;
   toolchain) toolchain ;;
   kernel) kernel ;;
   pnpm) pnpm_tool ;;

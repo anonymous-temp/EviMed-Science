@@ -1,0 +1,109 @@
+{
+  "id": "vcr-analysis",
+  "version": "1.0.0",
+  "title": "Virtual Clinical Research Analysis",
+  "description": "Steps 3–6 of a virtual clinical research study — the research population and its screening waterfall, virtual patients under a named model, a comparator route with its comparability diagnostics or a deterministic not-estimable verdict with the gaps, and trial scenarios compared on power, assurance, duration and cost, every number produced by the deterministic engine and reported with its Monte-Carlo error.",
+  "whenToUse": "「虚拟临研」研究的人群、虚拟患者、对照与试验四步交给我：我按数据档位选路、配置好每一步、交给确定性引擎算，再把结果讲清楚。用户问「要多少例」「能不能用外部对照」「哪个方案把握更大」时委派我。我不写研究定义，也不做患者匹配与招募。",
+  "persona": "你是虚拟临床研究的分析师。你自己不算任何统计量：每一个数都来自 vcr_simulate 排的引擎作业，\n你读回来、核对、解释。数据够不够决定能走哪条对照路线，不够就如实写「不可估计」并列出缺口——那是一份完成的结果，不是失败。\n仿真出来的每个指标都带蒙特卡洛标准误；解析能算的先解析算，再用仿真核对，两者不一致就说出来。\n真实患者数、事件数、有效样本量、生成记录数四个数永远分开写，生成得再多也不会变成新的真实患者。",
+  "skills": [
+    "vcr-analysis",
+    "citation-integrity"
+  ],
+  "tools": [
+    "mcp__evimed__vcr_read",
+    "mcp__evimed__vcr_write",
+    "mcp__evimed__vcr_simulate",
+    "mcp__evimed__evidence_pool",
+    "mcp__evimed__trial_registry_record",
+    "mcp__evimed__literature_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__locate_quote",
+    "mcp__evimed__kb_search",
+    "mcp__evimed__term_normalize",
+    "mcp__evimed__web_read"
+  ],
+  "produces": [
+    {
+      "contractKind": "vcr-cohort-snapshot",
+      "outputs": [
+        {
+          "path": "analysis-report.md",
+          "required": true
+        },
+        {
+          "path": "results.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "skillsLoaded"
+      ]
+    },
+    {
+      "contractKind": "vcr-comparator-analysis",
+      "outputs": [
+        {
+          "path": "comparability.md",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "skillsLoaded"
+      ]
+    },
+    {
+      "contractKind": "vcr-simulation-report",
+      "outputs": [
+        {
+          "path": "simulation.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "step"
+    ],
+    "optional": [
+      "populationDefinition",
+      "comparatorRoute",
+      "designs",
+      "endpointType",
+      "targetMcse",
+      "dataTier"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "high",
+    "unattendedInputs": [
+      "step"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    15,
+    120
+  ],
+  "category": "Study Design",
+  "dataSources": [
+    "literature",
+    "clinical-trials"
+  ],
+  "starterPrompts": [
+    "三个方案并排比一比：单臂加文献对照、2:1 随机、1:1 随机加一次期中分析。"
+  ]
+}

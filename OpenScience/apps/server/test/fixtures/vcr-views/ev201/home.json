@@ -1,0 +1,240 @@
+{
+  "studies": [
+    {
+      "id": "std_2",
+      "projectId": "prj_empty",
+      "name": "GLP-1 周制剂 III 期：样本量与脱落情景",
+      "question": null,
+      "tier": "T0",
+      "intendedUse": "exploratory",
+      "status": "active",
+      "steps": {
+        "definition": {
+          "status": "none",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": null
+        },
+        "evidence": {
+          "status": "none",
+          "requested": false,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": null,
+          "note": null
+        },
+        "population": {
+          "status": "none",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": null
+        },
+        "patients": {
+          "status": "none",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": null
+        },
+        "comparator": {
+          "status": "none",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": null
+        },
+        "trial": {
+          "status": "none",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": null
+        },
+        "matching": {
+          "status": "none",
+          "requested": false,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": null,
+          "note": null
+        }
+      },
+      "conclusion": null,
+      "attention": [],
+      "updatedAt": "今天 09:18",
+      "createdAt": "2026-09-27T01:14:00.000Z"
+    },
+    {
+      "id": "std_1",
+      "projectId": "prj_ev201",
+      "name": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+      "question": "单臂 II 期加外部对照行不行，还是必须做随机？",
+      "tier": "T0",
+      "intendedUse": "design_support",
+      "status": "active",
+      "steps": {
+        "definition": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "研究定义 v1"
+        },
+        "evidence": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "4 张假设卡"
+        },
+        "population": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "人群 v2"
+        },
+        "patients": {
+          "status": "failed",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "这一次运行只完成了一部分"
+        },
+        "comparator": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "文献对照"
+        },
+        "trial": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "4 个方案"
+        },
+        "matching": {
+          "status": "done",
+          "requested": true,
+          "runId": null,
+          "jobId": null,
+          "updatedAt": "2026-09-28T02:00:00.000Z",
+          "note": "6 人已评估"
+        }
+      },
+      "conclusion": {
+        "text": "已模拟 3 个方案，成功把握 58%～74%；真实外部对照不可估计，缺 3 项数据",
+        "state": "estimable"
+      },
+      "attention": [
+        {
+          "kind": "ai_set",
+          "tone": "attention",
+          "tab": "data",
+          "text": "2 条关键假设由 AI 设定",
+          "items": [
+            "对照组中位 PFS",
+            "目标 HR"
+          ],
+          "action": {
+            "label": "去复核",
+            "tab": "data"
+          }
+        },
+        {
+          "kind": "not_estimable",
+          "tone": "attention",
+          "tab": "comparator",
+          "text": "真实外部对照不可估计，缺 3 项数据",
+          "items": [
+            "同期治疗记录",
+            "结局评估频率",
+            "ECOG 缺失 38%"
+          ],
+          "action": {
+            "label": "查看缺口",
+            "tab": "comparator"
+          }
+        },
+        {
+          "kind": "stale",
+          "tone": "stale",
+          "text": "1 个结果已过期：入排条件已变更"
+        },
+        {
+          "kind": "budget_confirm",
+          "tone": "attention",
+          "text": "1 项计算在等你确认计算预算"
+        },
+        {
+          "kind": "step_failed",
+          "tone": "attention",
+          "tab": null,
+          "text": "「患者」这一步没有做完，已算出的部分保留"
+        }
+      ],
+      "updatedAt": "今天 09:09",
+      "createdAt": "2026-09-27T01:07:00.000Z"
+    }
+  ],
+  "todos": [
+    {
+      "id": "std_1:contact",
+      "kind": "contact",
+      "studyId": "std_1",
+      "title": "P-0192 待确认联系",
+      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+      "action": {
+        "label": "去确认",
+        "tab": "matching"
+      }
+    },
+    {
+      "id": "std_1:evidence",
+      "kind": "evidence",
+      "studyId": "std_1",
+      "title": "1 人待补证",
+      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+      "action": {
+        "label": "去看缺口",
+        "tab": "matching"
+      }
+    },
+    {
+      "id": "std_1:site:ste_07",
+      "kind": "site",
+      "studyId": "std_1",
+      "title": "中心 07 的资料还没有核实过",
+      "detail": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+      "action": {
+        "label": "去看中心",
+        "tab": "matching"
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "id": "rvw_1",
+      "subject": "统计复核：假设卡「orr_control」v1 · 已复核",
+      "by": null,
+      "at": "昨天 09:07",
+      "studyName": "EV-201 二线 NSCLC：单臂 II 期还是随机",
+      "state": "reviewed"
+    }
+  ]
+}

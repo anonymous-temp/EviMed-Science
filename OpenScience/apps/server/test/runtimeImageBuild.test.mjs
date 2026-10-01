@@ -64,7 +64,37 @@ test("both images pin every shared tool to the same version, and the kernel to d
   assert.equal(arg(agentbay, "DSH_VERSION"), pins.dsh.version);
   assert.equal(arg(docker, "DSH_CORDIS_VERSION"), pins.dsh.cordis);
   assert.equal(arg(docker, "PNPM_VERSION"), pins.dsh.pnpm);
+  const pandoc = pins.$runtimeTools.pandoc;
+  for (const dockerfile of [docker, agentbay]) {
+    assert.equal(arg(dockerfile, "PANDOC_VERSION"), pandoc.version);
+    for (const arch of ["amd64", "arm64"]) {
+      assert.match(pandoc.debSha256[arch], /^[a-f0-9]{64}$/);
+      assert.equal(arg(dockerfile, `PANDOC_SHA256_${arch.toUpperCase()}`), pandoc.debSha256[arch]);
+    }
+  }
   assert.match(agentbay, /^ARG TARGETARCH$/m);
+});
+
+test("CI installs the same digest-checked renderer and real Chromium before the Office tests", async () => {
+  const { script } = await sources();
+  const phase = definedInstallPhases(script).get("renderer");
+  assert.ok(phase);
+  assert.match(phase, /sha256sum -c -/);
+  assert.match(phase, /dpkg -i/);
+  assert.match(phase, /test "\$\(pandoc --version.*= "pandoc \$\{PANDOC_VERSION\}"/);
+  const workflow = await read("../.github/workflows/web.yml");
+  const marker = "      - name: Install the runtime document renderer";
+  const position = workflow.indexOf(marker);
+  assert.ok(position > 0 && position < workflow.indexOf("      - name: Test Hosted Web API"));
+  const step = workflow.slice(position + marker.length).split(/\n      - (?:name:|uses:)/)[0];
+  assert.match(step, /deps-version\.json"\)\.\$runtimeTools\.pandoc\.version/);
+  for (const arch of ["amd64", "arm64"]) assert.match(step, new RegExp(`\\.debSha256\\.${arch}`));
+  for (const name of ["renderer", "browser", "verify-tools"]) assert.match(step, new RegExp(`bash deploy/runtime-dsh/install-runtime\\.sh ${name}`));
+  const python = definedInstallPhases(script).get("python") ?? "";
+  for (const name of ["Pillow", "playwright", "pypdf"]) {
+    const dependency = new RegExp(`${name}==[0-9.]+`).exec(python)?.[0];
+    assert.ok(dependency && step.includes(dependency), `${name}: CI and runtime must exercise one renderer dependency version`);
+  }
 });
 
 test("the image and the nightly seam check install the kernel under one cutoff", async () => {
@@ -191,4 +221,16 @@ test("the install script refuses what it does not know before touching anything"
   const session = run(["session"]);
   assert.equal(session.status, 64, "the session phase belongs to the AgentBay image");
   assert.match(session.stderr, /belongs to the AgentBay image/);
+});
+
+test("the runtime tool verification cannot pass after any required tool fails", async () => {
+  const { script } = await sources();
+  const phase = definedInstallPhases(script).get("verify-tools");
+  assert.ok(phase);
+  for (const failed of ["pandoc", "test", "rg", "python"]) {
+    const commands = ["pandoc", "test", "rg", "python"].map(name => `${name}() { return ${name === failed ? 73 : 0}; }`).join("\n");
+    const result = spawnSync("bash", ["-c", `set -e\n${commands}\nRscript() { echo unexpected-fallthrough; }\nverify() {\n${phase}\n}\nverify`], { encoding: "utf8" });
+    assert.equal(result.status, 73, `${failed} must fail the phase, not only its intermediate command`);
+    assert.doesNotMatch(result.stdout, /unexpected-fallthrough/);
+  }
 });

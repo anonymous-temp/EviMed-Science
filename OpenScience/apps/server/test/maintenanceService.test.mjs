@@ -44,13 +44,19 @@ class FakeDatabase {
     if (/pg_advisory_xact_lock/.test(sql)) return { rows: [{ locked: true }] };
     if (/INSERT INTO evimed_product\.maintenance_lease/.test(sql)) {
       const [requestId, ttlSeconds] = values;
-      if (this.lease && this.lease.expiresAt > this.now() && this.lease.requestId !== requestId) return { rows: [] };
+      if (this.lease && (this.lease.durableHold || this.lease.expiresAt > this.now()) && this.lease.requestId !== requestId) return { rows: [] };
       const requestedAt = new Date(this.now());
       this.lease = {
         requestId,
         requestedAt,
         expiresAt: new Date(this.now() + ttlSeconds * 1000),
+        durableHold: this.lease?.durableHold ?? false,
       };
+      return { rows: [this.row()] };
+    }
+    if (/UPDATE evimed_product\.maintenance_lease SET durable_hold=true/.test(sql)) {
+      if (!this.lease || this.lease.requestId !== values[0] || (!this.lease.durableHold && this.lease.expiresAt <= this.now())) return { rows: [] };
+      this.lease.durableHold = true;
       return { rows: [this.row()] };
     }
     if (/DELETE FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -60,7 +66,7 @@ class FakeDatabase {
       return { rows: [row] };
     }
     if (/FROM evimed_product\.maintenance_lease/.test(sql)) {
-      return { rows: this.lease && this.lease.expiresAt > this.now() ? [this.row()] : [] };
+      return { rows: this.lease && (this.lease.expiresAt > this.now() || (sql.includes('durable_hold') && this.lease.durableHold)) ? [this.row()] : [] };
     }
     if (/FROM evimed_product\.jobs/.test(sql)) return { rows: [{
       running_jobs: String(this.runningJobs),
@@ -75,6 +81,7 @@ class FakeDatabase {
       request_id: this.lease.requestId,
       requested_at: this.lease.requestedAt,
       expires_at: this.lease.expiresAt,
+      durable_hold: this.lease.durableHold ?? false,
     };
   }
 }
@@ -158,6 +165,30 @@ test("lease expiry automatically reopens admission without a release request", a
   assert.equal((await service.status()).state, "open");
 });
 
+test('a protective hold survives expiry and restart, same-owner renewal cannot clear it, and only its owner releases it', async () => {
+  const { service, database, timers, advance } = fixture();
+  await service.initialize();
+  await service.request({ requestId: 'held-backup', ttlSeconds: 30 });
+  await assert.rejects(service.hold({ requestId: 'other-owner' }), { code: 'maintenance_conflict' });
+  const held = await service.hold({ requestId: 'held-backup' });
+  assert.equal(held.lease.durableHold, true);
+  assert.equal(timers.filter(timer => !timer.canceled).length, 1);
+  assert.equal(timers.filter(timer => !timer.canceled)[0].delay, 1000);
+  advance(3_600_001);
+  assert.equal((await service.status()).lease.durableHold, true);
+  await assert.rejects(service.withMutation(async () => assert.fail('must remain fenced')), { code: 'maintenance_active' });
+  const restarted = new MaintenanceService(database, { migrate: async () => {}, inspectActivity: async () => EMPTY_ACTIVITY });
+  await restarted.initialize();
+  assert.equal(restarted.claimingAllowed(), false);
+  const renewed = await restarted.request({ requestId: 'held-backup', ttlSeconds: 5 });
+  assert.equal(renewed.lease.durableHold, true);
+  await assert.rejects(restarted.request({ requestId: 'other-owner', ttlSeconds: 30 }), { code: 'maintenance_conflict' });
+  await assert.rejects(restarted.release({ requestId: 'other-owner' }), { code: 'maintenance_conflict' });
+  await restarted.release({ requestId: 'held-backup' });
+  assert.equal(restarted.claimingAllowed(), true);
+  await restarted.close(); await service.close();
+});
+
 test("running jobs, tasks, background work and runtime unknowns all prevent idle", async () => {
   const activity = async () => ({
     activeCommands: 1,
@@ -236,4 +267,14 @@ test("TaskManager keeps already queued work intact while maintenance pauses clai
   for (let attempt = 0; attempt < 20 && invoked === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(invoked, 1);
   assert.equal((await manager.get(ctx, queued.id)).status, "succeeded");
+});
+
+
+test("expired physical render and compute work remains in the release switch's running-job count", async () => {
+  const { service } = fixture(async () => ({ ...EMPTY_ACTIVITY, heavyWorkJobs: 2 }));
+  await service.initialize();
+  assert.equal((await service.activity()).runningProductJobs, 2);
+  const held = await service.request({ requestId: "render-recovery", ttlSeconds: 30 });
+  assert.equal(held.state, "draining");
+  assert.equal(held.blockers.runningProductJobs, 2);
 });

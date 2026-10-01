@@ -1,0 +1,105 @@
+{
+  "id": "std_2",
+  "projectId": "prj_empty",
+  "name": "GLP-1 周制剂 III 期：样本量与脱落情景",
+  "question": null,
+  "tier": "T0",
+  "intendedUse": "exploratory",
+  "status": "active",
+  "steps": {
+    "definition": {
+      "status": "none",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": null
+    },
+    "evidence": {
+      "status": "none",
+      "requested": false,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": null,
+      "note": null
+    },
+    "population": {
+      "status": "none",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": null
+    },
+    "patients": {
+      "status": "none",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": null
+    },
+    "comparator": {
+      "status": "none",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": null
+    },
+    "trial": {
+      "status": "none",
+      "requested": true,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": "2026-09-28T02:00:00.000Z",
+      "note": null
+    },
+    "matching": {
+      "status": "none",
+      "requested": false,
+      "runId": null,
+      "jobId": null,
+      "updatedAt": null,
+      "note": null
+    }
+  },
+  "sessionId": null,
+  "abilities": [
+    "read",
+    "write",
+    "run",
+    "export",
+    "manage_members",
+    "manage_study",
+    "manage_data",
+    "review_any",
+    "contact_patients",
+    "read_patient_level"
+  ],
+  "budget": {
+    "limitSeconds": 7200,
+    "usedSeconds": 0,
+    "committedSeconds": 0,
+    "remainingSeconds": 7200,
+    "awaitingBudget": 0
+  },
+  "jobs": [],
+  "ceiling": {
+    "ceiling": "submission_preparation",
+    "requested": "exploratory",
+    "withinCeiling": true,
+    "reasons": []
+  },
+  "overview": {
+    "headline": null,
+    "metrics": [],
+    "counts": null,
+    "designs": [],
+    "attention": [],
+    "changes": [],
+    "deliverables": []
+  },
+  "updatedAt": "今天 09:18",
+  "createdAt": "2026-09-27T01:14:00.000Z"
+}

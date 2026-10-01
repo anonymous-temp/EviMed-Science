@@ -1,3 +1,4 @@
+import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Code2, Download, Eye, ExternalLink, FileSearch, History, Loader2, X } from "lucide-react";
 import type { FilePreviewInspector as FilePreviewInspectorT, FileRoot } from "@ai4s/shared";
@@ -240,6 +241,9 @@ export function FilePreviewInspector({
         </button>
       </header>
 
+      {hostedWeb && data.content === undefined && (kind === "markdown" || /\.txt$/i.test(data.filename)) && (
+        <div className="shrink-0 border-b border-border px-4 py-2"><DocumentExportActions source={{ artifactId: data.path, root: data.root }} /></div>
+      )}
       {lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
 
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">

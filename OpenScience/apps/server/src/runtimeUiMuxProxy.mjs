@@ -1,4 +1,5 @@
 /** Policy-aware bridge for DSH's native open/cancel/item/error/end mux wire. */
+import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from "@evimed/domain";
 import WebSocket, { WebSocketServer } from "ws";
 import { connect } from "node:net";
 import { HttpError } from "./security.mjs";
@@ -58,7 +59,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   const upstream = new WebSocket(target, {
     headers,
     createConnection: runtime.socketPath ? () => connect({ path: runtime.socketPath }) : undefined,
-    maxPayload, perMessageDeflate: false, handshakeTimeout: 10_000,
+    maxPayload: RUNTIME_UI_MUX_RESPONSE_MAX_BYTES, perMessageDeflate: false, handshakeTimeout: 10_000,
   });
   /** @type {WebSocket | undefined} */
   let browser;
@@ -99,7 +100,11 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   });
   // ws handles protocol errors, including payload overflow, with the correct
   // close code. Preserve that close frame instead of destroying its socket.
-  upstream.on("error", () => shutdown(1011, "runtime_unavailable"));
+  upstream.on("error", (error) => {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH") {
+      shutdown(1009, "runtime_ui_response_limit");
+    } else shutdown(1011, "runtime_unavailable");
+  });
   upstream.on("close", () => shutdown(1001, "runtime_unavailable"));
   try {
     await new Promise((resolve, reject) => {
@@ -131,6 +136,8 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   const streams = new Set();
   let queuedBytes = 0;
   let queuedFrames = 0;
+  let responseQueuedBytes = 0;
+  let responseQueuedFrames = 0;
   let queue = Promise.resolve();
   let validating = false;
 
@@ -220,11 +227,21 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
         acknowledgements.get(frame.streamId)?.resolve();
       }
     } catch { shutdown(1008, "runtime_ui_frame_invalid"); return; }
-    if (client.bufferedAmount > maxPayload * 2) { shutdown(1009, "runtime_ui_queue_limit"); return; }
+    const data = Buffer.isBuffer(raw) ? raw : Buffer.from(/** @type {ArrayBuffer} */ (raw));
+    // Include the current frame and every outstanding send, not just the
+    // socket's last bufferedAmount. pause() may leave messages already parsed
+    // from the current TCP chunk; resume only when those writes also finish.
+    if (responseQueuedBytes + data.length > RUNTIME_UI_MUX_RESPONSE_MAX_BYTES || responseQueuedFrames >= MAX_STREAMS) {
+      shutdown(1009, "runtime_ui_queue_limit"); return;
+    }
+    responseQueuedBytes += data.length;
+    responseQueuedFrames++;
     upstream.pause();
-    void send(client, /** @type {Buffer} */ (raw)).then(() => {
-      if (!closed) upstream.resume();
-    }).catch(() => shutdown(1011, "runtime_ui_proxy_failed"));
+    void send(client, data).catch(() => shutdown(1011, "runtime_ui_proxy_failed")).finally(() => {
+      responseQueuedBytes -= data.length;
+      responseQueuedFrames--;
+      if (!closed && responseQueuedFrames === 0) upstream.resume();
+    });
   });
   client.on("error", () => shutdown(1008, "runtime_ui_frame_invalid"));
   client.on("close", () => shutdown());

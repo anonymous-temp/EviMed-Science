@@ -2,9 +2,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import vm from 'node:vm';
+import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from '@evimed/domain';
 import { installRuntimeUiTransport } from '../src/runtimeUiTransport.mjs';
 
-const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', prefix: '/__evimed/f/frame-a/' };
+const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', prefix: '/__evimed/f/frame-a/', muxResponseMaxBytes: RUNTIME_UI_MUX_RESPONSE_MAX_BYTES };
 function browser() {
   /** @type {any[]} */ const sockets = [];
   /** @type {any[]} */ const calls = [];
@@ -201,4 +202,102 @@ test('native wire corruption rejects extra keys, empty identities and non-record
     await assert.rejects(next, (/** @type {any} */ error) => error.dshRemoteStreamFailure?.kind === 'carrier');
     hooks.dispose();
   }
+});
+
+
+test('a 17 MiB UTF-8 session follow snapshot and subsequent small streams share the serialized carrier', { timeout: 3000 }, async () => {
+  const { target, sockets } = browser();
+  const install = vm.runInNewContext(`(${installRuntimeUiTransport.toString()})`, { URL, Error, Map, Set, Promise, Object, JSON, TextEncoder });
+  const hooks = install(frame, target);
+  const follow = hooks.openStream('session/follow', { args: { sessionId: 'large-session', limit: 500, minTurns: 2 } }, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = follow.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const socket = sockets[0];
+  const snapshot = { type: 'snapshot', records: Array.from({ length: 2900 }, (_, index) => ({ id: `record-${index}`, content: '研'.repeat(2050) })) };
+  const response = { type: 'item', streamId: socket.sent[0].streamId, value: snapshot };
+  assert.ok(Buffer.byteLength(JSON.stringify(response)) > 17 * 1024 * 1024);
+  socket.message(response);
+  assert.equal(JSON.stringify((await pending).value), JSON.stringify(snapshot));
+  socket.message({ type: 'item', streamId: response.streamId, value: { type: 'update', sequence: 1 } });
+  assert.equal(JSON.stringify((await follow.next()).value), JSON.stringify({ type: 'update', sequence: 1 }));
+  socket.message({ type: 'end', streamId: response.streamId });
+  assert.equal((await follow.next()).done, true);
+  const small = hooks.openStream('workspace/follow', { args: {} }, new AbortController().signal)[Symbol.asyncIterator]();
+  const next = small.next(); await new Promise(resolve => setImmediate(resolve));
+  socket.message({ type: 'item', streamId: socket.sent.at(-1).streamId, value: 'still connected' });
+  assert.equal((await next).value, 'still connected');
+  assert.equal(sockets.length, 1); assert.equal(socket.readyState, 1);
+  await small.return(); hooks.dispose();
+});
+
+test('receive limits count UTF-8 bytes and name an oversized frame', { timeout: 3000 }, async () => {
+  const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const stream = hooks.openStream('session/follow', {}, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const response = { type: 'item', streamId: sockets[0].sent[0].streamId, value: '研'.repeat(Math.ceil(frame.muxResponseMaxBytes / 3)) };
+  assert.ok(JSON.stringify(response).length < frame.muxResponseMaxBytes);
+  assert.ok(Buffer.byteLength(JSON.stringify(response)) > frame.muxResponseMaxBytes);
+  sockets[0].message(response);
+  await assert.rejects(pending, /Runtime carrier frame limit/);
+  assert.equal(sockets[0].readyState, 3); hooks.dispose();
+});
+
+test('outbound requests retain their 2 MiB bound in UTF-8 bytes', { timeout: 3000 }, async () => {
+  const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const request = { content: '研'.repeat(800_000) };
+  assert.ok(JSON.stringify(request).length < 2 * 1024 * 1024);
+  assert.ok(Buffer.byteLength(JSON.stringify(request)) > 2 * 1024 * 1024);
+  const stream = hooks.openStream('session/prompt', request, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next();
+  const rejected = assert.rejects(pending, /Runtime carrier send limit/);
+  sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  // Terminate the old implementation so its missing send rejection fails without a hanging test.
+  if (sockets[0].sent.length) sockets[0].close();
+  await rejected;
+  assert.equal(sockets[0].sent.length, 0); hooks.dispose();
+});
+
+test('receive queues share a finite byte budget across sibling streams', { timeout: 3000 }, async () => {
+  const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const streams = ['session/follow', 'workspace/follow'].map(endpoint => hooks.openStream(endpoint, {}, new AbortController().signal)[Symbol.asyncIterator]());
+  const pending = streams.map(stream => stream.next()); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const socket = sockets[0]; const ids = socket.sent.map((/** @type {any} */ item) => item.streamId);
+  ids.forEach((/** @type {string} */ streamId) => socket.message({ type: 'item', streamId, value: 0 })); await Promise.all(pending);
+  // Each slow reader stays below its own byte and item limits; together they exceed 32 MiB.
+  const value = '研'.repeat(1024 * 1024 / 3 | 0);
+  for (let index = 0; index < 33; index++) socket.message({ type: 'item', streamId: ids[index % 2], value });
+  assert.equal(socket.readyState, 3, 'aggregate queued bytes must close the carrier');
+  for (const stream of streams) await assert.rejects(stream.next(), /Runtime stream receive limit/);
+  hooks.dispose();
+});
+
+test('releasing a slow stream returns its receive budget to sibling streams', { timeout: 3000 }, async () => {
+  const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const follow = hooks.openStream('session/follow', {}, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = follow.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const socket = sockets[0]; const id = socket.sent[0].streamId;
+  socket.message({ type: 'item', streamId: id, value: 0 }); await pending;
+  socket.message({ type: 'item', streamId: id, value: '研'.repeat(6 * 1024 * 1024) });
+  assert.equal(socket.readyState, 1, 'the queued response fits the receive budget');
+  await follow.return();
+  const sibling = hooks.openStream('session/follow', {}, new AbortController().signal)[Symbol.asyncIterator]();
+  const next = sibling.next(); await new Promise(resolve => setImmediate(resolve));
+  socket.message({ type: 'item', streamId: socket.sent.at(-1).streamId, value: '研'.repeat(6 * 1024 * 1024) });
+  assert.equal((await next).value.length, 6 * 1024 * 1024);
+  assert.equal(sockets.length, 1); assert.equal(socket.readyState, 1);
+  await sibling.return(); hooks.dispose();
+});
+
+
+test('a response at the shared UTF-8 byte ceiling is accepted exactly', async () => {
+  const { target, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const stream = hooks.openStream('session/follow', {}, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await new Promise(resolve => setImmediate(resolve));
+  const response = { type: 'item', streamId: sockets[0].sent[0].streamId, value: '' };
+  const remaining = frame.muxResponseMaxBytes - Buffer.byteLength(JSON.stringify(response));
+  response.value = '研'.repeat(Math.floor(remaining / 3)) + 'x'.repeat(remaining % 3);
+  assert.equal(Buffer.byteLength(JSON.stringify(response)), frame.muxResponseMaxBytes);
+  sockets[0].message(response);
+  assert.equal((await pending).value, response.value);
+  assert.equal(sockets[0].readyState, 1);
+  await stream.return(); hooks.dispose();
 });

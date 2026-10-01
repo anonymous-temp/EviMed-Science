@@ -41,7 +41,9 @@ vi.mock("@/lib/store", () => ({
 // The projects and their tasks read the store and the ledgers on mount and
 // have their own tests (ProjectBrowser.test.tsx); here the section is a slot.
 vi.mock("@/components/sidebar/ProjectBrowser", () => ({
-  ProjectBrowser: () => <section aria-label="项目" data-testid="project-browser" />,
+  ProjectBrowser: ({ geo, vcr }: { geo?: boolean; vcr?: boolean }) => (
+    <section aria-label="项目" data-testid="project-browser" data-geo={String(Boolean(geo))} data-vcr={String(Boolean(vcr))} />
+  ),
 }));
 
 function LocationProbe() {
@@ -154,6 +156,38 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
+  // 「虚拟临研」 sits between 「科研工具」 and 「循证 GEO」, and only where
+  // `/api/me` offers it (`features.vcr`).
+  it("has no 虚拟临研 row unless the account is offered the module", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "循证 GEO" });
+    expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
+  });
+
+  it("puts 虚拟临研 between 科研工具 and 循证 GEO when the account is offered both", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, vcr: true, geo: true } });
+    renderSidebar();
+    const row = await screen.findByRole("link", { name: "虚拟临研" });
+    expect(row).toHaveAttribute("href", "/app/virtual-research");
+    const rows = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    await userEvent.click(row);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
+    expect(row).toHaveAttribute("aria-current", "page");
+  });
+
+  // One board offered and the other not: the one that is there keeps its place
+  // under 科研工具 rather than inheriting the missing one's.
+  it("puts 虚拟临研 under 科研工具 with no 循证 GEO beside it", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "虚拟临研" });
+    const rows = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临研", "知识库", "记忆胶囊", "定时任务"]);
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
+  });
+
   it("puts 循证 GEO below 科研工具 without the frontier feed too", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
@@ -162,11 +196,22 @@ describe("Sidebar navigation", () => {
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
+  // The people icon on a study in 「最近」: the project list is told which
+  // modules are offered, and reads a module's own list only for one that is.
+  it("tells the project list which of the two modules are offered", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
+    renderSidebar();
+    await screen.findByRole("link", { name: "虚拟临研" });
+    await waitFor(() => expect(screen.getByTestId("project-browser")).toHaveAttribute("data-vcr", "true"));
+    expect(screen.getByTestId("project-browser")).toHaveAttribute("data-geo", "false");
+  });
+
   it("keeps the row out when /api/me cannot be read", async () => {
     mocks.fetchWebMe.mockRejectedValue(new Error("offline"));
     renderSidebar();
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 

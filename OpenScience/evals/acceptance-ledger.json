@@ -419,6 +419,76 @@
         "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt"
       ],
       "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress."
+    },
+    {
+      "id": "vcr-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/vcr-analysis",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "新建于 2026-09-28，随工作包 D：人群、虚拟患者、对照与试验的配置、运行与解读。数字全部来自 vcr-engine，能力只读结果。尚无能力级交付。"
+    },
+    {
+      "id": "vcr-evidence",
+      "visibility": "public",
+      "evalHarness": "evals/vcr-evidence",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "新建于 2026-09-28，随工作包 C：先例检索、带原文位置的抽取与假设卡。尚无能力级交付。"
+    },
+    {
+      "id": "vcr-matching",
+      "visibility": "public",
+      "evalHarness": "evals/vcr-matching",
+      "briefCount": 5,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "新建于 2026-09-28，随工作包 E：患者事实抽取、三值判定与招募材料草稿。判定由代码做，能力只抽证据。尚无能力级交付。"
+    },
+    {
+      "id": "vcr-package",
+      "visibility": "public",
+      "evalHarness": "evals/vcr-package",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "新建于 2026-09-28，随工作包 D：研究包与对外资料包的文字，数字由结果渲染（原则 10c）。尚无能力级交付。"
+    },
+    {
+      "id": "vcr-protocol",
+      "visibility": "public",
+      "evalHarness": "evals/vcr-protocol",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [],
+      "note": "新建于 2026-09-28，随「虚拟临研」工作包 D：研究定义、入排结构化与访视日程。尚无能力级交付。"
     }
   ]
 }

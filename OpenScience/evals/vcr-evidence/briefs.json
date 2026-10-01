@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "vcr-evidence",
+  "note": "Real briefs, not smoke tests. Each is a parameterization somebody would actually bring to a study, chosen because it has one specific way of going wrong that a plausible-looking set of assumption cards would hide: a number that is verbatim nowhere, a sponsor's plan read as history, a subgroup quietly folded into a pool, a confidence interval standing in for a prediction interval, and a gap filled with an invented figure instead of a labelled wide one. The failure modes are what is being evaluated; the questions are ordinary on purpose. Graded against AC-25: every number on a card has to reach a quotation and a field position, and a number that cannot is an `unknown`, never a card.",
+  "briefs": [
+    {
+      "id": "vcr-evidence-001-hcc-single-arm-threshold",
+      "title": "肝细胞癌二线单臂试验：从文献对照组做出客观缓解率的历史基准与目标阈值",
+      "why": "The ordinary case, and the one where the pooling decision is the whole task. Objective response in hepatocellular carcinoma has been reported against RECIST 1.1 and against mRECIST, which measure different things, and a single-arm threshold pooled across the two is a target nobody can hit or miss meaningfully. The registry record usually states the criterion in the outcome's own `description`; the published paper states it in Methods. A run that pools on the parameter name alone will look completely normal and produce a threshold that is not about any one endpoint.",
+      "gradedOn": "Whether every pooled value carries the same endpoint key, whether that key is justified from a quoted sentence, and whether the threshold is derived from the prediction interval rather than the confidence interval.",
+      "inputs": {
+        "studyId": "std-eval-vcr-evidence-001",
+        "parameters": [
+          "response_rate",
+          "median_time",
+          "dropout_rate"
+        ],
+        "registries": [
+          "clinicaltrials.gov",
+          "chictr"
+        ],
+        "endpointKeys": "the run assigns them; at least `orr-recist11` and `orr-mrecist` must end up distinct",
+        "population": "既往接受过一线系统治疗的晚期肝细胞癌，Child-Pugh A",
+        "line": "second",
+        "region": "china",
+        "eraYear": 2026,
+        "eraWindowYears": 8
+      },
+      "mustDo": [
+        "Give every extracted number a quotation and a field position, and let the platform's check decide whether it stands; a value the check refuses is reported as unknown with what is missing.",
+        "Assign an endpoint key per extracted value from the response criterion the source itself states, and quote the sentence that states it.",
+        "Pool only values that share an endpoint key, and say in the report how many candidates were set aside for a different criterion and which ones.",
+        "Report the historical benchmark as the pooled value with its heterogeneity and its prediction interval, and derive the single-arm threshold from the prediction interval.",
+        "Name the China-population studies separately, and say whether the closest subset and the whole pool agree under the stated rule.",
+        "Ship `evidence-parameters.md` and `results.json`, with every number in the prose rendered from the results file."
+      ],
+      "mustNotDo": [
+        "Pool RECIST 1.1 and mRECIST response rates because the parameter name is the same.",
+        "Use the confidence interval as the range a simulation draws from.",
+        "Compute the pooled value, I² or the prediction interval in the reply instead of asking the engine for them.",
+        "Round an extracted proportion to a precision the source does not state.",
+        "Report a threshold at all when no two studies share an endpoint key — say so and list what is missing."
+      ]
+    },
+    {
+      "id": "vcr-evidence-002-accrual-prior-planned-vs-actual",
+      "title": "入组速度先验：近五年国内 ALK 阳性非小细胞肺癌 III 期试验，计划与实际差多少",
+      "why": "The brief that separates a registry read from a registry transcription. ClinicalTrials.gov marks enrollment and all three milestone dates ACTUAL or ESTIMATED, and an ongoing trial's `ESTIMATED` enrollment is the sponsor's intention — pooling it into an accrual prior teaches the model that every trial enrolls exactly what it planned, which is the one thing the historical record says is false. The second trap is quieter: no registry records screening failure rate, per-site accrual or site activation date, and a run that needs a per-site rate will produce one rather than say it cannot.",
+      "gradedOn": "Whether planned and actual appear as two columns and only actual enters the baseline; whether the three quantities no registry carries are reported as 「不可得」 with their source; whether the derived accrual duration names the two date fields it was computed from.",
+      "inputs": {
+        "studyId": "std-eval-vcr-evidence-002",
+        "parameters": [
+          "enrollment_actual",
+          "enrollment_estimated",
+          "accrual_to_primary_completion_months",
+          "site_count",
+          "accrual_per_site_per_month"
+        ],
+        "registries": [
+          "clinicaltrials.gov",
+          "chictr"
+        ],
+        "population": "ALK 融合阳性、既往未接受系统治疗的晚期非小细胞肺癌",
+        "line": "first",
+        "biomarker": "alk_positive",
+        "region": "china",
+        "eraYear": 2026,
+        "eraWindowYears": 5
+      },
+      "mustDo": [
+        "Put planned and actual enrollment in one table, side by side, per trial, and state which trials are still recruiting so their figure is a plan.",
+        "Build the accrual prior from actual figures only, and say how many candidates were excluded for having only an estimate.",
+        "Report per-site accrual, screening failure rate and site activation date as 「不可得」 with the reason and where they would come from.",
+        "State the accrual duration as a calculated value and name the two milestone fields it came from.",
+        "Write the per-site rate, if the study needs one, as an expert setting labelled 「专家设定·待补证」 with the nearest evidence widened, not as a figure read off a registry."
+      ],
+      "mustNotDo": [
+        "Enter an ESTIMATED enrollment into the historical baseline.",
+        "Write 0 for a quantity no registry records.",
+        "Divide total enrollment by site count by months and present the quotient as an observed per-site rate.",
+        "Report a single average duration without the spread the prediction interval carries.",
+        "Cite a trial's registry page as evidence for a number the page does not state."
+      ]
+    },
+    {
+      "id": "vcr-evidence-003-china-vs-global-hazard-ratio",
+      "title": "EGFR 突变阳性非小细胞肺癌一线治疗：中国人群与全球人群的无进展生存风险比是否可以合并",
+      "why": "The applicability case, and the one the calibre rule exists for. Several first-line EGFR trials report a China cohort alongside the global cohort with its own hazard ratio and its own, wider confidence interval — the same trial, two populations, two answers. A run that pools every reported hazard ratio produces one number with a comfortable interval and silently changes whose effect it is about; a run that uses only the China cohorts pools three studies and calls it precise. The correct output is three calibres, a stated rule for which one is the default, and the other two visible as sensitivity.",
+      "gradedOn": "Whether all three calibres are pooled and reported; whether the default is the one the stated rule picks and the reason is written down; whether the log-normal on the card is built from the prediction interval on the log scale.",
+      "inputs": {
+        "studyId": "std-eval-vcr-evidence-003",
+        "parameters": [
+          "hazard_ratio",
+          "median_time"
+        ],
+        "registries": [
+          "clinicaltrials.gov"
+        ],
+        "population": "EGFR 敏感突变（19 外显子缺失或 L858R）阳性的晚期非小细胞肺癌，一线",
+        "line": "first",
+        "biomarker": "egfr_positive",
+        "region": "china",
+        "eraYear": 2026,
+        "eraWindowYears": 10
+      },
+      "mustDo": [
+        "Extract the China-cohort and global-cohort estimates as separate values, each with the group labels the record itself uses.",
+        "Declare the population stratum on every extracted value, and leave it unknown where the source does not say.",
+        "Pool all three calibres — the closest subset, everything, and the next-closest — and report each with its k, I² and prediction interval.",
+        "State which calibre is the default and why, in the words of the rule the platform applied.",
+        "Say plainly, in the applicability section, which population the default card's number is about.",
+        "Keep the hazard-ratio card on the log scale and report the interval as a prediction interval."
+      ],
+      "mustNotDo": [
+        "Pool a trial's China cohort and its global cohort as two independent studies without saying they overlap.",
+        "Choose a calibre because its interval is narrower.",
+        "Report a single hazard ratio with no statement of whose effect it estimates.",
+        "Drop the sensitivity calibres from the report once a default is chosen.",
+        "Convert a hazard ratio into a median survival ratio and present it as an extracted value."
+      ]
+    },
+    {
+      "id": "vcr-evidence-004-rare-disease-no-precedent",
+      "title": "罕见病（进行性核上性麻痹）的研究者发起试验：几乎没有同类先例，参数怎么做出来",
+      "why": "The case where the honest answer is mostly gaps, and the one where an assumption card is most likely to be invented. Registered interventional trials in progressive supranuclear palsy are few, most have no results posted, and the ones that do use rating-scale endpoints with different versions. A run under pressure to produce a parameter set will fill the holes with figures that read exactly like evidence. The required behaviour is the opposite: pool what can be pooled, and for everything else produce a card built from the nearest evidence, widened, and labelled 「专家设定·待补证」 with what would close it — a wide labelled range lets the simulation run, a blank does not, and an invented number is worse than both.",
+      "gradedOn": "Whether every card with no evidence is an expert setting that cites nothing and says what is missing; whether no number appears on a card without a quotation behind it; whether the report states what the parameter set cannot currently support.",
+      "inputs": {
+        "studyId": "std-eval-vcr-evidence-004",
+        "parameters": [
+          "median_time",
+          "dropout_rate",
+          "accrual_per_site_per_month",
+          "screen_failure_rate"
+        ],
+        "registries": [
+          "clinicaltrials.gov",
+          "chictr"
+        ],
+        "population": "临床诊断的进行性核上性麻痹（PSP-RS），研究者发起的干预性试验",
+        "region": "china",
+        "eraYear": 2026,
+        "eraWindowYears": 12
+      },
+      "mustDo": [
+        "Say how many candidate trials were found, how many carry results, and what that means for what can be pooled.",
+        "Produce a card for every parameter the study needs, either pooled or expert-set — no blanks.",
+        "Build each expert setting from the nearest evidence, widened, and name the evidence it was widened from.",
+        "Label every expert setting 「专家设定·待补证」 and say what data would replace it and who holds it.",
+        "State the rating-scale version behind every extracted endpoint value, and keep different versions in different endpoint keys.",
+        "Close the report with what this parameter set can and cannot support — a design comparison, or only an exploratory scenario."
+      ],
+      "mustNotDo": [
+        "Write a plausible dropout rate with no source behind it.",
+        "Leave a needed parameter empty so the simulation cannot run.",
+        "Present an expert setting with the same visual weight and the same source label as a pooled one.",
+        "Pool two rating-scale endpoints of different versions because both are called the same scale.",
+        "Claim a China-population estimate when every candidate trial ran elsewhere."
+      ]
+    }
+  ]
+}

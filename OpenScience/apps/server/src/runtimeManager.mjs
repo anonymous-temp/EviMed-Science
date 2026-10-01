@@ -33,6 +33,8 @@ import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
+import { vcrGatewayProviderUrl } from "./vcrGateway.mjs";
+import { vcrAudienceAllows } from "./vcrService.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
 import { createAgentBayClient } from "./agentbay/client.mjs";
 // A cycle, on purpose and safe: the provider module reads this one's exports
@@ -1571,6 +1573,14 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (geoGatewayUrl && geoAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_GEO_GATEWAY_URL = geoGatewayUrl;
     }
+    // 「虚拟临研」's five tools ride the same token on the same terms: the
+    // module on and open to this account. Whether this project carries a study
+    // is the gateway's answer (`vcr_no_study`), not a reason to withhold the
+    // address — a runtime that cannot ask cannot be told no.
+    const vcrGatewayUrl = gateways ? String(gateways.vcr ?? "") : vcrGatewayProviderUrl(config);
+    if (vcrGatewayUrl && vcrAudienceAllows(config, { id: String(project.userId ?? "") })) {
+      environment.EVIMED_VCR_GATEWAY_URL = vcrGatewayUrl;
+    }
   }
   // Keyless-public Unpaywall tier: when the operator configured an email, the
   // runtime MCP may query Unpaywall anonymously (email param) even without a
@@ -1711,6 +1721,22 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     : String(config.geoSocialUrl ?? "").trim() ? [] : ["social_posts_search"];
   if (geoDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...geoDisabled])].join(",");
+  }
+  // 「虚拟临研」's likewise, and one step further: without the deterministic
+  // engine `vcr_simulate` could only ever answer 「引擎未接入」, and a tool that
+  // can only refuse is not offered. The other four still work — the study, its
+  // evidence and its registry records are the control plane's, not the
+  // engine's (plan §10.5).
+  // "Without the engine" is the composed engine (URL and both secrets), not the
+  // URL alone: with the URL set and a secret missing no client is made
+  // (`vcrEngineStatus`), and a tool offered against an engine that will refuse
+  // every call is the same refusal one step later.
+  const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
+  const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
+    ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]
+    : vcrEngineComposed ? [] : ["vcr_simulate", "evidence_pool"];
+  if (vcrDisabled.length) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
   }
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String((gateways ? gateways.adapters?.[key] : configured[key]) ?? "").trim();
@@ -3533,6 +3559,15 @@ export class RuntimeManager {
     return this.runtimes.get(key)?.modelGatewayScope ?? this.pendingModelGatewayScopes.get(key) ?? null;
   }
 
+  assertBoundedStartOwnership(project, ownedScope = null) {
+    // Ownership fences creation/adoption, not reads of an already running
+    // runtime in the same workspace (including dispatch baseline capture).
+    const scope = this.pendingModelGatewayScopes.get(this.key(project));
+    if (scope && scope !== ownedScope) {
+      throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
+    }
+  }
+
   assertInteractiveRuntimeAvailable(project) {
     if (this.runtimeStops.has(this.key(project))) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(this.key(project))) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
@@ -3544,9 +3579,6 @@ export class RuntimeManager {
   async reserveBoundedRuntimeSession(project, budgetScope) {
     const key = this.key(project);
     if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
-    if (this.runtimes.has(key) || this.starts.has(key) || this.runtimeStops.has(key) || this.pendingModelGatewayScopes.has(key)) {
-      throw new HttpError(409, "runtime_busy", "The project runtime is already in use; proactive research will retry later.");
-    }
     const scope = {
       runId: safeId(budgetScope?.runId, "bounded run id"),
       dailyLimit: Number(budgetScope?.dailyLimit), weeklyLimit: Number(budgetScope?.weeklyLimit), runLimit: Number(budgetScope?.runLimit),
@@ -3554,13 +3586,31 @@ export class RuntimeManager {
     if ([scope.dailyLimit, scope.weeklyLimit, scope.runLimit].some((value) => !Number.isFinite(value) || value <= 0)) {
       throw new HttpError(400, "runtime_model_gateway_scope_invalid", "A bounded runtime needs positive spending limits.");
     }
+    const warm = this.runtimes.get(key);
+    const busy = () => new HttpError(409, "runtime_busy", "The project runtime is already in use; proactive research will retry later.");
+    if (this.starts.has(key) || this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)
+      || this.pendingModelGatewayScopes.has(key) || warm?.modelGatewayScope || this.activeProxyCountForProject(project) > 0) {
+      throw busy();
+    }
+    // Reserve admission before awaiting the idle proof. A disconnected warm
+    // container is a cache, not a running research task; the scheduled episode
+    // must not wait for its twelve-hour cache timeout. Connected, working or
+    // unreadable runtimes keep their ownership and are retried later.
     this.pendingModelGatewayScopes.set(key, scope);
     try {
-      const runtime = await this.start(project);
-      if (runtime.modelGatewayScope?.runId !== scope.runId) throw new HttpError(500, "runtime_model_gateway_scope_invalid", "Bounded runtime scope was not applied.");
+      if (warm) {
+        const existingProject = warm.project ?? project;
+        if (await this.idleVerdict(existingProject) !== "idle" || this.runtimes.get(key) !== warm
+          || this.activeProxyCountForProject(project) > 0) throw busy();
+        if (!(await this.stopIdleRuntime(existingProject, { event: "yielded" }))) throw busy();
+      }
+      const runtime = await this.start(project, { boundedScope: scope });
+      if (runtime.modelGatewayScope?.runId !== scope.runId || runtime.workspaceDir !== project.workspaceDir) {
+        throw new HttpError(500, "runtime_model_gateway_scope_invalid", "Bounded runtime startup did not preserve its workspace and budget binding.");
+      }
       return { id: randomId("session_"), kernel: RUNTIME_KERNEL_NAME };
     } catch (error) {
-      this.pendingModelGatewayScopes.delete(key);
+      if (this.pendingModelGatewayScopes.get(key) === scope) this.pendingModelGatewayScopes.delete(key);
       throw error;
     }
   }
@@ -3588,11 +3638,13 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean }} [options] `opening`: the researcher is
+   * @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
    *   opening a conversation in this project (the shell's own start of its
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
    *   under way is joined as it is.
+   *   `boundedScope`: the private reservation object owned by the workflow;
+   *   ordinary starts cannot adopt its workspace or spending authority.
    *   `speculative`: the shell guessing a project will be opened (a pointer
    *   over it in the sidebar) — a start that takes free room only. It must
    *   not retire the researcher's other idle runtime: on 2026-09-24 opening
@@ -3612,14 +3664,16 @@ export class RuntimeManager {
     }
     await this.runtimeQuotaStops.get(key);
     if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs a confirmed cleanup before replacement.");
+    this.assertBoundedStartOwnership(project, options.boundedScope ?? null);
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean }} [options] */
-  async startAdmitted(project, { opening = false, speculative = false } = {}) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] */
+  async startAdmitted(project, { opening = false, speculative = false, boundedScope = null } = {}) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
+    this.assertBoundedStartOwnership(project, boundedScope);
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
       // Opening the interactive workspace is not permission to interrupt a
@@ -4641,7 +4695,7 @@ export class RuntimeManager {
       error.definitivelyRejected = true;
       throw error;
     }
-    if (runtime.modelGatewayScope && !allowBounded) this.assertInteractiveRuntimeAvailable(project);
+    if (!allowBounded) this.assertInteractiveRuntimeAvailable(project);
     if (typeof system === "string" && system.trim()) {
       await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }

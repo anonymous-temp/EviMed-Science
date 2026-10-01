@@ -76,8 +76,8 @@ export class ProductJobs {
   }
 
   /** Worker-only operation. Never expose cross-account claiming as a customer API.
-   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number }} options */
-  async claim(kinds, workerId, { leaseMs = 60_000 } = {}) {
+   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number, admission?: (client:any) => Promise<boolean> }} options */
+  async claim(kinds, workerId, { leaseMs = 60_000, admission = null } = {}) {
     if (!Array.isArray(kinds) || !kinds.length || kinds.length > PRODUCT_JOB_KINDS.length) throw new HttpError(400, "product_kind_invalid", "A worker must declare supported job kinds.");
     const allowed = kinds.map((kind) => productKind(kind, PRODUCT_JOB_KINDS));
     productInteger(leaseMs, 1000, 3_600_000);
@@ -85,6 +85,7 @@ export class ProductJobs {
     await migrateProductStore(this.database);
     return this.database.transaction(async (client) => {
       if (!(await maintenanceAllowsClaims(client))) return null;
+      if (admission && !(await admission(client))) return null;
       await client.query(`WITH exhausted AS (
         SELECT id FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND status='running'
         AND lease_expires_at<=statement_timestamp() AND attempts>=max_attempts

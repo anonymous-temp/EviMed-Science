@@ -28,6 +28,7 @@ import { HttpError, openScopedFileNoFollow, resolveScopedPath } from "./security
 import { readRunTranscript } from "./runTranscripts.mjs";
 import { notificationSwitches, runFinishedNotice } from "./notificationService.mjs";
 import { geoNoticeHref } from "./geoNotify.mjs";
+import { vcrNoticeHref } from "./vcrNotify.mjs";
 import { IN_APP_CHANNEL, channelMessage, deliveryOutcome } from "./channels/port.mjs";
 import { ChannelRegistry, channelSwitches } from "./channels/registry.mjs";
 import { ChannelStore } from "./channels/store.mjs";
@@ -126,6 +127,8 @@ export function noticeLink(config, item) {
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
   const geoPath = source?.type === "geo" ? geoNoticeHref(source.id) : null;
   if (geoPath) return appLink(config, geoPath);
+  const vcrPath = source?.type === "vcr" ? vcrNoticeHref(source.id) : null;
+  if (vcrPath) return appLink(config, vcrPath);
   return appLink(config, "/app/inbox");
 }
 

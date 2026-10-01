@@ -155,6 +155,43 @@
       "contractKinds": [
         "statistical-analysis-package"
       ]
+    },
+    {
+      "id": "vcr-analysis",
+      "safetyClass": "general",
+      "contractKinds": [
+        "vcr-cohort-snapshot",
+        "vcr-comparator-analysis",
+        "vcr-simulation-report"
+      ]
+    },
+    {
+      "id": "vcr-evidence",
+      "safetyClass": "general",
+      "contractKinds": [
+        "vcr-study-package"
+      ]
+    },
+    {
+      "id": "vcr-matching",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "vcr-matching-assessment"
+      ]
+    },
+    {
+      "id": "vcr-package",
+      "safetyClass": "general",
+      "contractKinds": [
+        "vcr-study-package"
+      ]
+    },
+    {
+      "id": "vcr-protocol",
+      "safetyClass": "general",
+      "contractKinds": [
+        "vcr-study-package"
+      ]
     }
   ]
 }

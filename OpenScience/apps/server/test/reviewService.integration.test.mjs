@@ -120,6 +120,7 @@ function service({ modelAnswers, notifications = null, imService = null, runtime
 
 /** @param {ReviewService} review @param {string} reviewId */
 async function settled(review, reviewId) {
+  await review.processStudyReviews("deliverable-test-worker");
   for (let tries = 0; tries < 100; tries += 1) {
     const state = await review.reviewStatus({ userId, projectId }, reviewId);
     if (state?.status !== "running") return state;
@@ -567,4 +568,36 @@ test("the reply a run gave is its last assistant text inside its window, with th
   ];
   assert.deepEqual(replyOfRun(messages, run), { replyText: "新回答", turnSeq: 9, question: "新问题" });
   assert.equal(replyOfRun(messages.slice(0, 2), run), null);
+});
+
+test('queued deliverable resumes after API restart against frozen package bytes', options, async () => {
+  const file = path.join(workspace, 'deliverables/d1/clinical-evidence-report.md');
+  const original = await fs.readFile(file, 'utf8');
+  await fs.writeFile(file, '# Frozen review\nOriginal claim.\n');
+  try {
+    const first = service({ modelAnswers: [QUIET] });
+    const requested = await first.review.startDeliverableReview({ userId, projectId }, { runId: 'restart-review', deliverableId: 'd1', contractKind: 'clinical-evidence-report' });
+    await fs.writeFile(file, '# Changed after queue\nNew unreviewed claim.\n');
+    const restarted = service({ modelAnswers: [QUIET] }); await restarted.review.ready();
+    const done = await settled(restarted.review, requested.reviewId);
+    assert.equal(done.status, 'done');
+    assert.match(restarted.prompts[0].messages[1].content, /Original claim/);
+    assert.doesNotMatch(restarted.prompts[0].messages[1].content, /New unreviewed claim/);
+  } finally { await fs.writeFile(file, original); }
+});
+
+test('restarted L2/L3 deliverable refuses provider drift without changing the frozen package or source files', options, async () => {
+  const original = service({ modelAnswers: [QUIET] });
+  const requested = await original.review.startDeliverableReview({ userId, projectId }, { runId: 'deliverable-provider-drift', deliverableId: 'd1', contractKind: 'clinical-evidence-report' });
+  const frozen = (await database.query('SELECT configuration,frozen_input FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  const file = path.join(workspace, 'deliverables/d1/clinical-evidence-report.md');
+  const bytes = await fs.readFile(file);
+  const restarted = service({ modelAnswers: [QUIET] });
+  restarted.review.config = { ...config, reviewApiBase: 'https://different-provider.invalid' };
+  await restarted.review.ready();
+  const state = await settled(restarted.review, requested.reviewId);
+  assert.equal(state.status, 'failed'); assert.equal(state.code, 'review_configuration_changed');
+  assert.equal(restarted.prompts.length, 0); assert.deepEqual(await fs.readFile(file), bytes);
+  const saved = (await database.query('SELECT configuration,frozen_input FROM evimed_review.reviews WHERE id=$1', [requested.reviewId])).rows[0];
+  assert.deepEqual(saved, frozen);
 });

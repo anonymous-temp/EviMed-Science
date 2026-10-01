@@ -49,6 +49,7 @@ export const COMPUTED_CONTRACT_KINDS = Object.freeze([
   'bibliometric-analysis-report',
   'adr-analysis-report',
   'research-topic-report',
+  'vcr-study-package', 'vcr-simulation-report', 'vcr-comparator-analysis', 'vcr-cohort-snapshot', 'vcr-matching-assessment',
 ])
 
 /**

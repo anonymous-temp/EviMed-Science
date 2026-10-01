@@ -1,0 +1,69 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>新建研究</title>
+<meta name="shot" content="1512x945"><link rel="stylesheet" href="base.css"><style>
+  .hero-bg { position: absolute; inset: 0; pointer-events: none;
+    background-image: linear-gradient(var(--n-150) 1px, transparent 1px), linear-gradient(90deg, var(--n-150) 1px, transparent 1px);
+    background-size: 44px 44px; opacity: .55;
+    -webkit-mask-image: radial-gradient(ellipse 60% 48% at 50% 36%, #000 0%, transparent 72%); mask-image: radial-gradient(ellipse 60% 48% at 50% 36%, #000 0%, transparent 72%); }
+  .glow { position: absolute; left: 50%; top: 240px; width: 860px; height: 380px; transform: translateX(-50%); pointer-events: none;
+    background: radial-gradient(closest-side, rgba(42, 114, 208, .10), transparent); filter: blur(10px); }
+  .hero { position: relative; width: 800px; margin: 0 auto; padding-top: 244px; }
+  .hero h1 { font-family: var(--font-serif); font-weight: 600; font-size: 40px; line-height: 52px; letter-spacing: .02em; color: var(--n-900); text-align: center; }
+  .composer { margin-top: 36px; padding: 14px 14px 12px 18px; }
+  .attach { display: flex; align-items: center; gap: 8px; }
+  .toolchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 10px; border-radius: 8px; background: var(--brand-50); color: var(--brand-700); font-size: 13px; font-weight: 500; }
+  .toolchip .x { color: var(--brand-400); }
+  .file { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 4px; border-radius: 8px; background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; color: var(--text); }
+  .file .fic { width: 22px; height: 22px; border-radius: 5px; background: #D9483B; color: #fff; font-size: 8px; font-weight: 700; letter-spacing: .02em; display: grid; place-items: center; }
+  .file .fs { font-size: 12px; color: var(--text-3); }
+  .file .x { color: var(--text-4); }
+  .composer .ph { margin-top: 12px; min-height: 60px; }
+  .caret { display: inline-block; width: 2px; height: 20px; background: var(--brand-600); vertical-align: -4px; margin-left: 2px; border-radius: 1px; }
+  .composer .bar { margin-top: 8px; }
+  .divv { width: 1px; height: 18px; background: var(--line-strong); margin: 0 6px 0 2px; }
+  .opt { height: 32px; padding: 0 8px 0 12px; display: inline-flex; align-items: center; gap: 0; border-radius: 16px; font-size: 13px; font-weight: 500; color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); white-space: nowrap; }
+  .opt .k { color: var(--text-3); font-weight: 400; }
+  .opt svg { color: var(--text-3); margin-left: 4px; }
+  .opt.muted-v b { color: var(--text-3); font-weight: 400; }
+  .opt b { font-weight: 500; }
+  .eta { display: flex; align-items: center; gap: 6px; margin: 12px 0 0 20px; font-size: 13px; color: var(--text-3); }
+  .eta svg { color: var(--text-4); }
+  .starters { display: flex; justify-content: center; gap: 8px; margin-top: 30px; }
+  .starters .chip { background: var(--surface); height: 34px; padding: 0 14px 0 12px; font-size: 13px; border-radius: 17px; }
+  .starters .chip svg { color: var(--text-3); }
+  .foot { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font-size: 12px; color: var(--text-4); }
+</style></head>
+<body data-nav="vcr" data-recent="">
+<div class="app"><aside class="side" data-shell></aside><main class="main">
+  <div class="hero-bg"></div><div class="glow"></div>
+  <section class="hero">
+    <h1>想先把哪个研究模拟一遍？</h1>
+    <div class="composer">
+      <div class="attach">
+        <span class="toolchip"><svg data-i="users-round" class="i xs"></svg>虚拟临研<svg data-i="x" class="i xs x"></svg></span>
+        <span class="file"><span class="fic">PDF</span>EV-201-方案草稿-v0.3.pdf<span class="fs num">1.8 MB</span><svg data-i="x" class="i xs x"></svg></span>
+      </div>
+      <div class="ph typed">EV-201 二线 NSCLC，想知道单臂 II 期加外部对照行不行，还是必须做随机；方案草稿在附件<span class="caret"></span></div>
+      <div class="bar">
+        <a class="ibtn" title="添加文件、选择数据源"><svg data-i="plus" class="i l"></svg></a>
+        <span class="divv"></span>
+        <a class="opt"><span class="k">起点：</span><b>自动</b><svg data-i="chevron-down" class="i xs"></svg></a>
+        <a class="opt"><span class="k">预期用途：</span><b>探索</b><svg data-i="chevron-down" class="i xs"></svg></a>
+        <a class="opt muted-v"><span class="k">数据：</span><b>未选择</b><svg data-i="chevron-down" class="i xs"></svg></a>
+        <span class="sp"></span>
+        <a class="send"><svg data-i="arrow-up" class="i l"></svg></a>
+      </div>
+    </div>
+    <div class="eta"><svg data-i="clock" class="i xs"></svg>预计 1～2 小时 · 完成后通知你</div>
+    <div class="starters">
+      <a class="chip"><svg data-i="calculator" class="i xs"></svg>估算样本量</a>
+      <a class="chip"><svg data-i="git-compare" class="i xs"></svg>外部对照可行性</a>
+      <a class="chip"><svg data-i="library" class="i xs"></svg>找先例和参数</a>
+      <a class="chip"><svg data-i="database" class="i xs"></svg>生成合成数据</a>
+      <a class="chip"><svg data-i="user-check" class="i xs"></svg>匹配患者</a>
+      <a class="chip"><svg data-i="route" class="i xs"></svg>完整研究</a>
+    </div>
+  </section>
+  <div class="foot">AI 生成 · 供医学专业人员参考，不替代临床判断</div>
+</main></div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script src="shell.js"></script><script src="icons.js"></script></body></html>

@@ -41,6 +41,14 @@ export const CONTRACT_KINDS = Object.freeze([
   'geo-strategy-pack',
   'geo-content-pack',
   'geo-proposal-pack',
+  // P4 — 「虚拟临研」: the study package and the four results it renders from
+  // (build plan 2026-09-28 §11.2). Every finding of theirs is advisory: the
+  // blocking budget is spent, and 「不可估计」 is a finished delivery.
+  'vcr-study-package',
+  'vcr-simulation-report',
+  'vcr-comparator-analysis',
+  'vcr-cohort-snapshot',
+  'vcr-matching-assessment',
   // Reserved: regulated, ships only when product and compliance decide (§9.9)
   'clinical-decision-brief',
   // Autopilot contract kinds (§24.7)
@@ -147,6 +155,11 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'geo-strategy-pack': 'GEO 信源与目标',
   'geo-content-pack': 'GEO 分层稿件',
   'geo-proposal-pack': 'GEO 提案资料包',
+  'vcr-study-package': '虚拟临研研究包',
+  'vcr-simulation-report': '虚拟临研模拟报告',
+  'vcr-comparator-analysis': '虚拟临研对照分析',
+  'vcr-cohort-snapshot': '虚拟临研队列快照',
+  'vcr-matching-assessment': '虚拟临研匹配评估',
   'clinical-decision-brief': '临床决策辅助简报',
   'episode-plan': '回合计划',
   'agenda-delta': '议程增量',

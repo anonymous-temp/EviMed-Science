@@ -12,6 +12,7 @@
  */
 
 import { evidenceSourceTypeOf } from "@evimed/domain";
+import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 
 /** One of the domain's evidence source types (contract C8): `guideline`, `rct`, … `other`. */
 export type EvidenceSourceType = ReturnType<typeof evidenceSourceTypeOf>;
@@ -24,6 +25,8 @@ export interface ClaimSource {
   supportQuote?: string;
   /** The preserved copy of the source in the workspace (`.evimed-sources/…`), when the run kept one. */
   artifactPath?: string;
+  /** The matrix's original path, retained for bond enumeration only. File opening uses `artifactPath`. */
+  declaredArtifactPath?: string;
   /** What kind of evidence the source is, decided once by the domain (C8). */
   sourceType: EvidenceSourceType;
   /** The source's risk of bias by a named tool, as the run recorded it (read by `claimAppraisalDisplay`). */
@@ -219,6 +222,7 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
       accessLevel: text(record.accessLevel),
       supportQuote: text(record.supportQuote),
       artifactPath: safeWorkspacePath(record.artifactPath),
+      declaredArtifactPath: text(record.artifactPath),
       sourceType: evidenceSourceTypeOf(record),
       ...(record.riskOfBias !== undefined && record.riskOfBias !== null ? { riskOfBias: record.riskOfBias } : {}),
       ...authorsOf(record.authors),
@@ -249,9 +253,7 @@ export function parseClaimMatrixDocument(text: string): ClaimMatrixDocument {
 
 /** The sources a claim stands on, in the order the verification reports them. */
 export function claimSources(claim: ClaimEvidence): ClaimSource[] {
-  if (claim.claimType === "derived") return [];
-  if (claim.claimType === "synthesized") return claim.supportingSources ?? [];
-  return [claim];
+  return claimEvidenceSources(claim);
 }
 
 /**

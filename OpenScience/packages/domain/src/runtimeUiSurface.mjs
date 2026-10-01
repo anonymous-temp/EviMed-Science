@@ -37,6 +37,13 @@
  */
 
 /**
+ * Native follow snapshots can contain complete tool results (17 MiB observed
+ * with 2,900 records). One finite UTF-8 budget covers response frames and
+ * pending delivery on both sides of the bridge; request limits stay separate.
+ */
+export const RUNTIME_UI_MUX_RESPONSE_MAX_BYTES = 32 * 1024 * 1024;
+
+/**
  * Namespaces no hosted browser may enter, whatever the method.
  *
  * Each one is a durable change to the deployment or a way out of the project:

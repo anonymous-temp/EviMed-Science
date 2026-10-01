@@ -345,7 +345,7 @@ class FakePool extends EventEmitter {
         ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT request_id,requested_at,expires_at FROM evimed_product\.maintenance_lease/.test(sql)) {
+    if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
       const held = this.heldLease();
       return { rows: held ? [held] : [], rowCount: held ? 1 : 0 };
     }
@@ -357,6 +357,7 @@ class FakePool extends EventEmitter {
         request_id: values[0],
         requested_at: requestedAt,
         expires_at: new Date(requestedAt.getTime() + Number(values[1]) * 1000),
+        durable_hold: held?.durable_hold ?? false,
       };
       return { rows: [this.lease], rowCount: 1 };
     }
@@ -366,7 +367,7 @@ class FakePool extends EventEmitter {
       this.lease = null;
       return { rows: [held], rowCount: 1 };
     }
-    if (/^DELETE FROM evimed_product\.maintenance_lease WHERE singleton=true AND expires_at<=/.test(sql)) {
+    if (/^DELETE FROM evimed_product\.maintenance_lease WHERE singleton=true AND (?:NOT durable_hold AND )?expires_at<=/.test(sql)) {
       if (!this.heldLease()) this.lease = null;
       return { rows: [], rowCount: 0 };
     }
@@ -375,7 +376,7 @@ class FakePool extends EventEmitter {
 
   heldLease() {
     if (!this.lease) return null;
-    return this.lease.expires_at.getTime() > Date.now() ? this.lease : null;
+    return this.lease.durable_hold || this.lease.expires_at.getTime() > Date.now() ? this.lease : null;
   }
 
   async connect() {
@@ -1614,7 +1615,7 @@ test("/api/me says whether this account sees the feed, and the routes agree", as
   const off = await composedApp(t);
   // `openList` is false here because this composition configures no OpenList
   // (openListReadiness.test.mjs covers the probe that turns it on).
-  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false, openList: false });
+  assert.deepEqual((await me(off)).features, { frontier: false, review: false, geo: false, vcr: false, openList: false });
   assert.equal(off.app.frontierWorker, null, "a deployment that did not switch it on composes no worker");
   const offStatus = await status(off);
   assert.equal(offStatus.status, 404);

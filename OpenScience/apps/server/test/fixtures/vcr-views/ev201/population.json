@@ -1,0 +1,629 @@
+{
+  "version": "人群 v2（方案 v1）",
+  "kind": "真实队列",
+  "versions": [
+    {
+      "id": "pop_1",
+      "label": "人群 v2",
+      "stale": true,
+      "counts": {
+        "realPatients": 3412,
+        "events": null,
+        "effectiveSampleSize": null,
+        "generatedRecords": null,
+        "scope": null
+      }
+    },
+    {
+      "id": "pop_2",
+      "label": "人群 v1",
+      "stale": false,
+      "counts": {
+        "realPatients": 3390,
+        "events": null,
+        "effectiveSampleSize": null,
+        "generatedRecords": null,
+        "scope": null
+      }
+    }
+  ],
+  "versionCompare": {
+    "left": {
+      "label": "人群 v1",
+      "at": "昨天",
+      "counts": {
+        "realPatients": 3390,
+        "events": null,
+        "effectiveSampleSize": null,
+        "generatedRecords": null,
+        "scope": null
+      }
+    },
+    "right": {
+      "label": "人群 v2",
+      "at": "昨天",
+      "counts": {
+        "realPatients": 3412,
+        "events": null,
+        "effectiveSampleSize": null,
+        "generatedRecords": null,
+        "scope": null
+      }
+    },
+    "rows": [
+      {
+        "key": "age",
+        "label": "年龄（岁）",
+        "left": null,
+        "right": {
+          "value": 62,
+          "text": null,
+          "unit": "岁",
+          "source": "observed",
+          "interval": null,
+          "mcse": null,
+          "review": null,
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "key": "immuno",
+        "label": "既往免疫治疗",
+        "left": null,
+        "right": {
+          "value": 100,
+          "text": null,
+          "unit": "%",
+          "source": "observed",
+          "interval": null,
+          "mcse": null,
+          "review": null,
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "key": "ecog",
+        "label": "ECOG 0 / 1",
+        "left": null,
+        "right": {
+          "value": 31,
+          "text": null,
+          "unit": "%",
+          "source": "observed",
+          "interval": null,
+          "mcse": null,
+          "review": null,
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ]
+  },
+  "definition": {
+    "timeZero": "一线治疗后首次影像进展日",
+    "evidenceWindow": "影像 ≤ 12 周 · 体能评分与化验 ≤ 4 周",
+    "exit": "死亡 · 失访 · 已开始二线治疗",
+    "protocol": "方案 v1"
+  },
+  "criteria": [
+    {
+      "id": "crt_1",
+      "code": "I1",
+      "name": "人口学",
+      "quote": "年龄 ≥ 18 岁",
+      "quoteSource": "第 12 页",
+      "kind": "inclusion",
+      "kept": 3400,
+      "excluded": 12,
+      "unknown": 0,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    },
+    {
+      "id": "crt_2",
+      "code": "I2",
+      "name": "体能状态",
+      "quote": "ECOG 体能评分 0–1（近 4 周内）",
+      "quoteSource": "第 12 页，3.1",
+      "kind": "inclusion",
+      "kept": 2589,
+      "excluded": 152,
+      "unknown": 188,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    },
+    {
+      "id": "crt_3",
+      "code": "I3",
+      "name": "既往治疗",
+      "quote": "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂",
+      "quoteSource": "第 12 页，3.1",
+      "kind": "inclusion",
+      "kept": 1855,
+      "excluded": 611,
+      "unknown": 22,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    },
+    {
+      "id": "crt_4",
+      "code": "E1",
+      "name": "合并症",
+      "quote": "活动性脑转移",
+      "quoteSource": "第 13 页，3.2",
+      "kind": "exclusion",
+      "kept": 1200,
+      "excluded": 90,
+      "unknown": 402,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    },
+    {
+      "id": "crt_5",
+      "code": "E2",
+      "name": "时间窗",
+      "quote": "末次免疫治疗距今不足 28 天",
+      "quoteSource": "第 13 页，3.2",
+      "kind": "exclusion",
+      "kept": null,
+      "excluded": null,
+      "unknown": null,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    },
+    {
+      "id": "crt_6",
+      "code": "E3",
+      "name": "妊娠",
+      "quote": "妊娠或哺乳期",
+      "quoteSource": "第 13 页，3.2",
+      "kind": "exclusion",
+      "kept": null,
+      "excluded": null,
+      "unknown": null,
+      "review": "ai_set",
+      "source": "extracted",
+      "changed": null
+    }
+  ],
+  "attrition": [
+    {
+      "key": "all",
+      "label": "全部候选人",
+      "code": null,
+      "remaining": 3412,
+      "unknown": null,
+      "removed": null
+    },
+    {
+      "key": "crt_1",
+      "label": "年龄 ≥ 18 岁",
+      "code": "I1",
+      "remaining": 3400,
+      "unknown": 0,
+      "removed": 12
+    },
+    {
+      "key": "crt_2",
+      "label": "ECOG 0–1",
+      "code": "I2",
+      "remaining": 2741,
+      "unknown": 188,
+      "removed": 152
+    },
+    {
+      "key": "crt_3",
+      "label": "一线含铂双药化疗",
+      "code": "I3",
+      "remaining": 2130,
+      "unknown": 22,
+      "removed": 611
+    },
+    {
+      "key": "crt_4",
+      "label": "无活动性脑转移",
+      "code": "E1",
+      "remaining": 1692,
+      "unknown": 402,
+      "removed": 90
+    }
+  ],
+  "outcome": {
+    "eligible": 57,
+    "insufficient": 612,
+    "ineligible": 2743
+  },
+  "profile": [
+    {
+      "key": "age",
+      "label": "年龄（岁）",
+      "ours": {
+        "value": 62,
+        "text": null,
+        "unit": "岁",
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "theirs": {
+        "value": 61,
+        "text": null,
+        "unit": "岁",
+        "source": "aggregate",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "smd": 0.09,
+      "flagged": false,
+      "note": null
+    },
+    {
+      "key": "immuno",
+      "label": "既往免疫治疗",
+      "ours": {
+        "value": 100,
+        "text": null,
+        "unit": "%",
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "theirs": {
+        "value": 95.4,
+        "text": null,
+        "unit": "%",
+        "source": "aggregate",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "smd": 0.31,
+      "flagged": true,
+      "note": null
+    },
+    {
+      "key": "ecog",
+      "label": "ECOG 0 / 1",
+      "ours": {
+        "value": 31,
+        "text": null,
+        "unit": "%",
+        "source": "observed",
+        "interval": null,
+        "mcse": null,
+        "review": "ai_set",
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "theirs": {
+        "value": 35,
+        "text": null,
+        "unit": "%",
+        "source": "aggregate",
+        "interval": null,
+        "mcse": null,
+        "review": null,
+        "precision": null,
+        "reason": null,
+        "stale": false,
+        "detail": null
+      },
+      "smd": 0.08,
+      "flagged": false,
+      "note": null
+    }
+  ],
+  "profileNote": "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。",
+  "unknownReasons": [
+    {
+      "key": "stale_evidence",
+      "label": "证据超过时效",
+      "detail": "如体能评分超过 4 周",
+      "count": 479
+    },
+    {
+      "key": "not_recorded",
+      "label": "没有记录",
+      "detail": null,
+      "count": 111
+    }
+  ],
+  "blockers": [
+    {
+      "code": "I3",
+      "label": "既往治疗",
+      "text": "排除 611",
+      "tone": "neutral"
+    },
+    {
+      "code": "E1",
+      "label": "合并症",
+      "text": "无法判断 402",
+      "tone": "attention"
+    },
+    {
+      "code": "I2",
+      "label": "体能状态",
+      "text": "无法判断 188",
+      "tone": "attention"
+    }
+  ],
+  "quality": {
+    "tag": "合成 · 探索性",
+    "groups": [
+      {
+        "key": "fidelity",
+        "label": "保真度",
+        "rows": [
+          {
+            "key": "ks",
+            "label": "最大 KS 距离",
+            "value": {
+              "value": 0.04,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "tvd",
+            "label": "最大总变异距离",
+            "value": {
+              "value": 0.03,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "missing",
+            "label": "缺失率的最大差",
+            "value": {
+              "value": 0.02,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "pairwise",
+            "label": "相关结构的最大差",
+            "value": {
+              "value": 0.05,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "spmse",
+            "label": "标准化 pMSE",
+            "value": {
+              "value": 1.4,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "auc",
+            "label": "区分真假记录的 AUC",
+            "value": {
+              "value": 0.56,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        ]
+      },
+      {
+        "key": "utility",
+        "label": "可用性",
+        "rows": [
+          {
+            "key": "joint",
+            "label": "入排通过率的相对差",
+            "value": {
+              "value": 0.06,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "overlap_0",
+            "label": "pfs_median：置信区间重叠",
+            "value": {
+              "value": 0.91,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "violations",
+            "label": "硬约束违反的记录数",
+            "value": {
+              "value": 0,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        ]
+      },
+      {
+        "key": "leakage",
+        "label": "泄露风险",
+        "rows": [
+          {
+            "key": "replication",
+            "label": "复制率（相对留出集）",
+            "value": {
+              "value": 0.9,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "nn",
+            "label": "最近邻落在训练集的比例",
+            "value": {
+              "value": 0.5,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          },
+          {
+            "key": "membership",
+            "label": "成员推断 AUC",
+            "value": {
+              "value": 0.52,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": null,
+              "review": null,
+              "precision": null,
+              "reason": null,
+              "stale": false,
+              "detail": null
+            }
+          }
+        ]
+      }
+    ],
+    "trainingRecords": 3412,
+    "copies": 1
+  },
+  "counts": {
+    "realPatients": 3412,
+    "events": null,
+    "effectiveSampleSize": null,
+    "generatedRecords": 0,
+    "scope": null
+  },
+  "conclusion": "estimable",
+  "headline": "按方案 v1，3,412 人中 57 人全部满足、612 人至少 1 条无法判断。",
+  "stale": {
+    "reason": "入排条件已变更",
+    "queued": true,
+    "since": "2026-09-28T02:11:00.000Z"
+  },
+  "partial": null
+}

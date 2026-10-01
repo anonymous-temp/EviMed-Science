@@ -17,6 +17,30 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PostgresBackupTests(unittest.TestCase):
+    def test_managed_capture_pins_container_and_admits_tools_under_one_nonce(self):
+        with tempfile.TemporaryDirectory() as value:
+            environment = self.recovery_environment(value)
+            environment.update({"EVIMED_POSTGRES_CONTAINER": "1" * 64, "EVIMED_POSTGRES_CAPTURE_OPERATION_ID": "a" * 32})
+            calls = []
+            def run(arguments, **_kwargs):
+                calls.append(arguments)
+                return "tool (PostgreSQL) 16.14" if arguments[-1] == "--version" else ""
+            with patch.dict(os.environ, environment, clear=False), patch.object(MODULE, "command", side_effect=run):
+                base, _database, _role, _phrase, _crypto = MODULE.recovery_config()
+            self.assertIn("PGAPPNAME=evimed_vcr_capture_" + "a" * 32, base)
+            self.assertIn("evimed-managed-capture", base)
+            self.assertIn("flock", base[base.index("-c") + 1])
+            self.assertIn("canceled", base[base.index("-c") + 1])
+            self.assertEqual(calls[0][-1], "a" * 32)
+
+    def test_fence_cli_only_accepts_an_immutable_container_and_owned_operation_nonce(self):
+        mode, values = MODULE.parse_cli(["fence-capture", "--container", "1" * 64, "--operation", "a" * 32])
+        self.assertEqual(mode, "fence-capture")
+        self.assertEqual(values, {"container": "1" * 64, "operation": "a" * 32})
+        for container, operation in [("production-name", "a" * 32), ("1" * 64, "other;kill"), ("1" * 64, "")]:
+            with self.assertRaises(MODULE.BackupError):
+                MODULE.parse_cli(["fence-capture", "--container", container, "--operation", operation])
+
     def test_restore_takes_recovery_lock_before_checking_receipt_absence(self):
         events = []
 

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import {
+  RUNTIME_GATEWAY_NAMES,
   createRuntimeGatewayEntry,
   publicRuntimeGatewayUrls,
   resolveRuntimeGatewayPath,
 } from "../src/runtimeGatewayEntry.mjs";
+import { VCR_GATEWAY_OPERATIONS } from "../src/vcrGateway.mjs";
 
 // The public entry an AgentBay session reaches every gateway through
 // (plan §3.1 #5): the same gateways, the same tokens, one prefix on 443, and a
@@ -135,6 +137,32 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/geo/%2e%2e/%2e%2e/api/me"), null);
   // `geo` and `geo-probe` are two gateways: a prefix of one is never the other.
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/geo-probe/v1"), { kind: "internal", url: "/internal/geo-probe/v1" });
+  // 虚拟临研 (CS-9): one base like 循证 GEO's, offered only when the module is on,
+  // and every operation its gateway serves resolves to the same internal path.
+  // Without it a runtime in an AgentBay session had no address for the study it
+  // was working on, and every one of the module's five tools answered 「关闭」.
+  assert.equal(urls?.vcr, "", "虚拟临研 is off here, so its tools are not offered there");
+  const withVcr = publicRuntimeGatewayUrls({
+    runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
+    vcrEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
+  });
+  assert.equal(withVcr?.vcr, "https://evimed.example/runtime-gateway/vcr/v1");
+  assert.ok(RUNTIME_GATEWAY_NAMES.includes("vcr"));
+  assert.ok(VCR_GATEWAY_OPERATIONS.length >= 3, "the operations were read from the gateway, not from a list here");
+  for (const operation of VCR_GATEWAY_OPERATIONS) {
+    assert.deepEqual(resolveRuntimeGatewayPath(`/runtime-gateway/vcr/v1/${operation}`), { kind: "internal", url: `/internal/vcr/v1/${operation}` }, operation);
+  }
+  assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/vcr/%2e%2e/%2e%2e/api/me"), null);
+  assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/vcrx/v1/read"), null, "a prefix of the name is not the gateway");
+});
+
+test("a request for the 虚拟临研 gateway from an active runtime reaches it, and an unknown runtime does not", async (t) => {
+  const base = await entryServer(t, { runtimeGatewayRateLimitPerMinute: 600 });
+  const read = await fetch(`${base}/runtime-gateway/vcr/v1/read`, { method: "POST", headers: { authorization: "Bearer workload-alice" } });
+  assert.deepEqual(await read.json(), { dispatched: "/internal/vcr/v1/read" });
+  const stranger = await fetch(`${base}/runtime-gateway/vcr/v1/read`, { method: "POST", headers: { authorization: "Bearer workload-mallory" } });
+  assert.equal(stranger.status, 401);
+  await stranger.body?.cancel();
 });
 
 test("only an active runtime's token passes, and the request goes on to its gateway", async (t) => {

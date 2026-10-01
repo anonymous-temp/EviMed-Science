@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search, X } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, Loader2, Pencil, Plus, Radar, Search, UsersRound, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { webErrorMessage, type WebAgentRun, type WebProject } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/Button";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
+import { useVcrProjectIds } from "@/components/vcr/useVcrProjectIds";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
@@ -110,12 +111,16 @@ type Destination = () => { to: string; state?: unknown };
  * Conversations are read per project and only once a group is open
  * (`useProjectRuns`); which groups are open survives a reload.
  */
-export function ProjectBrowser({ geo = false }: {
+export function ProjectBrowser({ geo = false, vcr = false }: {
   /** Whether 「循证 GEO」 is offered: its projects then carry the radar icon. */
   geo?: boolean;
+  /** Whether 「虚拟临研」 is offered: its studies then carry the people icon. */
+  vcr?: boolean;
 } = {}) {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
-  const geoProjectIds = useGeoProjectIds(geo, projects.map((project) => project.id).join("\u0000"));
+  const projectsKey = projects.map((project) => project.id).join("\u0000");
+  const geoProjectIds = useGeoProjectIds(geo, projectsKey);
+  const vcrProjectIds = useVcrProjectIds(vcr, projectsKey);
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();
@@ -490,6 +495,7 @@ export function ProjectBrowser({ geo = false }: {
                     key={project.id}
                     project={project}
                     geo={geoProjectIds.has(project.id)}
+                    vcr={vcrProjectIds.has(project.id)}
                     current={project.id === currentId}
                     standIn={projects.length === 0}
                     expanded={isExpanded(project.id)}
@@ -529,6 +535,7 @@ export function ProjectBrowser({ geo = false }: {
 function ProjectGroup({
   project,
   geo,
+  vcr,
   current,
   standIn,
   expanded,
@@ -549,6 +556,8 @@ function ProjectGroup({
   project: WebProject;
   /** A GEO project: the radar instead of the folder. */
   geo: boolean;
+  /** A 虚拟临研 study: the people icon instead of the folder. */
+  vcr: boolean;
   current: boolean;
   /** The group shown for the tab's project while the list cannot be read:
    *  named 「当前项目」, and not renamable, since its real name is unknown. */
@@ -578,7 +587,7 @@ function ProjectGroup({
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const running = runs?.status === "ready" && runs.runs.some(isRunning);
-  const Icon = geo ? Radar : expanded ? FolderOpen : Folder;
+  const Icon = geo ? Radar : vcr ? UsersRound : expanded ? FolderOpen : Folder;
 
   useEffect(() => {
     if (!renaming) return;

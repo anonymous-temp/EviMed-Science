@@ -64,8 +64,11 @@ function source(value) {
   // `memory` arrived 2026-09-16: a notice about a memory that named no memory
   // left the inbox saying a record had changed and offering no way to reach it
   // (review, M4①). `geo` (2026-09-25): a 「循证 GEO」 notice names the page it
-  // is about, `<geoId>/<tab>[/<item>]` (geoNotify.mjs).
-  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest", "memory", "geo"].includes(item.type)) {
+  // is about, `<geoId>/<tab>[/<item>]` (geoNotify.mjs). `vcr` (2026-09-28): a
+  // 「虚拟临研」 notice names the study page it is about,
+  // `<studyId>/<tab>[/<item>]` (vcrNotify.mjs) — without the word here all
+  // five of the module's notices throw and are counted as failures.
+  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest", "memory", "geo", "vcr"].includes(item.type)) {
     throw new HttpError(400, "notification_payload_invalid", "Invalid source.");
   }
   return { type: item.type, id: productId(item.id, "source") };

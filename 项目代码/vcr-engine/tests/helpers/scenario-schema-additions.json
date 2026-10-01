@@ -1,0 +1,1263 @@
+{
+ "_note": "The scenario keys the engine's handlers read. They were missing from the domain's scenario schemas (R/domain-snapshot.json, scenarioSchemas) when the engine was repaired and the domain has adopted all of them; this file is now the checklist that keeps it so. tests/helpers/harness.R looks each entry up in the domain's schemas; one that is missing is overlaid in memory (so the rest of the suite runs against the intended contract) and case N26 fails, naming it. Each entry: the method, the path of the object the key lives on (dots for fields, [*] for array items), the key, and the schema node the handler expects, in the domain's own format.",
+ "additions": [
+  {
+   "method": "cohort.build",
+   "path": "",
+   "key": "timeZero",
+   "node": {
+    "t": "object",
+    "fields": {
+     "column": {
+      "t": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+      "maxLength": 64,
+      "req": true
+     }
+    }
+   }
+  },
+  {
+   "method": "cohort.build",
+   "path": "",
+   "key": "exit",
+   "node": {
+    "t": "object",
+    "fields": {
+     "column": {
+      "t": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+      "maxLength": 64,
+      "req": true
+     }
+    }
+   }
+  },
+  {
+   "method": "cohort.build",
+   "path": "",
+   "key": "idColumn",
+   "node": {
+    "t": "string",
+    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+    "maxLength": 64,
+    "default": "USUBJID"
+   }
+  },
+  {
+   "method": "population.scenario",
+   "path": "population.variables[*]",
+   "key": "paramSd",
+   "node": {
+    "t": "map",
+    "values": {
+     "t": "number",
+     "min": 0
+    },
+    "min": 1,
+    "max": 4
+   }
+  },
+  {
+   "method": "population.literature",
+   "path": "baselineTable[*]",
+   "key": "proportions",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "number",
+     "min": 0,
+     "max": 1
+    },
+    "min": 2,
+    "max": 50
+   }
+  },
+  {
+   "method": "population.literature",
+   "path": "baselineTable[*]",
+   "key": "levels",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "string",
+     "maxLength": 64
+    },
+    "min": 2,
+    "max": 50
+   }
+  },
+  {
+   "method": "population.synthpop",
+   "path": "",
+   "key": "analyses",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 20,
+    "items": {
+     "t": "object",
+     "fields": {
+      "name": {
+       "t": "string",
+       "minLength": 1,
+       "maxLength": 80
+      },
+      "kind": {
+       "t": "string",
+       "values": [
+        "mean",
+        "glm"
+       ],
+       "req": true
+      },
+      "column": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "outcome": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "predictors": {
+       "t": "array",
+       "items": {
+        "t": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+        "maxLength": 64
+       },
+       "min": 1,
+       "max": 50
+      },
+      "target": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "family": {
+       "t": "string",
+       "values": [
+        "gaussian",
+        "binomial"
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "population.synthpop",
+   "path": "",
+   "key": "tstrOutcome",
+   "node": {
+    "t": "string",
+    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+    "maxLength": 64
+   }
+  },
+  {
+   "method": "population.quality",
+   "path": "",
+   "key": "analyses",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 20,
+    "items": {
+     "t": "object",
+     "fields": {
+      "name": {
+       "t": "string",
+       "minLength": 1,
+       "maxLength": 80
+      },
+      "kind": {
+       "t": "string",
+       "values": [
+        "mean",
+        "glm"
+       ],
+       "req": true
+      },
+      "column": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "outcome": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "predictors": {
+       "t": "array",
+       "items": {
+        "t": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+        "maxLength": 64
+       },
+       "min": 1,
+       "max": 50
+      },
+      "target": {
+       "t": "string",
+       "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+       "maxLength": 64
+      },
+      "family": {
+       "t": "string",
+       "values": [
+        "gaussian",
+        "binomial"
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "population.quality",
+   "path": "",
+   "key": "tstrOutcome",
+   "node": {
+    "t": "string",
+    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+    "maxLength": 64
+   }
+  },
+  {
+   "method": "patients.continuous",
+   "path": "truth",
+   "key": "covariateEffects",
+   "node": {
+    "t": "map",
+    "values": {
+     "t": "number"
+    },
+    "min": 1,
+    "max": 100
+   }
+  },
+  {
+   "method": "patients.binary",
+   "path": "truth",
+   "key": "covariateEffects",
+   "node": {
+    "t": "map",
+    "values": {
+     "t": "number"
+    },
+    "min": 1,
+    "max": 100
+   }
+  },
+  {
+   "method": "patients.time_to_event",
+   "path": "truth",
+   "key": "covariateEffects",
+   "node": {
+    "t": "map",
+    "values": {
+     "t": "number"
+    },
+    "min": 1,
+    "max": 100
+   }
+  },
+  {
+   "method": "evidence.reconstruct_km",
+   "path": "",
+   "key": "provenance",
+   "node": {
+    "t": "object",
+    "req": true,
+    "fields": {
+     "kind": {
+      "t": "string",
+      "values": [
+       "digitizer",
+       "human_click"
+      ],
+      "req": true
+     },
+     "tool": {
+      "t": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "req": true
+     },
+     "toolVersion": {
+      "t": "string",
+      "maxLength": 40
+     }
+    }
+   }
+  },
+  {
+   "method": "evidence.reconstruct_km",
+   "path": "",
+   "key": "treatmentArm",
+   "node": {
+    "t": "object",
+    "fields": {
+     "curve": {
+      "t": "array",
+      "min": 2,
+      "max": 2000,
+      "req": true,
+      "items": {
+       "t": "object",
+       "fields": {
+        "time": {
+         "t": "number",
+         "min": 0,
+         "req": true
+        },
+        "surv": {
+         "t": "number",
+         "gt": 0,
+         "max": 1,
+         "req": true
+        }
+       }
+      }
+     },
+     "riskTable": {
+      "t": "array",
+      "min": 2,
+      "max": 200,
+      "items": {
+       "t": "object",
+       "fields": {
+        "time": {
+         "t": "number",
+         "min": 0,
+         "req": true
+        },
+        "atRisk": {
+         "t": "number",
+         "min": 0,
+         "req": true
+        }
+       }
+      }
+     },
+     "totalEvents": {
+      "t": "number",
+      "min": 0
+     },
+     "reportedMedian": {
+      "t": "number",
+      "gt": 0
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "endpoint",
+   "node": {
+    "t": "object",
+    "fields": {
+     "type": {
+      "t": "string",
+      "values": [
+       "continuous",
+       "binary",
+       "time_to_event"
+      ],
+      "req": true
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "tau",
+   "node": {
+    "t": "number",
+    "gt": 0,
+    "unit": "time units"
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "timeUnit",
+   "node": {
+    "t": "string",
+    "maxLength": 20,
+    "default": "months"
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "parameterCode",
+   "node": {
+    "t": "string",
+    "maxLength": 64
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "cohortRules",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 100,
+    "items": {
+     "t": "object",
+     "fields": {
+      "name": {
+       "t": "string",
+       "minLength": 1,
+       "maxLength": 80,
+       "req": true
+      },
+      "rule": {
+       "t": "rule",
+       "req": true
+      },
+      "unknownAs": {
+       "t": "string",
+       "values": [
+        "include",
+        "exclude"
+       ],
+       "default": "exclude"
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.entropy_balance",
+   "path": "",
+   "key": "targetTrial",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 50,
+    "items": {
+     "t": "object",
+     "fields": {
+      "item": {
+       "t": "string",
+       "maxLength": 80,
+       "req": true
+      },
+      "emulation": {
+       "t": "string",
+       "values": [
+        "exact",
+        "approximate",
+        "cannot"
+       ],
+       "req": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "endpoint",
+   "node": {
+    "t": "object",
+    "fields": {
+     "type": {
+      "t": "string",
+      "values": [
+       "continuous",
+       "binary",
+       "time_to_event"
+      ],
+      "req": true
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "tau",
+   "node": {
+    "t": "number",
+    "gt": 0,
+    "unit": "time units"
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "timeUnit",
+   "node": {
+    "t": "string",
+    "maxLength": 20,
+    "default": "months"
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "parameterCode",
+   "node": {
+    "t": "string",
+    "maxLength": 64
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "cohortRules",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 100,
+    "items": {
+     "t": "object",
+     "fields": {
+      "name": {
+       "t": "string",
+       "minLength": 1,
+       "maxLength": 80,
+       "req": true
+      },
+      "rule": {
+       "t": "rule",
+       "req": true
+      },
+      "unknownAs": {
+       "t": "string",
+       "values": [
+        "include",
+        "exclude"
+       ],
+       "default": "exclude"
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.propensity_weight",
+   "path": "",
+   "key": "targetTrial",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 50,
+    "items": {
+     "t": "object",
+     "fields": {
+      "item": {
+       "t": "string",
+       "maxLength": 80,
+       "req": true
+      },
+      "emulation": {
+       "t": "string",
+       "values": [
+        "exact",
+        "approximate",
+        "cannot"
+       ],
+       "req": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.rmst",
+   "path": "",
+   "key": "parameterCode",
+   "node": {
+    "t": "string",
+    "maxLength": 64
+   }
+  },
+  {
+   "method": "comparator.rmst",
+   "path": "",
+   "key": "cohortRules",
+   "node": {
+    "t": "array",
+    "min": 1,
+    "max": 100,
+    "items": {
+     "t": "object",
+     "fields": {
+      "name": {
+       "t": "string",
+       "minLength": 1,
+       "maxLength": 80,
+       "req": true
+      },
+      "rule": {
+       "t": "rule",
+       "req": true
+      },
+      "unknownAs": {
+       "t": "string",
+       "values": [
+        "include",
+        "exclude"
+       ],
+       "default": "exclude"
+      }
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.maic",
+   "path": "",
+   "key": "treatmentColumn",
+   "node": {
+    "t": "string",
+    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+    "maxLength": 64,
+    "default": "arm"
+   }
+  },
+  {
+   "method": "comparator.maic",
+   "path": "",
+   "key": "endpoint",
+   "node": {
+    "t": "object",
+    "fields": {
+     "type": {
+      "t": "string",
+      "values": [
+       "continuous",
+       "binary",
+       "time_to_event"
+      ],
+      "req": true
+     }
+    }
+   }
+  },
+  {
+   "method": "comparator.map_prior",
+   "path": "",
+   "key": "operatingCharacteristics",
+   "node": {
+    "t": "object",
+    "fields": {
+     "nControl": {
+      "t": "integer",
+      "min": 1,
+      "max": 1000000,
+      "req": true
+     },
+     "nTreatment": {
+      "t": "integer",
+      "min": 1,
+      "max": 1000000,
+      "req": true
+     },
+     "drifts": {
+      "t": "array",
+      "items": {
+       "t": "number"
+      },
+      "min": 1,
+      "max": 50,
+      "req": true
+     },
+     "effect": {
+      "t": "number",
+      "req": true
+     },
+     "robustWeights": {
+      "t": "array",
+      "items": {
+       "t": "number",
+       "min": 0,
+       "max": 1
+      },
+      "min": 1,
+      "max": 5
+     },
+     "alpha": {
+      "t": "number",
+      "gt": 0,
+      "lt": 1,
+      "default": 0.025
+     }
+    }
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "",
+   "key": "costs",
+   "node": {
+    "t": "object",
+    "fields": {
+     "perPatient": {
+      "t": "number",
+      "min": 0
+     },
+     "perSite": {
+      "t": "number",
+      "min": 0
+     },
+     "perMonth": {
+      "t": "number",
+      "min": 0
+     },
+     "sites": {
+      "t": "integer",
+      "min": 0
+     }
+    }
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "",
+   "key": "costs",
+   "node": {
+    "t": "object",
+    "fields": {
+     "perPatient": {
+      "t": "number",
+      "min": 0
+     },
+     "perSite": {
+      "t": "number",
+      "min": 0
+     },
+     "perMonth": {
+      "t": "number",
+      "min": 0
+     },
+     "sites": {
+      "t": "integer",
+      "min": 0
+     }
+    }
+   }
+  },
+  {
+   "method": "design.assurance",
+   "path": "designPrior",
+   "key": "basis",
+   "node": {
+    "t": "string",
+    "values": [
+     "prediction",
+     "confidence"
+    ],
+    "default": "prediction"
+   }
+  },
+  {
+   "method": "design.assurance",
+   "path": "designPrior",
+   "key": "basisOverride",
+   "node": {
+    "t": "boolean"
+   }
+  },
+  {
+   "method": "design.assurance",
+   "path": "analysis",
+   "key": "sided",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 2,
+    "default": 1
+   }
+  },
+  {
+   "method": "design.procova",
+   "path": "analysis",
+   "key": "sided",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 2,
+    "default": 1
+   }
+  },
+  {
+   "method": "accrual.poisson_gamma",
+   "path": "",
+   "key": "eventHazard",
+   "node": {
+    "t": "number",
+    "gt": 0,
+    "unit": "per month"
+   }
+  },
+  {
+   "method": "design.assurance",
+   "path": "designPrior",
+   "key": "kind",
+   "node": {
+    "t": "string",
+    "values": [
+     "normal",
+     "lognormal"
+    ],
+    "default": "normal"
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "design",
+   "key": "n",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 10000,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm",
+      "single_arm_external",
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "design",
+   "key": "n1",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 10000,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "design",
+   "key": "r1",
+   "node": {
+    "t": "integer",
+    "min": 0,
+    "max": 9999,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "design",
+   "key": "r",
+   "node": {
+    "t": "integer",
+    "min": 0,
+    "max": 9999,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "truth",
+   "key": "nullRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm",
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "truth",
+   "key": "responseRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm",
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "truth",
+   "key": "alternativeRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "simon_two_stage"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "truth",
+   "key": "controlRates",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "number",
+     "min": 0,
+     "max": 1
+    },
+    "min": 2,
+    "max": 2,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm_external"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "truth",
+   "key": "treatmentRates",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "number",
+     "min": 0,
+     "max": 1
+    },
+    "min": 2,
+    "max": 2,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm_external"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "analysis",
+   "key": "alternative",
+   "node": {
+    "t": "string",
+    "values": [
+     "greater",
+     "less",
+     "two.sided"
+    ],
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "analysis",
+   "key": "estimand",
+   "node": {
+    "t": "string",
+    "values": [
+     "ATT"
+    ],
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm_external"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.simulate",
+   "path": "",
+   "key": "external",
+   "node": {
+    "t": "object",
+    "fields": {
+     "kind": {
+      "t": "string",
+      "values": [
+       "stratified_beta_binomial"
+      ],
+      "req": true
+     },
+     "n": {
+      "t": "integer",
+      "min": 2,
+      "max": 1000000,
+      "req": true
+     },
+     "targetPrevalence": {
+      "t": "number",
+      "min": 0,
+      "max": 1,
+      "req": true
+     },
+     "sourcePrevalence": {
+      "t": "number",
+      "min": 0,
+      "max": 1,
+      "req": true
+     },
+     "parameterInformation": {
+      "t": "number",
+      "gt": 0,
+      "max": 1000000000,
+      "req": true
+     },
+     "logOddsDrift": {
+      "t": "number",
+      "min": -10,
+      "max": 10,
+      "req": true
+     },
+     "sensitivityDrifts": {
+      "t": "array",
+      "items": {
+       "t": "number",
+       "min": -10,
+       "max": 10
+      },
+      "min": 1,
+      "max": 9,
+      "unique": true,
+      "req": true
+     }
+    },
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm_external"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.analytic",
+   "path": "design",
+   "key": "n",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 10000,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.analytic",
+   "path": "truth",
+   "key": "responseRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1,
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.analytic",
+   "path": "analysis",
+   "key": "alternative",
+   "node": {
+    "t": "string",
+    "values": [
+     "greater",
+     "less",
+     "two.sided"
+    ],
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.analytic",
+   "path": "analysis",
+   "key": "method",
+   "node": {
+    "t": "string",
+    "values": [
+     "exact_binomial"
+    ],
+    "when": {
+     "path": "design.kind",
+     "in": [
+      "single_arm"
+     ]
+    },
+    "req": true
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "designs[*]",
+   "key": "n",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 10000
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "designs[*]",
+   "key": "n1",
+   "node": {
+    "t": "integer",
+    "min": 1,
+    "max": 10000
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "designs[*]",
+   "key": "r1",
+   "node": {
+    "t": "integer",
+    "min": 0,
+    "max": 9999
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "designs[*]",
+   "key": "r",
+   "node": {
+    "t": "integer",
+    "min": 0,
+    "max": 9999
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "truths[*]",
+   "key": "nullRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "truths[*]",
+   "key": "responseRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "truths[*]",
+   "key": "alternativeRate",
+   "node": {
+    "t": "number",
+    "min": 0,
+    "max": 1
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "truths[*]",
+   "key": "controlRates",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "number",
+     "min": 0,
+     "max": 1
+    },
+    "min": 2,
+    "max": 2
+   }
+  },
+  {
+   "method": "design.grid",
+   "path": "truths[*]",
+   "key": "treatmentRates",
+   "node": {
+    "t": "array",
+    "items": {
+     "t": "number",
+     "min": 0,
+     "max": 1
+    },
+    "min": 2,
+    "max": 2
+   }
+  }
+ ]
+}

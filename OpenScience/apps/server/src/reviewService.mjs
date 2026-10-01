@@ -78,9 +78,11 @@ import {
 import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
 import { judgeCitedSentences } from "./replyCheckJev.mjs";
+import { StudyReviews, assertStudyReviewConfiguration, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
+import { ProductJobs } from "./productJobs.mjs";
 import { migrateReview } from "./reviewPersistence.mjs";
 import { createReferenceResolver } from "./referenceResolver.mjs";
-import { openScopedFileNoFollow } from "./security.mjs";
+import { openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 
 /** The reporting checklists, by contract kind (data a methodologist edits). */
 const CHECKLISTS = JSON.parse(fs.readFileSync(new URL("./reviewChecklists.json", import.meta.url), "utf8"));
@@ -285,18 +287,20 @@ export function editorSystemPrompt({ safety, pass }) {
 export class ReviewService {
   /**
    * @param {{
-   *   config: Record<string, any>, database: any, usageLedger?: any, runtimeManager?: any, store: any,
+   *   config: Record<string, any>, database: any, jobs?: any, usageLedger?: any, runtimeManager?: any, store: any,
    *   agentRegistry?: Promise<any> | any, attributeRun?: (input: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
    *   notifications?: any, imService?: any, webReader?: any, fetchImpl?: typeof fetch, referenceResolver?: any,
    *   report?: (code: string, detail?: string) => void, now?: () => Date, retryDelayMs?: number,
    * }} deps
    */
-  constructor({ config, database, usageLedger = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
+  constructor({ config, database, jobs = null, usageLedger = null, runtimeManager = null, store, agentRegistry = null, attributeRun = async () => null,
     notifications = null, imService = null, webReader = null, fetchImpl = globalThis.fetch, referenceResolver = null, report = () => {}, now = () => new Date(),
     retryDelayMs = EDITOR_RETRY_DELAY_MS }) {
     this.config = config;
     this.retryDelayMs = retryDelayMs;
     this.database = database;
+    this.jobs = jobs ?? (database ? new ProductJobs(database) : null);
+    this.studyReviews = new StudyReviews(this);
     this.usageLedger = usageLedger;
     this.runtimeManager = runtimeManager;
     this.store = store;
@@ -359,10 +363,18 @@ export class ReviewService {
     if (!this.database) return;
     await migrateReview(this.database);
     await this.database.query(`UPDATE evimed_review.reviews SET status='failed', error_code='review_interrupted', finished_at=clock_timestamp()
-      WHERE status='running' AND created_at < clock_timestamp() - make_interval(secs => $1)`, [Math.ceil(Number(this.config.reviewEditorTimeoutMs ?? 900_000) / 1000) + 60]);
+      WHERE status='running' AND subject IS NULL AND created_at < clock_timestamp() - make_interval(secs => $1)`, [Math.ceil(Number(this.config.reviewEditorTimeoutMs ?? 900_000) / 1000) + 60]);
     await this.database.query(`UPDATE evimed_review.reply_checks SET status='queued', lease_owner=NULL, lease_until=NULL
       WHERE status='running' AND lease_until < clock_timestamp()`);
   }
+
+  /** @param {string} kind @param {any} adapter */
+  registerStudyReviewAdapter(kind, adapter) { this.studyReviews.register(kind, adapter); }
+  /** @param {ReviewIdentity} identity @param {any} input */
+  requestStudyReview(identity, input) { return this.studyReviews.request(identity, input); }
+  cancelActiveStudyReviews() { this.studyReviews.cancelActive(); }
+  /** @param {string} workerId */
+  processStudyReviews(workerId) { return this.studyReviews.process(workerId); }
 
   /* ------------------------------------------------------------ L2 / L3 */
 
@@ -378,31 +390,65 @@ export class ReviewService {
     const user = await this.store.userById(identity.userId);
     if (!user) throw Object.assign(new Error("The workload's user no longer exists."), { status: 401, code: "evimed_workload_token_invalid" });
     const project = await this.store.requireProject(user, identity.projectId);
+    if (String(input.contractKind).startsWith('vcr-')) {
+      const adapter = this.studyReviews.adapters.get('vcr');
+      if (!adapter?.requestDeliverable) return { status: 'skipped', reason: 'review_adapter_unavailable' };
+      const records = await adapter.requestDeliverable(identity, input);
+      return records[0] ? { reviewId: records[0].reviewId, status: 'running' } : { status: 'skipped', reason: 'review_input_pending' };
+    }
     await migrateReview(this.database);
     const socketRunId = clip(input.runId ?? "", 120);
     const sessionId = clip(input.sessionId ?? "", 200);
     const runId = await this.attributeRun({ userId: identity.userId, projectId: identity.projectId, sessionId: sessionId || null }).catch(() => null);
-    const previous = await this.database.query(`SELECT id, pass, package_digest, report_text, status, created_at FROM evimed_review.reviews
-      WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 ORDER BY created_at DESC LIMIT 5`,
-    [identity.userId, identity.projectId, socketRunId, input.deliverableId]);
-    const id = newId("rv_");
-    await this.database.query(`INSERT INTO evimed_review.reviews
-      (id,user_id,project_id,run_id,socket_run_id,session_id,deliverable_id,contract_kind,tier,safety,attempt,status,model)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'running',$12)`,
-    [id, identity.userId, identity.projectId, runId, socketRunId, sessionId, input.deliverableId, input.contractKind, tier.tier, tier.safety,
-      Math.max(1, Math.floor(Number(input.attempt) || 1)), this.config.reviewModel]);
+    await this.runtimeManager?.workspaceRootForDelivery?.(project)?.catch?.(() => {});
+    const files = await readDeliverable(project.workspaceDir, input.deliverableId, await this.#declaredOutputs(input.capability));
+    const packageText = [...files.entries()].map(([name, text]) => `${name}\n${text}`).join('\n\n');
+    const { claims, sources } = await claimsWithSources(project.workspaceDir, files.get(MATRIX_FILE));
+    const jobs = tier.tier === 'L3' ? (await existingJobs(project.workspaceDir, [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, JOB_CANDIDATE_LIMIT))).slice(0, 4) : [];
+    const frozen = { files: [...files], claims, sources, jobs, jobFiles: await readJobOutputs(project.workspaceDir, jobs), input };
+    if (Buffer.byteLength(JSON.stringify(frozen)) > 20 * 1024 * 1024) throw Object.assign(new Error('The review snapshot is too large.'), { code: 'review_input_invalid' });
+    const digest = studyReviewDigest(frozen);
+    const configuration = studyReviewConfiguration(this.config);
+    const id = `rv_${studyReviewDigest({ identity, socketRunId, sessionId, digest, configuration })}`;
+    await this.studyReviews.ready();
+    await this.database.transaction(async client => {
+      await client.query(`INSERT INTO evimed_review.reviews
+        (id,user_id,project_id,run_id,socket_run_id,session_id,deliverable_id,contract_kind,tier,safety,attempt,status,package_digest,subject,frozen_input,configuration)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'running',$12,$13::jsonb,$14::jsonb,$15::jsonb)
+        ON CONFLICT(id) DO NOTHING`,
+      [id, identity.userId, identity.projectId, runId, socketRunId, sessionId, input.deliverableId, input.contractKind, tier.tier, tier.safety,
+        Math.max(1, Math.floor(Number(input.attempt) || 1)), digest, JSON.stringify({ kind: 'deliverable' }), JSON.stringify(frozen), JSON.stringify(configuration)]);
+      await this.jobs.enqueue(identity.userId, 'study-review', { reviewId: id }, { projectId: identity.projectId, idempotencyKey: id, maxAttempts: 3, transactionClient: client });
+    });
     this.counts.reviewsStarted += 1;
-    const task = this.#review({ id, identity, project, runId, tier, input, previous: previous.rows })
-      .catch(async (error) => {
-        this.counts.reviewsFailed += 1;
-        this.lastError = error?.code ?? "review_failed";
-        this.report("review_failed", String(error?.message ?? error));
-        await this.database.query(`UPDATE evimed_review.reviews SET status='failed', error_code=$2, finished_at=clock_timestamp() WHERE id=$1`,
-          [id, String(error?.code ?? "review_failed").slice(0, 64)]).catch(() => {});
-      })
-      .finally(() => this.running.delete(id));
-    this.running.set(id, task);
     return { reviewId: id, status: "running" };
+  }
+
+  /** Existing L2/L3 review, now owned by the same durable queue as study reviews.
+   * @param {any} job @param {AbortSignal} signal */
+  async processDeliverableReview(job, signal) {
+    const row = (await this.database.query('SELECT * FROM evimed_review.reviews WHERE id=$1 AND user_id=$2', [job.payload.reviewId, job.userId])).rows[0];
+    const identity = { userId: job.userId, projectId: job.projectId };
+    const commit = operation => {
+      if (signal.aborted) throw Object.assign(new Error('Review interrupted.'), { code: 'review_interrupted' });
+      return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { reviewId: row.id }, operation);
+    };
+    try {
+      assertStudyReviewConfiguration(row.configuration, this.config);
+      if (studyReviewDigest(row.frozen_input) !== row.package_digest) throw Object.assign(new Error('The review snapshot changed.'), { code: 'review_input_changed' });
+      const previous = await this.database.query(`SELECT id,pass,package_digest,report_text,status,created_at FROM evimed_review.reviews
+        WHERE user_id=$1 AND project_id=$2 AND socket_run_id=$3 AND deliverable_id=$4 AND id<>$5 AND created_at<=$6
+        ORDER BY created_at DESC LIMIT 5`, [job.userId, job.projectId, row.socket_run_id, row.deliverable_id, row.id, row.created_at]);
+      await this.#review({ id: row.id, identity, project: null, runId: row.run_id,
+        tier: { tier: row.tier, safety: row.safety }, input: row.frozen_input.input, previous: previous.rows,
+        frozen: row.frozen_input, configuration: row.configuration, signal, commit });
+    } catch (error) {
+      if (error?.code === 'product_job_lease_lost') return;
+      if (signal.aborted) { await this.jobs.fail(job.userId, job.id, job.leaseToken, { code: 'review_interrupted', message: 'Review interrupted.' }, { retry: true }); return; }
+      this.counts.reviewsFailed += 1;
+      await commit(client => client.query(`UPDATE evimed_review.reviews SET status='failed',error_code=$2,finished_at=clock_timestamp() WHERE id=$1`,
+        [row.id, String(error?.code ?? 'review_failed').slice(0, 64)]));
+    }
   }
 
   /**
@@ -443,9 +489,9 @@ export class ReviewService {
   /**
    * The review of one package: read it, check it, have it edited, keep what
    * can be located.
-   * @param {{ id: string, identity: ReviewIdentity, project: any, runId: string | null, tier: { tier: 'L2'|'L3', safety: boolean }, input: Record<string, any>, previous: any[] }} job
+   * @param {{ id: string, identity: ReviewIdentity, project: any, runId: string | null, tier: { tier: 'L2'|'L3', safety: boolean }, input: Record<string, any>, previous: any[], frozen?:any, configuration?:any, signal?:AbortSignal, commit?:(operation:any)=>Promise<any> }} job
    */
-  async #review({ id, identity, project, runId, tier, input, previous }) {
+  async #review({ id, identity, project, runId, tier, input, previous, frozen = null, configuration = null, signal, commit = operation => this.database.transaction(operation) }) {
     // Read from the host copy, which is where this process opens files.
     // `workspaceRootForDelivery` answers a different question — the root the
     // model's own paths are relative to, `/workspace` inside a docker runtime —
@@ -454,10 +500,10 @@ export class ReviewService {
     // fourteen findings the evidence rule then dropped. It is still asked, for
     // its side effect: a remote provider brings the host copy up to date first
     // (readRunSideActivity in agentRuns.mjs draws the same line).
-    await this.runtimeManager?.workspaceRootForDelivery?.(project)?.catch?.(() => {});
-    const root = project.workspaceDir;
+    if (!frozen) await this.runtimeManager?.workspaceRootForDelivery?.(project)?.catch?.(() => {});
+    const root = project?.workspaceDir;
     const outputs = await this.#declaredOutputs(input.capability);
-    const files = await readDeliverable(root, input.deliverableId, outputs);
+    const files = frozen ? new Map(frozen.files) : await readDeliverable(root, input.deliverableId, outputs);
     // Nothing to read is a named failure, never a review: an editor shown no
     // package has nothing to judge and is paid to guess.
     if (!files.size) throw Object.assign(new Error(`No file of deliverable ${input.deliverableId} could be read.`), { code: "review_package_unreadable" });
@@ -481,8 +527,8 @@ export class ReviewService {
       // 「topic-run-receipt」 — and the first four matches were all that was
       // read: the 2026-09-27 topic review traced against three words and one
       // job, and told the run so in every finding.
-      const jobs = (await existingJobs(root, [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, JOB_CANDIDATE_LIMIT))).slice(0, 4);
-      const jobFiles = await readJobOutputs(root, jobs);
+      const jobs = frozen?.jobs ?? (await existingJobs(root, [...new Set(packageText.match(JOB_ID) ?? [])].slice(0, JOB_CANDIDATE_LIMIT))).slice(0, 4);
+      const jobFiles = frozen?.jobFiles ?? await readJobOutputs(root, jobs);
       const numbers = outputNumbers(jobFiles);
       const traced = numericTraceFindings({ reportText: report, outputs: numbers, outputLabel: jobs.length ? `作业 ${jobs.join("、")} 的输出` : "引擎输出" });
       numeric = { findings: traced.findings, metrics: { ...traced.metrics, jobFiles: jobFiles.length }, jobs };
@@ -497,7 +543,7 @@ export class ReviewService {
 
     // The claims and what their sources say around each quote (the
     // clinical evidence report is the one kind with a claim matrix).
-    const { claims, sources } = await claimsWithSources(root, files.get(MATRIX_FILE));
+    const { claims, sources } = frozen ?? await claimsWithSources(root, files.get(MATRIX_FILE));
     // The gateway refuses a value outside the vocabulary; a caller that did
     // not come through it gets no list and no attribute from one either.
     const studyType = isStudyType(input.studyType) ? String(input.studyType) : "";
@@ -536,14 +582,16 @@ export class ReviewService {
         today: this.now().toISOString().slice(0, 10),
         deterministic: { references: references.metrics, referenceFindings: references.findings, numeric, stats }, previousFindings,
       });
-      const edit = () => this.editors.run(() => callReviewModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
-        userId: identity.userId, projectId: identity.projectId, runId,
+      const edit = () => this.editors.run(() => {
+        if (configuration) assertStudyReviewConfiguration(configuration, this.config);
+        return callReviewModel({ config: { ...this.config, ...(configuration ? { reviewModel: configuration.model } : {}) }, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+        signal, userId: identity.userId, projectId: identity.projectId, runId,
         messages: [{ role: "system", content: editorSystemPrompt({ safety: tier.safety, pass }) }, { role: "user", content: message }],
         schema: reviewEditorSchema({ checklistIds: checklist.map((item) => item.id), acceptanceCount: acceptanceItems.length }), schemaName: "review_findings",
-        thinking: { enabled: true, budget: Number(this.config.reviewThinkingBudget ?? 8_000) },
-        maxTokens: Number(this.config.reviewMaxOutputTokens ?? 24_000),
-        timeoutMs: Number(this.config.reviewEditorTimeoutMs ?? 900_000),
-      }));
+        thinking: { enabled: true, budget: Number(configuration?.thinkingBudget ?? this.config.reviewThinkingBudget ?? 8_000) },
+        maxTokens: Number(configuration?.maxTokens ?? this.config.reviewMaxOutputTokens ?? 24_000),
+        timeoutMs: Number(configuration?.timeoutMs ?? this.config.reviewEditorTimeoutMs ?? 900_000),
+      }); });
       try {
         this.counts.editorCalls += 1;
         // One retry, for a failure the provider calls transient (a broken
@@ -593,9 +641,10 @@ export class ReviewService {
           findings: Array.isArray(answer.value?.findings) ? answer.value.findings.length : 0,
           checklistAsked: checklist.length, checklistAnswered: answeredChecks.returned.checklist, checklistKept: answeredChecks.checklist.length,
           acceptanceAsked: acceptanceItems.length, acceptanceAnswered: answeredChecks.returned.acceptance, acceptanceKept: answeredChecks.acceptance.length,
-          reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(this.config.reviewThinkingBudget ?? 8_000), emptyAnswers,
+          reasoningTokens: answer.usage.reasoningTokens, thinkingBudget: Number(configuration?.thinkingBudget ?? this.config.reviewThinkingBudget ?? 8_000), emptyAnswers,
         };
       } catch (error) {
+        if (error?.code === 'review_configuration_changed') throw error;
         this.counts.editorFailures += 1;
         editorError = error instanceof ReviewModelError ? error.code : "review_editor_failed";
         this.lastError = editorError;
@@ -644,7 +693,7 @@ export class ReviewService {
     // carried: a finding that comes back identical was not fixed.
     const declined = await this.#declinedAnswers(previous);
 
-    await this.database.transaction(async (/** @type {any} */ client) => {
+    await commit(async (/** @type {any} */ client) => {
       for (const finding of numbered) {
         const reason = declined.get(`${finding.kind}\u0000${finding.evidence}`);
         await client.query(`INSERT INTO evimed_review.findings (review_id,finding_id,kind,severity,origin,location,evidence,fix,message,response,response_reason,responded_at)
@@ -1036,7 +1085,7 @@ export class ReviewService {
   stats() {
     return {
       ...this.counts,
-      running: this.running.size,
+      running: this.running.size + this.studyReviews.active.size,
       editorsActive: this.editors.active,
       editorsQueued: this.editors.queued,
       references: this.resolver?.stats?.() ?? null,
@@ -1198,7 +1247,7 @@ async function readWorkspaceText(root, relative) {
   try {
     opened = await openScopedFileNoFollow(root, path.join(root, relative));
     if (!opened.stat.isFile() || opened.stat.size <= 0 || opened.stat.size > FILE_LIMIT_BYTES) return null;
-    return await opened.handle.readFile("utf8");
+    return (await readStableFileHandle(opened.handle, opened.stat)).toString("utf8");
   } catch {
     return null;
   } finally {

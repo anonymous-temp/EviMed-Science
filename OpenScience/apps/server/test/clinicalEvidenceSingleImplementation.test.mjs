@@ -122,6 +122,32 @@ test("a package both sides accept", async () => {
   assert.equal(preflight.ok, true, JSON.stringify(preflight.issues));
 });
 
+test("a false explicit synthesized bond is the same advisory in both gates and never withholds a package", async () => {
+  const input = deepResearchPackage();
+  const original = input.matrix.claims[0];
+  const claim = {
+    ...original, claimType: "synthesized", confidence: "moderate", referenceNumbers: [1, 2],
+    supportingSources: [original, input.matrix.claims[1]],
+    supportQuote: "This explicit top-level quotation was never in the preserved source.",
+  };
+  input.matrix.claims[0] = claim;
+  const { gate, preflight } = await verdicts(input, "explicit bond");
+  assert.deepEqual(gate.findings.map((finding) => [finding.check, finding.tier]), [["claim-explicit-quote-verbatim", "advisory"]]);
+  assert.deepEqual(gate.blockingIssues, []);
+  assert.deepEqual(preflight.issues, []);
+  assert.equal(preflight.ok, true);
+  assert.deepEqual(preflight.notes, gate.issues);
+  assert.match(preflight.notes[0], /^MUST FIX — claims\[0\]\.supportQuote was not found/);
+
+  for (const corrected of [{ ...claim, supportQuote: original.supportQuote }, { ...claim, artifactPath: undefined, supportQuote: undefined }]) {
+    input.matrix.claims[0] = corrected;
+    const clean = await verdicts(input, "corrected or removed explicit bond");
+    assert.equal(clean.gate.valid, true, clean.gate.issues.join("\n"));
+    assert.equal(clean.preflight.ok, true);
+    assert.deepEqual(clean.preflight.notes, []);
+  }
+});
+
 test("whatever the server gate rejects, the preflight already caught", async () => {
   // Each case is a real production failure, reduced to the one field that
   // caused it. If the preflight passes any of these, a run is told it is done

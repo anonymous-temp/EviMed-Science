@@ -428,6 +428,44 @@ test("循证 GEO's options come in rebuilt from a closed shape, and a change goe
   f.ctx.dispose();
 });
 
+test("虚拟临研's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  /** @type {any[]} */ const delivered = [];
+  hub.on('vcr', (data) => delivered.push(data));
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  shellSends(f, { type: 'evimed.runtime-ui.vcr', seq: 1, sessionId: 'session-a', controls: true, canSetUse: true,
+    start: 'trial', startOptions: [{ id: 'auto', label: '自动' }, { id: 'trial', label: '试验' }, { id: '../x', label: 'no' }, { id: 'cohort' }, { id: 'patients', label: '' }],
+    intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }, { id: 'Bad Id', label: 'x' }],
+    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60) }, { label: '', draft: 'x' }, { label: 'y', draft: '' }], extra: 'dropped' });
+  assert.deepEqual(delivered[0], {
+    sessionId: 'session-a', controls: true, canSetUse: true, start: 'trial',
+    startOptions: [{ id: 'auto', label: '自动' }, { id: 'trial', label: '试验' }],
+    intendedUse: 'exploratory', useOptions: [{ id: 'exploratory', label: '探索' }, { id: 'design_support', label: '研究设计支持' }],
+    starters: [{ label: '估算样本量', draft: '帮我估算样本量：'.repeat(60).slice(0, 400) }],
+  });
+  // A value that is not among the choices on offer is not carried.
+  shellSends(f, { type: 'evimed.runtime-ui.vcr', seq: 2, sessionId: 'session-a', controls: true, start: 'anything',
+    startOptions: [{ id: 'auto', label: '自动' }], intendedUse: 'exploratory', useOptions: [], starters: [] });
+  assert.equal(delivered[1].start, null);
+  assert.equal(delivered[1].intendedUse, null);
+  assert.equal(delivered[1].canSetUse, false, 'the lead\'s control is offered only when the shell says so');
+  shellSends(f, { type: 'evimed.runtime-ui.vcr', seq: 3, sessionId: 'session-a', clear: true });
+  assert.deepEqual(delivered[2], { sessionId: 'session-a', starters: null });
+
+  hub.send('vcr-options', { sessionId: 'session-a', start: 'cohort' });
+  hub.send('vcr-options', { sessionId: 'session-a', intendedUse: 'design_support' });
+  hub.send('vcr-options', { sessionId: 'session-a', start: '../admin', intendedUse: 'Not Valid' });
+  hub.send('vcr-options', { sessionId: 'session-a' });
+  hub.send('vcr-options', { sessionId: 'bad id', start: 'trial' });
+  const changes = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.vcr-options').map(row => row.message);
+  assert.deepEqual(changes.map(({ sessionId, start, intendedUse }) => ({ sessionId, start, intendedUse })), [
+    { sessionId: 'session-a', start: 'cohort', intendedUse: undefined },
+    { sessionId: 'session-a', start: undefined, intendedUse: 'design_support' },
+    { sessionId: null, start: 'trial', intendedUse: undefined },
+  ], 'a change that says nothing valid is not sent, and a session that is not an id is not addressed');
+  f.ctx.dispose();
+});
+
 test('the frame can send the reader to 循证 GEO, at a tab named from a closed list', async () => {
   const f = fixture(); apply(f.ctx, {}, f.target); await settle();
   const shell = /** @type {any} */ (f.target).__EVIMED_SHELL__;

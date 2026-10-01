@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { claimVerification } from "@evimed/domain/clinical-evidence";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { MarkdownViewer } from "./MarkdownViewer";
 import { parseClaimMatrix } from "@/lib/claimCitations";
@@ -93,5 +95,39 @@ describe("a report sentence opens what it rests on", () => {
   it("a comment quoted as code survives", () => {
     const { container } = render(<MarkdownViewer variant="document">{"用 `<!-- claim:CLM-001 -->` 标注主张。"}</MarkdownViewer>);
     expect(container.textContent).toContain("<!-- claim:CLM-001 -->");
+  });
+
+  it.each([
+    "./.evimed-sources/a/fulltext.md",
+    ".evimed-sources/a/../a/fulltext.md",
+    ".evimed-sources/../../outside.md",
+  ])("shows an unsafe explicit quotation at %s with a warning and no file link", async (artifactPath) => {
+    const matrix = { claims: [{
+      claimId: "CLM-053", claim: "Two reviews describe the evidence.", claimType: "synthesized",
+      artifactPath, sourceTitle: "Top-level review", sourceUrl: "https://www.nice.org.uk/guidance/ng136", supportQuote: "The search ended in June 2019.",
+      supportingSources: [
+        { artifactPath: ".evimed-sources/a/fulltext.md", sourceTitle: "Earlier review", supportQuote: "The search ended in December 2014." },
+        { artifactPath: ".evimed-sources/b/fulltext.md", sourceTitle: "Later review", supportQuote: "Randomized studies were included." },
+      ],
+    }] };
+    const verification = claimVerification({ matrix, sourceArtifacts: {
+      ".evimed-sources/a/fulltext.md": "The search ended in December 2014.",
+      ".evimed-sources/b/fulltext.md": "Randomized studies were included.",
+    } });
+    render(<MemoryRouter><MarkdownViewer variant="document" claims={parseClaimMatrix(JSON.stringify(matrix))}
+      reading={{ runId: "run_1", verified: new Map(verification.claims.map((claim) => [claim.claimId, claim])) }}>
+      {"Two reviews [1]<!-- claim:CLM-053 -->."}
+    </MarkdownViewer></MemoryRouter>);
+    const citation = screen.getByRole("button", { name: /查看这句话的依据/ });
+    expect(citation).toHaveTextContent("依据 ⚠");
+    await userEvent.click(citation);
+    const top = (await screen.findByText("“The search ended in June 2019.”")).closest("[data-quote-index]") as HTMLElement;
+    expect(top).toHaveAttribute("data-quote-index", "2");
+    expect(within(top).getByLabelText("这条结论没有给出可核对的引文")).toHaveTextContent("⚠");
+    expect(within(top).getByRole("link", { name: "Top-level review" })).toHaveAttribute("href", matrix.claims[0].sourceUrl);
+    expect(within(top).queryByRole("link", { name: "定位原文" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "定位原文" })).toHaveLength(2);
+    expect(screen.getByText(/^⚠ 第 3 段引文缺少/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText("引文已在保存的原文中核对")).toHaveLength(2);
   });
 });

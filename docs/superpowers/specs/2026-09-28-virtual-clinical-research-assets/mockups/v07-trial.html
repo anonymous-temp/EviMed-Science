@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>试验 · EV-201 二线 NSCLC</title>
+<meta name="shot" content="full">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* 整页截图：外壳随内容增高 */
+  html, body { height: auto; }
+  body { position: relative; min-height: 100vh; }
+  .app { height: auto; min-height: 100vh; overflow: visible; }
+  .main { overflow: visible; }
+  .render-note { position: absolute; }
+  .wrapx { width: 1200px; margin: 0 auto; padding-bottom: 56px; }
+
+  /* ── 研究页页头（v04–v07 共用，逐字相同） ── */
+  .shead { display: flex; align-items: center; gap: 10px; padding: 24px 0 16px; }
+  .shead h1 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -.005em; margin-right: 4px; }
+  .rail { display: grid; grid-template-columns: repeat(7, 1fr); padding: 14px 18px 12px; border-radius: 14px; background: var(--surface); box-shadow: var(--e1); }
+  .stp { position: relative; padding-top: 20px; }
+  .stp::before { content: ""; position: absolute; top: 6px; left: 14px; right: -2px; height: 2px; background: var(--n-150); }
+  .stp.done::before { background: var(--brand-300); }
+  .stp:last-child::before { display: none; }
+  .stp .k { position: absolute; top: 0; left: 0; width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--n-200); background: var(--surface); }
+  .stp.done .k { background: var(--accent); box-shadow: none; }
+  .stp.done .k::after { content: ""; position: absolute; left: 4.5px; top: 2.5px; width: 3.5px; height: 6.5px; border-right: 1.8px solid #fff; border-bottom: 1.8px solid #fff; transform: rotate(45deg); }
+  .stp.wait .k { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px var(--brand-100); }
+  .stp .n { font-weight: 600; font-size: 14px; }
+  .stp .m { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .stp.wait .m { color: var(--brand-700); font-weight: 500; }
+  .navrow { display: flex; align-items: flex-end; gap: 6px; margin-top: 16px; box-shadow: inset 0 -1px 0 var(--line); }
+  .navrow .tabs { box-shadow: none; }
+  .dd { height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; font-size: 13px; color: var(--text-2); margin-bottom: 5px; white-space: nowrap; }
+  .dd b { color: var(--text); font-weight: 500; }
+  .dd svg { color: var(--text-3); }
+  .dd.pill { box-shadow: inset 0 0 0 1px var(--line-strong); border-radius: 15px; padding: 0 10px; }
+  .headline { margin: 18px 0 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; line-height: 26px; font-weight: 500; color: var(--n-900); }
+  .headline > svg { color: var(--brand-600); }
+  .headline .hl { color: var(--brand-700); font-weight: 600; }
+  .headline .at { color: var(--attn-strong); font-weight: 600; }
+
+  /* ── 通用 ── */
+  .box { background: var(--surface); border-radius: 16px; box-shadow: var(--e1); padding: 18px 20px; }
+  .ctitle { font-size: 16px; line-height: 24px; font-weight: 600; }
+  .chead { display: flex; align-items: center; gap: 8px; }
+  .chead .sp { flex: 1; }
+  .o { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--text-3); background: var(--surface-2); line-height: 1; white-space: nowrap; vertical-align: 1px; }
+  .chip-ai { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 12px; font-weight: 500; color: var(--attn-strong); background: var(--attn-soft); white-space: nowrap; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-2); align-items: center; flex-wrap: wrap; }
+  .lk { display: inline-block; width: 16px; height: 2.5px; margin-right: 6px; vertical-align: 3px; border-radius: 2px; }
+  svg.ch { display: block; font-family: var(--font-sans); }
+
+  /* ADEMP */
+  .ademp { display: grid; grid-template-columns: 1fr; margin-top: 8px; }
+  .ademp .r { display: grid; grid-template-columns: 22px 92px 1fr; align-items: baseline; gap: 6px; padding: 8px 0; font-size: 13px; line-height: 20px; box-shadow: inset 0 -1px 0 var(--line); }
+  .ademp .r:last-child { box-shadow: none; padding-bottom: 0; }
+  .ademp .l { font-weight: 700; color: var(--brand-700); font-size: 12px; }
+  .ademp .k { color: var(--text-3); }
+  .ademp .v { color: var(--n-800); }
+
+  /* 设计网格 */
+  table.dg { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+  table.dg th { text-align: right; font-weight: 500; font-size: 12px; color: var(--text-3); padding: 8px 10px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: bottom; }
+  table.dg th:first-child { text-align: left; padding-left: 4px; }
+  table.dg td { padding: 12px 10px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.dg td:first-child { text-align: left; padding-left: 4px; }
+  table.dg tr:last-child td { border-bottom: 0; }
+  .dn { display: flex; align-items: center; gap: 8px; }
+  .dn .id { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--surface-2); color: var(--text); flex: none; }
+  .dn .nm { font-weight: 500; }
+  .dn .sw { width: 14px; height: 2.5px; border-radius: 2px; margin-left: 2px; }
+  .ds { font-size: 12px; color: var(--text-3); margin: 2px 0 0 32px; }
+  .v1 { font-weight: 500; }
+  .se { display: block; font-size: 11.5px; color: var(--text-4); margin-top: 1px; font-weight: 400; }
+  .fn { font-size: 10px; color: var(--text-3); vertical-align: 5px; margin-left: 1px; }
+  tr.dom td { color: var(--text-4); }
+  tr.dom .dn .nm { color: var(--text-3); }
+  tr.dom .dn .id { background: var(--surface-1); color: var(--text-4); }
+  .domtag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 11px; color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-strong); margin-left: 4px; }
+  .foot { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; font-size: 12px; color: var(--text-3); }
+  .foot b { font-weight: 600; color: var(--attn-strong); }
+
+  /* 第三行 */
+  .g3 { display: grid; grid-template-columns: 776px 408px; gap: 16px; margin-top: 16px; }
+  .rc { display: flex; flex-direction: column; gap: 16px; }
+  .dec .lab { font-size: 12px; color: var(--text-3); margin-top: 12px; }
+  .ta { margin-top: 6px; min-height: 92px; padding: 10px 12px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line-control); font-size: 13px; line-height: 20px; color: var(--text-4); background: var(--surface); }
+  .ta .cur { display: inline-block; width: 1.5px; height: 16px; background: var(--accent); vertical-align: -3px; margin-right: 2px; }
+  .opts { display: flex; gap: 8px; margin-top: 12px; }
+  .opt { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 9px; box-shadow: inset 0 0 0 1px var(--line-strong); font-size: 13px; color: var(--text-2); }
+  .opt i { width: 14px; height: 14px; border-radius: 7px; box-shadow: inset 0 0 0 1.5px var(--line-control); }
+  .opt.off { color: var(--text-4); background: var(--surface-1); box-shadow: none; }
+  .opt.off i { box-shadow: inset 0 0 0 1.5px var(--n-200); }
+  .decbar { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .btn.dis { background: var(--n-150); color: var(--n-400); box-shadow: none; cursor: not-allowed; }
+  .mc .it { display: flex; gap: 10px; padding: 10px 0; font-size: 13px; line-height: 20px; box-shadow: inset 0 -1px 0 var(--line); }
+  .mc .it:last-child { box-shadow: none; padding-bottom: 0; }
+  .mc .it svg { flex: none; margin-top: 2px; color: var(--text-3); }
+  .mc .it.okk svg { color: var(--ok); }
+  .mc .it .s { display: block; font-size: 12px; color: var(--text-3); }
+
+  /* 四个数 */
+  .band { display: grid; grid-template-columns: repeat(4, 1fr) 1.5fr; margin-top: 16px; border-radius: 16px; background: var(--surface); box-shadow: var(--e1); }
+  .band .c4 { padding: 14px 18px; position: relative; }
+  .band .c4 + .c4::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--line); }
+  .band .lab { font-size: 12px; color: var(--text-3); }
+  .band .val { font-size: 22px; line-height: 30px; font-weight: 600; margin-top: 2px; }
+  .band .val.na { color: var(--text-4); }
+  .band .sub { font-size: 12px; color: var(--text-3); }
+</style></head>
+<body data-nav="vcr" data-recent="a">
+<div class="app">
+  <aside class="side" data-shell></aside>
+  <main class="main">
+    <div class="wrapx">
+      <!-- 研究页页头 · 开始 -->
+      <div class="shead">
+        <h1>EV-201 二线 NSCLC：单臂 II 期还是随机</h1>
+        <span class="tag outline">T0 公开资料</span>
+        <span class="tag outline">研究设计支持</span>
+        <span class="sp"></span>
+        <a class="btn secondary"><svg data-i="message-square" class="i xs"></svg>对话</a>
+        <a class="ibtn"><svg data-i="ellipsis"></svg></a>
+      </div>
+      <div class="rail">
+        <div class="stp done"><span class="k"></span><div class="n">定义</div><div class="m">研究定义 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">证据</div><div class="m">12 张假设卡</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">人群</div><div class="m">人群 v3</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">患者</div><div class="m">虚拟患者集 v2</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">对照</div><div class="m">文献对照</div></div>
+        <div class="stp done"><span class="k"></span><div class="n">试验</div><div class="m">4 个方案</div></div>
+        <div class="stp"><span class="k"></span><div class="n">匹配</div><div class="m">未开始</div></div>
+      </div>
+      <!-- 研究页页头 · 结束 -->
+
+      <div class="navrow">
+        <nav class="tabs"><a>总览</a><a>人群</a><a>虚拟患者</a><a>对照</a><a class="on">试验</a><a>匹配与招募</a><a>数据与证据</a></nav>
+        <span class="sp"></span>
+        <a class="dd"><b>运行 #12</b> · 9 月 27 日<svg data-i="chevron-down" class="i xs"></svg></a>
+      </div>
+
+      <div class="headline"><svg data-i="sparkles" class="i"></svg><span>随机方案 B、C 的成功把握（<span class="hl">71%</span>、<span class="hl">74%</span>）都高于单臂方案 A（58%）；C 多 3 个百分点，但多 40 例、晚 3.2 个月、多约 700 万元。</span></div>
+
+      <section class="box">
+        <div class="chead"><span class="ctitle">模拟设定</span><span class="o">ADEMP</span><span class="sp"></span><span class="chip-ai">AI 设定</span><a class="ibtn" style="width:28px;height:28px"><svg data-i="pencil" class="i xs"></svg></a></div>
+        <div class="ademp">
+          <div class="r"><span class="l">A</span><span class="k">目的</span><span class="v">在“单臂 + 文献对照”和随机对照之间选定 II 期方案</span></div>
+          <div class="r"><span class="l">D</span><span class="k">数据生成机制</span><span class="v">人群 v3 · 对照组 PFS 对数正态（中位 4.1 个月，预测区间 3.0–5.6）· 真实 HR 取自设计先验（中位 0.60）· 脱落 10%/年 · Poisson–Gamma 入组（每中心每月 0.42 例）</span></div>
+          <div class="r"><span class="l">E</span><span class="k">估计目标</span><span class="v">意向治疗人群；B、C 为 PFS 风险比，A 为客观缓解率；后续治疗按治疗策略处理</span></div>
+          <div class="r"><span class="l">M</span><span class="k">分析方法</span><span class="v">A 精确二项检验（≥ 14 例缓解）；B、C 分层 log-rank；单侧 α 均为 0.025；C 在 50% 信息量时期中分析（O'Brien-Fleming 型，边界 2.797 / 1.977）</span></div>
+          <div class="r"><span class="l">P</span><span class="k">性能指标</span><span class="v">功效 · I 类错误 · 成功把握 · 期望样本量 · 末例入组时间 · 成本</span></div>
+        </div>
+      </section>
+
+      <section class="box" style="margin-top:16px">
+        <div class="chead"><span class="ctitle">四个方案的运行特征</span><span class="sp"></span><span class="t12 muted">± 为蒙特卡洛标准误 · 区间为 80% 预测区间</span></div>
+        <table class="dg">
+          <thead><tr>
+            <th>方案</th><th>样本量</th><th>事件数</th><th>功效（HR 0.60）</th><th>成功把握</th><th>I 类错误（HR 1.0）</th><th>期望样本量</th><th>末例入组中位（月）</th><th>成本（万元）</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td><div class="dn"><span class="id">A</span><span class="nm">单臂 + 文献对照</span></div><div class="ds">≥ 14 例缓解（ORR ≥ 23.3%）· 15 个中心</div></td>
+              <td><span class="v1">60</span></td>
+              <td><span class="v1" style="color:var(--text-4)">—</span><span class="se">ORR 终点</span></td>
+              <td><span class="v1">66%</span><span class="fn">1</span><span class="se">±0.4</span></td>
+              <td><span class="v1">58%</span><span class="fn">2</span><span class="se">±0.4</span></td>
+              <td><span class="v1">1.36%</span><span class="fn">3</span><span class="se">精确二项</span></td>
+              <td><span class="v1">60</span><span class="se">固定</span></td>
+              <td><span class="v1">11.7</span><span class="se">9.2–15.0</span></td>
+              <td><span class="v1">约 1,450</span><span class="se">按中位周期</span></td>
+            </tr>
+            <tr>
+              <td><div class="dn"><span class="id">B</span><span class="nm">2:1 随机</span><span class="sw" style="background:#0A5DC1"></span></div><div class="ds">EV-201 : 多西他赛 = 120 : 60 · 30 个中心</div></td>
+              <td><span class="v1">180</span></td>
+              <td><span class="v1">138</span></td>
+              <td><span class="v1">81%</span><span class="se">±0.3</span></td>
+              <td><span class="v1">71%</span><span class="se">±0.4</span></td>
+              <td><span class="v1">2.47%</span><span class="se">±0.11</span></td>
+              <td><span class="v1">180</span><span class="se">固定</span></td>
+              <td><span class="v1">16.4</span><span class="se">13.9–19.3</span></td>
+              <td><span class="v1">约 3,900</span><span class="se">按中位周期</span></td>
+            </tr>
+            <tr>
+              <td><div class="dn"><span class="id">C</span><span class="nm">1:1 随机 + 一次期中</span><span class="sw" style="background:#5A626B"></span></div><div class="ds">50% 信息量期中 · 边界 2.797 / 1.977 · 30 个中心</div></td>
+              <td><span class="v1">220</span></td>
+              <td><span class="v1">140</span></td>
+              <td><span class="v1">85%</span><span class="se">±0.3</span></td>
+              <td><span class="v1">74%</span><span class="se">±0.4</span></td>
+              <td><span class="v1">2.51%</span><span class="se">±0.11</span></td>
+              <td><span class="v1">约 200</span><span class="se">期中停止 26%（±0.3）</span></td>
+              <td><span class="v1">19.6</span><span class="se">16.7–23.2</span></td>
+              <td><span class="v1">约 4,600</span><span class="se">按中位周期</span></td>
+            </tr>
+            <tr class="dom">
+              <td><div class="dn"><span class="id">D</span><span class="nm">1:1 随机，无期中</span><span class="domtag">被 C 占优</span></div></td>
+              <td>240</td>
+              <td colspan="7" style="text-align:left;padding-left:22px">样本更多、周期更长，成功把握不高于 C</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="foot">
+          <span>1 方案 A 的功效按真实 ORR 25% 计。</span>
+          <span>2 按 EV-201 真实 ORR 的先验 Beta(8, 24)（均值 25%）平均。</span>
+          <span>3 对照 ORR 取 12.4% 时的精确二项值。若对照组真实 ORR 是预测区间上限 18.6%，药物无效时仍有 <b>21.5%</b> 的概率“成功”。</span>
+        </div>
+      </section>
+
+      <div class="g3">
+        <section class="box">
+          <div class="chead"><span class="ctitle">功效随真实 HR 的变化：HR 0.60 时 B 81%、C 85%</span></div>
+          <div class="legend" style="margin-top:8px">
+            <span><i class="lk" style="background:#0A5DC1"></i>方案 B · 2:1，180 例</span>
+            <span><i class="lk" style="background:#5A626B"></i>方案 C · 1:1 + 期中，220 例</span>
+            <span><i style="display:inline-block;width:8px;height:8px;border-radius:4px;background:#fff;box-shadow:inset 0 0 0 2px #3E454D;margin-right:6px;vertical-align:0"></i>仿真值</span>
+            <span><i style="display:inline-block;width:16px;height:10px;border-radius:2px;background:#DDE9F9;margin-right:6px;vertical-align:-1px"></i>设计先验</span>
+            <span class="muted">方案 A 以 ORR 为终点，不在此图</span>
+          </div>
+          <svg id="pw" class="ch" viewBox="0 0 736 400" width="736" height="400" style="margin-top:6px"></svg>
+        </section>
+
+        <div class="rc">
+          <section class="box dec">
+            <div class="chead"><span class="ctitle">决策</span><span class="sp"></span><span class="t12 muted">写入决策记录</span></div>
+            <div class="lab">比较目标（待你写）</div>
+            <div class="ta"><span class="cur"></span>例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……</div>
+            <div class="opts"><span class="opt"><i></i>A</span><span class="opt"><i></i>B</span><span class="opt"><i></i>C</span><span class="opt off"><i></i>D</span></div>
+            <div class="decbar"><a class="btn dis"><svg data-i="check" class="i xs"></svg>选定方案</a><span class="t12 muted">平台不自动选定方案</span></div>
+          </section>
+          <section class="box mc">
+            <div class="ctitle" style="font-size:14px">运行记录</div>
+            <div class="it okk"><svg data-i="circle-check" class="i xs"></svg><span>解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）<span class="s">rpact 解析 · gsDesign 交叉核对</span></span></div>
+            <div class="it"><svg data-i="dices" class="i xs"></svg><span>零假设情景 20,000 次 · 备择情景 16,000 次 · 种子已记录<span class="s">功效的蒙特卡洛标准误 ±0.3 个百分点</span></span></div>
+          </section>
+        </div>
+      </div>
+
+      <section class="band">
+        <div class="c4"><div class="lab">真实患者数</div><div class="val num">0</div><div class="sub">设计阶段</div></div>
+        <div class="c4"><div class="lab">事件数</div><div class="val na">—</div><div class="sub">设计阶段</div></div>
+        <div class="c4"><div class="lab">有效样本量</div><div class="val na">—</div><div class="sub">设计阶段</div></div>
+        <div class="c4"><div class="lab">生成记录数</div><div class="val num">648 万</div><div class="sub">方案 B：3.6 万次仿真 × 180 人</div></div>
+        <div class="c4"><div class="lab">仿真次数</div><div class="val num" style="font-size:18px">3.6 万</div><div class="sub">零假设 2 万 + 备择 1.6 万</div></div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="render-note">设计稿渲染 · 研究、药名与数字均为示意</div>
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  function el(svg, tag, a, text) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; }
+  function Phi(z) { var t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; }
+  // B：2:1，138 个事件，单侧 α 0.025 → Φ(√(138·2/9)·|ln HR| − 1.96)
+  // C：1:1，140 个事件，50% 信息量期中，边界 2.797 / 1.977（两次检验的联合正态）
+  var kB = Math.sqrt(138 * 2 / 9), kC = Math.sqrt(140 / 4), r = Math.SQRT1_2;
+  var pB = function (h) { return Phi(kB * Math.log(1 / h) - 1.96); };
+  function bvn(a, b) { var s = 0, dz = 0.004; for (var z = -8; z < a; z += dz) s += Math.exp(-z * z / 2) / 2.5066283 * Phi((b - r * z) / r) * dz; return s; }
+  var pC = function (h) { var th = kC * Math.log(1 / h); return 1 - bvn(2.797 - th * r, 1.977 - th); };
+  var s = document.getElementById("pw"), TX = "#646D77";
+  var X0 = 56, X1 = 704, Y0 = 26, H = 314, h0 = 0.3, h1 = 1.1;
+  var x = function (h) { return X0 + (X1 - X0) * (h - h0) / (h1 - h0); };
+  var y = function (p) { return Y0 + H * (1 - p); };
+  [0, .25, .5, .75, 1].forEach(function (p) {
+    el(s, "line", { x1: X0, x2: X1, y1: y(p), y2: y(p), stroke: p === 0 ? "#BAC2CA" : "#E4E8EC", "stroke-width": 1 });
+    el(s, "text", { x: X0 - 8, y: y(p) + 4, "font-size": 12, fill: TX, "text-anchor": "end" }, Math.round(p * 100) + "%");
+  });
+  el(s, "text", { x: X0 - 40, y: 12, "font-size": 12, fill: TX }, "功效");
+  [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1].forEach(function (h) { el(s, "text", { x: x(h), y: Y0 + H + 20, "font-size": 12, fill: TX, "text-anchor": "middle" }, h.toFixed(2)); });
+  el(s, "text", { x: X1, y: Y0 + H + 40, "font-size": 12, fill: TX, "text-anchor": "end" }, "真实 HR（EV-201 : 多西他赛）");
+  // 设计先验：log HR ~ N(log 0.60, 0.22²)，只画形状
+  var mu = Math.log(0.6), sd = 0.22, f = function (h) { return Math.exp(-Math.pow(Math.log(h) - mu, 2) / (2 * sd * sd)) / h; };
+  var fmax = 0, h; for (h = h0; h <= h1; h += 0.002) fmax = Math.max(fmax, f(h));
+  var pts = [x(h0) + "," + y(0)]; for (h = h0; h <= h1 + 1e-9; h += 0.004) pts.push(x(h).toFixed(1) + "," + (y(0) - 74 * f(h) / fmax).toFixed(1)); pts.push(x(h1) + "," + y(0));
+  el(s, "polygon", { points: pts.join(" "), fill: "#DDE9F9", opacity: 0.9 });
+  el(s, "line", { x1: x(0.5), x2: x(0.75), y1: y(0) - 6, y2: y(0) - 6, stroke: "#8FB5EA", "stroke-width": 1 });
+  [0.5, 0.75].forEach(function (hh) { el(s, "line", { x1: x(hh), x2: x(hh), y1: y(0) - 10, y2: y(0) - 2, stroke: "#8FB5EA", "stroke-width": 1 }); });
+  el(s, "text", { x: x(0.75) + 6, y: y(0) - 3, "font-size": 11, fill: "#0A4DA0" }, "敏感性 0.50–0.75");
+  el(s, "text", { x: x(0.318), y: y(0) - 10, "font-size": 11, fill: "#0A4DA0" }, "设计先验");
+  // 参照线
+  el(s, "line", { x1: x(0.6), x2: x(0.6), y1: Y0 - 8, y2: y(0), stroke: "#939CA6", "stroke-width": 1 });
+  el(s, "text", { x: x(0.6) + 6, y: Y0, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "目标 HR 0.60");
+  el(s, "rect", { x: x(0.6) + 84, y: Y0 - 13, width: 30, height: 18, rx: 4, fill: "#EDF0F3" });
+  el(s, "text", { x: x(0.6) + 99, y: Y0 - 0.5, "font-size": 11, fill: "#646D77", "text-anchor": "middle" }, "假设");
+  el(s, "line", { x1: x(1.0), x2: x(1.0), y1: Y0 - 8, y2: y(0), stroke: "#BAC2CA", "stroke-width": 1 });
+  el(s, "text", { x: x(1.0) - 6, y: Y0 - 0.5, "font-size": 12, fill: TX, "text-anchor": "end" }, "零假设 HR 1.0");
+  // 曲线
+  function curve(fn, c, w) { var d = ""; for (var hh = h0; hh <= h1 + 1e-9; hh += 0.005) d += (d ? "L" : "M") + x(hh).toFixed(1) + " " + y(fn(hh)).toFixed(1); el(s, "path", { d: d, fill: "none", stroke: c, "stroke-width": w, "stroke-linecap": "round" }); }
+  curve(pC, "#5A626B", 2); curve(pB, "#0A5DC1", 2.5);
+  // 仿真点（与解析曲线的差都在 3 倍蒙特卡洛标准误内）
+  var simB = { 0.4: 0.999, 0.5: 0.968, 0.6: 0.81, 0.7: 0.509, 0.8: 0.232, 0.9: 0.086, 1.0: 0.0247 };
+  var simC = { 0.4: 0.9997, 0.5: 0.982, 0.6: 0.85, 0.7: 0.553, 0.8: 0.262, 0.9: 0.092, 1.0: 0.0251 };
+  [[simC, "#5A626B"], [simB, "#0A5DC1"]].forEach(function (a) { for (var hh in a[0]) el(s, "circle", { cx: x(+hh), cy: y(a[0][hh]), r: 4, fill: "#fff", stroke: a[1], "stroke-width": 2 }); });
+  // 标注
+  el(s, "text", { x: x(0.6) + 10, y: y(0.85) - 8, "font-size": 12.5, fill: "#1A1F25", "font-weight": 600 }, "C 85%");
+  el(s, "text", { x: x(0.6) - 10, y: y(0.81) + 20, "font-size": 12.5, fill: "#0A4DA0", "font-weight": 600, "text-anchor": "end" }, "B 81%");
+  el(s, "line", { x1: x(1.0), x2: x(1.0) + 14, y1: y(0.025) - 5, y2: y(0.16) + 6, stroke: "#939CA6", "stroke-width": 1 });
+  el(s, "text", { x: x(1.0) + 16, y: y(0.16) - 6, "font-size": 12, fill: "#1A1F25", "font-weight": 600 }, "I 类错误");
+  el(s, "text", { x: x(1.0) + 16, y: y(0.16) + 10, "font-size": 11.5, fill: TX }, "B 2.47%");
+  el(s, "text", { x: x(1.0) + 16, y: y(0.16) + 25, "font-size": 11.5, fill: TX }, "C 2.51%");
+})();
+</script>
+<script src="shell.js"></script><script src="icons.js"></script>
+</body></html>
