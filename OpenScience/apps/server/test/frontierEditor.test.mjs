@@ -221,7 +221,7 @@ test("an edit that passes every check is published as written, with what the mod
   assert.equal(call.body.messages[1].content, result.modelInput, "the item last, exactly what is stored");
   assert.match(result.modelInput, /- semaglutide → 司美格鲁肽/, "the glossary entries the text names");
   assert.match(result.modelInput, /- SELECT：保留原文/);
-  assert.ok(result.modelInput.indexOf("术语表") < result.modelInput.indexOf("摘要："), "the source text comes last");
+  assert.ok(result.modelInput.indexOf("术语") < result.modelInput.indexOf("摘要："), "the source text comes last");
   assert.equal(result.numbers?.checked, 5, "20% in the title; 17,604, 20%, 0.80 and 39.8 in the summary");
   assert.deepEqual(result.numbers?.missing, []);
 });
@@ -340,6 +340,33 @@ test("the item text: labelled lines, the glossary, trial facts, no date when it 
   assert.ok(text.length <= FRONTIER_MODEL_INPUT_CHARS + 20, `${text.length} characters`);
   assert.match(buildModelInput(item()), /发布日期：2026-09-20/);
   assert.match(buildModelInput(item({ allowedLanes: ["evidence", "ai"] })), /允许的栏目：evidence（临床证据）、ai（AI 与医学）/);
+});
+
+test("the edit input keeps generated drug names out of the hand-kept glossary", () => {
+  // The generated pair is from the actual NMPA glossary; its product salt
+  // must not receive the authority of the hand-kept substance/form names.
+  const glossary = [
+    { kind: "drug", termEn: "dexamethasone", termZh: "地塞米松磷酸钠", keepOriginal: false, origin: "nmpa-drug-list" },
+    { kind: "drug", termEn: "testosterone", termZh: "睾酮", keepOriginal: false, origin: "hand" },
+    { kind: "drug", termEn: "Testosterone gel", termZh: "睾酮凝胶", keepOriginal: false, origin: "hand" },
+    { kind: "trial", termEn: "SELECT", termZh: "SELECT", keepOriginal: true },
+  ];
+  const original = structuredClone(glossary);
+  const abstract = "Dexamethasone and Testosterone gel were the registered interventions.";
+  const text = buildModelInput(item({ titleRaw: "Registered interventions", abstract, glossary }));
+  const handStart = text.indexOf("手工术语表");
+  const candidateStart = text.indexOf("自动生成术语候选");
+  const sourceStart = text.indexOf("来源：");
+  assert.ok(handStart >= 0 && candidateStart > handStart && sourceStart > candidateStart);
+  assert.deepEqual(text.slice(handStart, candidateStart).split("\n").filter((line) => line.startsWith("- ")), [
+    "- testosterone → 睾酮", "- Testosterone gel → 睾酮凝胶",
+  ]);
+  assert.deepEqual(text.slice(candidateStart, sourceStart).split("\n").filter((line) => line.startsWith("- ")), [
+    "- dexamethasone → 地塞米松磷酸钠", "- SELECT：保留原文",
+  ], "unknown provenance remains a candidate, including keep-original terms");
+  assert.ok(text.endsWith(`摘要：${abstract}`), "the exact source text remains last");
+  assert.ok(text.length <= FRONTIER_MODEL_INPUT_CHARS + 20);
+  assert.deepEqual(glossary, original);
 });
 
 test("reading an answer: fenced, wrapped in prose, or not JSON at all", () => {

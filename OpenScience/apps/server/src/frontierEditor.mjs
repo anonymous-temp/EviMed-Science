@@ -118,7 +118,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "写作原则：",
   "1. 只写原文里有的事实，不补充原文没有的背景、结论和推测。",
   "2. 一切数量都用阿拉伯数字书写（例如 30%、2 倍、3.2 万、1,234 例），并且必须与原文的数字完全一致：不四舍五入，不换算，不自行计算差值、比例或合计；原文没有的数字，包括年份和日期，一个也不要写。",
-  "3. 药物写中国通用名；「术语表」给出的译名必须照用；标为「保留原文」的名称、试验名称缩写、基因和蛋白符号保留原文。",
+  "3. 药物名称以原文实际实体范围为准：手工术语仅在范围一致时使用；自动生成术语只是译名候选，不能把原文未指定的通用药名补成某种盐、酯或剂型，也不能丢掉原文明确的盐、酯或剂型。候选不匹配时不用该候选，使用忠实的通用名；无法确认时保留英文名称。标为「保留原文」的名称、试验名称缩写、基因和蛋白符号保留原文。",
   "4. 写给医生看：说清楚这是什么、结果如何、意味着什么；呈现主要分析及其不确定性，无对照研究不作比较性疗效结论。AI 相关的消息说清它对临床或科研意味着什么，不写参数量、基准分数和接口价格。",
   "原文同时给出意向性治疗（ITT）和其他分析集（如 FAS）的结果时，必须呈现 ITT 主要终点及原文提供的置信区间，明确其他结果来自哪个分析集；不能只选有利的分析集来概括整项试验。",
   "5. 发表状态只依据来源明确给出的事实：来源明确称顶线结果尚未发表时才说明尚未发表，来源明确是预印本时才说明尚未经同行评议。试验注册记录、没有论文链接、原文没有提到论文，都不能推断为「尚无论文」「未发表」或「未经同行评议」；不猜测论文是否存在。",
@@ -235,7 +235,7 @@ export const FRONTIER_ABSTRACT_INSTRUCTIONS = [
   "翻译原则：",
   "1. 逐句忠实：不增加原文没有的内容，不删减原文的方法、结果和结论，不加评论。",
   "2. 一切数量都用阿拉伯数字书写；数字、单位和统计量（HR、OR、95% CI、P 值）照原文写，不四舍五入，不换算，不自行计算。",
-  "3. 药物写中国通用名；「术语表」给出的译名必须照用；标为「保留原文」的名称、试验名称缩写、基因和蛋白符号保留原文。",
+  "3. 药物名称以原文实际实体范围为准：手工术语仅在范围一致时使用；自动生成术语只是译名候选，不能把原文未指定的通用药名补成某种盐、酯或剂型，也不能丢掉原文明确的盐、酯或剂型。候选不匹配时不用该候选，使用忠实的通用名；无法确认时保留英文名称。标为「保留原文」的名称、试验名称缩写、基因和蛋白符号保留原文。",
   "4. 原文分段（背景、方法、结果、结论）的，译文照样分段，段与段之间换行。",
   "5. 不出现链接或网址。",
   "",
@@ -383,9 +383,27 @@ function clip(value, max) {
  * @property {string | null} [journal]
  * @property {string[]} [publicationTypes]
  * @property {{ phase?: string, status?: string, enrollment?: number, sponsor?: string } | null} [trialFacts]
- * @property {Array<{ kind: string, termEn: string, termZh: string, keepOriginal: boolean }>} [glossary]
+ * @property {Array<{ kind: string, termEn: string, termZh: string, keepOriginal: boolean, origin?: string }>} [glossary]
  * @property {{ lane?: string | null, specialties?: string[] }} [defaults]  the screening verdict
  */
+
+/**
+ * Preserve the glossary's provenance in both translation inputs. Generated
+ * product-list names are suggestions, not proof of a source's salt or form.
+ * Missing provenance never grants a term hand-kept authority.
+ * @param {Array<{ termEn: string, termZh: string, keepOriginal: boolean, origin?: string }>} entries
+ */
+function glossaryInputLines(entries) {
+  const hand = entries.filter((entry) => entry.origin === "hand");
+  const candidates = entries.filter((entry) => entry.origin !== "hand");
+  const format = (/** @type {{ termEn: string, termZh: string, keepOriginal: boolean }} */ entry) => entry.keepOriginal
+    ? `- ${entry.termEn}：保留原文`
+    : `- ${entry.termEn} → ${entry.termZh}`;
+  return [
+    ...(hand.length ? ["手工术语表（仅用于原文相同实体范围，不增删盐、酯或剂型）：", ...hand.map(format)] : []),
+    ...(candidates.length ? ["自动生成术语候选（不是指定译名；原文未指定的盐、酯或剂型不得补入）：", ...candidates.map(format)] : []),
+  ];
+}
 
 /**
  * Exactly what one edit call shows the model after the stable prefix, and so
@@ -402,10 +420,7 @@ export function buildModelInput(item) {
     lines.push(`证据类型：${item.evidenceFixed.type}（已由程序确定，照填）`);
   }
   lines.push(`中文信源：${item.isChinese ? "是（title_zh 原样照抄标题）" : "否"}`);
-  const glossary = (item.glossary ?? []).map((entry) => (entry.keepOriginal
-    ? `- ${entry.termEn}：保留原文`
-    : `- ${entry.termEn} → ${entry.termZh}`));
-  if (glossary.length) lines.push("术语表（本条原文里出现的词，译名必须照用）：", ...glossary);
+  lines.push(...glossaryInputLines(item.glossary ?? []));
   lines.push(`来源：${clip(item.sourceName, 120)}${item.sourceTypeLabel ? `（${item.sourceTypeLabel}）` : ""}`);
   const day = item.datePrecision === "inferred" ? null : isoDay(item.publishedAt);
   if (day) lines.push(`发布日期：${day}`);
@@ -836,12 +851,11 @@ export function verifyProfile(answer, sources) {
  * Exactly what the abstract call shows the model: the title, the glossary
  * entries its own text contains, the abstract last, bounded to 6,000
  * characters — and so exactly what its numbers are checked against.
- * @param {{ titleRaw: string, abstract: string, glossary?: Array<{ termEn: string, termZh: string, keepOriginal: boolean }> }} input
+ * @param {{ titleRaw: string, abstract: string, glossary?: Array<{ termEn: string, termZh: string, keepOriginal: boolean, origin?: string }> }} input
  */
 export function buildAbstractInput({ titleRaw, abstract, glossary = [] }) {
   const lines = [`标题：${clip(titleRaw, 600)}`];
-  const terms = glossary.map((entry) => (entry.keepOriginal ? `- ${entry.termEn}：保留原文` : `- ${entry.termEn} → ${entry.termZh}`));
-  if (terms.length) lines.push("术语表（本篇原文里出现的词，译名必须照用）：", ...terms);
+  lines.push(...glossaryInputLines(glossary));
   const head = lines.join("\n");
   // Paragraph breaks are the abstract's structure; only runs of spaces fold.
   const body = String(abstract ?? "").replace(/[ \t\f\v]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -1385,7 +1399,7 @@ export class FrontierEditor {
    * The Chinese abstract a reader asked for (plan §10.3.6): one call, the
    * checks every piece of prose gets, one rewrite with the issues named, and
    * nothing if the rewrite fails too — the reader is shown the original.
-   * @param {{ titleRaw: string, abstract: string, glossary?: Array<{ termEn: string, termZh: string, keepOriginal: boolean }> }} input
+   * @param {{ titleRaw: string, abstract: string, glossary?: Array<{ termEn: string, termZh: string, keepOriginal: boolean, origin?: string }> }} input
    */
   async writeAbstractZh({ titleRaw, abstract, glossary = [] }) {
     const input = buildAbstractInput({ titleRaw, abstract, glossary });

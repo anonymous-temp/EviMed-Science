@@ -2,6 +2,8 @@
   "$comment": "Hand-kept rows of the frontier editor's glossary (plan §10.3.6), loaded into evimed_frontier.glossary by scripts/ops/seed-frontier-glossary.mjs with origin 'hand'. Drug generic names come from the pharmacy base data through that script; this list holds what that data cannot: agencies and societies (their official Chinese names), trial names kept as written, and method and disease names whose standard Chinese form the platform fixes. A row here is never overwritten by a generated one. Keep it short: every row that matches an item's text is sent with its prompt.",
   "version": 1,
   "entries": [
+    { "kind": "drug", "en": "testosterone", "zh": "睾酮" },
+    { "kind": "drug", "en": "Testosterone gel", "zh": "睾酮凝胶" },
     { "kind": "org", "en": "FDA", "zh": "美国食品药品监督管理局" },
     { "kind": "org", "en": "Food and Drug Administration", "zh": "美国食品药品监督管理局" },
     { "kind": "org", "en": "EMA", "zh": "欧洲药品管理局" },
