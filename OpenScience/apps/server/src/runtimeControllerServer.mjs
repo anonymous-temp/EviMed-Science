@@ -1,4 +1,5 @@
 import { createDocumentRenderController } from "./documentRenderController.mjs";
+import { createSkillValidationController } from "./skillValidationController.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -325,9 +326,10 @@ async function prepareControllerSocket(socketPath) {
   }
 }
 
-export function createRuntimeController(overrides = {}) {
+export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
   const documents = createDocumentRenderController(config);
+  const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
   const runtimeChildren = new Map();
   const runtimeOwners = new Map();
   // The last words of each runtime container, kept past its own death. A
@@ -603,6 +605,26 @@ export function createRuntimeController(overrides = {}) {
         } finally { res.removeListener("close", disconnected); }
         return;
       }
+      if (req.method === "POST" && ["/v1/skills/validate", "/v1/skills/cancel"].includes(url.pathname)) {
+        if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+          throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
+        }
+        const payload = await readJson(req, 4096);
+        assertExactKeys(payload, ["ownerHash", "kind", "contentId", "expectedName"]);
+        const abort = new AbortController();
+        const disconnected = () => { if (!res.writableEnded) abort.abort(); };
+        req.once("aborted", disconnected);
+        res.once("close", disconnected);
+        if (req.aborted || res.destroyed) abort.abort();
+        try {
+          const result = url.pathname.endsWith("/cancel") ? await skillValidation.cancel(payload) : await skillValidation.validate(payload, abort.signal);
+          if (!res.destroyed) sendJson(res, 200, { data: result });
+        } finally {
+          req.removeListener("aborted", disconnected);
+          res.removeListener("close", disconnected);
+        }
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/docker/info") {
         sendJson(res, 200, { data: dockerInfo(config) });
         return;
@@ -626,6 +648,8 @@ export function createRuntimeController(overrides = {}) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
         }
         const payload = await readJson(req, config.maxJsonBytes);
+        // Protocol 8 deliberately accepts this exact version-7 citation shape;
+        // extension generations need their own subsequent coordinated adapter.
         const allowed = url.pathname === "/v1/runtime/start"
           ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"]
           : ["userId", "projectId", "activeWorkspace"];
@@ -694,6 +718,8 @@ export function createRuntimeController(overrides = {}) {
       return socketPath;
     },
     async close() {
+      let skillValidationFailure = null;
+      try { await skillValidation.close(); } catch (error) { skillValidationFailure = error; }
       await documents.close();
       await Promise.allSettled(
         [...runtimeChildren.keys()].map(async (containerName) => {
@@ -740,6 +766,7 @@ export function createRuntimeController(overrides = {}) {
         }
         ownedSocket = null;
       }
+      if (skillValidationFailure) throw skillValidationFailure;
     },
   };
 }

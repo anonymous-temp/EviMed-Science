@@ -4,8 +4,9 @@ import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 
-// Version 7 adds the fixed offline document renderer and scoped cancellation.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 7;
+// Version 8 adds isolated native skill validation. The version-7 citation
+// runtime-start shape stays explicitly supported during coordinated rollout.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 8;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -160,6 +161,7 @@ export class RuntimeControllerClient {
       }
       if (body) request.end(body);
       else request.end();
+      options.onDispatch?.();
     });
   }
 
@@ -170,6 +172,34 @@ export class RuntimeControllerClient {
 
   cancelDocumentRender(reference) {
     return this.request("POST", "/v1/document/cancel", reference);
+  }
+
+  /** Fixed owned content reference; the controller resolves every filesystem path.
+   * @param {{ownerHash:string,kind:'imports'|'packages',contentId:string,expectedName:string|null}} reference
+   * @param {{signal?:AbortSignal}} [options] */
+  async validatePersonalSkill(reference, { signal } = {}) {
+    let dispatched = false;
+    try {
+      return await this.request("POST", "/v1/skills/validate", reference,
+        // Native stdout retains its 512 KiB cap; this bounded headroom covers
+        // the controller's JSON data envelope around a valid near-limit result.
+        { signal, timeoutMs: 45000, maxResponseBytes: 512 * 1024 + 1024, onDispatch: () => { dispatched = true; } });
+    } catch (error) {
+      if (dispatched && (signal?.aborted || error?.name === "AbortError"
+        || ["runtime_controller_timeout", "runtime_controller_unavailable", "runtime_controller_response_too_large"].includes(error?.code))) {
+        try {
+          const joined = await this.cancelPersonalSkill(reference);
+          if (joined?.cancelled !== true) throw new Error("cancel_unknown");
+        } catch {
+          throw controllerError("product_state_unavailable", "Skill validation cancellation could not be confirmed.");
+        }
+      }
+      throw error;
+    }
+  }
+
+  cancelPersonalSkill(reference) {
+    return this.request("POST", "/v1/skills/cancel", reference, { timeoutMs: 45000 });
   }
 
   async health() {
