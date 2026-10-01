@@ -33,6 +33,14 @@
     "pnpm audit:source-secrets",
     "git diff --check"
   ],
+  "ciFollowup": {
+    "finding": "An existing FAERS test assigned mocked query counts by nondeterministic worker order. The first push CI exposed the race; reversing worker completion reproduced it deterministically.",
+    "change": "Six test fixtures now bind counts to query identity, with one reversed-completion regression. Production statistical formulas and existing assertions are unchanged.",
+    "researchMcp": [
+      { "python": "3.10.21", "passed": 393, "failed": 0 },
+      { "python": "3.12.3", "passed": 393, "failed": 0 }
+    ]
+  },
   "browser": {
     "native": 20,
     "reader": 16,
