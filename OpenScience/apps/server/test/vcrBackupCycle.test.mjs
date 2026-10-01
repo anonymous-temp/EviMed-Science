@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { runVcrBackupCycle, vcrBackupConfig } from '../../../scripts/ops/vcr-backup.mjs';
+import { createVcrBackupOperatorClient, runVcrBackupCycle, vcrBackupConfig } from '../../../scripts/ops/vcr-backup.mjs';
+const execute = promisify(execFile);
 
 test('disabled VCR backup needs no host authority or storage paths', async () => {
   assert.equal(vcrBackupConfig({}).enabled, false);
@@ -24,7 +27,7 @@ test('configured VCR backup refuses partial configuration and non-loopback opera
   assert.throws(() => vcrBackupConfig({ ...env, OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL: 'http://127.0.0.1:8787',
     OPEN_SCIENCE_VCR_BACKUP_DIR: '/plane/archives' }), /separate/);
   assert.equal(vcrBackupConfig({ ...env, OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL: '', OPEN_SCIENCE_API_PORT: '18887' }).operatorUrl,
-    'http://127.0.0.1:18887');
+    'http://127.0.0.1:8787');
 });
 
 async function fixture(t, { busy = false, leaseLost = false, drillFails = false } = {}) {
@@ -124,7 +127,7 @@ test('retention preserves the latest two complete recovery sets and incomplete u
   assert.ok(directories.includes('vcr-backup-00000000-0000-0000-0000-000000000000'));
 });
 
-for (const redirected of [false, true]) test(`operator requests use direct loopback and ${redirected ? 'refuse redirects' : 'ignore proxy configuration'}`, async t => {
+for (const redirected of [false, true]) test(`container-local operator requests ${redirected ? 'refuse redirects' : 'ignore proxy configuration'}`, async t => {
   const { config, dependencies } = await fixture(t);
   const requests = []; let requestId;
   const server = createServer(async (req, res) => {
@@ -141,6 +144,21 @@ for (const redirected of [false, true]) test(`operator requests use direct loopb
   t.after(() => new Promise(resolve => server.close(resolve)));
   config.operatorUrl = `http://127.0.0.1:${server.address().port}`;
   delete dependencies.maintenance;
+  const previousRun = dependencies.run;
+  dependencies.run = async (command, args, options) => {
+    if (command === 'docker' && args[0] === 'inspect' && args.at(-1) === 'web-open-science-web-1') {
+      return { stdout: JSON.stringify({ id: '2'.repeat(64), running: true, service: 'open-science-web', project: 'web' }) };
+    }
+    if (command === 'docker' && args[0] === 'exec') {
+      assert.equal(args[1], '2'.repeat(64));
+      assert.equal(args[2], 'node');
+      const processOptions = { ...options };
+      if (!processOptions.signal) delete processOptions.signal;
+      return execute(process.execPath, args.slice(3), { ...processOptions, env: { ...process.env,
+        OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: config.tokenFile } });
+    }
+    return previousRun(command, args, options);
+  };
   const oldProxy = process.env.HTTP_PROXY;
   process.env.HTTP_PROXY = 'http://127.0.0.1:1';
   t.after(() => { if (oldProxy === undefined) delete process.env.HTTP_PROXY; else process.env.HTTP_PROXY = oldProxy; });
@@ -150,6 +168,125 @@ for (const redirected of [false, true]) test(`operator requests use direct loopb
   } else assert.equal((await runVcrBackupCycle(config, dependencies)).status, 'healthy');
   assert.ok(requests.every(row => row.path === '/api/ops/maintenance'));
   assert.ok(requests.every(row => row.authorization === 'Bearer fixture-token-for-scoped-operator-api'));
+});
+
+test('operator transport pins one inspected web identity and never sends token bytes through Docker arguments', async t => {
+  const { config } = await fixture(t);
+  const calls = [];
+  const run = async (command, args, options) => {
+    calls.push({ command, args, options });
+    return { stdout: args[0] === 'inspect'
+      ? JSON.stringify({ id: '3'.repeat(64), running: true, service: 'open-science-web', project: 'web' })
+      : JSON.stringify({ completed: true, data: { state: 'idle' } }) };
+  };
+  const controller = new AbortController();
+  const client = await createVcrBackupOperatorClient(config, controller.signal, { run });
+  assert.deepEqual(await client('status'), { state: 'idle' });
+  controller.abort();
+  await assert.rejects(client('status'), { code: 'vcr_backup_canceled' });
+  await client('release', { requestId: 'owned-backup-request' });
+  assert.equal(calls.filter(call => call.args[0] === 'inspect').length, 1);
+  const execs = calls.filter(call => call.args[0] === 'exec');
+  assert.equal(execs.length, 2);
+  assert.ok(execs.every(call => call.args[1] === '3'.repeat(64) && call.options.timeout === 15000));
+  assert.equal(execs[1].options.signal, null);
+  assert.equal(JSON.stringify(calls).includes('fixture-token-for-scoped-operator-api'), false);
+});
+
+test('an in-flight canceled operator mutation finishes before cleanup release, preventing late lease reacquisition', async t => {
+  const { config } = await fixture(t);
+  const controller = new AbortController();
+  let admitted; const started = new Promise(resolve => { admitted = resolve; });
+  let complete; const barrier = new Promise(resolve => { complete = resolve; });
+  let lease = 'open'; const order = [];
+  const run = async (_command, args, options) => {
+    if (args[0] === 'inspect') return { stdout: JSON.stringify({ id: '4'.repeat(64), running: true, service: 'open-science-web', project: 'web' }) };
+    assert.equal(options.signal, null, 'daemon-side work must be acknowledged even when caller cancels');
+    const action = args[6];
+    if (action === 'request') { admitted(); await barrier; lease = 'idle'; order.push('request-completed'); }
+    if (action === 'release') { lease = 'open'; order.push('release-completed'); }
+    return { stdout: JSON.stringify({ completed: true, data: { state: lease } }) };
+  };
+  const client = await createVcrBackupOperatorClient(config, controller.signal, { run });
+  let settled = false;
+  const request = client('request', { requestId: 'owned-backup-request', ttlSeconds: 3600 }).finally(() => { settled = true; });
+  const rejection = assert.rejects(request, { code: 'vcr_backup_canceled' });
+  await started; controller.abort();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(settled, false);
+  complete(); await rejection;
+  await client('release', { requestId: 'owned-backup-request' });
+  assert.equal(lease, 'open');
+  assert.deepEqual(order, ['request-completed', 'release-completed']);
+});
+
+test('uncertain remote completion preserves maintenance and never acknowledges cleanup release', async t => {
+  const { config, dependencies, calls } = await fixture(t);
+  delete dependencies.maintenance;
+  const previousRun = dependencies.run;
+  dependencies.run = async (command, args, options) => {
+    if (command === 'docker' && args[0] === 'inspect' && args.at(-1) === 'web-open-science-web-1') {
+      return { stdout: JSON.stringify({ id: '5'.repeat(64), running: true, service: 'open-science-web', project: 'web' }) };
+    }
+    if (command === 'docker' && args[0] === 'exec') { calls.push({ action: args[6] }); throw new Error('private daemon diagnostic'); }
+    return previousRun(command, args, options);
+  };
+  await assert.rejects(runVcrBackupCycle(config, dependencies), { code: 'vcr_backup_capture_stop_unconfirmed' });
+  assert.equal(calls.some(call => call.action === 'release'), false);
+  const state = JSON.parse(await readFile(path.join(config.statusDir, 'state.json'), 'utf8'));
+  assert.equal(state.maintenanceHeld, true);
+});
+
+test('HTTP timeout cannot release maintenance before a late server-side mutation finishes', { timeout: 20000 }, async t => {
+  const { config, dependencies, calls } = await fixture(t);
+  delete dependencies.maintenance;
+  let lateAdmission = false; let releaseSeen = false;
+  let complete; const lateCompleted = new Promise(resolve => { complete = resolve; });
+  const server = createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = raw ? JSON.parse(raw) : {};
+    if (body.action === 'request') {
+      await new Promise(resolve => setTimeout(resolve, 10500));
+      lateAdmission = true; complete();
+    }
+    if (body.action === 'release') releaseSeen = true;
+    res.end(JSON.stringify({ data: { state: body.action === 'release' ? 'open' : 'idle' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  config.operatorUrl = `http://127.0.0.1:${server.address().port}`;
+  const previousRun = dependencies.run;
+  dependencies.run = async (command, args, options) => {
+    if (command === 'docker' && args[0] === 'inspect' && args.at(-1) === 'web-open-science-web-1') {
+      return { stdout: JSON.stringify({ id: '6'.repeat(64), running: true, service: 'open-science-web', project: 'web' }) };
+    }
+    if (command === 'docker' && args[0] === 'exec') {
+      calls.push({ action: args[6] });
+      const processOptions = { ...options }; delete processOptions.signal;
+      return execute(process.execPath, args.slice(3), { ...processOptions, env: { ...process.env,
+        OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: config.tokenFile } });
+    }
+    return previousRun(command, args, options);
+  };
+  await assert.rejects(runVcrBackupCycle(config, dependencies), { code: 'vcr_backup_capture_stop_unconfirmed' });
+  assert.equal(releaseSeen, false);
+  assert.equal(calls.some(call => call.action === 'release'), false);
+  await lateCompleted;
+  assert.equal(lateAdmission, true, 'the isolated server really committed after the client timed out');
+  assert.equal(releaseSeen, false, 'an unresolved mutation must keep maintenance held');
+  const state = JSON.parse(await readFile(path.join(config.statusDir, 'state.json'), 'utf8'));
+  assert.equal(state.maintenanceHeld, true);
+});
+
+test('operator transport refuses an unrelated or stopped container and sanitizes command diagnostics', async t => {
+  const { config } = await fixture(t);
+  for (const record of [{ id: '3'.repeat(64), running: false, service: 'open-science-web', project: 'web' },
+    { id: '3'.repeat(64), running: true, service: 'other-product', project: 'web' }]) {
+    await assert.rejects(createVcrBackupOperatorClient(config, null, { run: async () => ({ stdout: JSON.stringify(record) }) }),
+      { code: 'vcr_backup_maintenance_unavailable' });
+  }
+  await assert.rejects(createVcrBackupOperatorClient(config, null, { run: async () => { throw new Error('private diagnostic'); } }),
+    error => error.code === 'vcr_backup_maintenance_unavailable' && !error.message.includes('private diagnostic'));
 });
 
 test('stopping during capture cancels the process, records failure and releases the lease without another renewal', async t => {

@@ -2,7 +2,6 @@
 // authority, patient rows or database credentials enter the web/backup image.
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { request } from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,13 +31,15 @@ export function vcrBackupConfig(env = process.env) {
     statusDir: required('OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR'), tokenFile: required('OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_HOST_FILE'),
     passphraseFile: required('OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE'),
     jobsVolume: String(env.OPEN_SCIENCE_VCR_JOBS_VOLUME ?? 'web_evimed-vcr-jobs'),
-    operatorUrl: String(env.OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL || `http://127.0.0.1:${env.OPEN_SCIENCE_API_PORT || 8787}`), drainSeconds: 60,
+    operatorUrl: String(env.OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL || 'http://127.0.0.1:8787'),
+    operatorProject: String(env.EVIMED_COMPOSE_PROJECT || 'web'), drainSeconds: 60,
     maxSets: Number(env.OPEN_SCIENCE_VCR_BACKUP_MAX_SETS ?? 2) };
   const url = new URL(config.operatorUrl);
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw error('vcr_backup_operator_loopback_required');
   }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(config.jobsVolume)) throw error('vcr_backup_configuration_invalid');
+  if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(config.operatorProject)) throw error('vcr_backup_configuration_invalid');
   if (!Number.isSafeInteger(config.maxSets) || config.maxSets < 2 || config.maxSets > 32) throw error('vcr_backup_configuration_invalid');
   for (const left of [config.backupDir, config.statusDir]) {
     if (inside(config.dataPlaneDir, left) || inside(left, config.dataPlaneDir)) throw error('vcr_backup_paths_must_be_separate');
@@ -82,47 +83,83 @@ async function writeJson(file, value, mode = 0o600) {
   await fs.chmod(file, mode);
 }
 
-async function operatorClient(config, signal) {
+// The web instance already mounts its operator token. Docker authority stays
+// with the host; this fixed program receives no credential bytes in argv and
+// returns only maintenance state. Native HTTP follows no redirect or proxy.
+export const VCR_OPERATOR_REQUEST_SCRIPT = String.raw`
+const fs=require('node:fs'), http=require('node:http'), crypto=require('node:crypto');
+const [url,action,encoded,expectedTokenHash,deadlineRaw]=process.argv.slice(1);
+let ended=false,dispatched=false;
+const fail=(acknowledged=false)=>{if(ended)return;ended=true;process.stdout.write(JSON.stringify({completed:acknowledged||!dispatched,code:'vcr_backup_maintenance_unavailable'}));};
+try{
+ const deadline=Number(deadlineRaw);
+ if(!Number.isSafeInteger(deadline)||Date.now()>=deadline)throw Error();
+ const parsed=new URL(url);
+ if(parsed.protocol!=='http:'||parsed.hostname!=='127.0.0.1'||parsed.username||parsed.password||parsed.pathname!=='/'||parsed.search||parsed.hash)throw Error();
+ if(!['status','request','hold','release'].includes(action))throw Error();
+ const body=JSON.parse(encoded);
+ if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['requestId','ttlSeconds'].includes(k)))throw Error();
+ const file=process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE;
+ if(!file||!file.startsWith('/'))throw Error();
+ const token=fs.readFileSync(file,'utf8').trim();
+ if(token.length<16||/[\r\n]/.test(token)||crypto.createHash('sha256').update(token).digest('hex')!==expectedTokenHash)throw Error();
+ if(Date.now()>=deadline)throw Error();
+ const req=http.request(new URL('/api/ops/maintenance',parsed),{method:action==='status'?'GET':'POST',
+  headers:{authorization:'Bearer '+token,'content-type':'application/json'}},res=>{
+  const chunks=[];let size=0;
+  res.on('data',chunk=>{size+=chunk.length;if(size>65536)res.destroy();else chunks.push(chunk);});
+  res.once('error',()=>fail());
+  res.once('end',()=>{try{if(res.statusCode!==200){fail(true);return;}const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+   if(!value.data||typeof value.data!=='object'||Array.isArray(value.data))throw Error();
+   if(!ended){ended=true;process.stdout.write(JSON.stringify({completed:true,data:value.data}));}
+  }catch{fail(true);}});
+ });
+ const timer=setTimeout(()=>req.destroy(),Math.max(1,Math.min(10000,deadline-Date.now())));
+ req.once('close',()=>clearTimeout(timer));req.once('error',()=>fail());
+ dispatched=true;
+ req.end(action==='status'?undefined:JSON.stringify({action,...body}));
+}catch{fail();}`;
+
+/** Pin one inspected live web identity for every request in a backup cycle. */
+export async function createVcrBackupOperatorClient(config, signal, { run = runVcrBackupProcess, onUncertain = () => {} } = {}) {
   const token = (await readRegular(config.tokenFile, { privateFile: true })).toString('utf8').trim();
   if (token.length < 16 || /[\r\n]/.test(token)) throw error('vcr_backup_operator_token_invalid');
-  return async (action, body) => {
-    // Native HTTP follows no redirects and reads no proxy environment. The
-    // authority was validated as literal loopback before the token was read.
-    return new Promise((resolve, reject) => {
-      // Releasing the held lease must still work after cancellation.
-      const actionSignal = action === 'release' ? null : signal;
-      if (actionSignal?.aborted) { reject(error('vcr_backup_canceled')); return; }
-      let settled = false;
-      const finish = (callback, value) => {
-        if (settled) return;
-        settled = true;
-        actionSignal?.removeEventListener('abort', abort);
-        callback(value);
-      };
-      const abort = () => req.destroy(error('vcr_backup_canceled'));
-      const req = request(new URL('/api/ops/maintenance', config.operatorUrl), {
-        method: action === 'status' ? 'GET' : 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      }, response => {
-        if (response.statusCode !== 200) { response.resume(); finish(reject, error('vcr_backup_maintenance_unavailable')); return; }
-        const chunks = []; let size = 0;
-        response.on('data', chunk => {
-          size += chunk.length;
-          if (size > 65536) response.destroy(error('vcr_backup_maintenance_invalid'));
-          else chunks.push(chunk);
-        });
-        response.once('error', () => finish(reject, error(actionSignal?.aborted ? 'vcr_backup_canceled' : 'vcr_backup_maintenance_unavailable')));
-        response.once('end', () => {
-          try { finish(resolve, JSON.parse(Buffer.concat(chunks).toString('utf8')).data); }
-          catch { finish(reject, error('vcr_backup_maintenance_invalid')); }
-        });
-      });
-      req.setTimeout(10000, () => req.destroy(error('vcr_backup_maintenance_unavailable')));
-      req.once('error', () => finish(reject, error(actionSignal?.aborted ? 'vcr_backup_canceled' : 'vcr_backup_maintenance_unavailable')));
-      actionSignal?.addEventListener('abort', abort, { once: true });
-      if (actionSignal?.aborted) abort();
-      req.end(action === 'status' ? undefined : JSON.stringify({ action, ...body }));
-    });
+  const project = config.operatorProject ?? 'web';
+  if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(project)) throw error('vcr_backup_configuration_invalid');
+  let identity;
+  try {
+    const inspected = await run('docker', ['inspect', '--type', 'container', '--format',
+      '{"id":"{{.Id}}","running":{{.State.Running}},"service":"{{index .Config.Labels "com.docker.compose.service"}}","project":"{{index .Config.Labels "com.docker.compose.project"}}"}',
+      `${project}-open-science-web-1`], { signal, timeout: 10000, maxBuffer: 4096 });
+    identity = JSON.parse(inspected.stdout);
+    if (!/^[a-f0-9]{64}$/.test(identity.id) || identity.running !== true
+      || identity.service !== 'open-science-web' || identity.project !== project) throw Error();
+  } catch (failure) {
+    if (signal?.aborted) throw error('vcr_backup_canceled');
+    if (failure.code === 'vcr_backup_process_stop_unconfirmed') throw failure;
+    throw error('vcr_backup_maintenance_unavailable');
+  }
+  return async (action, body = {}) => {
+    const actionSignal = action === 'release' ? null : signal;
+    if (actionSignal?.aborted) throw error('vcr_backup_canceled');
+    if (!['status', 'request', 'hold', 'release'].includes(action) || !body || typeof body !== 'object'
+      || Array.isArray(body) || Object.keys(body).some(key => !['requestId', 'ttlSeconds'].includes(key))) throw error('vcr_backup_maintenance_invalid');
+    let value;
+    try {
+      // Aborting Docker's client does not stop daemon-side exec. Await the
+      // fixed program's bounded completion before cleanup can release a lease.
+      const result = await run('docker', ['exec', identity.id, 'node', '-e', VCR_OPERATOR_REQUEST_SCRIPT,
+        config.operatorUrl, action, JSON.stringify(body), hash(token), String(Date.now() + 10000)],
+      { signal: null, timeout: 15000, maxBuffer: 65536 });
+      value = JSON.parse(result.stdout);
+      if (value.completed !== true) throw Error();
+    } catch {
+      onUncertain();
+      throw error('vcr_backup_process_stop_unconfirmed');
+    }
+    if (actionSignal?.aborted) throw error('vcr_backup_canceled');
+    if (value.code || !value.data || typeof value.data !== 'object' || Array.isArray(value.data)) throw error('vcr_backup_maintenance_unavailable');
+    return value.data;
   };
 }
 
@@ -204,7 +241,8 @@ export async function runVcrBackupCycle(config, dependencies = {}) {
     await safeDirectory(jobsDir);
     await (dependencies.jobsOwnerCheck ?? jobsOwnerCheck)(jobsDir);
     if ([config.dataPlaneDir, config.backupDir, config.statusDir].some(root => inside(root, jobsDir) || inside(jobsDir, root))) throw error('vcr_backup_paths_must_be_separate');
-    maintenance = dependencies.maintenance ?? await operatorClient(config, signal);
+    maintenance = dependencies.maintenance ?? await createVcrBackupOperatorClient(config, signal,
+      { run: executeOperation, onUncertain: () => { physicalStopUnconfirmed = true; } });
   } catch (failure) {
     await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: failure.code ?? 'vcr_backup_storage_unavailable' }, 0o644);
     throw failure;
