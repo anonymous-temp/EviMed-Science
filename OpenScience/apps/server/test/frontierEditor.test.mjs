@@ -450,3 +450,16 @@ test("evidence relevance accepts skip reasons and preserves new/existing questio
   assert.equal(JSON.parse(calls[0].body.messages[1].content).description, input.description);
   assert.match(calls[0].body.messages[0].content, /Make this decision even when cards is empty/);
 });
+
+test("author gateway preserves DOMException timeout and frozen provider refusal causes without mutating errors", async () => {
+  const original=new DOMException("Synthetic timeout","AbortError");
+  const frozen=Object.freeze(Object.assign(new Error("Synthetic refusal"),{code:"model_gateway_payment_required",upstreamStatus:402}));
+  for(const [cause,code,status] of [[original,"frontier_model_timeout",undefined],[frozen,"model_gateway_payment_required",402]]) {
+    const editor=new FrontierEditor(config,{owner,callModel:async()=>{throw cause;}});
+    await assert.rejects(editor.evidenceCard({sources:[]}),error=>{
+      assert.equal(error.code,code);assert.equal(error.cause,cause);assert.equal(error.upstreamStatus,status);assert.notEqual(error.name,"TypeError");return true;
+    });
+    assert.equal(editor.counters.callFailures,1);assert.equal(editor.lastError,code);
+  }
+  assert.equal(original.code,20);
+});

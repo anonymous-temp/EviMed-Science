@@ -1183,6 +1183,10 @@ export function createModelGatewayHandler(config, runtimeManager, {
   };
 }
 
+// Match the review client's never-sent boundary: ambiguous resets or deadlines
+// before response headers do not prove that the provider received no request.
+const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EHOSTDOWN|UND_ERR_CONNECT_TIMEOUT|ERR_TLS_\w+|CERT_\w+|UNABLE_TO_\w+|DEPTH_ZERO_SELF_SIGNED_CERT|SELF_SIGNED_CERT_IN_CHAIN|ERR_SSL_\w+)$/;
+
 /**
  * A model call the control plane makes on its own behalf, through the same
  * boundary as every other one.
@@ -1233,6 +1237,11 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
   if (config.requireDurableUsageLedger === true && !usageLedger) {
     throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
   }
+  // Validate and serialize before any dispatch or reservation. Check again
+  // after reservation in case its database await outlived the caller.
+  const endpoint = upstreamUrl(config.deepseekBaseUrl, config.production);
+  const encodedBody = JSON.stringify(body);
+  call.signal?.throwIfAborted();
   let reservation = null;
   /** @type {ReturnType<typeof estimateModelReservation> | null} */
   let estimate = null;
@@ -1242,7 +1251,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: call.purpose,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
-      requestFingerprint: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+      requestFingerprint: createHash("sha256").update(encodedBody).digest("hex"),
       estimatedCost: estimate.cost,
       dailyLimit: call.limits?.daily !== undefined ? Number(call.limits.daily) : Number(config.userDailySpendLimit) || 0,
       weeklyLimit: call.limits?.weekly !== undefined ? Number(call.limits.weekly) : Number(config.userWeeklySpendLimit) || 0,
@@ -1255,17 +1264,25 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
   /** The status of an answer that came back without output, 0 while none has. */
   let refusedStatus = 0;
   try {
-    const response = await fetchImpl(upstreamUrl(config.deepseekBaseUrl, config.production), {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${config.deepseekApiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: call.signal,
-    });
-    dispatched = true;
+    let response;
+    try {
+      call.signal?.throwIfAborted();
+      dispatched = true;
+      response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${config.deepseekApiKey}`,
+          "content-type": "application/json",
+        },
+        body: encodedBody,
+        signal: call.signal,
+      });
+    } catch (error) {
+      const networkCode = /** @type {any} */ (error)?.cause?.code ?? /** @type {any} */ (error)?.code;
+      if (!call.signal?.aborted && typeof networkCode === "string" && CONTROL_PLANE_NEVER_SENT.test(networkCode)) dispatched = false;
+      throw error;
+    }
     if (!response.ok) {
       refusedStatus = response.status;
       recordProviderRefusal("deepseek", response.status);

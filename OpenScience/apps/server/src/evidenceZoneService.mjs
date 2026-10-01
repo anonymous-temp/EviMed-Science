@@ -332,6 +332,20 @@ export class EvidenceZoneService {
         where.push(
           cards
             ? `strpos(lower(concat_ws(' ',c.title,c.summary,c.body,c.limitations,c.provenance,
+              c.content->>'question',c.content->>'answer',c.content->>'population',c.content->>'context',c.content->>'nextStep',
+              (SELECT string_agg(concat_ws(' ',section->>'title',section->>'text'),' ')
+               FROM jsonb_path_query(c.content,'$.sections[*]') section),
+              (SELECT string_agg(concat_ws(' ',entry->>'title',entry->>'caption',
+                (SELECT string_agg(cell #>> '{}',' ') FROM (
+                  SELECT jsonb_path_query(entry,'$.columns[*]') AS cell
+                  UNION ALL SELECT jsonb_path_query(entry,'$.rows[*][*]')
+                ) cells)),' ')
+               FROM jsonb_path_query(c.content,'$.tables[*]') entry),
+              (SELECT string_agg(concat_ws(' ',comparison->>'title',comparison->>'outcome',comparison->>'timeframe',
+                comparison->'control'->>'label',comparison->'intervention'->>'label',
+                comparison->>'denominator',comparison->'control'->>'events',comparison->'intervention'->>'events',
+                comparison->>'relativeEffect',comparison->>'certainty',comparison->>'note'),' ')
+               FROM jsonb_path_query(c.content,'$.comparisons[*]') comparison),
               (SELECT string_agg(concat_ws(' ',source->>'title',source->>'url',source->>'excerpt'),' ')
                FROM jsonb_array_elements(c.sources) source))),lower(${param(q)}))>0`
             : `strpos(lower(z.title||' '||z.description||' '||z.background),lower(${param(q)}))>0`,

@@ -1,7 +1,89 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import path from "node:path";
 import test from "node:test";
 
 import { loadConfig } from "../src/config.mjs";
+import { buildRuntimeLaunchPlan, DockerRuntimeProvider } from "../src/runtimeManager.mjs";
+
+const bindProject = (dataDir, userId, id) => {
+  const rootDir = path.join(dataDir, "users", userId, "projects", id);
+  return { userId, id, dataDir, rootDir, workspaceDir: path.join(rootDir, "workspace"), runtimeDir: path.join(rootDir, "runtime") };
+};
+
+test("long bind socket paths use only each tenant project's isolated control mount", () => {
+  const dataDir = "/data/evimed-science/app-data";
+  const config = loadConfig({ dataDir, runtimeSandboxMode: "docker", production: false });
+  assert.equal(Boolean(config.runtimeDataVolume), false);
+  const sockets = new Set();
+  for (const userId of ["u".repeat(64), "v".repeat(64)]) {
+    for (const id of ["p".repeat(64), "q".repeat(64)]) {
+      const project = bindProject(dataDir, userId, id);
+      const plan = buildRuntimeLaunchPlan(config, project, 4096);
+      const hash = createHash("sha256").update(`${userId}\0${id}`, "utf8").digest("hex").slice(0, 24);
+      const controlDir = path.join(dataDir, ".runtime-sockets", hash);
+      assert.equal(plan.socketPath, path.join(controlDir, "dsh.sock"));
+      assert.ok(Buffer.byteLength(plan.socketPath, "utf8") + 1 <= 108);
+      assert.equal(plan.socketTrustRoot, dataDir);
+      const mounts = plan.args.filter((_, i) => plan.args[i - 1] === "--mount");
+      assert.ok(mounts.includes(`type=bind,src=${controlDir},dst=/runtime-control`));
+      assert.ok(mounts.includes(`type=bind,src=${path.join(project.runtimeDir, "container-runtime")},dst=/runtime`));
+      assert.ok(mounts.includes(`type=bind,src=${project.workspaceDir},dst=/workspace`));
+      assert.equal(mounts.some(mount => mount.startsWith(`type=bind,src=${dataDir},`)), false);
+      assert.ok(plan.args.includes("OPEN_SCIENCE_RUNTIME_SOCKET=/runtime-control/dsh.sock"));
+      assert.ok(plan.runtimeDirs.includes(controlDir));
+      sockets.add(plan.socketPath);
+    }
+  }
+  assert.equal(sockets.size, 4);
+});
+
+test("short bind socket paths retain the existing project mount and socket location", () => {
+  const dataDir = "/data";
+  const config = loadConfig({ dataDir, runtimeSandboxMode: "docker", production: false });
+  const project = bindProject(dataDir, "u", "p");
+  const plan = buildRuntimeLaunchPlan(config, project, 4096);
+  assert.equal(plan.socketPath, path.join(project.runtimeDir, "container-runtime", "control", "dsh.sock"));
+  assert.equal(plan.socketTrustRoot, project.rootDir);
+  assert.ok(plan.args.includes("OPEN_SCIENCE_RUNTIME_SOCKET=/runtime/control/dsh.sock"));
+  assert.equal(plan.args.some(arg => arg.includes("dst=/runtime-control")), false);
+});
+
+test("long bind control directories remain private and reject symlinked sockets", async () => {
+  const fs = await import("node:fs/promises");
+  const { createServer, createConnection } = await import("node:net");
+  const root = await fs.mkdtemp("/tmp/dsh-bind-");
+  const config = loadConfig({ dataDir: root, runtimeSandboxMode: "docker", production: false });
+  const project = bindProject(root, "u".repeat(64), "p".repeat(64));
+  const input = { port: 4096, pluginConfig: { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, capsuleMethodsMounted: 0 };
+  const provider = new DockerRuntimeProvider({
+    config, ensureKnowledgeBaseDir: async () => {}, cleanupDocker: async () => ({ missing: true }),
+  });
+  const server = createServer(socket => socket.end());
+  try {
+    const plan = await provider.prepare(project, input);
+    assert.equal((await fs.stat(path.dirname(plan.socketPath))).mode & 0o777, 0o700);
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(plan.socketPath, resolve);
+    });
+    await new Promise((resolve, reject) => {
+      const socket = createConnection(plan.socketPath);
+      socket.once("error", reject);
+      socket.once("connect", () => { socket.destroy(); resolve(); });
+    });
+    await new Promise(resolve => server.close(resolve));
+    const target = path.join(root, "outside.sock");
+    await fs.writeFile(target, "preserved");
+    await fs.symlink(target, plan.socketPath);
+    await assert.rejects(() => provider.prepare(project, input),
+      error => error.code === "runtime_socket_symlink");
+    assert.equal(await fs.readFile(target, "utf8"), "preserved");
+  } finally {
+    if (server.listening) await new Promise(resolve => server.close(resolve));
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 /** The DSH kernel's container entrypoint is the socat bridge script: it seeds
  *  the profile, turns telemetry off and injects the deployment's settings, and

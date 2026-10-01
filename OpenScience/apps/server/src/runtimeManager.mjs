@@ -2367,7 +2367,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsDir = capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
-    const isolatedControlMount = Boolean(config.runtimeDataVolume);
+    const legacyControlDir = path.join(runtimeRoot, "control");
+    const isolatedControlMount = Boolean(config.runtimeDataVolume)
+      || Buffer.byteLength(path.join(legacyControlDir, RUNTIME_SOCKET_FILE_NAME), "utf8") + 1 > UNIX_SOCKET_PATH_LIMIT;
     const controlDir = isolatedControlMount
       ? path.join(
           config.dataDir,
@@ -2377,9 +2379,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             .digest("hex")
             .slice(0, 24),
         )
-      : path.join(runtimeRoot, "control");
+      : legacyControlDir;
     const socketPath = path.join(controlDir, RUNTIME_SOCKET_FILE_NAME);
-    assertConnectableSocketPath(socketPath, Boolean(config.runtimeDataVolume));
+    assertConnectableSocketPath(socketPath, isolatedControlMount);
     const containerName = runtimeContainerName(project);
     const readOnlyViews = readOnlyWorkspaceViews(config, project);
     return {
@@ -2816,21 +2818,19 @@ export function readOnlyWorkspaceViews(config, project) {
  *  readiness probe whose errors were being discarded. The observable result was
  *  a runtime that starts, serves, and is unreachable.
  *
- *  The volume-backed layout puts the socket in a short hashed directory and
- *  never comes near this; a deployment without it puts the socket under the
- *  project, where the length depends on how deep the operator put the data
- *  directory. */
+ *  Volume-backed layouts and long bind paths use a short hashed directory.
+ *  Its prefix still depends on where the operator put the data directory. */
 const UNIX_SOCKET_PATH_LIMIT = 108;
 
-/** @param {string} socketPath @param {boolean} volumeBacked */
-function assertConnectableSocketPath(socketPath, volumeBacked) {
+/** @param {string} socketPath @param {boolean} isolatedControlMount */
+function assertConnectableSocketPath(socketPath, isolatedControlMount) {
   const bytes = Buffer.byteLength(socketPath, "utf8") + 1; // the terminating NUL counts
   if (bytes <= UNIX_SOCKET_PATH_LIMIT) return;
   throw new HttpError(
     500,
     "runtime_socket_path_too_long",
     `The runtime control socket path needs ${bytes} bytes and the kernel allows ${UNIX_SOCKET_PATH_LIMIT}. ` +
-      (volumeBacked
+      (isolatedControlMount
         ? "Shorten OPEN_SCIENCE_DATA_DIR."
         : "Shorten OPEN_SCIENCE_DATA_DIR, or set OPEN_SCIENCE_RUNTIME_DATA_VOLUME, which places the socket in a short hashed directory instead of under the project."),
   );

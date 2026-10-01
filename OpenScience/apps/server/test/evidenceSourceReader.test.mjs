@@ -140,3 +140,65 @@ test('explicit scholarly notices distinguish status clear, unknown, concern and 
   assert.equal((await read({isRetracted:'N',commentCorrectionList:{commentCorrection:[{type:'Comment in'}]}})).publicationStatus,null);
   assert.equal((await read({commentCorrectionList:{commentCorrection:[{type:'Expression of concern in',reference:'Synthetic official notice'}]}})).publicationStatus.kind,'concern');
 });
+
+function officialReader(payload, { robotsText = "User-agent: *\nAllow: /\n", status = 200, fallback = async () => { throw new Error("Unexpected browser fallback"); } } = {}) {
+  const requests = [];
+  return { requests, reader: createEvidenceSourceReader({ userAgent: "EviMedBot", readWeb: fallback, transport: async request => {
+    requests.push(request);
+    return {status: request.url.pathname === "/robots.txt" ? 200 : status, headers: {}, body: Buffer.from(request.url.pathname === "/robots.txt" ? robotsText : JSON.stringify(payload))};
+  } }) };
+}
+test("DOI lookup binds exact official DOI, abstract coverage and publisher notice", async () => {
+  const payload = {resultList:{result:[{doi:"10.1001/OTHER",abstractText:"Wrong source"}, {doi:"10.1001/JAMACARDIO.2026.4215",title:"Official trial report",abstractText:"<p>Retained primary abstract.</p>",isRetracted:"Y"}]}};
+  const {reader,requests} = officialReader(payload);
+  const signal = new AbortController().signal;
+  const result = await reader("https://doi.org/10.1001/jamacardio.2026.4215", {signal});
+  assert.equal(result.text,"Retained primary abstract."); assert.equal(result.coverage,"abstract"); assert.equal(result.publicationStatus.kind,"retracted");
+  assert.equal(requests[1].url.searchParams.get("query"),'DOI:"10.1001/jamacardio.2026.4215"');
+  assert.equal(requests[1].signal,signal); assert.equal(requests[1].maxBytes,16*1024*1024);
+  assert.equal(result.receipt.url,"https://doi.org/10.1001/jamacardio.2026.4215");
+  assert.equal(result.receipt.sha256,createHash("sha256").update(JSON.stringify(payload)).digest("hex"));
+  assert.equal(result.receipt.truncated,false);
+});
+test("DOI mismatches cannot become evidence; an unindexed DOI retains normal page fallback", async () => {
+  const wrong = officialReader({resultList:{result:[{doi:"10.1001/other",abstractText:"Wrong"}]}});
+  await assert.rejects(wrong.reader("https://doi.org/10.1001/jamacardio.2026.4215"),{code:"evidence_source_identity_mismatch"});
+  const calls=[]; const absent=officialReader({resultList:{result:[]}}, {fallback:async(url,options)=>{calls.push({url,options});return {text:"Actual official page"};}});
+  const signal=new AbortController().signal; assert.equal((await absent.reader("https://doi.org/10.1001/jamacardio.2026.4215",{signal})).text,"Actual official page");
+  assert.equal(calls[0].options.signal,signal);
+});
+test("ClinicalTrials official study identity and selected scientific modules are registry excerpts, never paper full text", async () => {
+  const study={protocolSection:{identificationModule:{nctId:"NCT06575348",briefTitle:"Registered study",organization:{fullName:"Unused organization"}},statusModule:{overallStatus:"RECRUITING"},descriptionModule:{briefSummary:"Registered protocol, not efficacy results."},designModule:{enrollmentInfo:{count:100,type:"ESTIMATED"}},contactsLocationsModule:{centralContacts:[{email:"private-contact@example.test"}]}},resultsSection:{outcomeMeasuresModule:{outcomeMeasures:[{title:"Observed outcome",counts:[{value:"10"}]}]},moreInfoModule:{pointOfContact:{email:"private-result@example.test"}}}};
+  const {reader,requests}=officialReader(study); const result=await reader("https://clinicaltrials.gov/study/NCT06575348");
+  assert.equal(result.coverage,"excerpt"); assert.equal(result.publicationStatus,undefined);
+  assert.match(result.text,/trial registry record/); assert.match(result.text,/not a journal publication/); assert.match(result.text,/ESTIMATED/); assert.match(result.text,/Observed outcome/);
+  assert.doesNotMatch(result.text,/private-contact|private-result|contactsLocationsModule|moreInfoModule/);
+  assert.equal(result.receipt.title,"Registered study"); assert.match(result.receipt.finalUrl,/api\/v2\/studies\/NCT06575348\?/);
+  assert.equal(requests.length,1); assert.match(requests[0].url.searchParams.get("fields"),/OutcomeMeasuresModule/);
+  assert.equal(result.receipt.sha256,createHash("sha256").update(JSON.stringify(study)).digest("hex"));
+});
+test("official API sources preserve robots refusals, unavailable records, cancellation and identity checks", async () => {
+  const denied=officialReader({}, {robotsText:"User-agent: *\nDisallow: /europepmc/\n"});
+  await assert.rejects(denied.reader("https://doi.org/10.1001/jamacardio.2026.4215"),{code:"web_read_robots_disallowed"}); assert.equal(denied.requests.length,1);
+  await assert.rejects(officialReader({}, {status:403}).reader("https://clinicaltrials.gov/study/NCT06575348"),{code:"evidence_source_unavailable"});
+  await assert.rejects(officialReader({protocolSection:{identificationModule:{nctId:"NCT00000000"},descriptionModule:{briefSummary:"Wrong trial"}}}).reader("https://clinicaltrials.gov/study/NCT06575348"),{code:"evidence_source_identity_mismatch"});
+  await assert.rejects(officialReader({protocolSection:{identificationModule:{nctId:"NCT06575348"}}}).reader("https://clinicaltrials.gov/study/NCT06575348"),{code:"evidence_source_empty"});
+  const controller=new AbortController(); controller.abort();
+  await assert.rejects(officialReader({}).reader("https://doi.org/10.1001/jamacardio.2026.4215",{signal:controller.signal}),{name:"AbortError"});
+});
+
+test("only the constructed official ClinicalTrials single-study API has explicit API authorization", async () => {
+  const calls=[];
+  const {reader,requests}=officialReader({protocolSection:{identificationModule:{nctId:"NCT06575348"},descriptionModule:{briefSummary:"Registered study"}}}, {robotsText:"User-agent: *\nDisallow: /api/\n",fallback:async(url)=>{calls.push(url);return {text:"Existing protected webpage reader"};}});
+  await reader("https://clinicaltrials.gov/study/NCT06575348?fields=ContactsLocationsModule&redirect=https://other.example");
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].url.origin,"https://clinicaltrials.gov");
+  assert.equal(requests[0].url.pathname,"/api/v2/studies/NCT06575348");
+  assert.ok(!requests[0].url.searchParams.has("redirect"));
+  assert.doesNotMatch(requests[0].url.searchParams.get("fields"),/ContactsLocations/);
+  for (const url of ["https://clinicaltrials.gov/api/v2/studies/NCT06575348", "https://clinicaltrials.gov/study/NCT06575348/other", "https://other.example/study/NCT06575348", "https://clinicaltrials.gov/api/int/studies"]) {
+    assert.equal((await reader(url)).text,"Existing protected webpage reader");
+  }
+  assert.equal(calls.length,4); assert.equal(requests.length,1);
+  await assert.rejects(officialReader({}, {status:302}).reader("https://clinicaltrials.gov/study/NCT06575348"),{code:"evidence_source_unavailable"});
+});

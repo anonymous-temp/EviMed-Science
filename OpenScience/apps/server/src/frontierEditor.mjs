@@ -118,8 +118,8 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "1. 只写原文里有的事实，不补充原文没有的背景、结论和推测。",
   "2. 一切数量都用阿拉伯数字书写（例如 30%、2 倍、3.2 万、1,234 例），并且必须与原文的数字完全一致：不四舍五入，不换算，不自行计算差值、比例或合计；原文没有的数字，包括年份和日期，一个也不要写。",
   "3. 药物写中国通用名；「术语表」给出的译名必须照用；标为「保留原文」的名称、试验名称缩写、基因和蛋白符号保留原文。",
-  "4. 写给医生看：说清楚这是什么、结果如何、意味着什么。AI 相关的消息说清它对临床或科研意味着什么，不写参数量、基准分数和接口价格。",
-  "5. 企业新闻稿只有顶线结果、没有论文的，导读里说明数据尚未发表；预印本说明尚未经同行评议。",
+  "4. 写给医生看：说清楚这是什么、结果如何、意味着什么；呈现主要分析及其不确定性，无对照研究不作比较性疗效结论。AI 相关的消息说清它对临床或科研意味着什么，不写参数量、基准分数和接口价格。",
+  "5. 发表状态只依据来源明确给出的事实：来源明确称顶线结果尚未发表时才说明尚未发表，来源明确是预印本时才说明尚未经同行评议。试验注册记录、没有论文链接、原文没有提到论文，都不能推断为「尚无论文」「未发表」或「未经同行评议」；不猜测论文是否存在。",
   "6. 不出现链接或网址；不用感叹号和营销用语；不写「本文」「据悉」之类的套话。",
   "",
   "字段要求：",
@@ -130,7 +130,7 @@ export const FRONTIER_EDIT_INSTRUCTIONS = [
   "- evidence_type：证据类型键。条目已注明证据类型的，照填。",
   "- entities：drugs（药物，中文通用名）、trials（试验名称，保留原文）、orgs（机构，中文简称）、diseases（疾病，中文规范名），每类最多 5 个，没有就给空数组。",
   "- scores：impact 实践或科研影响（0–30：会不会改变处方、指南、课题设计或必须执行的政策）；novelty 新颖性（0–20：首次报告或重要更新，还是重复已知）；relevance 与国内读者的相关性（0–20：药物在国内已上市或在审、国内疾病负担、国内政策与指南、国内研究者常用的方法）。都给整数。",
-  "- flags：这是一篇只有顶线结果、没有论文的企业新闻稿时给 [\"press-release\"]，否则给 []。",
+  "- flags：只有来源明确是一篇企业新闻稿、且明确说明顶线结果尚未发表时给 [\"press-release\"]，否则给 []；注册记录或没有论文链接不触发该标记。",
   "",
   `栏目词表：${LANE_LINE}。`,
   "栏目说明：safety 药物安全只收药品、疫苗、生物制品、医疗器械和膳食补充剂的安全信息（不良反应、警示、召回、说明书安全性修订）；普通食品的召回和过敏原未标注属于 public-health 公共卫生。",
@@ -934,7 +934,12 @@ export class FrontierEditor {
     } catch (error) {
       this.counters.callFailures += 1;
       this.lastError = errorCode(error);
-      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { code: errorCode(error) });
+      // DOMException.code is read-only; preserve the upstream cause instead of
+      // mutating it and replacing a genuine timeout with a TypeError.
+      throw Object.assign(new Error(error instanceof Error ? error.message : String(error), {cause:error}), {
+        code: errorCode(error),
+        ...(Number.isInteger(/** @type {any} */ (error)?.upstreamStatus) ? {upstreamStatus:/** @type {any} */ (error).upstreamStatus} : {}),
+      });
     } finally {
       clearTimeout(timer);
     }

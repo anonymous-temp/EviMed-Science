@@ -330,6 +330,66 @@ test(
 );
 
 test(
+  "structured evidence search includes visible reading text without JSON keys or editorial metadata",
+  options,
+  async () => {
+    const zone = await createZone();
+    const content = {
+      question: "设备检出的亚临床房颤，是否应抗凝？",
+      answer: "Visible answer marker",
+      population: "Eligible participants marker",
+      context: "Decision context marker",
+      nextStep: "Discuss monitoring marker",
+      sections: [{ title: "Section heading marker", text: "Section prose marker", sourceIndexes: [1] }],
+      tables: [{
+        title: "Table heading marker", columns: ["Study arm marker", "Observation marker"],
+        rows: [["Cell treatment marker", "Cell result marker"]], caption: "Table caption marker", sourceIndexes: [1],
+      }],
+      comparisons: [{
+        title: "Comparison heading marker", outcome: "Clinical endpoint marker", timeframe: "Follow-up duration marker",
+        denominator: 100, measure: "risk", denominatorUnit: "people",
+        control: { label: "Comparator arm marker", events: 7 }, intervention: { label: "Intervention arm marker", events: 4 },
+        relativeEffect: "Relative estimate marker", certainty: "Uncertainty statement marker", note: "Chart qualification marker", sourceIndexes: [1],
+      }],
+    };
+    let card = await createCard(zone, alice, { content });
+    card = (await service.saveEditorial(alice, {
+      expectedRevision: card.revision,
+      editorial: { author: { kind: "ai", name: "Metadata author marker", model: "private-test-model" }, status: "review-pending" },
+    }, zone.id, card.id)).evidence;
+    card = await publish(zone, card);
+    await createCard(zone, alice, { content });
+    const privateZone = await createZone(alice, false);
+    await publish(privateZone, await createCard(privateZone, alice, { content }));
+    const visible = [content.question, content.answer, content.population, content.context, content.nextStep,
+      content.sections[0].title, content.sections[0].text, content.tables[0].title, ...content.tables[0].columns,
+      ...content.tables[0].rows[0], content.tables[0].caption, content.comparisons[0].title,
+      content.comparisons[0].outcome, content.comparisons[0].timeframe, content.comparisons[0].control.label,
+      content.comparisons[0].intervention.label, content.comparisons[0].relativeEffect,
+      content.comparisons[0].certainty, content.comparisons[0].note, "100", "7", "4"];
+    for (const q of visible) {
+      const result = await service.list(bob, new URLSearchParams({ q: q.toUpperCase() }), zone.id);
+      assert.equal(result.total, 1, q);
+      assert.deepEqual(result.items.map(item => item.id), [card.id], q);
+    }
+    for (const q of ["question", "nextStep", "sections", "columns", "sourceIndexes", "relativeEffect",
+      "denominatorUnit", "risk", "people", "Metadata author marker", "private-test-model", card.editorial.contentHash]) {
+      assert.equal((await service.list(bob, new URLSearchParams({ q }), zone.id)).total, 0, q);
+    }
+    assert.equal((await service.list(bob, new URLSearchParams({ q: content.question }), "*")).total, 1);
+    assert.equal((await service.list(alice, new URLSearchParams({ q: content.question, scope: "owned" }), zone.id)).total, 2);
+    await service.act(bob, zone.id, "follow", { expectedRevision: zone.revision });
+    assert.equal((await service.list(bob, new URLSearchParams({ q: content.question, scope: "following" }), "*")).total, 1);
+    const optional = await publish(zone, await createCard(zone, alice, {
+      content: { answer: "Optional reading marker", sections: null, tables: null, comparisons: null },
+    }));
+    const result = await service.list(bob, new URLSearchParams({ q: "Optional reading marker" }), zone.id);
+    assert.equal(result.total, 1);
+    assert.equal(result.items[0].id, optional.id);
+  },
+);
+
+test(
   "list projections stay small while detail and search retain the complete source material",
   options,
   async () => {

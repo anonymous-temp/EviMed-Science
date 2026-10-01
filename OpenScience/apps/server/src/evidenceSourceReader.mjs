@@ -82,6 +82,7 @@ export function createEvidenceSourceReader({
     /** @type {string} */ rawUrl,
     /** @type {any} */ options = {},
   ) => {
+    options.signal?.throwIfAborted();
     const url = new URL(rawUrl);
     const pmid =
       url.hostname === "pubmed.ncbi.nlm.nih.gov"
@@ -92,15 +93,32 @@ export function createEvidenceSourceReader({
     )
       ? url.pathname.match(/\b(PMC\d+)\b/i)?.[1]?.toUpperCase()
       : null;
-    if (!pmid && !pmcid) return readWeb(rawUrl, options);
-    const target = pmid
+    const doi = ["doi.org", "www.doi.org", "dx.doi.org"].includes(url.hostname)
+      ? decodeURIComponent(url.pathname).match(/^\/(10\.\d{4,9}\/[^\s"\\]+)$/i)?.[1]?.toLowerCase()
+      : null;
+    const nct = ["clinicaltrials.gov", "www.clinicaltrials.gov"].includes(url.hostname)
+      ? url.pathname.match(/^\/study\/(NCT\d{8})\/?$/i)?.[1]?.toUpperCase()
+      : null;
+    if (!pmid && !pmcid && !doi && !nct) return readWeb(rawUrl, options);
+    const registryFields = "NCTId,BriefTitle,OfficialTitle,OverallStatus,LastUpdatePostDate,DescriptionModule,ConditionsModule,DesignModule,ArmsInterventionsModule,OutcomesModule,EligibilityModule,ParticipantFlowModule,BaselineCharacteristicsModule,OutcomeMeasuresModule,AdverseEventsModule";
+    const target = nct
+      ? new URL(`https://clinicaltrials.gov/api/v2/studies/${nct}?fields=${registryFields}`)
+      : doi
+      ? new URL(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(`DOI:"${doi}"`)}&format=json&resultType=core`)
+      : pmid
       ? new URL(
           `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A${pmid}+AND+SRC%3AMED&format=json&resultType=core`,
         )
       : new URL(
           `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/fullTextXML`,
         );
-    const verdict = await robots.check(target, { signal: options.signal });
+    // NLM explicitly authorizes this open API for automated study extraction:
+    // https://www.nlm.nih.gov/pubs/techbull/ja25/ja25_clinical_trials_screen-scraping.html
+    // This exception is only our constructed exact study endpoint and fixed fields,
+    // never caller URLs, redirects, pages or arbitrary ClinicalTrials API requests.
+    const verdict = nct
+      ? {allowed:true,crawlDelayMs:1000}
+      : await robots.check(target, { signal: options.signal });
     if (!verdict.allowed)
       throw Object.assign(
         new Error("The scholarly API refuses automated reading."),
@@ -114,7 +132,7 @@ export function createEvidenceSourceReader({
       url: target,
       headers: {
         "user-agent": userAgent,
-        accept: pmid ? "application/json" : "application/xml",
+        accept: pmid || doi || nct ? "application/json" : "application/xml",
       },
       signal: options.signal,
       maxBytes: 16 * 1024 * 1024,
@@ -128,10 +146,32 @@ export function createEvidenceSourceReader({
       title = "",
       coverage = "full-text";
     let status;
-    if (pmid) {
-      const result = JSON.parse(markup)?.resultList?.result?.find(
-        (r) => String(r.id) === pmid && r.source === "MED",
+    if (nct) {
+      const study = JSON.parse(markup);
+      const protocol = study?.protocolSection;
+      if (protocol?.identificationModule?.nctId !== nct)
+        throw Object.assign(new Error("The registry returned another trial identity."), {code:"evidence_source_identity_mismatch"});
+      title = protocol.identificationModule.officialTitle ?? protocol.identificationModule.briefTitle ?? nct;
+      // Keep the selected scientific modules only, never registry contact records.
+      const selected = {
+        identificationModule: {nctId:nct,briefTitle:protocol.identificationModule.briefTitle,officialTitle:protocol.identificationModule.officialTitle},
+        statusModule: {overallStatus:protocol.statusModule?.overallStatus,lastUpdatePostDateStruct:protocol.statusModule?.lastUpdatePostDateStruct},
+        ...Object.fromEntries(["descriptionModule","conditionsModule","designModule","armsInterventionsModule","outcomesModule","eligibilityModule"].filter(key=>protocol[key]!=null).map(key=>[key,protocol[key]])),
+        resultsSection: Object.fromEntries(["participantFlowModule","baselineCharacteristicsModule","outcomeMeasuresModule","adverseEventsModule"].filter(key=>study.resultsSection?.[key]!=null).map(key=>[key,study.resultsSection[key]])),
+      };
+      if (!protocol.descriptionModule?.briefSummary && !protocol.descriptionModule?.detailedDescription && !Object.keys(selected.resultsSection).length)
+        throw Object.assign(new Error("No scientific registry description or posted results."), {code:"evidence_source_empty"});
+      markup = `ClinicalTrials.gov trial registry record; registered protocol and any posted results, not a journal publication. ${JSON.stringify(selected)}`;
+      coverage = "excerpt";
+    } else if (pmid || doi) {
+      const records = JSON.parse(markup)?.resultList?.result ?? [];
+      const result = records.find(
+        (r) => doi ? typeof r.doi === "string" && r.doi.trim().toLowerCase() === doi : String(r.id) === pmid && r.source === "MED",
       );
+      if (doi && !result) {
+        if (!records.length) return readWeb(rawUrl, options);
+        throw Object.assign(new Error("The scholarly API returned another DOI identity."), {code:"evidence_source_identity_mismatch"});
+      }
       status = result ? publicationStatus(result) : undefined;
       if (typeof result?.abstractText !== "string" && !status)
         throw Object.assign(
