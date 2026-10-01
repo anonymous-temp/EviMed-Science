@@ -11,6 +11,7 @@ import {
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
+import { createEvidenceSourceReader } from "../src/evidenceSourceReader.mjs";
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "local PostgreSQL required" };
 let isolated,
@@ -1186,4 +1187,203 @@ test('maintenance rotates past partial and terminal failed cards while discovery
   await worker.schedule();
   assert.equal((await db.query('SELECT state FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1',[first])).rows[0].state,'failed');
   assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+// Synthetic API metadata exercises the real reader and native refresh path.
+const coreReader = (record) => createEvidenceSourceReader({
+  userAgent: 'EviMedTest',
+  readWeb: async () => { throw new Error('Expected primary scholarly API'); },
+  transport: async ({url}) => ({status:200,headers:{},body:Buffer.from(url.pathname === '/robots.txt' ? 'User-agent: *\nAllow: /\n' : JSON.stringify({resultList:{result:[{id:'12345',source:'MED',title:'Synthetic trial fixture',abstractText:document,...record()}]}}))}),
+});
+const preparePubmedCard = async () => {
+  const retained=(await db.query('SELECT sources FROM evimed_frontier.evidence_cards WHERE id=$1',[card.id])).rows[0].sources;
+  card=(await service.saveEditorial(user,{expectedRevision:card.revision,sources:retained.map(source=>({...source,url:'https://pubmed.ncbi.nlm.nih.gov/12345/'})),editorial:{...card.editorial,status:'review-pending'}},zone.id,card.id)).evidence;
+  await reviewCard();
+};
+const refreshAgain = async () => {
+  await db.query('UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1',[zone.id]);
+  await worker.tick();
+  return (await service.detail(user,zone.id,card.id)).evidence;
+};
+test('same abstract N to Y invalidates the receipt and exposes the retraction; unknown retains it and explicit N clears it before new review',options,async()=>{
+  await preparePubmedCard();
+  let metadata={isRetracted:'N'};
+  worker.readSource=coreReader(()=>metadata);
+  await worker.tick();
+  const previous=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(previous.editorial.status,'ai-reviewed');
+  metadata={isRetracted:'Y',commentCorrectionList:{commentCorrection:[{type:'Retraction in',reference:'Synthetic journal notice',source:'MED',id:'54321'}]}};
+  let current=await refreshAgain();
+  assert.equal(current.sources[0].sha256,previous.sources[0].sha256);
+  assert.notEqual(current.editorial.contentHash,previous.editorial.contentHash);
+  assert.notEqual(current.editorial.sourceFingerprint,previous.editorial.sourceFingerprint);
+  assert.equal(current.sources[0].publicationStatus.kind,'retracted');
+  assert.ok(current.sources[0].publicationStatus.notices.some(notice=>notice.includes('Synthetic journal notice')));
+  assert.equal(current.sources[0].documentText,undefined,'Public details must not expose retained full text');
+  assert.equal(current.editorial.status,'review-pending');
+  assert.equal(current.editorial.reviewer,null);
+  assert.equal(current.editorial.reviewRevision,null);
+  assert.equal(current.body,previous.body);
+  assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+  assert.ok(current.editorial.findings.some(finding=>finding.kind==='publication-status'));
+  const flaggedDate=current.sources[0].checkedAt, flaggedRevision=current.revision;
+  metadata={};current=await refreshAgain();
+  assert.equal(current.sources[0].publicationStatus.kind,'retracted');
+  assert.equal(current.sources[0].checkedAt,flaggedDate);
+  assert.equal(current.revision,flaggedRevision);
+  assert.equal(current.editorial.sourceChecks[0].status,'retained');
+  assert.equal(current.editorial.sourceChecks[0].code,'evidence_publication_status_unavailable');
+  metadata={isRetracted:'N'};current=await refreshAgain();
+  assert.equal(current.sources[0].publicationStatus,undefined);
+  assert.equal(current.editorial.status,'ai-reviewed');
+  assert.equal(current.editorial.reviewRevision,current.revision);
+  assert.equal(authorCalls,1);assert.equal(reviewCalls,1);
+  assert.equal(current.editorial.findings.some(finding=>finding.kind==='publication-status'),false);
+});
+test('explicit erratum with unchanged abstract requires review while ordinary comments do not',options,async()=>{
+  await preparePubmedCard();
+  let type='Comment in';
+  worker.readSource=coreReader(()=>({isRetracted:'N',commentCorrectionList:{commentCorrection:[{type,reference:'Synthetic relation fixture',source:'MED',id:'54321'}]}}));
+  await worker.tick();
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.editorial.status,'ai-reviewed');
+  type='Erratum in';const current=await refreshAgain();
+  assert.equal(current.sources[0].publicationStatus.kind,'corrected');
+  assert.equal(current.editorial.status,'review-pending');assert.equal(current.editorial.reviewer,null);
+  assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+test('truncated refresh retains complete source hash and old dates rather than re-signing it as full text',options,async()=>{
+  const retained=(await db.query('SELECT sources FROM evimed_frontier.evidence_cards WHERE id=$1',[card.id])).rows[0].sources;
+  card=(await service.saveEditorial(user,{expectedRevision:card.revision,sources:retained.map(source=>({...source,coverage:'full-text'})),editorial:{...card.editorial,status:'review-pending'}},zone.id,card.id)).evidence;
+  await reviewCard();
+  const original=card.sources[0],previousDate=card.editorial.sourceCheckedAt;
+  worker.readSource=createEvidenceSourceReader({userAgent:'EviMedTest',transport:async()=>{throw new Error('No scholarly API');},readWeb:async()=>({text:'Truncated changed source',coverage:'full-text',receipt:{sha256:evidenceHash('Truncated changed source'),truncated:true}})});
+  await worker.tick();const current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(current.sources[0].sha256,original.sha256);
+  assert.equal(current.sources[0].checkedAt,original.checkedAt);
+  assert.equal(current.sources[0].coverage,'full-text');
+  assert.equal(current.editorial.sourceCheckedAt,previousDate);
+  assert.equal(current.editorial.sourceChecks[0].status,'retained');
+  assert.equal(current.editorial.sourceChecks[0].code,'evidence_source_truncated');
+  assert.equal(current.editorial.status,'ai-reviewed');assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+test('publication notice survives a removed abstract and cannot acquire a forged current AI receipt',options,async()=>{
+  await preparePubmedCard();
+  worker.readSource=coreReader(()=>({isRetracted:'Y',abstractText:undefined}));
+  await worker.tick();
+  const current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(current.sources[0].publicationStatus.kind,'retracted');
+  assert.equal(current.sources[0].sha256,card.sources[0].sha256);
+  assert.equal(current.sources[0].checkedAt,card.sources[0].checkedAt);
+  assert.equal(current.editorial.sourceChecks[0].status,'retained');
+  assert.equal(current.editorial.sourceCheckedAt,card.editorial.sourceCheckedAt);
+  assert.equal(current.editorial.status,'review-pending');
+  assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+  await assert.rejects(()=>service.saveEditorial(user,{expectedRevision:current.revision,editorial:{...current.editorial,status:'ai-reviewed',reviewer:identity,contentHash:current.editorial.contentHash}},zone.id,card.id),{status:400});
+});
+test('new discoveries with publisher retraction status complete as skipped without authoring or review',options,async()=>{
+  await db.query('DELETE FROM evimed_frontier.evidence_cards WHERE id=$1',[card.id]);
+  await insertSource(db,'synthetic-source');
+  const item=await insertItem(db,{sourceId:'synthetic-source',title:'Kidney synthetic fixture',state:'published'});
+  await db.query("UPDATE evimed_frontier.items SET canonical_url='https://pubmed.ncbi.nlm.nih.gov/12345/' WHERE id=$1",[item.id]);
+  worker.readSource=coreReader(()=>({isRetracted:'Y'}));
+  await worker.tick();
+  assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM evimed_frontier.evidence_cards')).rows[0].n,0);
+  const jobs=(await db.query('SELECT state,payload FROM evimed_frontier.evidence_editorial_jobs')).rows;
+  assert.equal(jobs.length,1);assert.equal(jobs[0].state,'completed');assert.equal(jobs[0].payload.decision,'skip');
+});
+
+test('bounded processing renews its lease across the original deadline and excludes a second claimant',options,async()=>{
+  await reviewCard();await worker.schedule();const job=await worker.claim();
+  const deadline=(await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET lease_until=clock_timestamp()+interval '300 milliseconds' WHERE id=$1 RETURNING lease_until",[job.id])).rows[0].lease_until;
+  let entered,release;const started=new Promise(resolve=>{entered=resolve;});const gate=new Promise(resolve=>{release=resolve;});
+  worker.readSource=async()=>{entered();await gate;return{text:document};};
+  const processing=worker.process(job);
+  try {
+    await started;
+    await db.query("SELECT pg_sleep(greatest(0,extract(epoch from $1::timestamptz-clock_timestamp()))+0.02)",[deadline]);
+    assert.equal((await db.query('SELECT clock_timestamp()>$1::timestamptz AS expired',[deadline])).rows[0].expired,true);
+    const second=new EvidenceEditorial({database:db,service,editor:worker.editor,readSource:worker.readSource,workerId:'second-claimant'});
+    assert.equal(await second.claim(),null);
+  } finally {release();await processing;}
+  assert.equal((await worker.automation(user,zone.id)).jobs.completed,1);assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+test('all eight source checks and separate author and review operations renew the durable lease',options,async()=>{
+  await addSupportingSource(7);const observed=[];
+  const check=async phase=>{
+    const row=(await db.query("SELECT id,lease_until>clock_timestamp()+interval '5 minutes' AS fresh FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 AND state='running'",[zone.id])).rows[0];
+    assert.equal(row.fresh,true,`${phase} starts with a renewed lease`);observed.push(phase);
+    await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET lease_until=clock_timestamp()+interval '30 seconds' WHERE id=$1",[row.id]);
+  };
+  worker.readSource=async()=>{await check('source');return{text:document+' New observations.'};};
+  const write=worker.editor.evidenceCard,review=worker.editor.evidenceReview;
+  worker.editor.evidenceCard=async input=>{await check('author');return write(input);};
+  worker.editor.evidenceReview=async input=>{await check('review');return review(input);};
+  await worker.tick();assert.deepEqual(observed,[...Array(8).fill('source'),'author','review']);
+  assert.equal((await worker.automation(user,zone.id)).jobs.completed,1);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.editorial.status,'ai-reviewed');
+});
+
+test('renewal never revives an expired lease or takes over another owner',options,async()=>{
+  await reviewCard();await worker.schedule();const job=await worker.claim();
+  await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",[job.id]);
+  await assert.rejects(worker.renew(job),{code:'evidence_revision_conflict'});
+  const second=new EvidenceEditorial({database:db,service,editor:worker.editor,readSource:worker.readSource,workerId:'renewal-replacement'});
+  assert.equal((await second.claim()).id,job.id);
+  const before=(await db.query('SELECT lease_owner,lease_until,attempts FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1',[job.id])).rows[0];
+  await assert.rejects(worker.process(job),{code:'evidence_revision_conflict'});
+  assert.deepEqual((await db.query('SELECT lease_owner,lease_until,attempts FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1',[job.id])).rows[0],before);
+  assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+for(const stop of ['disabled','maintenance'])test(`source checks cannot commit or start a model call after ${stop}`,options,async()=>{
+  await reviewCard();worker.readSource=async()=>{
+    if(stop==='disabled')await db.query('UPDATE evimed_frontier.evidence_automation SET enabled=false WHERE zone_id=$1',[zone.id]);else worker.canRun=()=>false;
+    return{text:document+' Changed observations.'};
+  };
+  await worker.tick();const current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(current.revision,card.revision);assert.equal(current.editorial.status,'ai-reviewed');assert.deepEqual(current.editorial.sourceChecks,[]);
+  assert.equal(current.sources[0].sha256,card.sources[0].sha256);assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+test('expired review cannot publish a receipt and a new lease resumes only the pending review',options,async()=>{
+  worker.readSource=async()=>({text:document+' Changed observations.'});const review=worker.editor.evidenceReview;
+  worker.editor.evidenceReview=async input=>{const answer=await review(input);
+    await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE zone_id=$1 AND state='running'",[zone.id]);return answer;};
+  await worker.tick();let current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(current.editorial.status,'review-pending');assert.equal(current.editorial.reviewer,null);assert.equal(authorCalls,1);assert.equal(reviewCalls,1);
+  worker.editor.evidenceReview=review;await worker.tick();current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(current.editorial.status,'ai-reviewed');assert.equal(authorCalls,1);assert.equal(reviewCalls,2);assert.equal((await worker.automation(user,zone.id)).jobs.completed,1);
+});
+
+test('source checks rotate beyond eight without moving citations or claiming full freshness',options,async()=>{
+  await addSupportingSource(9);const reads=[],before=card.sources.map(source=>source.url);
+  worker.readSource=async url=>{reads.push(url);if(url===before[0])throw unreadable();return{text:document};};
+  await worker.tick();assert.equal(reads.length,8);assert.equal(reads.includes(before[9]),false);
+  await db.query('UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1',[zone.id]);await worker.tick();
+  assert.equal(reads.length,16);assert.deepEqual(new Set(reads),new Set(before));
+  const current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.deepEqual(current.sources.map(source=>source.url),before);assert.equal(current.editorial.sourceCheckedAt,card.editorial.sourceCheckedAt);
+  assert.equal(current.sources[0].checkedAt,card.sources[0].checkedAt);assert.equal(current.editorial.status,'ai-reviewed');assert.equal(authorCalls,0);assert.equal(reviewCalls,0);
+});
+
+test('new discovery jobs inherit the card source cursor while reading their new source within the cap',options,async()=>{
+  await addSupportingSource(9);const before=card.sources.map(source=>source.url),reads=[];
+  worker.readSource=async url=>{reads.push(url);return{text:document};};await worker.tick();assert.equal(reads.length,8);
+  await insertSource(db,'cursor-discovery');const item=await insertItem(db,{sourceId:'cursor-discovery',title:'Kidney new randomized evidence'});
+  const url='https://example.org/new-cursor-primary';await db.query('UPDATE evimed_frontier.items SET canonical_url=$2 WHERE id=$1',[item.id,url]);
+  worker.editor.evidenceTarget=async()=>card.id;reads.length=0;
+  await db.query('UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1',[zone.id]);await worker.schedule();
+  // Select the discovery job explicitly; this schedule also queues ordinary maintenance.
+  const discovery=(await db.query('SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE source_item_id=$1',[item.publicId])).rows[0];
+  assert.equal(discovery.payload.sourceReadCursor,undefined);
+  await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()-interval '1 second' WHERE id=$1",[discovery.id]);
+  await worker.tick();
+  assert.ok(reads.includes(before[8])&&reads.includes(before[9]),'a different job continues the previous rotation');
+  assert.equal(reads.filter(value=>value===url).length,1);assert.equal(reads.length,8);
+  const current=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.deepEqual(current.sources.slice(0,10).map(source=>source.url),before);assert.equal(current.sources[10].url,url);
+  assert.equal(current.editorial.status,'ai-reviewed');assert.equal(authorCalls,1);assert.equal(reviewCalls,1);
 });

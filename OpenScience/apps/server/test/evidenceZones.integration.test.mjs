@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
+import { evidenceContentHash, evidenceEditorialReceipt } from "../src/evidenceCardContent.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
@@ -670,3 +671,61 @@ test(
     assert.equal(reader.evidenceZoneFeedback[0].text, "A feedback note");
   },
 );
+
+
+test("authenticated scientific edits preserve AI authorship and record account revision history", options, async () => {
+  const zone = await createZone();
+  const author = {kind:"ai",name:"Evidence author AI",model:"synthetic-test"};
+  let card = (await service.saveEditorial(alice, {
+    ...cardInput, editorial:{author,status:"review-pending"},
+  }, zone.id, null, true)).evidence;
+  assert.equal(card.editorial.lastEditor, undefined);
+  card = await publish(zone,card);
+  assert.equal(card.editorial.lastEditor, undefined);
+  card = (await service.saveEditorial(alice, {
+    expectedRevision:card.revision,
+    editorial:{author,status:"ai-reviewed",contentHash:evidenceContentHash(card),reviewer:{kind:"ai",name:"Independent AI",model:"synthetic-test"}},
+  },zone.id,card.id)).evidence;
+  assert.equal(card.editorial.status,"ai-reviewed");
+  assert.equal(card.editorial.lastEditor,undefined);
+  await assert.rejects(service.save(alice, {
+    expectedRevision:card.revision,body:"New scientific prose",
+    editorial:{...card.editorial,lastEditor:{userId:"bob",name:"Forged",editedAt:new Date().toISOString()}},
+  },zone.id,card.id),{code:"evidence_invalid"});
+  await assert.rejects(service.save(bob, {
+    expectedRevision:card.revision,body:"Unauthorized science",
+  },zone.id,card.id),{code:"evidence_owner_required"});
+  card = (await service.save({...alice,name:"Spoofed physician"}, {
+    expectedRevision:card.revision,body:"Authenticated revised scientific prose",
+  },zone.id,card.id)).evidence;
+  assert.deepEqual(card.editorial.author,author);
+  assert.equal(card.editorial.status,"review-pending");
+  assert.equal(card.editorial.reviewer,null);
+  const editor=card.editorial.lastEditor;
+  assert.equal(editor.userId,"alice");
+  assert.equal(editor.name,"Alice");
+  assert.ok(Number.isFinite(Date.parse(editor.editedAt)));
+  const hash=evidenceContentHash(card);
+  assert.equal(evidenceContentHash({...card,editorial:{...card.editorial,lastEditor:null}}),hash);
+  assert.throws(()=>evidenceEditorialReceipt({...card.editorial,lastEditor:{...editor,editedAt:"invalid"}},card,card.revision),{code:"evidence_invalid"});
+  card = (await service.save(alice, {
+    expectedRevision:card.revision,body:card.body,state:"draft",
+  },zone.id,card.id)).evidence;
+  assert.deepEqual(card.editorial.lastEditor,editor);
+  card = (await service.saveEditorial(alice, {
+    expectedRevision:card.revision,body:"Later AI prose",
+    editorial:{author,status:"review-pending",lastEditor:{userId:"bob",name:"Forged",editedAt:new Date().toISOString()}},
+  },zone.id,card.id)).evidence;
+  assert.deepEqual(card.editorial.lastEditor,editor);
+  assert.deepEqual(card.editorial.author,author);
+  const history=(await db.query("SELECT snapshot FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision DESC LIMIT 1",[card.id])).rows[0];
+  assert.deepEqual(history.snapshot.editorial.lastEditor,editor);
+});
+
+test("manual cards without AI receipts retain their creator without invented attribution", options, async () => {
+  const zone=await createZone();
+  let card=await createCard(zone);
+  card=(await service.save(alice,{expectedRevision:card.revision,body:"Revised manual content"},zone.id,card.id)).evidence;
+  assert.equal(card.creator,"Alice");
+  assert.equal(card.editorial,null);
+});

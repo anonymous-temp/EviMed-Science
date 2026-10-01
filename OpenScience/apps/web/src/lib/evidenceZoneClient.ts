@@ -41,6 +41,7 @@ export interface EvidenceCard {
     sha256?: string;
     checkedAt?: string | null;
     coverage?: "full-text" | "abstract" | "excerpt";
+    publicationStatus?: { kind: "retracted" | "corrected" | "concern"; notices: string[] } | null;
   }>;
   limitations: string | null;
   discussion: Array<{
@@ -57,6 +58,7 @@ export interface EvidenceCard {
   content?: EvidenceContent | null;
   editorial?: {
     author: { kind: "ai" | "human"; name: string; model?: string };
+    lastEditor?: { userId: string; name: string; editedAt: string };
     reviewer: { kind: "ai"; name: string; model?: string } | null;
     sourceFingerprint?: string;
     sourceCheckedAt?: string | null;

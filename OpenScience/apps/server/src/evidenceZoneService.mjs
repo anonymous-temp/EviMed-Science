@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
-import { evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt } from "./evidenceCardContent.mjs";
+import { evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const error = (
@@ -80,7 +80,8 @@ function sources(value) {
   if (!Array.isArray(value) || value.length > 50)
     throw error(400, "invalid", "Invalid source list.");
   return value.map((source) => {
-    fields(source, ["title", "url", "excerpt", "sha256", "checkedAt", "coverage", "documentText", "fetchedSha256"]);
+    fields(source, ["title", "url", "excerpt", "sha256", "checkedAt", "coverage", "documentText", "fetchedSha256", "publicationStatus"]);
+    const publicationStatus = evidencePublicationStatus(source.publicationStatus);
     const title = text(source.title, 500, true),
       excerpt = source.excerpt == null ? null : text(source.excerpt, 12000);
     const url = evidenceSourceUrl(source.url);
@@ -95,7 +96,7 @@ function sources(value) {
     if (sha256 != null && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) throw error(400,"invalid","Invalid source hash.");
     if (source.checkedAt != null && (typeof source.checkedAt !== "string" || !Number.isFinite(Date.parse(source.checkedAt)))) throw error(400,"invalid","Invalid source check date.");
     if (coverage === "full-text" && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
-    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}) };
+    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
   });
 }
 
@@ -546,9 +547,16 @@ export class EvidenceZoneService {
           existing.sources.find(old=>old.title===source.title && old.url===source.url && old.excerpt===source.excerpt) ?? source);
         value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
         const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
-        value.editorial = evidenceEditorialReceipt(body.editorial === undefined
+        const receipt = body.editorial === undefined
           ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null,...(!internalOperation ? {sourceChecks:[],...(JSON.stringify(value.sources)!==JSON.stringify(existing.sources) ? {sourceCheckedAt:null} : {})} : {})} : existing?.editorial ?? null
-          : body.editorial, value, (existing?.revision ?? 0) + 1);
+          : body.editorial;
+        // Only an authenticated scientific edit records an account. Imports and
+        // model maintenance preserve that history instead of supplying identities.
+        const lastEditor = !internalOperation && existing?.editorial &&
+          evidenceContentHash(value) !== evidenceContentHash(existing)
+          ? {userId:user.id,name:existing.creator,editedAt:new Date().toISOString()}
+          : existing?.editorial?.lastEditor;
+        value.editorial = evidenceEditorialReceipt(receipt ? {...receipt,lastEditor} : null, value, (existing?.revision ?? 0) + 1);
         if(value.editorial) value.editorial={...value.editorial,automationContentHash:internalOperation ? value.editorial.contentHash : existing?.editorial?.automationContentHash ?? null};
         if (body.editorial !== undefined && value.editorial?.status === "ai-reviewed")
           value.editorial = {...value.editorial,reviewOperationId:internalOperation?.id,reviewOrigin:internalOperation?.origin};

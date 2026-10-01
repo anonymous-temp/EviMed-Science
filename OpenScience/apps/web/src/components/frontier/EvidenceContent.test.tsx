@@ -261,3 +261,27 @@ describe("question-based evidence content", () => {
     expect(screen.getByText("Legacy article")).toBeInTheDocument();
   });
 });
+
+it('publication notices warn readers and cannot display a current AI review endorsement',()=>{
+  const editorial: NonNullable<EvidenceCard['editorial']>={author:{kind:'ai',name:'AI writer'},reviewer:{kind:'ai',name:'Old AI reviewer'},status:'ai-reviewed',reviewRevision:card.revision};
+  render(<EvidenceReading evidence={{...card,editorial,sources:card.sources.map(source=>({...source,publicationStatus:{kind:'retracted',notices:['Synthetic journal retraction notice']}}))}}/>);
+  expect(screen.getByRole('alert')).toHaveTextContent('原有结论需要重新核查');
+  expect(screen.getByText('Synthetic journal retraction notice')).toBeInTheDocument();
+  expect(screen.queryByText('AI 已评议')).not.toBeInTheDocument();
+  expect(screen.queryByText('当前内容已完成 AI 评议')).not.toBeInTheDocument();
+  expect(screen.getByText('当前内容待重新评议')).toBeInTheDocument();
+});
+
+
+it("shows an account revision history alongside the original AI author without claiming human review", () => {
+  const editedAt="2026-10-01T12:00:00Z";
+  render(<EvidenceReading evidence={{...card,editorial:{
+    author:{kind:"ai",name:"Original evidence AI",model:"synthetic-test"},
+    reviewer:null,status:"review-pending",reviewRevision:null,
+    lastEditor:{userId:"alice",name:"Alice",editedAt},
+  }}}/>);
+  expect(screen.getByText(/AI 编写 · Original evidence AI/)).toBeInTheDocument();
+  expect(screen.getByText(`用户修订记录 · Alice · ${evidenceDate(editedAt)}`)).toBeInTheDocument();
+  expect(screen.getByText("AI 待评议")).toBeInTheDocument();
+  expect(screen.queryByText(/人工评议|医生|已完成 AI 评议/)).not.toBeInTheDocument();
+});

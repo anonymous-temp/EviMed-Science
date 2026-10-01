@@ -6,6 +6,7 @@ import {
   evidenceContentHash,
   evidenceSourceFingerprint,
   evidencePublicExcerpt,
+  evidencePublicationStatus,
 } from "./evidenceCardContent.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
@@ -18,6 +19,7 @@ const retainedSourceErrors = new Set([
   "web_read_timeout", "web_read_upstream_unavailable", "web_read_not_found",
   "web_read_login_required", "web_read_upstream_error", "evidence_source_unavailable",
   "evidence_abstract_unavailable", "evidence_source_empty",
+  "evidence_source_truncated", "evidence_publication_status_unavailable",
 ]);
 const author = (/** @type {any} */ editor) => ({
   kind: "ai",
@@ -327,8 +329,19 @@ export class EvidenceEditorial {
         { code: "evidence_budget_wait" },
       );
   }
+  /** Renew between bounded source/model calls; an expired lease is never revived. @param {any} job */
+  async renew(job) {
+    if (!this.canRun()) throw Object.assign(new Error("Maintenance active."), {code:"evidence_maintenance_active"});
+    const held = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs j
+      SET lease_until=clock_timestamp()+interval '10 minutes'
+      WHERE j.id=$1 AND j.lease_owner=$2 AND j.state='running' AND j.lease_until>clock_timestamp()
+        AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_automation a JOIN evimed_frontier.evidence_zones z ON z.id=a.zone_id
+          WHERE a.zone_id=j.zone_id AND a.enabled AND z.state='published') RETURNING j.id`,[job.id,this.workerId]);
+    if (!held.rowCount) throw new HttpError(409,"evidence_revision_conflict","The editorial lease or update settings changed; this worker has stopped.");
+  }
   /** @param {any} job */
   async process(job) {
+    await this.renew(job);
     const zone = (
       await this.database.query(
         "SELECT * FROM evimed_frontier.evidence_zones WHERE id=$1",
@@ -381,14 +394,27 @@ export class EvidenceEditorial {
           throw Object.assign(new Error("Maintenance active."), {
             code: "evidence_maintenance_active",
           });
+        await this.renew(job);
         prefetched = await this.readSource(job.source_url, {
           signal: AbortSignal.timeout(90000),
         });
+        await this.renew(job);
+        if (prefetched.publicationStatus) {
+          const skipped = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs
+            SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb
+            WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp()`,
+            [job.id,this.workerId,JSON.stringify({decision:"skip",skipReason:"原始文献存在撤稿、更正或关注声明，不能作为普通推荐依据。",publicationStatus:prefetched.publicationStatus})]);
+          if (!skipped.rowCount) throw new HttpError(409,"evidence_revision_conflict","The publication-status check lost its editorial lease.");
+          await this.finish(job,"completed");
+          this.counters.skipped++;
+          return;
+        }
         if (!String(prefetched.text ?? "").trim())
           throw Object.assign(new Error("No readable source."), {
             code: "evidence_source_empty",
           });
         await this.requireModel();
+        await this.renew(job);
         const targetId = await this.editor.evidenceTarget({
           zone: zone.title,
           description: zone.description,
@@ -396,12 +422,14 @@ export class EvidenceEditorial {
           source: {
             title: job.source_title,
             url: job.source_url,
-            coverage: prefetched.coverage ?? "excerpt",
-            inputTruncated: String(prefetched.text ?? "").length > 12000,
+            coverage: prefetched.receipt?.truncated ? "excerpt" : prefetched.coverage ?? "excerpt",
+            publicationStatus: prefetched.publicationStatus ?? null,
+            inputTruncated: !!prefetched.receipt?.truncated || String(prefetched.text ?? "").length > 12000,
             text: String(prefetched.text ?? "").slice(0, 12000),
           },
           cards: targets,
         });
+        await this.renew(job);
         if (targetId?.skip === true) {
           const skipped = await this.database.query(
             `UPDATE evimed_frontier.evidence_editorial_jobs
@@ -491,12 +519,22 @@ export class EvidenceEditorial {
       );
     const sources = [];
     const sourceChecks = [];
-    const readIndexes = new Set(originals.slice(0, 8).map((_, index) => index));
+    // The job survives scheduling. A newly discovered source mapped to this
+    // card inherits its previous job's cursor instead of restarting at zero.
+    let cursor = job.payload?.sourceReadCursor;
+    if (!Number.isSafeInteger(cursor) && card) cursor = (await this.database.query(
+      `SELECT payload->'sourceReadCursor' AS cursor FROM evimed_frontier.evidence_editorial_jobs
+        WHERE card_id=$1 AND id<>$2 AND payload ? 'sourceReadCursor' ORDER BY updated_at DESC,id LIMIT 1`,[card.id,job.id],
+    )).rows[0]?.cursor;
+    const readCursor = Number.isSafeInteger(cursor) && cursor >= 0 ? cursor % originals.length : 0;
+    const selectedIndexes = Array.from({length:Math.min(8,originals.length)},(_,index)=>(readCursor+index)%originals.length);
+    const readIndexes = new Set(selectedIndexes);
+    const nextReadCursor = (readCursor+selectedIndexes.length)%originals.length;
     const newSourceIndex = originals.findIndex(
       (source) => source.url === job.source_url,
     );
-    if (newSourceIndex >= 8) {
-      readIndexes.delete(7);
+    if (card && newSourceIndex >= 0 && !card.sources.some(source=>source.url === job.source_url) && !readIndexes.has(newSourceIndex)) {
+      readIndexes.delete(selectedIndexes.at(-1));
       readIndexes.add(newSourceIndex);
     }
     for (const [sourceIndex, source] of originals.entries()) {
@@ -510,10 +548,7 @@ export class EvidenceEditorial {
         sources.push(source);
         continue;
       }
-      if (!this.canRun())
-        throw Object.assign(new Error("Maintenance active."), {
-          code: "evidence_maintenance_active",
-        });
+      await this.renew(job);
       const check = {sourceIndex:sourceIndex+1,status:"checked",attemptedAt:this.now().toISOString()};
       sourceChecks.push(check);
       let result, documentText;
@@ -521,14 +556,28 @@ export class EvidenceEditorial {
         result = prefetched && source.url === job.source_url
           ? prefetched : await this.readSource(source.url,{signal:AbortSignal.timeout(90000)});
         documentText = String(result.text ?? "").slice(0,2000000);
+        const retained = typeof source.documentText === "string" && source.documentText.trim() && source.sha256 === evidenceHash(source.documentText);
+        if (!documentText.trim() && result.publicationStatus && card && retained) {
+          Object.assign(check,{status:"retained",code:"evidence_source_empty"});
+          sources.push({...source,publicationStatus:evidencePublicationStatus(result.publicationStatus)});
+          await this.renew(job);
+          continue;
+        }
         if (!documentText.trim()) throw Object.assign(new Error("No readable source."),{code:"evidence_source_empty"});
+        if ((result.receipt?.truncated || String(result.text ?? "").length > 2000000) && retained)
+          throw Object.assign(new Error("Only truncated text was read; the complete retained source is preserved."),{code:"evidence_source_truncated"});
+        if (source.publicationStatus && result.publicationStatus === undefined)
+          throw Object.assign(new Error("Publication status could not be verified."),{code:"evidence_publication_status_unavailable"});
       } catch (error) {
         const code = error?.name === "TimeoutError" ? "web_read_timeout" : error?.code;
         if (error instanceof TypeError || !card || !retainedSourceErrors.has(code) || typeof source.documentText !== "string" || !source.documentText.trim() || source.sha256 !== evidenceHash(source.documentText)) throw error;
         Object.assign(check,{status:"retained",code});
-        sources.push(source);
+        sources.push(code === "evidence_source_truncated" && result.publicationStatus !== undefined
+          ? {...source,publicationStatus:evidencePublicationStatus(result.publicationStatus)} : source);
+        await this.renew(job);
         continue;
       }
+      await this.renew(job);
       const excerpt = evidencePublicExcerpt(
         documentText,
         source.excerpt ?? null,
@@ -540,8 +589,10 @@ export class EvidenceEditorial {
         sha256: evidenceHash(documentText),
         fetchedSha256: result.receipt?.sha256 ?? evidenceHash(documentText),
         checkedAt: this.now().toISOString(),
+        // Explicit null clears a previously verified notice; absent metadata does not.
+        publicationStatus: evidencePublicationStatus(result.publicationStatus),
         coverage:
-          result.coverage ??
+          (result.receipt?.truncated || String(result.text ?? "").length > 2000000) ? "excerpt" : result.coverage ??
           (source.coverage === "full-text" && !result.receipt?.truncated
             ? "full-text"
             : (source.coverage ?? "excerpt")),
@@ -557,7 +608,7 @@ export class EvidenceEditorial {
       status:"review-pending",reviewer:null,reviewRevision:null,sourceChangedAt:this.now().toISOString(),observedSourceFingerprint:fingerprint,
     } : {})};
     const checkedJob = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb
-      WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,[job.id,this.workerId,JSON.stringify({sourceCheckStatus})]);
+      WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,[job.id,this.workerId,JSON.stringify({sourceCheckStatus,sourceReadCursor:nextReadCursor})]);
     if (!checkedJob.rowCount) throw new HttpError(409,"evidence_revision_conflict","The source check lost its editorial lease.");
     if (card) {
       const checkedCard = await this.database.query(`UPDATE evimed_frontier.evidence_cards SET editorial=editorial||$3::jsonb
@@ -567,7 +618,26 @@ export class EvidenceEditorial {
       if (!checkedCard.rowCount) throw new HttpError(409,"evidence_revision_conflict","Card or lease changed during the source check.");
       card.editorial={...card.editorial,...checkMetadata};
     }
-    if (unchanged && card.editorial.status === "ai-reviewed") {
+    const publicationFindings = sources.flatMap((source,index) => source.publicationStatus ? [{
+      kind:"publication-status",sourceIndex:index+1,
+      text:source.publicationStatus.kind === "retracted" ? "该来源存在撤稿记录，原有结论须重新核查；本卡暂停 AI 评议。" : source.publicationStatus.kind === "concern" ? "该来源存在关注声明，原有结论须重新核查；本卡暂停 AI 评议。" : "该来源存在更正记录，尚未确认对本卡结论的影响；本卡暂停 AI 评议。",
+    }] : []);
+    if (publicationFindings.length && (!unchanged || card?.editorial.status !== "review-pending" || !card?.editorial.findings?.some(finding=>finding.kind === "publication-status"))) {
+      if (card) {
+        const saved = await this.service.saveEditorial(user,{
+          expectedRevision:baseRevision,sources,
+          editorial:{...card.editorial,status:"review-pending",reviewer:null,reviewRevision:null,sourceCheckedAt,sourceChecks,
+            sourceChangedAt:unchanged ? card.editorial.sourceChangedAt : this.now().toISOString(),
+            findings:[...(card.editorial.findings ?? []).filter(finding=>finding.kind !== "publication-status"),...publicationFindings]},
+        },zone.id,card.id,false,"model",{jobId:job.id,workerId:this.workerId});
+        card.revision=saved.evidence.revision;
+      }
+      await this.database.query("UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
+        [job.id,this.workerId,JSON.stringify({managedRevision:card?.revision,publicationStatus:"requires-review"})]);
+      await this.finish(job,"completed");
+      return;
+    }
+    if (unchanged && (card.editorial.status === "ai-reviewed" || publicationFindings.length)) {
       const refreshed = await this.database.query(
         `UPDATE evimed_frontier.evidence_cards SET sources=$3::jsonb,editorial=editorial||$4::jsonb
         WHERE id=$1 AND revision=$2 AND state='published' AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id JOIN evimed_frontier.evidence_zones z ON z.id=j.zone_id WHERE j.id=$5 AND j.lease_owner=$6 AND j.state='running' AND j.lease_until>clock_timestamp() AND a.enabled AND z.state='published') RETURNING id`,
@@ -629,6 +699,7 @@ export class EvidenceEditorial {
           [card?.id ?? "", zone.id],
         )
       ).rows;
+      await this.renew(job);
       const draft = await this.editor.evidenceCard({
         examples,
         sourceChecks,
@@ -641,6 +712,7 @@ export class EvidenceEditorial {
           url: s.url,
           text: (s.documentText ?? s.excerpt ?? "").slice(0, 24000),
           coverage: s.coverage,
+          publicationStatus: s.publicationStatus ?? null,
           inputTruncated: (s.documentText ?? s.excerpt ?? "").length > 24000,
         })),
         previous: card
@@ -658,6 +730,7 @@ export class EvidenceEditorial {
             }
           : null,
       });
+      await this.renew(job);
       const saved = await this.service.saveEditorial(
         user,
         {
@@ -717,6 +790,7 @@ export class EvidenceEditorial {
       this.counters.published++;
     }
     await this.requireModel();
+    await this.renew(job);
     const review = await this.editor.evidenceReview({
       title: card.title,
       summary: card.summary,
@@ -729,9 +803,11 @@ export class EvidenceEditorial {
         title: s.title,
         text: (s.documentText ?? s.excerpt ?? "").slice(0, 24000),
         coverage: s.coverage,
+        publicationStatus: s.publicationStatus ?? null,
         inputTruncated: (s.documentText ?? s.excerpt ?? "").length > 24000,
       })),
     });
+    await this.renew(job);
     const findings = [
       ...review.findings,
       ...card.sources.flatMap((s, index) =>

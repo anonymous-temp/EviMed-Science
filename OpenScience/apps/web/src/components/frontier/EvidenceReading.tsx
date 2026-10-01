@@ -36,7 +36,7 @@ const redundantBody = (evidence: EvidenceCard) =>
 export const evidenceReviewLabel = (evidence: EvidenceCard) =>
   !evidence.editorial
     ? null
-    : evidence.editorial.status === "ai-reviewed" &&
+    : !evidence.sources.some(source=>source.publicationStatus) && evidence.editorial.status === "ai-reviewed" &&
         evidence.editorial.reviewRevision === evidence.revision &&
         evidence.editorial.reviewer
       ? "AI 已评议"
@@ -51,9 +51,17 @@ export function EvidenceReading({
   const retainedSources = evidence.editorial?.sourceChecks?.filter(
     (check) => check.status === "retained",
   ) || [];
+  const publicationSources = evidence.sources.flatMap((source,index)=>source.publicationStatus ? [{source,index:index+1}] : []);
+  const publicationLabel = (kind: "retracted" | "corrected" | "concern") => kind === "retracted" ? "存在撤稿记录" : kind === "concern" ? "存在关注声明" : "存在更正记录";
   return (
     <article className="min-w-0 max-w-measure-body space-y-6 break-words">
       <header className="space-y-2">
+        {publicationSources.length > 0 && (
+          <div role="alert" className="space-y-2 text-ui text-warn">
+            <p>来源状态有警示，原有结论需要重新核查。以下内容保留供追溯，不能作为已完成核验的临床或科研依据。</p>
+            {publicationSources.map(({source,index})=><p key={index}>{publicationLabel(source.publicationStatus!.kind)}<EvidenceReferences evidence={evidence} indexes={[index]} /></p>)}
+          </div>
+        )}
         {evidence.subtype && (
           <p className="text-caption text-text-3">
             {evidence.subtype === "academic"
@@ -78,6 +86,12 @@ export function EvidenceReading({
             </span>
           ) : (
             evidence.creator && <span>创作者 {evidence.creator}</span>
+          )}
+          {evidence.editorial?.lastEditor && (
+            <span>
+              用户修订记录 · {evidence.editorial.lastEditor.name} ·{" "}
+              {evidenceDate(evidence.editorial.lastEditor.editedAt)}
+            </span>
           )}
           {evidence.reviewer && <span>评议者 {evidence.reviewer}</span>}
           {evidenceReviewLabel(evidence) && (
@@ -206,6 +220,12 @@ export function EvidenceReading({
                         ` · 上次成功读取于 ${evidenceDate(source.checkedAt)}`}
                     </p>
                   )}
+                  {source.publicationStatus && (
+                    <div className="mt-2 space-y-1 text-caption text-warn">
+                      <p>{publicationLabel(source.publicationStatus.kind)} · 待核查对结论的影响</p>
+                      {source.publicationStatus.notices.map((notice,noticeIndex)=><p key={noticeIndex}>{notice}</p>)}
+                    </div>
+                  )}
                   {sourceCheck?.status === "retained" && (
                     <p className="mt-1 text-caption text-warn">
                       {deferred
@@ -237,7 +257,7 @@ export function EvidenceReading({
               ` · ${evidenceDate(evidence.editorial.reviewedAt)}`}
           </p>
           <p className="mt-2 text-ui text-text-2">
-            {evidence.editorial.status === "ai-reviewed" &&
+            {publicationSources.length === 0 && evidence.editorial.status === "ai-reviewed" &&
             evidence.editorial.reviewRevision === evidence.revision
               ? "当前内容已完成 AI 评议"
               : "当前内容待重新评议"}

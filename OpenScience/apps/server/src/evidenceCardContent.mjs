@@ -26,6 +26,17 @@ export const evidenceHash = (value) =>
       typeof value === "string" ? value : JSON.stringify(canonical(value)),
     )
     .digest("hex");
+/** Publisher status is evidence, not an AI judgement. Missing metadata never clears it.
+ * @param {any} value */
+export function evidencePublicationStatus(value) {
+  if (value == null) return null;
+  if (typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).some(key => !["kind", "notices"].includes(key)) ||
+      !["retracted", "corrected", "concern"].includes(value.kind) ||
+      !Array.isArray(value.notices) || value.notices.length > 10 ||
+      value.notices.some(notice => typeof notice !== "string" || !notice.trim() || notice.length > 1000)) throw invalid();
+  return {kind:value.kind,notices:[...new Set(value.notices.map(notice=>notice.trim()))].sort()};
+}
 /** The final scientific payload, excluding attribution and volatile fetch timestamps. @param {any} value */
 export function evidenceContentHash(value) {
   return evidenceHash([
@@ -40,6 +51,7 @@ export function evidenceContentHash(value) {
       s.excerpt,
       s.sha256 ?? null,
       s.coverage ?? "excerpt",
+      ...(s.publicationStatus ? [evidencePublicationStatus(s.publicationStatus)] : []),
     ]),
   ]);
 }
@@ -50,6 +62,7 @@ export function evidenceSourceFingerprint(sources) {
       s.url,
       s.sha256 ?? evidenceHash(s.documentText ?? s.excerpt ?? ""),
       s.coverage ?? "excerpt",
+      ...(s.publicationStatus ? [evidencePublicationStatus(s.publicationStatus)] : []),
     ]),
   );
 }
@@ -172,6 +185,14 @@ export function evidenceEditorialReceipt(value, card, revision) {
     JSON.stringify(value).length > 20000
   )
     throw invalid();
+  const lastEditor = value.lastEditor;
+  if (lastEditor != null && (
+    typeof lastEditor !== "object" || Array.isArray(lastEditor) ||
+    Object.keys(lastEditor).some(key => !["userId", "name", "editedAt"].includes(key)) ||
+    typeof lastEditor.userId !== "string" || !lastEditor.userId.trim() || lastEditor.userId.length > 300 ||
+    typeof lastEditor.name !== "string" || !lastEditor.name.trim() || lastEditor.name.length > 300 ||
+    typeof lastEditor.editedAt !== "string" || !Number.isFinite(Date.parse(lastEditor.editedAt))
+  )) throw invalid();
   const author = value.author;
   if (
     !author ||
@@ -187,6 +208,7 @@ export function evidenceEditorialReceipt(value, card, revision) {
   if (
     reviewed &&
     (value.contentHash !== contentHash ||
+      card.sources.some(source => source.publicationStatus) ||
       value.reviewer?.kind !== "ai" ||
       typeof value.reviewer.name !== "string" ||
       typeof value.reviewer.model !== "string")
@@ -228,6 +250,7 @@ export function evidenceEditorialReceipt(value, card, revision) {
       throw invalid();
   return {
     author,
+    ...(lastEditor ? {lastEditor:{userId:lastEditor.userId,name:lastEditor.name,editedAt:lastEditor.editedAt}} : {}),
     reviewer: reviewed ? value.reviewer : null,
     contentHash,
     sourceFingerprint,

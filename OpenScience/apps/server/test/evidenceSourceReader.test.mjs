@@ -129,3 +129,14 @@ test("public quote anchors remain bounded for Chinese sources without spaces", (
   ).join(" ");
   assert.equal(evidencePublicExcerpt(english).split(/\s+/).length, 25);
 });
+
+test('explicit scholarly notices distinguish status clear, unknown, concern and ordinary comments', async()=>{
+  const read = async metadata => {
+    const reader=createEvidenceSourceReader({userAgent:'EviMedTest',readWeb:async()=>{throw new Error('Unexpected web fallback');},transport:async({url})=>({status:200,headers:{},body:Buffer.from(url.pathname==='/robots.txt'?'User-agent: *\nAllow: /\n':JSON.stringify({resultList:{result:[{id:'12345',source:'MED',abstractText:'Synthetic abstract',...metadata}]}}))})});
+    return reader('https://pubmed.ncbi.nlm.nih.gov/12345/');
+  };
+  assert.equal((await read({isRetracted:'N'})).publicationStatus,null);
+  assert.equal((await read({})).publicationStatus,undefined);
+  assert.equal((await read({isRetracted:'N',commentCorrectionList:{commentCorrection:[{type:'Comment in'}]}})).publicationStatus,null);
+  assert.equal((await read({commentCorrectionList:{commentCorrection:[{type:'Expression of concern in',reference:'Synthetic official notice'}]}})).publicationStatus.kind,'concern');
+});

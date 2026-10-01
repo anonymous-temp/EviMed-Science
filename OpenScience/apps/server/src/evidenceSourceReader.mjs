@@ -2,6 +2,43 @@ import { createHash } from "node:crypto";
 import { parseFragment } from "parse5";
 import { RobotsPolicy } from "./webReadRobots.mjs";
 import { HostPacer } from "./webReadLimits.mjs";
+import { evidencePublicationStatus } from "./evidenceCardContent.mjs";
+
+/** Only explicit bibliographic notices count; ordinary comments are not corrections.
+ * Undefined means that the record supplied no status, null means verified clear.
+ * @param {any} record */
+function publicationStatus(record) {
+  const types = record.pubTypeList?.pubType ?? [];
+  const relations = record.commentCorrectionList?.commentCorrection ?? [];
+  const kindOf = (/** @type {string} */ type) => {
+    const normalized = type.toLowerCase().replace(/\s+/g, " ").trim();
+    if (["retracted publication", "retraction of publication", "retraction in", "retraction of"].includes(normalized)) return "retracted";
+    if (["expression of concern", "expression of concern in", "expression of concern for"].includes(normalized)) return "concern";
+    if (["published erratum", "erratum in", "erratum for", "corrected and republished in", "corrected and republished from"].includes(normalized)) return "corrected";
+    return null;
+  };
+  const notices = [];
+  const kinds = new Set();
+  for (const type of types) {
+    const kind = typeof type === "string" ? kindOf(type) : null;
+    if (kind) { kinds.add(kind); notices.push(type); }
+  }
+  for (const relation of relations) {
+    const kind = typeof relation.type === "string" ? kindOf(relation.type) : null;
+    if (kind) {
+      kinds.add(kind);
+      notices.push([relation.type, relation.reference, relation.note,
+        relation.id ? `${relation.source ?? "MED"}:${relation.id}` : null]
+        .filter(value=>typeof value === "string" && value.trim()).join(" · ").slice(0,1000));
+    }
+  }
+  const retracted = record.isRetracted === true || String(record.isRetracted).toUpperCase() === "Y";
+  if (retracted) { kinds.add("retracted"); notices.push("Europe PMC: isRetracted=Y"); }
+  const kind = ["retracted", "concern", "corrected"].find(value=>kinds.has(value));
+  if (kind) return evidencePublicationStatus({kind,notices:notices.slice(0,10)});
+  if (record.isRetracted === false || String(record.isRetracted).toUpperCase() === "N") return null;
+  return undefined;
+}
 
 /** Canonical retained scientific text; excludes JATS front matter and references.
  * @param {string} markup @param {boolean} [fullText] */
@@ -90,27 +127,30 @@ export function createEvidenceSourceReader({
     let markup = response.body.toString("utf8"),
       title = "",
       coverage = "full-text";
+    let status;
     if (pmid) {
       const result = JSON.parse(markup)?.resultList?.result?.find(
         (r) => String(r.id) === pmid && r.source === "MED",
       );
-      if (typeof result?.abstractText !== "string")
+      status = result ? publicationStatus(result) : undefined;
+      if (typeof result?.abstractText !== "string" && !status)
         throw Object.assign(
           new Error("The primary record contains no abstract."),
           { code: "evidence_abstract_unavailable" },
         );
-      markup = result.abstractText;
+      markup = result.abstractText ?? "";
       title = result.title ?? "";
-      coverage = "abstract";
+      coverage = markup ? "abstract" : "excerpt";
     }
     const text = canonicalEvidenceSourceText(markup, Boolean(pmcid));
-    if (!text)
+    if (!text && !status)
       throw Object.assign(new Error("No primary source text."), {
         code: "evidence_source_empty",
       });
     return {
       text,
       coverage,
+      ...(status !== undefined ? {publicationStatus:status} : {}),
       receipt: {
         url: rawUrl,
         finalUrl: target.href,
