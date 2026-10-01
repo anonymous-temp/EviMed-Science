@@ -9,6 +9,7 @@ import {
   evidencePublicationStatus,
 } from "./evidenceCardContent.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { frontierProviderUnavailable, FRONTIER_PROVIDER_RETRY_MS, FRONTIER_PROVIDER_REFUSED_WAIT_MS } from "./frontierPipeline.mjs";
 
 const codeOf = (/** @type {any} */ e) =>
   /^[a-z0-9_]{2,100}$/.test(e?.code ?? "")
@@ -55,6 +56,7 @@ export class EvidenceEditorial {
     this.running = false;
     this.lastError = null;
     this.lastRunAt = null;
+    this.providerPausedUntil = 0;
     this.counters = {
       checked: 0,
       unchanged: 0,
@@ -78,7 +80,8 @@ export class EvidenceEditorial {
       );
     await migrateEvidenceZones(this.database);
     await this.database.transaction(async (/** @type {any} */ client) => {
-      const zone = await this.service.zoneRow(client, user, zoneId, true);
+      const rewriteRequest = method === "POST" && Object.keys(body).length > 0;
+      const zone = await this.service.zoneRow(client, user, zoneId, !rewriteRequest);
       if (zone.user_id !== user.id)
         throw new HttpError(
           403,
@@ -136,12 +139,41 @@ export class EvidenceEditorial {
           ],
         );
       } else if (method === "POST") {
-        if (Object.keys(body).length)
-          throw new HttpError(
-            400,
-            "evidence_invalid",
-            "Refresh does not accept additional fields.",
-          );
+        if (rewriteRequest) {
+          if (Object.keys(body).some(key=>!["cardId","expectedRevision"].includes(key)) ||
+              typeof body.cardId !== "string" || !body.cardId || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 1)
+            throw new HttpError(400,"evidence_invalid","A card rewrite requires its id and current revision.");
+          // Match internal save's job -> zone -> card lock order. A running job
+          // cannot be replaced by an owner request while its save holds these locks.
+          let jobs = (await client.query(`SELECT * FROM evimed_frontier.evidence_editorial_jobs
+            WHERE zone_id=$1 AND card_id=$2 ORDER BY updated_at DESC,id FOR UPDATE`,[zoneId,body.cardId])).rows;
+          if (!jobs.length) {
+            const existing = await this.service.cardRow(client,user,zoneId,body.cardId);
+            const identityKey = `card:${existing.id}`;
+            // Resolve a first-schedule race before taking the zone/card locks:
+            // an internal save may already hold the conflicting job's lock.
+            await client.query(`INSERT INTO evimed_frontier.evidence_editorial_jobs(id,zone_id,identity_key,card_id,source_item_id,source_url,source_title,payload)
+              VALUES($1,$2,$3,$4,$5,$6,$7,'{}'::jsonb) ON CONFLICT(zone_id,identity_key) DO NOTHING`,[
+              `ej_${evidenceHash([zoneId,identityKey]).slice(0,32)}`,zoneId,identityKey,existing.id,existing.source_item_id,existing.sources[0]?.url??null,existing.sources[0]?.title??null,
+            ]);
+            jobs = (await client.query(`SELECT * FROM evimed_frontier.evidence_editorial_jobs
+              WHERE zone_id=$1 AND card_id=$2 ORDER BY updated_at DESC,id FOR UPDATE`,[zoneId,body.cardId])).rows;
+          }
+          if (jobs.some(job=>job.state==="running")) throw new HttpError(409,"evidence_revision_conflict","This card already has an active editorial job.");
+          const currentZone = await this.service.zoneRow(client,user,zoneId,true);
+          const current = await this.service.cardRow(client,user,zoneId,body.cardId,true);
+          if (currentZone.state !== "published" || current.state !== "published" || current.user_id !== user.id || current.revision !== body.expectedRevision ||
+              current.editorial?.author?.kind !== "ai" || !current.editorial?.contentHash ||
+              current.editorial.automationContentHash !== current.editorial.contentHash || evidenceContentHash(current) !== current.editorial.contentHash)
+            throw new HttpError(409,"evidence_revision_conflict","Only the current published AI-managed card may be rewritten.");
+          const enabled = await client.query("SELECT zone_id FROM evimed_frontier.evidence_automation WHERE zone_id=$1 AND enabled",[zoneId]);
+          if (!enabled.rowCount) throw new HttpError(409,"evidence_automation_disabled","Enable evidence updates before rewriting.");
+          const payload = {managedRevision:current.revision,rewriteRevision:current.revision};
+          await client.query(`UPDATE evimed_frontier.evidence_editorial_jobs
+              SET state='pending',attempts=0,available_at=clock_timestamp(),last_error=NULL,lease_owner=NULL,lease_until=NULL,
+                payload=COALESCE(payload,'{}'::jsonb)||$2::jsonb,updated_at=clock_timestamp() WHERE id=$1`,[jobs[0].id,JSON.stringify(payload)]);
+          return;
+        }
         const result = await client.query(
           "UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1 AND enabled RETURNING zone_id",
           [zoneId],
@@ -480,6 +512,7 @@ export class EvidenceEditorial {
       );
     reviewerActor = card?.editorial?.reviewer?.userId ?? null;
     const baseRevision = card?.revision ?? null;
+    const rewriteRequested = card && job.payload?.rewriteRevision === baseRevision;
     if (
       card &&
       card.editorial?.automationContentHash !== card.editorial?.contentHash
@@ -637,7 +670,7 @@ export class EvidenceEditorial {
       await this.finish(job,"completed");
       return;
     }
-    if (unchanged && (card.editorial.status === "ai-reviewed" || publicationFindings.length)) {
+    if (unchanged && !rewriteRequested && (card.editorial.status === "ai-reviewed" || publicationFindings.length)) {
       const refreshed = await this.database.query(
         `UPDATE evimed_frontier.evidence_cards SET sources=$3::jsonb,editorial=editorial||$4::jsonb
         WHERE id=$1 AND revision=$2 AND state='published' AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id JOIN evimed_frontier.evidence_zones z ON z.id=j.zone_id WHERE j.id=$5 AND j.lease_owner=$6 AND j.state='running' AND j.lease_until>clock_timestamp() AND a.enabled AND z.state='published') RETURNING id`,
@@ -668,7 +701,7 @@ export class EvidenceEditorial {
       await this.finish(job, "completed");
       return;
     }
-    if (!unchanged) {
+    if (!unchanged || rewriteRequested) {
       await this.database.query(
         `UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2`,
         [
@@ -759,7 +792,7 @@ export class EvidenceEditorial {
             status: "review-pending",
             sourceCheckedAt,
             sourceChecks,
-            sourceChangedAt: card ? this.now().toISOString() : null,
+            sourceChangedAt: card ? (!unchanged ? this.now().toISOString() : card.editorial?.sourceChangedAt ?? null) : null,
             findings: [],
           },
         },
@@ -779,14 +812,16 @@ export class EvidenceEditorial {
         "UPDATE evimed_frontier.evidence_editorial_jobs SET card_id=$3 WHERE id=$1 AND lease_owner=$2",
         [job.id, this.workerId, card.id],
       );
-      await this.database.query(
-        "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
+      const authored = await this.database.query(
+        `UPDATE evimed_frontier.evidence_editorial_jobs SET payload=(COALESCE(payload,'{}'::jsonb)-'rewriteRevision')||$3::jsonb
+          WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,
         [
           job.id,
           this.workerId,
           JSON.stringify({ managedRevision: card.revision }),
         ],
       );
+      if (!authored.rowCount) throw new HttpError(409,"evidence_revision_conflict","The author save lost its editorial lease.");
       this.counters.published++;
     }
     await this.requireModel();
@@ -868,6 +903,7 @@ export class EvidenceEditorial {
         "UPDATE evimed_frontier.evidence_editorial_jobs SET state='failed',lease_owner=NULL,lease_until=NULL,last_error='evidence_lease_expired' WHERE state='running' AND lease_until<clock_timestamp() AND attempts>=3",
       );
       await this.schedule();
+      if (this.now().getTime() < this.providerPausedUntil) return;
       const job = await this.claim();
       if (!job) return;
       try {
@@ -875,6 +911,19 @@ export class EvidenceEditorial {
         this.lastError = null;
       } catch (e) {
         this.lastError = codeOf(e);
+        if (frontierProviderUnavailable(e)) {
+          const waitMs = this.lastError === "model_gateway_payment_required" ? FRONTIER_PROVIDER_REFUSED_WAIT_MS : FRONTIER_PROVIDER_RETRY_MS;
+          const waiting = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs
+            SET state='pending',attempts=greatest(0,attempts-1),available_at=clock_timestamp()+$3*interval '1 millisecond',
+              last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp()
+            WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,
+            [job.id,this.workerId,waitMs,this.lastError]);
+          if (waiting.rowCount) {
+            this.providerPausedUntil = this.now().getTime()+waitMs;
+            await this.database.query("UPDATE evimed_frontier.evidence_automation SET last_error=$2 WHERE zone_id=$1",[job.zone_id,this.lastError]);
+          }
+          return;
+        }
         if (this.lastError === "evidence_budget_wait") {
           await this.database.query(
             "UPDATE evimed_frontier.evidence_editorial_jobs SET attempts=greatest(0,attempts-1) WHERE id=$1 AND lease_owner=$2",

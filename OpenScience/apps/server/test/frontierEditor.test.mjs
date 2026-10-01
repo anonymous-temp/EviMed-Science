@@ -132,12 +132,14 @@ test("a batch the provider fails with an error status is not asked again entry b
   assert.equal(result.errors.size, 20);
   assert.equal(overloaded.counters.screenSingles, 0);
 
-  // A call that ran out of time may have been too big: that one is still split.
+  // A deadline is a provider wait too; shrinking twenty inputs must not spend
+  // twenty more calls before the pipeline can record its cooldown.
   const slow = stubModel([refuse("frontier_model_timeout"), refuse("frontier_model_timeout"),
     () => verdicts(1), () => verdicts(1)]);
   const timed = await new FrontierEditor(config, { owner, callModel: slow.callModel }).screen(batch(2));
-  assert.equal(slow.calls.length, 4);
-  assert.equal(timed.verdicts.size, 2);
+  assert.equal(slow.calls.length, 2);
+  assert.equal(timed.verdicts.size, 0);
+  assert.deepEqual([...timed.errors.values()],["frontier_model_timeout","frontier_model_timeout"]);
 });
 
 test("screening says whether a piece covers several stories, and it defaults to one", () => {
@@ -462,4 +464,37 @@ test("author gateway preserves DOMException timeout and frozen provider refusal 
     assert.equal(editor.counters.callFailures,1);assert.equal(editor.lastError,code);
   }
   assert.equal(original.code,20);
+});
+
+test("pending edits and screen errors preserve provider status and confirmed transport codes",async()=>{
+  for (const original of [
+    Object.assign(new Error("Provider refused"),{code:"model_gateway_upstream_error",upstreamStatus:429}),
+    Object.assign(new Error("Provider refused"),{code:"model_gateway_upstream_error",upstreamStatus:503}),
+    new TypeError("fetch failed",{cause:Object.assign(new Error("reset"),{code:"ECONNRESET"})}),
+  ]) {
+    const editor=new FrontierEditor(config,{owner,callModel:async()=>{throw original;}});
+    const edited=await editor.edit(item());
+    assert.equal(edited.verification,"pending");
+    assert.equal(edited.upstreamStatus,original.upstreamStatus);
+    assert.equal(edited.networkCode,original.cause?.code);
+    const screened=await editor.screen(batch(1));
+    assert.deepEqual(screened.providerErrors.get("e1"),{
+      ...(original.upstreamStatus?{upstreamStatus:original.upstreamStatus}:{}),
+      ...(original.cause?.code?{networkCode:original.cause.code}:{}),
+    });
+  }
+});
+
+test("confirmed timeout or network outage never fans a screening batch out into paid single calls",async()=>{
+  for (const error of [
+    new DOMException("Timeout","AbortError"),
+    new TypeError("fetch failed",{cause:Object.assign(new Error("reset"),{code:"ECONNRESET"})}),
+  ]) {
+    let calls=0;
+    const editor=new FrontierEditor(config,{owner,callModel:async()=>{calls++;throw error;}});
+    const result=await editor.screen(batch(20));
+    assert.equal(calls,2,"at most the original whole-batch retry; no per-entry requests");
+    assert.equal(result.errors.size,20);
+    assert.equal(editor.counters.screenSingles,0);
+  }
 });

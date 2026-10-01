@@ -109,8 +109,22 @@ export const FRONTIER_MAX_ATTEMPTS = 3;
  * holding the feed up long after the top-up.
  */
 export const FRONTIER_PROVIDER_REFUSED_WAIT_MS = 30 * MINUTE;
+/** A temporary transport/provider outage gets one new ask after five minutes. */
+export const FRONTIER_PROVIDER_RETRY_MS = 5 * MINUTE;
 /** The provider's answer for a spent balance, as the model gateway names it. */
 const PROVIDER_BALANCE_REFUSAL = "model_gateway_payment_required";
+/** Only observed provider/transport failures wait; malformed content still spends an attempt.
+ * @param {any} error */
+export function frontierProviderUnavailable(error) {
+  const code = typeof error === "string" ? error : error?.code;
+  if ([PROVIDER_BALANCE_REFUSAL, "frontier_model_timeout", "model_gateway_timeout",
+    "model_gateway_rate_limited", "model_gateway_upstream_unavailable"].includes(code)) return true;
+  const status = error?.upstreamStatus;
+  if (code === "model_gateway_upstream_error" && Number.isInteger(status) && (status === 429 || (status >= 500 && status <= 599))) return true;
+  const networkCode = error?.networkCode ?? error?.cause?.cause?.code ?? error?.cause?.code;
+  return code === "frontier_model_failed" && typeof networkCode === "string"
+    && /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EHOSTDOWN|ETIMEDOUT|EPIPE|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT|UND_ERR_BODY_TIMEOUT|UND_ERR_SOCKET)$/.test(networkCode);
+}
 /** The 72-hour rule of `timeline_at` (plan §6.1). */
 export const FRONTIER_TIMELINE_WINDOW_MS = 72 * HOUR;
 /** A lane with an item at or above this score today gets at least one selected. */
@@ -499,8 +513,10 @@ export class FrontierPipeline {
       // Rows released to wait out a provider balance refusal, never charged an attempt.
       providerRefusedWaits: 0,
     };
-    /** Until when (epoch ms) the model is not asked, after a balance refusal. @type {number | null} */
+    /** Until when (epoch ms) the model is not asked after a provider outage. @type {number | null} */
     this.providerPausedUntil = null;
+    /** @type {string | null} */
+    this.providerPauseReason = null;
     /** @type {string | null} */
     this.lastError = null;
     /** @type {string | null} */
@@ -583,7 +599,7 @@ export class FrontierPipeline {
         if (key in this.counters && typeof this.counters[key] === "number") this.counters[key] += summary[key];
       }
       this.lastBatch = { at: now.toISOString(), ...summary };
-      this.lastError = null;
+      this.lastError = this.#providerPause(now) ? this.providerPauseReason ?? null : null;
       return summary;
     } catch (error) {
       this.lastError = codeOf(error);
@@ -736,9 +752,13 @@ export class FrontierPipeline {
     return this.providerPausedUntil !== null && now.getTime() < this.providerPausedUntil ? new Date(this.providerPausedUntil) : null;
   }
 
-  /** The provider refused for its balance: stop asking for a while. @param {Date} now @returns {Date} */
-  #pauseForProvider(now) {
-    this.providerPausedUntil = Math.max(this.providerPausedUntil ?? 0, now.getTime() + FRONTIER_PROVIDER_REFUSED_WAIT_MS);
+  /** Stop asking during a provider outage; a balance refusal waits longer.
+   * @param {Date} now @param {string} [reason] @returns {Date} */
+  #pauseForProvider(now, reason = "provider-refused") {
+    const waitMs = reason === "provider-refused" || reason === PROVIDER_BALANCE_REFUSAL
+      ? FRONTIER_PROVIDER_REFUSED_WAIT_MS : FRONTIER_PROVIDER_RETRY_MS;
+    this.providerPausedUntil = Math.max(this.providerPausedUntil ?? 0, Math.max(now.getTime(),this.now().getTime()) + waitMs);
+    this.providerPauseReason = reason;
     return new Date(this.providerPausedUntil);
   }
 
@@ -751,6 +771,11 @@ export class FrontierPipeline {
   /** A processing error: an attempt spent; the third fails the entry. @param {any} entry @param {unknown} error @param {FrontierBatchSummary} summary */
   async #failEntry(entry, error, summary) {
     const code = codeOf(error);
+    if (frontierProviderUnavailable(error)) {
+      await this.#waitEntry(entry, this.#pauseForProvider(this.now(), code), code);
+      summary.deferred += 1;
+      return;
+    }
     const attempts = Number(entry.attempts) + 1;
     try {
       await this.database.query(`UPDATE evimed_frontier.entries SET attempts = $2::integer, state_reason = $3,
@@ -960,7 +985,7 @@ export class FrontierPipeline {
     // The provider refused for its balance a moment ago: wait it out.
     const paused = this.#providerPause(now);
     if (paused) {
-      for (const entry of entries) await this.#waitEntry(entry, paused, "provider-refused");
+      for (const entry of entries) await this.#waitEntry(entry, paused, this.providerPauseReason ?? "provider-refused");
       summary.deferred += entries.length;
       this.counters.providerRefusedWaits += entries.length;
       return;
@@ -981,7 +1006,7 @@ export class FrontierPipeline {
       excerpt: String(entry.summary_raw ?? "").slice(0, FRONTIER_SCREEN_EXCERPT_CHARS),
       allowedLanes: allowedLanes(sources.get(entry.source_id)),
     }));
-    const { verdicts, errors } = await this.editor.screen(inputs);
+    const { verdicts, errors, providerErrors } = await this.editor.screen(inputs);
     for (const entry of entries) {
       const source = sources.get(entry.source_id);
       try {
@@ -996,6 +1021,9 @@ export class FrontierPipeline {
             await this.#waitEntry(entry, this.#pauseForProvider(now), "provider-refused");
             summary.deferred += 1;
             this.counters.providerRefusedWaits += 1;
+          } else if (frontierProviderUnavailable({code,...providerErrors?.get(String(entry.id))})) {
+            await this.#waitEntry(entry, this.#pauseForProvider(now, code), code);
+            summary.deferred += 1;
           } else await this.#failEntry(entry, Object.assign(new Error(code), { code }), summary);
           continue;
         }
@@ -1333,8 +1361,12 @@ export class FrontierPipeline {
           let result = null;
           if (decision.edit) {
             result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
+            if (frontierProviderUnavailable({...result,code:result.error})) {
+              await this.#waitItem(item,this.#pauseForProvider(now,result.error),result.error);
+              summary.deferred += 1;
+              continue;
+            }
             if (result.verification !== "pending") summary.edited += 1;
-            else if (result.error === PROVIDER_BALANCE_REFUSAL) this.#pauseForProvider(now);
           } else {
             this.counters.editSkipped[decision.reason] += 1;
             summary.deferred += 1;
@@ -1365,17 +1397,15 @@ export class FrontierPipeline {
       try {
         const { texts, source, entry } = await this.#itemContext(item);
         if (this.#providerPause(now)) {
-          // Refused for the balance earlier in this batch: released untouched.
-          await this.#releaseItem(item);
+          // An outage earlier in this batch leaves all remaining edits untouched.
+          await this.#waitItem(item, this.#providerPause(now), this.providerPauseReason ?? "provider-refused");
           continue;
         }
         const result = await this.editor.edit(this.#editItem(item, texts, entry, source, context.glossary));
-        if (result.verification === "pending" && result.error === PROVIDER_BALANCE_REFUSAL) {
-          // Our account, not the item: a wait, never an attempt — a third
-          // would have left it title-only for good.
-          this.#pauseForProvider(now);
-          await this.#releaseItem(item);
-          this.counters.providerRefusedWaits += 1;
+        if (frontierProviderUnavailable({...result,code:result.error})) {
+          await this.#waitItem(item, this.#pauseForProvider(now, result.error), result.error);
+          summary.deferred += 1;
+          if (result.error === PROVIDER_BALANCE_REFUSAL) this.counters.providerRefusedWaits += 1;
           continue;
         }
         if (result.verification === "pending") {
@@ -1398,15 +1428,23 @@ export class FrontierPipeline {
     }
   }
 
-  /** Release a claimed item without spending an attempt. @param {any} item */
-  async #releaseItem(item) {
-    await this.database.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = NULL WHERE id = $1", [item.id]);
+  /** The existing claim predicate also respects an ownerless future lease_until.
+   * @param {any} item @param {Date} until @param {string} reason */
+  async #waitItem(item, until, reason) {
+    const released = await this.database.query(`UPDATE evimed_frontier.items SET lease_owner=NULL,lease_until=$3
+      WHERE id=$1 AND lease_owner=$2 RETURNING id`, [item.id,this.workerId,until]);
+    if (released.rowCount) await this.database.query("UPDATE evimed_frontier.entries SET state_reason=$2 WHERE item_id=$1",[item.id,reason]);
   }
 
   /** @param {any} item @param {unknown} error @param {FrontierBatchSummary} summary */
   async #failItem(item, error, summary) {
     const code = codeOf(error);
     this.lastError = code;
+    if (frontierProviderUnavailable(error)) {
+      await this.#waitItem(item, this.#pauseForProvider(this.now(), code), code);
+      summary.deferred += 1;
+      return;
+    }
     try {
       const attempts = Number(item.attempts) + 1;
       const published = item.state === "published";

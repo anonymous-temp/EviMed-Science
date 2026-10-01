@@ -577,6 +577,67 @@ test("the day's budget counts an uncertain call at its recorded bound, not its r
   assert.equal((await pipeline.budget(clock)).spentCny, 0.75);
 });
 
+test("transient owed edits preserve attempts and existing prose across restart; schema failures still exhaust", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T02:00:00Z");
+  const setup = pipelineWith({now:()=>clock});
+  const delivered = await deliver({source_id:"m-stat",title:"Kidney therapy trial [score:60]",summary:"S".repeat(200)});
+  setup.plugin.texts.set(delivered.pluginEntryId,{entry_id:delivered.pluginEntryId,revision:1,status:"unavailable",enrichment:{}});
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  await database.query("UPDATE evimed_frontier.items SET title_zh='Existing title',summary_zh='Existing valid prose',attempts=2 WHERE id=$1",[id]);
+  const edit = setup.editor.edit.bind(setup.editor);
+  clock = new Date("2026-09-22T12:00:00Z");
+  for (const failure of [
+    {error:"frontier_model_timeout"},
+    {error:"model_gateway_upstream_error",upstreamStatus:429},
+    {error:"model_gateway_upstream_error",upstreamStatus:503,verification:"title-only"},
+    {error:"frontier_model_failed",networkCode:"ECONNRESET"},
+    {error:"model_gateway_payment_required",verification:"title-only",waitMinutes:30},
+  ]) {
+    let calls=0;
+    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);return {verification:"pending",...failure};};
+    const {pipeline}=pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin});
+    await pipeline.processBatch();
+    const waiting=await item(id);
+    assert.deepEqual([waiting.attempts,waiting.editor_version,waiting.summary_zh,waiting.lease_owner],[2,null,"Existing valid prose",null]);
+    const waitMs=(failure.waitMinutes??5)*60_000;
+    assert.equal(new Date(waiting.lease_until).getTime(),clock.getTime()+waitMs);
+    assert.equal((await entry(delivered.id)).state_reason,failure.error);
+    // A fresh process must respect the ownerless durable cooldown too.
+    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    assert.equal(calls,1);
+    clock=new Date(clock.getTime()+waitMs+1);
+  }
+  setup.editor.edit=edit;
+  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  assert.equal((await item(id)).verification,"passed");
+  assert.equal((await item(id)).attempts,0);
+  // A promoted update whose content repair lost the provider keeps its old
+  // valid prose too, without reporting that partial response as an edit.
+  await database.query("UPDATE evimed_frontier.items SET state='screened',editor_version=NULL,attempts=2 WHERE id=$1",[id]);
+  const validProse=(await item(id)).summary_zh;
+  setup.editor.edit=async()=>({verification:"title-only",error:"frontier_model_timeout",output:{titleZh:"Partial repair",summaryZh:null}});
+  const deferred=await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  const promotedWait=await item(id);
+  assert.deepEqual([promotedWait.state,promotedWait.attempts,promotedWait.summary_zh,promotedWait.lease_owner],["screened",2,validProse,null]);
+  assert.equal(deferred.edited,0);
+  clock=new Date(clock.getTime()+5*60_000+1);
+  setup.editor.edit=edit;
+  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  assert.equal((await item(id)).state,"published");
+  // Invalid content and an explicit HTTP 400 are not provider waits.
+  for (const failure of [{error:"frontier_edit_invalid"},{error:"model_gateway_upstream_error",upstreamStatus:400}]) {
+    await database.query("UPDATE evimed_frontier.items SET editor_version=NULL,attempts=2 WHERE id=$1",[id]);
+    setup.editor.edit=async()=>({verification:"pending",...failure});
+    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    const exhausted=await item(id);
+    assert.equal(exhausted.attempts,3);
+    assert.equal(exhausted.editor_version,FRONTIER_EDITOR_VERSION);
+    assert.equal(exhausted.lease_until,null);
+  }
+});
+
 test("vectors come after publication and never block it; two concurrent batches never claim one entry twice", options, async () => {
   await reset();
   const clock = new Date("2026-09-22T12:00:00Z");

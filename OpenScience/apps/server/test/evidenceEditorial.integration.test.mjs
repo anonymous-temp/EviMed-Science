@@ -171,6 +171,142 @@ const reviewCard = async () => {
   ).evidence;
 };
 
+test("owner rewrite of unchanged sources reuses one job and independent review; empty refresh remains a cheap check",options,async()=>{
+  await reviewCard();
+  await worker.tick();
+  const first=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+  const due=(await db.query("SELECT next_run_at FROM evimed_frontier.evidence_automation WHERE zone_id=$1",[zone.id])).rows[0].next_run_at;
+  await db.query("INSERT INTO evimed_frontier.evidence_editorial_jobs(id,zone_id,identity_key,state,attempts) VALUES('other-failed',$1,'other-question','failed',3)",[zone.id]);
+  await service.act(user,zone.id,"feedback",{expectedRevision:zone.revision,feedbackInfo:"Clarify the comparison and effect measure."});
+  const write=worker.editor.evidenceCard;
+  let input;
+  worker.editor.evidenceCard=async value=>{input=value;return write(value);};
+  await worker.automation(user,zone.id,{cardId:card.id,expectedRevision:card.revision},"POST");
+  const requested=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1",[first.id])).rows[0];
+  assert.equal(requested.payload.rewriteRevision,card.revision);
+  assert.equal(requested.state,"pending");
+  assert.equal((await db.query("SELECT next_run_at FROM evimed_frontier.evidence_automation WHERE zone_id=$1",[zone.id])).rows[0].next_run_at.getTime(),due.getTime());
+  assert.deepEqual((await db.query("SELECT state,attempts FROM evimed_frontier.evidence_editorial_jobs WHERE id='other-failed'")).rows[0],{state:"failed",attempts:3});
+  await worker.tick();
+  const revised=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.deepEqual([authorCalls,reviewCalls],[1,1]);
+  assert.equal(revised.revision,card.revision+2);
+  assert.equal(revised.editorial.sourceChangedAt,card.editorial.sourceChangedAt);
+  assert.equal(revised.editorial.status,"ai-reviewed");
+  assert.equal(revised.editorial.reviewRevision,revised.revision);
+  assert.equal(revised.editorial.contentHash,evidenceContentHash(revised));
+  assert.equal(revised.editorial.reviewOrigin,"model");
+  assert.ok(input.readerQuestions.some(question=>question.origin==="zone-question"&&question.text.includes("effect measure")));
+  const completed=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1",[first.id])).rows[0];
+  assert.equal(completed.payload.rewriteRevision,undefined);
+  assert.equal(completed.state,"completed");
+  await db.query("DELETE FROM evimed_frontier.evidence_editorial_jobs WHERE id='other-failed'");
+  await worker.automation(user,zone.id,{},"POST");
+  await worker.tick();
+  assert.deepEqual([authorCalls,reviewCalls],[1,1]);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.revision,revised.revision);
+});
+
+test("same-source rewrite review retry consumes the request without repeating authoring",options,async()=>{
+  await reviewCard();
+  const reviewed=worker.editor.evidenceReview;
+  worker.editor.evidenceReview=async()=>{reviewCalls++;throw Object.assign(new Error("Temporary deadline"),{code:"frontier_model_timeout"});};
+  await worker.automation(user,zone.id,{cardId:card.id,expectedRevision:card.revision},"POST");
+  await worker.tick();
+  const waiting=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+  assert.equal(waiting.payload.rewriteRevision,undefined);
+  assert.equal(waiting.payload.managedRevision,card.revision+1);
+  assert.deepEqual([authorCalls,reviewCalls],[1,1]);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.editorial.status,"review-pending");
+  worker.providerPausedUntil=0;
+  worker.editor.evidenceReview=reviewed;
+  await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp() WHERE id=$1",[waiting.id]);
+  await worker.tick();
+  assert.deepEqual([authorCalls,reviewCalls],[1,2]);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.editorial.status,"ai-reviewed");
+});
+
+test("owner rewrite rejects foreign, stale, running and manually revised cards",options,async()=>{
+  await reviewCard();
+  const request={cardId:card.id,expectedRevision:card.revision};
+  await assert.rejects(worker.automation({id:"other-account"},zone.id,request,"POST"),{code:"evidence_owner_required"});
+  await assert.rejects(worker.automation(user,zone.id,{...request,expectedRevision:card.revision-1},"POST"),{code:"evidence_revision_conflict"});
+  await assert.rejects(worker.automation(user,zone.id,{cardId:card.id},"POST"),{code:"evidence_invalid"});
+  await worker.automation(user,zone.id,request,"POST");
+  const claimed=await worker.claim();
+  await assert.rejects(worker.automation(user,zone.id,request,"POST"),{code:"evidence_revision_conflict"});
+  assert.equal((await db.query("SELECT lease_owner FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1",[claimed.id])).rows[0].lease_owner,worker.workerId);
+  await worker.finish(claimed,"completed");
+  const edited=(await service.save(user,{expectedRevision:card.revision,body:"An account changed the scientific answer."},zone.id,card.id)).evidence;
+  await assert.rejects(worker.automation(user,zone.id,{cardId:card.id,expectedRevision:edited.revision},"POST"),{code:"evidence_revision_conflict"});
+  assert.equal(authorCalls,0);
+});
+
+test("a manual edit after a rewrite request conflicts before authoring",options,async()=>{
+  await reviewCard();
+  await worker.automation(user,zone.id,{cardId:card.id,expectedRevision:card.revision},"POST");
+  await service.save(user,{expectedRevision:card.revision,body:"Manual correction wins."},zone.id,card.id);
+  await worker.tick();
+  assert.equal(authorCalls,0);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.body,"Manual correction wins.");
+  assert.equal((await worker.automation(user,zone.id)).jobs.conflict,1);
+});
+
+test("provider outages preserve editorial attempts and content; restart waits and a later review recovers",options,async()=>{
+  const original=(await service.detail(user,zone.id,card.id)).evidence;
+  const review=worker.editor.evidenceReview;
+  const failures=[
+    {code:"frontier_model_timeout"},
+    {code:"model_gateway_upstream_error",upstreamStatus:429},
+    {code:"model_gateway_upstream_error",upstreamStatus:503},
+    {code:"frontier_model_failed",networkCode:"ECONNRESET"},
+    {code:"model_gateway_payment_required",waitMinutes:30},
+  ];
+  for (const failure of failures) {
+    await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()-interval '1 second' WHERE card_id=$1",[card.id]);
+    worker.providerPausedUntil=0;
+    worker.editor.evidenceReview=async()=>{reviewCalls++;throw Object.assign(new Error("Provider unavailable"),failure);};
+    const started=Date.now();
+    await worker.tick();
+    const waiting=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+    assert.deepEqual([waiting.state,waiting.attempts,waiting.lease_owner,waiting.lease_until,waiting.last_error],["pending",0,null,null,failure.code]);
+    assert.ok(new Date(waiting.available_at).getTime()>=started+(failure.waitMinutes??5)*60_000);
+    assert.equal(evidenceContentHash((await service.detail(user,zone.id,card.id)).evidence),evidenceContentHash(original));
+    const before=reviewCalls;
+    worker.providerPausedUntil=0; // Simulate restart; the database owns the due time.
+    await worker.tick();
+    assert.equal(reviewCalls,before);
+  }
+  worker.editor.evidenceReview=review;
+  worker.providerPausedUntil=0;
+  await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()-interval '1 second' WHERE card_id=$1",[card.id]);
+  await worker.tick();
+  const completed=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+  assert.deepEqual([completed.state,completed.attempts,completed.last_error],["completed",1,null]);
+  assert.equal((await service.detail(user,zone.id,card.id)).evidence.editorial.status,"ai-reviewed");
+});
+
+test("schema failures and explicit HTTP 400 still consume editorial attempts without replacing old content",options,async()=>{
+  const original=(await service.detail(user,zone.id,card.id)).evidence;
+  for (let attempt=1;attempt<=3;attempt++) {
+    worker.editor.evidenceReview=async()=>({findings:[{kind:"source",text:null}]});
+    await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()-interval '1 second' WHERE card_id=$1",[card.id]);
+    await worker.tick();
+    const failed=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+    assert.equal(failed.attempts,attempt);
+    assert.equal(failed.last_error,"evidence_invalid");
+    assert.equal(failed.state,attempt===3?"failed":"pending");
+    assert.equal(evidenceContentHash((await service.detail(user,zone.id,card.id)).evidence),evidenceContentHash(original));
+  }
+  await worker.automation(user,zone.id,{},"POST");
+  worker.editor.evidenceReview=async()=>{throw Object.assign(new Error("Bad request"),{code:"model_gateway_upstream_error",upstreamStatus:400});};
+  await worker.tick();
+  const badRequest=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+  assert.equal(badRequest.attempts,1);
+  assert.equal(badRequest.last_error,"model_gateway_upstream_error");
+  assert.equal(worker.providerPausedUntil,0);
+});
+
 for (const scenario of [
   {
     name: "empty anticoagulation zone skips ectopic atrial tissue",
