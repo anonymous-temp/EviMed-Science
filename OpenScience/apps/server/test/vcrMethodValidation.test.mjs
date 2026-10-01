@@ -19,6 +19,8 @@ test('numerical evidence requires the exact source, runtime, lock and completed 
   const accepted = bindMethodValidation(parsed, identity);
   assert.equal(accepted.status, 'verified');
   assert.equal(bindMethodValidation(parsed, { ...identity, rVersion: 'R version 4.3.3 (2024-02-29)' }).status, 'verified');
+  assert.equal(bindMethodValidation(parsed, { ...identity, rVersion: 'R 4.3.3' }).status, 'verified', 'The actual engine health uses paste("R", getRversion()).');
+  assert.equal(bindMethodValidation(parsed, { ...identity, rVersion: 'R 4.4.0' }).status, 'unmeasured');
   for (const patch of [{ numericalSourceDigest: 'e'.repeat(64) }, { packageLockHash: 'e'.repeat(64) }, { rVersion: '4.4.0' }, { ok: false }, { numericalSourceDigest: null }]) {
     assert.equal(bindMethodValidation(parsed, { ...identity, ...patch }).status, 'unmeasured');
   }

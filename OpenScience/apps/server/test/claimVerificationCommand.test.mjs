@@ -74,3 +74,53 @@ test("only a claim matrix is read, and a claim cannot point the check outside th
     assert.notEqual(result.claims[0].status, "verified", "a traversing path is never read as a preserved source");
   });
 });
+
+test("a synthesized claim's explicit bond keeps its own verdict, source type and DOI", async () => {
+  await withProject(async ({ project }) => {
+    const claim = {
+      claimId: "CLM-053", claim: "Two sources.", claimType: "synthesized",
+      ...source({ sourceUrl: "https://www.nice.org.uk/guidance/ng136", identifier: "DOI:10.1234/explicit", supportQuote: "This explicit top-level quotation is not present in the preserved document." }),
+      supportingSources: [source(), source()],
+    };
+    const matrixPath = "deliverables/review/clinical-evidence-matrix.json";
+    await writeFile(path.join(project.workspaceDir, matrixPath), JSON.stringify({ claims: [claim] }), "utf8");
+    const config = { maxFileBytes: 2_000_000 };
+    const asked = [];
+    const registry = createCommandRegistry({ config, runtimeManager: {}, sourceUpdates: {
+      lookup: async (dois) => { asked.push(...dois); return new Map([["10.1234/explicit", []]]); },
+    } });
+    const result = await registry.invoke("claim_verification", { path: matrixPath }, { config, project });
+    assert.equal(result.claims[0].status, "quote_not_found");
+    assert.deepEqual(result.claims[0].sources.map((entry) => [entry.status, entry.sourceType]), [
+      ["verified", "other"], ["verified", "other"], ["quote_not_found", "guideline"],
+    ]);
+    assert.deepEqual(asked, ["10.1234/explicit"]);
+    assert.equal(result.claims[0].sources[2].doi, "10.1234/explicit");
+    assert.deepEqual(result.claims[0].sources[2].updates, []);
+  });
+});
+
+for (const artifactPath of ["./.evimed-sources/PMC1/abc/fulltext.md", ".evimed-sources/PMC1/abc/../abc/fulltext.md", ".evimed-sources/../../outside.md"]) {
+  test(`an explicit bond at ${artifactPath} keeps its origin without making its path readable`, async () => {
+    await withProject(async ({ project }) => {
+      const claim = {
+        claimId: "CLM-053", claim: "Two sources.", claimType: "synthesized",
+        ...source({ artifactPath, sourceUrl: "https://www.nice.org.uk/guidance/ng136", identifier: "DOI:10.1234/explicit", supportQuote: "This explicit quotation is not in the preserved document." }),
+        supportingSources: [source(), source()],
+      };
+      const matrixPath = "deliverables/review/clinical-evidence-matrix.json";
+      await writeFile(path.join(project.workspaceDir, matrixPath), JSON.stringify({ claims: [claim] }), "utf8");
+      const config = { maxFileBytes: 2_000_000 };
+      const registry = createCommandRegistry({ config, runtimeManager: {}, sourceUpdates: {
+        lookup: async () => new Map([["10.1234/explicit", []]]),
+      } });
+      const result = await registry.invoke("claim_verification", { path: matrixPath }, { config, project });
+      assert.equal(result.claims[0].status, "no_quote");
+      assert.deepEqual(result.claims[0].sources.map((entry) => [entry.status, entry.sourceType]), [
+        ["verified", "other"], ["verified", "other"], ["no_quote", "guideline"],
+      ]);
+      assert.equal(result.claims[0].sources[2].artifactPath, null);
+      assert.equal(result.claims[0].sources[2].doi, "10.1234/explicit");
+    });
+  });
+}

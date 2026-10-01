@@ -55,7 +55,7 @@ export function bindMethodValidation(artifact, health, artifactSha256 = null) {
   if (!health?.ok || !HASH.test(health?.numericalSourceDigest ?? '') || !HASH.test(health?.packageLockHash ?? '')) {
     return { status: 'unmeasured', reason: 'engine_identity_unavailable' };
   }
-  const runtimeVersion = /^(?:R version\s+)?(\d+\.\d+\.\d+)(?:[ (].*)?$/.exec(String(health.rVersion ?? ''))?.[1];
+  const runtimeVersion = /^(?:R(?: version)?\s+)?(\d+\.\d+\.\d+)(?:[ (].*)?$/.exec(String(health.rVersion ?? ''))?.[1];
   if (artifact.numericalSourceDigest !== health.numericalSourceDigest || artifact.packageLockHash !== health.packageLockHash || artifact.rVersion !== runtimeVersion) {
     return { status: 'unmeasured', reason: 'engine_identity_changed' };
   }

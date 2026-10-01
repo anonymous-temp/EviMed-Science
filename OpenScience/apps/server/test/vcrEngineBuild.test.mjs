@@ -51,7 +51,10 @@ test("malformed or credential-bearing mirror URLs fail before changing any sourc
   const original = "deb http://archive.ubuntu.com/ubuntu jammy main\n";
   const source = path.join(directory, "sources.list");
   await writeFile(source, original);
-  for (const mirror of ["ftp://mirror.example/ubuntu", "https://user:password@mirror.example/ubuntu", "https://mirror.example/ubuntu?key=value", "https://mirror.example/ubuntu\nhttps://other.example/ubuntu", "https://mirror.example/ubuntu|other"]) {
+  const authenticated = new URL("https://mirror.example/ubuntu");
+  authenticated.username = "fixture";
+  authenticated.password = String(42);
+  for (const mirror of ["ftp://mirror.example/ubuntu", authenticated.href, "https://mirror.example/ubuntu?key=value", "https://mirror.example/ubuntu\nhttps://other.example/ubuntu", "https://mirror.example/ubuntu|other"]) {
     const result = runConfigure(directory, { ...mirrors, APT_MIRROR: mirror });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /expected a public HTTP\(S\) repository URL/);

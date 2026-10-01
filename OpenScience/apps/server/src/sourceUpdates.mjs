@@ -19,6 +19,7 @@
  */
 
 import { doiOf, sourceUpdatesFromCrossref } from "@evimed/domain";
+import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 
 const CROSSREF_WORKS = "https://api.crossref.org/works";
 /** Works per request; Crossref's filter list stays well under URL limits. */
@@ -151,8 +152,9 @@ export async function attachSourceUpdates(verdict, { matrix, sourceArtifacts, lo
   const pending = [];
   for (const claim of verdict.claims) {
     const record = cited.get(claim.claimId);
+    const origins = claimEvidenceSources({ ...record, claimType: claim.claimType });
     claim.sources.forEach((source, index) => {
-      const origin = claim.claimType === "synthesized" ? record?.supportingSources?.[index] : record;
+      const origin = origins[index];
       const doi = doiOf(origin?.identifier) ?? doiOf(origin?.sourceUrl)
         ?? doiFromCapture(source.artifactPath ? sourceArtifacts[source.artifactPath] : null);
       if (doi) pending.push([source, doi]);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import {
-  CLAIM_STATUS_TEXT, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimStatuses, claimVerificationSummary, isClaimMatrixPath,
+  CLAIM_STATUS_TEXT, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimSources, claimStatuses, claimVerificationSummary, isClaimMatrixPath,
   linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath,
 } from "./claimCitations";
 
@@ -105,5 +106,70 @@ describe("claim citations", () => {
     expect(claimGuidance(claim, { ...verified, status: "verified", sources: [] })).toBeNull();
     const single = { claimId: "CLM-011", claimType: "direct", status: "source_unavailable", sources: [{ artifactPath: null, status: "source_unavailable" }] };
     expect(claimGuidance(undefined, single)).toBe("这段引文的原文没有保存，无法自动核对：请到原始来源核实。");
+  });
+
+  it("shows an explicit top-level synthesized quotation in the verification's order and points to its failure", () => {
+    const [claim] = parseClaimMatrix(JSON.stringify({ claims: [{
+      claimId: "CLM-053", claim: "Two reviews.", claimType: "synthesized",
+      artifactPath: ".evimed-sources/a/fulltext.md", supportQuote: "The search ended in June 2019.", sourceTitle: "Earlier review",
+      supportingSources: [
+        { artifactPath: ".evimed-sources/a/fulltext.md", supportQuote: "The search ended in December 2014.", sourceTitle: "Earlier review" },
+        { artifactPath: ".evimed-sources/b/fulltext.md", supportQuote: "Randomized studies were included.", sourceTitle: "Later review" },
+      ],
+    }] })).values();
+    const displayed = claimSources(claim);
+    expect(displayed.map((source) => source.supportQuote)).toEqual([
+      "The search ended in December 2014.", "Randomized studies were included.", "The search ended in June 2019.",
+    ]);
+    const verification = claimVerification({ matrix: { claims: [claim] }, sourceArtifacts: {
+      ".evimed-sources/a/fulltext.md": "The search ended in December 2014.",
+      ".evimed-sources/b/fulltext.md": "Randomized studies were included.",
+    } });
+    const verdict = verification.claims[0];
+    expect(verdict.sources.map((source) => source.artifactPath)).toEqual(displayed.map((source) => source.artifactPath));
+    expect(claimGuidance(claim, verdict)).toBe("第 3 段引文没有在保存的原文中找到：请打开原文核对措辞与数字。");
+    expect(claimStatuses(verification).get(claim.claimId)).toBe("quote_not_found");
+    expect(CLAIM_STATUS_TEXT[verdict.status].tone).toBe("warn");
+    expect(claimSources({ ...claim, supportQuote: claim.supportingSources?.[0].supportQuote })).toEqual(claim.supportingSources);
+  });
+
+  it.each([
+    "./.evimed-sources/a/fulltext.md",
+    ".evimed-sources/a/../a/fulltext.md",
+    ".evimed-sources/../../outside.md",
+  ])("keeps the raw bond at %s visible without making it a file-opening path", (artifactPath) => {
+    const raw = {
+      claimId: "CLM-053", claim: "Two reviews.", claimType: "synthesized",
+      artifactPath, supportQuote: "The search ended in June 2019.", sourceTitle: "Top-level review", identifier: "DOI:10.1000/top",
+      supportingSources: [
+        { artifactPath: ".evimed-sources/a/fulltext.md", supportQuote: "The search ended in December 2014.", sourceTitle: "Earlier review" },
+        { artifactPath: ".evimed-sources/b/fulltext.md", supportQuote: "Randomized studies were included.", sourceTitle: "Later review" },
+      ],
+    };
+    const sourceArtifacts = {
+      ".evimed-sources/a/fulltext.md": "The search ended in December 2014.",
+      ".evimed-sources/b/fulltext.md": "Randomized studies were included.",
+    };
+    const verification = claimVerification({ matrix: { claims: [raw] }, sourceArtifacts });
+    const [parsed] = parseClaimMatrix(JSON.stringify({ claims: [raw] })).values();
+    const displayed = claimSources(parsed);
+    expect(displayed.map((source) => source.sourceTitle)).toEqual(claimEvidenceSources(raw).map((source) => source.sourceTitle));
+    expect(displayed.map((source) => source.supportQuote)).toEqual(claimEvidenceSources(raw).map((source) => source.supportQuote));
+    expect(displayed).toHaveLength(3);
+    expect(displayed[2].artifactPath).toBeUndefined();
+    expect(displayed[2].identifier).toBe("DOI:10.1000/top");
+    expect(verification.claims[0].sources.map((source) => source.status)).toEqual(["verified", "verified", "no_quote"]);
+    expect(verification.claims[0].sources[2].artifactPath).toBeNull();
+    expect(claimVerification({ matrix: { claims: [parsed] }, sourceArtifacts })).toEqual(verification);
+    expect(claimVerificationSummary(verification)?.text).toBe("⚠ 1 条待核对");
+    expect(claimGuidance(parsed, verification.claims[0])).toMatch(/^第 3 段引文缺少/);
+
+    const identical = { ...raw, supportQuote: raw.supportingSources[0].supportQuote };
+    const [parsedIdentical] = parseClaimMatrix(JSON.stringify({ claims: [identical] })).values();
+    expect(claimSources(parsedIdentical)).toHaveLength(claimEvidenceSources(identical).length);
+    expect(claimSources({ ...parsed, supportQuote: undefined })).toHaveLength(2);
+    const noPath = { ...raw, artifactPath: undefined };
+    const [parsedNoPath] = parseClaimMatrix(JSON.stringify({ claims: [noPath] })).values();
+    expect(claimSources(parsedNoPath)).toHaveLength(2);
   });
 });

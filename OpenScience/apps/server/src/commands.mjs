@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 import { evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
+import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { claimVerification } from "./clinicalEvidenceQuality.mjs";
 import {
   HttpError,
@@ -484,8 +485,9 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       const matrixClaims = new Map((Array.isArray(matrix?.claims) ? matrix.claims : []).map((/** @type {any} */ claim) => [String(claim?.claimId), claim]));
       for (const claim of verdict.claims) {
         const cited = matrixClaims.get(claim.claimId);
+        const origins = claimEvidenceSources(cited);
         claim.sources.forEach((/** @type {Record<string, any>} */ source, index) => {
-          const origin = claim.claimType === "synthesized" ? cited?.supportingSources?.[index] : cited;
+          const origin = origins[index];
           source.sourceType = (source.artifactPath && preservedTypes.get(source.artifactPath))
             || evidenceSourceTypeOf({ url: origin?.sourceUrl });
         });
