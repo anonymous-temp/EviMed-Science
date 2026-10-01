@@ -3921,6 +3921,8 @@ export class RuntimeManager {
       }
       throw error;
     }
+    const runtimeUrl = plan.runtimeUrl ?? `http://127.0.0.1:${port}`;
+    const browserSessionAuthority = new URL(runtimeUrl).host;
     const runtime = {
       pluginConfig: plan.pluginConfig,
       // The kernel that is actually running, from one binding. This was once
@@ -3929,19 +3931,22 @@ export class RuntimeManager {
       // with a kernel that had not run it — harmless on its own, and
       // kernel-blind for any reader that branches on it.
       kind: RUNTIME_KERNEL_NAME,
-      url: plan.runtimeUrl ?? `http://127.0.0.1:${port}`,
+      url: runtimeUrl,
       socketPath: plan.socketPath ?? null,
       // Bound to the authority the kernel will actually receive in the `Host`
       // header, which is the URL's host even when the connection is dialled
       // over a unix socket. The kernel derives its cookie name from what it
       // received, so a cookie minted for anything else is not a weaker
       // credential — it is a different cookie the kernel never looks for.
-      cookie: browserSessionSecret
-        ? browserSessionCookie({
-          secret: browserSessionSecret,
-          authority: new URL(plan.runtimeUrl ?? `http://127.0.0.1:${port}`).host,
-        })
-        : null,
+      // Every HTTP request and mux reconnect reads this field. A startup-only
+      // cookie expires after 24 hours even while its runtime remains healthy.
+      // Renew with the same kernel secret, retaining the bounded lifetime and
+      // authority binding without rotating credentials or interrupting a turn.
+      get cookie() {
+        return browserSessionSecret
+          ? browserSessionCookie({ secret: browserSessionSecret, authority: browserSessionAuthority })
+          : null;
+      },
       sandboxMode: plan.sandboxMode,
       networkMode: plan.networkMode ?? this.config.runtimeNetworkMode,
       workspaceDir: project.workspaceDir,
@@ -3972,6 +3977,8 @@ export class RuntimeManager {
       project,
       close: async () => this.provider.close(project, plan, child),
     };
+    // Keep the credential out of generic runtime enumeration/serialization.
+    Object.defineProperty(runtime, "cookie", { enumerable: false });
     /** @type {any} */ (child).once("error", (err) => {
       runtime.spawnError = err;
       runtime.exitedAt = new Date().toISOString();
