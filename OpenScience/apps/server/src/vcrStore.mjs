@@ -1159,13 +1159,25 @@ export class VcrStore extends VcrStoreBase {
       .map((row) => this.#exportFromRow(row));
   }
 
-  /** Preserve concurrently submitted report sections. @param {string} id @param {(cover:any)=>any} update */
+  /** Pending conversions are not hidden behind the recent-export page limit.
+   * @param {string} studyId */
+  async pendingReviewExports(studyId) {
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.exports WHERE study_id=$1
+      AND cover->'reviewDocumentRefresh'->>'state'='pending' ORDER BY created_at ASC LIMIT 50`, [studyId]))
+      .map(row => this.#exportFromRow(row));
+  }
+
+  /** Preserve concurrent sections; trusted refreshes may recheck proof on this transaction's connection.
+   * @param {string} id @param {(cover:any,snapshot:VcrStore)=>any|Promise<any>} update */
   async updateExportCover(id, update) {
     return this.transaction(async client => {
       const row = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.exports WHERE id=$1 FOR UPDATE`, [id])).rows[0];
       if (!row) return null;
+      const snapshot = new VcrStore({ database: this.database });
+      snapshot.transaction = async read => read(client);
+      const cover = await update(object(row.cover), snapshot);
       return this.#exportFromRow((await client.query(`UPDATE ${VCR_SCHEMA}.exports SET cover=$2::jsonb, updated_at=now() WHERE id=$1 RETURNING *`,
-        [id, JSON.stringify(update(object(row.cover)))])).rows[0]);
+        [id, JSON.stringify(cover)])).rows[0]);
     });
   }
 

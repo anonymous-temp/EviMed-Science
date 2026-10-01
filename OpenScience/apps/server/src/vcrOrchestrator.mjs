@@ -56,6 +56,8 @@ import {
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
+import { readVcrReviewExportProof } from "./vcrReview.mjs";
+import { studyReviewDigest } from "./studyReview.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
@@ -1000,6 +1002,43 @@ export class VcrOrchestrator {
 
   // --- the route hooks ---------------------------------------------------------------
 
+  /** Review-only conversion, with no research dispatch or scientific model replacement.
+   * @param {string} studyId @param {any} input */
+  async requestReviewExportRefresh(studyId, input) {
+    if (!this.queueExport) return { skipped: "conversion_unavailable" };
+    const proof = await this.store.reportSnapshot(snapshot => readVcrReviewExportProof(snapshot, studyId, input));
+    if (!proof || proof.study.status !== "active") return { skipped: "review_proof_stale" };
+    const id = studyReviewDigest({ reportRevision: input.reportRevision, sourceDigest: input.sourceDigest,
+      configurationDigest: input.configurationDigest, reviewIds: proof.records.map(row => row.platformReviewId).sort() });
+    const row = await this.store.updateExportCover(proof.exported.id, async (cover, snapshot) => {
+      if (vcrReportReviewRevision(cover) !== input.reportRevision || cover.reviewDocumentRefresh?.id === id) return cover;
+      const current = await readVcrReviewExportProof(snapshot, studyId, input);
+      if (!current) return cover;
+      return { ...cover, reviewDocumentRefresh: { id, state: "pending", exportId: current.exported.id,
+        sourceDigest: input.sourceDigest, configurationDigest: input.configurationDigest, reportRevision: input.reportRevision,
+        reviewIds: current.records.map(record => record.platformReviewId), records: current.records,
+        baseConversion: cover.documentExportId ? { id: cover.documentExportId, sourceRevision: cover.documentExportSourceRevision } : null } };
+    });
+    if (row?.cover.reviewDocumentRefresh?.id !== id) return { skipped: "report_changed" };
+    if (row.cover.reviewDocumentRefresh.state === "pending") {
+      try { await this.queueExport({ id: proof.study.userId }, proof.study, row); }
+      catch (error) { this.report(codeOf(error)); }
+    }
+    return { queued: row.cover.reviewDocumentRefresh.state === "pending" };
+  }
+
+  /** Resume conversions after a worker restart using the existing study loop.
+   * @param {any} study */
+  async #refreshReviewExports(study) {
+    if (!this.queueExport) return;
+    const pending = this.store.pendingReviewExports ? await this.store.pendingReviewExports(study.id)
+      : (await this.store.exports(study.id)).filter(item => item.cover.reviewDocumentRefresh?.state === "pending");
+    for (const row of pending) {
+      try { await this.queueExport({ id: study.userId }, study, row); }
+      catch (error) { this.report(codeOf(error)); }
+    }
+  }
+
   /** Queue advisory review only after the current calculations have settled.
    * @param {string} studyId @param {Record<string,any>} [options] */
   async #queueReview(studyId, options = {}) {
@@ -1191,6 +1230,7 @@ export class VcrOrchestrator {
       let study = await this.store.studyById(studyId);
       if (!study || study.status !== "active") return { skipped: study ? "paused" : "gone" };
       await this.#detectChanges(study);
+      await this.#refreshReviewExports(study);
       // Two passes, because what the programme wants depends on what is
       // already finished: a study whose definition has just been written is a
       // study that wants the whole programme, and reading the plan before

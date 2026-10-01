@@ -1,6 +1,6 @@
 /** Trusted, aggregate-only VCR adapter for the platform review queue. */
 import { createHash } from 'node:crypto';
-import { vcrResultOutputPayload } from '@evimed/domain';
+import { parseLineageNode, vcrResultOutputPayload } from '@evimed/domain';
 import { vcrRecordedResultHash } from './vcrJobs.mjs';
 import { vcrCurrentNodes, vcrReviewIsCurrent } from './vcrViews.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
@@ -44,6 +44,37 @@ export function buildVcrReviewInput({ model, results, executions, evidence, repo
     references: { checked: referenced.size }, findings } };
 }
 
+/** Read only trusted terminal records for one exact frozen report. A failed
+ * review is retained as a failure, never attested as a successful review.
+ * @param {any} store @param {string} studyId @param {any} identity */
+export async function readVcrReviewExportProof(store, studyId, identity) {
+  if (!/^[a-f0-9]{64}$/.test(String(identity.sourceDigest)) || !/^[a-f0-9]{64}$/.test(String(identity.configurationDigest))) return null;
+  if (identity.reviewIds && (!Array.isArray(identity.reviewIds) || identity.reviewIds.length !== 2 || new Set(identity.reviewIds).size !== 2)) return null;
+  const study = await store.studyById(studyId);
+  const exported = await store.exportRow(studyId, identity.exportId);
+  if (!study || !exported?.cover?.results?.study || !(exported.cover.reports?.length || exported.cover.report)
+    || identity.reportRevision !== vcrReportReviewRevision(exported.cover)) return null;
+  const [reviews, results, stale, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol] = await Promise.all([
+    store.reviews(studyId), store.results(studyId), store.staleMarks(studyId), store.assumptions(studyId), store.populations(studyId),
+    store.patientSets(studyId), store.comparatorDesigns(studyId), store.trialScenarios(studyId), store.latestDesignGrid(studyId), store.latestDefinition(studyId), store.latestProtocolVersion(studyId)]);
+  const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
+  const staleNodes = new Set(stale.map(row => row.node));
+  // The store orders by the full PostgreSQL timestamp. Never fall back to an
+  // older pair after a newer review is queued, or a late replay could regress
+  // the downloaded cover to the previous reviewer configuration.
+  const selected = reviews.filter(row => row.reviewerKind === 'ai' && row.platformReviewId
+    && row.provenance.subjectRef?.kind === 'vcr' && row.provenance.subjectRef?.studyId === studyId
+    && row.provenance.subjectRef?.exportId === exported.id && row.provenance.subjectRef?.reportRevision === identity.reportRevision);
+  const pair = ['clinical', 'statistical'].map(role => selected.find(row => row.kind === role));
+  if (pair.some(row => !row || !['done', 'failed'].includes(row.status)
+    || row.provenance.inputDigest !== identity.sourceDigest || row.provenance.configurationDigest !== identity.configurationDigest
+    || (identity.reviewIds && !identity.reviewIds.includes(row.platformReviewId)) || !row.nodes?.length || row.nodes.some(node => {
+    const parsed = parseLineageNode(node);
+    return !parsed || staleNodes.has(node) || (current.kinds.has(parsed.kind) && !current.nodes.has(node));
+  }) || (row.status === 'done' && !vcrReviewIsCurrent(row, { results, stale, current, exports: [exported] })))) return null;
+  return { study, exported, records: pair };
+}
+
 /** @param {{vcr:any, reviewService:any}} parts */
 export function createVcrReviewAdapter({ vcr, reviewService }) {
   const persist = (client, record) => vcr.store.saveAiReview({ ...record, studyId: record.subjectRef.studyId }, { client });
@@ -55,22 +86,15 @@ export function createVcrReviewAdapter({ vcr, reviewService }) {
     return api.queue(study.id, { ...(row ? { exportId: row.id } : {}), runId: input.runId });
   }, completed: async record => {
     const exportId = record.subjectRef.exportId;
-    if (!exportId || !vcr.orchestrator?.requestReviewRepair) return;
-    const study = await vcr.store.studyById(record.subjectRef.studyId);
-    if (!study) return;
-    const exportRow = await vcr.store.exportRow(study.id, exportId);
-    const reviews = await vcr.store.reviews(study.id);
-    const pair = reviews.filter(row => row.reviewerKind === 'ai' && row.provenance.subjectRef?.exportId === exportId
-      && row.provenance.subjectRef?.reportRevision === record.subjectRef.reportRevision && row.provenance.inputDigest === record.inputDigest
-      && row.provenance.configurationDigest === record.configurationDigest);
-    if (!['clinical', 'statistical'].every(role => pair.some(row => row.kind === role && ['done', 'failed'].includes(row.status)))) return;
-    const [results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol] = await Promise.all([
-      vcr.store.results(study.id), vcr.store.assumptions(study.id), vcr.store.populations(study.id), vcr.store.patientSets(study.id),
-      vcr.store.comparatorDesigns(study.id), vcr.store.trialScenarios(study.id), vcr.store.latestDesignGrid(study.id), vcr.store.latestDefinition(study.id), vcr.store.latestProtocolVersion(study.id)]);
-    const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
-    const completed = pair.filter(row => row.status === 'done' && vcrReviewIsCurrent(row, { results, current, exports: exportRow ? [exportRow] : [] }));
+    if (!exportId || !vcr.orchestrator) return;
+    const identity = { sourceDigest: record.inputDigest, configurationDigest: record.configurationDigest,
+      reportRevision: record.subjectRef.reportRevision, exportId };
+    const proof = await vcr.store.reportSnapshot(snapshot => readVcrReviewExportProof(snapshot, record.subjectRef.studyId, identity));
+    if (!proof) return;
+    await vcr.orchestrator.requestReviewExportRefresh?.(proof.study.id, { ...identity, reviewIds: proof.records.map(row => row.platformReviewId) });
+    const completed = proof.records.filter(row => row.status === 'done');
     const findings = completed.flatMap(row => (row.provenance.findings ?? []).filter(finding => finding.fix));
-    if (findings.length) await vcr.orchestrator.requestReviewRepair(study.id, { sourceDigest: record.inputDigest, exportId,
+    if (findings.length) await vcr.orchestrator.requestReviewRepair?.(proof.study.id, { sourceDigest: record.inputDigest, exportId,
       reviewIds: completed.map(row => row.platformReviewId), findings });
   } });
   const api = {

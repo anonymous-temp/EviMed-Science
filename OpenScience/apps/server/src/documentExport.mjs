@@ -141,6 +141,31 @@ export class DocumentExportService {
     return { ...this.view(row), formats, state: job?.status === 'running' ? 'running' : row.payload.state,
       ...(job?.status === 'failed' && row.payload.state === 'queued' ? { state: 'failed', error: job.error } : {}) };
   }
+  /** Reuse exact frozen figures in a review-only conversion; never read the
+   * possibly changed workspace. This internal reader rechecks source authority.
+   * @param {any} user @param {string} id @param {{source:any,sourceRevision:string}} expected */
+  async frozenAssets(user, id, expected) {
+    const row = await this.authorized(user, id);
+    if (row.payload.sourceRevision !== expected.sourceRevision || documentExportDigest(row.payload.source) !== documentExportDigest(expected.source)) {
+      throw new HttpError(409, 'document_source_changed', 'The retained conversion belongs to a different source.');
+    }
+    const root = documentExportDirectory(this.config, { ownerId: row.payload.ownerId, projectId: row.projectId, exportId: id });
+    const bytes = await boundedRead(root, path.join(root, 'input', 'document.json'), 5 * 1024 * 1024);
+    if (exportHash(bytes) !== row.payload.inputDigest) throw new HttpError(409, 'document_input_changed', 'Frozen document changed.');
+    const input = JSON.parse(bytes.toString('utf8'));
+    if (input.sourceDigest !== row.payload.sourceDigest || input.revision !== expected.sourceRevision || !Array.isArray(input.assets) || input.assets.length > 40) {
+      throw new HttpError(409, 'document_input_changed', 'Frozen document identity changed.');
+    }
+    const assets = [];
+    let total = 0;
+    for (const asset of input.assets) {
+      const data = await boundedRead(root, resolveScopedPath(path.join(root, 'input'), asset.path), 10 * 1024 * 1024);
+      total += data.length;
+      if (total > 20 * 1024 * 1024 || exportHash(data) !== asset.sha256) throw new HttpError(409, 'document_input_changed', 'Frozen asset changed.');
+      assets.push({ path: asset.path, sha256: asset.sha256, mime: asset.mime, data });
+    }
+    return assets;
+  }
   async cancel(user, id) {
     return this.cancelRecord(await this.authorized(user, id));
   }

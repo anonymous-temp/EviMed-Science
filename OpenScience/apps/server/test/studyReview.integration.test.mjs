@@ -248,7 +248,9 @@ test('completed retained VCR packages automatically review and dispatch one inde
   const revision = exports.find(row => row.cover.revisionOf === original.id);
   assert.ok(revision); assert.notEqual(revision.id, original.id);
   assert.equal(revision.cover.documentExportId, undefined);
-  assert.deepEqual((await store.exportRow(study.id, original.id)).cover, original.cover);
+  const { reviewDocumentRefresh: pendingConversion, ...retainedCover } = (await store.exportRow(study.id, original.id)).cover;
+  assert.equal(pendingConversion.state, 'pending');
+  assert.deepEqual(retainedCover, original.cover);
   const records = await store.reviews(study.id);
   const completed = records.filter(row => row.provenance.subjectRef?.exportId === original.id);
   const again = await orchestrator.requestReviewRepair(study.id, { exportId: original.id, sourceDigest: completed[0].provenance.inputDigest, reviewIds: completed.map(row => row.platformReviewId) });
@@ -257,7 +259,8 @@ test('completed retained VCR packages automatically review and dispatch one inde
   await orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: 'run_auto_2', dispatchId: dispatched[1].dispatchId, status: 'failed' });
   assert.equal((await store.exportRow(study.id, revision.id)).state, 'failed');
   assert.equal((await store.exportRow(study.id, original.id)).state, 'ready');
-  assert.deepEqual((await store.exportRow(study.id, original.id)).cover, original.cover, 'Failed advice repair never discards the original Word/PDF binding.');
+  const { reviewDocumentRefresh: _refresh, ...afterFailedRepair } = (await store.exportRow(study.id, original.id)).cover;
+  assert.deepEqual(afterFailedRepair, original.cover, 'Failed advice repair never discards the original Word/PDF binding.');
 });
 
 test('real multistage job persistence proves both the engine stage and recorded aggregate for review', options, async () => {

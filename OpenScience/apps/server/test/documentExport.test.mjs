@@ -78,6 +78,21 @@ test('every registered public document capability has a canonical output support
 });
 
 import { createVcrDocumentAdapter } from '../src/vcrDocumentExport.mjs';
+import { vcrReportReviewRevision } from '../src/vcrRender.mjs';
+test('review-only metadata cannot change any frozen numeric binding, including references into old review metadata', () => {
+  const study = { id: 'study', name: 'Research', intendedUse: 'exploratory' };
+  const cover = { results: { study, review: { records: [{ kind: 'clinical', reviewerKind: 'ai', status: 'done', provenance: { cost: 1.25, model: 'old-reviewer' } }] } },
+    reports: [{ section: 'main', template: '既有记录 {{n:review.records[0].provenance.cost|f2}}。' }] };
+  const original = canonicalVcrDocument(study, { kind: 'study_package', cover });
+  const updated = canonicalVcrDocument(study, { kind: 'study_package', cover: { ...cover, documentReview: {
+    reportRevision: vcrReportReviewRevision(cover), records: [{ kind: 'clinical', reviewerKind: 'ai', status: 'done', provenance: { cost: 2.5, model: 'actual-new-reviewer', findings: [] } }],
+  } } });
+  assert.match(updated.canonicalMarkdown, /actual-new-reviewer/);
+  assert.match(updated.canonicalMarkdown, /既有记录 1.25/);
+  assert.doesNotMatch(updated.canonicalMarkdown, /既有记录 2.50/);
+  assert.notEqual(updated.revision, original.revision);
+  assert.equal(cover.results.review.records[0].provenance.cost, 1.25);
+});
 test('a report section arriving during conversion scheduling is retained and attached to its own frozen revision', async () => {
   const study = { id:'study', name:'Research', projectId:'project', intendedUse:'exploratory' };
   const row = { id:'package', kind:'study_package', cover:{ results:{study}, reports:[{section:'Methods',template:'方法。'}] } };
