@@ -385,7 +385,7 @@ test("recently generated dailies keep old referenced items eligible for an owed 
   const ids = [];
   for (const delivered of deliveries) ids.push(Number((await entry(delivered.id)).item_id));
   assert.equal(new Set(ids).size, 4);
-  await database.query("UPDATE evimed_frontier.items SET timeline_at=$2 WHERE id=ANY($1::bigint[])",
+  await database.query("UPDATE evimed_frontier.items SET timeline_at=$2,visible_at=$2 WHERE id=ANY($1::bigint[])",
     [ids, new Date("2026-09-01T00:00:00Z")]);
   clock = new Date("2026-09-22T11:00:00Z");
   // item_ids holds internal bigint IDs. Only the first daily was actually
@@ -406,6 +406,36 @@ test("recently generated dailies keep old referenced items eligible for an owed 
     assert.deepEqual([untouched.state, untouched.editor_version, untouched.attempts], ["published", null, 0]);
   }
   for (const id of ids) assert.equal((await item(id)).timeline_at.toISOString(), "2026-09-01T00:00:00.000Z");
+});
+
+test("old source dates remain eligible for owed edits when recently published here, without scanning old unreferenced history",options,async()=>{
+  await reset();
+  let clock=new Date("2026-09-22T02:00:00Z");
+  const {pipeline,editor,plugin}=pipelineWith({now:()=>clock});
+  const sourceDate=new Date("2026-09-01T00:00:00Z"),ids=[];
+  for(const title of DISTINCT_TOPICS.slice(0,2)) {
+    const delivered=await deliver({source_id:"m-stat",title:`${title} [score:60]`,summary:"S".repeat(200),published_at:sourceDate});
+    plugin.texts.set(delivered.pluginEntryId,{entry_id:delivered.pluginEntryId,revision:1,status:"unavailable",enrichment:{}});
+    ids.push(delivered.id);
+  }
+  await pipeline.processBatch();
+  const items=[];for(const id of ids)items.push(await item(Number((await entry(id)).item_id)));
+  for(const published of items) {
+    assert.equal(published.timeline_at.toISOString(),sourceDate.toISOString());
+    assert.equal(published.visible_at.toISOString(),clock.toISOString(),"visible_at records publication in this module, not the source date");
+    assert.equal(published.editor_version,null);
+  }
+  await database.query("UPDATE evimed_frontier.items SET visible_at=$2 WHERE id=$1",[items[1].id,sourceDate]);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.dailies")).rows[0].n,0);
+  const calls=editor.calls.edit.length;
+  clock=new Date("2026-09-22T11:00:00Z");
+  const result=await pipeline.processBatch();
+  assert.equal(result.edited,1);
+  assert.equal(editor.calls.edit.length,calls+1);
+  assert.equal((await item(Number(items[0].id))).editor_version,FRONTIER_EDITOR_VERSION);
+  const old=await item(Number(items[1].id));
+  assert.deepEqual([old.state,old.editor_version,old.attempts],["published",null,0]);
+  for(const published of items)assert.equal((await item(Number(published.id))).timeline_at.toISOString(),sourceDate.toISOString());
 });
 
 test("peak hours and the budget: non-urgent items are published title-only and edited later; a spent budget collects only", options, async () => {
