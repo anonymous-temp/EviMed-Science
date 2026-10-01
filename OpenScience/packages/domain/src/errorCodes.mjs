@@ -1076,6 +1076,8 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
+  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy',
+  'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
   'vcr_matching_vocabulary_unavailable', 'registry_unsupported',
@@ -1321,6 +1323,11 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
+  vcr_backup_unhealthy: '恢复备份尚未通过检查。',
+  review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
+  document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
+  document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
   ...DOCUMENT_EXPORT_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',

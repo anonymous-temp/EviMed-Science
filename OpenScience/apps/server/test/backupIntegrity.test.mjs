@@ -67,7 +67,7 @@ for (const encrypted of [false, true]) {
       await numericRestore(archive, numericTarget, { ...f.env, OPEN_SCIENCE_RESTORE_VERIFICATION_FILE: numericReceipt });
       assert.deepEqual(await readdir(numericTarget), await readdir(target));
       if (files) assert.equal(await readFile(path.join(numericTarget, "pharmacy.sqlite"), "utf8"), "synthetic pharmacy fixture\n");
-      assert.deepEqual(JSON.parse(await readFile(numericReceipt, "utf8")), JSON.parse(await readFile(receipt, "utf8")));
+      assert.deepEqual(JSON.parse(await readFile(numericReceipt, "utf8")), { ...JSON.parse(await readFile(receipt, "utf8")), numericOwnersVerified: true });
       const drills = path.join(f.root, "drills");
       const result = await execute("bash", [path.join(ops, "restore-drill.sh"), archive], {
         env: { ...f.env, OPEN_SCIENCE_RESTORE_DRILL_DIR: drills },
