@@ -1,0 +1,10 @@
+{
+  "sourceId": "cochrane-effects",
+  "title": "Cochrane Handbook, Chapter 6: Choosing effect measures and computing estimates of effect",
+  "url": "https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-06",
+  "checkedAt": "2026-10-01T09:06:30.040077+00:00",
+  "coverage": "excerpt",
+  "quote": "The number needed to treat is obtained from the risk difference.",
+  "quoteSha256": "ad63300aa4e5ea1633b5ec15eba7e1acf69691930e0273afe22eb128e74d232d",
+  "documentTextSha256": "a84cf5956085bdc58f9f655a15570eb753e985bef567de059cf3283325fc1b52"
+}

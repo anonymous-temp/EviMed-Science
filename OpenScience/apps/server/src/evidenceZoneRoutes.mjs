@@ -1,9 +1,10 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
-/** @param {{store:any,service:any,frontier:any,config:any,maxJsonBytes:number}} options */
+/** @param {{store:any,service:any,editorial?:any,frontier:any,config:any,maxJsonBytes:number}} options */
 export function createEvidenceZoneRoutes({
   store,
   service,
+  editorial=null,
   frontier,
   config,
   maxJsonBytes,
@@ -70,6 +71,8 @@ export function createEvidenceZoneRoutes({
       if (method === "PATCH")
         return reply(await service.save(user, await body(), zoneId));
     }
+    if(parts.length===3 && parts[2]==="automation" && editorial && ["GET","PUT","POST"].includes(method))
+      return reply(await editorial.automation(user,zoneId,method==="GET"?{}:await body(),method));
     if (parts.length === 3 && parts[2] === "evidence") {
       if (method === "GET")
         return reply(await service.list(user, url.searchParams, zoneId));

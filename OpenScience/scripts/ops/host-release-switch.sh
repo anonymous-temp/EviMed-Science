@@ -77,10 +77,18 @@
 #      anyway. An unanswered question is a warning, not a stop: a release must
 #      still be possible when the old one is the thing that is broken.
 set -euo pipefail
-NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan | --allow-active]}"
+NEW="${1:?usage: host-release-switch.sh <NEW_SHORT> [--no-prune | --plan | --allow-active] [--maintenance-request-id=ID]}"
 PRUNE=1; [ "${2:-}" = "--no-prune" ] && PRUNE=0
 PLAN=0; [ "${2:-}" = "--plan" ] && PLAN=1
 ALLOW_ACTIVE=0; for arg in "$@"; do [ "$arg" = "--allow-active" ] && ALLOW_ACTIVE=1; done
+MAINTENANCE_REQUEST_ID=""
+for arg in "$@"; do
+  case "$arg" in --maintenance-request-id=*) MAINTENANCE_REQUEST_ID="${arg#*=}" ;; esac
+done
+if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
+  [[ "$MAINTENANCE_REQUEST_ID" =~ ^[a-zA-Z0-9._:-]{1,200}$ ]] || { echo "invalid maintenance request id"; exit 1; }
+  [ "$ALLOW_ACTIVE" = 0 ] && [ "$PLAN" = 0 ] || { echo "maintenance switches require a real drained release"; exit 1; }
+fi
 ROOT="${EVIMED_ROOT:-/srv/evimed-science}"
 PROJECT="${EVIMED_COMPOSE_PROJECT:-web}"
 REL="${ROOT}/releases/${NEW}"
@@ -125,11 +133,22 @@ ACTIVITY=$(docker exec "$WEB_CONTAINER" node -e '
   const token = (file ? fs.readFileSync(file, "utf8") : process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN || "").trim();
   fetch("http://127.0.0.1:8787/api/ops/maintenance?activity=1", { headers: { authorization: "Bearer " + token } })
     .then((r) => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
-    .then((body) => { const a = body.data.activity; console.log([a.runningAgentRuns, a.runningProductJobs, a.busyRuntimes].join(" ")); })
-    .catch((error) => { console.log("unknown " + error.message); });' 2>/dev/null || echo "unknown no-web-container")
+    .then((body) => {
+      const a = body.data.activity;
+      if (process.argv[1] && (body.data.state !== "maintenance" || body.data.lease?.requestId !== process.argv[1]
+        || Date.parse(body.data.lease.expiresAt) <= Date.now()
+        || Object.values(a).some((value) => !Number.isSafeInteger(value) || value !== 0))) throw new Error("maintenance is not owned and drained");
+      console.log([a.runningAgentRuns, a.runningProductJobs, a.busyRuntimes].join(" "));
+    })
+    .catch((error) => { console.log("unknown " + error.message); });' "$MAINTENANCE_REQUEST_ID" 2>/dev/null || echo "unknown no-web-container")
 if ! [[ "$ACTIVITY" =~ ^[0-9]+\ [0-9]+\ [0-9]+$ || "$ACTIVITY" == unknown\ * ]]; then ACTIVITY="unknown ${ACTIVITY:-no answer}"; fi
 case "$ACTIVITY" in
-  unknown*) echo "  WARNING: could not read the live release's activity (${ACTIVITY#unknown }); switching without the check" ;;
+  unknown*)
+    if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
+      echo "  REFUSED: maintenance activity is unknown; current has not moved"
+      exit 3
+    fi
+    echo "  WARNING: could not read the live release's activity (${ACTIVITY#unknown }); switching without the check" ;;
   "0 0 0") echo "  nothing in flight" ;;
   *)
     read -r active_runs active_jobs busy_runtimes <<<"$ACTIVITY"
@@ -187,12 +206,21 @@ echo "=== which services differ from what is running ==="
 hashes=$("${COMPOSE[@]}" config --hash '*')
 [ -n "$hashes" ] || { echo "compose resolved no services; refusing"; exit 1; }
 changed=()
+receipt_changed=0
 while read -r service hash; do
   [ -n "$service" ] || continue
   container=$(docker ps -a --filter "label=com.docker.compose.project=${PROJECT}" --filter "label=com.docker.compose.service=${service}" --format '{{.Names}}' | head -1)
   have=""
   [ -n "$container" ] && have=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "$container")
-  if [ "$have" != "$hash" ]; then changed+=("$service"); echo "  changed: ${service}"; fi
+  if [ "$have" != "$hash" ]; then
+    if [ "$service" = "open-science-release-receipt" ]; then
+      receipt_changed=1
+      echo "  deferred until admission resumes: ${service}"
+    else
+      changed+=("$service")
+      echo "  changed: ${service}"
+    fi
+  fi
 done <<< "$hashes"
 echo "  ${#changed[@]} service(s) to recreate"
 if [ "$PLAN" -eq 1 ]; then
@@ -204,7 +232,7 @@ fi
 
 if [ "${#changed[@]}" -gt 0 ]; then
   echo "=== recreate them ==="
-  "${COMPOSE[@]}" up -d --no-deps "${changed[@]}"
+  "${COMPOSE[@]}" up -d --no-build --pull never --no-deps "${changed[@]}"
 fi
 
 echo "=== restart what still reads the previous release through current ==="
@@ -230,10 +258,12 @@ if [ "$alert_config_changed" -eq 1 ] && ! printf '%s\n' "${changed[@]:-}" | grep
 fi
 
 echo "=== mint the release receipt once web serves evimed-${NEW}-1 ==="
+web_healthy=0
 for _ in $(seq 1 60); do
-  docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>r.json()).then(j=>process.exit(j.data&&j.data.releaseId==='evimed-${NEW}-1'?0:1)).catch(()=>process.exit(1))" && break
+  if docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>r.ok?r.json():Promise.reject()).then(j=>process.exit(j.data&&j.data.releaseId==='evimed-${NEW}-1'?0:1)).catch(()=>process.exit(1))"; then web_healthy=1; break; fi
   sleep 5
 done
+[ "$web_healthy" = 1 ] || { echo "new release did not become healthy; keeping maintenance and old releases"; exit 1; }
 # The backup's start-up cycle, if that container was recreated or restarted:
 # wait for it to say how it ended, so the mint below does not change the tree
 # under it.
@@ -244,6 +274,35 @@ if printf '%s\n' "${changed[@]:-}" "${restarted[@]:-}" | grep -qxE "open-science
     sleep 5
   done
 fi
+# A deployment wrapper acquires and drains this durable lease before moving
+# current. Release only its own lease, after the new application is healthy,
+# so the live model receipt and page walk can use normal task admission.
+if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
+  echo "=== resume admission after the drained switch ==="
+  docker exec "$WEB_CONTAINER" node -e '
+    const fs = require("node:fs");
+    const file = process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE;
+    const token = (file ? fs.readFileSync(file, "utf8") : process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN || "").trim();
+    (async () => {
+      const manifest = JSON.parse(fs.readFileSync(process.env.OPEN_SCIENCE_RELEASE_MANIFEST_FILE, "utf8"));
+      if (manifest.app.releaseId !== process.argv[2] || manifest.source.revision !== process.env.OPEN_SCIENCE_SOURCE_REVISION) throw new Error();
+      const endpoint = "http://127.0.0.1:8787/api/ops/maintenance";
+      const headers = { authorization: "Bearer " + token, "content-type": "application/json" };
+      const beforeResponse = await fetch(endpoint, { headers, signal: AbortSignal.timeout(10000) });
+      const before = await beforeResponse.json();
+      if (!beforeResponse.ok || before.data?.state !== "maintenance" || before.data.lease?.requestId !== process.argv[1]) throw new Error();
+      const response = await fetch(endpoint, {
+        method: "POST", headers, body: JSON.stringify({ action: "release", requestId: process.argv[1] }), signal: AbortSignal.timeout(10000)
+      });
+      const body = await response.json();
+      if (!response.ok || body.data?.state !== "open" || body.data?.lease !== null) process.exit(1);
+    })().catch(() => process.exit(1));' "$MAINTENANCE_REQUEST_ID" "evimed-${NEW}-1" || { echo "maintenance lease release failed; receipt was not minted"; exit 1; }
+fi
+# The receipt scheduler mints immediately when it starts. Recreate it only
+# after admission resumes, not with the initial batch of changed services.
+if [ "$receipt_changed" = 1 ]; then
+  "${COMPOSE[@]}" up -d --no-build --pull never --no-deps open-science-release-receipt
+fi
 # Two mints at most. The receipt is a live kernel chain against the provider,
 # and one chain can fail for a reason that is not the release: on 2026-09-21
 # two of three releases needed the receipt container restarted by hand, each
@@ -252,7 +311,7 @@ fi
 # fixed in modelGateway.mjs). A second mint is what a person did then; a
 # second failure is a real one and stops the switch before retention.
 for mint in 1 2; do
-  docker restart "$RECEIPT_CONTAINER" >/dev/null
+  if [ "$mint" != 1 ] || [ "$receipt_changed" != 1 ]; then docker restart "$RECEIPT_CONTAINER" >/dev/null; fi
   # Eight minutes: long enough for the backup scheduler's own five-minute retry,
   # should its start-up cycle have failed on the first mint attempt after all.
   # The line reads `<ok|notok> <checks> <failing checks but backup, or -> backup=<ok|code>`:

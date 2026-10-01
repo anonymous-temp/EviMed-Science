@@ -10,6 +10,7 @@ import {
   type EvidenceZone,
 } from "@/lib/evidenceZoneClient";
 import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
+import { evidenceReviewLabel } from "./EvidenceReading";
 
 export function FollowedEvidenceZones() {
   const [cards, setCards] = useState<EvidenceCard[]>([]);
@@ -100,11 +101,16 @@ export function FollowedEvidenceZones() {
                   to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}
                   className="text-ui text-text hover:text-accent"
                 >
-                  {card.title}
+                  {card.content?.question || card.title}
                 </Link>
-                {card.summary && (
+                {(card.content?.answer || card.summary) && (
                   <p className="mt-1 line-clamp-2 max-w-measure text-caption text-text-2">
-                    {card.summary}
+                    {card.content?.answer || card.summary}
+                  </p>
+                )}
+                {evidenceReviewLabel(card) && (
+                  <p className="mt-1 text-caption text-text-3">
+                    {evidenceReviewLabel(card)}
                   </p>
                 )}
               </li>

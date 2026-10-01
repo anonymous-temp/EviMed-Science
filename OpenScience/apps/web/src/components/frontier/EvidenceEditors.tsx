@@ -14,6 +14,10 @@ import {
   type EvidenceCardInput,
 } from "@/lib/evidenceZoneClient";
 import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
+import {
+  EvidenceVisualEditor,
+  removeEvidenceSource,
+} from "./EvidenceVisualEditor";
 
 export function ZoneEditor({
   zone,
@@ -161,13 +165,35 @@ export function CardEditor({
             },
           ]
         : []),
+    ...(card?.content ? { content: card.content } : {}),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = (
     key: "title" | "summary" | "body" | "limitations",
     value: string,
-  ) => setInput((previous) => ({ ...previous, [key]: value }));
+  ) =>
+    setInput((previous) => ({
+      ...previous,
+      [key]: value,
+      ...(previous.content && key === "summary"
+        ? { content: { ...previous.content, answer: value } }
+        : {}),
+    }));
+  const contentField = (
+    key: "question" | "population" | "context" | "nextStep",
+    value: string,
+  ) =>
+    setInput((previous) => ({
+      ...previous,
+      content: {
+        question: previous.title,
+        answer: previous.summary,
+        population: "",
+        ...previous.content,
+        [key]: value,
+      },
+    }));
   const [saved, setSaved] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const dirty =
@@ -189,6 +215,7 @@ export function CardEditor({
               },
             ]
           : []),
+      ...(card?.content ? { content: card.content } : {}),
     });
   useDirtyWarning(dirty && !saved);
   return (
@@ -250,13 +277,65 @@ export function CardEditor({
           </label>
           <Textarea
             maxLength={12000}
-            label="摘要"
+            label="核心回答"
             value={input.summary}
             onChange={(event) => field("summary", event.target.value)}
           />
+          <details open={!!card?.content}>
+            <summary className="cursor-pointer text-ui text-text-3">
+              问题、人群与证据图表
+            </summary>
+            <div className="mt-3 space-y-4">
+              <Input
+                label="这张卡回答什么问题"
+                maxLength={300}
+                value={input.content?.question || ""}
+                onChange={(event) =>
+                  contentField("question", event.target.value)
+                }
+              />
+              <Textarea
+                label="适用人群"
+                maxLength={12000}
+                value={input.content?.population || ""}
+                onChange={(event) =>
+                  contentField("population", event.target.value)
+                }
+              />
+              <Textarea
+                label="临床或研究情境"
+                maxLength={12000}
+                value={input.content?.context || ""}
+                onChange={(event) =>
+                  contentField("context", event.target.value)
+                }
+              />
+              <Textarea
+                label="下一步怎么用"
+                maxLength={12000}
+                value={input.content?.nextStep || ""}
+                onChange={(event) =>
+                  contentField("nextStep", event.target.value)
+                }
+              />
+              <EvidenceVisualEditor
+                content={
+                  input.content || {
+                    question: input.title,
+                    answer: input.summary,
+                    population: "",
+                  }
+                }
+                onChange={(content) =>
+                  setInput((previous) => ({ ...previous, content }))
+                }
+                sourceCount={input.sources.length}
+              />
+            </div>
+          </details>
           <Textarea
             maxLength={50000}
-            label="证据正文"
+            label={input.content ? "补充说明" : "证据正文"}
             value={input.body}
             onChange={(event) => field("body", event.target.value)}
           />
@@ -329,6 +408,14 @@ export function CardEditor({
                     setInput((previous) => ({
                       ...previous,
                       sources: previous.sources.filter((_, at) => at !== index),
+                      ...(previous.content
+                        ? {
+                            content: removeEvidenceSource(
+                              previous.content,
+                              index + 1,
+                            ),
+                          }
+                        : {}),
                     }))
                   }
                 >

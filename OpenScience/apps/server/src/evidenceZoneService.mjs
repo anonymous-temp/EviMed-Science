@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
+import { evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt } from "./evidenceCardContent.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const error = (
@@ -79,13 +80,22 @@ function sources(value) {
   if (!Array.isArray(value) || value.length > 50)
     throw error(400, "invalid", "Invalid source list.");
   return value.map((source) => {
-    fields(source, ["title", "url", "excerpt"]);
+    fields(source, ["title", "url", "excerpt", "sha256", "checkedAt", "coverage", "documentText", "fetchedSha256"]);
     const title = text(source.title, 500, true),
       excerpt = source.excerpt == null ? null : text(source.excerpt, 12000);
     const url = evidenceSourceUrl(source.url);
     if (!url && !excerpt)
       throw error(400, "invalid", "A source needs a URL or preserved excerpt.");
-    return { title, url, excerpt };
+    const coverage = source.coverage ?? "excerpt";
+    if (!["full-text", "abstract", "excerpt"].includes(coverage)) throw error(400, "invalid", "Invalid source coverage.");
+    const documentText = source.documentText == null ? null : (typeof source.documentText === "string" && source.documentText.length<=2000000 ? source.documentText : text(source.documentText,2000000));
+    const sha256 = evidenceHash(documentText ?? excerpt ?? "");
+    if (source.sha256 != null && source.sha256 !== sha256) throw error(400,"invalid","Source hash does not match its retained text.");
+    if (source.fetchedSha256 != null && (typeof source.fetchedSha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.fetchedSha256))) throw error(400,"invalid","Invalid fetched document hash.");
+    if (sha256 != null && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) throw error(400,"invalid","Invalid source hash.");
+    if (source.checkedAt != null && (typeof source.checkedAt !== "string" || !Number.isFinite(Date.parse(source.checkedAt)))) throw error(400,"invalid","Invalid source check date.");
+    if (coverage === "full-text" && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
+    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}) };
   });
 }
 
@@ -204,13 +214,18 @@ export class EvidenceZoneService {
       reviewer: current?.author ?? null,
       reviewedAt: current?.createdAt ?? null,
       claims: [],
-      sources: detail ? row.sources : [],
+      sources: detail ? (row.sources ?? []).map((/** @type {any} */ source) => { const { documentText: _documentText, ...visible } = source; return visible; }) : [],
+      content: row.content ?? null,
+      editorial: row.editorial ?? null,
+      revisions: detail ? (await client.query(`SELECT revision,recorded_at AS "recordedAt",snapshot->>'title' AS title,
+        snapshot->'editorial'->>'sourceFingerprint' AS "sourceFingerprint",snapshot->'editorial'->>'status' AS "reviewStatus"
+        FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision DESC LIMIT 30`,[row.id])).rows : [],
       limitations: detail ? row.limitations : "",
       provenance: detail ? row.provenance : "",
       sourceItemId: row.source_item_id ?? null,
       discussion,
       reviews: detail ? reviews : [],
-      review: current ? { score: current.score, label: "同行评价" } : null,
+      review: current ? { score: current.score, label: "用户评议" } : null,
       state: row.state,
       canEdit: row.user_id === user.id,
       canResearch: row.state === "published" && row.zone_state === "published",
@@ -335,7 +350,7 @@ export class EvidenceZoneService {
       );
       const rows = (
         await client.query(
-          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
+          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
           values,
         )
       ).rows;
@@ -405,9 +420,17 @@ export class EvidenceZoneService {
       return { zone: await this.zoneView(client, user, row), feedback };
     });
   }
-  /** @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] */
-  async save(user, body, zoneId = null, cardId = null, createCard = false) {
+  /** Internal operator import / model worker entry; never mounted as an HTTP route.
+   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"model"|"import"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
+  async saveEditorial(user, body, zoneId = null, cardId = null, createCard = false, origin = "import", lease = null) {
+    const operation = {origin,lease,id:`er_${randomUUID().replaceAll("-","")}`};
+    return this.save(user,body,zoneId,cardId,createCard,operation);
+  }
+  /** @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {{origin:string,id:string,lease?:{jobId:string,workerId:string}|null}|null} [internalOperation] */
+  async save(user, body, zoneId = null, cardId = null, createCard = false, internalOperation = null) {
     const card = createCard || cardId != null;
+    if (!internalOperation && (body?.editorial !== undefined || (Array.isArray(body?.sources) && body.sources.some(source => !source || typeof source!=="object" || Array.isArray(source) || Object.keys(source).some(key => !["title","url","excerpt"].includes(key))))))
+      throw error(400,"invalid","Editorial receipts and retained source metadata require an internal editorial operation.");
     fields(
       body,
       card
@@ -420,6 +443,8 @@ export class EvidenceZoneService {
             "limitations",
             "provenance",
             "sourceItemId",
+            "content",
+            "editorial",
             "state",
             "expectedRevision",
             "requestId",
@@ -435,10 +460,17 @@ export class EvidenceZoneService {
     );
     await this.ready();
     return this.database.transaction(async (/** @type {any} */ client) => {
+      if(internalOperation?.lease) {
+        const lease=internalOperation.lease;
+        const held=await client.query(`SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
+          WHERE j.id=$1 AND j.lease_owner=$2 AND j.lease_until>clock_timestamp() AND j.state='running' AND a.enabled FOR UPDATE OF j`,[lease.jobId,lease.workerId]);
+        if(!held.rowCount) throw error(409,"lease_lost","This editorial operation no longer owns its lease.");
+      }
       if (card && !zoneId) throw missing();
       const parent = card
         ? await this.zoneRow(client, user, zoneId ?? "", true)
         : null;
+      if(internalOperation?.lease && parent?.state!=="published") throw error(409,"revision_conflict","The zone was withdrawn during the editorial operation.");
       if (parent && parent.user_id !== user.id)
         throw error(
           403,
@@ -451,6 +483,7 @@ export class EvidenceZoneService {
           ? await this.zoneRow(client, user, zoneId, true)
           : null;
       if (existing) {
+        if(internalOperation?.lease && card && existing.state!=="published") throw error(409,"revision_conflict","The card was withdrawn during the editorial operation.");
         if (existing.user_id !== user.id)
           throw error(
             403,
@@ -509,6 +542,16 @@ export class EvidenceZoneService {
           body.sources === undefined
             ? (existing?.sources ?? [])
             : sources(body.sources);
+        if(!internalOperation && body.sources !== undefined && existing) value.sources=value.sources.map(source =>
+          existing.sources.find(old=>old.title===source.title && old.url===source.url && old.excerpt===source.excerpt) ?? source);
+        value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
+        const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
+        value.editorial = evidenceEditorialReceipt(body.editorial === undefined
+          ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null} : existing?.editorial ?? null
+          : body.editorial, value, (existing?.revision ?? 0) + 1);
+        if(value.editorial) value.editorial={...value.editorial,automationContentHash:internalOperation ? value.editorial.contentHash : existing?.editorial?.automationContentHash ?? null};
+        if (body.editorial !== undefined && value.editorial?.status === "ai-reviewed")
+          value.editorial = {...value.editorial,reviewOperationId:internalOperation?.id,reviewOrigin:internalOperation?.origin};
         if (
           value.state === "published" &&
           (!value.body || !value.sources.length)
@@ -530,11 +573,13 @@ export class EvidenceZoneService {
             "limitations",
             "provenance",
             "source_item_id",
+            "content",
+            "editorial",
             "state",
           ]
         : ["title", "description", "background", "state"];
       const values = columns.map((key) =>
-        key === "sources" ? JSON.stringify(value[key]) : value[key],
+        ["sources","content","editorial"].includes(key) ? JSON.stringify(value[key]) : value[key],
       );
       const table = card ? "evidence_cards" : "evidence_zones";
       if (existing)
@@ -571,6 +616,11 @@ export class EvidenceZoneService {
             );
         }
       }
+      if(card && existing && internalOperation?.lease) await client.query(`UPDATE evimed_frontier.evidence_editorial_jobs
+        SET payload=jsonb_set(COALESCE(payload,'{}'::jsonb),'{managedRevision}',to_jsonb($3::integer))
+        WHERE card_id=$1 AND state IN ('pending','completed') AND payload->>'managedRevision'=$2::text`,[id,existing.revision,existing.revision+1]);
+      if (card) await client.query(`INSERT INTO evimed_frontier.evidence_card_revisions(card_id,revision,snapshot)
+        SELECT id,revision,to_jsonb(c) FROM evimed_frontier.evidence_cards c WHERE id=$1 ON CONFLICT DO NOTHING`, [id]);
       await this.bump(client);
       return card
         ? {

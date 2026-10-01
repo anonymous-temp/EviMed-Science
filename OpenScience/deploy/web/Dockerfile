@@ -84,6 +84,7 @@ COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops
+COPY --from=build /app/content/evidence ./content/evidence
 COPY --from=build /app/evals/method-quality ./evals/method-quality
 COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
 COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden

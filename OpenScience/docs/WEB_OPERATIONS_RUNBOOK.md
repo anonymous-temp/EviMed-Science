@@ -206,6 +206,15 @@ opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
 
+For a drained switch, acquire a durable maintenance lease under the deployment
+lock, verify that its activity is known and idle, and pass the same request ID
+to `host-release-switch.sh <sha> --no-prune --maintenance-request-id=<id>`.
+The switch releases that lease only after the new Web release answers health,
+before minting the live model receipt and walking the pages. A failed health or
+lease release stops the switch without minting; inspect the staged release and
+keep the lease renewed while recovering. The legacy `--plan` moves `current`
+and must not be used as a read-only preparation step.
+
 ## Deployment Check
 
 Run before opening traffic and after every deployment:

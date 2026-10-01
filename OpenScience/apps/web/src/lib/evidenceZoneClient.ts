@@ -34,7 +34,14 @@ export interface EvidenceCard {
   reviewer: string | null;
   reviewedAt: string | null;
   claims: Array<{ text: string }>;
-  sources: Array<{ title: string; url: string | null; excerpt: string | null }>;
+  sources: Array<{
+    title: string;
+    url: string | null;
+    excerpt: string | null;
+    sha256?: string;
+    checkedAt?: string | null;
+    coverage?: "full-text" | "abstract" | "excerpt";
+  }>;
   limitations: string | null;
   discussion: Array<{
     id?: string;
@@ -47,6 +54,54 @@ export interface EvidenceCard {
   canReview?: boolean;
   review: { score: number | null; label: string } | null;
   canResearch: boolean;
+  content?: EvidenceContent | null;
+  editorial?: {
+    author: { kind: "ai" | "human"; name: string; model?: string };
+    reviewer: { kind: "ai"; name: string; model?: string } | null;
+    sourceFingerprint?: string;
+    sourceCheckedAt?: string | null;
+    sourceChangedAt?: string | null;
+    status: "ai-reviewed" | "review-pending";
+    findings?: Array<{ kind: string; text: string; sourceIndex?: number }>;
+    reviewRevision: number | null;
+    reviewedAt?: string | null;
+  } | null;
+  revisions?: Array<{
+    revision: number;
+    recordedAt: string;
+    title: string;
+    sourceFingerprint: string | null;
+    reviewStatus: string | null;
+  }>;
+}
+export interface EvidenceContent {
+  question: string;
+  answer: string;
+  population: string;
+  context?: string;
+  nextStep?: string;
+  sections?: Array<{ title: string; text: string; sourceIndexes?: number[] }>;
+  tables?: Array<{
+    title: string;
+    columns: string[];
+    rows: string[][];
+    caption?: string;
+    sourceIndexes: number[];
+  }>;
+  comparisons?: Array<{
+    title: string;
+    outcome: string;
+    denominator: number;
+    timeframe: string;
+    measure?: "risk" | "rate";
+    denominatorUnit?: "people" | "person-years";
+    control: { label: string; events: number };
+    intervention: { label: string; events: number };
+    relativeEffect?: string;
+    certainty?: string;
+    sourceIndexes: number[];
+    note?: string;
+  }>;
 }
 export interface EvidencePage<T> {
   canCreate?: boolean;
@@ -145,6 +200,7 @@ export interface EvidenceCardInput {
   body: string;
   sources: EvidenceCard["sources"];
   limitations: string;
+  content?: EvidenceContent | null;
 }
 export async function saveEvidenceZone(
   input: EvidenceZoneInput,
@@ -187,6 +243,11 @@ export async function saveEvidenceCard(
       card ? "PATCH" : "POST",
       {
         ...input,
+        sources: input.sources.map(({ title, url, excerpt }) => ({
+          title,
+          url,
+          excerpt,
+        })),
         requestId,
         ...(card ? { expectedRevision: card.revision } : {}),
       },
@@ -255,12 +316,61 @@ export const deleteEvidenceComment = (card: EvidenceCard, commentId: string) =>
     "DELETE",
   );
 
+export interface EvidenceAutomation {
+  enabled: boolean;
+  query: string;
+  sourceTypes: string[];
+  intervalHours: number;
+  maxCardsPerRun: number;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastError: string | null;
+}
+export interface EvidenceMaintenance {
+  automation: EvidenceAutomation;
+  jobs: { pending: number; running: number; failed: number };
+  recent: Array<{
+    id: string;
+    state: string;
+    attempts: number;
+    lastError: string | null;
+    updatedAt: string;
+    cardId?: string | null;
+  }>;
+}
+export const fetchEvidenceMaintenance = (zoneId: string) =>
+  productRequest<EvidenceMaintenance>(
+    `/frontier/zones/${id(zoneId)}/automation`,
+  );
+export const saveEvidenceMaintenance = (
+  zone: EvidenceZone,
+  automation: EvidenceAutomation,
+) =>
+  productRequest<EvidenceMaintenance>(
+    `/frontier/zones/${id(zone.id)}/automation`,
+    "PUT",
+    {
+      enabled: automation.enabled,
+      query: automation.query,
+      sourceTypes: automation.sourceTypes,
+      intervalHours: automation.intervalHours,
+      maxCardsPerRun: automation.maxCardsPerRun,
+      expectedRevision: zone.revision,
+    },
+  );
+export const refreshEvidenceZone = (zone: EvidenceZone) =>
+  productRequest<EvidenceMaintenance>(
+    `/frontier/zones/${id(zone.id)}/automation`,
+    "POST",
+    {},
+  );
+
 /** Native evidence failures explain the action while keeping unsaved input intact. */
 export function evidenceErrorMessage(error: unknown): string {
   return webErrorMessage(error, {
     codes: {
       evidence_invalid:
-        "请检查必填项和长度；每个来源需填写标题，并提供有效的网页链接或原文引句。",
+        "请检查必填项、图表数值和来源编号；每个来源需填写标题，并提供有效的网页链接或原文引句。",
       evidence_query_invalid: "搜索条件无效，请清空搜索条件后重试。",
       evidence_revision_conflict:
         "内容已有更新，当前填写内容仍保留。请先复制修改，再关闭编辑并重新打开最新版本后保存。",
@@ -272,6 +382,7 @@ export function evidenceErrorMessage(error: unknown): string {
         "创建者不能评议自己的证据，请由其他用户参与评议。",
       evidence_publication_incomplete:
         "发布前请填写证据正文，并添加至少一个有链接或原文引句的来源。",
+      evidence_automation_disabled: "请先启用并保存更新计划，再立即更新。",
     },
   });
 }

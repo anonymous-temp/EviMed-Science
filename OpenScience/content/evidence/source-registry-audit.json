@@ -1,0 +1,127 @@
+{
+  "checkedAt": "2026-10-01T09:07:20.258Z",
+  "scope": "Read-only registry, recorded read-only probe evidence, and deployed live inventory supplied by root agent; no source toggles or DB writes.",
+  "registry": {
+    "path": "项目代码/knowledge-plugin/registry/sources.json",
+    "sha256": "6a94c4f02cb1f9be710d825b4fbed28ab3ed397847e1bddf597047b8f4d62ced",
+    "registered": 720,
+    "enabled": 492,
+    "disabled": 228,
+    "enabledByEgress": {
+      "direct": 422,
+      "relay": 45,
+      "browser": 23,
+      "api": 2
+    }
+  },
+  "live": {
+    "status": "ok",
+    "healthy": 486,
+    "degraded": 5,
+    "drifted": 1,
+    "enabledSourcesSuccessfulLast24h": 470,
+    "enabledSourcesWithNewEntriesLast24h": 224,
+    "lastOkFetchAt": "2026-10-01T09:07:03.469Z",
+    "lastNewEntryAt": "2026-10-01T09:05:03.378Z",
+    "egress": {
+      "direct": "ok",
+      "api": "ok",
+      "relay": "ok",
+      "browser": "ok",
+      "bridge": "unconfigured",
+      "evimed-api": "ok"
+    },
+    "pendingTextEnrichments": 549,
+    "latestPluginSeq": 35102,
+    "platformCursor": 35102,
+    "publishedItemCount": 9046,
+    "issues": [
+      {
+        "id": "anthropic-news",
+        "name": "Anthropic 官方新闻（社区镜像）",
+        "health": "degraded",
+        "last_ok_at": "2026-10-01T08:04:36.134Z",
+        "last_new_entry_at": "2026-09-30T04:31:32.093Z"
+      },
+      {
+        "id": "cnpharm-drug",
+        "name": "中国医药报 · 中国食品药品网（药品频道）",
+        "health": "degraded",
+        "last_ok_at": "2026-09-30T08:17:38.390Z",
+        "last_new_entry_at": "2026-09-30T08:17:38.390Z"
+      },
+      {
+        "id": "ema-whats-new",
+        "name": "欧洲药品管理局 全站更新 EMA What's New",
+        "health": "drifted",
+        "last_ok_at": "2026-10-01T08:18:51.672Z",
+        "last_new_entry_at": "2026-09-30T16:18:49.673Z"
+      },
+      {
+        "id": "meta-newsroom-tech",
+        "name": "Meta 新闻室 · 技术与创新",
+        "health": "degraded",
+        "last_ok_at": "2026-10-01T08:57:13.061Z",
+        "last_new_entry_at": "2026-09-30T04:29:35.273Z"
+      },
+      {
+        "id": "star-guideline-rating-cn",
+        "name": "STAR 指南评级平台",
+        "health": "degraded",
+        "last_ok_at": "2026-09-28T08:21:54.583Z",
+        "last_new_entry_at": null
+      },
+      {
+        "id": "zhishifenzi",
+        "name": "知识分子",
+        "health": "degraded",
+        "last_ok_at": "2026-09-30T23:18:44.498Z",
+        "last_new_entry_at": null
+      }
+    ]
+  },
+  "recordedProbes": {
+    "2026-09-29": {
+      "p1Probed": 68,
+      "p1PositiveEntries": 53,
+      "relayPagesProbed": 32,
+      "relayHttpReadable": 22,
+      "relayListsAdmitted": 9,
+      "newSourcesAdmitted": 62,
+      "previouslyEnabledOwnerExclusions": 1,
+      "registryEnabledBefore": 311,
+      "registryEnabledAfter": 372,
+      "productionRegistryChanged": false,
+      "ownerExcludedIds": [
+        "cde-guidance-principles",
+        "cde-breakthrough-therapy",
+        "cde-marketed-drug-info",
+        "fierce-biotech",
+        "fierce-pharma",
+        "fierce-healthcare"
+      ],
+      "deferred": "WeChat authorization and social login were not probed. Robots refusals, challenges, blocks and timeouts were not bypassed. Readable HTML alone did not qualify a source."
+    },
+    "2026-09-30": {
+      "rows": 183,
+      "enabledWithEntries": 120,
+      "deferred": 63,
+      "entryLists": 106,
+      "canonicalDocuments": 14,
+      "withDatedEntries": 57,
+      "capturedEntries": 2439
+    }
+  },
+  "interpretation": [
+    "Registered count is not enabled count, and neither is a live-success count.",
+    "The 224 live figure counts sources with new entries in the last 24h, not total new entry items.",
+    "57 of 120 sources admitted in the September 30 probe had dated entries; canonical-document monitoring must not invent publication timestamps.",
+    "CDE and Fierce sources remain owner-excluded; no challenge or robots bypass is proposed.",
+    "The frontier mirror's enabled=720 reflects the platform user-visibility policy. The plugin's enabled=492 independently controls collector polling; root verified these distinct meanings, so the counts are not a display or collection defect."
+  ],
+  "suggestedCoverageMaintenance": [
+    "Prioritize reliable primary paper identifiers and direct official guideline/regulator records, not raw registration growth.",
+    "Track last successful poll and newest actual publication date separately.",
+    "Use abstract-only evidence honestly when full text cannot be retained; expand full-text availability before subgroup or dosing claims."
+  ]
+}

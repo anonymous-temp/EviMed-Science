@@ -86,7 +86,11 @@ if (command === "exec") {
   const script = rest.join(" ");
   if (script.includes("/api/ready")) { out((state.ready ?? "ok 27 - backup=ok") + "\n"); process.exit(0); }
   if (script.includes("/api/ops/maintenance?activity=1")) { out((state.activity ?? "0 0 0") + "\n"); process.exit(0); }
-  if (script.includes("/api/health")) process.exit(0);
+  if (script.includes("/api/ops/maintenance")) {
+    if (state.maintenanceReleaseFails) process.exit(1);
+    state.releasedMaintenance = rest.at(-2); save(); process.exit(0);
+  }
+  if (script.includes("/api/health")) process.exit(state.healthExit ?? 0);
   process.exit(1);
 }
 if (command === "run" && flag("--entrypoint") === "sh") {
@@ -204,7 +208,7 @@ test("the switch restarts what still reads the previous release through current,
     assert.doesNotMatch(result.stdout, /restarted: web-open-science-release-receipt-1/);
     assert.match(result.stdout, /(\d+) bind\(s\) verified live inside their containers, 0 unverified/);
     const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
-    const up = calls.findIndex((line) => line.includes(" up -d --no-deps open-science-web"));
+    const up = calls.findIndex((line) => line.includes(" up -d --no-build --pull never --no-deps open-science-web"));
     const restart = calls.indexOf(`restart ${PROJECT}-prometheus-1`);
     assert.ok(up >= 0 && restart > up, "prometheus is restarted after the changed services are recreated");
     assert.ok(calls.some((line) => line.startsWith(`exec ${PROJECT}-prometheus-1 stat -c %h /etc/prometheus/rules/open-science.rules.json`)));
@@ -378,5 +382,55 @@ test("the plan names the containers the switch would restart, and restarts none"
     assert.doesNotMatch(calls, / up -d /);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a drained switch releases only its named maintenance lease after health and before the receipt", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const state = JSON.parse(await readFile(path.join(root, "docker-state.json"), "utf8"));
+    assert.equal(state.releasedMaintenance, "release-content-1");
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const release = calls.findIndex((line) => line.includes('action: "release"'));
+    assert.ok(release > calls.findIndex((line) => line.includes("/api/health")));
+    assert.ok(release < calls.indexOf(`restart ${PROJECT}-open-science-release-receipt-1`));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a changed receipt scheduler starts after the maintenance lease is released", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const stateFile = path.join(root, "docker-state.json");
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    state.compose["open-science-release-receipt"] = "new";
+    await writeFile(stateFile, JSON.stringify(state));
+    const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const release = calls.findIndex((line) => line.includes('action: "release"'));
+    const receipt = calls.findIndex((line) => line.includes(" up -d ") && line.includes("--no-deps open-science-release-receipt"));
+    assert.ok(receipt > release, "the startup mint requires normal admission");
+    assert.ok(!calls.some((line) => line.includes("--no-deps open-science-web open-science-release-receipt")));
+    assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`), "the recreated scheduler already mints once");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a maintenance switch refuses unknown activity and preserves the lease when health or release fails", { skip }, async () => {
+  for (const scenario of [{ activity: "unknown HTTP 503" }, { healthExit: 1 }, { maintenanceReleaseFails: true }]) {
+    const { root } = await host();
+    try {
+      const stateFile = path.join(root, "docker-state.json");
+      const state = JSON.parse(await readFile(stateFile, "utf8"));
+      await writeFile(stateFile, JSON.stringify({ ...state, ...scenario }));
+      const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+      assert.notEqual(result.code, 0, result.stdout + result.stderr);
+      const after = JSON.parse(await readFile(stateFile, "utf8"));
+      assert.equal(after.releasedMaintenance, undefined);
+      const calls = await readFile(path.join(root, "docker.log"), "utf8");
+      assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`));
+      if (scenario.activity) assert.doesNotMatch(result.stdout, /=== current -> /);
+    } finally { await rm(root, { recursive: true, force: true }); }
   }
 });

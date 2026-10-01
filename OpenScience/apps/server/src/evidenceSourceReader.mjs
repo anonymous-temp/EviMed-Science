@@ -1,0 +1,124 @@
+import { createHash } from "node:crypto";
+import { parseFragment } from "parse5";
+import { RobotsPolicy } from "./webReadRobots.mjs";
+import { HostPacer } from "./webReadLimits.mjs";
+
+/** Canonical retained scientific text; excludes JATS front matter and references.
+ * @param {string} markup @param {boolean} [fullText] */
+export function canonicalEvidenceSourceText(markup, fullText = false) {
+  const body = fullText
+    ? markup.match(/<body(?:\s[^>]*)?>([\s\S]*?)<\/body>/)?.[1]
+    : null;
+  const tables = fullText
+    ? [...markup.matchAll(/<table-wrap(?:\s[^>]*)?>([\s\S]*?)<\/table-wrap>/g)]
+        .map((match) => match[1])
+        .join(" ")
+    : "";
+  const scientific = body
+    ? `${body.replace(/<table-wrap(?:\s[^>]*)?>[\s\S]*?<\/table-wrap>/g, "")} ${tables}`
+    : markup;
+  const parts = [];
+  const walk = (/** @type {any} */ node) => {
+    if (node.nodeName === "#text") parts.push(node.value);
+    for (const child of node.childNodes ?? []) walk(child);
+  };
+  walk(
+    parseFragment(
+      scientific.replace(/<(?:\/?[A-Za-z][^>]*|![^>]*|\?[^>]*\?)>/g, " "),
+    ),
+  );
+  return parts.join(" ").replace(/\s*</g, " < ").replace(/\s+/g, " ").trim();
+}
+
+/** Primary scholarly API text is stable across page chrome updates; all sockets
+ * still use the existing pinned transport, robots policy and bounded responses.
+ * @param {{readWeb:any,transport:any,userAgent:string,now?:()=>Date}} dependencies */
+export function createEvidenceSourceReader({
+  readWeb,
+  transport,
+  userAgent,
+  now = () => new Date(),
+}) {
+  const robots = new RobotsPolicy({ transport, userAgent });
+  const pacer = new HostPacer({ intervalMs: 1000 });
+  return async (
+    /** @type {string} */ rawUrl,
+    /** @type {any} */ options = {},
+  ) => {
+    const url = new URL(rawUrl);
+    const pmid =
+      url.hostname === "pubmed.ncbi.nlm.nih.gov"
+        ? url.pathname.match(/^\/(\d+)\/?$/)?.[1]
+        : null;
+    const pmcid = ["pmc.ncbi.nlm.nih.gov", "europepmc.org"].includes(
+      url.hostname,
+    )
+      ? url.pathname.match(/\b(PMC\d+)\b/i)?.[1]?.toUpperCase()
+      : null;
+    if (!pmid && !pmcid) return readWeb(rawUrl, options);
+    const target = pmid
+      ? new URL(
+          `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A${pmid}+AND+SRC%3AMED&format=json&resultType=core`,
+        )
+      : new URL(
+          `https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/fullTextXML`,
+        );
+    const verdict = await robots.check(target, { signal: options.signal });
+    if (!verdict.allowed)
+      throw Object.assign(
+        new Error("The scholarly API refuses automated reading."),
+        { code: "web_read_robots_disallowed" },
+      );
+    await pacer.acquire(target.hostname, {
+      crawlDelayMs: verdict.crawlDelayMs,
+      signal: options.signal,
+    });
+    const response = await transport({
+      url: target,
+      headers: {
+        "user-agent": userAgent,
+        accept: pmid ? "application/json" : "application/xml",
+      },
+      signal: options.signal,
+      maxBytes: 16 * 1024 * 1024,
+    });
+    if (response.status < 200 || response.status >= 300)
+      throw Object.assign(
+        new Error("The primary scholarly record is unavailable."),
+        { code: "evidence_source_unavailable" },
+      );
+    let markup = response.body.toString("utf8"),
+      title = "",
+      coverage = "full-text";
+    if (pmid) {
+      const result = JSON.parse(markup)?.resultList?.result?.find(
+        (r) => String(r.id) === pmid && r.source === "MED",
+      );
+      if (typeof result?.abstractText !== "string")
+        throw Object.assign(
+          new Error("The primary record contains no abstract."),
+          { code: "evidence_abstract_unavailable" },
+        );
+      markup = result.abstractText;
+      title = result.title ?? "";
+      coverage = "abstract";
+    }
+    const text = canonicalEvidenceSourceText(markup, Boolean(pmcid));
+    if (!text)
+      throw Object.assign(new Error("No primary source text."), {
+        code: "evidence_source_empty",
+      });
+    return {
+      text,
+      coverage,
+      receipt: {
+        url: rawUrl,
+        finalUrl: target.href,
+        title,
+        fetchedAt: now().toISOString(),
+        sha256: createHash("sha256").update(response.body).digest("hex"),
+        truncated: false,
+      },
+    };
+  };
+}

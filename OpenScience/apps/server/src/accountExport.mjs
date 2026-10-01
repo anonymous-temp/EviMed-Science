@@ -21,6 +21,8 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
 const queries = [
   ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
   ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
+  ["evidenceCardRevisions", "SELECT r.* FROM evimed_frontier.evidence_card_revisions r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id WHERE c.user_id=$1 ORDER BY r.card_id,r.revision"],
+  ["evidenceAutomation", "SELECT a.* FROM evimed_frontier.evidence_automation a JOIN evimed_frontier.evidence_zones z ON z.id=a.zone_id WHERE z.user_id=$1 ORDER BY a.zone_id"],
   ["evidenceZoneFollows", "SELECT * FROM evimed_frontier.evidence_zone_follows WHERE user_id=$1 ORDER BY zone_id"],
   ["evidenceComments", "SELECT * FROM evimed_frontier.evidence_comments WHERE user_id=$1 ORDER BY id"],
   ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
@@ -234,7 +236,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents,
-      evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
+      evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,
     };
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");

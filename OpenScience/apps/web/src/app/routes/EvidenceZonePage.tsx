@@ -5,8 +5,12 @@ import {
   useEvidenceRequestId,
 } from "@/components/frontier/useEvidenceScope";
 import { fetchFrontierItem, type FrontierItem } from "@/lib/frontierClient";
-import { evidenceDate } from "@/components/frontier/EvidenceReading";
+import {
+  evidenceDate,
+  evidenceReviewLabel,
+} from "@/components/frontier/EvidenceReading";
 import { ZoneEditor, CardEditor } from "@/components/frontier/EvidenceEditors";
+import { EvidenceMaintenance } from "@/components/frontier/EvidenceMaintenance";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -264,6 +268,13 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 </details>
               )}
             </header>
+            {zone.canEdit && (
+              <EvidenceMaintenance
+                key={zone.id}
+                zone={zone}
+                onUpdated={() => setRefresh((value) => value + 1)}
+              />
+            )}
             <section aria-label="专区证据">
               <div className="mb-3 flex flex-wrap gap-3 text-caption text-text-3">
                 {total !== null && <span>{total} 条匹配证据</span>}
@@ -341,16 +352,34 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                         to={`/app/frontier/zones/${encodeURIComponent(zone.id)}/evidence/${encodeURIComponent(card.id)}`}
                         className="text-ui font-medium text-text hover:text-accent"
                       >
-                        {card.title}
+                        {card.content?.question || card.title}
                       </Link>
-                      {card.summary && (
+                      {(card.content?.answer || card.summary) && (
                         <p className="mt-2 line-clamp-3 max-w-measure text-ui leading-relaxed text-text-2">
-                          {card.summary}
+                          {card.content?.answer || card.summary}
                         </p>
                       )}
                       <div className="mt-2 flex flex-wrap gap-3 text-caption text-text-3">
-                        {card.creator && <span>创作者 {card.creator}</span>}
+                        {card.editorial?.author ? (
+                          <span>
+                            {card.editorial.author.kind === "ai"
+                              ? "AI 编写"
+                              : "编写"}{" "}
+                            · {card.editorial.author.name}
+                          </span>
+                        ) : (
+                          card.creator && <span>创作者 {card.creator}</span>
+                        )}
                         {card.reviewer && <span>评议者 {card.reviewer}</span>}
+                        {evidenceReviewLabel(card) && (
+                          <span>{evidenceReviewLabel(card)}</span>
+                        )}
+                        {card.editorial?.sourceCheckedAt && (
+                          <span>
+                            来源核查 ·{" "}
+                            {evidenceDate(card.editorial.sourceCheckedAt)}
+                          </span>
+                        )}
                       </div>
                     </li>
                   ))}
