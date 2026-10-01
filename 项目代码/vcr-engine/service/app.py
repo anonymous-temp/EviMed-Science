@@ -1050,6 +1050,31 @@ class Engine:
 
 # --- health ----------------------------------------------------------------
 
+def numerical_source_digest(root: Path) -> str | None:
+    """Identity of the R code/schema/lock physically installed in this image."""
+    try:
+        folder = root / "R"
+        if root.is_symlink() or folder.is_symlink() or not folder.is_dir():
+            return None
+        files = sorted(path for path in folder.rglob("*") if path.suffix in {".R", ".json"})
+        if not files or folder / "package-lock.json" not in files or folder / "engine.R" not in files:
+            return None
+        digest = hashlib.sha256()
+        for path in files:
+            cursor = path
+            while cursor != root:
+                if cursor.is_symlink():
+                    return None
+                cursor = cursor.parent
+            body = read_regular_file(path, 8 * 1024 * 1024)
+            if body is None:
+                return None
+            record = f"{path.relative_to(root).as_posix()}\0{len(body)}\0{hashlib.sha256(body).hexdigest()}\n"
+            digest.update(record.encode("utf-8"))
+        return digest.hexdigest()
+    except OSError:
+        return None
+
 
 class HealthProbe:
     """R's self-check, run once and remembered (a failure only briefly)."""
@@ -1097,7 +1122,8 @@ class HealthProbe:
             codes = [code for code in codes if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,64}", code)]
             LOG.error("engine self-check reported problems: %s", ", ".join(codes) or "unnamed")
             return 503, {"ok": False, "detail": "engine_self_check_failed", "issues": codes}
-        return 200, {"ok": True, **{name: health.get(name) for name in HEALTH_FIELDS}}
+        return 200, {"ok": True, **{name: health.get(name) for name in HEALTH_FIELDS},
+                     "numericalSourceDigest": numerical_source_digest(s.engine_root)}
 
 
 # --- the app ---------------------------------------------------------------

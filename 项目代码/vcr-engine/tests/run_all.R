@@ -24,4 +24,14 @@ cat(sprintf("vcr-engine %s | %s | cores %d | lock %s\n\n",
 files <- sort(list.files(file.path(VCR_ROOT, "tests", "numeric"), pattern = "\\.R$", full.names = TRUE))
 for (f in files) source(f, local = FALSE)
 ok <- vcr_case_summary()
+evidence <- Sys.getenv("VCR_NUMERICAL_EVIDENCE_FILE", "")
+if (nzchar(evidence)) {
+  writeLines(jsonlite::toJSON(list(schemaVersion = 1L, sourceRevision = Sys.getenv("GITHUB_SHA", ""),
+    rVersion = as.character(getRversion()), packageLockHash = vcr_package_lock_hash(),
+    methods = vcr_domain()$methods, cases = .vcr_test_env$results,
+    methodsByCase = vcr_test_methods_by_case(), testOnly = .vcr_test_env$only,
+    skippedCaseIds = vapply(Filter(function(case) grepl("skipped:", case$detail, fixed = TRUE), .vcr_test_env$results), function(case) case$id, character(1)),
+    complete = isTRUE(ok) && !nzchar(.vcr_test_env$only)),
+    auto_unbox = TRUE, null = "null", digits = NA, pretty = TRUE), evidence)
+}
 quit(status = if (isTRUE(ok)) 0L else 1L)

@@ -381,13 +381,27 @@ class SecretFilesTest(EngineCase):
 
 
 class HealthTest(EngineCase):
+    def test_numerical_identity_reads_the_installed_files_and_refuses_links(self) -> None:
+        root = self.tmp / "numerical"
+        (root / "R").mkdir(parents=True)
+        (root / "R/engine.R").write_bytes(b"engine-source")
+        (root / "R/package-lock.json").write_bytes(b"{}")
+        first = engine_app.numerical_source_digest(root)
+        self.assertRegex(first, r"^[a-f0-9]{64}$")
+        self.assertEqual(first, engine_app.numerical_source_digest(root))
+        (root / "R/engine.R").write_bytes(b"changed-source")
+        self.assertNotEqual(first, engine_app.numerical_source_digest(root))
+        (root / "R/linked.R").symlink_to(self.tmp / "missing-source")
+        self.assertIsNone(engine_app.numerical_source_digest(root))
+
     def test_health_runs_r_once_and_answers_from_the_cache(self) -> None:
         client = self.client()
         for _ in range(3):
             response = client.get("/health")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), {"ok": True, **{k: HEALTH_OK[k] for k in (
-                "engineVersion", "rVersion", "methods", "packageLockHash", "protocolVersion")}})
+                "engineVersion", "rVersion", "methods", "packageLockHash", "protocolVersion")},
+                "numericalSourceDigest": engine_app.numerical_source_digest(ENGINE_ROOT)})
         self.assertEqual(self.health_calls(), 1)
         env = read_env_dump(self.stub / "health-env.txt")
         self.assertNotIn("VCR_ENGINE_TOKEN_FILE", env)
@@ -909,7 +923,7 @@ class RealEngineSmokeTest(EngineCase):
         self.assertIn(health.status_code, (200, 503))
         if health.status_code == 200:
             self.assertEqual(set(health.json()), {"ok", "engineVersion", "rVersion", "methods",
-                                                  "packageLockHash", "protocolVersion"})
+                                                  "packageLockHash", "protocolVersion", "numericalSourceDigest"})
         self.assertNotIn(b"Error", health.content)
 
 
