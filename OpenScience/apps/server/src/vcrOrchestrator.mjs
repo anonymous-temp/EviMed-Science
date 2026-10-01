@@ -2334,11 +2334,28 @@ export class VcrOrchestrator {
       if (!(await this.#claim(study, `detect:${node}`, "notice", "done", { detail: { sourceId, from: used, to: newest } }))) continue;
       await this.#mark_stale(study, [node], "source_corrected", { by: "detect", sourceId });
     }
-    const rows = await this.store.rows(`SELECT DISTINCT j.checkpoint ->> 'node' AS node, e.method, e.method_version
-      FROM ${VCR_SCHEMA}.results r
-      JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
-      JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
-      WHERE r.study_id = $1 AND r.superseded_by IS NULL AND j.checkpoint ? 'node'`, [study.id]);
+    // A current result can aggregate several stages. Its execution_id names
+    // only the last landing, while earlier stages still supply its numbers.
+    // Require the current stageResults bond and the stored job's study/node/
+    // stage, so a retired or foreign diagnostic reference grants no authority.
+    const rows = await this.store.rows(`WITH current_results AS (
+        SELECT r.study_id,r.diagnostics,e.id AS execution_id,j.checkpoint->>'node' AS node
+        FROM ${VCR_SCHEMA}.results r
+        JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
+        WHERE r.study_id=$1 AND r.superseded_by IS NULL AND j.checkpoint ? 'node'
+      ), contributions AS (
+        SELECT study_id,node,execution_id FROM current_results
+        UNION
+        SELECT c.study_id,c.node,e.id FROM current_results c
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(c.diagnostics->'stages')='array'
+          THEN c.diagnostics->'stages' ELSE '[]'::jsonb END) AS s(stage)
+        JOIN ${VCR_SCHEMA}.executions e ON e.job_id=s.stage->>'jobId' AND e.study_id=c.study_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=c.study_id
+        WHERE c.diagnostics->'stageResults'->(s.stage->>'stage')->>'jobId'=e.job_id
+          AND j.checkpoint->>'node'=c.node AND j.checkpoint->>'stage'=s.stage->>'stage'
+      ) SELECT DISTINCT c.node,e.method,e.method_version FROM contributions c
+      JOIN ${VCR_SCHEMA}.executions e ON e.id=c.execution_id AND e.study_id=c.study_id`, [study.id]);
     for (const row of rows) {
       const now = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[String(row.method)]?.version;
       if (!now || now === String(row.method_version)) continue;

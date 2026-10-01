@@ -200,6 +200,21 @@ async function drainJobs(module, study) {
   throw new Error("the jobs did not settle");
 }
 
+/** Force one legal completion order through the real worker, without a clock delay or editing result pointers.
+ * The worker's running-job read has no ordering contract, so both stage orders are valid.
+ * @param {any} t @param {string} lastKind */
+function finishStageLast(t, lastKind) {
+  const original = store.rows;
+  store.rows = async (query, values = []) => {
+    const rows = await original.call(store, query, values);
+    if (!/SELECT\s+id,\s*study_id\s+FROM\s+evimed_vcr\.jobs\s+WHERE\s+state\s*=\s*'running'/u.test(query) || rows.length < 2) return rows;
+    const jobs = await original.call(store, "SELECT id,kind FROM evimed_vcr.jobs WHERE id=ANY($1::text[])", [rows.map(row => row.id)]);
+    const kinds = new Map(jobs.map(job => [job.id, job.kind]));
+    return rows.sort((a, b) => Number(kinds.get(a.id) === lastKind) - Number(kinds.get(b.id) === lastKind));
+  };
+  t.after(() => { store.rows = original; });
+}
+
 /**
  * One AI run: the orchestrator dispatches it, the run writes what a run of
  * that capability writes (through the very same write path the runtime uses),
@@ -600,7 +615,8 @@ test("an in-flight result cannot clear a newer source change, including changes 
   assert.deepEqual(await store.staleMarks(study.id), []);
 });
 
-test("AC-16 the other four things that make a result stale each raise their own reason: a criterion, a protocol revision, a corrected source, a moved method", options, async () => {
+test("AC-16 the other four things that make a result stale each raise their own reason: a criterion, a protocol revision, a corrected source, a moved method", options, async (t) => {
+  finishStageLast(t, "design_analytic");
   const module = compose();
   const { study } = await computedStudy(module, "reasons");
   const [scenario] = await store.trialScenarios(study.id);
@@ -645,15 +661,88 @@ test("AC-16 the other four things that make a result stale each raise their own 
   await store.clearStale(study.id, (await store.staleMarks(study.id)).map((mark) => mark.node));
 
   // A method whose version moved: a current result computed with another version is stale under `method_version_changed`.
-  await store.query("UPDATE evimed_vcr.executions SET method_version = '0.9.0' WHERE study_id = $1 AND method = 'design.simulate'", [study.id]);
+  const currentExecution = await store.one(`SELECT e.id,e.method,e.method_version FROM evimed_vcr.results r
+    JOIN evimed_vcr.executions e ON e.id=r.execution_id JOIN evimed_vcr.jobs j ON j.id=e.job_id
+    WHERE r.study_id=$1 AND r.superseded_by IS NULL AND j.checkpoint->>'node'=$2`, [study.id, scenarioNode]);
+  const currentAggregate = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+  const simulation = currentAggregate.diagnostics.stageResults.simulation;
+  assert.equal(simulation.method, "design.simulate");
+  assert.ok(simulation.measures.some(measure => measure.name === "power"), "the current aggregate still uses the earlier simulation's measures");
+  // Represent a retained result from an older deployment coherently across its
+  // execution, frozen job and merged provenance, whichever stage landed last.
+  await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [study.id, simulation.jobId]);
+  await store.query("UPDATE evimed_vcr.jobs SET method_version='0.9.0' WHERE study_id=$1 AND id=$2", [study.id, simulation.jobId]);
+  currentAggregate.diagnostics.stageResults.simulation.methodVersion = "0.9.0";
+  for (const stage of currentAggregate.diagnostics.stages) if (stage.jobId === simulation.jobId) stage.methodVersion = "0.9.0";
+  await store.query("UPDATE evimed_vcr.results SET diagnostics=$2::jsonb WHERE id=$1", [currentAggregate.id, JSON.stringify(currentAggregate.diagnostics)]);
   await module.orchestrator.advance(study.id);
   const moved = await store.staleMarks(study.id);
-  assert.ok(moved.some((mark) => mark.reason === "method_version_changed" && mark.node === scenarioNode), JSON.stringify(moved));
+  assert.ok(moved.some((mark) => mark.reason === "method_version_changed" && mark.node === scenarioNode), JSON.stringify({ moved, currentExecution }));
   await drainJobs(module, study);
   assert.equal(VCR_ENGINE_METHODS["design.simulate"].version, "1.1.0");
-  const rerun = (await store.rows("SELECT method_version FROM evimed_vcr.executions WHERE study_id = $1 AND method = 'design.simulate' ORDER BY created_at DESC LIMIT 1", [study.id]))[0];
+  const aggregateAfter = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+  const rerun = await store.one("SELECT method_version FROM evimed_vcr.executions WHERE study_id=$1 AND job_id=$2", [study.id, aggregateAfter.diagnostics.stageResults.simulation.jobId]);
   assert.equal(rerun.method_version, VCR_ENGINE_METHODS["design.simulate"].version, "computed again at the version the engine publishes now");
 });
+
+for (const lastKind of ["design_analytic", "design_simulation"]) {
+  test(`AC-16 current contributing method drift is detected with ${lastKind} landing last; retired and foreign stages do not invalidate it`, options, async (t) => {
+    finishStageLast(t, lastKind);
+    const module = compose();
+    const { study, write } = await computedStudy(module, `contributing-${lastKind}`);
+    const [scenario] = await store.trialScenarios(study.id);
+    const node = vcrObjectNode("trial_scenario", scenario);
+    const previous = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+    const retiredJobId = previous.diagnostics.stageResults.simulation.jobId;
+    await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set", valueSource: "assumed" }]);
+    await drainJobs(module, study);
+    const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+    const simulation = current.diagnostics.stageResults.simulation;
+    assert.notEqual(simulation.jobId, retiredJobId);
+    const root = await store.one("SELECT method FROM evimed_vcr.executions WHERE id=$1", [current.executionId]);
+    assert.equal(root.method, lastKind === "design_analytic" ? "design.analytic" : "design.simulate");
+    await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [study.id, retiredJobId]);
+    // A superseded job mentioned only in the stage list is not a current
+    // contribution: the matching stageResults entry still names its successor.
+    const retained = structuredClone(current.diagnostics);
+    retained.stages.push({ stage: "simulation", jobId: retiredJobId, method: "design.simulate", methodVersion: "0.9.0" });
+    await store.query("UPDATE evimed_vcr.results SET diagnostics=$2::jsonb WHERE id=$1", [current.id, JSON.stringify(retained)]);
+    await module.orchestrator.advance(study.id);
+    assert.deepEqual(await store.staleMarks(study.id), []);
+    const foreignModule = compose();
+    const { study: foreignStudy } = await computedStudy(foreignModule, `foreign-${lastKind}`);
+    const foreignResult = (await store.results(foreignStudy.id, "trial_scenario"))[0];
+    const foreignStage = foreignResult.diagnostics.stageResults.simulation;
+    const foreignCheckpoint = (await store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1", [foreignStage.jobId])).checkpoint;
+    await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [foreignStudy.id, foreignStage.jobId]);
+    await store.query("UPDATE evimed_vcr.jobs SET checkpoint=jsonb_set(checkpoint,'{node}',$2::jsonb) WHERE id=$1", [foreignStage.jobId, JSON.stringify(node)]);
+    const injected = structuredClone(current.diagnostics);
+    injected.stageResults.simulation = { ...foreignStage };
+    injected.stages = injected.stages.filter(stage => stage.stage !== "simulation");
+    injected.stages.push({ stage: "simulation", jobId: foreignStage.jobId, method: "design.simulate", methodVersion: "0.9.0" });
+    await store.query("UPDATE evimed_vcr.results SET diagnostics=$2::jsonb WHERE id=$1", [current.id, JSON.stringify(injected)]);
+    await module.orchestrator.advance(study.id);
+    assert.deepEqual(await store.staleMarks(study.id), [], "foreign stage references cannot invalidate or inspect another study");
+    await store.query("UPDATE evimed_vcr.jobs SET checkpoint=$2::jsonb WHERE id=$1", [foreignStage.jobId, JSON.stringify(foreignCheckpoint)]);
+    await store.query("UPDATE evimed_vcr.executions SET method_version=$3 WHERE study_id=$1 AND job_id=$2", [foreignStudy.id, foreignStage.jobId, foreignStage.methodVersion]);
+    await store.query("UPDATE evimed_vcr.results SET diagnostics=$2::jsonb WHERE id=$1", [current.id, JSON.stringify({ ...current.diagnostics, stages: { malformed: true } })]);
+    await module.orchestrator.advance(study.id);
+    assert.deepEqual(await store.staleMarks(study.id), []);
+    // Restore the real current stage provenance and move its version.
+    current.diagnostics.stageResults.simulation.methodVersion = "0.9.0";
+    for (const stage of current.diagnostics.stages) if (stage.jobId === simulation.jobId) stage.methodVersion = "0.9.0";
+    await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [study.id, simulation.jobId]);
+    await store.query("UPDATE evimed_vcr.jobs SET method_version='0.9.0' WHERE study_id=$1 AND id=$2", [study.id, simulation.jobId]);
+    await store.query("UPDATE evimed_vcr.results SET diagnostics=$2::jsonb WHERE id=$1", [current.id, JSON.stringify(current.diagnostics)]);
+    await module.orchestrator.advance(study.id);
+    assert.ok((await store.staleMarks(study.id)).some(mark => mark.node === node && mark.reason === "method_version_changed"));
+    await drainJobs(module, study);
+    const replacement = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+    assert.notEqual(replacement.diagnostics.stageResults.simulation.jobId, simulation.jobId);
+    assert.equal(replacement.diagnostics.stageResults.simulation.methodVersion, VCR_ENGINE_METHODS["design.simulate"].version);
+    assert.ok((await store.allResults(study.id)).some(result => result.id === current.id), "the usable old aggregate is retained");
+  });
+}
 
 test("AC-21 a review countersigns one version, and reads as changed once that version moves", options, async () => {
   const module = compose();
