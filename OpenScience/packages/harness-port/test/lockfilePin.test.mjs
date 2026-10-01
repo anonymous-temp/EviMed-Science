@@ -43,6 +43,8 @@ const MINIMUM_PACKAGES_EXPECTED = 12;
 test("every @deepseek-ai/dsh package in the lockfile is the pinned release", async () => {
   const pins = JSON.parse(await readFile(new URL("../../../deps-version.json", import.meta.url), "utf8"));
   const pin = pins.dsh.version;
+  const seams = JSON.parse(await readFile(new URL('../seam-manifest.json', import.meta.url), 'utf8'));
+  assert.equal(seams.pnpm, pins.dsh.pnpm, 'native preparer must use the pinned kernel package manager');
   assert.match(pin, /^\d+\.\d+\.\d+/, "deps-version.json must carry a concrete dsh version");
 
   const lock = await readFile(new URL("../../../pnpm-lock.yaml", import.meta.url), "utf8");

@@ -1,6 +1,7 @@
 {
   "dsh": "0.1.7-rc.2",
   "cordis": "4.0.4",
+  "pnpm": "11.7.0",
   "services": {
     "required": [
       "tools",
@@ -89,7 +90,7 @@
     "@deepseek-ai/dsh-persona": "config-row",
     "@deepseek-ai/dsh-mcp-client": "config-row",
     "@deepseek-ai/dsh-agent-preset": "config-row",
-    "@deepseek-ai/dsh-skill-filesystem": "config-row",
+    "@deepseek-ai/dsh-skill-filesystem": "provider-base",
     "@deepseek-ai/dsh-compaction-basic": "provider-base",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",
@@ -103,7 +104,8 @@
     "@deepseek-ai/dsh-storage-json": "config-row",
     "@deepseek-ai/dsh-typert-protocol": "dependency",
     "@deepseek-ai/dsh-scope": "dependency",
-    "@deepseek-ai/dsh-system-prompt": "dependency"
+    "@deepseek-ai/dsh-system-prompt": "dependency",
+    "@deepseek-ai/dsh-plugin-manager": "dependency"
   },
   "providers": {
     "compaction": {
@@ -138,6 +140,30 @@
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
       "verifiedAgainst": "0.1.7-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.1.7-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
+    },
+    "personalSkills": {
+      "package": "@deepseek-ai/dsh-skill-filesystem",
+      "export": "FileSystemSkillProvider",
+      "methods": [
+        "list",
+        "get",
+        "dispose"
+      ],
+      "policy": {
+        "includeDefaultRoots": false,
+        "watch": false
+      }
+    },
+    "extensionPreparation": {
+      "package": "@deepseek-ai/dsh-plugin-manager",
+      "export": "PluginManager",
+      "methods": [
+        "inspect",
+        "installBundle",
+        "cancelInstall",
+        "listBundles"
+      ],
+      "serving": false
     }
   },
   "promptSections": {

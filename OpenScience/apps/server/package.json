@@ -30,6 +30,8 @@
     "parse5": "8.0.1",
     "pg": "8.16.3",
     "playwright-core": "1.63.0",
+    "tar-stream": "2.2.0",
+    "unzipper": "0.10.14",
     "ws": "8.21.3",
     "wuying-agentbay-sdk": "0.22.0",
     "yaml": "2.8.3"
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@types/ws": "8.18.1",
     "eslint": "^8.57.1",
+    "fflate": "0.8.3",
     "typescript": "^5.6.3"
   }
 }

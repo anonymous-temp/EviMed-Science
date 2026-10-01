@@ -1262,3 +1262,5 @@ export {
 } from './src/compaction.mjs'
 
 export { decorateEngineToolContext, ENGINE_EXECUTION_CONTEXT } from './src/engineContext.mjs'
+export { parsePersonalSkill, createPersonalSkillProvider, validatePersonalSkillRoot } from './src/personalSkills.mjs'
+export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer } from './src/extensionPreparation.mjs'
