@@ -1220,6 +1220,7 @@ export function presentDataTab(bundle, query = {}) {
       ...(cards.length ? [{ label: "假设卡", value: `${cards.length} 张` }] : []),
       { label: "患者级数据", value: study.dataTier === "T0" ? "未接入" : (snapshots.length ? `${snapshots.length} 个快照` : "未接入") },
     ],
+    ...(evidence?.registryCoverage?.length ? { registryCoverage: evidence.registryCoverage } : {}),
     assumptions: cards,
     reviews: list(bundle.reviews).map(presentVcrReview),
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,

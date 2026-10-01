@@ -706,7 +706,7 @@ test("an assessment carries which model and prompt produced its language judgmen
   });
   assert.equal(assessment.provenance.modelId, "deepseek-v4");
   assert.equal(matchingAssessmentDocument(assessment).provenance.criteriaVersion, "prt-1@2");
-  assert.equal(assessSubject({ subjectKey: "S1", asOf: AS_OF, criteria: [], facts: [] }).provenance, null);
+  assert.equal(assessSubject({ subjectKey: "S1", asOf: AS_OF, criteria: [], facts: [] }).provenance.vocabularyVersion, "evimed-internal-sex-1");
 });
 
 // ------------------------------------------------ the capability package
@@ -797,4 +797,15 @@ test("the eval pack carries real briefs, and every one of them names the input t
   // The two measurement briefs are the ones AC-36 and AC-37 are answered by.
   assert.ok(ids.some((id) => id.includes("historical-replay")), "AC-36 needs a replay brief");
   assert.ok(ids.some((id) => id.includes("accrual-forecast-backtest")), "AC-37 needs a backtest brief");
+});
+
+test('C2-25 declared code vocabulary versions cannot silently select the current mapping', () => {
+  const node = { op: 'compare', variable: 'sex', comparator: 'eq', value: 'female' };
+  const fact = { id: 'versioned', variable: 'sex', value: 'F', extractedBy: 'snapshot', source: { vocabularyVersion: 'unknown-vocabulary-2' } };
+  const unknown = evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) });
+  assert.equal(unknown.state, UNKNOWN);
+  assert.equal(unknown.missing[0].reason, 'coding_version_unavailable');
+  const assessed = assessSubject({ subjectKey: 'heldout', asOf: AS_OF, facts: [{ ...fact, visibleAt: AS_OF }], criteria: [{ id: 'sex', kind: 'inclusion', requirement: node }] });
+  assert.equal(assessed.judgments[0].state, UNKNOWN);
+  assert.ok(assessed.provenance.vocabularyVersion);
 });

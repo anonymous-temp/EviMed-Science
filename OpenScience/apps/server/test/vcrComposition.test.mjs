@@ -162,7 +162,8 @@ const matchingInputs = (asOf = AS_OF, protocol = "prt_1") => [
 ];
 
 test("the frozen context of a matching job is read back from its inputs, and a missing or invalid instant is refused (CS-34)", () => {
-  assert.deepEqual(matchingContextOf(matchingInputs()), { asOf: AS_OF, protocolVersionId: "prt_1", factsToken: "0123456789abcdef" });
+  assert.deepEqual(matchingContextOf(matchingInputs()), { vocabularyVersion: "evimed-internal-sex-1", asOf: AS_OF, protocolVersionId: "prt_1", factsToken: "0123456789abcdef" });
+  assert.throws(() => matchingContextOf([...matchingInputs(), { kind: 'evidence', id: 'matching:vocabulary:unknown-version' }]), error => error.code === 'vcr_matching_vocabulary_unavailable');
   assert.throws(() => matchingContextOf([]), (error) => error.code === "vcr_asof_invalid");
   assert.throws(() => matchingContextOf(matchingInputs("28/09/2026")), (error) => error.code === "vcr_asof_invalid");
 });

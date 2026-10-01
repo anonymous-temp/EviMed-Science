@@ -1125,17 +1125,19 @@ export class VcrStore extends VcrStoreBase {
       .map((row) => this.#decisionFromRow(row));
   }
 
-  /** @param {{ studyId: string, userId: string, kind: string, cover?: Record<string, any> }} input */
-  async createExport(input) {
+  /** @param {{ studyId: string, userId: string, kind: string, cover?: Record<string, any> }} input
+   * @param {{client?:any}} [options] */
+  async createExport(input, { client = null } = {}) {
     if (!VCR_EXPORT_KINDS.includes(String(input.kind))) throw new TypeError(`createExport: unknown kind ${JSON.stringify(input.kind)}`);
-    return this.transaction(async (client) => {
-      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.exports (id, study_id, user_id, kind, cover)
+    const write = async (handle) => {
+      const row = (await handle.query(`INSERT INTO ${VCR_SCHEMA}.exports (id, study_id, user_id, kind, cover)
         VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING *`,
       [vcrId("export"), input.studyId, String(input.userId), String(input.kind), JSON.stringify(input.cover ?? {})])).rows[0];
-      await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.export.create",
+      await this.audit({ client: handle, studyId: input.studyId, userId: String(input.userId), action: "vcr.export.create",
         object: String(row.id), detail: { kind: String(input.kind) } });
       return this.#exportFromRow(row);
-    });
+    };
+    return client ? write(client) : this.transaction(write);
   }
 
   /** @param {any} row */
@@ -1271,11 +1273,13 @@ export class VcrStore extends VcrStoreBase {
   async saveMethod(input) {
     const row = await this.one(`INSERT INTO ${VCR_SCHEMA}.methods (id, method, version, endpoints, assumptions, numeric_tests, cross_checks, released_at)
       VALUES ($1, $2, $3, $4::text[], $5::jsonb, $6::jsonb, $7::text[], $8)
-      ON CONFLICT (method, version) DO UPDATE SET endpoints = EXCLUDED.endpoints, assumptions = EXCLUDED.assumptions,
-        numeric_tests = EXCLUDED.numeric_tests, cross_checks = EXCLUDED.cross_checks RETURNING *`,
+      ON CONFLICT (method, version) DO UPDATE SET endpoints = EXCLUDED.endpoints,
+        assumptions = CASE WHEN $9 THEN EXCLUDED.assumptions ELSE methods.assumptions END,
+        numeric_tests = CASE WHEN $10 THEN EXCLUDED.numeric_tests ELSE methods.numeric_tests END,
+        cross_checks = EXCLUDED.cross_checks RETURNING *`,
     [vcrId("method"), String(input.method), String(input.version), list(input.endpoints).map(String),
       JSON.stringify(input.assumptions ?? []), JSON.stringify(input.numericTests ?? {}), list(input.crossChecks).map(String),
-      input.releasedAt ?? null]);
+      input.releasedAt ?? null, Object.hasOwn(input, 'assumptions'), Object.hasOwn(input, 'numericTests')]);
     return row ? { id: String(row.id), method: String(row.method), version: String(row.version) } : null;
   }
 

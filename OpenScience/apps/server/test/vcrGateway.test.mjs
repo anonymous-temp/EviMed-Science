@@ -402,3 +402,38 @@ test("the write path cannot be reached without a study, and an empty write says 
   assert.equal(result.ok, false);
   assert.equal(result.issues[0].code, "vcr_write_empty");
 });
+
+test('deferred publication cannot be requested while private forecasts and ordinary study writes remain usable', async () => {
+  const { handler, vcr } = fixture();
+  const saved = [];
+  vcr.store.result = async (_studyId, id) => ({ id, version: 1, measures: [{ name: 'power', value: 0.8 }], counts: {} });
+  vcr.store.registerForecast = async value => { saved.push(value); return { id: 'fct_private' }; };
+  const res = response();
+  await handler(request('/internal/vcr/v1/write', { what: 'forecast', items: [
+    { kind: 'trial', resultId: 'res_1', public: true }, { kind: 'trial', resultId: 'res_1' },
+  ] }), res);
+  assert.equal(res.json().data.ids.length, 1);
+  assert.equal(res.json().data.issues[0].field, 'public');
+  assert.equal(saved.length, 1); assert.notEqual(saved[0].public, true);
+  for (const what of ['soa_item', 'regulatory_contact', 'recruitment_material_publication']) {
+    const deferred = response(); await handler(request('/internal/vcr/v1/write', { what, items: [{}] }), deferred);
+    assert.equal(deferred.status, 400); assert.equal(deferred.json().code, 'vcr_write_what_invalid');
+  }
+  const normal = response(); await handler(request('/internal/vcr/v1/write', { what: 'definition', items: [{ pico: {}, estimand: {} }] }), normal);
+  assert.equal(normal.json().data.ids.length, 1);
+});
+
+test('patient-set requests resolve exactly one registered model version before saving', async () => {
+  const { handler, vcr } = fixture();
+  const saved = [];
+  vcr.store.models = async () => [{ id: 'mdl_v1', name: 'Restricted model', version: '1' }, { id: 'mdl_v2', name: 'Restricted model', version: '2' }];
+  vcr.store.savePatientSet = async input => { saved.push(input); return { id: 'patients' }; };
+  const res = response();
+  await handler(request('/internal/vcr/v1/write', { what: 'patient_set', items: [
+    { modelId: 'mdl_v1', modelVersion: '99' }, { modelVersion: '1' }, { modelId: 'Restricted model' },
+    { modelId: 'Restricted model', modelVersion: '2' },
+  ] }), res);
+  assert.equal(res.json().data.ids.length, 1);
+  assert.equal(res.json().data.issues.length, 3);
+  assert.equal(saved.length, 1); assert.equal(saved[0].modelId, 'mdl_v2'); assert.equal(saved[0].modelVersion, '2');
+});

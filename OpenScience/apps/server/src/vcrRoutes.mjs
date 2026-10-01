@@ -124,6 +124,11 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/jobs/:job/cancel": ["run"],
   "POST /studies/:id/budget": ["manage_study"],
   "POST /studies/:id/assumptions": ["write"],
+  "POST /studies/:id/correction-cases": ["export"],
+  "GET /studies/:id/correction-cases/:dataset": ["export"],
+  "POST /studies/:id/correction-cases/:dataset/replay": ["export"],
+  "GET /studies/:id/curve-extractions": ["read"],
+  "POST /studies/:id/curve-extractions": ["write"],
   "POST /studies/:id/reviews clinical": ["review_clinical", "review_any"],
   "POST /studies/:id/reviews statistical": ["review_statistical", "review_any"],
   "POST /studies/:id/reviews data": ["write", "review_any"],
@@ -174,7 +179,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "decisions", "export", "members", "referrals"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -235,7 +240,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -728,6 +733,33 @@ export function createVcrRoutes(dependencies) {
     }
 
     // --- a review countersignature ------------------------------------------------
+    if (section === 'correction-cases') {
+      const { study } = await authorize(id, 'export');
+      const cases = service.packages?.corrections ?? dependencies.corrections;
+      if (!cases) throw new HttpError(503, 'vcr_evaluation_input_unavailable', 'Correction replay is unavailable.');
+      const identity = { studyId: study.id, principal: String(user.id) };
+      if (parts.length === 3 && method === 'POST') {
+        const body = await bodyOf(req, maxJsonBytes, ['after', 'limit']);
+        return reply(await cases.exportDataset({ ...identity, after: body.after ?? '0', limit: body.limit ?? 100 }));
+      }
+      if (parts.length === 4 && method === 'GET') return reply(await cases.readDataset({ ...identity, datasetId: parts[3] }));
+      if (parts.length === 5 && parts[4] === 'replay' && method === 'POST') {
+        await bodyOf(req, maxJsonBytes, []);
+        return reply(await cases.replay({ ...identity, datasetId: parts[3] }));
+      }
+      throw new HttpError(404, 'not_found', 'Correction-case route not found.');
+    }
+
+    if (parts.length === 3 && section === "curve-extractions" && ["GET", "POST"].includes(method)) {
+      const { study } = await authorize(id, method === 'POST' ? 'write' : 'read');
+      const curves = service.packages?.evidence?.curves ?? dependencies.evidence?.curves;
+      if (!curves) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source-bound curve input is unavailable.');
+      if (method === 'GET') return reply({ receipts: await curves.receipts({ studyId: study.id, principal: String(user.id) }) });
+      const body = await bodyOf(req, maxJsonBytes, ['imageArtifactId', 'points']);
+      const saved = await curves.recordSelection({ studyId: study.id, principal: String(user.id), imageArtifactId: body.imageArtifactId, points: body.points });
+      return reply({ id: saved.id, origin: saved.origin, createdAt: saved.createdAt }, 201);
+    }
+
     if (parts.length === 3 && method === "POST" && section === "reviews") {
       const body = await bodyOf(req, maxJsonBytes, ["kind", "nodes", "note", "changes"]);
       const kind = word(body.kind, VCR_REVIEW_KINDS, "vcr_review_kind_invalid", "kind");

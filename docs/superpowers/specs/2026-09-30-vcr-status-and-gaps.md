@@ -10,6 +10,41 @@
 
 ## 一、当前状态
 
+### Candidate source corrections (2026-10-01, Task 04)
+
+The following changes are implemented in the integration worktree. They are
+source-level evidence, not a claim that the candidate is deployed, that final CI
+qualified the released engine, or that ordinary-user live acceptance has passed.
+The historical tables below describe the earlier branch and must not be used as
+the current release receipt.
+
+| Gap | Current behavior and evidence | Remaining boundary |
+|:--|:--|:--|
+| G3 | `vcrMethodValidation.mjs` reads only a root-owned, mode-0644, no-follow, at-most-1-MiB operator file. Each reference-case claim binds a method/version, successful CI head/report, R 4.3.3, package lock and the running engine's numerical-source digest. Catalogue restarts retain stored evidence; pages and runtime reads recheck the mounted proof and current engine before showing a pass. | `OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE` is off when empty. The release owner must produce the exact final CI artifact and mount it read-only. Missing, historical or mismatched proof is unmeasured; numerical checks are not clinical model qualification. |
+| G7 | A KM reconstruction requires a study-scoped curve receipt created from an authenticated point submission and a preserved PNG/JPEG artifact. Receipt, image and point hashes are checked before enqueue and engine submission. Forged origin strings, changed bytes, another study's receipt and revoked access are refused by focused unit/PG tests. | This is source-bound reconstruction from existing point inputs. Automatic curve digitization is not implemented or claimed. Missing reliable points/image limits this calculation and preserves other research; optional point submission is data input, not expert approval. |
+| G8 | Registry reads expose configured coverage and the last actual read outcome. ClinicalTrials.gov is structured; ChiCTR is list-only and cannot supply an inferred baseline. The page distinguishes unavailable/not queried/successful empty results. | CDE, CTIS and ICTRP adapters remain unsupported. Actual network availability is checked during release acceptance, not inferred from local fixtures. |
+| G10/G16/G18 | Visit/regulatory-contact workflow promises and recruitment-material approval/publication promises are removed from current skills. Runtime forecasts reject the public flag and stay private; legacy publication flags are not presented as active publication. | Existing tables, private forecasts, downloads of recruitment drafts, patient upload/matching, referral/follow-up and ordinary patient-contact consent are retained. No new patient-facing channel was added. |
+| G17 | Corrections freeze original assessment input references in the existing study audit ledger. Authorized export creates a reference-only, immutable dataset; held-out replay uses the actual deterministic matcher without passing expected labels to it. Current actor, source grants/windows/fields/seal and document/fact hashes are rechecked on every read and replay. One subject stays in one split; repeated labels do not inflate the current case set. | No raw patient values, document text, private notes or global fixtures are exported. Replay covers document-anchored frozen facts/language judgments, not a fresh LLM extraction pass. Legacy cases without frozen proof remain unavailable. No clinical accuracy or independent rater agreement is inferred. |
+| G19 | C2-25 pins the existing internal sex-alias vocabulary (`evimed-internal-sex-1`); unknown declared versions remain unknown. C2-26 tests the active gateway-to-persistent-job path against raw patients, invented model distributions, expressions and forged addresses. Patient-set selection binds an exact registered model version. | No ICD/GB/T vocabulary coverage, deleted virtual-population selector/copy merge, USDM round trip or Circe adapter is claimed. Those optional paths are not first-release gates. |
+
+Focused regression owners are `vcrCurveEvidence*`, `vcrCorrectionCases.integration`,
+`vcrPopulationBoundary.integration`, `vcrMethodValidation`, the real composed-app
+role matrix, and the existing matching/gateway/registry/UI suites. The engine
+transport in curve boundary fixtures is a signed stub, not a live R result.
+G20–G22 and final all-user Word/PDF/AI-review behavior remain subject to the
+release owner's exact-candidate CI and live acceptance. Partner data and optional
+human review are not prerequisites for completing supported research.
+
+The protected G3 JSON contract is `schemaVersion: 1` with `sourceRevision`,
+`numericalSourceDigest`, `rVersion`, `packageLockHash`, `ci` and `methods`.
+`ci` records `runId`, `jobId`, HTTPS `url`, `headSha`, `status: "success"`,
+`reportSha256` and `completedAt`; `sourceRevision` equals `ci.headSha`.
+Each method has `method`, `version`, `assumptions: [{text, source}]` and
+`numericTests: {status: "passed", caseIds, referenceCases: [{caseId, reference}]}`.
+Every reference case must be an actually executed case in `caseIds`. Methods
+without a real numerical reference case are omitted rather than marked passed.
+No API, runtime skill or model-authored report can write this proof.
+
 | 项 | 状态 |
 |:--|:--|
 | 代码 | Integrated candidate `e40f9405f` contains production-preserving main and VCR history; ten conflicts were resolved and independently reviewed. |

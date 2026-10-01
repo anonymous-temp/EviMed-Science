@@ -222,7 +222,12 @@
       "method": "accrual.poisson_gamma",
       "version": "1.0.0",
       "endpoints": "accrual",
-      "numeric": "9 / 9 通过",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -232,6 +237,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -240,7 +250,12 @@
       "method": "comparator.entropy_balance",
       "version": "1.0.0",
       "endpoints": "continuous · binary · time_to_event",
-      "numeric": "7 / 7 通过",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -250,6 +265,11 @@
       "version": "1.0.0",
       "endpoints": "binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -259,6 +279,11 @@
       "version": "1.0.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -268,6 +293,11 @@
       "version": "1.0.0",
       "endpoints": "binary · continuous",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -277,6 +307,11 @@
       "version": "1.0.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -285,7 +320,12 @@
       "method": "comparator.rmst",
       "version": "1.0.0",
       "endpoints": "time_to_event",
-      "numeric": "6 / 6 通过",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -295,6 +335,11 @@
       "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -304,6 +349,11 @@
       "version": "1.0.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -313,6 +363,11 @@
       "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -322,6 +377,11 @@
       "version": "1.0.0",
       "endpoints": "continuous",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -331,6 +391,11 @@
       "version": "1.1.0",
       "endpoints": "continuous · binary · time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -340,6 +405,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -348,7 +418,12 @@
       "method": "evidence.reconstruct_km",
       "version": "1.0.0",
       "endpoints": "time_to_event",
-      "numeric": "5 / 5 通过",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -358,6 +433,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -367,6 +447,11 @@
       "version": "1.0.0",
       "endpoints": "binary",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -376,6 +461,11 @@
       "version": "1.0.0",
       "endpoints": "continuous",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -385,6 +475,11 @@
       "version": "1.0.0",
       "endpoints": "time_to_event",
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -394,6 +489,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -403,6 +503,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -412,6 +517,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -421,6 +531,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     },
     {
@@ -430,6 +545,11 @@
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
       "usedIn": null
     }
   ],

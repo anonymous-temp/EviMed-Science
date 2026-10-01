@@ -67,6 +67,8 @@ import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
+import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
+import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
@@ -81,7 +83,7 @@ import {
   parseProbabilityByMonth, readAccrualForecast, referralFunnel, screenFailuresByCriterion, siteProfileStatus,
 } from "./vcrRecruit.mjs";
 import {
-  assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
+  VCR_MATCHING_VOCABULARY_VERSION, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 
@@ -159,7 +161,7 @@ const LOCAL_EXECUTOR_LOCK_HASH = createHash("sha256").update("evimed-control-pla
 export const VCR_MATCHING_MAX_SUBJECTS = 5_000;
 
 /** How the frozen context of a matching job rides in its `inputs` (contract §3.1 has no scenario key for it). */
-const CONTEXT_INPUT = Object.freeze({ asOf: "matching:asof:", protocol: "matching:protocol:", facts: "matching:facts:" });
+const CONTEXT_INPUT = Object.freeze({ asOf: "matching:asof:", protocol: "matching:protocol:", facts: "matching:facts:", vocabulary: "matching:vocabulary:" });
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -182,7 +184,9 @@ export function matchingContextOf(inputs) {
   };
   const asOf = idOf(CONTEXT_INPUT.asOf);
   if (!asOf) throw Object.assign(new Error("A matching job carries the instant it is made as of."), { code: "vcr_asof_invalid" });
-  return { asOf: frozenAsOf(asOf), protocolVersionId: idOf(CONTEXT_INPUT.protocol), factsToken: idOf(CONTEXT_INPUT.facts) };
+  const vocabularyVersion = idOf(CONTEXT_INPUT.vocabulary) ?? VCR_MATCHING_VOCABULARY_VERSION;
+  if (vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) throw Object.assign(new Error('The matching vocabulary version is unsupported.'), { code: 'vcr_matching_vocabulary_unavailable' });
+  return { vocabularyVersion, asOf: frozenAsOf(asOf), protocolVersionId: idOf(CONTEXT_INPUT.protocol), factsToken: idOf(CONTEXT_INPUT.facts) };
 }
 
 /**
@@ -212,7 +216,7 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
     const studyId = String(job?.studyId ?? "");
     const study = await store.studyById(studyId);
     if (!study) throw Object.assign(new Error("The study of this job is gone."), { code: "vcr_study_not_found" });
-    const { asOf, protocolVersionId } = matchingContextOf(job?.inputs);
+    const { asOf, protocolVersionId, vocabularyVersion } = matchingContextOf(job?.inputs);
 
     const frozenIds = list(object(job?.scenario).criteria).map((criterion) => String(object(criterion).id ?? ""));
     const criteria = (await matchStore.listCriteria({ studyId, protocolVersionId })).filter((criterion) => frozenIds.includes(criterion.id));
@@ -248,7 +252,7 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
           if (document) loaded[documentId] = { text: document.text };
         }
         const assessment = assessSubject({
-          studyId, protocolVersionId, subjectKey, asOf, direction: "trial_to_patient", criteria, facts, documents: loaded, modelJudgments,
+          studyId, protocolVersionId, subjectKey, asOf, direction: "trial_to_patient", criteria, facts, documents: loaded, modelJudgments, provenance: { vocabularyVersion },
         });
         voidedTotal += assessment.voidedFacts.length;
         assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length } });
@@ -364,6 +368,7 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
     { kind: "evidence", id: `${CONTEXT_INPUT.asOf}${asOf}` },
     { kind: "evidence", id: `${CONTEXT_INPUT.protocol}${protocolVersionId}` },
     { kind: "evidence", id: `${CONTEXT_INPUT.facts}${token}` },
+    { kind: "evidence", id: `${CONTEXT_INPUT.vocabulary}${VCR_MATCHING_VOCABULARY_VERSION}` },
   ];
 }
 
@@ -802,13 +807,13 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *
  * @param {{
  *   config: Record<string, any>,
- *   productDatabase: any,
+ *   productDatabase: any, projectStore?: any,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   fetchImpl?: typeof fetch,
  *   report?: (code: string) => void,
  * }} input
  */
-export function composeVcr({ config, productDatabase, audit = async () => {}, fetchImpl, report = () => {} }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {} }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   const store = new VcrStore({ database: productDatabase });
@@ -863,6 +868,13 @@ export function composeVcr({ config, productDatabase, audit = async () => {}, fe
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call }),
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
+  const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, resolveProject: async study => {
+    if (!projectStore) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source image access is unavailable.');
+    const owner = await projectStore.userById(study.userId);
+    return projectStore.requireProject(owner, study.projectId);
+  } });
+  Object.assign(evidence, { curves, verifyCurveRequest: curves.curveVerifier });
+  jobs.curveVerifier = curves.curveVerifier;
 
   /** @type {any} */
   let composed = null;
@@ -879,8 +891,10 @@ export function composeVcr({ config, productDatabase, audit = async () => {}, fe
     store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
   });
 
+  const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
+  service.attach({ corrections });
   composed = {
-    store, dataStore, matchStore, evidenceStore,
+    store, dataStore, matchStore, evidenceStore, corrections,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,

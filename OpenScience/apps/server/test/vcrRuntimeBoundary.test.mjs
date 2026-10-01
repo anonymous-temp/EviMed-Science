@@ -70,6 +70,7 @@ const store = {
   async models() { return [{ id: "mdl_1", name: "reference-time-to-event", evidence: [], tier: "scenario" }]; },
   async methods() { return []; },
   async reviews() { return []; },
+  async exports() { return []; },
 };
 
 function service(packages = {}) {

@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VCR_READ_WHATS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
+  VcrService, VCR_READ_WHATS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
   vcrDominatedScenarios, vcrReadiness, vcrRouteOptions,
 } from "../src/vcrService.mjs";
 import { VCR_COUNT_KEYS, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_TABS, intendedUseCeiling, missingModelEvidence } from "@evimed/domain";
@@ -107,6 +107,8 @@ test("the first catalogue seeds every engine method and the three reference simu
   // The methods are the domain's list, at the versions the domain pins.
   assert.deepEqual(methods.map((method) => method.method).sort(), Object.keys(VCR_ENGINE_METHODS).sort());
   for (const method of methods) assert.equal(method.version, VCR_ENGINE_METHODS[method.method].version);
+  assert.ok(methods.every(method => !Object.hasOwn(method, 'numericTests') && !Object.hasOwn(method, 'assumptions')),
+    'A catalogue restart must not erase trusted release evidence.');
   // The three simulators are scenario-tier by construction: they answer 「under
   // these assumptions」 and carry no claim about any real population.
   assert.deepEqual(models.map((model) => model.name), VCR_REFERENCE_MODELS.map((model) => model.name));
@@ -155,4 +157,14 @@ test("readiness is red only for this module's own invariants; a missing engine i
   assert.equal(ready.status, "ok");
   assert.deepEqual(ready.warnings, ["vcr_engine_not_composed", "vcr_data_plane_not_configured"]);
   assert.equal(ready.warning, "vcr_engine_not_composed");
+});
+
+test('legacy public prediction flags are not presented as a publication capability', async () => {
+  const service = new VcrService({ store: {
+    trialScenarios: async () => [], latestDesignGrid: async () => null,
+    forecasts: async () => [{ id: 'forecast', public: true, prediction: { probability: 0.8 } }],
+  }, config: {} });
+  const result = await service.runtimeRead({ id: 'study', userId: 'owner' }, 'trial');
+  assert.equal(result.forecasts[0].public, undefined);
+  assert.equal(result.forecasts[0].prediction.probability, 0.8);
 });

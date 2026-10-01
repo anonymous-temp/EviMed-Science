@@ -390,6 +390,11 @@ const REQUESTS = {
   "POST /studies/:id/jobs/:job/cancel": ["POST", "/api/vcr/studies/std_1/jobs/job_1/cancel", {}],
   "POST /studies/:id/budget": ["POST", "/api/vcr/studies/std_1/budget", { cpuSeconds: 600 }],
   "POST /studies/:id/assumptions": ["POST", "/api/vcr/studies/std_1/assumptions", { key: "dropout" }],
+  "POST /studies/:id/correction-cases": ["POST", "/api/vcr/studies/std_1/correction-cases", {}],
+  "GET /studies/:id/correction-cases/:dataset": ["GET", "/api/vcr/studies/std_1/correction-cases/eds_fixture", undefined],
+  "POST /studies/:id/correction-cases/:dataset/replay": ["POST", "/api/vcr/studies/std_1/correction-cases/eds_fixture/replay", {}],
+  "GET /studies/:id/curve-extractions": ["GET", "/api/vcr/studies/std_1/curve-extractions", undefined],
+  "POST /studies/:id/curve-extractions": ["POST", "/api/vcr/studies/std_1/curve-extractions", { imageArtifactId: "figure.png", points: {} }],
   "POST /studies/:id/reviews clinical": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "clinical", nodes: ["result:res_1@1"] }],
   "POST /studies/:id/reviews statistical": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "statistical", nodes: ["result:res_1@1"] }],
   "POST /studies/:id/reviews data": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "data", nodes: ["result:res_1@1"] }],
@@ -420,6 +425,8 @@ const REQUESTS = {
 function composedHooks() {
   const ok = async () => ({ ok: true, released: [], removed: 1, job: { id: "job_1" }, created: true, export: { id: "exp_1" } });
   return {
+    corrections: { exportDataset: ok, readDataset: ok, replay: ok },
+    evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     orchestrator: { runStep: ok, recomputeAfterChange: ok },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },

@@ -1,3 +1,4 @@
+import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState } from "react";
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock, TriangleAlert } from "lucide-react";
 import {
@@ -112,6 +113,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
 
   const toolbar = (summary?: string) => (
     <VcrToolbar summary={summary}>
+      {study.abilities.includes("export") && study.abilities.includes("read_patient_level") && <VcrCorrectionCasesActions key={studyId} studyId={studyId} />}
       <SegmentedControl aria-label="匹配与招募的视图" value={view} onChange={switchView} options={[...VIEWS]} />
       {view === "matching" && (
         <SegmentedControl aria-label="匹配方向" value={direction} onChange={switchDirection} options={[...DIRECTIONS]} />

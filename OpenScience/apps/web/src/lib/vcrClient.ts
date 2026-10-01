@@ -906,6 +906,7 @@ export interface VcrPrecedent {
 }
 
 export interface VcrDataTab {
+  registryCoverage?: VcrRegistrySource[];
   reviews?: VcrReviewSummary[];
   headline?: string | null;
   /** 「证据截至 9月27日 · 试验先例 23 项 · 假设卡 12 张 · 患者级数据 未接入」. */
@@ -927,7 +928,9 @@ export interface VcrDataTab {
 export interface VcrModels {
   models: VcrModelCard[];
   /** The method packages, which are not models. */
-  methods: Array<{ id: string; name: string; /** The engine's own method id. */ method?: string; version?: string | null; endpoints?: string | null; numeric?: string | null; usedIn?: string | null }>;
+  methods: Array<{ id: string; name: string; /** The engine's own method id. */ method?: string; version?: string | null; endpoints?: string | null; numeric?: string | null; usedIn?: string | null;
+    assumptions?: Array<{ text: string; source: string }>;
+    validation?: { status: 'passed' | 'unmeasured'; reason?: string; ciUrl?: string; completedAt?: string; sourceRevision?: string } }>;
   /** The credibility ladder: what each model risk needs, and what it may claim. */
   ladder?: Array<{ risk: VcrModelRisk; needs: string; ceiling: VcrIntendedUse; count?: number | null }>;
   engineAvailable?: boolean;
@@ -935,7 +938,14 @@ export interface VcrModels {
 }
 
 /** The precedent search's answer (`GET /api/vcr/precedents`). */
+export interface VcrRegistrySource {
+  key: string; label: string; configured: boolean;
+  coverage: 'structured' | 'list_only' | 'unsupported';
+  availability: 'not_queried' | 'available' | 'unavailable'; reason: string | null; lastCheckedAt: string | null;
+}
+
 export interface VcrPrecedents {
+  registryCoverage?: VcrRegistrySource[];
   /** False when the library is not composed here: `message` says so, and the table must not read as 「没有先例」. */
   available: boolean;
   message: string | null;
@@ -1347,6 +1357,7 @@ export function readVcrPrecedents(raw: unknown): VcrPrecedents {
     available: value.available !== false,
     message: text(value.message),
     precedents: arr(value.precedents) as unknown as VcrPrecedent[],
+    registryCoverage: arr(value.registryCoverage) as unknown as VcrRegistrySource[],
     sources: text(value.sources),
   };
 }
@@ -1922,3 +1933,11 @@ export function createVcrGrant(studyId: string, sourceId: string, input: VcrGran
 export function revokeVcrGrant(studyId: string, grantId: string) {
   return productRequest<{ grant: { id: string; revokedAt: string | null } }>(`${dataRoute(studyId)}/grants/${id(grantId)}/revoke`, "POST", {});
 }
+
+export interface VcrCorrectionDataset {
+  datasetId: string; schemaVersion: string; cases: Array<{ caseId: string; partition: 'development' | 'held_out' }>;
+  selection: { more: boolean; nextCursor: string | null; legacyUnfrozen: number };
+}
+export interface VcrCorrectionReplay { evaluated: number; matched: number; partition: 'held_out'; extractionRerun: false }
+export const exportVcrCorrectionCases = (studyId: string, after = '0') => productRequest<VcrCorrectionDataset>(`${study(studyId)}/correction-cases`, 'POST', { after, limit: 100 });
+export const replayVcrCorrectionCases = (studyId: string, datasetId: string) => productRequest<VcrCorrectionReplay>(`${study(studyId)}/correction-cases/${id(datasetId)}/replay`, 'POST', {});

@@ -260,9 +260,10 @@ test("AC-23 a forecast is registered from a saved result of this study: its meas
   assert.equal(registered.prediction.resultId, saved.id);
   assert.equal(registered.prediction.measures[0].value, 14.2, "the prediction is the saved result's own measure, never a number the run typed");
 
-  const again = await write("forecast", [{ kind: "accrual", resultId: saved.id, public: true }]);
+  const again = await write("forecast", [{ kind: "accrual", resultId: saved.id }]);
   assert.equal(again.ok, true);
   assert.deepEqual((await vcr.store.forecasts(study.id)).map((row) => row.version).sort(), [1, 2], "a change is a new version; the first stands");
+  assert.ok((await vcr.store.forecasts(study.id)).every(row => row.public === false), 'The first release retains private forecasts only.');
 
   const refused = await write("forecast", [
     { kind: "accrual", resultId: foreign.id },
@@ -276,7 +277,7 @@ test("AC-23 a forecast is registered from a saved result of this study: its meas
     [0, "resultId", "vcr_write_value_invalid"],
     [1, "prediction", "vcr_write_field_forbidden"],
     [2, "resultId", "vcr_write_field_forbidden"],
-    [3, "public", "vcr_write_value_invalid"],
+    [3, "public", "vcr_write_field_forbidden"],
     [4, "resultId", "vcr_write_value_invalid"],
   ]);
 });

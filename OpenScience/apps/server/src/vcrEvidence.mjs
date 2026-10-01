@@ -1137,6 +1137,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   const pipeline = {
     get engineReady() { return typeof jobs?.enqueue === "function"; },
     get registryReady() { return Boolean(registry?.configured); },
+    registryCoverage() { return registry?.coverage?.() ?? []; },
 
     /**
      * Step 1 — candidates. Registry answers are ranked by similarity and
@@ -1591,6 +1592,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       return {
         available: true,
         registryConfigured: Boolean(registry?.configured),
+        registryCoverage: pipeline.registryCoverage(),
         // The page says so rather than showing an empty pooling panel: with no
         // queue there is no card, and that is a deployment fact, not a result.
         engineConfigured: typeof jobs?.enqueue === "function",

@@ -67,6 +67,7 @@ import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } 
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
@@ -104,6 +105,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "vcr_disabled", "vcr_no_study", "vcr_gateway_token_missing", "vcr_gateway_token_invalid", "vcr_gateway_rate_limited",
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
+  "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_job_not_found", "registry_unavailable",
 ]);
 
@@ -113,6 +115,8 @@ class VcrGatewayError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+    /** @type {Array<{kind:string,label:string}> | undefined} */
+    this.alternatives = undefined;
   }
 }
 
@@ -848,13 +852,19 @@ const WRITERS = {
     const scenario = item.obj("scenario") ?? {};
     const populationId = item.row.populationId == null ? null : String(item.row.populationId);
     if (populationId) await item.owned("populationId", "population", populationId);
+    let selected = null;
+    if (modelVersion && !modelId) item.bad('modelId', '指定模型版本时必须同时指定模型。');
     if (modelId) {
       const models = await store.models(study.userId);
-      if (!models.some((model) => model.id === modelId || model.name === modelId)) item.bad("modelId", `模型库里没有「${modelId.slice(0, 60)}」：先读 vcr_read what:"models"。`);
+      const exactId = models.filter(model => model.id === modelId);
+      const candidates = (exactId.length ? exactId : models.filter(model => model.name === modelId))
+        .filter(model => !modelVersion || String(model.version) === modelVersion);
+      if (candidates.length !== 1) item.bad('modelVersion', '无法唯一确定这个模型版本；请先用 mcp__evimed__vcr_read 读取 models 并选择其中的模型与版本。');
+      else selected = candidates[0];
     }
     if (!item.ok) return null;
     const saved = await store.savePatientSet({
-      studyId: study.id, userId: study.userId, populationId, name, modelId: modelId ?? null, modelVersion: modelVersion ?? null, scenario, twinLabel: null,
+      studyId: study.id, userId: study.userId, populationId, name, modelId: selected?.id ?? null, modelVersion: selected?.version ?? null, scenario, twinLabel: null,
     });
     return saved.id;
   },
@@ -926,17 +936,16 @@ const WRITERS = {
    * read by the platform — a run cannot type the number it is later compared to.
    */
   async forecast(item, { store, study }) {
-    if (!item.only(["kind", "resultId", "public"], { ids: ["resultId"] })) return null;
+    if (!item.only(["kind", "resultId"], { ids: ["resultId"] })) return null;
     const kind = item.str("kind", { max: 60 }) ?? "accrual";
     const resultId = item.token("resultId", ID, "一个已保存结果的 id", { required: true });
-    if (item.row.public != null && typeof item.row.public !== "boolean") item.bad("public", "public 是 true 或 false。");
     if (!item.ok) return null;
     const result = await store.result(study.id, String(resultId));
     if (!result) return void item.bad("resultId", "这个结果不属于本研究。");
     const saved = await store.registerForecast({
       studyId: study.id, userId: study.userId, kind,
       prediction: { resultId: result.id, version: result.version, measures: result.measures, counts: result.counts },
-      public: item.row.public === true,
+      public: false,
     });
     return saved.id;
   },
@@ -1026,8 +1035,10 @@ const WRITERS = {
 
   async fact(item, { matchStore, documents, study }, extra) {
     if (!item.only(["subjectKey", "variable", "value", "unit", "polarity", "occurredAt", "recordedAt", "visibleAt", "surface", "dateSurface",
-      "documentId", "start", "end", "quote"])) return null;
+      "documentId", "start", "end", "quote", "vocabularyVersion"])) return null;
     const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号（vcr_read what:subject_document 给出）", { required: true });
+    const vocabularyVersion = item.str('vocabularyVersion', { max: 80 }) ?? VCR_MATCHING_VOCABULARY_VERSION;
+    if (vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) item.bad('vocabularyVersion', '这个编码词表版本未接入，不能按当前映射解释。');
     const variable = item.token("variable", /^[a-z][a-z0-9_]{0,63}$/, "小写英文变量名，与入排条件里的 variable 一致", { required: true });
     let value = item.row.value;
     if (value != null && !(typeof value === "string" ? value.length <= 200 : Number.isFinite(value))) { item.bad("value", "value 是一个数或不超过 200 字的文字。"); value = undefined; }
@@ -1060,7 +1071,7 @@ const WRITERS = {
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
       subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
-      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote }, extractedBy: "model",
+      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion }, extractedBy: "model",
     } });
     extra.results.push({ index: item.index, id: saved.id, subjectKey });
     return saved.id;
@@ -1563,6 +1574,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       sendJson(res, status, {
         error: known ? /** @type {any} */ (error).message : "The 虚拟临研 gateway is unavailable; go on without the platform's study data.",
         code,
+        ...(known && error.alternatives ? { alternatives: error.alternatives } : {}),
       });
     }
   };
@@ -1654,6 +1666,18 @@ async function startJob(vcr, study, request) {
     // The same frozen scenario asked for twice is the same job; a changed one is not.
     idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${request.subjectId ?? ""}:${scenarioHash}`,
     detail,
+  }).catch(error => {
+    if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
+      'generate_patients', 'generate_patients_continuous', 'generate_patients_binary'].includes(request.kind)) {
+      const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
+      refusal.alternatives = [
+        { kind: 'reference_scenario', label: '使用明确分布参数的参考情景' },
+        { kind: 'registered_model', label: '查询已登记模型及其适用范围' },
+        { kind: 'authorized_data', label: '补充已授权数据后再计算' },
+      ];
+      throw refusal;
+    }
+    throw error;
   });
   return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
     // A job stopped for budget is the second human stop: the run is

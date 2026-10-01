@@ -41,18 +41,25 @@
  *   kept apart because a result recorded on Tuesday about Monday's blood draw
  *   was not knowable on Monday, and evaluating history with it manufactures a
  *   tool that cannot exist.
- * - **No accuracy threshold, here or anywhere.** TrialGPT's 87.3% is 183
- *   synthetic vignettes; PRISM measured 63–68% on real oncology charts, where
- *   physicians agreed with each other only 64–70% of the time. So the report
- *   this module produces states the inter-rater agreement as the ceiling and
- *   declines to compare itself to any published number (AC-36).
+ * - **No imported accuracy threshold.** Evaluation describes the current
+ *   cases. Independent rater agreement, when measured, is reported separately
+ *   and does not establish a clinical accuracy ceiling (AC-36).
  *
  * @module vcrMatching
  */
 
+import { createHash } from 'node:crypto';
 import {
-  VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
+  canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
 } from "@evimed/domain";
+
+/** Stable persisted input identity, including JSON date normalization. @param {any} value */
+export const matchingInputDigest = value => createHash('sha256').update(canonicalScenarioJson(JSON.parse(JSON.stringify(value ?? null)))).digest('hex');
+export const VCR_PRIVATE_MATCHING_PROVENANCE_KEYS = Object.freeze(['inputFactIds', 'inputLanguageIds', 'inputFactHashes', 'inputCriterionHashes', 'inputLanguageHashes', 'inputReferencesComplete']);
+/** Only model/configuration identities belong in a public assessment projection. @param {any} provenance */
+export function publicMatchingProvenance(provenance) {
+  return provenance == null ? null : Object.fromEntries(Object.entries(provenance).filter(([key]) => !VCR_PRIVATE_MATCHING_PROVENANCE_KEYS.includes(key)));
+}
 
 /**
  * Why a criterion is `unknown` for a reason the evaluator itself found, on top
@@ -63,7 +70,7 @@ import {
  * cannot decide a question about a window (contract §2.2).
  */
 export const VCR_EVALUATOR_UNKNOWN_REASONS = Object.freeze([
-  "criterion_malformed", "coding_unmapped", "unit_missing", "unit_mismatch", "undated", "evaluation_error",
+  "criterion_malformed", "coding_unmapped", "coding_version_unavailable", "unit_missing", "unit_mismatch", "undated", "evaluation_error",
 ]);
 /** Every reason a gap may carry. */
 const GAP_REASONS = Object.freeze([...VCR_MISSING_REASONS, ...VCR_EVALUATOR_UNKNOWN_REASONS]);
@@ -469,6 +476,7 @@ function evaluatePresence(node, context) {
  * unread code as a string is how 「女」 fails to be 「female」 and a woman is
  * passed over for a pregnancy exclusion that applied to her.
  */
+export const VCR_MATCHING_VOCABULARY_VERSION = "evimed-internal-sex-1";
 export const VCR_CODE_VOCABULARIES = Object.freeze({
   sex: Object.freeze({
     male: Object.freeze(["male", "m", "man", "男", "男性", "1"]),
@@ -586,6 +594,7 @@ function compareFact(node, fact, context) {
   const cannot = (reason) => ({ state: UNKNOWN, missing: [{ variable, reason }] });
   const raw = fact?.value;
   if (raw === null || raw === undefined || raw === "") return cannot("not_measured");
+  if (fact?.source?.vocabularyVersion && fact.source.vocabularyVersion !== VCR_MATCHING_VOCABULARY_VERSION) return cannot('coding_version_unavailable');
 
   if (comparator === "in" || comparator === "not_in" || comparator === "eq" || comparator === "ne") {
     const wanted = comparator === "in" || comparator === "not_in" ? (Array.isArray(node.value) ? node.value : [node.value]) : [node.value];
@@ -594,6 +603,8 @@ function compareFact(node, fact, context) {
     const number = numericValue(raw);
     let hit;
     if (VOCABULARY_OF[variable]) {
+      const version = fact?.source?.vocabularyVersion ?? context.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION;
+      if (version !== VCR_MATCHING_VOCABULARY_VERSION) return cannot('coding_version_unavailable');
       const have = codedValue(variable, raw);
       if (have === null) return cannot("coding_unmapped");
       const want = wanted.map((item) => codedValue(variable, item));
@@ -933,7 +944,7 @@ export function frozenAsOf(value) {
  * @param {{ studyId?: string, protocolVersionId?: string|null, subjectKey: string,
  *   direction?: string, criteria: readonly any[], facts: readonly any[],
  *   documents?: any, modelJudgments?: Record<string, any>, priority?: any,
- *   provenance?: { modelId?: string, promptVersion?: string, criteriaVersion?: string } | null,
+ *   provenance?: { modelId?: string, promptVersion?: string, criteriaVersion?: string, vocabularyVersion?: string } | null,
  *   asOf: number|string|Date, unitConverter?: (value: number, from: string, to: string) => number|null }} input
  */
 export function assessSubject(input) {
@@ -948,6 +959,7 @@ export function assessSubject(input) {
     facts, asOf, documents: input.documents,
     modelJudgments: input.modelJudgments ?? {},
     unitConverter: input.unitConverter,
+    vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
   };
   const judgments = (input.criteria ?? []).map((criterion) => evaluateCriterion(criterion, context));
   const counts = eligibilityCounts(judgments);
@@ -960,7 +972,15 @@ export function assessSubject(input) {
     // the verdict: when any of the three changes the old assessment is
     // superseded rather than overwritten, and `matchingReportDiff` needs the
     // three to say what changed between two measurements.
-    provenance: input.provenance ?? null,
+    provenance: { ...(input.provenance ?? {}), vocabularyVersion: input.provenance?.vocabularyVersion ?? VCR_MATCHING_VOCABULARY_VERSION,
+      inputFactIds: (input.facts ?? []).map(fact => fact.id).filter(Boolean),
+      inputLanguageIds: Object.values(input.modelJudgments ?? {}).map(judgment => judgment.id).filter(Boolean),
+      inputFactHashes: Object.fromEntries((input.facts ?? []).filter(fact => fact.id).map(fact => [fact.id, matchingInputDigest(fact)])),
+      inputCriterionHashes: Object.fromEntries((input.criteria ?? []).filter(criterion => criterion.id).map(criterion => [criterion.id, matchingInputDigest(criterion)])),
+      inputLanguageHashes: Object.fromEntries(Object.values(input.modelJudgments ?? {}).filter(judgment => judgment.id)
+        .map(judgment => [judgment.id, matchingInputDigest({ id: judgment.id, state: judgment.state, evidence: judgment.evidence ?? [] })])),
+      inputReferencesComplete: (input.facts ?? []).every(fact => typeof fact.id === 'string')
+        && Object.values(input.modelJudgments ?? {}).every(judgment => typeof judgment.id === 'string') },
     protocolVersionId: input.protocolVersionId ?? null,
     subjectKey: String(input.subjectKey ?? ""),
     direction: input.direction === "patient_to_trial" ? "patient_to_trial" : "trial_to_patient",
@@ -986,7 +1006,7 @@ export function matchingAssessmentDocument(assessment) {
   return {
     subjectKey: assessment.subjectKey,
     asOf: assessment.asOf,
-    provenance: assessment.provenance ?? null,
+    provenance: publicMatchingProvenance(assessment.provenance),
     summary: assessment.summary,
     counts: assessment.counts,
     priority: assessment.priority,
@@ -1182,10 +1202,8 @@ export function patientMatchingMetrics(pairs) {
 /**
  * Agreement between two independent human readers, and Cohen's κ.
  *
- * This is the ceiling, not a baseline: on real oncology charts five physicians
- * agreed 64% of the time with each other, and two selected ones 70%. A tool
- * reported above the ceiling has been measured against one person's opinion,
- * not against the truth.
+ * Agreement describes these supplied labels; it is not a clinical accuracy
+ * ceiling or a qualification threshold for another evaluation population.
  * @param {readonly string[]} first @param {readonly string[]} second
  */
 export function interRaterAgreement(first, second) {
@@ -1212,7 +1230,7 @@ export function interRaterAgreement(first, second) {
 /**
  * The whole matching evaluation report (AC-36, C2-20).
  *
- * It states a ceiling and refuses a threshold. `passed` is deliberately absent:
+ * It separates agreement from accuracy and refuses a threshold. `passed` is deliberately absent:
  * there is no number this module could compare itself against that would mean
  * anything, and putting one here would be the platform promising a figure it
  * measured on somebody else's patients.
@@ -1233,7 +1251,7 @@ export function matchingEvaluationReport(input) {
     subject: patientMatchingMetrics(input?.subjectPairs ?? []),
     ceiling: {
       ...ceiling,
-      note: "两位医生独立判定之间的一致率，是本工具能达到的上限；高于上限的数字说明评测集对的是一个人的意见。",
+      note: ceiling.pairs ? "独立标注者的一致性仅描述本评测集，不代表临床准确率上限。" : "没有独立双标注数据；未估计标注者一致性。",
     },
     // Workload, measured with and without the tool on the same charts. It is not
     // a quality metric and is reported beside quality, never instead of it.
@@ -1251,8 +1269,8 @@ export function matchingEvaluationReport(input) {
 
 /**
  * Run the deterministic evaluator over a labelled set and produce the pairs the
- * report reads. The gold labels come from two independent readers plus an
- * adjudication; the predictions come from `assessSubject` and nothing else, so
+ * report reads. Gold labels retain their actual source (optional human correction or an
+ * independent labelled reference); the predictions come from `assessSubject` and nothing else, so
  * an evaluation cannot accidentally score a different code path than the one
  * that runs in production.
  *

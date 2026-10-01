@@ -34,6 +34,8 @@
  * @module vcrService
  */
 
+import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
+import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_STEPS,
   VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel,
@@ -94,7 +96,7 @@ export function stripPlaneAddresses(value, ancestors = new Set()) {
     /** @type {Record<string, unknown>} */
     const out = {};
     for (const [key, item] of Object.entries(value)) {
-      if (key === "location" || key === "inputHashes" || key === "outputHash" || key === "signature") continue;
+      if (key === "location" || key === "inputHashes" || key === "outputHash" || key === "signature" || VCR_PRIVATE_MATCHING_PROVENANCE_KEYS.includes(key)) continue;
       out[key] = stripPlaneAddresses(item, ancestors);
     }
     return out;
@@ -220,16 +222,15 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
  * keys, so composing the module twice — or two control planes starting
  * together — writes it once.
  *
- * @param {{ store: import("./vcrStore.mjs").VcrStore, engine?: any, report?: (code: string) => void }} dependencies
+ * @param {{ store: import("./vcrStore.mjs").VcrStore, engine?: any, methodValidationFile?: string, report?: (code: string) => void }} dependencies
  * @returns {Promise<{ methods: number, models: number, engineMismatch: readonly string[] | null }>}
  */
-export async function seedVcrCatalogue({ store, engine = null, report = () => {} }) {
+export async function seedVcrCatalogue({ store, engine = null, methodValidationFile = '', report = () => {} }) {
   await store.ready();
   let methods = 0;
   for (const [method, entry] of Object.entries(VCR_ENGINE_METHODS)) {
     await store.saveMethod({
       method, version: entry.version, endpoints: [...entry.endpoints], crossChecks: [...entry.crossChecks],
-      assumptions: [], numericTests: {},
     });
     methods += 1;
   }
@@ -252,6 +253,14 @@ export async function seedVcrCatalogue({ store, engine = null, report = () => {}
         : Object.freeze([]);
     } catch (error) {
       report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "vcr_engine_unreachable");
+    }
+  }
+  const validation = await loadMethodValidation({ file: methodValidationFile, engine, report });
+  if (validation.status === 'verified') {
+    for (const method of validatedMethods(validation.artifact.methods, validation)) {
+      const entry = VCR_ENGINE_METHODS[method.method];
+      await store.saveMethod({ method: method.method, version: method.version, endpoints: [...entry.endpoints], crossChecks: [...entry.crossChecks],
+        assumptions: method.assumptions, numericTests: method.numericTests });
     }
   }
   return { methods, models, engineMismatch };
@@ -834,7 +843,8 @@ export class VcrService {
       const merged = [...byId, ...byName.filter((entry) => !byId.some((other) => other.id === entry.id))];
       if (merged.length) usedBy.set(model.id, merged);
     }
-    return presentModels({ models, methods, usedBy, engineAvailable: Boolean(this.engine?.configured?.()), engineMismatch: this.engineMismatch });
+    return presentModels({ models, methods: validatedMethods(methods, await loadMethodValidation({ file: this.config.vcrMethodValidationFile, engine: this.engine })),
+      usedBy, engineAvailable: Boolean(this.engine?.configured?.()), engineMismatch: this.engineMismatch });
   }
 
   /**
@@ -876,7 +886,7 @@ export class VcrService {
     }
     const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
     const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
-    return presentPrecedents({ available: true, rows, sources: rows.length ? `${rows.length} 项试验先例` : null });
+    return presentPrecedents({ available: true, rows, registryCoverage: this.packages.evidence?.registryCoverage?.() ?? [], sources: rows.length ? `${rows.length} 项试验先例` : null });
   }
 
   // --- the runtime's read (build contract §3.2, §4) ---------------------------------------
@@ -995,7 +1005,8 @@ export class VcrService {
         if (!evidence?.evidenceRead) {
           return { available: false, code: "vcr_evidence_unavailable", message: "证据参数化未接入：这一步暂不可用，其余步骤照常。" };
         }
-        return evidence.evidenceRead(study, { ...filter, limit });
+        return { ...await evidence.evidenceRead(study, { ...filter, limit }),
+          curveReceipts: evidence.curves ? await evidence.curves.receipts({ studyId: study.id, principal: study.userId }) : [] };
       }
       case "population": {
         const populations = await this.store.populations(study.id, limit);
@@ -1013,7 +1024,7 @@ export class VcrService {
       }
       case "comparator": return { designs: await this.store.comparatorDesigns(study.id, limit), routes: vcrRouteOptions(study.dataTier) };
       case "trial": return { scenarios: await this.store.trialScenarios(study.id, limit), grid: await this.store.latestDesignGrid(study.id),
-        forecasts: await this.store.forecasts(study.id) };
+        forecasts: (await this.store.forecasts(study.id)).map(({ public: _public, ...forecast }) => forecast) };
       case "results": {
         const results = await this.store.results(study.id, filter.kind ? String(filter.kind) : null);
         const stale = await this.store.staleMarks(study.id);
@@ -1021,7 +1032,8 @@ export class VcrService {
       }
       case "report_model": return { model: await this.reportModel(study) };
       case "jobs": return { jobs: await this.store.jobs(study.id, limit) };
-      case "models": return { models: await this.store.models(study.userId), methods: await this.store.methods() };
+      case "models": return { models: await this.store.models(study.userId), methods: validatedMethods(await this.store.methods(),
+        await loadMethodValidation({ file: this.config.vcrMethodValidationFile, engine: this.engine })) };
       case "snapshot_profile": {
         const dataPlane = this.packages.dataPlane;
         if (!dataPlane?.runtimeProfile) {

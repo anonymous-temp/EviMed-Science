@@ -111,7 +111,7 @@ metadata:
   **`summary` 抄 `mcp__evimed__vcr_read` 读回的，不要自己算。**
 - `matching-assessment.md` —— 协调员读的：每位受试者为什么可能合适、还缺什么、怎么补。每个「满足」和「不满足」都引它的原句。数字取自评估，不凭记忆。
 - `criterion-funnel.md`（可选）—— 哪一条单独排除了最多的候选人。这是申办方最想知道的答案：一条让试验失去患者的条件，在方案还是草稿时可以改。
-- `recruitment-drafts.md`（可选）—— 预筛问卷、给患者的说明和协调员话术，由结构化条件生成，每个问题对回条件编号。**第一行写「草稿」**：研究团队审阅发布之前，这里的任何东西都到不了患者。患者对问卷的回答算「患者自述」，不是病历事实。
+- `recruitment-drafts.md` (optional): downloadable draft questionnaires, patient explanations and coordinator wording, each question linked to its criterion. Label the first line “草稿”. This release has no materials approval, publication or patient self-service channel. Do not claim that drafting or AI review authorizes sending anything to patients; ordinary referral contact consent remains a separate existing authority.
 - `revision-notes.md`（可选）—— 后台。关于你自己的过程、改了什么、为什么，只写在这里。
 
 正文里的数（人数、比例）要在 `matching.json` 里有同样的字段；小人数的格子平台读给你的时候已经隐去，隐去的就写「少于十人」，不要猜。
@@ -169,3 +169,10 @@ metadata:
 过程记述、改稿说明、自查记录写进 `revision-notes.md`，不要写进报告正文——报告正文里不写过程，正是因为过程有它自己的去处。
 
 然后 `evimed_submit_deliverable{deliverableId}`。它应用的规则只有一份实现，和服务端应用的是同一份。
+
+
+## Correction cases and vocabulary scope
+
+Authorized judgment corrections are retained as study-local cases with frozen input references. The matching page can export those references and replay held-out subjects through the deterministic evaluator. This does not re-run clinical-document extraction, does not establish clinical accuracy and does not require a human reviewer to complete ordinary research. Never copy patient text, extracted facts or correction labels into global learning fixtures, prompts or another study.
+
+The internal sex-code mapping is pinned as `evimed-internal-sex-1`. Optional `vocabularyVersion` on a fact must match that supported version; unknown declared versions are not reinterpreted through the current table. This is not ICD, GB/T, USDM or Circe support. Preserve unknown codes as unknown and retain their source evidence.

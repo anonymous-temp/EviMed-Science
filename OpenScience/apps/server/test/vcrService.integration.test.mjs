@@ -12,7 +12,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VcrJobs } from "../src/vcrJobs.mjs";
 import { VcrService, VCR_READ_WHATS, seedVcrCatalogue } from "../src/vcrService.mjs";
-import { VCR_TABS } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_TABS } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -56,6 +56,18 @@ after(async () => {
     await admin.query(`DROP DATABASE IF EXISTS "${isolatedName}" WITH (FORCE)`).catch(() => {});
     await admin.end().catch(() => {});
   }
+});
+
+test('catalogue restarts retain stored numerical provenance but never present it as current without protected proof', options, async () => {
+  const method = 'design.analytic';
+  const evidence = { status: 'passed', passed: 1, total: 1, numericalSourceDigest: 'a'.repeat(64), caseIds: ['synthetic-reference'] };
+  const assumptions = [{ text: 'Fixture-only assumption', source: 'fixture.R:1' }];
+  await store.saveMethod({ method, version: VCR_ENGINE_METHODS[method].version, endpoints: [], crossChecks: [], assumptions, numericTests: evidence });
+  await seedVcrCatalogue({ store });
+  const preserved = (await store.methods()).find(row => row.method === method);
+  assert.deepEqual(preserved.numericTests, evidence); assert.deepEqual(preserved.assumptions, assumptions);
+  const displayed = (await service.modelLibrary({ id: 'reader' })).methods.find(row => row.method === method);
+  assert.equal(displayed.numeric, null); assert.equal(displayed.validation.status, 'unmeasured');
 });
 
 /** A study with something in every tab. @param {string} label */

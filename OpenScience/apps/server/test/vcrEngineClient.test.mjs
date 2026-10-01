@@ -98,6 +98,13 @@ test("a submitted job is accepted by id, and a timeout is retryable while a refu
   await assert.rejects(lost.status("job_1"), (/** @type {any} */ error) => error.code === "vcr_engine_not_found" && error.retryable === false);
 });
 
+test('health preserves only a well-formed numerical source digest from the running engine', async () => {
+  let digest = 'a'.repeat(64);
+  const client = createVcrEngineClient({ baseUrl: 'http://engine.local', fetchImpl: async () => json({ ok: true, numericalSourceDigest: digest, rVersion: 'R version 4.3.3', packageLockHash: 'b'.repeat(64) }) });
+  assert.equal((await client.health()).numericalSourceDigest, digest);
+  digest = 'unknown'; assert.equal((await client.health()).numericalSourceDigest, null);
+});
+
 test("the workload token is read at the moment of the call, so a rotation reaches a long-running worker", async () => {
   /** @type {string[]} */
   const seen = [];

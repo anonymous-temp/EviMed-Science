@@ -141,11 +141,15 @@ export function VcrModelsPanel() {
                 {
                   key: "numeric",
                   header: "数值验证",
-                  isEmpty: (row) => !row.numeric,
                   cell: (row) => row.numeric
-                    ? <span className="inline-flex items-center gap-1 text-ok"><CircleCheck size={16} aria-hidden="true" />{row.numeric}</span>
-                    : <span className="text-text-3">—</span>,
+                    ? <div className="flex flex-col gap-1"><span className="inline-flex items-center gap-1 text-ok"><CircleCheck size={16} aria-hidden="true" />{row.numeric}</span>
+                      {row.validation?.ciUrl && <a className="text-link hover:underline" href={row.validation.ciUrl} target="_blank" rel="noreferrer">查看验证来源</a>}</div>
+                    : <span className="text-text-3">当前版本尚无已核对的参考用例</span>,
                 },
+                { key: "assumptions", header: "适用假设", cell: (row) => row.assumptions?.length
+                  ? <details><summary className="cursor-pointer text-link">查看假设及来源</summary><ul className="mt-2 flex flex-col gap-2">
+                    {row.assumptions.map((item, index) => <li key={index}><p>{item.text}</p><p className="text-text-3">{item.source}</p></li>)}
+                  </ul></details> : <span className="text-text-3">尚未提供已核对的假设说明</span> },
                 { key: "usedIn", header: "用在", isEmpty: (row) => !row.usedIn, cell: (row) => row.usedIn ?? "—" },
               ]}
               rows={data.methods}

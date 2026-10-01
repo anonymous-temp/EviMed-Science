@@ -884,16 +884,17 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
   return {
     models: cards,
     methods: methods.map((method) => {
-      const numeric_ = object(method.numericTests);
-      const passed = numeric(numeric_.passed);
-      const total = numeric(numeric_.total);
+      const validation = object(method.validationEvidence);
+      const references = validation.status === 'passed' ? list(validation.referenceCases) : [];
       return {
         id: String(method.id),
         name: METHOD_LABELS[String(method.method)] ?? String(method.method),
         method: String(method.method),
         version: text(method.version),
         endpoints: list(method.endpoints).length ? list(method.endpoints).map(String).join(" · ") : null,
-        numeric: passed !== null && total !== null ? `${passed} / ${total} 通过` : null,
+        numeric: references.length ? `${references.length} 个参考用例通过` : null,
+        validation: references.length ? validation : { status: 'unmeasured', reason: validation.reason ?? 'no_reference_evidence' },
+        assumptions: references.length ? list(method.assumptions) : [],
         usedIn: null,
       };
     }),
@@ -1023,13 +1024,14 @@ export function presentPrecedent(row) {
 /**
  * `GET /api/vcr/precedents`: the library, or the sentence saying it is not
  * there — never an empty table that reads as 「没有先例」.
- * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null }} input
+ * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null, registryCoverage?:any[] }} input
  */
-export function presentPrecedents({ available, message = null, rows = [], sources = null }) {
+export function presentPrecedents({ available, message = null, rows = [], sources = null, registryCoverage = [] }) {
   return {
     available,
     message: available ? null : message,
     precedents: rows.map(presentPrecedent),
+    ...(registryCoverage.length ? { registryCoverage } : {}),
     sources,
   };
 }

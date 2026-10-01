@@ -472,6 +472,7 @@ export function createVcrEngineClient({ baseUrl = "", timeoutMs = 120_000, token
         rVersion: String(answer.rVersion ?? ""),
         methods: Array.isArray(answer.methods) ? answer.methods.map(String) : [],
         packageLockHash: String(answer.packageLockHash ?? ""),
+        numericalSourceDigest: /^[a-f0-9]{64}$/.test(answer.numericalSourceDigest ?? "") ? answer.numericalSourceDigest : null,
       };
     },
   };

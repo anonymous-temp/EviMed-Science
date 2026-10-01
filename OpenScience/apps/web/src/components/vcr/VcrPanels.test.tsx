@@ -34,6 +34,20 @@ beforeEach(() => {
 describe("模型与方法", () => {
   const card = () => document.querySelector("[data-vcr-model-card]")?.closest("section") as HTMLElement;
 
+  it("shows current numerical evidence with its source and leaves other methods unmeasured", async () => {
+    const payload = fixture("ev201/models.json");
+    Object.assign(payload.methods[0], { numeric: '1 个参考用例通过', validation: { status: 'passed', ciUrl: 'https://example.org/ci/101' },
+      assumptions: [{ text: 'Constant event rate in the declared interval.', source: 'R/example.R:10' }] });
+    Object.assign(payload.methods[1], { numeric: null, validation: { status: 'unmeasured' }, assumptions: [] });
+    installVcrServer(network.productRequest, { "GET /vcr/models": payload });
+    draw(<VcrModelsPanel />);
+    expect(await screen.findByRole('link', { name: '查看验证来源' })).toHaveAttribute('href', 'https://example.org/ci/101');
+    expect(screen.getByText('1 个参考用例通过')).toBeInTheDocument();
+    expect(screen.getAllByText('当前版本尚无已核对的参考用例').length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByText('查看假设及来源'));
+    expect(screen.getByText('Constant event rate in the declared interval.')).toBeVisible();
+  });
+
   // UI-19: a one-shot prediction from baseline has a name of its own and is
   // never shown as 「不适用」.
   it("names a baseline-conditioned model's output as such, with what it lacks to be a twin", async () => {
@@ -80,7 +94,7 @@ describe("模型与方法", () => {
     await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
     await userEvent.click(document.querySelector("[data-vcr-model='mdl_2']") as HTMLElement);
     expect(await screen.findByRole("heading", { name: "二分类终点参考仿真器" })).toBeInTheDocument();
-    expect(document.querySelector("[data-vcr-method='mth_1']")).toHaveTextContent("9 / 9 通过");
+    expect(document.querySelector("[data-vcr-method='mth_1']")).toHaveTextContent("当前版本尚无已核对的参考用例");
   });
 
   // UI-27: the ladder is a table, not a sentence about the system.

@@ -1,3 +1,4 @@
+import { VcrRegistryCoverage } from "./VcrRegistryCoverage";
 import { Fragment, useState, type ReactNode } from "react";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { getVcrPrecedents, type VcrPrecedent } from "@/lib/vcrClient";
@@ -42,6 +43,7 @@ export function VcrPrecedentsPanel() {
 
   return (
     <div className="flex flex-col gap-4">
+      {state.kind === "ready" && <VcrRegistryCoverage sources={state.data.registryCoverage} />}
       <VcrToolbar summary={state.kind === "ready" ? `${state.data.precedents.length} 项` : undefined}>
         <SearchInput
           label="搜索先例"

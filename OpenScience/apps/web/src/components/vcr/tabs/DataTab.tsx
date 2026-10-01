@@ -1,3 +1,4 @@
+import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { VcrReviews } from "../VcrReviews";
 import { useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -101,6 +102,7 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
     return (
       <div className="flex flex-col gap-6">
         {note}
+        <VcrRegistryCoverage sources={data.registryCoverage} />
         <VcrReviews reviews={data.reviews} />
         <VcrStepPending studyId={studyId} study={study} step="evidence" />
         {intakePanel}
@@ -125,6 +127,7 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
         <VcrToolbar summary={data.status.map((item) => `${item.label} ${item.value}`).join(" · ")} />
       )}
       {note}
+      <VcrRegistryCoverage sources={data.registryCoverage} />
       <VcrReviews reviews={data.reviews} />
       {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
 

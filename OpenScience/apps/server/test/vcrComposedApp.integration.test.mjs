@@ -192,6 +192,11 @@ function requests(target, ids) {
     "POST /studies/:id/decisions": async () => ["POST", `${S}/decisions`, { question: "选哪个设计", chosen: { design: "B" }, rationale: "功效更高" }],
     "POST /studies/:id/export": async () => ["POST", `${S}/export`, { kind: "study_package" }],
     "GET /studies/:id/export/:export": async () => ["GET", `${S}/export/${ids.exportId}`, undefined],
+    "GET /studies/:id/curve-extractions": async () => ["GET", `${S}/curve-extractions`, undefined],
+    "POST /studies/:id/curve-extractions": async () => ["POST", `${S}/curve-extractions`, { imageArtifactId: 'missing', points: {} }],
+    "POST /studies/:id/correction-cases": async () => ["POST", `${S}/correction-cases`, {}],
+    "GET /studies/:id/correction-cases/:dataset": async () => ["GET", `${S}/correction-cases/eds_missing`, undefined],
+    "POST /studies/:id/correction-cases/:dataset/replay": async () => ["POST", `${S}/correction-cases/eds_missing/replay`, {}],
     "GET /studies/:id/members": async () => ["GET", `${S}/members`, undefined],
     "POST /studies/:id/members": async () => ["POST", `${S}/members`, { userId: `newcomer${suffix}`, role: "viewer" }],
     "DELETE /studies/:id/members/:user": async () => ["DELETE", `${S}/members/newcomer${suffix}?role=viewer`, undefined],
@@ -248,7 +253,9 @@ test("CS-45 every route, driven through the real server as the owner and as each
     for (const [key, abilities] of Object.entries(VCR_ROUTE_ABILITIES)) {
       const [method, route, body] = await built[key]();
       const answer = await call(who, method, route, body);
-      const allowed = holdsAny(held, abilities);
+      // Reference-only case export still requires current patient-level read
+      // authority; study export alone cannot read its underlying documents.
+      const allowed = holdsAny(held, abilities) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
       if (answer.status >= 500) problems.push(`${label}: a server error — ${answer.text.slice(0, 160)}`);
       else if (allowed && answer.status === 403) problems.push(`${label}: refused, but the role holds ${abilities.join(" or ")}`);

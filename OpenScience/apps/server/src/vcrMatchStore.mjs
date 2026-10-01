@@ -33,6 +33,8 @@
 
 import { createHash, randomUUID } from "node:crypto";
 
+import { correctionHash, correctionPartition } from "./vcrCorrectionCases.mjs";
+import { publicMatchingProvenance } from "./vcrMatching.mjs";
 import { VCR_CRITERION_STATES, VCR_REFERRAL_STATES } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -81,6 +83,7 @@ const assessmentOf = (row) => (row ? {
   asOf: row.as_of,
   summary: row.summary,
   counts: row.counts ?? {},
+  provenance: publicMatchingProvenance(row.provenance ?? {}),
   priority: row.priority ?? null,
   evidenceGaps: row.evidence_gaps ?? [],
   reviewedBy: row.reviewed_by ?? null,
@@ -296,21 +299,21 @@ export class VcrMatchStore extends VcrStoreBase {
       const id = assessment?.id ?? vcrId("assessment");
       const saved = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.matching_assessments
-           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb)
+           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps, provenance)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb)
          ON CONFLICT (study_id, protocol_version_id, subject_key, as_of) DO UPDATE SET
            reviewed_by = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_by END,
            reviewed_at = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_at END,
            summary = EXCLUDED.summary, counts = EXCLUDED.counts,
-           priority = EXCLUDED.priority, evidence_gaps = EXCLUDED.evidence_gaps
+           priority = EXCLUDED.priority, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
          RETURNING *`,
         [id, assessment.studyId, assessment.protocolVersionId ?? null, userId, assessment.subjectKey,
           assessment.direction ?? "trial_to_patient", assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}),
           assessment.priority ? JSON.stringify(assessment.priority) : null,
-          JSON.stringify(assessment.evidenceGaps ?? [])],
+          JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {})],
       );
       const row = saved.rows[0];
       const kept = (assessment.judgments ?? []).map((/** @type {any} */ judgment) => String(judgment.criterionId));
@@ -474,6 +477,11 @@ export class VcrMatchStore extends VcrStoreBase {
       throw new HttpError(400, "vcr_write_value_invalid", `state must be one of: ${VCR_CRITERION_STATES.join(", ")}.`);
     }
     return this.transaction(async (client) => {
+      const assessment = (await client.query('SELECT * FROM evimed_vcr.matching_assessments WHERE id=$1 AND study_id=$2 FOR UPDATE', [assessmentId, studyId])).rows[0];
+      if (!assessment) return null;
+      const previous = (await client.query('SELECT * FROM evimed_vcr.criterion_judgments WHERE assessment_id=$1 AND criterion_id=$2 FOR UPDATE', [assessmentId, criterionId])).rows[0];
+      if (!previous) return null;
+      const evaluationCase = await this.captureCorrectionCase(client, assessment, previous, { state, by });
       const result = await client.query(
         `UPDATE ${VCR_SCHEMA}.criterion_judgments j
             SET override_state = $3, overridden_by = $4, override_note = $5
@@ -483,10 +491,81 @@ export class VcrMatchStore extends VcrStoreBase {
       if (!result.rowCount) return null;
       await this.audit({
         client, studyId, userId, actor: by, action: "vcr.judgment.override",
-        object: `${assessmentId}:${criterionId}`, detail: { state, note },
+        object: `${assessmentId}:${criterionId}`, detail: { state, note, evaluationCase },
       });
       return judgmentOf(result.rows[0]);
     });
+  }
+
+  /** Freeze references before the assessment's next evaluation can overwrite the original judgment.
+   * @param {any} client @param {any} assessment @param {any} previous @param {{state:string,by:string}} correction */
+  async captureCorrectionCase(client, assessment, previous, { state, by }) {
+    const criterion = criterionOf((await client.query('SELECT * FROM evimed_vcr.criteria WHERE id=$1 AND study_id=$2', [previous.criterion_id, assessment.study_id])).rows[0]);
+    const factIds = assessment.provenance?.inputFactIds ?? [];
+    const languageIds = assessment.provenance?.inputLanguageIds ?? [];
+    const facts = (await client.query('SELECT * FROM evimed_vcr.matching_facts WHERE study_id=$1 AND subject_key=$2 AND visible_at<=$3 AND id=ANY($4::text[]) ORDER BY array_position($4::text[],id) LIMIT 257',
+      [assessment.study_id, assessment.subject_key, assessment.as_of, factIds])).rows.map(factOf);
+    const language = (await client.query(`SELECT * FROM evimed_vcr.language_judgments WHERE study_id=$1 AND subject_key=$2 AND visible_at<=$3 AND id=ANY($4::text[])
+      ORDER BY array_position($4::text[],id) LIMIT 101`, [assessment.study_id,assessment.subject_key,assessment.as_of,languageIds])).rows.map(row => this.correctionLanguage(row));
+    const documentIds = [...new Set([...facts.map(fact => fact.source?.documentId), ...language.flatMap(row => row.evidence.map(item => item.documentId))].filter(Boolean))];
+    const documents = (await client.query('SELECT id,source_id,sha256 FROM evimed_vcr.source_files WHERE study_id=$1 AND id=ANY($2::text[])', [assessment.study_id,documentIds])).rows
+      .map(row => ({ id: row.id, sourceId: row.source_id, sha256: row.sha256 })).sort((a, b) => a.id.localeCompare(b.id));
+    // Different assessments of one subject can be corrected concurrently. Keep
+    // the opaque group identity stable as well as the deterministic partition.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`vcr-correction-group:${assessment.study_id}:${assessment.subject_key}`]);
+    const prior = (await client.query(`SELECT a.detail#>>'{evaluationCase,groupId}' AS group_id FROM evimed_vcr.audit a
+      JOIN evimed_vcr.matching_assessments m ON m.id=a.detail#>>'{evaluationCase,assessmentId}'
+      WHERE a.study_id=$1 AND a.action='vcr.judgment.override' AND m.subject_key=$2 ORDER BY a.id LIMIT 1`, [assessment.study_id,assessment.subject_key])).rows[0];
+    const unavailable = !criterion || !assessment.provenance?.vocabularyVersion ? 'case_version_missing'
+      : !assessment.provenance?.inputReferencesComplete || facts.length !== factIds.length || language.length !== languageIds.length ? 'case_references_missing'
+      : correctionHash(criterion) !== assessment.provenance.inputCriterionHashes?.[criterion.id]
+        || facts.some(row => correctionHash(row) !== assessment.provenance.inputFactHashes?.[row.id])
+        || language.some(row => correctionHash({ id: row.id, state: row.state, evidence: row.evidence }) !== assessment.provenance.inputLanguageHashes?.[row.id]) ? 'case_inputs_changed'
+      : facts.length > 256 || language.length > 100 || documentIds.length > 20 ? 'case_input_limit' : documents.length !== documentIds.length ? 'case_document_missing' : null;
+    const factRefs = facts.slice(0,256).map(row => ({ id: row.id, hash: correctionHash(row) }));
+    const languageRefs = language.slice(0,100).map(row => ({ id: row.id, hash: correctionHash(row) }));
+    const ruleHash = correctionHash(criterion);
+    const inputDigest = correctionHash({ assessmentId: assessment.id, criterionId: previous.criterion_id, ruleHash, facts: factRefs, language: languageRefs, documents });
+    return { caseId: `case_${randomUUID().replaceAll('-', '')}`, inputDigest, studyId: assessment.study_id, assessmentId: assessment.id, criterionId: previous.criterion_id,
+      protocolVersionId: assessment.protocol_version_id, asOf: new Date(assessment.as_of).toISOString(), originalState: previous.state, expectedState: state,
+      reviewerId: by, capturedAt: new Date().toISOString(), groupId: prior?.group_id ?? `group_${randomUUID().replaceAll('-', '')}`,
+      partition: correctionPartition(assessment.study_id, assessment.subject_key), subjectDigest: correctionHash({ studyId: assessment.study_id, subjectKey: assessment.subject_key }),
+      vocabularyVersion: assessment.provenance?.vocabularyVersion ?? null, criterion, ruleHash,
+      facts: factRefs, language: languageRefs,
+      documents, ...(unavailable ? { unavailable } : {}) };
+  }
+  /** @param {any} row */
+  correctionLanguage(row) { return { id: row.id, subjectKey: row.subject_key, criterionKey: row.criterion_key, state: row.state,
+    evidence: row.evidence ?? [], visibleAt: new Date(row.visible_at).toISOString() }; }
+  /** @param {{studyId:string,after?:string,limit?:number}} request */
+  async correctionCases({ studyId, after='0', limit=100 }) {
+    const rows = await this.rows(`WITH latest AS (
+      SELECT DISTINCT ON (detail#>>'{evaluationCase,inputDigest}') id,detail->'evaluationCase' AS item FROM evimed_vcr.audit
+      WHERE study_id=$1 AND action='vcr.judgment.override' AND detail#>>'{evaluationCase,inputDigest}' IS NOT NULL
+        AND COALESCE(detail#>>'{evaluationCase,unavailable}','')=''
+      ORDER BY detail#>>'{evaluationCase,inputDigest}',id DESC)
+      SELECT id::text,item FROM latest WHERE id>$2::bigint ORDER BY latest.id LIMIT $3`, [studyId,after,limit+1]);
+    const legacy = await this.one(`SELECT count(*)::int AS count FROM evimed_vcr.audit WHERE study_id=$1 AND action='vcr.judgment.override'
+      AND (detail->'evaluationCase' IS NULL OR COALESCE(detail#>>'{evaluationCase,unavailable}','')<>'')`, [studyId]);
+    const page = rows.slice(0,limit);
+    return { items: page.map(row => row.item), more: rows.length>limit, nextCursor: page.at(-1)?.id ?? null, legacyUnfrozen: legacy.count };
+  }
+  /** @param {string} studyId @param {string[]} ids */
+  async correctionCasesById(studyId, ids) {
+    return (await this.rows(`SELECT detail->'evaluationCase' AS item FROM evimed_vcr.audit WHERE study_id=$1 AND action='vcr.judgment.override'
+      AND detail#>>'{evaluationCase,caseId}'=ANY($2::text[]) ORDER BY array_position($2::text[],detail#>>'{evaluationCase,caseId}')`, [studyId,ids])).map(row => row.item);
+  }
+  /** @param {any} item */
+  async correctionInputs(item) {
+    const facts = (await this.rows('SELECT * FROM evimed_vcr.matching_facts WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.facts.map(row=>row.id)])).map(factOf);
+    const language = (await this.rows('SELECT * FROM evimed_vcr.language_judgments WHERE study_id=$1 AND id=ANY($2::text[]) ORDER BY array_position($2::text[],id)', [item.studyId,item.language.map(row=>row.id)])).map(row=>this.correctionLanguage(row));
+    if (facts.length!==item.facts.length || language.length!==item.language.length || facts.some((row,index)=>correctionHash(row)!==item.facts[index].hash)
+      || language.some((row,index)=>correctionHash(row)!==item.language[index].hash)) throw new HttpError(409,'vcr_evaluation_input_changed','A frozen case input changed.');
+    return { facts, modelJudgments: Object.fromEntries(language.map(row=>[row.criterionKey,{state:row.state,evidence:row.evidence}])) };
+  }
+  /** @param {string} studyId @param {string} datasetId */
+  async evaluationDataset(studyId,datasetId) {
+    return (await this.one("SELECT detail->'manifest' AS manifest FROM evimed_vcr.audit WHERE study_id=$1 AND action='vcr.evaluation.dataset' AND object=$2 ORDER BY id LIMIT 1", [studyId,datasetId]))?.manifest ?? null;
   }
 
   /**
@@ -555,7 +634,7 @@ export class VcrMatchStore extends VcrStoreBase {
   async saveFact({ studyId, userId, fact }) {
     const key = createHash("sha256").update(JSON.stringify([
       fact.subjectKey, fact.variable, fact.polarity, fact.value ?? null, fact.unit ?? null,
-      fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null,
+      fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null, fact.source?.vocabularyVersion ?? null,
     ])).digest("hex");
     return this.transaction(async (client) => {
       const inserted = await client.query(
@@ -625,7 +704,7 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async latestLanguageJudgments({ studyId, visibleBy = null }) {
     const rows = await this.rows(
-      `SELECT DISTINCT ON (subject_key, criterion_key) subject_key, criterion_key, state, evidence
+      `SELECT DISTINCT ON (subject_key, criterion_key) id, subject_key, criterion_key, state, evidence
          FROM ${VCR_SCHEMA}.language_judgments
         WHERE study_id = $1 AND ($2::timestamptz IS NULL OR visible_at <= $2)
         ORDER BY subject_key, criterion_key, created_at DESC, id DESC`, [studyId, visibleBy]);
@@ -633,7 +712,7 @@ export class VcrMatchStore extends VcrStoreBase {
     const bySubject = new Map();
     for (const row of rows) {
       const entry = bySubject.get(String(row.subject_key)) ?? {};
-      entry[String(row.criterion_key)] = { state: row.state, evidence: row.evidence ?? [] };
+      entry[String(row.criterion_key)] = { id: row.id, state: row.state, evidence: row.evidence ?? [] };
       bySubject.set(String(row.subject_key), entry);
     }
     return bySubject;

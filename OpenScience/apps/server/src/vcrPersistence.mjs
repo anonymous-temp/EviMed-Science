@@ -76,7 +76,7 @@ export const VCR_FIELD_MAP_STATES = Object.freeze(["none", "proposed", "confirme
  */
 export const VCR_TABLES = Object.freeze([
   "studies", "members", "study_definitions", "protocol_versions", "criteria", "soa_items",
-  "precedents", "study_precedents", "evidence_items", "assumptions",
+  "precedents", "study_precedents", "evidence_items", "curve_extractions", "assumptions",
   "sources", "source_files", "grants", "snapshots", "field_maps", "analysis_tables",
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "models", "methods",
@@ -322,6 +322,20 @@ END $$;
 -- An assumption card: one parameter, one version. The distribution is what a
 -- simulation draws from; the prediction interval is what a pooled literature
 -- parameter actually justifies (plan §6.1).
+-- Authenticated curve selection/extraction receipts are study-local immutable numerical input.
+CREATE TABLE IF NOT EXISTS evimed_vcr.curve_extractions (
+  id text PRIMARY KEY,
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
+  principal text NOT NULL,
+  origin text NOT NULL CHECK (origin IN ('human_click','digitizer')),
+  image jsonb NOT NULL,
+  points_hash text NOT NULL,
+  scenario jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_curve_extractions_study_idx ON evimed_vcr.curve_extractions(study_id,created_at);
+
 CREATE TABLE IF NOT EXISTS evimed_vcr.assumptions (
   id             text PRIMARY KEY,
   study_id       text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
@@ -787,6 +801,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_assessments (
   created_at          timestamptz NOT NULL DEFAULT now(),
   UNIQUE (study_id, protocol_version_id, subject_key, as_of)
 );
+ALTER TABLE evimed_vcr.matching_assessments ADD COLUMN IF NOT EXISTS provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS vcr_matching_study_idx ON evimed_vcr.matching_assessments (study_id, summary, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.criterion_judgments (

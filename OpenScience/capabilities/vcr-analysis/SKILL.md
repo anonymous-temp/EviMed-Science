@@ -104,24 +104,11 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 | `model_comparator` 模型预测比较器 | T0 | 当前版本没有实现：引擎里只有按情景参数生成的参考仿真器，给不出"对该人群的预测"。平台如实记为不可估计并写明原因 |
 | `hybrid_control` 混合对照 | T0 | 设计期的 MAP 先验：先验有效样本量与冲突情景下的运行特征 |
 
-`mcp__evimed__vcr_write` `what: "comparator"`。文献对照的曲线坐标必须来自数字化程序或人工点选（`provenance` 写明是哪个工具），**你不能看图报数**；缺风险人数表就不重建，因为没有它删失无从辨认。下面的曲线只列了四个点作示意，数字化出来的曲线有几十到上百个点：
+Use `mcp__evimed__vcr_read` with `what: "evidence"` to find a `curveReceipts` identifier already recorded by the control plane. For a literature comparator, write that exact identifier as `configuration.provenance.receiptId`; do not invent coordinates, risk-table values, an origin label, or a tool name. The platform resolves the recorded points and verifies the current source-image hash before reconstruction.
 
-```json vcr:object:comparator
-{
-  "route": "literature_control",
-  "estimand": "ATT",
-  "targetTrial": { "population": "二线 NSCLC", "treatment": "EV 单药" },
-  "configuration": {
-    "curve": [ { "time": 0, "surv": 1 }, { "time": 6, "surv": 0.7 }, { "time": 12, "surv": 0.5 }, { "time": 24, "surv": 0.25 } ],
-    "riskTable": [ { "time": 0, "atRisk": 200 }, { "time": 12, "atRisk": 100 }, { "time": 24, "atRisk": 50 } ],
-    "totalEvents": 120,
-    "reportedMedian": 12,
-    "provenance": { "kind": "digitizer", "tool": "WebPlotDigitizer", "toolVersion": "4.6" }
-  }
-}
-```
+This release supports source-bound reconstruction from existing recorded point inputs; it does not implement automatic image digitization. An optional authenticated user selection is data input, not an expert approval requirement. If a receipt, source image or risk table is missing or changed, report reconstruction as unavailable and continue other supported research. Never treat an LLM-written `digitizer` or `human_click` string as proof.
 
-只有一条曲线的重建是一个基准，不是比较。要做 RMST 对比，把另一组的曲线写进 `treatmentArm`（同样的 `curve`、`riskTable`、`totalEvents`），再加 `tau`（RMST 的时点，不能超过任一组的最长随访）和 `timeUnit`；平台先重建，再对伪个体算 RMST。
+A single recorded arm is a benchmark, not a comparison. For a receipt containing both arms, RMST additionally needs an explicitly supported `tau` and `timeUnit`; do not invent these or claim that an unavailable comparison was computed.
 
 真实外部对照读的是患者级数据，`configuration` 写用哪些协变量、分析时点和哪个参数，并带数据快照：
 

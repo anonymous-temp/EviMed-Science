@@ -107,7 +107,7 @@ import {
   suppressForModel, workspaceLayout,
 } from "@evimed/domain";
 
-import { HttpError } from "./security.mjs";
+import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { vcrEffectiveSeal, vcrOutcomeColumns, vcrSealRequired } from "./vcrSeal.mjs";
@@ -2700,7 +2700,7 @@ export class VcrDataPlane {
   /**
    * The text of a patient document, for the matching side. Judged as a
    * patient-level read of the source that holds it, and audited.
-   * @param {{ studyId: string, documentId: string, principal: string, purpose?: string | null }} entry
+   * @param {{ studyId: string, documentId: string, principal: string, purpose?: string | null, maxBytes?:number }} entry
    */
   async documentText(entry) {
     const root = this.root();
@@ -2708,8 +2708,13 @@ export class VcrDataPlane {
     const file = ID_PATTERN.test(String(entry.documentId ?? "")) ? await this.store.getSourceFile(studyId, entry.documentId) : null;
     if (!file || file.role !== "document") throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
     await this.access.require({ actor: String(entry.principal), studyId, ability: "read_patient_level", sourceId: file.sourceId, purpose: entry.purpose ?? null, note: "document" });
-    const body = await fs.readFile(assertDataPlaneLocation(root, file.location), "utf8").catch(() => null);
-    if (body === null) throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
+    const opened = await openScopedFileNoFollow(root, assertDataPlaneLocation(root, file.location));
+    let body;
+    try {
+      if (opened.stat.size !== Number(file.bytes)) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, 'The document byte length changed.');
+      if (entry.maxBytes != null && opened.stat.size > entry.maxBytes) throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, 'The document exceeds this operation’s bound.');
+      body = (await readStableFileHandle(opened.handle, opened.stat)).toString('utf8');
+    } finally { await opened.handle.close(); }
     if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
     return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
   }

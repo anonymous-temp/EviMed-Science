@@ -533,6 +533,7 @@ function vcrSettings(overrides) {
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.
     vcrEngineUrl: engineUrl,
+    vcrMethodValidationFile: String(overrides.vcrMethodValidationFile ?? process.env.OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE ?? '').trim(),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
     // The engine's two secrets, read from the files the deployment mounts
     // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
