@@ -38,8 +38,8 @@
 #   `install.packages` on a build a month later silently picks up WeightIt 2.1
 #   or cobalt 5.1 and every cross-software case shifts. The date is the pin.
 # - **Mirrors are build arguments** because the production host cannot reach
-#   deb.debian.org, CRAN or PyPI directly (the same reason every other image in
-#   this repo takes `APT_MIRROR` / `CRAN_MIRROR` / `PIP_INDEX_URL`). Trust does
+#   the Ubuntu archives, CRAN or PyPI directly (the same reason every other
+#   image takes `APT_MIRROR` / `CRAN_MIRROR` / `PIP_INDEX_URL`). Trust does
 #   not move with the URL: the version checks below check whatever any mirror
 #   served.
 # - **No model client, no secret, no network egress at run time.** The engine
@@ -55,13 +55,16 @@
 #   /tmp, which is why the R library lives under /opt and the self-check runs
 #   at build time.
 #
-# This file is written, not built here (the development box cannot build it).
-
-ARG R_BASE_IMAGE=docker.m.daocloud.io/library/r-base:4.3.3
+# R 4.3.3 on Ubuntu 22.04, including its recommended packages. r-base:4.3.3
+# carries Debian testing: installing Python there years later partially
+# upgrades the distribution. The digest fixes both R and the underlying OS;
+# a registry mirror may replace the registry but must preserve this digest.
+ARG R_BASE_IMAGE=docker.io/rocker/r-ver:4.3.3@sha256:732d15020af326da9e919c07f70ca32bf5d3e409220af32e0a4b6d0a89437309
 FROM ${R_BASE_IMAGE}
 
-ARG APT_MIRROR=http://deb.debian.org/debian
-ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+ARG APT_MIRROR=http://archive.ubuntu.com/ubuntu
+ARG UBUNTU_SECURITY_MIRROR=http://security.ubuntu.com/ubuntu
+ARG UBUNTU_PORTS_MIRROR=http://ports.ubuntu.com/ubuntu-ports
 ARG PIP_INDEX_URL=https://pypi.org/simple
 # A dated CRAN snapshot: the versions in both locks are the ones this date
 # serves. Moving the date is a numerics change and reruns tests/run_all.sh.
@@ -69,7 +72,7 @@ ARG CRAN_SNAPSHOT_DATE=2026-09-28
 ARG CRAN_MIRROR=https://packagemanager.posit.co/cran/${CRAN_SNAPSHOT_DATE}
 # 0 = the lean runtime image; 1 = the CI test image with the cross-check lock.
 ARG WITH_CROSSCHECK=0
-ARG R_BUILD_NCPUS=2
+ARG R_BUILD_NCPUS=1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     R_LIBS_SITE=/opt/vcr-rlib \
@@ -85,21 +88,28 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     TZ=UTC
 
+ENV PATH=/opt/vcr-venv/bin:${PATH}
+
+COPY scripts/configure-apt.sh /usr/local/bin/vcr-configure-apt
+
 # System libraries. The runtime closure needs only a compiler toolchain (the
-# base image ships r-base-dev) and, optionally, ICU for stringi. The
+# base image ships make, g++ and gfortran) and ICU for stringi. The
 # cross-check closure adds curl, xml2, V8 (RBesT's chain), fs and
 # RcppParallel's build; the build fails loudly if the mirror omits any of them
 # rather than degrading to a package set that silently drops a case.
 RUN set -eux; \
-    sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" \
-      /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    . /etc/os-release; \
+    test "${ID}:${VERSION_CODENAME}" = "ubuntu:jammy"; \
+    Rscript -e 'stopifnot(as.character(getRversion()) == "4.3.3")'; \
+    sh /usr/local/bin/vcr-configure-apt; \
     case "${WITH_CROSSCHECK}" in \
       0) extra="" ;; \
       1) extra="libcurl4-openssl-dev libssl-dev libxml2-dev libv8-dev libuv1-dev cmake" ;; \
       *) echo "WITH_CROSSCHECK must be 0 or 1" >&2; exit 1 ;; \
     esac; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates python3 python3-pip libicu-dev ${extra}; \
+    apt-get install -y --no-install-recommends ca-certificates python3 python3-venv libicu-dev ${extra}; \
+    python3 -m venv /opt/vcr-venv; \
     rm -rf /var/lib/apt/lists/*
 
 COPY R/package-lock.json /tmp/vcr-locks/runtime.json
@@ -118,10 +128,8 @@ COPY tests/package-lock.crosscheck.json /tmp/vcr-locks/crosscheck.json
 #    holds nothing else (no dependency arrived unlisted); and, with the
 #    library order run_job.R uses, every listed package loads from the site
 #    library and every base or recommended one from R's own -- which is the
-#    property that matters, since Debian's Renviron.site puts
-#    /usr/local/lib/R/site-library in front of R_LIBS_SITE.
-# Inside R the path is read from VCR_R_LIBS: that same Renviron.site rewrites
-# R_LIBS_SITE into a colon-joined list, which is not a directory.
+#    property that matters when a base image configures additional libraries.
+# Inside R the path is read from VCR_R_LIBS, which is always one directory.
 RUN set -eux; \
     locks="/tmp/vcr-locks/runtime.json"; \
     if [ "${WITH_CROSSCHECK}" = "1" ]; then locks="${locks} /tmp/vcr-locks/crosscheck.json"; fi; \
@@ -167,7 +175,7 @@ RUN set -eux; \
     rm -rf /tmp/vcr-locks
 
 COPY requirements.txt /tmp/requirements.txt
-RUN python3 -m pip install --no-cache-dir --break-system-packages \
+RUN python3 -m pip install --no-cache-dir \
       --index-url "${PIP_INDEX_URL}" -r /tmp/requirements.txt
 
 WORKDIR /opt/vcr-engine

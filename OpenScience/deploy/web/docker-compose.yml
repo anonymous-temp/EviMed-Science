@@ -1129,8 +1129,9 @@ services:
       context: ../../../项目代码/vcr-engine
       dockerfile: Dockerfile
       args:
-        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
-        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+        APT_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_ARCHIVE_MIRROR:-http://archive.ubuntu.com/ubuntu}
+        UBUNTU_SECURITY_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}
+        UBUNTU_PORTS_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_PORTS_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
         CRAN_SNAPSHOT_DATE: ${OPEN_SCIENCE_VCR_CRAN_SNAPSHOT_DATE:-2026-09-28}
         # Passed even though the Dockerfile derives a default from the snapshot
