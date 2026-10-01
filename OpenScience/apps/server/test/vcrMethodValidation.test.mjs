@@ -55,6 +55,7 @@ test('only bounded root-owned non-writable regular files can supply method evide
     const link = path.join(root, 'link.json'); await fs.symlink(file, link);
     assert.equal((await loadMethodValidation({ file: link, health: identity })).status, 'unmeasured');
     if (process.getuid?.() !== 0) assert.equal((await loadMethodValidation({ file, health: identity })).reason, 'file_untrusted');
+    else assert.equal((await loadMethodValidation({ file, health: identity })).status, 'verified', 'The real protected absolute mount must be readable.');
     assert.equal((await loadMethodValidation({ file: '', health: identity })).reason, 'not_configured');
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

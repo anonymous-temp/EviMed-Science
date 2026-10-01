@@ -227,7 +227,8 @@ const cards = [
 ];
 const seedStudy = { id: "std_1", userId: "u1", dataTier: "T0", intendedUse: "design_support" };
 const definition = { id: "def_1", version: 1, endpointType: "time_to_event" };
-const context = { study: seedStudy, definition, assumptions: cards, populations: [], scenarios: [], grid: null, analytic: null };
+const context = { study: seedStudy, definition, assumptions: cards, populations: [], scenarios: [], grid: null, analytic: null,
+  models: [{ id: "mdl_reference", name: "reference-time-to-event", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: {} }] };
 
 /** @param {Record<string, any>} configuration @param {Record<string, any>} [row] */
 const trialRow = (configuration, row = {}) => ({ id: "scn_1", version: 1, label: "A", design: "two_arm_fixed", endpointType: "time_to_event",
@@ -304,11 +305,11 @@ test("a design the engine does not implement is said in a sentence and never run
   assert.equal(single.ok, false);
   assert.equal(single.unavailable.reason, "design_not_supported");
   assert.match(single.unavailable.gaps[0].title, /single_arm_external/);
-  // Simon's design is the one that is analytic only.
+  // Simon search is analytic until a stored result selects frozen boundaries.
   const simon = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ truth: { nullRate: 0.1, alternativeRate: 0.3 }, analysis: { alpha: 0.05, power: 0.8 } },
     { design: "simon_two_stage", endpointType: "binary" }) }, context));
   assert.equal(simon.ok, true);
-  assert.deepEqual(simon.stages.map((entry) => entry.jobKind), ["design_analytic"]);
+  assert.deepEqual(simon.stages.filter((entry) => !entry.detail.awaitingAnalytic).map((entry) => entry.jobKind), ["design_analytic"]);
   const typo = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ accrual: { kind: "uniform", duration: 12, followup: 12, dropoutRate: 0.1 } }) }, context));
   assert.equal(typo.ok, false);
   assert.deepEqual(typo.refused.paths, ["accrual.dropoutRate"]);
@@ -319,6 +320,34 @@ test("a design the engine does not implement is said in a sentence and never run
   // The words a page shows an object by are the only keys allowed to go without a word.
   const shown = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ cost: 180, notes: "x", design: { nTreat: 10, nControl: 10 } }) }, context));
   assert.equal(shown.ok, true);
+});
+
+test("Simon simulation freezes the selected analytic result and both declared null/alternative laws", () => {
+  const row = trialRow({ simonSelection: "minimax", design: { maxN: 35 }, truth: { nullRate: 0.1, alternativeRate: 0.3 },
+    analysis: { alpha: 0.05, power: 0.8, sided: 1 }, performance: ["power", "expected_sample_size"] }, { design: "simon_two_stage", endpointType: "binary" });
+  const analytic = { id: "res_simon", version: 1, executionId: "exe_simon", diagnostics: {
+    simon: { optimal: { n1: 10, n: 29, r1: 1, r: 5 }, minimax: { n1: 15, n: 25, r1: 1, r: 5 } },
+  } };
+  const analyticJob = { id: "job_simon", methodVersion: "1.1.0", scenarioHash: "a".repeat(64) };
+  const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context, analytic, analyticJob }));
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.stages.map((stage) => stage.stage), ["analytic", "simulation_null", "simulation"]);
+  for (const stage of plan.stages.slice(1)) {
+    assert.deepEqual(stage.scenario.design, { kind: "simon_two_stage", n1: 15, n: 25, r1: 1, r: 5 });
+    assert.equal(stage.after, "analytic");
+    assert.deepEqual(stage.detail.analyticSource, { resultId: "res_simon", resultVersion: 1, executionId: "exe_simon",
+      jobId: "job_simon", methodVersion: "1.1.0", scenarioHash: "a".repeat(64), selection: "minimax" });
+  }
+  assert.deepEqual(plan.stages.slice(1).map((stage) => stage.scenario.truth.responseRate), [0.1, 0.3]);
+  const incomplete = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context, analytic }));
+  assert.deepEqual(incomplete.stages.filter((stage) => !stage.detail.awaitingAnalytic).map((stage) => stage.stage), ["analytic"], "unbound numbers never enter a simulation");
+  const explicit = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({
+    design: { n1: 10, n: 29, r1: 1, r: 5 }, truth: { nullRate: 0.1, alternativeRate: 0.3, responseRate: 0.3 },
+    analysis: { alpha: 0.05, sided: 1 },
+  }, { design: "simon_two_stage", endpointType: "binary" }) }, context));
+  assert.equal(explicit.ok, true);
+  assert.equal(explicit.stages.length, 1);
+  assert.equal(explicit.stages[0].after, null, "a declared fixed rule is simulated, never replaced by a search");
 });
 
 test("each comparator route becomes the jobs the engine runs for it; a route the tier cannot reach is a derived verdict, not a job", () => {
@@ -400,7 +429,7 @@ test("populations, patient sets and grids are built as their own schemas, and a 
 test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
   const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
-  assert.ok(blocks.length >= 8, `the skill teaches by example (${blocks.length} blocks)`);
+  assert.ok(blocks.length >= 7, `the skill teaches supported designs by example (${blocks.length} blocks)`);
   const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
     populations: [{ id: "pop_example", resultId: "res_example" }] };
   const kinds = new Set();
@@ -409,6 +438,10 @@ test("every example in the skill is a shape the platform accepts: the objects bu
     if (kind.startsWith("object:")) {
       const objectKind = kind.slice("object:".length);
       const row = { id: `${objectKind}_example`, version: 1, ...body, ...(objectKind === "design_grid" ? { truthScenarios: body.truthScenarios } : {}) };
+      if (objectKind === "comparator" && row.configuration?.provenance?.receiptId) {
+        assert.equal(row.configuration.curve, undefined, "the skill references a source receipt rather than inventing points");
+        continue; // The authorized receipt is resolved by the real planner/queue integration tests.
+      }
       const plan = /** @type {any} */ (vcrBuildStages({ kind: objectKind, row }, t2));
       assert.equal(plan.ok, true, `${kind}: ${JSON.stringify(plan)}`);
       for (const stage of plan.stages) {
@@ -516,9 +549,10 @@ test("C3-09 a model answers only for what it declares it covers: the endpoint, t
   assert.equal(refused.refused.code, "vcr_model_not_applicable");
   assert.deepEqual(refused.refused.paths, ["creatinine", "age"]);
   assert.match(refused.refused.message, /fitted-os/);
-  // A model the library does not hold is judged by its tier at the result, not refused here; a covered one plans as before.
+  // An explicitly selected missing model is refused; it never becomes a different generator.
   const unknown = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "absent" } }, { ...context, populations: [population], models: [fitted] }));
-  assert.equal(unknown.ok, true);
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.refused.code, "vcr_model_not_found");
   const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "reference-time-to-event" } },
     { ...context, populations: [population], models: [{ id: "mdl_3", name: "reference-time-to-event", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: {} }] }));
   assert.equal(covered.ok, true);

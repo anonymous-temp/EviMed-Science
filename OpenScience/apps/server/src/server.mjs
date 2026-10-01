@@ -1615,7 +1615,7 @@ export function createWebApiApp(overrides = {}) {
   // module is off or this deployment has no product database — the schema is
   // the module, and a half-running module is worse than an absent one.
   const vcr = composeVcr({
-    config, productDatabase,
+    config, productDatabase, projectStore: store,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     report: (code) => process.stderr.write(`vcr: ${code}\n`),
     fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
@@ -3464,6 +3464,7 @@ export function createWebApiApp(overrides = {}) {
     const orchestrator = new VcrOrchestrator({
       store: vcr.store, jobs: vcr.jobs, config, notifier: vcr.notifier, seal: vcr.seal,
       queueExport: documentExportService && vcrDocumentAdapter ? (user, study, row) => vcrDocumentAdapter.queue(documentExportService, user, study, row) : null,
+      queueReviews: (studyId, options) => vcr.review?.queue(studyId, options) ?? Promise.resolve([]),
       dispatchRun: overrides.vcrDispatchRun ?? dispatchVcrRun,
       latestSessionId: async ({ userId, projectId }) => {
         const owner = await store.userById(userId);
@@ -3485,7 +3486,7 @@ export function createWebApiApp(overrides = {}) {
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.
-    void seedVcrCatalogue({ store: vcr.store, engine: vcr.engine, report: (code) => process.stderr.write(`vcr catalogue: ${code}\n`) })
+    void seedVcrCatalogue({ store: vcr.store, engine: vcr.engine, methodValidationFile: config.vcrMethodValidationFile, report: (code) => process.stderr.write(`vcr catalogue: ${code}\n`) })
       .then((seeded) => { vcr.service.engineMismatch = seeded?.engineMismatch ?? null; })
       .catch(() => {});
   }

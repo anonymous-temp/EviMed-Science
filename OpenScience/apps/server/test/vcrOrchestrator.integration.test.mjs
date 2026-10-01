@@ -28,6 +28,10 @@ import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { createVcrNotifier } from "../src/vcrNotify.mjs";
 import { createVcrSeal } from "../src/vcrSeal.mjs";
 import { createVcrWorkerLoops } from "../src/vcrWorker.mjs";
+import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
+import { VcrEvidenceStore } from "../src/vcrEvidenceStore.mjs";
+import { VcrDataStore } from "../src/vcrDataStore.mjs";
+import { VcrAccess } from "../src/vcrAccess.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { VCR_ACCRUAL_MEASURES } from "../src/vcrRecruit.mjs";
 import { VCR_ENGINE_METHODS, VCR_STEPS, lineageNode } from "@evimed/domain";
@@ -63,6 +67,7 @@ before(async () => {
   await store.ready();
   await seedVcrCatalogue({ store });
   scratch = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-orch-"));
+  await fs.writeFile(path.join(scratch, "controlled-curve-source.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/L1sAAAAASUVORK5CYII=", "base64"));
 });
 
 after(async () => {
@@ -163,6 +168,9 @@ function compose({ resultFor = (job) => engineResult(job), now = () => new Date(
   };
   const cfg = config();
   const jobs = new VcrJobs({ store, config: cfg, engine, dataPlane });
+  const curves = createVcrCurveEvidence({ store: new VcrEvidenceStore({ database }), studyStore: store,
+    access: new VcrAccess({ store: new VcrDataStore({ database }) }), resolveProject: async () => ({ workspaceDir: scratch }) });
+  jobs.curveVerifier = curves.curveVerifier;
   const notifier = createVcrNotifier({
     notifications: { async create(userId, input) { notices.push({ userId, ...input }); return { id: `n_${notices.length}` }; } },
     store, config: cfg,
@@ -178,7 +186,7 @@ function compose({ resultFor = (job) => engineResult(job), now = () => new Date(
   jobs.notifier = notifier;
   const service = new VcrService({ store, config: cfg, engine, jobs });
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
-  return { dispatched, notices, engine, jobs, notifier, seal, orchestrator, service, loops };
+  return { dispatched, notices, engine, jobs, notifier, seal, orchestrator, service, loops, curves };
 }
 
 /** Run the worker's own queue loop until nothing is queued or running, and the orchestrator has nothing more to enqueue. @param {any} module @param {any} study */
@@ -251,7 +259,6 @@ const publishedArm = (/** @type {number} */ median) => ({
   curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.5 }, { time: 24, surv: Math.round(0.5 ** (24 / median) * 1e4) / 1e4 }],
   riskTable: [{ time: 0, atRisk: 200 }, { time: 12, atRisk: 100 }], totalEvents: 120, reportedMedian: median,
 });
-const provenance = { kind: "digitizer", tool: "WebPlotDigitizer", toolVersion: "4.6" };
 const trialA = { label: "A 2:1 随机", design: "two_arm_fixed", endpointType: "time_to_event", assumptionIds: ["hazard_ratio", "control_median_pfs", "dropout_rate"],
   configuration: { design: { nTreat: 120, nControl: 60, allocation: 0.6667 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 },
     accrual: { kind: "uniform", duration: 12, followup: 12 }, performance: ["power"] } };
@@ -307,8 +314,10 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
     await write("patient_set", { name: "240 名虚拟患者", populationId, modelId: "reference-time-to-event", modelVersion: "1.0.0",
       scenario: { design: { nTreat: 160, nControl: 80 }, endpoint: { type: "time_to_event" }, truth: { covariateEffects: { ldh: 0.001 } },
         accrual: { kind: "uniform", duration: 12, followup: 12 } } });
+    const curve = await module.curves.recordSelection({ studyId: study.id, principal: study.userId,
+      imageArtifactId: "controlled-curve-source.png", points: { ...publishedArm(12), treatmentArm: publishedArm(17) } });
     await write("comparator", { route: "literature_control", estimand: "ATT",
-      configuration: { ...publishedArm(12), provenance, treatmentArm: publishedArm(17), tau: 18, timeUnit: "months" } });
+      configuration: { provenance: { receiptId: curve.id }, tau: 18, timeUnit: "months" } });
     await write("trial_scenario", [trialA, { label: "B 1:1 加期中分析", design: "group_sequential", endpointType: "time_to_event",
       configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5, informationRates: [0.5, 1], spending: "obrien_fleming" },
         analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 }, accrual: { kind: "uniform", duration: 12, followup: 12 },
@@ -524,6 +533,39 @@ test("AC-16 a change waits visibly while the successor is in flight, and a heavy
   assert.equal((await store.studyById(study.id)).steps.trial.status, "done");
 });
 
+test("an in-flight result cannot clear a newer source change, including changes within the same millisecond", options, async () => {
+  const module = compose({ dispatch: false });
+  const { study, write } = await computedStudy(module, "inflight-stale");
+  await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.2, sourceKind: "expert_set", valueSource: "assumed" }]);
+  await module.orchestrator.advance(study.id);
+  let claimed = await module.jobs.claim();
+  if (!claimed.some(job => job.kind === "design_simulation")) {
+    for (const job of claimed) { await module.jobs.advance(job); await module.jobs.advance(job); }
+    claimed = await module.jobs.claim();
+  }
+  const oldSimulation = claimed.find(job => job.kind === "design_simulation");
+  assert.ok(oldSimulation);
+  await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.25, sourceKind: "expert_set", valueSource: "assumed" }]);
+  await module.orchestrator.advance(study.id);
+  // Real PostgreSQL microseconds expose the ordering that JavaScript Date loses.
+  await store.query(`UPDATE evimed_vcr.jobs SET created_at=date_trunc('milliseconds',created_at)+interval '100 microseconds'
+    WHERE id=ANY($1::text[])`, [claimed.map(job => job.id)]);
+  const node = (await store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1", [oldSimulation.id])).checkpoint.node;
+  await store.query(`UPDATE evimed_vcr.stale_marks SET marked_at=(SELECT created_at+interval '100 microseconds' FROM evimed_vcr.jobs WHERE id=$3)
+    WHERE study_id=$1 AND node=$2`, [study.id, node, oldSimulation.id]);
+  for (const job of claimed) { await module.jobs.advance(job); await module.jobs.advance(job); }
+  const jobs = await store.jobs(study.id);
+  const next = jobs.find(job => job.kind === "design_simulation" && job.id !== oldSimulation.id && job.state === "queued");
+  assert.ok(next, "The late old completion must start a new frozen generation.");
+  const frozen = await store.one("SELECT scenario,inputs FROM evimed_vcr.jobs WHERE id=$1", [next.id]);
+  assert.equal(frozen.scenario.accrual.dropoutAnnual, 0.25);
+  assert.ok(frozen.inputs.some(input => input.id === "assumption:dropout_rate@3"));
+  assert.ok((await store.staleMarks(study.id)).some(mark => mark.node === node), "The late result is retained while the current source stays stale.");
+  assert.ok((await module.jobs.resultOf(study.id, oldSimulation.id)).measures.length);
+  await drainJobs(module, study);
+  assert.deepEqual(await store.staleMarks(study.id), []);
+});
+
 test("AC-16 the other four things that make a result stale each raise their own reason: a criterion, a protocol revision, a corrected source, a moved method", options, async () => {
   const module = compose();
   const { study } = await computedStudy(module, "reasons");
@@ -574,9 +616,9 @@ test("AC-16 the other four things that make a result stale each raise their own 
   const moved = await store.staleMarks(study.id);
   assert.ok(moved.some((mark) => mark.reason === "method_version_changed" && mark.node === scenarioNode), JSON.stringify(moved));
   await drainJobs(module, study);
-  assert.equal(VCR_ENGINE_METHODS["design.simulate"].version, "1.0.0");
+  assert.equal(VCR_ENGINE_METHODS["design.simulate"].version, "1.1.0");
   const rerun = (await store.rows("SELECT method_version FROM evimed_vcr.executions WHERE study_id = $1 AND method = 'design.simulate' ORDER BY created_at DESC LIMIT 1", [study.id]))[0];
-  assert.equal(rerun.method_version, "1.0.0", "computed again at the version the engine publishes now");
+  assert.equal(rerun.method_version, VCR_ENGINE_METHODS["design.simulate"].version, "computed again at the version the engine publishes now");
 });
 
 test("AC-21 a review countersigns one version, and reads as changed once that version moves", options, async () => {
@@ -606,11 +648,11 @@ test("AC-21 a review countersigns one version, and reads as changed once that ve
   assert.notEqual(node, lineageNode("result", current.id, current.version));
   assert.deepEqual((await store.staleMarks(study.id)).map((mark) => mark.node), [], "the stale marks are cleared as the successors land");
 
-  // And a study nobody reviewed cannot be labelled a specified analysis.
+  // Advisory review does not determine method/evidence applicability.
   const unreviewed = await makeStudy("unreviewed");
   const bare = await module.service.studyViewOf(unreviewed);
-  assert.equal(bare.intendedUseCeiling.ceiling, "design_support");
-  assert.ok(bare.intendedUseCeiling.reasons.some((reason) => reason.code === "not_reviewed"));
+  assert.equal(bare.intendedUseCeiling.ceiling, "submission_preparation");
+  assert.equal(bare.intendedUseCeiling.reasons.some((reason) => reason.code === "not_reviewed"), false);
 });
 
 test("AC-23 an accrual forecast and a design's key predictions are registered automatically with the time they were made, and enrolment is held against them", options, async () => {

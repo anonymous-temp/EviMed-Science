@@ -30,13 +30,17 @@ import { after, before, test } from "node:test";
 import pg from "pg";
 import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_VALUE_SOURCES, validateEngineJob } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { createVcrEngineClient } from "../src/vcrEngineClient.mjs";
-import { VcrJobs } from "../src/vcrJobs.mjs";
+import { createVcrEngineClient, vcrComputedOutputHash } from "../src/vcrEngineClient.mjs";
+import { VcrJobs, vcrRecordedResultHash } from "../src/vcrJobs.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { VcrOrchestrator, vcrBuildStages } from "../src/vcrOrchestrator.mjs";
 import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { createVcrWorkerLoops } from "../src/vcrWorker.mjs";
+import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
+import { VcrEvidenceStore } from "../src/vcrEvidenceStore.mjs";
+import { VcrDataStore } from "../src/vcrDataStore.mjs";
+import { VcrAccess } from "../src/vcrAccess.mjs";
 import { COHORT_SIZE, FIELD_MAP, cohortCsv, streamOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +85,8 @@ let service = null;
 let servicePort = 0;
 /** @type {ReturnType<typeof createVcrEngineClient>} */
 let engine;
+/** @type {ReturnType<typeof createVcrCurveEvidence>} */
+let curves;
 const token = "t".repeat(48);
 const receiptKey = "r".repeat(48);
 let serviceLog = "";
@@ -121,6 +127,12 @@ before(async () => {
   scratch = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-seam-"));
   await fs.mkdir(path.join(scratch, "data-plane"), { recursive: true });
   await fs.mkdir(path.join(scratch, "jobs"), { recursive: true });
+  // A controlled raster fixture binds the authenticated input to actual source
+  // bytes. The synthetic curve below checks numeric reconstruction, not the
+  // accuracy of points selected from a published image or a digitizer.
+  await fs.writeFile(path.join(scratch, "controlled-curve-source.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/L1sAAAAASUVORK5CYII=", "base64"));
+  curves = createVcrCurveEvidence({ store: new VcrEvidenceStore({ database }), studyStore: store,
+    access: new VcrAccess({ store: new VcrDataStore({ database }) }), resolveProject: async () => ({ workspaceDir: scratch }) });
   await fs.writeFile(path.join(scratch, "token"), token, { mode: 0o600 });
   await fs.writeFile(path.join(scratch, "receipt-key"), receiptKey, { mode: 0o600 });
 
@@ -179,6 +191,7 @@ const configFor = (extra = {}) => ({
  */
 function compose({ dataPlane = null, config = configFor() } = {}) {
   const jobs = new VcrJobs({ store, config, engine, dataPlane });
+  jobs.curveVerifier = curves.curveVerifier;
   const orchestrator = new VcrOrchestrator({ store, jobs, config, dispatchRun: null });
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
   return { jobs, orchestrator, loops, config };
@@ -207,10 +220,10 @@ async function settle(module, studyId, { limitMs = 600_000 } = {}) {
 }
 
 /**
- * A published survival curve, digitized: the Kaplan-Meier estimate of `n` simulated
+ * A controlled survival-curve fixture: the Kaplan-Meier estimate of `n` simulated
  * patients (exponential with the given median, administratively censored at 24
- * months) read off every quarter of a month, with the numbers at risk the paper
- * would print and the events and median it would report. Built from a simulated
+ * months) read off every quarter of a month, with a generated risk table,
+ * event count and median. Built from a simulated
  * trial and not from the formula, because the reconstruction's quality control
  * holds a curve to the events and the at-risk table of a real cohort — the first
  * version of this fixture was the formula, and the engine (correctly) refused it.
@@ -278,10 +291,12 @@ async function seedT0(label, patch = {}) {
     modelId: "reference-time-to-event", modelVersion: "1.0.0",
     scenario: { design: { nTreat: 160, nControl: 80 }, endpoint: { type: "time_to_event" },
       truth: { covariateEffects: { ldh: 0.001 } }, accrual: { kind: "uniform", duration: 12, followup: 12 } } });
+  const curve = await curves.recordSelection({ studyId: study.id, principal: study.userId,
+    imageArtifactId: "controlled-curve-source.png", points: { ...publishedArm(12, 200, 4242), treatmentArm: publishedArm(17.14, 200, 2424) } });
   const comparator = await store.saveComparatorDesign({ studyId: study.id, userId: study.userId, route: "literature_control", estimand: "ATT",
     targetTrial: { population: "二线 NSCLC", treatment: "EV 单药" },
-    configuration: { ...publishedArm(12, 200, 4242), provenance: { kind: "digitizer", tool: "WebPlotDigitizer", toolVersion: "4.6" },
-      treatmentArm: publishedArm(17.14, 200, 2424), tau: 18, timeUnit: "months", comparability: [{ key: "time_period", state: "approximate", reason: "同期" }] } });
+    configuration: { provenance: { receiptId: curve.id }, tau: 18, timeUnit: "months",
+      comparability: [{ key: "time_period", state: "approximate", reason: "同期" }] } });
   const scenarioA = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "A 2:1 随机", design: "two_arm_fixed", endpointType: "time_to_event",
     configuration: { design: { nTreat: 120, nControl: 60, allocation: 2 / 3 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 },
       accrual: { kind: "uniform", duration: 12, followup: 12 }, performance: ["power"], cost: 180 } });
@@ -292,7 +307,7 @@ async function seedT0(label, patch = {}) {
     configuration: { design: { nTreat: 80 }, analysis: { alpha: 0.025, sided: 1 } } });
   const protocol = await store.saveProtocolVersion({ studyId: study.id, userId: study.userId, title: "EV-201 v1.0", criteria: [
     { kind: "inclusion", criterionType: "diagnosis", requirement: { op: "present", variable: "nsclc" }, sourceText: "经组织学确诊的非小细胞肺癌" }] });
-  return { study: await store.studyById(study.id), population, patients, comparator, scenarioA, scenarioB, scenarioC, protocol };
+  return { study: await store.studyById(study.id), population, patients, comparator, curve, scenarioA, scenarioB, scenarioC, protocol };
 }
 
 test("the engine service is the real one: R, the receipt key and the table route", options, async () => {
@@ -319,6 +334,13 @@ test("AC-02 AC-35 the T0 chain runs on the real engine: population, patients, co
     assert.equal(byKind("design_analytic").length, 2);
     assert.equal(byKind("design_simulation").length, 2);
     assert.equal(byKind("assurance").length, 1, "assurance for the fixed design whose effect card states a prediction distribution");
+    const reconstruction = await store.one("SELECT scenario, inputs, checkpoint FROM evimed_vcr.jobs WHERE id = $1", [byKind("reconstruct_km")[0].id]);
+    assert.deepEqual(reconstruction.scenario.provenance, { kind: "human_click", tool: "EviMed authenticated curve input", toolVersion: "1" });
+    assert.equal(reconstruction.checkpoint.curveReceiptId, seed.curve.id);
+    assert.equal(reconstruction.checkpoint.curvePrincipal, study.userId);
+    assert.equal(reconstruction.checkpoint.curvePointsHash, seed.curve.pointsHash);
+    assert.equal(reconstruction.checkpoint.curveImageHash, seed.curve.image.sha256);
+    assert.ok(reconstruction.inputs.some((/** @type {any} */ input) => input.id === `evidence:${seed.curve.id}@1`), "the source receipt is an input of the engine job");
 
     // The whole chain on real parts: every result is one the domain validates, signed, and hashed by what it says.
     const executions = await store.rows("SELECT * FROM evimed_vcr.executions WHERE study_id = $1", [study.id]);
@@ -613,6 +635,28 @@ function pages(module) {
   return new VcrService({ store, config: module.config, jobs: module.jobs, now: () => new Date() });
 }
 
+/** An independent finite-binomial reference; no engine probabilities are reused.
+ * @param {number} n @param {number} p */
+function binomialMass(n, p) {
+  const values = [Math.pow(1 - p, n)];
+  for (let x = 1; x <= n; x += 1) values.push(values[x - 1] * (n - x + 1) / x * p / (1 - p));
+  return values;
+}
+
+/** Enumerate both stages of the frozen rule, including the first-stage stop.
+ * @param {{n1:number,n:number,r1:number,r:number}} boundary @param {number} p */
+function simonReference({ n1, n, r1, r }, p) {
+  const first = binomialMass(n1, p);
+  const second = binomialMass(n - n1, p);
+  let rejection = 0;
+  let earlyStop = 0;
+  for (let x1 = 0; x1 <= n1; x1 += 1) {
+    if (x1 <= r1) earlyStop += first[x1];
+    else for (let x2 = 0; x2 <= n - n1; x2 += 1) if (x1 + x2 > r) rejection += first[x1] * second[x2];
+  }
+  return { rejection, earlyStop, expectedN: n1 * earlyStop + n * (1 - earlyStop) };
+}
+
 test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on the scale the cards state, and a card the method does not read is dropped in silence — not refused as the run's own field", options, async () => {
   const module = compose();
   const study = await bareStudy("scales", { endpointType: "continuous" });
@@ -627,21 +671,25 @@ test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on 
   const binary = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "二分类 1:1", design: "two_arm_fixed", endpointType: "binary",
     assumptionIds: ["control_event_rate", "risk_difference"],
     configuration: { design: { nTreat: 200, nControl: 200, allocation: 0.5 }, analysis: { method: "risk_difference", alpha: 0.025, sided: 1, power: 0.9 }, performance: ["power"] } });
-  // Simon's two-stage is analytic only, and states its own rates: the 「对照应答率」 card has no key of it to fill.
+  // Simon states its own rates: the unrelated 「对照应答率」 card binds no
+  // parameter. Its analytic selection precedes two simulations of that exact
+  // boundary, under the null and alternative response laws.
   const simon = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "Simon 两阶段", design: "simon_two_stage", endpointType: "binary",
     assumptionIds: ["control_event_rate"],
-    configuration: { design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 } } });
+    configuration: { design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 },
+      performance: ["power", "type_one_error", "expected_sample_size"] } });
 
   await settle(module, study.id);
   const jobs = await store.jobs(study.id, 100);
   for (const job of jobs) assert.equal(job.state, "succeeded", `${job.kind} ${job.id} ended ${job.state}: ${JSON.stringify(job.error)}`);
-  assert.deepEqual(jobs.map((job) => job.kind).sort(), ["assurance", "assurance", "design_analytic", "design_analytic", "design_analytic", "design_simulation", "design_simulation"],
-    "both fixed designs have their assurance, and Simon's design is computed analytically without being refused for a field nobody wrote");
+  assert.deepEqual(jobs.map((job) => job.kind).sort(), ["assurance", "assurance", "design_analytic", "design_analytic", "design_analytic",
+    "design_simulation", "design_simulation", "design_simulation", "design_simulation"],
+    "both fixed designs have their assurance, and Simon has one analytic selection and both operating-characteristic laws");
   const marks = await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id = $1 AND kind = 'job'", [study.id]);
   assert.ok(marks.every((mark) => mark.state === "done"), `every mark is done: ${JSON.stringify(marks.map((mark) => [mark.key, mark.state, mark.detail.message ?? mark.detail.error]))}`);
 
   const frozen = (/** @type {string} */ subject, /** @type {string} */ kind) => store.one(
-    "SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = $2 AND checkpoint ->> 'subjectId' = $3", [study.id, kind, subject]);
+    "SELECT id, scenario, scenario_hash, method_version, checkpoint FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = $2 AND checkpoint ->> 'subjectId' = $3", [study.id, kind, subject]);
   // The continuous assurance integrates on the outcome's own standard deviation (12), not the schema's default of 1.
   const continuousAssurance = await frozen(continuous.id, "assurance");
   assert.equal(continuousAssurance.scenario.truth.sd, 12);
@@ -662,6 +710,65 @@ test("C2-5 C2-6 the assurance stage of a continuous and a binary design runs on 
     const assurance = result?.measures.find((/** @type {any} */ measure) => measure.name === "assurance");
     assert.ok(assurance && assurance.value > 0.3 && assurance.value < 1, `${subject} assurance ${assurance?.value}`);
   }
+  const analytic = await module.jobs.resultOf(study.id, simonAnalytic.id);
+  assert.ok(analytic, "the selected design is an immutable result of the analytic job");
+  const selected = analytic.diagnostics.simon.optimal;
+  const boundary = Object.fromEntries(["n1", "n", "r1", "r"].map((key) => [key, selected[key]]));
+  const expectedSource = { resultId: analytic.id, resultVersion: analytic.version, executionId: analytic.executionId,
+    jobId: simonAnalytic.id, methodVersion: simonAnalytic.method_version, scenarioHash: simonAnalytic.scenario_hash, selection: "optimal" };
+  const simulations = await store.rows(`SELECT id, scenario, inputs, checkpoint, replicates, method_version
+    FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint ->> 'subjectId' = $2`, [study.id, simon.id]);
+  assert.equal(simulations.length, 2);
+  const simonResult = results.find((row) => row.subjectId === simon.id);
+  assert.ok(simonResult, "all three stages have a current stored result");
+  const stages = simonResult.diagnostics.stageResults;
+  assert.deepEqual(Object.keys(stages).sort(), ["analytic", "simulation", "simulation_null"], "neither simulated law overwrites the other's stage record");
+  const nullReference = simonReference(/** @type {{n1:number,n:number,r1:number,r:number}} */ (boundary), 0.2);
+  const alternativeReference = simonReference(/** @type {{n1:number,n:number,r1:number,r:number}} */ (boundary), 0.4);
+  assert.ok(Math.abs(selected.alpha - nullReference.rejection) < 1e-12);
+  assert.ok(Math.abs(selected.power - alternativeReference.rejection) < 1e-12);
+  assert.ok(Math.abs(selected.PET0 - nullReference.earlyStop) < 1e-12);
+  assert.ok(Math.abs(selected.EN0 - nullReference.expectedN) < 1e-12);
+  for (const simulation of simulations) {
+    const nullLaw = simulation.scenario.truth.responseRate === 0.2;
+    assert.ok(nullLaw || simulation.scenario.truth.responseRate === 0.4);
+    const stageName = nullLaw ? "simulation_null" : "simulation";
+    const reference = nullLaw ? nullReference : alternativeReference;
+    const retained = stages[stageName];
+    assert.deepEqual(simulation.scenario.design, { kind: "simon_two_stage", ...boundary }, "both laws run the exact selected boundary");
+    assert.deepEqual(simulation.checkpoint.analyticSource, expectedSource, "the immutable analytic job/result/version/hash are the selection's source");
+    const selectionInput = simulation.inputs.find((/** @type {any} */ input) => input.kind === "evidence" && input.id === `result:${analytic.id}@${analytic.version}`);
+    assert.ok(selectionInput, "the selected result is an engine input");
+    assert.deepEqual(selectionInput.value, expectedSource);
+    assert.equal(simulation.method_version, VCR_ENGINE_METHODS["design.simulate"].version);
+    assert.equal(simulation.replicates, nullLaw ? 20_000 : 5_000, "the law, rather than a caller label, sets the replicate floor");
+    assert.equal(retained.jobId, simulation.id);
+    assert.equal(retained.stale, false);
+    assert.equal(retained.counts.realPatients, 0);
+    assert.equal(retained.diagnostics.replicatesCompleted, simulation.replicates);
+    const raw = await engine.result(simulation.checkpoint.engineJobId);
+    assert.equal(raw.signed, true);
+    assert.equal(raw.refused, false);
+    assert.deepEqual(retained.measures, raw.result.measures, "the stored law's measures and MCSE are exactly the verified engine output");
+    assert.deepEqual(retained.counts, raw.result.counts);
+    assert.deepEqual(retained.diagnostics, raw.result.diagnostics, "each law retains its own diagnostics rather than the last stage's");
+    const expected = { [nullLaw ? "type_one_error" : "power"]: reference.rejection,
+      early_stop_probability: reference.earlyStop, expected_sample_size: reference.expectedN };
+    for (const [name, value] of Object.entries(expected)) {
+      const measured = retained.measures.find((/** @type {any} */ measure) => measure.name === name);
+      assert.ok(measured?.simulated === true && typeof measured.mcse === "number" && Number.isFinite(measured.mcse), `${stageName} ${name} carries its own Monte-Carlo error`);
+      assert.ok(Math.abs(measured.value - value) <= 3 * measured.mcse + 1e-12, `${stageName} ${name}: ${measured.value} vs independent exact ${value} (MCSE ${measured.mcse})`);
+    }
+    assert.equal(retained.measures.some((/** @type {any} */ measure) => measure.name === "coverage"), false, "unimplemented sequentially adjusted coverage is not invented");
+    const execution = await store.one("SELECT output_hash, receipt FROM evimed_vcr.executions WHERE job_id = $1", [simulation.id]);
+    assert.equal(execution.receipt.stageVerified, true);
+    assert.equal(vcrComputedOutputHash(execution.receipt.stageOutput), execution.output_hash, "the receipt hashes the raw stage rather than the multi-stage aggregate");
+    const recorded = await module.jobs.resultOf(study.id, simulation.id);
+    assert.equal(execution.receipt.recordedResultHash, vcrRecordedResultHash(recorded), "the aggregate has a separate stored integrity proof");
+  }
+  const measureValue = (/** @type {string} */ stageName, /** @type {string} */ name) => stages[stageName].measures.find((/** @type {any} */ measure) => measure.name === name).value;
+  assert.ok(measureValue("simulation_null", "early_stop_probability") > measureValue("simulation", "early_stop_probability"));
+  assert.ok(measureValue("simulation_null", "expected_sample_size") < measureValue("simulation", "expected_sample_size"));
 });
 
 test("C2-6 a key the run itself wrote that no stage reads is still refused by its path — only what the platform injected is dropped in silence", options, async () => {

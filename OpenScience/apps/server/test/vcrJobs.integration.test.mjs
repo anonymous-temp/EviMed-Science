@@ -345,6 +345,116 @@ test("submission identity is durable before the engine accepts, so a lost acknow
   assert.equal((await store.results(study.id, "trial_scenario")).length, 1);
 });
 
+test("concurrent distinct requests reserve one study compute budget atomically", options, async () => {
+  const study = await makeStudy("budget-race");
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 60 }, engine: engineDouble() });
+  await store.query("CREATE FUNCTION evimed_vcr.slow_budget_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.1); RETURN NEW; END $$");
+  await store.query("CREATE TRIGGER budget_race BEFORE INSERT ON evimed_vcr.jobs FOR EACH ROW EXECUTE FUNCTION evimed_vcr.slow_budget_insert()");
+  try {
+    const outcomes = await Promise.all([0.6, 0.8].map(hazardRatio => jobs.enqueue({ studyId: study.id, userId: study.userId,
+      kind: "design_simulation", cpuSecondsLimit: 60, scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio } } })));
+    assert.deepEqual(outcomes.map(outcome => outcome.job.state).sort(), ["awaiting_budget", "queued"]);
+    assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
+  } finally {
+    await store.query("DROP TRIGGER budget_race ON evimed_vcr.jobs");
+    await store.query("DROP FUNCTION evimed_vcr.slow_budget_insert()");
+  }
+});
+
+test("concurrent confirmations release waiting work once without losing or doubling the study grant", options, async () => {
+  const study = await makeStudy("confirm-race");
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 0 }, engine: engineDouble() });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60, scenario });
+  const confirmed = await Promise.all([1, 2].map(() => jobs.confirmBudget(study.id, { actor: study.userId })));
+  assert.equal(confirmed.reduce((n, result) => n + result.released.length, 0), 1);
+  assert.equal((await store.studyById(study.id)).budget.cpuSecondsConfirmed, 60);
+  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
+});
+
+test("canceled physical work retains its compute reservation and stopped work without a partial report still settles observed CPU", options, async () => {
+  const study = await makeStudy("cancel-budget");
+  const engine = engineDouble({ state: "running" });
+  engine.result = async () => { throw new VcrEngineError("vcr_engine_not_found", "No partial result.", { status: 404 }); };
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 60 }, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60, scenario });
+  const [first] = await jobs.claim(); await jobs.advance(first);
+  await jobs.cancel(study.id, first.id, { actor: study.userId });
+  const second = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,
+    scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio: 0.8 } } });
+  assert.equal(second.job.state, "awaiting_budget");
+  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
+  assert.deepEqual(await jobs.claim(), []);
+  engine.setState("canceled");
+  await jobs.recoverCanceled();
+  assert.equal((await jobs.budgetOf(study.id)).usedSeconds, 42.1, "A stopped process with no scientific result is still actual compute use.");
+  assert.deepEqual(await jobs.claim(), []);
+  assert.equal((await store.job(study.id, second.job.id)).state, "awaiting_budget");
+});
+
+test("usage settling after enqueue is rechecked before any new physical submission", options, async () => {
+  const study = await makeStudy("late-cpu-budget");
+  const engine = engineDouble();
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 120 }, engine });
+  for (const hazardRatio of [0.6, 0.8]) await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,
+    scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio } } });
+  const [first] = await jobs.claim();
+  await jobs.finish(first.id, { status: "succeeded", result: engineResult(await frozenJob(first.id)), cpuSeconds: 70 });
+  const [second] = await jobs.claim();
+  assert.equal((await jobs.advance(second)).action, "awaiting_budget");
+  assert.equal(engine.submitted.length, 0);
+  assert.equal((await store.job(study.id, second.id)).state, "awaiting_budget");
+});
+
+test("a stopped engine with unknown CPU holds an uncertain reservation and fabricates no use", options, async () => {
+  const study = await makeStudy("unknown-cpu-budget");
+  let stopped = false;
+  const engine = engineDouble({ statusFor: () => ({ state: stopped ? "canceled" : "running", cpuSeconds: null }) });
+  engine.result = async () => { throw new VcrEngineError("vcr_engine_not_found", "No partial result.", { status: 404 }); };
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 60 }, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60, scenario });
+  const [first] = await jobs.claim(); await jobs.advance(first);
+  await jobs.cancel(study.id, first.id, { actor: study.userId }); stopped = true;
+  await jobs.recoverCanceled();
+  const budget = await jobs.budgetOf(study.id);
+  assert.equal(budget.usedSeconds, 0); assert.equal(budget.committedSeconds, 60);
+  const second = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,
+    scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio: 0.8 } } });
+  assert.equal(second.job.state, "awaiting_budget");
+  assert.equal((await store.job(study.id, first.id)).checkpoint.cpuAccountingUncertain, true);
+});
+
+test("a duplicate enqueue cannot deadlock final result persistence while reserving the same study budget", options, async () => {
+  const study = await makeStudy("budget-finish-lock");
+  const jobs = new VcrJobs({ store, config, engine: engineDouble() });
+  const input = { studyId: study.id, userId: study.userId, kind: "design_simulation", scenario };
+  const original = await jobs.enqueue(input); const [claimed] = await jobs.claim();
+  await store.query("CREATE FUNCTION evimed_vcr.hold_execution_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(12367891); RETURN NEW; END $$");
+  await store.query("CREATE TRIGGER finish_lock BEFORE INSERT ON evimed_vcr.executions FOR EACH ROW EXECUTE FUNCTION evimed_vcr.hold_execution_insert()");
+  try {
+    await database.withClient(async gate => {
+      await gate.query("SELECT pg_advisory_lock(12367891)");
+      const finish = jobs.finish(claimed.id, { status: "succeeded", result: engineResult(await frozenJob(claimed.id)), cpuSeconds: 12 });
+      try {
+        let waiting = false;
+        for (let pass = 0; pass < 100; pass += 1) {
+          waiting = (await gate.query("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND objid=12367891 AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())) AS waiting")).rows[0].waiting;
+          if (waiting) break;
+          await new Promise(resolve => setTimeout(resolve, 5));
+        }
+        assert.equal(waiting, true, "The finishing transaction already owns the job and awaits its execution insert.");
+        const duplicate = jobs.enqueue(input);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        await gate.query("SELECT pg_advisory_unlock(12367891)");
+        const [finished, repeated] = await Promise.all([finish, duplicate]);
+        assert.equal(finished.state, "succeeded"); assert.equal(repeated.job.id, original.job.id); assert.equal(repeated.created, false);
+      } finally { await gate.query("SELECT pg_advisory_unlock(12367891)"); await finish; }
+    });
+  } finally {
+    await store.query("DROP TRIGGER finish_lock ON evimed_vcr.executions");
+    await store.query("DROP FUNCTION evimed_vcr.hold_execution_insert()");
+  }
+});
+
 test("a cancellation while submit is in flight also cancels its late acceptance and preserves physical admission", options, async () => {
   const study = await makeStudy("cancel-submit");
   const engine = engineDouble();

@@ -125,7 +125,7 @@ export function usagePurposeOfRun(run) {
 export function isResearcherOwnedWork(run) {
   if (!run || usagePurposeOfRun(run) !== 'kernel') return false
   const route = String(run.effectiveRouteReason ?? '')
-  const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:')
+  const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:') || route.startsWith('vcr:')
   return run.automated !== true || managedResearch
 }
 

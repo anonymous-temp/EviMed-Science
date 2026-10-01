@@ -345,7 +345,7 @@ export function createVcrEngineClient({ baseUrl = "", timeoutMs = 120_000, token
         jobId: String(answer.jobId ?? jobId),
         state: String(answer.state ?? "running"),
         progress: { done: Number(progress.done ?? 0), total: Number(progress.total ?? 0) },
-        cpuSeconds: Number.isFinite(Number(answer.cpuSeconds)) ? Number(answer.cpuSeconds) : null,
+        cpuSeconds: typeof answer.cpuSeconds === "number" && Number.isFinite(answer.cpuSeconds) && answer.cpuSeconds >= 0 ? answer.cpuSeconds : null,
         error: typeof answer.error === "string" ? answer.error : null,
       };
     },

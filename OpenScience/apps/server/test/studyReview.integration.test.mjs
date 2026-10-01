@@ -205,6 +205,61 @@ test('report-only changes invalidate export reviews and stale completion cannot 
   assert.equal(repairs, 1, 'Repair is requested only after both roles for this exact report finish.');
 });
 
+test('completed retained VCR packages automatically review and dispatch one independent report revision while preserving original exports', options, async () => {
+  const { VcrStore } = await import('../src/vcrStore.mjs');
+  const { VcrService } = await import('../src/vcrService.mjs');
+  const { VcrJobs } = await import('../src/vcrJobs.mjs');
+  const { VcrOrchestrator } = await import('../src/vcrOrchestrator.mjs');
+  const { createVcrReviewAdapter } = await import('../src/vcrReview.mjs');
+  const store = new VcrStore({ database }); await store.ready();
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ('alice','automatic-review-project','Automatic review',1048576)");
+  const study = await store.createStudy({ userId: 'alice', projectId: 'automatic-review-project', name: 'Retained report', question: '' });
+  await store.saveDefinition({ userId: 'alice', studyId: study.id, pico: {}, estimand: {}, endpointType: 'binary' });
+  await store.setStep(study.id, 'definition', { requested: true });
+  const research = new VcrService({ store, config: {} });
+  const dispatched = [], conversions = [];
+  let adapter;
+  const orchestrator = new VcrOrchestrator({ store, jobs: new VcrJobs({ store, config: {}, engine: {} }),
+    config: { vcrEnabled: true, vcrAudience: 'all' }, queueReviews: (id, input) => adapter.queue(id, input),
+    queueExport: async (_user, _study, row) => { conversions.push(row.id); return { id: 'retained-conversion' }; },
+    dispatchRun: async input => { dispatched.push(input); return { runId: `run_auto_${dispatched.length}`, sessionId: `session_auto_${dispatched.length}` }; } });
+  const reviewer = service(async () => answer({ findings: [{ kind: 'wording', location: 'main', evidence: 'Original claim.', fix: 'Clarify uncertainty.' }], checklist: [], acceptance: [] }));
+  adapter = createVcrReviewAdapter({ vcr: { store, service: research, orchestrator }, reviewService: reviewer });
+  const requested = await orchestrator.requestExport({ id: study.userId }, study, 'study_package');
+  assert.equal(dispatched.length, 1);
+  const { vcrRuntimeWrite: writeReport } = await import('../src/vcrGateway.mjs');
+  const written = await writeReport({ store, service: research, orchestrator, study, what: 'report', items: null,
+    data: { kind: 'study_package', template: 'Original claim.' } });
+  assert.deepEqual(written.issues, []);
+  await store.updateExportCover(requested.export.id, cover => ({ ...cover, documentExportId: 'original-word-pdf' }));
+  const original = await store.exportRow(study.id, requested.export.id);
+  await orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: requested.runId, dispatchId: dispatched[0].dispatchId, status: 'succeeded' });
+  assert.deepEqual(conversions, [original.id]);
+  assert.equal((await store.reviews(study.id)).length, 2, 'Both roles are queued from completion without a second user request.');
+  await reviewer.processStudyReviews('auto-review-worker');
+  assert.equal(dispatched.length, 1, 'The other independent role must finish.');
+  await reviewer.processStudyReviews('auto-review-worker');
+  assert.equal(dispatched.length, 2);
+  assert.equal(dispatched[1].reason, 'vcr:review-repair');
+  assert.match(dispatched[1].brief, /Original claim\./);
+  assert.match(dispatched[1].brief, /Clarify uncertainty\./);
+  assert.match(dispatched[1].brief, /Do not rerun engines or invent inputs\./);
+  const exports = await store.exports(study.id);
+  const revision = exports.find(row => row.cover.revisionOf === original.id);
+  assert.ok(revision); assert.notEqual(revision.id, original.id);
+  assert.equal(revision.cover.documentExportId, undefined);
+  assert.deepEqual((await store.exportRow(study.id, original.id)).cover, original.cover);
+  const records = await store.reviews(study.id);
+  const completed = records.filter(row => row.provenance.subjectRef?.exportId === original.id);
+  const again = await orchestrator.requestReviewRepair(study.id, { exportId: original.id, sourceDigest: completed[0].provenance.inputDigest, reviewIds: completed.map(row => row.platformReviewId) });
+  assert.equal(again.queued, false);
+  assert.equal(dispatched.length, 2, 'Retries and both completion hooks cannot start another revision.');
+  await orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: 'run_auto_2', dispatchId: dispatched[1].dispatchId, status: 'failed' });
+  assert.equal((await store.exportRow(study.id, revision.id)).state, 'failed');
+  assert.equal((await store.exportRow(study.id, original.id)).state, 'ready');
+  assert.deepEqual((await store.exportRow(study.id, original.id)).cover, original.cover, 'Failed advice repair never discards the original Word/PDF binding.');
+});
+
 test('real multistage job persistence proves both the engine stage and recorded aggregate for review', options, async () => {
   const { VcrStore } = await import('../src/vcrStore.mjs');
   const { VcrJobs, vcrScenarioHash } = await import('../src/vcrJobs.mjs');

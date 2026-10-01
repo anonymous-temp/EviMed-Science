@@ -1,4 +1,10 @@
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
+// Cancellation is logical immediately; its unspent reservation remains until
+// physical termination and observed CPU accounting have both been recorded.
+const CPU_COMMITTED_SQL = `CASE WHEN state IN ('queued','running') OR
+  (state IN ('failed','canceled') AND checkpoint ? 'engineJobId' AND
+    (COALESCE(checkpoint->>'engineStopped','false')<>'true' OR checkpoint->>'cpuAccountingUncertain'='true'))
+  THEN GREATEST(0,cpu_seconds_limit-cpu_seconds_used) ELSE 0 END`;
 /**
  * 「虚拟临研」's deterministic work: the job queue in front of `vcr-engine`
  * (build plan 2026-09-28 §11.4, integration contract 2026-09-29 §3).
@@ -324,6 +330,8 @@ export class VcrJobs {
     this.localExecutors = localExecutors ?? {};
     this.notifier = notifier;
     this.dataPlane = dataPlane;
+    /** @type {((request: {studyId:string,principal:string,scenario:Record<string,any>,inputs:any[],receiptId?:string}) => Promise<any>) | null} */
+    this.curveVerifier = null;
     this.now = now;
     this.report = report;
     this.owner = `vcr-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
@@ -367,7 +375,7 @@ export class VcrJobs {
     const limitSeconds = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
     const row = await this.store.one(`SELECT
         COALESCE(SUM(cpu_seconds_used), 0)::numeric AS used,
-        COALESCE(SUM(CASE WHEN state IN ('queued', 'running') THEN cpu_seconds_limit ELSE 0 END), 0)::numeric AS committed,
+        COALESCE(SUM(${CPU_COMMITTED_SQL}), 0)::numeric AS committed,
         COUNT(*) FILTER (WHERE state = 'awaiting_budget')::integer AS awaiting
       FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1`, [studyId]);
     const used = Number(row?.used ?? 0);
@@ -405,11 +413,19 @@ export class VcrJobs {
     const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     const methodVersion = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "";
-    const scenario = object(input.scenario);
+    let scenario = object(input.scenario);
     const principal = String(input.principal ?? input.userId);
 
     // 1. what a caller may send
-    const asked = list(input.inputs);
+    let asked = list(input.inputs);
+    /** @type {Record<string, any>} */
+    let curveDetail = {};
+    if (kind === "reconstruct_km") {
+      if (!this.curveVerifier) throw new HttpError(503, "vcr_curve_provenance_unavailable", "缺少可核验的曲线来源；其他分析可以继续。");
+      const verified = await this.curveVerifier({ studyId, principal, scenario, inputs: asked,
+        receiptId: object(input.detail).curveReceiptId });
+      scenario = verified.scenario; asked = verified.inputs; curveDetail = verified.detail;
+    }
     // A patient-level kind must name the snapshot it is granted — unless the orchestrator
     // hands it a table an earlier job of this study wrote (pseudo-patients, a generated
     // population), which is the control plane's own file and needs no grant.
@@ -444,12 +460,21 @@ export class VcrJobs {
     const issues = validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
     if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
 
-    const budget = await this.budgetOf(studyId);
-    const overBudget = cpuSecondsLimit > budget.remainingSeconds;
-    const state = overBudget ? "awaiting_budget" : "queued";
-
     const key = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
-    const row = await this.store.one(`INSERT INTO ${VCR_SCHEMA}.jobs
+    const row = await this.store.transaction(async (client) => {
+      // A distinct request must reserve against the same locked study budget
+      // as every other enqueue and confirmation, before its job becomes visible.
+      const study = (await client.query(`SELECT budget FROM ${VCR_SCHEMA}.studies
+        WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [studyId])).rows[0];
+      if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+      const confirmed = Number(object(study.budget).cpuSecondsConfirmed ?? 0);
+      const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
+      const reserved = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used), 0)::numeric AS used,
+        COALESCE(SUM(${CPU_COMMITTED_SQL}), 0)::numeric AS committed
+        FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1`, [studyId])).rows[0];
+      const state = cpuSecondsLimit > Math.max(0, limit - Number(reserved.used) - Number(reserved.committed))
+        ? "awaiting_budget" : "queued";
+      const inserted = (await client.query(`INSERT INTO ${VCR_SCHEMA}.jobs
       (id, study_id, user_id, kind, method, method_version, state, scenario, scenario_hash, inputs, seed, replicates,
        cpu_seconds_limit, max_attempts, run_id, idempotency_key, checkpoint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17::jsonb)
@@ -458,14 +483,16 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })]);
+      JSON.stringify({ ...object(input.detail), ...curveDetail, cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      if (inserted?.inserted === true) await this.store.audit({ client, studyId, userId: String(input.userId), action: "vcr.job.enqueue",
+        object: String(inserted.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
+      return inserted;
+    });
     const created = row?.inserted === true;
     if (created) {
       this.counters.enqueued += 1;
-      if (overBudget) this.counters.awaitingBudget += 1;
-      await this.store.audit({ studyId, userId: String(input.userId), action: "vcr.job.enqueue",
-        object: String(row.id), detail: { kind, method, state, cpuSecondsLimit, scenarioHash } });
-      if (overBudget && this.notifier?.budgetConfirm) {
+      if (row.state === "awaiting_budget") this.counters.awaitingBudget += 1;
+      if (row.state === "awaiting_budget" && this.notifier?.budgetConfirm) {
         const study = await this.store.studyById(studyId);
         if (study) await this.notifier.budgetConfirm(study, jobSummaryFromRow(row)).catch(() => null);
       }
@@ -623,18 +650,27 @@ export class VcrJobs {
     if (!this.engine?.configured?.()) return;
     const rows = await this.store.rows(`SELECT id, checkpoint FROM ${VCR_SCHEMA}.jobs
       WHERE state IN ('failed','canceled') AND checkpoint ? 'engineJobId'
-        AND COALESCE(checkpoint->>'engineStopped','false') <> 'true' ORDER BY updated_at LIMIT 5`);
+        AND (COALESCE(checkpoint->>'engineStopped','false') <> 'true' OR checkpoint->>'cpuAccountingUncertain'='true') ORDER BY updated_at LIMIT 5`);
     for (const row of rows) {
       try {
         const engineJobId = String(object(row.checkpoint).engineJobId);
         await this.engine.cancel?.(engineJobId);
         const status = await this.engine.status(engineJobId);
         if (["succeeded", "failed", "canceled", "not_estimable"].includes(status.state)) {
-          await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint = checkpoint || '{"engineStopped":true}'::jsonb
-            WHERE id=$1 AND state IN ('failed','canceled')`, [String(row.id)]);
+          await this.#noteStopped(row, status);
         }
       } catch { /* Unknown physical state retains its admission slot. */ }
     }
+  }
+
+  /** A terminal status is not a zero CPU observation. @param {any} row @param {any} status */
+  async #noteStopped(row, status) {
+    const cpu = typeof status.cpuSeconds === "number" && Number.isFinite(status.cpuSeconds) && status.cpuSeconds >= 0 ? status.cpuSeconds : null;
+    await this.store.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint = checkpoint ||
+      jsonb_build_object('engineStopped',true,'cpuAccountingUncertain',$2::boolean),
+      cpu_seconds_used=GREATEST(cpu_seconds_used,COALESCE($3::numeric,cpu_seconds_used))
+      WHERE id=$1 AND state IN ('failed','canceled') AND checkpoint->>'engineJobId'=$4`,
+    [String(row.id), cpu === null, cpu, String(object(row.checkpoint).engineJobId)]);
   }
 
   /** The jobs the last claims failed for want of attempts, once each. */
@@ -727,24 +763,35 @@ export class VcrJobs {
    * @param {string} studyId @param {{ actor: string, cpuSeconds?: number, jobId?: string | null }} input
    */
   async confirmBudget(studyId, input) {
-    const study = await this.store.studyById(studyId);
-    if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
-    const waiting = await this.store.rows(`SELECT id, cpu_seconds_limit FROM ${VCR_SCHEMA}.jobs
+    const released = await this.store.transaction(async (client) => {
+      const study = (await client.query(`SELECT user_id, budget FROM ${VCR_SCHEMA}.studies
+        WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [studyId])).rows[0];
+      if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
+      const waiting = (await client.query(`SELECT id, cpu_seconds_limit FROM ${VCR_SCHEMA}.jobs
       WHERE study_id = $1 AND state = 'awaiting_budget'${input.jobId ? " AND id = $2" : ""}
-      ORDER BY created_at`, input.jobId ? [studyId, String(input.jobId)] : [studyId]);
+      ORDER BY created_at`, input.jobId ? [studyId, String(input.jobId)] : [studyId])).rows;
     const needed = waiting.reduce((total, row) => total + Number(row.cpu_seconds_limit ?? 0), 0);
-    const grant = Math.max(needed, Math.max(0, Number(input.cpuSeconds ?? 0)));
     const budget = object(study.budget);
-    const confirmed = Number(budget.cpuSecondsConfirmed ?? 0) + grant;
-    await this.store.updateStudy(studyId, {
-      budget: { ...budget, cpuSecondsConfirmed: confirmed, lastConfirmedAt: this.now().toISOString(), lastConfirmedBy: String(input.actor) },
-    }, String(input.actor));
-    const released = waiting.length
-      ? await this.store.rows(`UPDATE ${VCR_SCHEMA}.jobs SET state = 'queued', run_after = now(), updated_at = now()
+      const consumed = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used),0)::numeric AS used,
+        COALESCE(SUM(${CPU_COMMITTED_SQL}),0)::numeric AS committed FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1`, [studyId])).rows[0];
+      const prior = Number(budget.cpuSecondsConfirmed ?? 0);
+      const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(prior) ? prior : 0);
+      const neededWithSettledUse = Math.max(0, Number(consumed.used) + Number(consumed.committed) + needed - limit);
+      const grant = Math.max(needed, neededWithSettledUse, Math.max(0, Number(input.cpuSeconds ?? 0)));
+      const confirmed = prior + grant;
+      await client.query(`UPDATE ${VCR_SCHEMA}.studies SET budget = $2::jsonb, updated_at = now() WHERE id = $1`,
+        [studyId, JSON.stringify({ ...budget, cpuSecondsConfirmed: confirmed, lastConfirmedAt: this.now().toISOString(), lastConfirmedBy: String(input.actor) })]);
+      await this.store.audit({ client, studyId, userId: String(study.user_id), actor: String(input.actor), action: "vcr.study.update",
+        object: studyId, detail: { fields: ["budget"] } });
+      const rows = waiting.length
+      ? (await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET state = 'queued', run_after = now(), updated_at = now()
           WHERE id = ANY($1::text[]) AND state = 'awaiting_budget' RETURNING *`, [waiting.map((row) => String(row.id))])
+        ).rows
       : [];
-    await this.store.audit({ studyId, userId: study.userId, actor: String(input.actor), action: "vcr.job.budget_confirm",
-      object: studyId, detail: { grantedCpuSeconds: grant, released: released.length } });
+      await this.store.audit({ client, studyId, userId: String(study.user_id), actor: String(input.actor), action: "vcr.job.budget_confirm",
+        object: studyId, detail: { grantedCpuSeconds: grant, released: rows.length } });
+      return rows;
+    });
     return { released: released.map(jobSummaryFromRow), budget: await this.budgetOf(studyId) };
   }
 
@@ -850,12 +897,46 @@ export class VcrJobs {
    * @param {any} row @param {Record<string, any>} frozen @param {string} owner
    */
   async #submit(row, frozen, owner, resubmit = false) {
-    const intent = await this.checkpoint(String(row.id), {
+    if (row.kind === "reconstruct_km") {
+      try {
+        if (!this.curveVerifier) throw new HttpError(503, "vcr_curve_provenance_unavailable", "曲线来源核验暂不可用；其他分析可以继续。");
+        await this.curveVerifier({ studyId: String(row.study_id), principal: String(object(row.checkpoint).curvePrincipal ?? ""),
+          scenario: frozen.scenario, inputs: frozen.inputs, receiptId: object(row.checkpoint).curveReceiptId });
+      } catch (error) { return this.#fail(row, error, owner); }
+    }
+    const intentFields = {
       engineJobId: String(row.id), engineStopped: false,
       submissionIntent: { scenarioHash: String(row.scenario_hash), methodVersion: String(row.method_version),
         at: this.now().toISOString(), attempt: Number(row.attempts) },
       ...(resubmit ? { resubmits: Number(object(row.checkpoint).resubmits ?? 0) + 1 } : {}),
-    }, owner, Number(row.attempts));
+    };
+    const admitted = await this.store.transaction(async client => {
+      const study = (await client.query(`SELECT budget FROM ${VCR_SCHEMA}.studies WHERE id=$1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [String(row.study_id)])).rows[0];
+      const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id=$1 FOR UPDATE`, [String(row.id)])).rows[0];
+      if (!study || !locked || locked.state !== "running" || locked.lease_owner !== owner || Number(locked.attempts) !== Number(row.attempts)) return { skipped: true };
+      if (!object(locked.checkpoint).engineJobId) {
+        const consumed = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used),0)::numeric AS used,
+          COALESCE(SUM(${CPU_COMMITTED_SQL}),0)::numeric AS committed FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1`, [String(row.study_id)])).rows[0];
+        const confirmed = Number(object(study.budget).cpuSecondsConfirmed ?? 0);
+        const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
+        if (Number(consumed.used) + Number(consumed.committed) > limit) {
+          const waiting = (await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET state='awaiting_budget',lease_owner=NULL,lease_until=NULL,
+            attempts=GREATEST(0,attempts-1),updated_at=now() WHERE id=$1 RETURNING *`, [String(row.id)])).rows[0];
+          await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.budget_wait",
+            object: String(row.id), detail: { reason: "cpu_usage_changed_before_submit" } });
+          return { waiting };
+        }
+      }
+      await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint || $2::jsonb,updated_at=now() WHERE id=$1`, [String(row.id), JSON.stringify(intentFields)]);
+      return { ready: true };
+    });
+    if (admitted.waiting) {
+      this.counters.awaitingBudget += 1;
+      const study = await this.store.studyById(String(row.study_id));
+      if (study && this.notifier?.budgetConfirm) await this.notifier.budgetConfirm(study, jobSummaryFromRow(admitted.waiting)).catch(() => null);
+      return { action: "awaiting_budget", state: "awaiting_budget" };
+    }
+    const intent = admitted.ready;
     if (!intent) return { action: "skipped", state: "changed" };
     try {
       let accepted;
@@ -1218,6 +1299,8 @@ export class VcrJobs {
           if (expired) await mark("expired");
           continue;
         }
+        if (!["succeeded", "failed", "canceled", "not_estimable"].includes(status.state)) continue;
+        await this.#noteStopped(row, status);
         const answer = await this.engine.result(String(object(row.checkpoint).engineJobId));
         const result = object(answer.result);
         if (answer.refused !== true) {

@@ -69,7 +69,12 @@ export async function loadMethodValidation({ file = '', engine = null, health, r
   let opened; let artifact; let artifactSha256;
   try {
     if (!path.isAbsolute(file)) throw invalid();
-    opened = await openScopedFileNoFollow(path.parse(file).root, file);
+    // The scoped helper walks from a real directory, not filesystem "/"
+    // (whose separator would otherwise be doubled in containment checks).
+    // Starting at the first directory still refuses every linked ancestor.
+    const root = path.parse(file).root;
+    const scope = path.join(root, path.relative(root, file).split(path.sep)[0]);
+    opened = await openScopedFileNoFollow(scope, file);
     assertMethodValidationFile(opened.stat);
     const bytes = await readStableFileHandle(opened.handle, opened.stat);
     artifact = parseMethodValidation(JSON.parse(bytes.toString('utf8')));

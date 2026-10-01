@@ -61,6 +61,7 @@ import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrReviewIsCurrent } from "./vcrViews.mjs";
+import { vcrReportReviewRevision } from "./vcrRender.mjs";
 
 /** Which capability thinks each step (the domain's map, named here for readers). */
 export const VCR_RUN_CAPABILITIES = VCR_STEP_CAPABILITIES;
@@ -234,7 +235,7 @@ const isObject = (value) => value !== null && typeof value === "object" && !Arra
  * and they are the only keys allowed to be dropped without a word.
  */
 export const VCR_NON_ENGINE_KEYS = Object.freeze([
-  "label", "name", "note", "notes", "cost", "comparability", "e10", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol",
+  "label", "name", "note", "notes", "cost", "comparability", "e10", "snapshotId", "method", "jobKind", "evidenceWindow", "protocol", "simonSelection",
 ]);
 
 /**
@@ -540,7 +541,7 @@ export function vcrModelApplicabilityIssues(model, { endpointType, variables }) 
  * @param {{ kind: string, row: Record<string, any> }} item
  * @param {{ study: Record<string, any>, definition: Record<string, any> | null, assumptions: readonly Record<string, any>[],
  *   populations?: readonly Record<string, any>[], scenarios?: readonly Record<string, any>[], grid?: Record<string, any> | null,
- *   analytic?: Record<string, any> | null, models?: readonly Record<string, any>[] }} context
+ *   analytic?: Record<string, any> | null, analyticJob?: Record<string, any> | null, models?: readonly Record<string, any>[] }} context
  * @returns {VcrPlan}
  */
 export function vcrBuildStages(item, context) {
@@ -555,6 +556,8 @@ export function vcrBuildStages(item, context) {
   const stage = (jobKind, candidate, options = {}) => {
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[jobKind];
     const own = structuredClone(candidate);
+    const curveReceiptId = jobKind === "reconstruct_km" ? own.provenance?.receiptId : undefined;
+    if (curveReceiptId !== undefined) delete own.provenance.receiptId;
     // A path the object stated itself is the run's; a path only the binder wrote is the
     // platform's. The two are told apart before the binder runs, because what the
     // schema does not read is refused when it was the run's and dropped in silence
@@ -574,7 +577,7 @@ export function vcrBuildStages(item, context) {
     return { built: /** @type {VcrStage} */ ({
       stage: options.stage ?? null, jobKind, scenario, keepTables: options.keepTables ?? [], derived: options.derived ?? [],
       snapshot: options.snapshot ?? VCR_PATIENT_LEVEL_JOB_KINDS.includes(jobKind), after: options.after ?? null, bound: used,
-      detail: options.detail ?? {},
+      detail: { ...(options.detail ?? {}), ...(curveReceiptId !== undefined ? { curveReceiptId } : {}) },
     }), unknown };
   };
   /** @param {Array<{ built: VcrStage, unknown: string[] }>} built @returns {VcrPlan} */
@@ -607,9 +610,13 @@ export function vcrBuildStages(item, context) {
     // A model answers only for what it declares it covers. A patient set that names a model
     // the study is outside of is refused before any job is queued, with what fell outside
     // (the reference simulators declare an endpoint and nothing else, so they pass).
+    if (row.modelVersion && !row.modelId) return { ok: false, refused: { code: "vcr_model_not_found", message: "模型版本必须绑定明确的模型，其他研究结果继续保留。" } };
     if (row.modelId) {
-      const named = (context.models ?? []).find((model) => (model.id === row.modelId || model.name === row.modelId)
-        && (!row.modelVersion || model.version === row.modelVersion));
+      const models = context.models ?? [];
+      const exact = models.filter((model) => model.id === row.modelId && (!row.modelVersion || model.version === row.modelVersion));
+      const matches = exact.length ? exact : models.filter((model) => model.name === row.modelId && (!row.modelVersion || model.version === row.modelVersion));
+      const named = matches.length === 1 ? matches[0] : null;
+      if (!named) return { ok: false, refused: { code: "vcr_model_not_found", message: "选定模型的确切版本已不可用；这一步不使用替代模型，其他研究结果继续保留。" } };
       const population = row.populationId ? (context.populations ?? []).find((entry) => entry.id === row.populationId) : null;
       const issues = named ? vcrModelApplicabilityIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
       if (issues.length) {
@@ -666,7 +673,7 @@ export function vcrBuildStages(item, context) {
     const configuration = object(row.configuration);
     const type = String(row.endpointType);
     const design = { ...object(configuration.design), kind: row.design };
-    const base = { ...configuration, design, endpoint: { ...object(configuration.endpoint), type } };
+    const base = /** @type {Record<string, any>} */ ({ ...configuration, design, endpoint: { ...object(configuration.endpoint), type } });
     const used = list(row.assumptionIds).length
       ? cards.filter((card) => list(row.assumptionIds).includes(card.key) || list(row.assumptionIds).includes(card.id))
       : cards;
@@ -674,12 +681,50 @@ export function vcrBuildStages(item, context) {
     const supports = (method) => Boolean(/** @type {Record<string, Record<string, readonly string[]>>} */ (VCR_DESIGN_SUPPORT)[method]?.[String(row.design)]?.includes(type));
     /** @type {Array<{ built: VcrStage, unknown: string[] }>} */
     const stages = [];
-    if (supports("design.analytic")) stages.push(stage("design_analytic", base, { stage: "analytic", endpoint: type, cards: used, snapshot: false }));
-    if (supports("design.simulate")) stages.push(stage("design_simulation", base, { stage: "simulation", endpoint: type, cards: used, snapshot: false }));
+    const simon = row.design === "simon_two_stage" && type === "binary";
+    const statedBoundary = simon && ["n1", "n", "r1", "r"].every((key) => Number.isSafeInteger(design[key]));
+    if (supports("design.analytic") && !statedBoundary) stages.push(stage("design_analytic", base, { stage: "analytic", endpoint: type, cards: used, snapshot: false }));
+    if (simon) {
+      const waiting = () => finish([...stages, stage("design_simulation", base, { stage: "simulation", endpoint: type,
+        cards: used, snapshot: false, after: "analytic", detail: { awaitingAnalytic: true } })]);
+      const selection = configuration.simonSelection ?? "optimal";
+      if (!["optimal", "minimax"].includes(selection) || (configuration.analysis?.sided != null && configuration.analysis.sided !== 1)) {
+        return { ok: false, refused: { code: "vcr_job_scenario_invalid", message: "Simon 两阶段只使用声明的单侧上尾判定；设计选择须为 optimal 或 minimax。" } };
+      }
+      const chosen = statedBoundary ? design : object(object(context.analytic?.diagnostics).simon)[selection];
+      if (chosen && ["n1", "n", "r1", "r"].every((key) => Number.isSafeInteger(chosen[key]))) {
+        const source = statedBoundary ? null : {
+          resultId: context.analytic?.id, resultVersion: context.analytic?.version, executionId: context.analytic?.executionId,
+          jobId: context.analyticJob?.id, methodVersion: context.analyticJob?.methodVersion,
+          scenarioHash: context.analyticJob?.scenarioHash, selection,
+        };
+        if (source && (!source.resultId || !Number.isSafeInteger(source.resultVersion) || !source.executionId
+          || !source.jobId || !source.methodVersion || !/^[a-f0-9]{64}$/.test(String(source.scenarioHash)))) {
+          return waiting();
+        }
+        const truth = object(base.truth);
+        const laws = truth.responseRate != null ? [truth.responseRate]
+          : typeof truth.null === "boolean" ? [truth.null ? truth.nullRate : truth.alternativeRate]
+            : [truth.nullRate, truth.alternativeRate];
+        for (const responseRate of laws) {
+          const nullLaw = responseRate === truth.nullRate;
+          const candidate = { ...base, design: { kind: "simon_two_stage", ...Object.fromEntries(["n1", "n", "r1", "r"].map((key) => [key, chosen[key]])) },
+            truth: { ...truth, responseRate }, analysis: { ...object(base.analysis), method: "simon_boundary", sided: 1 } };
+          stages.push(stage("design_simulation", candidate, { stage: nullLaw ? "simulation_null" : "simulation", endpoint: type,
+            cards: used, snapshot: false, after: source ? "analytic" : null,
+            detail: { simonSelection: statedBoundary ? "declared" : selection, ...(source ? { analyticSource: source } : {}) } }));
+        }
+      } else {
+        if (context.analyticJob?.state === "succeeded") {
+          return { ok: false, refused: { code: "vcr_job_scenario_invalid", message: "当前样本量范围内没有满足所声明错误率和把握度的 Simon 设计；解析结果已保留。" } };
+        }
+        return waiting();
+      }
+    } else if (supports("design.simulate")) stages.push(stage("design_simulation", base, { stage: "simulation", endpoint: type, cards: used, snapshot: false }));
     if (!stages.length) {
       return { ok: false, unavailable: { rule: "route_unavailable_in_version", reason: "design_not_supported", gaps: [{
         title: `${row.design} 设计在当前版本的引擎里没有实现`,
-        detail: `引擎对 ${type} 终点只实现了固定样本的两组比较（三类终点）、成组序贯（事件时间）和 Simon 两阶段（二分类，只有解析计算）；单臂和单臂加外部对照不做仿真，也不会被当成别的设计去算。`,
+        detail: `当前支持固定样本两组比较（三类终点）、成组序贯（事件时间），以及二分类的精确单臂、分层历史对照和 Simon 两阶段；${row.design} 与 ${type} 的这个组合尚未实现。`,
         answers: "改用引擎支持的设计并排比较，或等这个设计完成数值验证后再算。" }] } };
     }
     // Assurance integrates power over the design prior the effect's card states.
@@ -803,7 +848,7 @@ export function vcrGapsForRule(rule) {
 export class VcrOrchestrator {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
-   *   notifier?: any, seal?: any, queueExport?: any,
+   *   notifier?: any, seal?: any, queueExport?: any, queueReviews?: ((studyId:string, options?:Record<string,any>) => Promise<unknown>) | null,
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
    *     reason: string, brief: string }) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
@@ -811,7 +856,7 @@ export class VcrOrchestrator {
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, dispatchRun = null, latestSessionId = null,
+  constructor({ store, jobs, config = {}, notifier = null, seal = null, queueExport = null, queueReviews = null, dispatchRun = null, latestSessionId = null,
     briefFor = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR orchestrator needs the VCR store.");
     if (!jobs) throw new TypeError("The VCR orchestrator needs the VCR job queue.");
@@ -821,6 +866,7 @@ export class VcrOrchestrator {
     this.notifier = notifier;
     this.seal = seal;
     this.queueExport = queueExport;
+    this.queueReviews = queueReviews;
     this.dispatchRun = dispatchRun;
     this.latestSessionId = latestSessionId;
     this.briefFor = briefFor;
@@ -954,6 +1000,67 @@ export class VcrOrchestrator {
 
   // --- the route hooks ---------------------------------------------------------------
 
+  /** Queue advisory review only after the current calculations have settled.
+   * @param {string} studyId @param {Record<string,any>} [options] */
+  async #queueReview(studyId, options = {}) {
+    if (!this.queueReviews) return;
+    try {
+      const open = await this.store.one(`SELECT 1 FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1 AND state IN ('queued','running','awaiting_budget') LIMIT 1`, [studyId]);
+      if (open || (await this.store.staleMarks(studyId)).length) return;
+      await this.queueReviews(studyId, options);
+    } catch (error) { this.report(codeOf(error)); }
+  }
+
+  /** A trusted review completion can request one new report revision. The
+   * original package and its conversions remain available throughout.
+   * @param {string} studyId @param {{sourceDigest:string,exportId:string,reviewIds:string[],findings?:any[]}} input */
+  async requestReviewRepair(studyId, input) {
+    if (!/^[a-f0-9]{64}$/.test(String(input.sourceDigest)) || !list(input.reviewIds).length) return { skipped: "review_identity_invalid" };
+    const study = await this.store.studyById(studyId);
+    if (!study || study.status !== "active") return { skipped: "study_inactive" };
+    const [reviews, results, stale, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol, exports] = await Promise.all([
+      this.store.reviews(studyId), this.store.results(studyId), this.store.staleMarks(studyId), this.store.assumptions(studyId),
+      this.store.populations(studyId), this.store.patientSets(studyId), this.store.comparatorDesigns(studyId),
+      this.store.trialScenarios(studyId), this.store.latestDesignGrid(studyId), this.store.latestDefinition(studyId),
+      this.store.latestProtocolVersion(studyId), this.store.exports(studyId),
+    ]);
+    const original = exports.find((row) => row.id === input.exportId);
+    if (!original || original.cover?.revisionOf) return { skipped: "revision_already_attempted" };
+    const templates = list(original.cover.reports?.length ? original.cover.reports : [original.cover.report])
+      .map(report => String(object(report).template ?? "")).join("\n\n");
+    if (!templates.trim() || templates.length > 200_000) return { skipped: "retained_report_not_bounded" };
+    const reportRevision = vcrReportReviewRevision(original.cover);
+    const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
+    const accepted = reviews.filter((review) => review.reviewerKind === "ai" && input.reviewIds.includes(review.platformReviewId)
+      && review.provenance?.inputDigest === input.sourceDigest && review.provenance?.subjectRef?.exportId === original.id
+      && vcrReviewIsCurrent(review, { results, stale, current, exports }));
+    const findings = accepted.flatMap((review) => list(review.provenance?.findings).filter((finding) => typeof finding.fix === "string" && finding.fix.trim()));
+    if (!findings.length) return { skipped: "review_stale_or_no_action" };
+    const key = `run:review-repair:${original.id}`;
+    const created = await this.store.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-review-repair:' || $1))", [studyId]);
+      const existing = (await client.query(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id=$1 AND key=$2`, [studyId, key])).rows[0];
+      if (existing) return false;
+      const locked = (await client.query(`SELECT cover FROM ${VCR_SCHEMA}.exports WHERE study_id=$1 AND id=$2 FOR UPDATE`, [studyId, original.id])).rows[0];
+      if (!locked || vcrReportReviewRevision(locked.cover) !== reportRevision) return false;
+      const cover = structuredClone(original.cover);
+      delete cover.report; delete cover.reports; delete cover.documentExportId;
+      cover.revisionOf = original.id; cover.reviewRepair = { sourceDigest: input.sourceDigest, reportRevision,
+        reviewIds: accepted.map((review) => review.platformReviewId) };
+      const row = await this.store.createExport({ studyId, userId: study.userId, kind: original.kind, cover }, { client });
+      const brief = `Revise the retained report in place within a new version. Export ID: ${row.id}. Original export: ${original.id}.\n`
+        + "Preserve every valid computation, source and artifact. Use saved numeric bindings. Do not rerun engines or invent inputs. Address supported findings once; explain unresolved or declined advice. Human signature is optional.\n"
+        + `Write this revision only under deliverables/vcr-review-${row.id}/. Preserve every existing deliverable file.\n`
+        + `Complete retained report template (preserve {{n:…}} bindings):\n${templates}\nLocated advisory findings:\n${JSON.stringify(findings).slice(0, 24000)}`;
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.schedule_marks(study_id,key,user_id,kind,state,detail)
+        VALUES($1,$2,$3,'run','pending',$4::jsonb)`, [studyId, key, study.userId,
+        JSON.stringify({ purpose: "export", allowed: 1, kind: original.kind, exportId: row.id, revisionOf: original.id, reportRevision, brief })]);
+      return true;
+    });
+    if (created) await this.advance(studyId);
+    return { queued: created };
+  }
+
   /**
    * 「让 AI 做」: the step is requested, what serves it gets a fresh try, and
    * the study is advanced now — a run dispatched at once when one can be.
@@ -1005,16 +1112,17 @@ export class VcrOrchestrator {
    * @param {any} study
    */
   async #cover(study) {
-    const [reviews, stale, results, definition, assumptions, populations, patientSets, comparators, scenarios, grid, protocol] = await Promise.all([
+    const [reviews, stale, results, definition, assumptions, populations, patientSets, comparators, scenarios, grid, protocol, exports] = await Promise.all([
       this.store.reviews(study.id), this.store.staleMarks(study.id), this.store.results(study.id), this.store.latestDefinition(study.id),
       this.store.assumptions(study.id), this.store.populations(study.id, 20), this.store.patientSets(study.id, 20),
       this.store.comparatorDesigns(study.id, 20), this.store.trialScenarios(study.id, 60), this.store.latestDesignGrid(study.id),
       this.store.latestProtocolVersion(study.id),
+      this.store.exports(study.id),
     ]);
     // A countersignature is printed on the cover for what it still covers: one whose versions have moved on is
     // said to have changed after review, never 已复核 (the same test the page's ceiling uses, `vcrReviewIsCurrent`).
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
-    const stillHolds = (/** @type {any} */ review) => vcrReviewIsCurrent(review, { results, stale, current });
+    const stillHolds = (/** @type {any} */ review) => vcrReviewIsCurrent(review, { results, stale, current, exports });
     return {
       reviewed: reviews.some(stillHolds),
       reviews: reviews.map((review) => ({ kind: review.kind, reviewer: review.reviewer, nodes: review.nodes, at: review.createdAt, current: stillHolds(review) })),
@@ -1299,18 +1407,47 @@ export class VcrOrchestrator {
    */
   async #enqueueFor(study, item, read) {
     const node = vcrObjectNode(item.kind, item.row);
+    if (item.kind === "comparator" && item.row.route === "literature_control" && item.row.configuration?.provenance?.receiptId) {
+      try {
+        if (!this.jobs.curveVerifier) throw new HttpError(503, "vcr_curve_provenance_unavailable", "曲线来源核验暂不可用；其他分析可以继续。");
+        const configuration = object(item.row.configuration);
+        const fields = object(/** @type {any} */ (VCR_SCENARIO_SCHEMAS)["evidence.reconstruct_km"]).fields;
+        const scenario = Object.fromEntries(Object.entries(configuration).filter(([key]) => Object.hasOwn(fields, key)));
+        const verified = await this.jobs.curveVerifier({ studyId: study.id, principal: study.userId, scenario, inputs: [] });
+        item = { ...item, row: { ...item.row, configuration: { ...configuration, ...verified.scenario,
+          provenance: { ...verified.scenario.provenance, receiptId: verified.detail.curveReceiptId } } } };
+      } catch (error) {
+        await this.#claim(study, `job:${node}`, "job", "failed", { step: item.step,
+          detail: { node, error: codeOf(error), message: String(error?.message ?? "曲线来源无法核验。") } });
+        this.report(codeOf(error));
+        return [];
+      }
+    }
     const marks = read.marksByNode.get(node) ?? [];
     const staleMark = read.staleByNode.get(node);
     // A stale object whose last compute finished before it went stale is computed
     // again, under a new idempotency key: the same frozen scenario asked twice is
     // one job, a scenario under new assumption versions is another.
-    if (staleMark && marks.length && marks.every((mark) => mark.state === "done") && new Date(staleMark.markedAt).getTime() > Math.max(...marks.map((mark) => new Date(mark.updated_at).getTime()))) {
+    // Compare inside PostgreSQL: Date would discard sub-millisecond ordering
+    // and leave a late result falsely current after an in-flight source change.
+    const frozenBeforeChange = staleMark && marks.length ? await this.store.one(`SELECT
+      bool_and(COALESCE(j.created_at,m.created_at)<s.marked_at) AS all_old
+      FROM ${VCR_SCHEMA}.schedule_marks m LEFT JOIN ${VCR_SCHEMA}.jobs j ON j.id=m.job_id
+      JOIN ${VCR_SCHEMA}.stale_marks s ON s.study_id=m.study_id AND s.node=$2 AND s.cleared_at IS NULL
+      WHERE m.study_id=$1 AND m.kind='job' AND m.key=ANY($3::text[])`,
+    [study.id, node, marks.map(mark => String(mark.key))]) : null;
+    if (staleMark && marks.length && marks.every((mark) => ["done", "failed", "skipped"].includes(mark.state))
+      && frozenBeforeChange?.all_old === true) {
       await this.#dropMarks(study.id, `job:${node}`);
       marks.length = 0;
     }
-    const analytic = item.kind === "trial_scenario" ? await this.store.currentResultOf(study.id, "trial_scenario", item.row.id) : null;
+    const analyticMark = marks.find((mark) => object(mark.detail).stage === "analytic" && mark.state === "done");
+    const analyticJob = analyticMark?.job_id ? await this.jobs.get(study.id, String(analyticMark.job_id)) : null;
+    const analytic = item.kind === "trial_scenario" ? (item.row.design === "simon_two_stage"
+      ? analyticJob ? await this.jobs.resultOf(study.id, analyticJob.id) : null
+      : await this.store.currentResultOf(study.id, "trial_scenario", item.row.id)) : null;
     const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
-      scenarios: read.scenarios, grid: read.grid, analytic, models: read.models });
+      scenarios: read.scenarios, grid: read.grid, analytic, analyticJob, models: read.models });
     /** @type {string[]} */
     const queued = [];
     if (plan.ok === false) {
@@ -1396,6 +1533,7 @@ export class VcrOrchestrator {
    * @returns {Promise<{ jobId?: string, stop?: boolean }>}
    */
   async #enqueueStage(study, item, node, stage, read, generation, planned) {
+    if (stage.detail.awaitingAnalytic === true) return { stop: true };
     const key = stage.stage ? `job:${node}#${stage.stage}` : `job:${node}`;
     if (await this.#mark(study.id, key)) return {};
     /** @type {Array<{ resultId: string, table: string }>} */
@@ -1556,6 +1694,10 @@ export class VcrOrchestrator {
       inputs.push({ kind: "comparator_design", id: lineageNode("comparator_design", read.comparator.id, read.comparator.version),
         value: { route: read.comparator.route, estimand: read.comparator.estimand } });
     }
+    if (stage.detail.analyticSource) {
+      const source = stage.detail.analyticSource;
+      inputs.push({ kind: "evidence", id: lineageNode("result", source.resultId, source.resultVersion), value: source });
+    }
     const named = stage.snapshot ? (this.#snapshotIdOf(item) ?? read.population?.snapshotId ?? null) : null;
     if (named) {
       const newest = await this.store.one(`SELECT id FROM ${VCR_SCHEMA}.snapshots
@@ -1609,6 +1751,7 @@ export class VcrOrchestrator {
       if (job.state === "succeeded" && result) await this.#registerForecasts(study, job, result);
     });
     await this.advance(job.studyId);
+    if (result) await this.#queueReview(String(job.studyId), { reason: "compute_finished" });
     return true;
   }
 
@@ -1634,6 +1777,10 @@ export class VcrOrchestrator {
         status: cell.status, measures: list(cell.measures) })));
     }
     await this.store.addEdges(job.studyId, [{ from: node, to: lineageNode("result", result.id, result.version), cost: "light" }]);
+    const changedAfterFreeze = await this.store.one(`SELECT 1 FROM ${VCR_SCHEMA}.stale_marks s
+      JOIN ${VCR_SCHEMA}.jobs j ON j.id=$3 WHERE s.study_id=$1 AND s.node=$2 AND s.cleared_at IS NULL AND s.marked_at>j.created_at LIMIT 1`,
+    [job.studyId, node, job.id]);
+    if (changedAfterFreeze) return;
     // The stale marks of an object clear once nothing of it is still computing:
     // its own, its earlier results', and — when nothing downstream is left
     // stale — the superseded inputs they were marked for.
@@ -1763,6 +1910,7 @@ export class VcrOrchestrator {
       WHERE study_id = $1 AND kind = 'run' AND state IN ('claimed', 'running') LIMIT 1`, [study.id])).length > 0;
     if (active) return;
     const candidates = [
+      () => this.#pendingReviewRepair(study),
       () => this.#pendingExport(study),
       () => this.#stepRun(study, plan, "definition"),
       () => this.#stepRun(study, plan, "evidence"),
@@ -1786,6 +1934,31 @@ export class VcrOrchestrator {
     if (!mark) return true;
     if (["claimed", "running"].includes(String(mark.state))) return false;
     return Number(mark.attempts ?? 0) < Number(object(mark.detail).allowed ?? VCR_RUN_RULES.attempts);
+  }
+
+  /** @param {any} study @returns {Promise<VcrRunSpec | null>} */
+  async #pendingReviewRepair(study) {
+    const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id=$1 AND kind='run'
+      AND starts_with(key,'run:review-repair:') AND state='pending' ORDER BY created_at LIMIT 1`, [study.id]);
+    if (!mark || !this.#allowed(mark)) return null;
+    const detail = object(mark.detail);
+    const original = await this.store.exportRow(study.id, String(detail.revisionOf));
+    const [reviews, results, stale, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol] = await Promise.all([
+      this.store.reviews(study.id), this.store.results(study.id), this.store.staleMarks(study.id), this.store.assumptions(study.id),
+      this.store.populations(study.id), this.store.patientSets(study.id), this.store.comparatorDesigns(study.id),
+      this.store.trialScenarios(study.id), this.store.latestDesignGrid(study.id), this.store.latestDefinition(study.id), this.store.latestProtocolVersion(study.id),
+    ]);
+    const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
+    const revision = await this.store.exportRow(study.id, String(detail.exportId));
+    const ids = list(revision?.cover?.reviewRepair?.reviewIds);
+    if (!original || vcrReportReviewRevision(original.cover) !== detail.reportRevision
+      || !reviews.some(review => ids.includes(review.platformReviewId) && vcrReviewIsCurrent(review, { results, stale, current, exports: [original] }))) {
+      await this.#update(study.id, String(mark.key), { state: "failed", detail: { lastError: "review_changed_before_repair" } }, ["pending"]);
+      if (revision) await this.store.updateExport(revision.id, { state: "failed" });
+      return null;
+    }
+    return { key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: "vcr:review-repair",
+      brief: String(detail.brief), steps: [], detail };
   }
 
   /** @param {any} study @returns {Promise<VcrRunSpec | null>} */
@@ -1986,6 +2159,7 @@ export class VcrOrchestrator {
         state: usable ? "ready" : "failed", runId: mark.run_id ?? null, cover,
       });
       if (usable && this.queueExport) await this.queueExport({ id: study.userId }, study, row);
+      if (usable) await this.#queueReview(study.id, { exportId: row.id, runId: mark.run_id ?? undefined, reason: "package_finished" });
       if (row?.state === "ready" && this.notifier?.packageReady) {
         await this.#notice(study, `notice:package:${row.id}`, () => this.notifier.packageReady(study, {
           exportId: row.id, kind: row.kind, headline: object(cover).headline ?? null, gaps: Number(object(cover).staleResults ?? 0),
@@ -2005,6 +2179,7 @@ export class VcrOrchestrator {
       if (FINISHED.has(now) || now === "running") continue;
       if (status !== "succeeded") await this.#step(observed, step, { status: "failed" });
     }
+    await this.#queueReview(study.id, { runId: mark.run_id ?? undefined, reason: "research_finished" });
   }
 
   // --- change propagation (plan §6.3) --------------------------------------------------

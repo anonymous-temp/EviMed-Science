@@ -105,6 +105,17 @@ test('health preserves only a well-formed numerical source digest from the runni
   digest = 'unknown'; assert.equal((await client.health()).numericalSourceDigest, null);
 });
 
+test('terminal status preserves unknown CPU instead of coercing missing or malformed values to zero', async () => {
+  for (const cpuSeconds of [null, undefined, '', false, '42', -1, {}, []]) {
+    const client = createVcrEngineClient({ baseUrl: 'http://engine.local', fetchImpl: async () => json({ jobId: 'job_1', state: 'canceled', cpuSeconds }) });
+    assert.equal((await client.status('job_1')).cpuSeconds, null);
+  }
+  for (const cpuSeconds of [0, 42.1]) {
+    const client = createVcrEngineClient({ baseUrl: 'http://engine.local', fetchImpl: async () => json({ jobId: 'job_1', state: 'canceled', cpuSeconds }) });
+    assert.equal((await client.status('job_1')).cpuSeconds, cpuSeconds);
+  }
+});
+
 test("the workload token is read at the moment of the call, so a rotation reaches a long-running worker", async () => {
   /** @type {string[]} */
   const seen = [];
