@@ -122,12 +122,18 @@ test('held-out replay uses the actual evaluator without gold-label injection and
   await fs.writeFile(docs[0].filename, 'changed document');
   await assert.rejects(service.readDataset({ studyId: study.id, principal: 'alice', datasetId: dataset.datasetId }));
   await fs.writeFile(docs[0].filename, docs[0].text);
-  await database.query("UPDATE evimed_vcr.studies SET outcome_seal='{" + '"required":true' + "}'::jsonb WHERE id=$1", [study.id]);
-  await assert.rejects(service.replay({ studyId: study.id, principal: 'alice', datasetId: dataset.datasetId }), { code: 'vcr_evaluation_input_restricted' });
+  for (const intendedUse of ['specified_analysis', 'submission_preparation']) {
+    await database.query("UPDATE evimed_vcr.studies SET intended_use=$2,outcome_seal='{}'::jsonb WHERE id=$1", [study.id, intendedUse]);
+    for (const read of [() => service.exportDataset({ studyId: study.id, principal: 'alice' }),
+      () => service.readDataset({ studyId: study.id, principal: 'alice', datasetId: dataset.datasetId }),
+      () => service.replay({ studyId: study.id, principal: 'alice', datasetId: dataset.datasetId })]) {
+      await assert.rejects(read(), { code: 'vcr_evaluation_input_restricted' });
+    }
+  }
 });
 
 test('contrary correction labels remain mismatches and a subject never crosses the held-out split', options, async () => {
-  await database.query("UPDATE evimed_vcr.studies SET outcome_seal='{}'::jsonb WHERE id=$1", [study.id]);
+  await database.query("UPDATE evimed_vcr.studies SET intended_use='exploratory',outcome_seal='{}'::jsonb WHERE id=$1", [study.id]);
   const held = docs.find(item => correctionPartition(study.id, item.subjectKey) === 'held_out');
   const priorDataset = await service.exportDataset({ studyId: study.id, principal: 'alice' });
   await matchStore.overrideJudgment({ studyId: study.id, userId: 'alice', assessmentId: held.saved.id, criterionId: criteria[0].id, state: 'satisfied', by: 'alice' });

@@ -51,3 +51,11 @@ test('a verified receipt reaches the engine transport with immutable points and 
   assert.ok(submitted[0].inputs.some(input=>input.id===`evidence:${receipt.id}@1`));
   await jobs.advance(claim);assert.equal((await jobs.get(study.id,queued.job.id)).state,'succeeded');
 });
+test('malformed caller inputs retain a named queue refusal before any engine call',options,async()=>{
+  const before=submitted.length;
+  for(const value of [null,5,'not-an-input']) {
+    await assert.rejects(jobs.enqueue({studyId:study.id,userId:'alice',principal:'alice',kind:'reconstruct_km',
+      scenario:{provenance:{receiptId:receipt.id}},inputs:[value]}),{code:'vcr_job_scenario_invalid'});
+  }
+  assert.equal(submitted.length,before);
+});

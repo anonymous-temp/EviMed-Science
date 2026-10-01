@@ -72,7 +72,7 @@ export function createVcrCurveEvidence({ store, studyStore, access, resolveProje
         } else if (!Object.hasOwn(receipt.scenario, key) || digest(value) !== digest(receipt.scenario[key])) throw refuse('vcr_curve_provenance_invalid', 'Caller points do not match the recorded extraction.');
       }
       const lineage = { kind: 'evidence', id: `evidence:${id}@1` };
-      return { scenario: structuredClone(receipt.scenario), inputs: [...inputs.filter(input => input.id !== lineage.id), lineage],
+      return { scenario: structuredClone(receipt.scenario), inputs: [...inputs.filter(input => input?.id !== lineage.id), lineage],
         detail: { curveReceiptId: id, curvePrincipal: principal, curveImageHash: image.sha256, curvePointsHash: receipt.pointsHash } };
     },
     /** Identifiers only; source image bytes/paths never enter model context.

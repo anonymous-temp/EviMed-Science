@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 import { HttpError } from './security.mjs';
 import { assessSubject, matchingEvaluationReport, matchingInputDigest, VCR_MATCHING_VOCABULARY_VERSION } from './vcrMatching.mjs';
+import { vcrOutcomeReadable } from './vcrSeal.mjs';
 
 export const VCR_CORRECTION_SCHEMA = 'vcr-correction-cases-1';
 /** @param {any} value */
@@ -29,7 +30,7 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
     await access.require({ actor: principal, studyId, ability: 'read_patient_level', purpose: 'vcr' });
     const study = await store.studyById(studyId);
     if (!study) throw new HttpError(404, 'vcr_study_not_found', 'Study not found.');
-    if (study.outcomeSeal?.required && !study.outcomeSeal?.planFrozenAt) throw refused('vcr_evaluation_input_restricted', 'Sealed inputs cannot be replayed through correction cases.');
+    if (!vcrOutcomeReadable(study).readable) throw refused('vcr_evaluation_input_restricted', 'Sealed inputs cannot be replayed through correction cases.');
     return study;
   }
   /** Authorization is checked now, while asOf selects the frozen historical inputs.
