@@ -83,6 +83,50 @@ test('a whole source-bound run qualifies only methods with executed explicit num
   }
 });
 
+test('R machine metadata singleton arrays preserve exact method identity when auto-unboxed', async () => {
+  const input = await fixture();
+  input.report.methods = structuredClone(input.source.methods);
+  let unboxed = 0;
+  for (const method of Object.values(input.report.methods)) {
+    for (const field of ['endpoints', 'crossChecks']) {
+      if (Array.isArray(method[field]) && method[field].length === 1) {
+        method[field] = method[field][0]; unboxed += 1;
+      }
+    }
+  }
+  assert.equal(unboxed, 20, 'The real R report unboxes these registry fields');
+  const original = JSON.stringify(input.report);
+  const evidence = generate(input);
+  assert.equal(evidence.methods.length, 12);
+  assert.equal(evidence.ci.reportSha256, hash(Buffer.from(original)));
+  assert.equal(JSON.stringify(input.report), original, 'Raw immutable evidence is never rewritten');
+  assert.deepEqual(input.source.methods['comparator.evalue'].crossChecks, ['EValue']);
+  for (const mutate of [
+    methods => { methods['patients.binary'].endpoints = 'time_to_event'; },
+    methods => { methods['comparator.evalue'].version = 'unverified-version'; },
+    methods => { methods['comparator.evalue'].unexpectedMetadata = true; },
+  ]) {
+    const changed = structuredClone(input.report.methods);
+    mutate(changed);
+    assert.throws(() => generate({ ...input, report: { ...input.report, methods: changed } }), /report_methods_mismatch/);
+  }
+});
+
+test('structural unknown-method refusal attempts never qualify numerical evidence', async () => {
+  const input = await fixture();
+  input.report = structuredClone(input.report);
+  input.report.methodsByCase.E10a = ['design.analytic', 'nope.nope'];
+  const evidence = generate(input);
+  assert.equal(evidence.methods.length, 12);
+  assert.ok(!evidence.methods.some(method => method.method === 'nope.nope'));
+  assert.ok(evidence.methods.every(method => !method.numericTests.caseIds.includes('E10a')));
+  input.report.methodsByCase.N01b = ['design.analytic', 'nope.nope'];
+  assert.throws(() => generate(input), /report_coverage_invalid/);
+  input.report.methodsByCase.N01b = ['design.analytic'];
+  input.report.methodsByCase.E10a = [42];
+  assert.throws(() => generate(input), /report_coverage_invalid/);
+});
+
 test('failed, filtered, skipped, partial or source-mismatched machine reports cannot turn green', async () => {
   const changes = [
     report => { report.sourceRevision = 'b'.repeat(40); }, report => { report.complete = false; }, report => { report.testOnly = 'N01'; },

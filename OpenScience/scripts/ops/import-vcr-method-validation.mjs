@@ -130,6 +130,23 @@ function referenceFor(id, definition) {
   return { reference, assumptions };
 }
 
+/** jsonlite auto_unbox serializes singleton character vectors as strings.
+ * Normalize only the registry's declared array fields; every value, version,
+ * method and other field still has to equal the committed source metadata.
+ * The original artifact bytes remain the provenance and hash input.
+ * @param {any} methods */
+function reportedMethodMetadata(methods) {
+  if (!object(methods)) return methods;
+  return Object.fromEntries(Object.entries(methods).map(([name, value]) => {
+    if (!object(value)) return [name, value];
+    const metadata = { ...value };
+    for (const field of ['endpoints', 'crossChecks']) {
+      if (typeof metadata[field] === 'string') metadata[field] = [metadata[field]];
+    }
+    return [name, metadata];
+  }));
+}
+
 /** Bind GitHub's own run, job and immutable artifact metadata to one revision. */
 export function verifyGitHubIdentity({ repository, sourceRevision, runId, jobId, run, job, artifact }) {
   requireValue(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) && SHA.test(sourceRevision) && IDENTIFIER.test(String(runId)) && IDENTIFIER.test(String(jobId)), 'ci_identity_invalid');
@@ -161,7 +178,7 @@ export function produceMethodValidation({ reportBytes, logBytes, sourceRevision,
   const digest = numericalSourceDigest(source.runtimeFiles);
   const lockHash = packageLockHash(source.runtimeFiles.find(file => file.path === 'R/package-lock.json').bytes);
   requireValue(report.numericalSourceDigest === digest && report.packageLockHash === lockHash, 'report_source_mismatch');
-  requireValue(equal(report.methods, source.methods), 'report_methods_mismatch');
+  requireValue(equal(reportedMethodMetadata(report.methods), source.methods), 'report_methods_mismatch');
   const definitions = sourceCases(source.caseFiles);
   requireValue(Array.isArray(report.cases) && report.cases.length === definitions.size && object(report.methodsByCase), 'report_cases_incomplete');
   const executed = new Set();
@@ -173,8 +190,12 @@ export function produceMethodValidation({ reportBytes, logBytes, sourceRevision,
   }
   for (const [id, value] of Object.entries(report.methodsByCase)) {
     const methods = strings(value);
+    // Structural/refusal cases record attempted dispatches, including the
+    // unknown method they deliberately reject. Those names never qualify a
+    // numerical badge. Reference-bearing cases still require known methods.
     requireValue(executed.has(id) && Array.isArray(methods) && methods.length > 0 && new Set(methods).size === methods.length
-      && methods.every(method => Object.hasOwn(source.methods, method)), 'report_coverage_invalid');
+      && methods.every(method => typeof method === 'string' && method.length > 0 && method.length <= 128)
+      && (!Object.hasOwn(NUMERIC_REFERENCES, id) || methods.every(method => Object.hasOwn(source.methods, method))), 'report_coverage_invalid');
   }
   requireValue(Buffer.isBuffer(logBytes) && logBytes.length <= MAX_SOURCE_BYTES, 'numeric_log_invalid');
   const log = logBytes.toString('utf8');
