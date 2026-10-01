@@ -427,3 +427,26 @@ test("an item with nothing but its title gets no summary rather than its title a
   assert.doesNotMatch(fullInput, /正文：无/);
   assert.ok(verifyEdit(answer({ summary_zh: "" }), full, fullInput).issues.some((issue) => issue.includes("summary_zh 不能为空")));
 });
+
+test("evidence relevance accepts skip reasons and preserves new/existing question decisions", async () => {
+  const { calls, callModel } = stubModel([
+    () => ({ skip: true, reason: "该来源不回答专区的抗凝问题。" }),
+    () => ({ cardId: null }),
+    () => ({ cardId: "known-card" }),
+    () => ({ skip: true, reason: "" }),
+    () => ({ cardId: "unknown-card" }),
+  ]);
+  const editor = new FrontierEditor(config, { owner, callModel });
+  const input = { zone: "房颤抗凝", description: "卒中预防、出血与适用边界。", background: "Primary-source evidence.",
+    source: { title: "Right Atrial Ectopic Hepatic Tissue", text: "Retained source text.", coverage: "abstract" }, cards: [] };
+  assert.deepEqual(await editor.evidenceTarget(input), { skip: true, reason: "该来源不回答专区的抗凝问题。" });
+  assert.equal(await editor.evidenceTarget(input), null);
+  input.cards.push({ id: "known-card" });
+  assert.equal(await editor.evidenceTarget(input), "known-card");
+  await assert.rejects(editor.evidenceTarget(input), { code: "evidence_target_invalid" });
+  await assert.rejects(editor.evidenceTarget(input), { code: "evidence_target_invalid" });
+  assert.equal(calls[0].purpose, "frontier");
+  assert.equal(calls[0].body.max_tokens, 500);
+  assert.equal(JSON.parse(calls[0].body.messages[1].content).description, input.description);
+  assert.match(calls[0].body.messages[0].content, /Make this decision even when cards is empty/);
+});

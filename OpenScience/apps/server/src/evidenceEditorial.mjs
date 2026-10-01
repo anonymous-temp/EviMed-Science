@@ -52,6 +52,7 @@ export class EvidenceEditorial {
       unchanged: 0,
       published: 0,
       reviewed: 0,
+      skipped: 0,
       failed: 0,
       conflicts: 0,
     };
@@ -147,6 +148,16 @@ export class EvidenceEditorial {
           "UPDATE evimed_frontier.evidence_editorial_jobs SET state='pending',attempts=0,available_at=clock_timestamp(),last_error=NULL WHERE zone_id=$1 AND state IN ('failed','conflict')",
           [zoneId],
         );
+        await client.query(
+          `WITH skipped AS(SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j
+          JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
+          WHERE j.zone_id=$1 AND j.state='completed' AND j.card_id IS NULL AND j.payload->>'decision'='skip'
+          ORDER BY j.updated_at,j.id LIMIT(SELECT max_cards_per_run FROM evimed_frontier.evidence_automation WHERE zone_id=$1)
+          FOR UPDATE OF j SKIP LOCKED)
+          UPDATE evimed_frontier.evidence_editorial_jobs j SET state='pending',attempts=0,available_at=clock_timestamp(),last_error=NULL
+          FROM skipped WHERE j.id=skipped.id`,
+          [zoneId],
+        );
       }
     });
     const row = (
@@ -163,7 +174,7 @@ export class EvidenceEditorial {
     ).rows;
     const recent = (
       await this.database.query(
-        `SELECT id,state,attempts,last_error AS "lastError",updated_at AS "updatedAt",card_id AS "cardId" FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 ORDER BY updated_at DESC LIMIT 10`,
+        `SELECT id,state,attempts,last_error AS "lastError",updated_at AS "updatedAt",card_id AS "cardId",payload->>'skipReason' AS "skipReason" FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 ORDER BY updated_at DESC LIMIT 10`,
         [zoneId],
       )
     ).rows;
@@ -218,7 +229,8 @@ export class EvidenceEditorial {
         await client.query(
           `SELECT i.public_id,i.identity_key,i.canonical_url,i.title_raw FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
         WHERE i.state='published' AND s.enabled AND i.source_type=ANY($1::text[]) AND strpos(lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)),lower($2))>0
-        AND NOT EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j WHERE j.zone_id=$3 AND j.identity_key=i.identity_key)
+        AND NOT EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j WHERE j.zone_id=$3 AND j.identity_key=i.identity_key
+          AND NOT COALESCE(j.state='completed' AND j.card_id IS NULL AND j.payload->>'decision'='skip' AND j.available_at<=clock_timestamp(),false))
         ORDER BY i.timeline_at DESC,i.id DESC LIMIT $4`,
           [
             settings.source_types,
@@ -252,7 +264,8 @@ export class EvidenceEditorial {
         await client.query(
           `INSERT INTO evimed_frontier.evidence_editorial_jobs(id,zone_id,identity_key,card_id,source_item_id,source_url,source_title,payload)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb) ON CONFLICT(zone_id,identity_key) DO UPDATE SET state='pending',attempts=0,available_at=clock_timestamp(),updated_at=clock_timestamp()
-          WHERE evidence_editorial_jobs.state='completed'`,
+          WHERE evidence_editorial_jobs.state='completed' AND (evidence_editorial_jobs.card_id IS NOT NULL
+            OR (evidence_editorial_jobs.payload->>'decision'='skip' AND evidence_editorial_jobs.available_at<=clock_timestamp()))`,
           [
             id,
             settings.zone_id,
@@ -289,7 +302,9 @@ export class EvidenceEditorial {
   async finish(job, state, lastError = null) {
     const finished = await this.database.query(
       `UPDATE evimed_frontier.evidence_editorial_jobs SET state=$3,last_error=$4,lease_owner=NULL,lease_until=NULL,
-      available_at=clock_timestamp()+interval '5 minutes',updated_at=clock_timestamp() WHERE id=$1 AND lease_owner=$2 AND lease_until>clock_timestamp() RETURNING id`,
+      available_at=clock_timestamp()+CASE WHEN $3='completed' AND card_id IS NULL AND payload->>'decision'='skip'
+        THEN interval '7 days' ELSE interval '5 minutes' END,
+      updated_at=clock_timestamp() WHERE id=$1 AND lease_owner=$2 AND lease_until>clock_timestamp() RETURNING id`,
       [job.id, this.workerId, state, lastError],
     );
     if (!finished.rowCount) return;
@@ -355,19 +370,65 @@ export class EvidenceEditorial {
           [zone.id],
         )
       ).rows;
-      if (targets.length) {
+      {
+        if (!this.canRun())
+          throw Object.assign(new Error("Maintenance active."), {
+            code: "evidence_maintenance_active",
+          });
         prefetched = await this.readSource(job.source_url, {
           signal: AbortSignal.timeout(90000),
         });
+        if (!String(prefetched.text ?? "").trim())
+          throw Object.assign(new Error("No readable source."), {
+            code: "evidence_source_empty",
+          });
         await this.requireModel();
         const targetId = await this.editor.evidenceTarget({
           zone: zone.title,
+          description: zone.description,
+          background: zone.background,
           source: {
             title: job.source_title,
+            url: job.source_url,
+            coverage: prefetched.coverage ?? "excerpt",
+            inputTruncated: String(prefetched.text ?? "").length > 12000,
             text: String(prefetched.text ?? "").slice(0, 12000),
           },
           cards: targets,
         });
+        if (targetId?.skip === true) {
+          const skipped = await this.database.query(
+            `UPDATE evimed_frontier.evidence_editorial_jobs
+            SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb,updated_at=clock_timestamp()
+            WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,
+            [
+              job.id,
+              this.workerId,
+              JSON.stringify({ decision: "skip", skipReason: targetId.reason }),
+            ],
+          );
+          if (!skipped.rowCount)
+            throw new HttpError(
+              409,
+              "evidence_revision_conflict",
+              "The editorial lease changed; this worker has stopped.",
+            );
+          await this.finish(job, "completed");
+          this.counters.skipped++;
+          return;
+        }
+        const accepted = await this.database.query(
+          `UPDATE evimed_frontier.evidence_editorial_jobs
+          SET payload=COALESCE(payload,'{}'::jsonb)-'decision'-'skipReason'
+          WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,
+          [job.id, this.workerId],
+        );
+        if (!accepted.rowCount)
+          throw new HttpError(
+            409,
+            "evidence_revision_conflict",
+            "The editorial lease changed; this worker has stopped.",
+          );
         if (targetId)
           card = (
             await this.database.query(

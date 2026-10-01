@@ -139,7 +139,7 @@ export async function applyEvidenceImport(prepared, { store, ownerId, expectedRe
     const editorial = new EvidenceEditorial({ database: db, service, editor: { available: false }, readSource: null });
     for (const operation of operations.filter(op => op.type === 'zone')) {
       const zone = (await service.detail(owner, operation.id)).zone;
-      const desired = { enabled: true, query: { 'af-anticoagulation': 'atrial', 'cardiorenal-ckd': 'kidney', 'research-interpretation': 'randomized' }[operation.item.key] ?? operation.item.key, sourceTypes: ['journal', 'evidence-body', 'regulator'], intervalHours: 24, maxCardsPerRun: 2 };
+      const desired = { enabled: true, query: { 'af-anticoagulation': 'atrial fibrillation', 'cardiorenal-ckd': 'kidney', 'research-interpretation': 'randomized' }[operation.item.key] ?? operation.item.key, sourceTypes: ['journal', 'evidence-body', 'regulator'], intervalHours: 24, maxCardsPerRun: 2 };
       const current = (await editorial.automation(owner, zone.id)).automation;
       if (Object.keys(desired).some(key => JSON.stringify(current[key]) !== JSON.stringify(desired[key]))) {
         await editorial.automation(owner, zone.id, { ...desired, expectedRevision: zone.revision }, 'PUT'); result.settingsUpdated++;

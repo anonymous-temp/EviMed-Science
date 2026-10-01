@@ -3,6 +3,7 @@ import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { EvidenceEditorial } from "../src/evidenceEditorial.mjs";
+import { FrontierEditor } from "../src/frontierEditor.mjs";
 import {
   evidenceHash,
   evidenceContentHash,
@@ -96,6 +97,7 @@ beforeEach(async () => {
   const editor = {
     available: true,
     model: "test-model",
+    evidenceTarget: async () => null,
     evidenceCard: async () => {
       authorCalls++;
       return {
@@ -167,6 +169,337 @@ const reviewCard = async () => {
     )
   ).evidence;
 };
+
+for (const scenario of [
+  {
+    name: "empty anticoagulation zone skips ectopic atrial tissue",
+    title: "Right Atrial Ectopic Hepatic Tissue at the Caval Inflow",
+    zoneTitle: "房颤抗凝",
+    description: "原始抗凝研究的获益、出血与瓣膜病适用边界。",
+    query: "atrial",
+    empty: true,
+    text: "This case describes ectopic hepatic tissue at the right atrial caval inflow.",
+    decision: {
+      skip: true,
+      reason: "该病例描述右心房异位肝组织，无法回答房颤抗凝问题。",
+    },
+  },
+  {
+    name: "populated interpretation zone skips unrelated drug news",
+    title:
+      "Clinical evaluation of compound jinji granules in primary premature ejaculation: a randomized controlled trial",
+    zoneTitle: "研究解读",
+    description: "核对相对效应、绝对差异、复合终点与试验设计。",
+    query: "randomized",
+    empty: false,
+    text: "The available excerpt lists the premature-ejaculation trial title without design or endpoint results.",
+    decision: {
+      skip: true,
+      reason: "提供的短摘录没有足够设计或结局信息，不能支持研究解读问题。",
+    },
+  },
+  {
+    name: "empty anticoagulation zone accepts a supported new question",
+    title:
+      "Inequalities in oral anticoagulant treatment patterns associated with atrial fibrillation",
+    zoneTitle: "房颤抗凝",
+    description: "原始抗凝研究的获益、出血与瓣膜病适用边界。",
+    query: "atrial",
+    empty: true,
+    text: "This atrial-fibrillation cohort examines inequalities in oral anticoagulant treatment patterns. It is observational, not a randomized treatment comparison.",
+    decision: { cardId: null },
+  },
+])
+  test(`discovery relevance: ${scenario.name}`, options, async () => {
+    zone = (
+      await service.save(
+        user,
+        {
+          title: scenario.zoneTitle,
+          description: scenario.description,
+          background:
+            "Retain source coverage and only answer questions supported by the supplied material.",
+          expectedRevision: zone.revision,
+        },
+        zone.id,
+      )
+    ).zone;
+    if (scenario.empty)
+      await db.query("DELETE FROM evimed_frontier.evidence_cards WHERE id=$1", [
+        card.id,
+      ]);
+    await worker.automation(
+      user,
+      zone.id,
+      {
+        enabled: true,
+        query: scenario.query,
+        sourceTypes: ["journal"],
+        intervalHours: 24,
+        maxCardsPerRun: 1,
+        expectedRevision: zone.revision,
+      },
+      "PUT",
+    );
+    await insertSource(db, "discovery-journal");
+    await insertItem(db, {
+      sourceId: "discovery-journal",
+      title: scenario.title,
+    });
+    let targetCalls = 0;
+    const realEditor = new FrontierEditor(
+      {
+        deepseekProviderEnabled: true,
+        deepseekApiKey: "test-only-key",
+        frontierModel: "deepseek-flash",
+      },
+      {
+        owner: { userId: user.id, projectId: "evimed-frontier" },
+        callModel: async (_deps, call) => {
+          targetCalls++;
+          assert.equal(call.purpose, "frontier");
+          assert.equal(call.body.max_tokens, 500);
+          const input = JSON.parse(call.body.messages[1].content);
+          assert.equal(input.description, scenario.description);
+          assert.equal(input.source.text, scenario.text);
+          assert.equal(input.cards.length, scenario.empty ? 0 : 1);
+          assert.match(
+            call.body.messages[0].content,
+            /Make this decision even when cards is empty/,
+          );
+          return {
+            choices: [
+              { message: { content: JSON.stringify(scenario.decision) } },
+            ],
+          };
+        },
+      },
+    );
+    worker.editor.evidenceTarget = (input) => realEditor.evidenceTarget(input);
+    worker.readSource = async () => ({
+      text: scenario.text,
+      coverage: "abstract",
+    });
+    await worker.tick();
+    const jobs = (
+      await db.query(
+        "SELECT state,card_id,last_error,payload FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1",
+        [zone.id],
+      )
+    ).rows;
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].state, "completed");
+    assert.equal(jobs[0].last_error, null);
+    assert.equal(targetCalls, 1);
+    const savedCards = (
+      await db.query(
+        "SELECT id,editorial FROM evimed_frontier.evidence_cards WHERE zone_id=$1",
+        [zone.id],
+      )
+    ).rows;
+    if (scenario.decision.skip) {
+      assert.equal(authorCalls, 0);
+      assert.equal(reviewCalls, 0);
+      assert.equal(jobs[0].card_id, null);
+      assert.equal(jobs[0].payload.skipReason, scenario.decision.reason);
+      assert.equal(savedCards.length, scenario.empty ? 0 : 1);
+      assert.equal(worker.counters.skipped, 1);
+      const status = await worker.automation(user, zone.id);
+      assert.equal(status.recent[0].skipReason, scenario.decision.reason);
+    } else {
+      assert.equal(authorCalls, 1);
+      assert.equal(reviewCalls, 1);
+      assert.equal(savedCards.length, 1);
+      assert.equal(savedCards[0].editorial.status, "ai-reviewed");
+      assert.equal(worker.counters.skipped, 0);
+    }
+  });
+
+async function skippedDiscovery() {
+  await db.query("DELETE FROM evimed_frontier.evidence_cards WHERE id=$1", [
+    card.id,
+  ]);
+  await worker.automation(
+    user,
+    zone.id,
+    {
+      enabled: true,
+      query: "kidney",
+      sourceTypes: ["journal"],
+      intervalHours: 24,
+      maxCardsPerRun: 1,
+      expectedRevision: zone.revision,
+    },
+    "PUT",
+  );
+  await insertSource(db, "retry-journal");
+  await insertItem(db, {
+    sourceId: "retry-journal",
+    title: "Kidney trial methods and endpoint interpretation",
+  });
+  document = "Only the title is available.";
+  const operation = {
+    calls: 0,
+    decision: { skip: true, reason: "尚无足够正文回答结局解读问题。" },
+  };
+  const actualEditor = new FrontierEditor(
+    {
+      deepseekProviderEnabled: true,
+      deepseekApiKey: "test-only-key",
+      frontierModel: "deepseek-flash",
+    },
+    {
+      owner: { userId: user.id, projectId: "evimed-frontier" },
+      callModel: async () => {
+        operation.calls++;
+        return {
+          choices: [
+            { message: { content: JSON.stringify(operation.decision) } },
+          ],
+        };
+      },
+    },
+  );
+  worker.editor.evidenceTarget = (input) => actualEditor.evidenceTarget(input);
+  await worker.tick();
+  const job = (
+    await db.query(
+      "SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1",
+      [zone.id],
+    )
+  ).rows[0];
+  assert.equal(job.state, "completed");
+  assert.equal(job.card_id, null);
+  assert.equal(operation.calls, 1);
+  return { operation, job };
+}
+
+test(
+  "explicit refresh retries a skipped identity with enriched source and leaves successful jobs alone",
+  options,
+  async () => {
+    const { operation, job } = await skippedDiscovery();
+    const kept = (
+      await service.saveEditorial(
+        user,
+        {
+          title: "Existing successful question",
+          subtype: "academic",
+          summary: card.summary,
+          body: card.body,
+          limitations: card.limitations,
+          sources: card.sources,
+          state: "published",
+          editorial: {
+            author: identity,
+            status: "review-pending",
+            findings: [],
+          },
+        },
+        zone.id,
+        null,
+        true,
+      )
+    ).evidence;
+    await db.query(
+      `INSERT INTO evimed_frontier.evidence_editorial_jobs(id,zone_id,identity_key,card_id,state,attempts,payload)
+    VALUES('successful',$1,'successful',$2,'completed',2,'{}'),('another-skip',$1,'another-skip',NULL,'completed',0,'{"decision":"skip","skipReason":"Earlier unavailable source"}')`,
+      [zone.id, kept.id],
+    );
+    await worker.automation(user, zone.id, {}, "POST");
+    const refreshed = (
+      await db.query(
+        "SELECT id,state,attempts FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1",
+        [zone.id],
+      )
+    ).rows;
+    assert.equal(
+      refreshed.filter((row) => row.state === "pending").length,
+      1,
+      "explicit skip retries are capped by maxCardsPerRun",
+    );
+    assert.equal(refreshed.find((row) => row.id === job.id).state, "pending");
+    assert.equal(
+      refreshed.find((row) => row.id === "successful").state,
+      "completed",
+    );
+    assert.equal(refreshed.find((row) => row.id === "successful").attempts, 2);
+    document =
+      "The full abstract now identifies the kidney trial population, outcome definition and follow-up, supporting an endpoint interpretation question.";
+    operation.decision = { cardId: null };
+    await worker.tick();
+    const completed = (
+      await db.query(
+        "SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1",
+        [job.id],
+      )
+    ).rows[0];
+    assert.equal(completed.id, job.id);
+    assert.equal(completed.identity_key, job.identity_key);
+    assert.equal(completed.state, "completed");
+    assert.ok(completed.card_id);
+    assert.equal(completed.payload.skipReason, undefined);
+    assert.equal(completed.payload.decision, undefined);
+    assert.equal(operation.calls, 2);
+    assert.equal(authorCalls, 1);
+    assert.equal(reviewCalls, 1);
+    assert.equal(
+      (await service.detail(user, zone.id, completed.card_id)).evidence
+        .editorial.status,
+      "ai-reviewed",
+    );
+  },
+);
+
+test(
+  "automatic skipped-source retries observe a seven-day cooldown and remain capped",
+  options,
+  async () => {
+    const { operation, job } = await skippedDiscovery();
+    const days =
+      (new Date(job.available_at).getTime() -
+        new Date(job.updated_at).getTime()) /
+      86400000;
+    assert.ok(days > 6.99 && days < 7.01);
+    for (let index = 0; index < 2; index++) {
+      await db.query(
+        "UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1",
+        [zone.id],
+      );
+      await worker.tick();
+    }
+    assert.equal(
+      operation.calls,
+      1,
+      "daily scheduling cannot repeatedly spend on an unchanged skipped source",
+    );
+    await db.query(
+      "UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()-interval '1 minute' WHERE id=$1",
+      [job.id],
+    );
+    await db.query(
+      "UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1",
+      [zone.id],
+    );
+    await worker.tick();
+    const retried = (
+      await db.query(
+        "SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE id=$1",
+        [job.id],
+      )
+    ).rows[0];
+    assert.equal(retried.state, "completed");
+    assert.equal(retried.id, job.id);
+    assert.equal(operation.calls, 2);
+    assert.equal(authorCalls, 0);
+    assert.equal(reviewCalls, 0);
+    assert.ok(
+      new Date(retried.available_at).getTime() > Date.now() + 6.9 * 86400000,
+    );
+    await worker.tick();
+    assert.equal(operation.calls, 2);
+  },
+);
 
 test(
   "public owners cannot forge AI review receipts or retained source metadata",
