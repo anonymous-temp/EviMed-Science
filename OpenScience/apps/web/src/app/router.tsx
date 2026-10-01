@@ -36,6 +36,10 @@ const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ def
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
+const SkillsPage = lazy(() => import("./extensions/SkillsPage").then((m) => ({ default: m.SkillsPage })));
+const SkillDetailPage = lazy(() => import("./extensions/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })));
+const PluginsPage = lazy(() => import("./extensions/PluginsPage").then((m) => ({ default: m.PluginsPage })));
+const PluginDetailPage = lazy(() => import("./extensions/PluginDetailPage").then((m) => ({ default: m.PluginDetailPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -103,6 +107,11 @@ export const routes: RouteObject[] = [
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/plugins" replace /> },
+        { path: "extensions/plugins", element: <PluginsPage /> },
+        { path: "extensions/plugins/:extensionId", element: <PluginDetailPage /> },
+        { path: "extensions/skills", element: <SkillsPage /> },
+        { path: "extensions/skills/:skillId", element: <SkillDetailPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
         // below were top-level pages until then; each is now a view of one of the
         // six, and each keeps its address, because these are in people's

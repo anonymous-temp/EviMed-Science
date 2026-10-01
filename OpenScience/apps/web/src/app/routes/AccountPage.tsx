@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { BellRing, Folder, Gauge, Palette, Plug, UserRound, Wrench, type LucideIcon } from "lucide-react";
+import { BellRing, BookOpen, Folder, Gauge, Palette, Plug, UserRound, Wrench, type LucideIcon } from "lucide-react";
 import { fetchWebMe } from "@/lib/apiClient";
 import { fetchImStatus } from "@/lib/imClient";
 import { PageShell } from "@/components/layout/PageShell";
@@ -87,6 +87,8 @@ export function AccountPage() {
                 </li>
               );
             })}
+            <li className="shrink-0"><Link to="/app/extensions/plugins" className={navItemClasses({ className: "whitespace-nowrap" })}><Plug size={16} aria-hidden="true" className="text-text-3" />插件</Link></li>
+            <li className="shrink-0"><Link to="/app/extensions/skills" className={navItemClasses({ className: "whitespace-nowrap" })}><BookOpen size={16} aria-hidden="true" className="text-text-3" />技能</Link></li>
           </ul>
         </nav>
         <div className="min-w-0 flex-1">

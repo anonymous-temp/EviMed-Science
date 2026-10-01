@@ -7,6 +7,7 @@ import {
   Newspaper,
   Orbit,
   PanelLeft,
+  Plug,
   Radar,
   Settings,
   SquarePen,
@@ -182,6 +183,10 @@ export function Sidebar() {
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
         <ProjectBrowser geo={geo} vcr={vcr} />
+
+        <nav aria-label="扩展" className="px-3 pb-1">
+          <NavRow to="/app/extensions/plugins" label="插件与技能" icon={<Plug size={16} aria-hidden="true" />} active={location.pathname.startsWith("/app/extensions")} />
+        </nav>
 
         {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
           * plan §5.2). The count of data sources without a credential used to

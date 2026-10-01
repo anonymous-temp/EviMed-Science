@@ -71,7 +71,9 @@ describe("设置", () => {
     open();
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
     const links = within(nav()).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
+    expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "插件", "技能"]);
+    expect(within(nav()).getByRole("link", { name: "插件" })).toHaveAttribute("href", "/app/extensions/plugins");
+    expect(within(nav()).getByRole("link", { name: "技能" })).toHaveAttribute("href", "/app/extensions/skills");
     expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
     expect(within(nav()).getByRole("link", { name: "用量" })).toHaveAttribute("href", "/app/account?tab=usage");
     // The sidebar's navigation item (spec §20.6), not a 32 px look of its own.
@@ -140,8 +142,8 @@ describe("设置", () => {
     open();
     await within(nav()).findByRole("link", { name: "运维" });
     const labels = within(nav()).getAllByRole("link").map((link) => link.textContent);
-    expect(labels).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "运维"]);
-    for (const label of labels) {
+    expect(labels).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "运维", "插件", "技能"]);
+    for (const label of labels.filter(label => label !== "插件" && label !== "技能")) {
       await user.click(within(nav()).getByRole("link", { name: label ?? "" }));
       for (const gone of [/API Key/i, /审批模式/, /选择模型/, /添加 MCP/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
       expect(screen.queryByRole("combobox")).not.toBeInTheDocument();

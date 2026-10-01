@@ -1,3 +1,4 @@
+2026-10-02 06:08 · Ordinary-user Plugins/Skills pages passed independent UI review after nine pin, configuration, revocation and pagination fixes; actual runtime activation and SaaS qualification remain pending.
 2026-10-02 05:21 · Protocol8 skill validation now parses with the pinned SDK in a verified isolated read-only Docker task and joins cancellation; native boundary regression passed, while full serving-image and SaaS qualification remain pending.
 2026-10-02 04:59 · Extension metadata APIs passed independent 21-case review including real PostgreSQL concurrency and observed process cancellation; reload now binds preparation jobs, while actual runtime activation and SaaS qualification remain pending.
 2026-10-02 04:13 · Personal skill revisions, native invocation policies, scoped resources and bounded upload cleanup passed independent backend and Linux lifecycle review; live generation mounting, session invocation and ordinary-user UI acceptance remain pending.
