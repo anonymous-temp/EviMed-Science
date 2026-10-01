@@ -512,7 +512,7 @@ export class EvidenceEditorial {
       );
     reviewerActor = card?.editorial?.reviewer?.userId ?? null;
     const baseRevision = card?.revision ?? null;
-    const rewriteRequested = card && job.payload?.rewriteRevision === baseRevision;
+    const rewriteRequested = !!card && job.payload?.rewriteRevision === baseRevision;
     if (
       card &&
       card.editorial?.automationContentHash !== card.editorial?.contentHash
@@ -644,10 +644,17 @@ export class EvidenceEditorial {
       WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,[job.id,this.workerId,JSON.stringify({sourceCheckStatus,sourceReadCursor:nextReadCursor})]);
     if (!checkedJob.rowCount) throw new HttpError(409,"evidence_revision_conflict","The source check lost its editorial lease.");
     if (card) {
-      const checkedCard = await this.database.query(`UPDATE evimed_frontier.evidence_cards SET editorial=editorial||$3::jsonb
+      // Persist only volatile capture metadata with this receipt. Scientific
+      // fields still pass through the normal save, even if quote normalization
+      // changed while the retained document fingerprint stayed unchanged.
+      const checkedSources = unchanged ? card.sources.map((source,index)=>({
+        ...source,checkedAt:sources[index].checkedAt,fetchedSha256:sources[index].fetchedSha256,
+      })) : sources;
+      const checkedCard = await this.database.query(`UPDATE evimed_frontier.evidence_cards SET editorial=editorial||$3::jsonb,
+        sources=CASE WHEN $7::boolean THEN $6::jsonb ELSE sources END
         WHERE id=$1 AND revision=$2 AND state='published' AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id JOIN evimed_frontier.evidence_zones z ON z.id=j.zone_id
         WHERE j.id=$4 AND j.lease_owner=$5 AND j.state='running' AND j.lease_until>clock_timestamp() AND a.enabled AND z.state='published') RETURNING id`,
-        [card.id,baseRevision,JSON.stringify(checkMetadata),job.id,this.workerId]);
+        [card.id,baseRevision,JSON.stringify(checkMetadata),job.id,this.workerId,JSON.stringify(checkedSources),unchanged]);
       if (!checkedCard.rowCount) throw new HttpError(409,"evidence_revision_conflict","Card or lease changed during the source check.");
       card.editorial={...card.editorial,...checkMetadata};
     }
@@ -734,6 +741,7 @@ export class EvidenceEditorial {
       ).rows;
       await this.renew(job);
       const draft = await this.editor.evidenceCard({
+        rewriteRequested,
         examples,
         sourceChecks,
         previousFindings: card?.editorial?.findings ?? [],

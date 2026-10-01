@@ -143,7 +143,7 @@ export const FRONTIER_LANE_FLOOR_SCORE = 60;
  * never pads (§14.8 #6). Re-read a week's distribution before moving it.
  */
 export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 82;
-/** Published items still owed an edit are edited only this long after publication. */
+/** Owed edits cover recent publication or a daily generated within this window. */
 export const FRONTIER_DEFERRED_EDIT_WINDOW_MS = 7 * DAY;
 /** Items embedded by the pipeline (older ones are the rebuild script's). */
 export const FRONTIER_EMBED_WINDOW_MS = 30 * DAY;
@@ -1390,7 +1390,9 @@ export class FrontierPipeline {
     const { now, budget, summary } = context;
     if (!this.editor.available || budget.state === "exhausted" || this.#providerPause(now)) return;
     const general = budget.state === "ok" && !(this.offpeak && isPeak(now));
-    const items = await this.#claimItems(now, `i.state = 'published' AND i.editor_version IS NULL AND i.timeline_at > $5
+    const items = await this.#claimItems(now, `i.state = 'published' AND i.editor_version IS NULL
+      AND (i.timeline_at > $5 OR EXISTS (SELECT 1 FROM evimed_frontier.dailies d
+        WHERE d.generated_at > $5 AND d.generated_at <= $1 AND i.id = ANY(d.item_ids)))
       AND ($6::boolean OR s.safety_feed OR s.source_type = 'regulator' OR (s.source_type = 'journal' AND s.authority >= 5))`,
     [new Date(now.getTime() - FRONTIER_DEFERRED_EDIT_WINDOW_MS), general], DEFERRED_BATCH);
     for (const item of items) {

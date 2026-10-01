@@ -189,6 +189,7 @@ test("owner rewrite of unchanged sources reuses one job and independent review; 
   assert.deepEqual((await db.query("SELECT state,attempts FROM evimed_frontier.evidence_editorial_jobs WHERE id='other-failed'")).rows[0],{state:"failed",attempts:3});
   await worker.tick();
   const revised=(await service.detail(user,zone.id,card.id)).evidence;
+  assert.equal(input.rewriteRequested,true,"the owner request reaches the normal author operation as an explicit revision intent");
   assert.deepEqual([authorCalls,reviewCalls],[1,1]);
   assert.equal(revised.revision,card.revision+2);
   assert.equal(revised.editorial.sourceChangedAt,card.editorial.sourceChangedAt);
@@ -205,6 +206,34 @@ test("owner rewrite of unchanged sources reuses one job and independent review; 
   await worker.tick();
   assert.deepEqual([authorCalls,reviewCalls],[1,1]);
   assert.equal((await service.detail(user,zone.id,card.id)).evidence.revision,revised.revision);
+});
+
+test("a failed same-source rewrite atomically retains the successful source check without changing scientific content",options,async()=>{
+  await reviewCard();
+  const originalHash=evidenceContentHash(card);
+  const originalRevision=card.revision;
+  await worker.automation(user,zone.id,{cardId:card.id,expectedRevision:card.revision},"POST");
+  worker.editor.evidenceCard=async()=>{authorCalls++;return {title:"Invalid draft",content:{sections:[{title:null,text:"Invalid section"}]}};};
+  await worker.tick();
+  const current=(await service.detail(user,zone.id,card.id)).evidence;
+  const job=(await db.query("SELECT * FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1",[card.id])).rows[0];
+  assert.equal(job.state,"pending");
+  assert.equal(job.last_error,"evidence_invalid");
+  assert.equal(job.attempts,1);
+  assert.equal(authorCalls,1);
+  assert.equal(reviewCalls,0);
+  assert.equal(current.revision,originalRevision);
+  assert.equal(evidenceContentHash(current),originalHash);
+  assert.equal(current.editorial.contentHash,originalHash);
+  assert.equal(current.editorial.reviewRevision,originalRevision);
+  assert.equal(current.editorial.status,"ai-reviewed");
+  assert.equal(current.sources[0].documentText,card.sources[0].documentText);
+  assert.equal(current.sources[0].sha256,card.sources[0].sha256);
+  assert.notEqual(current.sources[0].checkedAt,card.sources[0].checkedAt);
+  const checked=current.editorial.sourceChecks[0];
+  assert.equal(checked.status,"checked");
+  assert.ok(Date.parse(current.sources[0].checkedAt)>=Date.parse(checked.attemptedAt));
+  assert.ok(Date.parse(current.editorial.sourceCheckedAt)>=Date.parse(current.sources[0].checkedAt));
 });
 
 test("same-source rewrite review retry consumes the request without repeating authoring",options,async()=>{

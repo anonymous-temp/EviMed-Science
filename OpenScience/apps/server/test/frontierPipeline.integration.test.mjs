@@ -93,7 +93,7 @@ const SOURCES = [
 async function reset() {
   await database.query(`TRUNCATE evimed_frontier.item_vectors, evimed_frontier.item_texts, evimed_frontier.item_keys, evimed_frontier.item_mentions,
     evimed_frontier.item_links, evimed_frontier.item_changes, evimed_frontier.user_state, evimed_frontier.event_items, evimed_frontier.items,
-    evimed_frontier.entries, evimed_frontier.sources, evimed_frontier.glossary RESTART IDENTITY CASCADE`);
+    evimed_frontier.entries, evimed_frontier.sources, evimed_frontier.glossary, evimed_frontier.dailies RESTART IDENTITY CASCADE`);
   await database.query("UPDATE evimed_frontier.meta SET value='0'::jsonb WHERE key IN ('content_version','hot_version','daily_version')");
   await database.query("DELETE FROM evimed_usage.model_requests WHERE user_id=$1", [operator]);
   for (const source of SOURCES) {
@@ -369,6 +369,43 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   // The item text the re-edit used is the one stored.
   const retexts = (await database.query("SELECT model_input FROM evimed_frontier.item_texts WHERE item_id=$1", [paper.id])).rows[0];
   assert.match(retexts.model_input, /摘要：In 17,604 patients/);
+});
+
+test("recently generated dailies keep old referenced items eligible for an owed edit without opening all history", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T02:00:00Z");
+  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const deliveries = [];
+  for (const title of DISTINCT_TOPICS.slice(0, 4)) {
+    const delivered = await deliver({ source_id: "m-stat", title: `${title} [score:60]`, summary: "S".repeat(200) });
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    deliveries.push(delivered);
+  }
+  await pipeline.processBatch();
+  const ids = [];
+  for (const delivered of deliveries) ids.push(Number((await entry(delivered.id)).item_id));
+  assert.equal(new Set(ids).size, 4);
+  await database.query("UPDATE evimed_frontier.items SET timeline_at=$2 WHERE id=ANY($1::bigint[])",
+    [ids, new Date("2026-09-01T00:00:00Z")]);
+  clock = new Date("2026-09-22T11:00:00Z");
+  // item_ids holds internal bigint IDs. Only the first daily was actually
+  // generated in the current seven-day window; an old or future receipt is not eligible.
+  for (const [index, generatedAt] of ["2026-09-21T23:30:00Z", "2026-09-14T23:30:00Z", "2026-09-23T23:30:00Z"].entries()) {
+    await database.query(`INSERT INTO evimed_frontier.dailies
+      (day,window_start,window_end,lead,sections,markdown,item_ids,model,generated_at)
+      VALUES ($1,$2,$2,'{}'::jsonb,'[]'::jsonb,'Daily',$3::bigint[],'fixture',$2)`,
+    [generatedAt.slice(0, 10), new Date(generatedAt), [ids[index]]]);
+  }
+  const editsBefore = editor.calls.edit.length;
+  const result = await pipeline.processBatch();
+  assert.equal(result.edited, 1);
+  assert.equal(editor.calls.edit.length, editsBefore + 1);
+  assert.equal((await item(ids[0])).editor_version, FRONTIER_EDITOR_VERSION);
+  for (const id of ids.slice(1)) {
+    const untouched = await item(id);
+    assert.deepEqual([untouched.state, untouched.editor_version, untouched.attempts], ["published", null, 0]);
+  }
+  for (const id of ids) assert.equal((await item(id)).timeline_at.toISOString(), "2026-09-01T00:00:00.000Z");
 });
 
 test("peak hours and the budget: non-urgent items are published title-only and edited later; a spent budget collects only", options, async () => {
