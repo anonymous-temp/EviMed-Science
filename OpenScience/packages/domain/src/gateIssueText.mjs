@@ -78,6 +78,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'claim-numeric-support': '数值未出现在引文中',
   'claim-artifact-path': '引文的来源文件未被保存',
   'claim-quote-verbatim': '引文在所引来源中找不到原句',
+  'claim-explicit-quote-verbatim': '引文在所引来源中找不到原句',
   'claim-source-url': '来源链接无效',
   'report-claim-unresolved': '报告引用的结论不在矩阵中',
   'matrix-claim-uncited': '矩阵结论未在报告中引用',
