@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
-import { evidenceContentHash, evidenceEditorialReceipt } from "../src/evidenceCardContent.mjs";
+import { evidenceHash, evidenceContentHash, evidenceEditorialReceipt } from "../src/evidenceCardContent.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
@@ -728,4 +728,47 @@ test("manual cards without AI receipts retain their creator without invented att
   card=(await service.save(alice,{expectedRevision:card.revision,body:"Revised manual content"},zone.id,card.id)).evidence;
   assert.equal(card.creator,"Alice");
   assert.equal(card.editorial,null);
+});
+
+
+const publicationFixture = async (zone, extraSources = []) => {
+  const source={...cardInput.sources[0],documentText:"Complete retained trial source with observed outcomes.",coverage:"full-text",checkedAt:"2026-10-01T00:00:00Z",publicationStatus:{kind:"retracted",notices:["Synthetic authoritative retraction notice"]}};
+  return (await service.saveEditorial(alice,{
+    ...cardInput,state:"published",sources:[...extraSources,source],
+    editorial:{author:{kind:"ai",name:"Original evidence AI",model:"synthetic-test"},status:"review-pending",sourceCheckedAt:source.checkedAt},
+  },zone.id,null,true)).evidence;
+};
+for (const field of ["title","excerpt"]) test(`manual ${field} edits keep a publication warning by normalized URL without stale full-text metadata`,options,async()=>{
+  const zone=await createZone();let card=await publicationFixture(zone);
+  const original=card.sources[0];
+  const edited={title:original.title,url:" HTTPS://EXAMPLE.ORG:443/trial ",excerpt:original.excerpt,[field]:field==="title" ? "Edited source title" : "Edited source quote"};
+  await assert.rejects(service.save(alice,{expectedRevision:card.revision,sources:[{...edited,publicationStatus:null}]},zone.id,card.id),{code:"evidence_invalid"});
+  card=(await service.save(alice,{expectedRevision:card.revision,sources:[edited]},zone.id,card.id)).evidence;
+  assert.equal(card.sources[0].url,original.url);
+  assert.deepEqual(card.sources[0].publicationStatus,original.publicationStatus);
+  assert.equal(card.sources[0].coverage,"excerpt");assert.equal(card.sources[0].checkedAt,undefined);
+  assert.equal(card.sources[0].sha256,evidenceHash(edited.excerpt));assert.notEqual(card.sources[0].sha256,original.sha256);
+  const stored=(await db.query('SELECT sources FROM evimed_frontier.evidence_cards WHERE id=$1',[card.id])).rows[0].sources[0];
+  assert.equal(stored.documentText,undefined);assert.equal(stored.fetchedSha256,undefined);
+  assert.equal(card.editorial.status,"review-pending");assert.equal(card.editorial.reviewer,null);assert.equal(card.editorial.reviewRevision,null);
+  assert.equal(card.editorial.sourceCheckedAt,null);assert.equal(card.editorial.lastEditor.name,"Alice");assert.equal(card.editorial.author.kind,"ai");
+});
+
+test("duplicate URL quotes inherit every known notice conservatively, while removed or replaced URLs and authoritative clears remain possible",options,async()=>{
+  const zone=await createZone();
+  let card=await publicationFixture(zone,[
+    {...cardInput.sources[0],publicationStatus:{kind:"corrected",notices:["Synthetic correction notice"]}},
+    {...cardInput.sources[0],excerpt:"Another quote from the same source"},
+  ]);
+  card=(await service.save(alice,{expectedRevision:card.revision,sources:[{...cardInput.sources[0],excerpt:"Edited duplicate quote"}]},zone.id,card.id)).evidence;
+  assert.equal(card.sources[0].publicationStatus.kind,"retracted");
+  assert.deepEqual(card.sources[0].publicationStatus.notices,["Synthetic authoritative retraction notice","Synthetic correction notice"]);
+  card=(await service.saveEditorial(alice,{expectedRevision:card.revision,sources:[{...card.sources[0],publicationStatus:null}],editorial:{...card.editorial,status:"review-pending"}},zone.id,card.id)).evidence;
+  assert.equal(card.sources[0].publicationStatus,undefined);
+  card=await publicationFixture(zone);
+  card=(await service.save(alice,{expectedRevision:card.revision,sources:[{...cardInput.sources[0],url:"https://example.org/replacement"}]},zone.id,card.id)).evidence;
+  assert.equal(card.sources[0].publicationStatus,undefined);
+  card=await publicationFixture(zone);
+  card=(await service.save(alice,{expectedRevision:card.revision,state:"draft",sources:[]},zone.id,card.id)).evidence;
+  assert.deepEqual(card.sources,[]);
 });

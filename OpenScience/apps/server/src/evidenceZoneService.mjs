@@ -543,8 +543,18 @@ export class EvidenceZoneService {
           body.sources === undefined
             ? (existing?.sources ?? [])
             : sources(body.sources);
-        if(!internalOperation && body.sources !== undefined && existing) value.sources=value.sources.map(source =>
-          existing.sources.find(old=>old.title===source.title && old.url===source.url && old.excerpt===source.excerpt) ?? source);
+        if(!internalOperation && body.sources !== undefined && existing) value.sources=value.sources.map(source => {
+          const retained = existing.sources.find(old=>old.title===source.title && old.url===source.url && old.excerpt===source.excerpt) ?? source;
+          // Publication notices belong to the normalized URL, even when an
+          // account edits its title or quote. Other retained metadata does not.
+          const warnings = source.url ? existing.sources.filter(old=>old.url===source.url && old.publicationStatus).map(old=>old.publicationStatus) : [];
+          if (!warnings.length) return retained;
+          const publicationStatus = evidencePublicationStatus({
+            kind:["retracted","concern","corrected"].find(kind=>warnings.some(warning=>warning.kind===kind)),
+            notices:[...new Set(warnings.flatMap(warning=>warning.notices))].sort().slice(0,10),
+          });
+          return {...retained,publicationStatus};
+        });
         value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
         const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
         const receipt = body.editorial === undefined
