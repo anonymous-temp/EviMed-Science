@@ -61,6 +61,12 @@ export interface EvidenceCard {
     sourceFingerprint?: string;
     sourceCheckedAt?: string | null;
     sourceChangedAt?: string | null;
+    sourceChecks?: Array<{
+      sourceIndex: number;
+      status: "checked" | "retained";
+      attemptedAt: string;
+      code?: string;
+    }>;
     status: "ai-reviewed" | "review-pending";
     findings?: Array<{ kind: string; text: string; sourceIndex?: number }>;
     reviewRevision: number | null;
@@ -336,6 +342,7 @@ export interface EvidenceMaintenance {
     lastError: string | null;
     updatedAt: string;
     cardId?: string | null;
+    sourceCheckStatus?: "partial" | "complete" | null;
   }>;
 }
 export const fetchEvidenceMaintenance = (zoneId: string) =>

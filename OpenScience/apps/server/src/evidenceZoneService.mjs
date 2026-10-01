@@ -547,7 +547,7 @@ export class EvidenceZoneService {
         value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
         const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
         value.editorial = evidenceEditorialReceipt(body.editorial === undefined
-          ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null} : existing?.editorial ?? null
+          ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null,...(!internalOperation ? {sourceChecks:[],...(JSON.stringify(value.sources)!==JSON.stringify(existing.sources) ? {sourceCheckedAt:null} : {})} : {})} : existing?.editorial ?? null
           : body.editorial, value, (existing?.revision ?? 0) + 1);
         if(value.editorial) value.editorial={...value.editorial,automationContentHash:internalOperation ? value.editorial.contentHash : existing?.editorial?.automationContentHash ?? null};
         if (body.editorial !== undefined && value.editorial?.status === "ai-reviewed")

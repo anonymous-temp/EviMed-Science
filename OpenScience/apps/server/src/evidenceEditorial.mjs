@@ -13,6 +13,12 @@ const codeOf = (/** @type {any} */ e) =>
   /^[a-z0-9_]{2,100}$/.test(e?.code ?? "")
     ? e.code
     : "evidence_editorial_failed";
+const retainedSourceErrors = new Set([
+  "web_read_robots_disallowed", "web_read_unreadable", "web_read_needs_browser",
+  "web_read_timeout", "web_read_upstream_unavailable", "web_read_not_found",
+  "web_read_login_required", "web_read_upstream_error", "evidence_source_unavailable",
+  "evidence_abstract_unavailable", "evidence_source_empty",
+]);
 const author = (/** @type {any} */ editor) => ({
   kind: "ai",
   name: "EviMed 证据编辑 AI",
@@ -174,7 +180,7 @@ export class EvidenceEditorial {
     ).rows;
     const recent = (
       await this.database.query(
-        `SELECT id,state,attempts,last_error AS "lastError",updated_at AS "updatedAt",card_id AS "cardId",payload->>'skipReason' AS "skipReason" FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 ORDER BY updated_at DESC LIMIT 10`,
+        `SELECT id,state,attempts,last_error AS "lastError",updated_at AS "updatedAt",card_id AS "cardId",payload->>'skipReason' AS "skipReason",payload->>'sourceCheckStatus' AS "sourceCheckStatus" FROM evimed_frontier.evidence_editorial_jobs WHERE zone_id=$1 ORDER BY updated_at DESC LIMIT 10`,
         [zoneId],
       )
     ).rows;
@@ -216,12 +222,12 @@ export class EvidenceEditorial {
         WHERE a.enabled AND a.next_run_at<=clock_timestamp() AND z.state='published' ORDER BY a.next_run_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED`)
       ).rows[0];
       if (!settings) return 0;
-      // Maintenance rotates by oldest source check; discovery gets alternating first place. AI authorship and zone opt-in are both required.
+      // Maintenance rotates by oldest job attempt; discovery gets alternating first place. AI authorship and zone opt-in are both required.
       const cards = (
         await client.query(
-          `SELECT c.*,j.identity_key AS editorial_identity FROM evimed_frontier.evidence_cards c LEFT JOIN LATERAL(SELECT identity_key,state FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=c.id AND zone_id=c.zone_id ORDER BY updated_at DESC LIMIT 1) j ON true
-        WHERE c.zone_id=$1 AND c.state='published' AND c.editorial->'author'->>'kind'='ai' AND COALESCE(j.state,'completed')<>'conflict'
-        ORDER BY COALESCE((c.editorial->>'sourceCheckedAt')::timestamptz,'epoch'::timestamptz),c.id LIMIT $2`,
+          `SELECT c.*,j.identity_key AS editorial_identity FROM evimed_frontier.evidence_cards c LEFT JOIN LATERAL(SELECT identity_key,state,updated_at FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=c.id AND zone_id=c.zone_id ORDER BY updated_at DESC LIMIT 1) j ON true
+        WHERE c.zone_id=$1 AND c.state='published' AND c.editorial->'author'->>'kind'='ai' AND COALESCE(j.state,'completed') NOT IN ('conflict','failed')
+        ORDER BY COALESCE(j.updated_at,(c.editorial->>'sourceCheckedAt')::timestamptz,'epoch'::timestamptz),c.id LIMIT $2`,
           [settings.zone_id, settings.max_cards_per_run],
         )
       ).rows;
@@ -484,6 +490,7 @@ export class EvidenceEditorial {
         { code: "evidence_source_capacity" },
       );
     const sources = [];
+    const sourceChecks = [];
     const readIndexes = new Set(originals.slice(0, 8).map((_, index) => index));
     const newSourceIndex = originals.findIndex(
       (source) => source.url === job.source_url,
@@ -495,9 +502,11 @@ export class EvidenceEditorial {
     for (const [sourceIndex, source] of originals.entries()) {
       if (!readIndexes.has(sourceIndex)) {
         sources.push(source);
+        sourceChecks.push({sourceIndex:sourceIndex+1,status:"retained",attemptedAt:this.now().toISOString(),code:"evidence_source_check_deferred"});
         continue;
       }
       if (!source.url) {
+        sourceChecks.push({sourceIndex:sourceIndex+1,status:"retained",attemptedAt:this.now().toISOString(),code:"evidence_source_url_missing"});
         sources.push(source);
         continue;
       }
@@ -505,17 +514,21 @@ export class EvidenceEditorial {
         throw Object.assign(new Error("Maintenance active."), {
           code: "evidence_maintenance_active",
         });
-      const result =
-        prefetched && source.url === job.source_url
-          ? prefetched
-          : await this.readSource(source.url, {
-              signal: AbortSignal.timeout(90000),
-            });
-      const documentText = String(result.text ?? "").slice(0, 2000000);
-      if (!documentText.trim())
-        throw Object.assign(new Error("No readable source."), {
-          code: "evidence_source_empty",
-        });
+      const check = {sourceIndex:sourceIndex+1,status:"checked",attemptedAt:this.now().toISOString()};
+      sourceChecks.push(check);
+      let result, documentText;
+      try {
+        result = prefetched && source.url === job.source_url
+          ? prefetched : await this.readSource(source.url,{signal:AbortSignal.timeout(90000)});
+        documentText = String(result.text ?? "").slice(0,2000000);
+        if (!documentText.trim()) throw Object.assign(new Error("No readable source."),{code:"evidence_source_empty"});
+      } catch (error) {
+        const code = error?.name === "TimeoutError" ? "web_read_timeout" : error?.code;
+        if (error instanceof TypeError || !card || !retainedSourceErrors.has(code) || typeof source.documentText !== "string" || !source.documentText.trim() || source.sha256 !== evidenceHash(source.documentText)) throw error;
+        Object.assign(check,{status:"retained",code});
+        sources.push(source);
+        continue;
+      }
       const excerpt = evidencePublicExcerpt(
         documentText,
         source.excerpt ?? null,
@@ -538,15 +551,31 @@ export class EvidenceEditorial {
     // Unread sources retain their original position, document text and check date.
     const fingerprint = evidenceSourceFingerprint(sources);
     const unchanged = card?.editorial?.sourceFingerprint === fingerprint;
+    const sourceCheckStatus = sourceChecks.every(check=>check.status==="checked") ? "complete" : "partial";
+    const sourceCheckedAt = sourceCheckStatus === "complete" ? this.now().toISOString() : card?.editorial?.sourceCheckedAt ?? null;
+    const checkMetadata = {sourceChecks,sourceCheckedAt,...(card && !unchanged ? {
+      status:"review-pending",reviewer:null,reviewRevision:null,sourceChangedAt:this.now().toISOString(),observedSourceFingerprint:fingerprint,
+    } : {})};
+    const checkedJob = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb
+      WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,[job.id,this.workerId,JSON.stringify({sourceCheckStatus})]);
+    if (!checkedJob.rowCount) throw new HttpError(409,"evidence_revision_conflict","The source check lost its editorial lease.");
+    if (card) {
+      const checkedCard = await this.database.query(`UPDATE evimed_frontier.evidence_cards SET editorial=editorial||$3::jsonb
+        WHERE id=$1 AND revision=$2 AND state='published' AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id JOIN evimed_frontier.evidence_zones z ON z.id=j.zone_id
+        WHERE j.id=$4 AND j.lease_owner=$5 AND j.state='running' AND j.lease_until>clock_timestamp() AND a.enabled AND z.state='published') RETURNING id`,
+        [card.id,baseRevision,JSON.stringify(checkMetadata),job.id,this.workerId]);
+      if (!checkedCard.rowCount) throw new HttpError(409,"evidence_revision_conflict","Card or lease changed during the source check.");
+      card.editorial={...card.editorial,...checkMetadata};
+    }
     if (unchanged && card.editorial.status === "ai-reviewed") {
       const refreshed = await this.database.query(
-        `UPDATE evimed_frontier.evidence_cards SET sources=$3::jsonb,editorial=jsonb_set(editorial,'{sourceCheckedAt}',to_jsonb($4::text))
-        WHERE id=$1 AND revision=$2 AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs WHERE id=$5 AND lease_owner=$6 AND lease_until>clock_timestamp()) RETURNING id`,
+        `UPDATE evimed_frontier.evidence_cards SET sources=$3::jsonb,editorial=editorial||$4::jsonb
+        WHERE id=$1 AND revision=$2 AND state='published' AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id JOIN evimed_frontier.evidence_zones z ON z.id=j.zone_id WHERE j.id=$5 AND j.lease_owner=$6 AND j.state='running' AND j.lease_until>clock_timestamp() AND a.enabled AND z.state='published') RETURNING id`,
         [
           card.id,
           baseRevision,
           JSON.stringify(sources),
-          this.now().toISOString(),
+          JSON.stringify(checkMetadata),
           job.id,
           this.workerId,
         ],
@@ -558,7 +587,7 @@ export class EvidenceEditorial {
           "Card or lease changed during the source check.",
         );
       await this.database.query(
-        "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=$3::jsonb WHERE id=$1 AND lease_owner=$2",
+        "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
         [
           job.id,
           this.workerId,
@@ -577,28 +606,12 @@ export class EvidenceEditorial {
           this.workerId,
           JSON.stringify({
             observedSourceFingerprint: fingerprint,
-            sourceCheckedAt: this.now().toISOString(),
+            sourceCheckedAt,
+            sourceChecks,
             sources,
           }),
         ],
       );
-      if (card)
-        await this.database.query(
-          `UPDATE evimed_frontier.evidence_cards SET editorial=editorial||$3::jsonb WHERE id=$1 AND revision=$2 AND EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs WHERE id=$4 AND lease_owner=$5 AND lease_until>clock_timestamp())`,
-          [
-            card.id,
-            baseRevision,
-            JSON.stringify({
-              status: "review-pending",
-              reviewer: null,
-              reviewRevision: null,
-              sourceChangedAt: this.now().toISOString(),
-              observedSourceFingerprint: fingerprint,
-            }),
-            job.id,
-            this.workerId,
-          ],
-        );
       await this.requireModel();
       const examples = (
         await this.database.query(
@@ -618,6 +631,7 @@ export class EvidenceEditorial {
       ).rows;
       const draft = await this.editor.evidenceCard({
         examples,
+        sourceChecks,
         previousFindings: card?.editorial?.findings ?? [],
         readerQuestions: feedback,
         zone: { title: zone.title, description: zone.description },
@@ -670,7 +684,8 @@ export class EvidenceEditorial {
                 : {}),
             },
             status: "review-pending",
-            sourceCheckedAt: this.now().toISOString(),
+            sourceCheckedAt,
+            sourceChecks,
             sourceChangedAt: card ? this.now().toISOString() : null,
             findings: [],
           },
@@ -692,7 +707,7 @@ export class EvidenceEditorial {
         [job.id, this.workerId, card.id],
       );
       await this.database.query(
-        "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=$3::jsonb WHERE id=$1 AND lease_owner=$2",
+        "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
         [
           job.id,
           this.workerId,
@@ -708,6 +723,7 @@ export class EvidenceEditorial {
       body: card.body,
       content: card.content,
       limitations: card.limitations,
+      sourceChecks,
       sources: card.sources.map((s, index) => ({
         sourceIndex: index + 1,
         title: s.title,
@@ -755,7 +771,7 @@ export class EvidenceEditorial {
       { jobId: job.id, workerId: this.workerId },
     );
     await this.database.query(
-      "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=$3::jsonb WHERE id=$1 AND lease_owner=$2",
+      "UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
       [
         job.id,
         this.workerId,

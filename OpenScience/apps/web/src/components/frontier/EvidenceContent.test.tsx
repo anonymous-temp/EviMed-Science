@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { EvidenceCard } from "@/lib/evidenceZoneClient";
-import { EvidenceReading } from "./EvidenceReading";
+import { EvidenceReading, evidenceDate } from "./EvidenceReading";
+import { evidenceSourceId } from "./EvidenceContent";
 const card: EvidenceCard = {
   id: "sample",
   zoneId: "zone",
@@ -160,6 +161,61 @@ describe("question-based evidence content", () => {
       />,
     );
     expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
+  });
+  it("separates unsuccessful source refresh from the retained reading date and current AI review", () => {
+    const checkedAt = "2026-10-01T00:00:00Z";
+    const attemptedAt = "2026-10-02T06:00:00Z";
+    const editorial: NonNullable<EvidenceCard["editorial"]> = {
+      author: { kind: "ai", name: "Writer" },
+      reviewer: { kind: "ai", name: "Reviewer" },
+      status: "ai-reviewed",
+      reviewRevision: card.revision,
+      sourceCheckedAt: checkedAt,
+      sourceChecks: [
+        { sourceIndex: 1, status: "retained", attemptedAt, code: "web_read_unreadable" },
+        { sourceIndex: 2, status: "checked", attemptedAt },
+      ],
+      findings: [{ kind: "coverage", text: "AI review remains about the scientific content" }],
+    };
+    const view = render(<EvidenceReading evidence={{
+      ...card,
+      editorial,
+      sources: [...card.sources, { title: "Second source", url: "https://example.org/second", excerpt: "New reading", checkedAt: attemptedAt }],
+    }} />);
+    const retained = view.container.querySelector(`#${evidenceSourceId(card.id, 1)}`)!;
+    expect(retained).toHaveTextContent(`上次成功读取于 ${evidenceDate(checkedAt)}`);
+    expect(retained).toHaveTextContent(`尝试于 ${evidenceDate(attemptedAt)}`);
+    expect(within(retained as HTMLElement).getByText(/本轮未能重新读取/)).toBeInTheDocument();
+    expect(view.container.querySelector(`#${evidenceSourceId(card.id, 2)}`)).not.toHaveTextContent("未能重新读取");
+    expect(screen.getByText(/全部来源上次核查于/)).toHaveTextContent(evidenceDate(checkedAt));
+    expect(screen.getByText(/部分来源本轮尚未完成复核/)).toBeInTheDocument();
+    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
+    expect(screen.getByText("AI review remains about the scientific content")).toBeInTheDocument();
+    expect(screen.queryByText(/web_read_unreadable/)).not.toBeInTheDocument();
+    for (const link of screen.getAllByRole("link", { name: "查看来源 1" }))
+      expect(view.container.querySelector(link.getAttribute("href")!)).toBe(retained);
+    view.rerender(<EvidenceReading evidence={{ ...card, editorial: { ...editorial, sourceChecks: [{ sourceIndex: 1, status: "checked", attemptedAt }] } }} />);
+    expect(screen.queryByText(/未能重新读取/)).not.toBeInTheDocument();
+    expect(screen.getByText("当前内容已完成 AI 评议")).toBeInTheDocument();
+  });
+  it("does not describe deferred or missing-link source checks as attempted reads", () => {
+    const attemptedAt = "2026-10-02T06:00:00Z";
+    const editorial: NonNullable<EvidenceCard["editorial"]> = {
+      author: { kind: "ai", name: "Writer" },
+      reviewer: null,
+      status: "review-pending",
+      reviewRevision: null,
+      sourceChecks: [{ sourceIndex: 1, status: "retained", attemptedAt, code: "evidence_source_check_deferred" }],
+    };
+    const view = render(<EvidenceReading evidence={{ ...card, editorial }} />);
+    expect(screen.getByText(/本轮尚未核查/)).toHaveTextContent(`记录于 ${evidenceDate(attemptedAt)}`);
+    expect(screen.queryByText(/尝试于|未能重新读取/)).not.toBeInTheDocument();
+    view.rerender(<EvidenceReading evidence={{ ...card, editorial: {
+      ...editorial,
+      sourceChecks: [{ sourceIndex: 1, status: "retained", attemptedAt, code: "evidence_source_url_missing" }],
+    } }} />);
+    expect(screen.getByText(/缺少原文链接/)).toHaveTextContent(`记录于 ${evidenceDate(attemptedAt)}`);
+    expect(screen.queryByText(/尝试于|未能重新读取/)).not.toBeInTheDocument();
   });
   it("omits exact answer duplication and preserves supplementary and legacy prose", () => {
     const content = {

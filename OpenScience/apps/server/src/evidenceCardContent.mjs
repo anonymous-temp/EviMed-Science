@@ -210,6 +210,12 @@ export function evidenceEditorialReceipt(value, card, revision) {
     )
   )
     throw invalid();
+  const sourceChecks = value.sourceChecks ?? [];
+  if (!Array.isArray(sourceChecks) || sourceChecks.length > card.sources.length || sourceChecks.some(check =>
+    !check || typeof check!=="object" || !Number.isSafeInteger(check.sourceIndex) || check.sourceIndex<1 || check.sourceIndex>card.sources.length ||
+    !["checked","retained"].includes(check.status) || typeof check.attemptedAt!=="string" || !Number.isFinite(Date.parse(check.attemptedAt)) ||
+    (check.code!=null && (typeof check.code!=="string" || !/^[a-z0-9_]{2,100}$/.test(check.code)))
+  ) || new Set(sourceChecks.map(check=>check.sourceIndex)).size !== sourceChecks.length) throw invalid();
   for (const date of [
     value.sourceCheckedAt,
     value.sourceChangedAt,
@@ -225,6 +231,7 @@ export function evidenceEditorialReceipt(value, card, revision) {
     reviewer: reviewed ? value.reviewer : null,
     contentHash,
     sourceFingerprint,
+    sourceChecks,
     sourceCheckedAt: value.sourceCheckedAt ?? null,
     sourceChangedAt: value.sourceChangedAt ?? null,
     reviewedAt: reviewed

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceMaintenance } from "./EvidenceMaintenance";
@@ -68,5 +68,43 @@ describe("zone evidence upkeep", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存更新计划" }));
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(query).toHaveValue("atrial fibrillation");
+  });
+  it("shows retained sources as awaiting recheck even when the maintenance job completed", async () => {
+    vi.useFakeTimers();
+    try {
+      client.fetchEvidenceMaintenance
+        .mockResolvedValueOnce({ ...maintenance, jobs: { running: 1, pending: 0, failed: 0 } })
+        .mockResolvedValue({
+          ...maintenance,
+          recent: [{ id: "job", state: "completed", attempts: 1, lastError: null, updatedAt: "2026-10-02T06:00:00Z", cardId: "card", sourceCheckStatus: "partial" }],
+        });
+      render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByText("正在寻找与复核新证据")).toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(screen.getByText(/部分来源待复核，已沿用上次保留内容/)).toBeInTheDocument();
+      expect(screen.getByText("本轮处理已结束；仍有部分来源待复核，可查看当前证据与来源状态。")).toBeInTheDocument();
+      expect(screen.queryByText("本轮更新已结束，可查看当前证据。")).not.toBeInTheDocument();
+      expect(screen.queryByText(/部分证据更新未完成/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "查看最新证据" })).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+  it("clears an old partial result when the latest job for that card completed all source checks", async () => {
+    vi.useFakeTimers();
+    try {
+      const job = { state: "completed", attempts: 1, lastError: null, cardId: "card" };
+      client.fetchEvidenceMaintenance
+        .mockResolvedValueOnce({ ...maintenance, jobs: { running: 1, pending: 0, failed: 0 } })
+        .mockResolvedValue({ ...maintenance, recent: [
+          { ...job, id: "maintenance", updatedAt: "2026-10-03T06:00:00Z", sourceCheckStatus: "complete" },
+          { ...job, id: "discovery", updatedAt: "2026-10-02T06:00:00Z", sourceCheckStatus: "partial" },
+          { ...job, id: "no-card", updatedAt: "2026-10-01T06:00:00Z", cardId: null, sourceCheckStatus: "partial" },
+        ] });
+      render(<EvidenceMaintenance zone={zone} onUpdated={vi.fn()} />);
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(screen.queryByText(/部分来源待复核/)).not.toBeInTheDocument();
+      expect(screen.getByText("本轮更新已结束，可查看当前证据。")).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
   });
 });

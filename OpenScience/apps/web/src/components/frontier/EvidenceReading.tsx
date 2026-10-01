@@ -48,6 +48,9 @@ export function EvidenceReading({
   evidence: EvidenceCard;
   onDeleteComment?: (id: string) => void;
 }) {
+  const retainedSources = evidence.editorial?.sourceChecks?.filter(
+    (check) => check.status === "retained",
+  ) || [];
   return (
     <article className="min-w-0 max-w-measure-body space-y-6 break-words">
       <header className="space-y-2">
@@ -86,7 +89,16 @@ export function EvidenceReading({
         </div>
         {evidence.editorial?.sourceCheckedAt && (
           <p className="text-caption text-text-3">
-            来源核查于 {evidenceDate(evidence.editorial.sourceCheckedAt)}
+            全部来源上次核查于 {evidenceDate(evidence.editorial.sourceCheckedAt)}
+          </p>
+        )}
+        {retainedSources.length > 0 && (
+          <p className="text-caption text-warn">
+            部分来源本轮尚未完成复核，沿用上次保留内容。
+            <EvidenceReferences
+              evidence={evidence}
+              indexes={retainedSources.map((check) => check.sourceIndex)}
+            />
           </p>
         )}
         {evidence.editorial?.sourceChangedAt && (
@@ -156,45 +168,63 @@ export function EvidenceReading({
         <section>
           <h3 className="mb-2 text-ui font-medium text-text">来源与引用</h3>
           <ol className="space-y-3">
-            {evidence.sources.map((source, index) => (
-              <li
-                id={evidenceSourceId(evidence.id, index + 1)}
-                key={index}
-                className="scroll-mt-4 text-ui text-text-2"
-              >
-                <span className="mr-2 text-text-3">[{index + 1}]</span>
-                {safeUrl(source.url) ? (
-                  <a
-                    href={safeUrl(source.url) || undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent hover:underline"
-                  >
-                    {source.title}
-                  </a>
-                ) : (
-                  source.title
-                )}
-                {(source.coverage || source.checkedAt) && (
-                  <p className="mt-1 text-caption text-text-3">
-                    {source.coverage === "full-text"
-                      ? "依据全文"
-                      : source.coverage === "abstract"
-                        ? "依据摘要"
-                        : source.coverage === "excerpt"
-                          ? "依据原文片段"
-                          : ""}
-                    {source.checkedAt &&
-                      ` · 查阅于 ${evidenceDate(source.checkedAt)}`}
-                  </p>
-                )}
-                {source.excerpt && (
-                  <blockquote className="mt-2 whitespace-pre-wrap border-l-2 border-border pl-3 text-caption text-text-3">
-                    {source.excerpt}
-                  </blockquote>
-                )}
-              </li>
-            ))}
+            {evidence.sources.map((source, index) => {
+              const sourceCheck = evidence.editorial?.sourceChecks?.find(
+                (check) => check.sourceIndex === index + 1,
+              );
+              const deferred = sourceCheck?.code === "evidence_source_check_deferred";
+              const missingUrl = sourceCheck?.code === "evidence_source_url_missing";
+              return (
+                <li
+                  id={evidenceSourceId(evidence.id, index + 1)}
+                  key={index}
+                  className="scroll-mt-4 text-ui text-text-2"
+                >
+                  <span className="mr-2 text-text-3">[{index + 1}]</span>
+                  {safeUrl(source.url) ? (
+                    <a
+                      href={safeUrl(source.url) || undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent hover:underline"
+                    >
+                      {source.title}
+                    </a>
+                  ) : (
+                    source.title
+                  )}
+                  {(source.coverage || source.checkedAt) && (
+                    <p className="mt-1 text-caption text-text-3">
+                      {source.coverage === "full-text"
+                        ? "依据全文"
+                        : source.coverage === "abstract"
+                          ? "依据摘要"
+                          : source.coverage === "excerpt"
+                            ? "依据原文片段"
+                            : ""}
+                      {source.checkedAt &&
+                        ` · 上次成功读取于 ${evidenceDate(source.checkedAt)}`}
+                    </p>
+                  )}
+                  {sourceCheck?.status === "retained" && (
+                    <p className="mt-1 text-caption text-warn">
+                      {deferred
+                        ? "本轮尚未核查"
+                        : missingUrl
+                          ? "缺少原文链接"
+                          : "本轮未能重新读取"}
+                      ，沿用上次保留内容
+                      {` · ${deferred || missingUrl ? "记录于" : "尝试于"} ${evidenceDate(sourceCheck.attemptedAt)}`}
+                    </p>
+                  )}
+                  {source.excerpt && (
+                    <blockquote className="mt-2 whitespace-pre-wrap border-l-2 border-border pl-3 text-caption text-text-3">
+                      {source.excerpt}
+                    </blockquote>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </section>
       )}
