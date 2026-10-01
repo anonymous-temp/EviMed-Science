@@ -510,6 +510,40 @@ test("AC-16 a changed assumption marks everything downstream stale, recomputes i
   assert.equal(view.stale.length, 0);
 });
 
+test("a stored Simon analytic result starts both exact-boundary laws and preserves their separate operating characteristics", options, async () => {
+  const boundary = { n1: 13, n: 43, r1: 3, r: 12 };
+  const module = compose({ dispatch: false, resultFor: job => job.method === "design.analytic"
+    ? engineResult(job, { diagnostics: { simon: { optimal: boundary, minimax: { n1: 18, n: 33, r1: 4, r: 10 } } } })
+    : engineResult(job, { measures: [{ name: job.scenario.truth.responseRate === 0.2 ? "type_one_error" : "power",
+      value: job.scenario.truth.responseRate === 0.2 ? 0.05 : 0.8, simulated: true, source: "synthetic", mcse: 0.002 }],
+      diagnostics: { responseRate: job.scenario.truth.responseRate } }) });
+  const study = await makeStudy("stored-simon");
+  await store.saveDefinition({ studyId: study.id, userId: study.userId, pico: {}, estimand: {}, endpointType: "binary" });
+  const scenario = await store.saveTrialScenario({ studyId: study.id, userId: study.userId, label: "Simon", design: "simon_two_stage", endpointType: "binary",
+    configuration: { design: { maxN: 60 }, truth: { nullRate: 0.2, alternativeRate: 0.4 }, analysis: { alpha: 0.05, power: 0.8 },
+      performance: ["power", "type_one_error", "expected_sample_size"] } });
+  await module.orchestrator.advance(study.id); await drainJobs(module, study);
+  const jobs = await store.jobs(study.id);
+  assert.equal(jobs.length, 3, "The cached schedule mark must retain its physical analytic job ID.");
+  const analytic = jobs.find(job => job.kind === "design_analytic");
+  const source = await module.jobs.resultOf(study.id, analytic.id);
+  const simulations = jobs.filter(job => job.kind === "design_simulation");
+  assert.deepEqual(simulations.map(job => job.replicates).sort((a, b) => a - b), [5000, 20000]);
+  for (const simulation of simulations) {
+    const frozen = await store.one("SELECT scenario,inputs,checkpoint FROM evimed_vcr.jobs WHERE id=$1", [simulation.id]);
+    assert.deepEqual(frozen.scenario.design, { kind: "simon_two_stage", ...boundary });
+    assert.equal(frozen.checkpoint.analyticSource.jobId, analytic.id);
+    assert.equal(frozen.checkpoint.analyticSource.resultId, source.id);
+    assert.equal(frozen.checkpoint.analyticSource.scenarioHash, analytic.scenarioHash);
+    assert.ok(frozen.inputs.some(input => input.id === `result:${source.id}@${source.version}`));
+  }
+  const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+  assert.equal(current.diagnostics.stageResults.simulation_null.diagnostics.responseRate, 0.2);
+  assert.equal(current.diagnostics.stageResults.simulation.diagnostics.responseRate, 0.4);
+  assert.equal(current.diagnostics.stageResults.simulation_null.measures[0].name, "type_one_error");
+  assert.equal(current.diagnostics.stageResults.simulation.measures[0].name, "power");
+});
+
 test("AC-16 a change waits visibly while the successor is in flight, and a heavy job behind the budget waits at the confirmation", options, async () => {
   const module = compose();
   const { study, write } = await computedStudy(module, "stalewait");

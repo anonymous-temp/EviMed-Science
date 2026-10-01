@@ -28,7 +28,7 @@ case "${target}" in docker|agentbay) ;; *) echo "EVIMED_RUNTIME_TARGET must be d
 
 # Invalid requests are rejected before reading or changing host state.
 case "${phase}" in
-  system|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|profile-seed|smoke|serve|session) ;;
+  system|renderer|toolchain|kernel|pnpm|python|browser|verify-tools|curated-smoke|office-smoke|sider-cache|socket-client|preset-skills|preset-row|profile-seed|smoke|serve|session) ;;
   *) echo "unknown phase: ${phase}" >&2; exit 64 ;;
 esac
 if [ "${phase}" = session ] && [ "${target}" != agentbay ]; then
@@ -74,7 +74,7 @@ system() {
     curl \
     fonts-noto-cjk \
     fonts-texgyre-math \
-    pandoc \
+    libgmp10 \
     git \
     gzip \
     python-is-python3 \
@@ -87,8 +87,34 @@ system() {
     tar \
     util-linux \
     xz-utils \
+    zlib1g \
     "${session_packages[@]}"
   rm -rf /var/lib/apt/lists/*
+}
+
+# The same tested Pandoc on Debian, Ubuntu and CI. Distribution packages vary
+# by base (Ubuntu 22.04 carries 2.9), so verify the official release bytes before
+# installing them, then verify the executable rather than trusting dpkg alone.
+renderer() {
+  set -x
+  local arch="${TARGETARCH:-$(dpkg --print-architecture)}"
+  local checksum
+  case "${arch}" in
+    amd64) checksum="${PANDOC_SHA256_AMD64:?missing amd64 Pandoc digest}" ;;
+    arm64) checksum="${PANDOC_SHA256_ARM64:?missing arm64 Pandoc digest}" ;;
+    *) echo "Unsupported Pandoc architecture=${arch}" >&2; exit 1 ;;
+  esac
+  test -n "${PANDOC_VERSION:?missing Pandoc version}"
+  local temporary
+  temporary="$(mktemp -d)"
+  curl --http1.1 --fail --show-error --location --retry 5 --retry-all-errors \
+    --connect-timeout 20 --max-time 600 \
+    "${GITHUB_DOWNLOAD_PREFIX:-}https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-${arch}.deb" \
+    -o "${temporary}/pandoc.deb"
+  printf '%s  %s\n' "${checksum}" "${temporary}/pandoc.deb" | sha256sum -c -
+  dpkg -i "${temporary}/pandoc.deb"
+  rm -rf "${temporary}"
+  test "$(pandoc --version | head -n 1)" = "pandoc ${PANDOC_VERSION}"
 }
 
 # Node and uv. Node is here because DSH is a Node program; the sandbox backend
@@ -440,6 +466,7 @@ session() {
 
 case "${phase}" in
   system) system ;;
+  renderer) renderer ;;
   toolchain) toolchain ;;
   kernel) kernel ;;
   pnpm) pnpm_tool ;;

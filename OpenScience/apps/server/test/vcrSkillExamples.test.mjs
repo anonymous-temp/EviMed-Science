@@ -20,6 +20,8 @@
 // its instructions and is refused, item by item, for something the skill said.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -30,6 +32,8 @@ import {
 
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
+import { VcrAccess } from "../src/vcrAccess.mjs";
+import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["vcr-protocol", "vcr-analysis", "vcr-evidence", "vcr-matching", "vcr-package"];
@@ -116,9 +120,12 @@ test("every what a skill teaches is a word the read or write vocabulary has, and
 
 test("every vcr_write example in a skill passes the real write path's own checks", async () => {
   let checked = 0;
-  let analysisChecked = 0;
+  const analysisObjects = [];
   for (const skill of SKILLS) {
     for (const block of taggedBlocks(read(`capabilities/${skill}/SKILL.md`))) {
+      // Receipt references depend on authenticated source input; the next test
+      // resolves that example through the real curve service before writing it.
+      if (block.tag === "vcr:curve_receipt") continue;
       const raw = block.text;
       const object = /^vcr:object:([a-z_]+)$/.exec(block.tag);
       // An object the analysis skill tags is the `data` of a write of that `what`.
@@ -141,17 +148,68 @@ test("every vcr_write example in a skill passes the real write path's own checks
       const own = outcome.issues.filter((entry) => entry.code !== "vcr_write_refused");
       assert.deepEqual(own, [], `${skill}: the ${parsed.what} example is refused by the writer`);
       checked += 1;
-      if (skill === "vcr-analysis") analysisChecked += 1;
+      if (skill === "vcr-analysis") analysisObjects.push(parsed.what);
     }
   }
   assert.ok(checked >= 12, `the walk found the write examples (${checked})`);
-  assert.ok(analysisChecked >= 7, `the walk found the analysis skill's objects (${analysisChecked})`);
+  assert.deepEqual(analysisObjects.sort(), ["comparator", "design_grid", "patient_set", "population", "trial_scenario", "trial_scenario"],
+    "the six ordinary analysis objects retain population, patient, comparator, both trial designs and the grid");
+});
+
+test("the analysis skill's curve example uses a recorded receipt and passes the real write path", async (t) => {
+  const blocks = taggedBlocks(read("capabilities/vcr-analysis/SKILL.md")).filter((block) => block.tag === "vcr:curve_receipt");
+  assert.equal(blocks.length, 1, "the literature comparator has a separate source-bound receipt example");
+  const example = JSON.parse(blocks[0].text);
+  assert.equal(example.what, "comparator");
+  assert.equal(example.data.route, "literature_control");
+  assert.deepEqual(example.data.configuration, { provenance: { receiptId: "crv_example_from_evidence_read" } },
+    "the model supplies the receipt identifier, never points or an origin label");
+
+  const workspaceDir = await mkdtemp(join(os.tmpdir(), "vcr-skill-curve-"));
+  t.after(() => rm(workspaceDir, { recursive: true, force: true }));
+  const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/L1sAAAAASUVORK5CYII=", "base64");
+  await writeFile(join(workspaceDir, "figure.png"), image);
+  const study = { id: "std_example", userId: "u_example", projectId: "p_example", dataTier: "T0" };
+  const receipts = new Map();
+  const audit = [];
+  const curves = createVcrCurveEvidence({
+    store: {
+      async saveCurveExtraction(row) { receipts.set(row.id, structuredClone(row)); return row; },
+      async curveExtraction(studyId, id) { const row = receipts.get(id); return row?.studyId === studyId ? structuredClone(row) : null; },
+    },
+    studyStore: { async studyById(id) { return id === study.id ? study : null; } },
+    access: new VcrAccess({ store: /** @type {any} */ ({
+      async studyForAccess(id) { return id === study.id ? study : null; },
+      async rolesOf() { return []; },
+      async audit(row) { audit.push(row); },
+    }) }),
+    resolveProject: async () => ({ workspaceDir }),
+  });
+  const points = { curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.5 }], riskTable: [{ time: 0, atRisk: 100 }, { time: 12, atRisk: 50 }] };
+  const receipt = await curves.recordSelection({ studyId: study.id, principal: study.userId, imageArtifactId: "figure.png", points });
+  example.data.configuration.provenance.receiptId = receipt.id;
+  const verified = await curves.curveVerifier({ studyId: study.id, principal: study.userId, scenario: example.data.configuration, inputs: [] });
+  assert.deepEqual(verified.scenario.curve, points.curve);
+  assert.ok(verified.inputs.some((input) => input.id === `evidence:${receipt.id}@1`));
+  assert.deepEqual(audit.map((row) => row.action), ["access.write", "access.run"]);
+
+  let saved;
+  const outcome = await vcrRuntimeWrite({
+    store: { async saveComparatorDesign(row) { saved = row; return { id: "cmp_example" }; } },
+    service: unreachable(), orchestrator: null, study, what: example.what, data: example.data, items: null,
+  });
+  assert.deepEqual(outcome.issues, []);
+  assert.equal(outcome.ok, true);
+  assert.equal(saved.configuration.provenance.receiptId, receipt.id);
+  await writeFile(join(workspaceDir, "figure.png"), Buffer.concat([image, Buffer.from("changed")]));
+  await assert.rejects(curves.curveVerifier({ studyId: study.id, principal: study.userId, scenario: example.data.configuration, inputs: [] }),
+    { code: "vcr_curve_source_changed" });
 });
 
 test("the analysis skill's example scenario is a job the domain accepts, and its objects are the ones the writer takes", () => {
   const blocks = taggedBlocks(read("capabilities/vcr-analysis/SKILL.md"));
   const tags = blocks.map((block) => block.tag);
-  assert.deepEqual(["population", "patient_set", "comparator", "comparator", "trial_scenario", "trial_scenario", "design_grid"]
+  assert.deepEqual(["population", "patient_set", "comparator", "trial_scenario", "design_grid"]
     .every((what) => tags.includes(`vcr:object:${what}`)), true, `the skill's examples are tagged by what they write: ${tags.join(", ")}`);
   const analytic = blocks.filter((block) => block.tag === "vcr:design_analytic");
   assert.equal(analytic.length, 1);

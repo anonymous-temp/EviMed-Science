@@ -106,6 +106,21 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 Use `mcp__evimed__vcr_read` with `what: "evidence"` to find a `curveReceipts` identifier already recorded by the control plane. For a literature comparator, write that exact identifier as `configuration.provenance.receiptId`; do not invent coordinates, risk-table values, an origin label, or a tool name. The platform resolves the recorded points and verifies the current source-image hash before reconstruction.
 
+The identifier below is a placeholder for the exact receipt returned by that read:
+
+```json vcr:curve_receipt
+{
+  "what": "comparator",
+  "data": {
+    "route": "literature_control",
+    "estimand": "ATT",
+    "configuration": {
+      "provenance": { "receiptId": "crv_example_from_evidence_read" }
+    }
+  }
+}
+```
+
 This release supports source-bound reconstruction from existing recorded point inputs; it does not implement automatic image digitization. An optional authenticated user selection is data input, not an expert approval requirement. If a receipt, source image or risk table is missing or changed, report reconstruction as unavailable and continue other supported research. Never treat an LLM-written `digitizer` or `human_click` string as proof.
 
 A single recorded arm is a benchmark, not a comparison. For a receipt containing both arms, RMST additionally needs an explicitly supported `tau` and `timeUnit`; do not invent these or claim that an unavailable comparison was computed.

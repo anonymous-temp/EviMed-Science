@@ -44,6 +44,9 @@ ARG APP_VERSION=0.1.3
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PANDOC_VERSION=2.17.1.1
+ARG PANDOC_SHA256_AMD64=2efe7a91a77be4248f8a2e38fb4e89f9b4d44b1d5be8200349c49d23d9f9bf4e
+ARG PANDOC_SHA256_ARM64=c3e589625476c130862e2ae4dc3309e8ef752d9258da1f4fa734904f4342459e
 
 LABEL org.opencontainers.image.title="EviMed agent runtime"
 LABEL org.opencontainers.image.description="Server-managed DeepSeek Harness runtime image for hosted EviMed workspaces."
@@ -67,6 +70,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # is still its own RUN, and so its own cached layer, exactly as before.
 COPY deploy/runtime-dsh/install-runtime.sh /usr/local/lib/evimed/install-runtime.sh
 RUN bash /usr/local/lib/evimed/install-runtime.sh system
+RUN bash /usr/local/lib/evimed/install-runtime.sh renderer
 
 # Node and uv, each fetched and verified against the pins above.
 RUN bash /usr/local/lib/evimed/install-runtime.sh toolchain

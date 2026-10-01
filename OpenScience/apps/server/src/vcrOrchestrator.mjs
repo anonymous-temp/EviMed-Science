@@ -1231,7 +1231,7 @@ export class VcrOrchestrator {
       this.store.staleMarks(study.id),
       this.store.rows(`SELECT kind, state, checkpoint ->> 'node' AS node FROM ${VCR_SCHEMA}.jobs
         WHERE study_id = $1 AND state IN ('queued', 'running', 'awaiting_budget')`, [study.id]),
-      this.store.rows(`SELECT key, state, step, detail, updated_at FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job'`, [study.id]),
+      this.store.rows(`SELECT key, state, step, job_id, detail, created_at, updated_at FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job'`, [study.id]),
     ]);
     // A labelled design is a line of versions: the newest row of each label is the design.
     /** @type {Map<string, any>} */

@@ -494,6 +494,9 @@ services:
       OPEN_SCIENCE_VCR_LEASE_MS:
       OPEN_SCIENCE_VCR_ENGINE_URL: ${OPEN_SCIENCE_VCR_ENGINE_URL-}
       OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS:
+      # Numerical validation is operator-installed evidence, never a model
+      # write. Set the container path only when its read-only host file exists.
+      OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
       # The engine's bearer token and receipt key are files, like every other
       # key this service holds (bound below; /dev/null where the deployment has
       # no engine, which reads as none). Set the URL without both and the module
@@ -953,6 +956,14 @@ services:
         source: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/vcr-engine-receipt-key
         read_only: true
+      # Root-owned 0644 evidence from import-vcr-method-validation.mjs --install.
+      # Never shared with the engine or a project runtime; unset stays unmeasured.
+      - type: bind
+        source: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:-/dev/null}
+        target: /run/evimed/vcr-method-validation.json
+        read_only: true
+        bind:
+          create_host_path: false
       # The data plane, read-write: uploads and the tables derived from them are
       # written here, and the engine reads the same directory read-only at the
       # same path. Never a runtime's mount and never inside `open-science-data`.

@@ -897,6 +897,8 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
     "UV_SHA256_AMD64",
     "UV_SHA256_ARM64",
     "UV_LICENSE_MIT_SHA256",
+    "PANDOC_SHA256_AMD64",
+    "PANDOC_SHA256_ARM64",
   ]) {
     assert.match(dockerfile, new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m"));
   }
@@ -928,11 +930,11 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
   // Three fetches now rather than four — Node, uv, and uv's license — because
   // the kernel is no longer downloaded.
   assert.equal((dockerfile.match(/curl "\$\{curl_args\[@\]\}"/g) ?? []).length, 3);
-  // Counting `sha256sum -c -` occurrences says three checks are written, not
-  // that three run: one of them sat inside a conditional that was false on
-  // arm64 and this count was three throughout. The assertion above -- that a
+  // Four checks include the independently fetched Pandoc renderer package.
+  // Counting checks alone never proves they run: one once sat inside a false
+  // arm64 conditional. The assertion above -- that a
   // missing pin exits non-zero -- is what makes the count mean "verified".
-  assert.equal((dockerfile.match(/sha256sum -c -/g) ?? []).length, 3);
+  assert.equal((dockerfile.match(/sha256sum -c -/g) ?? []).length, 4);
   assert.doesNotMatch(
     dockerfile,
     /if \[ -n "\$\{(NODE|UV)_SHA256\}" \]; then/,
