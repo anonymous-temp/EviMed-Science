@@ -52,6 +52,12 @@ def identity(metadata):
     return tuple(getattr(metadata, field) for field in IDENTITY_FIELDS)
 
 
+def verify_numeric_metadata(descriptor: int, uid: int, gid: int, mode: int) -> None:
+    metadata = os.fstat(descriptor)
+    if (metadata.st_uid, metadata.st_gid, stat.S_IMODE(metadata.st_mode)) != (uid, gid, mode):
+        raise RecoveryError("numeric_owner_metadata_mismatch")
+
+
 def safe_parts(value: str, *, absolute: bool) -> list[str]:
     if not value or os.path.isabs(value) != absolute or os.path.normpath(value) != value:
         raise RecoveryError("recovery_path_invalid")
@@ -261,6 +267,7 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
                 os.fsync(descriptor)
                 os.fchown(descriptor, member.uid, member.gid)
                 os.fchmod(descriptor, member.mode)
+                verify_numeric_metadata(descriptor, member.uid, member.gid, member.mode)
             finally:
                 os.close(descriptor)
     if member_count == 0 or root_metadata is None:
@@ -269,17 +276,19 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
         receipt = verify_tree(staging_fd)
     except IntegrityError as error:
         raise RecoveryError(str(error)) from None
-    write_receipt(receipt, root_fd=staging_fd)
     for parts, uid, gid, mode in sorted(directory_metadata, key=lambda value: len(value[0]), reverse=True):
         descriptor = ensure_directory(staging_fd, parts)
         try:
             os.fchown(descriptor, uid, gid)
             os.fchmod(descriptor, mode)
+            verify_numeric_metadata(descriptor, uid, gid, mode)
         finally:
             os.close(descriptor)
     _, uid, gid, mode = root_metadata
     os.fchown(staging_fd, uid, gid)
     os.fchmod(staging_fd, mode)
+    verify_numeric_metadata(staging_fd, uid, gid, mode)
+    write_receipt({**receipt, "numericOwnersVerified": True}, root_fd=staging_fd)
 
 
 def validate_blank_target(parent_fd: int, target_name: str) -> None:

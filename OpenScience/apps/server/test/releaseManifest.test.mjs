@@ -49,6 +49,22 @@ function runManifest(output, args = [], env = {}) {
   });
 }
 
+test("an enabled VCR release records its exact engine image and rejects a missing identity", async (t) => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "release-vcr-image-"));
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const output = path.join(tmp, "manifest.json");
+  const env = { OPEN_SCIENCE_VCR_ENABLED: "true", EVIMED_VCR_ENGINE_IMAGE: "evimed-vcr-engine:tested",
+    OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID: `sha256:${"9".repeat(64)}` };
+  await runManifest(output, [], env);
+  const manifest = JSON.parse(await readFile(output, "utf8"));
+  assert.deepEqual(manifest.services.find(value => value.name === "vcr-engine"), {
+    name: "vcr-engine", image: env.EVIMED_VCR_ENGINE_IMAGE, imageId: env.OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID,
+  });
+  await runManifest(output, ["--check"], env);
+  await assert.rejects(runManifest(output, ["--check"], { ...env, EVIMED_VCR_ENGINE_IMAGE: "evimed-vcr-engine:other" }));
+  await assert.rejects(runManifest(output, [], { ...env, EVIMED_VCR_ENGINE_IMAGE: "" }));
+});
+
 test("release manifest generator records exact images, tools, skills, and source inputs", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-release-"));
   const output = path.join(tmp, "release-manifest.json");
@@ -170,6 +186,10 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/backup-data.sh",
         "scripts/ops/backup-retention.mjs",
         "scripts/ops/backup-scheduler.mjs",
+        "scripts/ops/vcr-backup.mjs",
+        "scripts/ops/vcr-backup-process.mjs",
+        "scripts/ops/vcr-restore-drill.mjs",
+        "scripts/ops/recovery-volume.py",
         "scripts/ops/postgres-backup.py",
         "scripts/ops/configure-backup.mjs",
         "scripts/ops/configure-local-auth.mjs",
@@ -183,6 +203,8 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/audit-saas-alignment.mjs",
         "deploy/web/docker-compose.yml",
         "deploy/web/docker-compose.backup.yml",
+        "deploy/web/docker-compose.vcr-backup.yml",
+        "deploy/web/docker-compose.engine-keyless.yml",
         "deploy/web/docker-compose.local-auth.yml",
         "deploy/web/docker-compose.oidc.yml",
         "deploy/web/docker-compose.saas.yml",

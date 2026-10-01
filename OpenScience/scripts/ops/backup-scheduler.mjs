@@ -4,6 +4,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runVcrBackupCycle, vcrBackupConfig } from "./vcr-backup.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const backupScript = path.join(scriptDir, "backup-data.sh");
@@ -13,6 +14,7 @@ const archivePattern = /^open-science-data-\d{8}T\d{6}Z\.tar\.gz\.enc$/;
 const outputLimit = 64 * 1024;
 let activeChild = null;
 let stopping = false;
+const stopController = new AbortController();
 
 function boolEnv(name, fallback = false) {
   const raw = process.env[name];
@@ -386,12 +388,16 @@ async function run() {
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, () => {
     stopping = true;
+    stopController.abort();
     activeChild?.kill("SIGTERM");
   });
 }
 
 const mode = process.argv[2] ?? "run";
-const task = mode === "health" ? health() : mode === "run" ? run() : Promise.reject(new Error("Unknown backup scheduler mode."));
+// Run once as ExecStartPost of the existing host PostgreSQL timer. Its host
+// authority stays on the host; the regular container cycle is unchanged.
+const task = mode === "health" ? health() : mode === "run" ? run() : mode === "vcr" ?
+  runVcrBackupCycle(vcrBackupConfig(), { signal: stopController.signal }).then(result => log("backup.vcr_completed", { status: result.status })) : Promise.reject(new Error("Unknown backup scheduler mode."));
 task.catch((error) => {
   log("backup.scheduler_failed", { error: operationalError(error instanceof Error ? error.message : error) }, true);
   process.exitCode = 1;

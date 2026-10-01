@@ -83,6 +83,10 @@ const inputPaths = [
   "scripts/ops/backup-data.sh",
   "scripts/ops/backup-retention.mjs",
   "scripts/ops/backup-scheduler.mjs",
+  "scripts/ops/vcr-backup.mjs",
+  "scripts/ops/vcr-backup-process.mjs",
+  "scripts/ops/vcr-restore-drill.mjs",
+  "scripts/ops/recovery-volume.py",
   "scripts/ops/postgres-backup.py",
   "scripts/ops/configure-backup.mjs",
   "scripts/ops/configure-local-auth.mjs",
@@ -96,6 +100,8 @@ const inputPaths = [
   "scripts/ops/audit-saas-alignment.mjs",
   "deploy/web/docker-compose.yml",
   "deploy/web/docker-compose.backup.yml",
+  "deploy/web/docker-compose.vcr-backup.yml",
+  "deploy/web/docker-compose.engine-keyless.yml",
   "deploy/web/docker-compose.local-auth.yml",
   "deploy/web/docker-compose.oidc.yml",
   "deploy/web/docker-compose.saas.yml",
@@ -244,7 +250,7 @@ async function currentVersions() {
 
 async function currentServiceImages() {
   const deps = JSON.parse(await read("deps-version.json"));
-  return [
+  const services = [
     {
       name: "openlist",
       image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`,
@@ -258,6 +264,10 @@ async function currentServiceImages() {
       envName: "OPEN_SCIENCE_OPENVIKING_IMAGE_ID",
     },
   ];
+  if (["1", "true", "yes"].includes(String(process.env.OPEN_SCIENCE_VCR_ENABLED ?? "").toLowerCase())) {
+    services.push({ name: "vcr-engine", image: requiredEnv("EVIMED_VCR_ENGINE_IMAGE"), envName: "OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID" });
+  }
+  return services;
 }
 
 /**

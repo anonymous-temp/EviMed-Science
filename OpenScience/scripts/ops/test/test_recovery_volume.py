@@ -2,6 +2,7 @@ import gzip
 import hashlib
 import importlib.util
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -19,7 +20,48 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RecoveryVolumeTests(unittest.TestCase):
-    def archive(self, root: Path, uid=None, gid=None) -> Path:
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux"), "Linux root is required for uid10001 ownership proof")
+    def test_vcr_encrypted_drill_restores_real_uid10001_and_inventory_bytes(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value).resolve()
+            archive = self.archive(root, uid=10001, gid=10001, inventory=True)
+            encrypted = root / "member.tar.gz.enc"
+            phrase = root / "phrase"
+            phrase.write_text("synthetic VCR recovery fixture passphrase\n")
+            phrase.chmod(0o400)
+            env = {**os.environ, "OPEN_SCIENCE_BACKUP_PASSPHRASE": "", "OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE": str(phrase)}
+            ops = Path(__file__).parents[1]
+            subprocess.run(["node", str(ops / "archive-crypto.mjs"), "encrypt", str(archive), str(encrypted)], env=env, check=True)
+            encrypted.with_name(encrypted.name + ".sha256").write_text(
+                f"{hashlib.sha256(encrypted.read_bytes()).hexdigest()}  {encrypted.name}\n")
+            receipt = root / "verification.json"
+            target = root / "ownership-proved"
+            with patch.dict(os.environ, {**env, "OPEN_SCIENCE_RESTORE_VERIFICATION_FILE": str(receipt)}, clear=True):
+                MODULE.restore_numeric(str(encrypted), target)
+            payload = target / "nested/payload.txt"
+            self.assertEqual((payload.stat().st_uid, payload.stat().st_gid, payload.stat().st_mode & 0o7777), (10001, 10001, 0o640))
+            self.assertEqual((target.stat().st_uid, target.stat().st_gid), (10001, 10001))
+            result = subprocess.run(["node", str(ops / "vcr-restore-drill.mjs"), str(encrypted)], env=env,
+                                    check=False, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            proof = json.loads(result.stdout)
+            self.assertEqual(proof["verification"], "inventory-v1")
+            self.assertTrue(proof["numericOwnersVerified"])
+            self.assertEqual(proof["files"], 1)
+            self.assertFalse(any(item.name.startswith(".vcr-restore-drill-") for item in root.iterdir()))
+
+    def test_ownership_receipt_is_not_written_when_requested_metadata_was_not_applied(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value).resolve()
+            archive = self.archive(root)
+            receipt = root / "verification.json"
+            with patch.dict(os.environ, {"OPEN_SCIENCE_RESTORE_VERIFICATION_FILE": str(receipt)}), \
+                    patch.object(os, "fchmod", return_value=None), self.assertRaises(MODULE.RecoveryError) as raised:
+                MODULE.restore_numeric(str(archive), root / "restored", require_privilege=False)
+            self.assertEqual(raised.exception.code, "numeric_owner_metadata_mismatch")
+            self.assertFalse(receipt.exists())
+
+    def archive(self, root: Path, uid=None, gid=None, inventory=False) -> Path:
         uid = os.getuid() if uid is None else uid
         gid = os.getgid() if gid is None else gid
         archive = root / "member.tar.gz"
@@ -43,6 +85,15 @@ class RecoveryVolumeTests(unittest.TestCase):
             item.gid = gid
             item.size = len(payload)
             output.addfile(item, io.BytesIO(payload))
+            if inventory:
+                manifest = json.dumps({"format": "open-science-backup-inventory", "version": 1, "entries": [
+                    {"path": ".", "type": "directory", "size": 0},
+                    {"path": "nested", "type": "directory", "size": 0},
+                    {"path": "nested/payload.txt", "type": "file", "size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()},
+                ]}).encode()
+                entry = tarfile.TarInfo(".open-science-backup-manifest.json")
+                entry.uid, entry.gid, entry.mode, entry.size = uid, gid, 0o600, len(manifest)
+                output.addfile(entry, io.BytesIO(manifest))
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         archive.with_name(archive.name + ".sha256").write_text(f"{digest}  {archive.name}\n")
         return archive

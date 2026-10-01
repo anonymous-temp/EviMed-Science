@@ -176,9 +176,13 @@ COMPOSE=(docker compose -p "$PROJECT"
   -f docker-compose.backup.yml -f docker-compose.receipt.yml -f docker-compose.monitoring.yml)
 # The knowledge-source plugin (plan ch.14) runs only where the deployment names
 # its image. Read off `.env` with grep for the reason given above; before the
-# private override, which stays last.
+# private override; the keyless security overlay must follow that override.
 if grep -qE '^EVIMED_KNOWLEDGE_PLUGIN_IMAGE=.+' .env; then COMPOSE+=(-f docker-compose.knowledge.yml); fi
 COMPOSE+=(-f "$OVERRIDE")
+if grep -qE '^OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR=.+' .env; then COMPOSE+=(-f docker-compose.vcr-backup.yml); fi
+if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(process.env.OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED || "").toLowerCase()) ? 0 : 1)'; then
+  COMPOSE+=(-f docker-compose.engine-keyless.yml)
+fi
 
 echo "=== which services differ from what is running ==="
 # Captured first: a composition that does not resolve must stop the switch

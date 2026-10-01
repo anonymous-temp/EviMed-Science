@@ -97,6 +97,27 @@ test("exclusive maintenance request does not wait for already admitted work", op
   await service.release({ requestId: "integration-drain" });
 });
 
+test('real PostgreSQL durable hold keeps both mutation and job admission fenced after expiry and service restart', options, async () => {
+  await service.request({ requestId: 'durable-integration', ttlSeconds: 30 });
+  await service.hold({ requestId: 'durable-integration' });
+  await database.query(`UPDATE evimed_product.maintenance_lease SET requested_at=clock_timestamp()-interval '2 hours',
+    expires_at=clock_timestamp()-interval '1 hour' WHERE singleton=true`);
+  const restarted = new MaintenanceService(database, { inspectActivity: async () => EMPTY_ACTIVITY });
+  await restarted.initialize();
+  assert.equal(restarted.claimingAllowed(), false);
+  assert.equal((await restarted.status()).lease.durableHold, true);
+  await assert.rejects(restarted.withMutation(async () => assert.fail('must remain fenced')), { code: 'maintenance_active' });
+  const jobs = new ProductJobs(database);
+  const job = await jobs.enqueue(userId, 'notify', { synthetic: true }, { idempotencyKey: `hold:${randomUUID()}` });
+  assert.equal(await jobs.claim(['notify'], 'durable-test-worker', { leaseMs: 10000 }), null);
+  assert.equal((await jobs.get(userId, job.id)).status, 'queued');
+  assert.equal((await restarted.request({ requestId: 'durable-integration', ttlSeconds: 30 })).lease.durableHold, true);
+  await assert.rejects(restarted.request({ requestId: 'wrong-owner', ttlSeconds: 30 }), { code: 'maintenance_conflict' });
+  await restarted.release({ requestId: 'durable-integration' });
+  assert.equal((await jobs.claim(['notify'], 'durable-test-worker', { leaseMs: 10000 })).id, job.id);
+  await restarted.close();
+});
+
 test("loopback operator route blocks new API mutations while health remains readable", options, async (t) => {
   await database.query("DELETE FROM evimed_product.maintenance_lease WHERE singleton=true");
   const dataDir = await mkdtemp(path.join(tmpdir(), "maintenance-api-"));
@@ -129,6 +150,13 @@ test("loopback operator route blocks new API mutations while health remains read
     maintenance = await fetch(`${base}/api/ops/maintenance`, { headers: operator }).then((response) => response.json());
   }
   assert.equal(maintenance.data.state, "idle");
+  const unauthorizedHold = await fetch(`${base}/api/ops/maintenance`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'hold', requestId: 'api-owner' }) });
+  assert.equal(unauthorizedHold.status, 401);
+  const hold = await fetch(`${base}/api/ops/maintenance`, { method: 'POST', headers: operator,
+    body: JSON.stringify({ action: 'hold', requestId: 'api-owner' }) });
+  assert.equal(hold.status, 200);
+  assert.equal((await hold.json()).data.lease.durableHold, true);
   const blocked = await fetch(`${base}/api/auth/dev-login`, { method: "POST" });
   assert.equal(blocked.status, 503);
   assert.equal((await blocked.json()).code, "maintenance_active");

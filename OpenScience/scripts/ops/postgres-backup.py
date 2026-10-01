@@ -60,6 +60,174 @@ DERIVED_TABLE_DATA = {
     ("evimed_frontier", "item_vectors"): "pnpm rebuild:frontier-index",
 }
 DIGITS = re.compile(r"[0-9]{1,20}")
+CAPTURE_OPERATION = re.compile(r"[a-f0-9]{32}")
+CONTAINER_ID = re.compile(r"[a-f0-9]{64}")
+
+# These fixed commands run only in the exact container the caller inspected.
+# A tombstone survives an interrupted docker client: a daemon-side exec that
+# arrives late can never admit another tool after the fence was established.
+CAPTURE_INIT = r"""
+set -eu
+umask 077
+root=/tmp/evimed-vcr-capture-$1
+mkdir "$root"
+test ! -L "$root"
+test "$(stat -c '%u:%a' "$root")" = '0:700'
+"""
+CAPTURE_ADMIT = r"""
+set -eu
+operation=$1; supervisor=$2; shift 2
+root=/tmp/evimed-vcr-capture-$operation
+test -d "$root" && test ! -L "$root"
+test "$(stat -c '%u:%a' "$root")" = '0:700'
+exec 9>"$root/lock"
+flock -w 5 -x 9
+test ! -e "$root/canceled"
+start=$(awk '{print $22}' /proc/$$/stat)
+printf '%s\n' "$start" > "$root/pid-$$"
+flock -u 9
+exec 9>&-
+exec perl -e "$supervisor" "$operation" "$@"
+"""
+CAPTURE_SUPERVISOR = r"""
+use strict;
+use warnings;
+use Errno qw(ECHILD);
+use POSIX qw(uname setsid WNOHANG);
+my $stopping = 0;
+$SIG{TERM} = sub { $stopping = 1; };
+$SIG{INT} = sub { $stopping = 1; };
+my $architecture = (uname())[4];
+my $prctl = $architecture eq 'x86_64' ? 157 : $architecture eq 'aarch64' ? 167 : -1;
+die "subreaper architecture unavailable\n" if $prctl < 0;
+# The admission-side ancestor must adopt/reap orphan descendants. PostgreSQL
+# is PID1 in the production image; letting it reap an unknown SIGKILL child
+# triggers recovery of every database, including unrelated customer work.
+die "subreaper unavailable\n" if syscall($prctl, 36, 1, 0, 0, 0) < 0;
+my $operation = shift @ARGV;
+die "invalid operation\n" unless defined($operation) && $operation =~ /^[a-f0-9]{32}$/ && @ARGV;
+exit 125 if $stopping || -e "/tmp/evimed-vcr-capture-$operation/canceled";
+my $child = fork();
+die "capture fork failed\n" unless defined $child;
+if ($child == 0) {
+  $SIG{TERM} = 'DEFAULT'; $SIG{INT} = 'DEFAULT';
+  delete $ENV{EVIMED_CAPTURE_SUPERVISOR};
+  die "capture session failed\n" if setsid() < 0;
+  exec @ARGV;
+  die "capture exec failed\n";
+}
+my $main_status;
+my $terminating_at;
+while (1) {
+  my $finished = waitpid(-1, WNOHANG);
+  if ($finished > 0) { $main_status = $? if $finished == $child; next; }
+  last if $finished == -1 && $! == ECHILD;
+  # Signal only the child's owned group. Keep the subreaper alive until every
+  # adopted child is waitpid-reaped; the fence never hard-kills this supervisor.
+  # At least one child remains unreaped here, so its group identity cannot be
+  # recycled between this check and the signal.
+  if ($stopping || defined($main_status)) {
+    unless (defined $terminating_at) { kill 'TERM', -$child; $terminating_at = time(); }
+    kill 'KILL', -$child if time() - $terminating_at >= 1;
+  }
+  select undef, undef, undef, 0.02;
+}
+exit 125 if $stopping;
+exit !defined($main_status) || ($main_status & 127) ? 1 : ($main_status >> 8);
+"""
+CAPTURE_FENCE = r"""
+set -eu
+umask 077
+root=/tmp/evimed-vcr-capture-$1
+marker=PGAPPNAME=evimed_vcr_capture_$1
+if test ! -e "$root"; then mkdir "$root"; fi
+test -d "$root" && test ! -L "$root"
+test "$(stat -c '%u:%a' "$root")" = '0:700'
+exec 9>"$root/lock"
+flock -w 5 -x 9
+: > "$root/canceled"
+flock -u 9
+exec 9>&-
+"""
+CAPTURE_STOP = r"""
+use strict;
+use warnings;
+use Errno qw(ESRCH);
+use POSIX qw(uname);
+my $architecture = (uname())[4];
+die "unsupported pidfd architecture\n" unless $architecture eq 'x86_64' || $architecture eq 'aarch64';
+# Linux asm-generic and x86_64 headers agree on these two syscall numbers.
+my ($pidfd_open, $pidfd_send_signal) = (434, 424);
+my $operation = $ARGV[0];
+die "invalid capture operation\n" unless $operation =~ /^[a-f0-9]{32}$/;
+my $root = "/tmp/evimed-vcr-capture-$operation";
+my $marker = "PGAPPNAME=evimed_vcr_capture_$operation";
+sub contents {
+  my ($file) = @_;
+  open my $source, '<', $file or return undef;
+  local $/;
+  my $value = <$source>;
+  close $source;
+  return $value;
+}
+for my $round (1..50) {
+  my $active = 0;
+  opendir my $directory, '/proc' or die "proc unavailable\n";
+  my @pids = grep { /^[0-9]+$/ } readdir $directory;
+  closedir $directory;
+  for my $pid (@pids) {
+    # Open the stable process handle BEFORE examining scope. Even if that
+    # numeric PID exits/reuses afterwards, signaling the handle cannot reach
+    # its replacement. Never fall back to a raw PID kill.
+    my $descriptor = syscall($pidfd_open, int($pid), 0);
+    if ($descriptor < 0) {
+      next if $! == ESRCH;
+      die "pidfd unavailable\n";
+    }
+    open my $handle, '<&=', $descriptor or die "pidfd handle unavailable\n";
+    my $fdinfo = contents('/proc/self/fdinfo/' . fileno($handle));
+    my $fdlink = readlink('/proc/self/fd/' . fileno($handle));
+    die "pidfd identity unavailable\n" unless defined($fdinfo) && defined($fdlink) && $fdlink eq 'anon_inode:[pidfd]';
+    my ($held_pid) = $fdinfo =~ /^Pid:\s*(-?[0-9]+)$/m;
+    if (defined($held_pid) && $held_pid eq '-1') { close $handle; next; }
+    die "pidfd identity mismatch\n" unless defined($held_pid) && int($held_pid) == int($pid);
+    my $stat = contents("/proc/$pid/stat");
+    unless (defined($stat) && $stat =~ /^[0-9]+ \(.*\) (.*)$/s) { close $handle; next; }
+    my @fields = split /\s+/, $1;
+    if ($fields[0] eq 'Z') { close $handle; next; }
+    my $executable = readlink("/proc/$pid/exe");
+    unless (defined $executable) { close $handle; next; }
+    $executable =~ s{^.*/}{};
+    # PostgreSQL server children may carry client-associated text in their
+    # environment. OS-signaling even an owned backend with KILL makes the
+    # postmaster crash-recover every database. Backends are handled only by
+    # the authenticated, scoped pg_terminate_backend operation below.
+    if ($executable eq 'postgres' || $executable eq 'postmaster') { close $handle; next; }
+    my $recorded = contents("$root/pid-$pid");
+    $recorded =~ s/\s+$// if defined $recorded;
+    my $owned = defined($recorded) && $recorded eq $fields[19];
+    unless ($owned) {
+      my $environment = contents("/proc/$pid/environ");
+      $owned = defined($environment) && grep { $_ eq $marker } split /\0/, $environment;
+    }
+    if ($owned) {
+      $active = 1;
+      my $environment = contents("/proc/$pid/environ");
+      my $supervisor = defined($environment) && grep { $_ eq "EVIMED_CAPTURE_SUPERVISOR=$operation" } split /\0/, $environment;
+      if ($executable eq 'perl' && $supervisor) {
+        # Client descendants are stopped/reaped by their admission-side
+        # supervisor. Killing them from this sibling can orphan them to PG.
+        my $result = syscall($pidfd_send_signal, fileno($handle), 15, 0, 0);
+        die "pidfd signal unavailable\n" if $result < 0 && $! != ESRCH;
+      }
+    }
+    close $handle;
+  }
+  exit 0 unless $active;
+  select undef, undef, undef, 0.1;
+}
+die "capture still active\n";
+"""
 
 
 class BackupError(Exception):
@@ -351,6 +519,10 @@ def retain(backups: Path, days: int, maximum: int) -> None:
 def parse_cli(arguments: list[str]) -> tuple[str, dict]:
     if not arguments:
         return "timer", {}
+    if (len(arguments) == 5 and arguments[0] == "fence-capture" and arguments[1] == "--container"
+            and arguments[3] == "--operation" and CONTAINER_ID.fullmatch(arguments[2])
+            and CAPTURE_OPERATION.fullmatch(arguments[4])):
+        return "fence-capture", {"container": arguments[2], "operation": arguments[4]}
     if len(arguments) == 3 and arguments[:2] == ["capture-member", "--output-dir"]:
         output = Path(arguments[2])
         if not output.is_absolute():
@@ -496,19 +668,59 @@ def recovery_config() -> tuple[list[str], str, str, Path, list[str]]:
     container = os.environ.get("EVIMED_POSTGRES_CONTAINER", "web-evimed-postgres-1")
     database = os.environ.get("EVIMED_POSTGRES_DATABASE", "evimed")
     role = os.environ.get("EVIMED_POSTGRES_USER", "evimed")
-    if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}", value) for value in (container, database, role)):
+    if (not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", container)
+            or any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}", value) for value in (database, role))):
         raise BackupError("postgres_backup_config_invalid")
     passphrase = Path(os.environ.get(
         "EVIMED_POSTGRES_PASSPHRASE_FILE", str(DEFAULT_ROOT / "secrets/backup-passphrase.txt")
     )).absolute()
     validate_passphrase(passphrase)
     base = ["docker", "exec", "-i", container]
+    operation = os.environ.get("EVIMED_POSTGRES_CAPTURE_OPERATION_ID", "")
+    if operation:
+        if not CAPTURE_OPERATION.fullmatch(operation) or not CONTAINER_ID.fullmatch(container):
+            raise BackupError("postgres_backup_config_invalid")
+        command(["docker", "exec", "--user", "0:0", container, "sh", "-c", CAPTURE_INIT,
+                 "evimed-managed-capture-init", operation], timeout=30)
+        base = ["docker", "exec", "-i", "--user", "0:0", "--env", "PGAPPNAME=evimed_vcr_capture_" + operation,
+                "--env", "EVIMED_CAPTURE_SUPERVISOR=" + operation,
+                container, "sh", "-c", CAPTURE_ADMIT, "evimed-managed-capture", operation, CAPTURE_SUPERVISOR]
     for tool in ("pg_dump", "pg_restore"):
         if not re.search(r"\(PostgreSQL\) 16\.", command(base + [tool, "--version"], timeout=30, capture=True)):
             raise BackupError("postgres_backup_client_version")
     crypto = ["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "250000", "-md", "sha256",
               "-pass", "file:" + str(passphrase)]
     return base, database, role, passphrase, crypto
+
+
+def fence_capture(container: str, operation: str) -> dict:
+    if not CONTAINER_ID.fullmatch(container) or not CAPTURE_OPERATION.fullmatch(operation):
+        raise BackupError("postgres_capture_fence_invalid")
+    role = os.environ.get("EVIMED_POSTGRES_USER", "evimed")
+    database = os.environ.get("EVIMED_POSTGRES_DATABASE", "evimed")
+    if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}", value) for value in (role, database)):
+        raise BackupError("postgres_capture_fence_invalid")
+    running = command(["docker", "inspect", "--type", "container", "--format", "{{.State.Running}}", container], capture=True, timeout=10).strip()
+    if running not in {"true", "false"}:
+        raise BackupError("postgres_capture_stop_unconfirmed")
+    if running == "false":
+        # The process is stopped now, but no durable admission tombstone can
+        # be written until the container is available. Do not claim a fence.
+        raise BackupError("postgres_capture_stop_unconfirmed")
+    if running == "true":
+        base = ["docker", "exec", "--user", "0:0", "--env", "PGAPPNAME=evimed_backup_fence", container]
+        command(base + ["sh", "-c", CAPTURE_FENCE, "evimed-managed-capture-fence", operation], timeout=30)
+        command(base + ["perl", "-e", CAPTURE_STOP, operation], timeout=30)
+        app = "evimed_vcr_capture_" + operation
+        sql = base + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", role, "-d", database, "-c"]
+        selected = f"application_name='{app}' AND datname='{database}' AND usename='{role}' AND backend_type='client backend' AND pid<>pg_backend_pid()"
+        command(sql + [f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE {selected};"], timeout=10)
+        remaining = command(sql + [f"SELECT count(*) FROM pg_stat_activity WHERE {selected};"], capture=True, timeout=10)
+        if remaining.strip() != "0":
+            raise BackupError("postgres_capture_stop_unconfirmed")
+        command(base + ["sh", "-c", CAPTURE_FENCE, "evimed-managed-capture-fence", operation], timeout=30)
+        command(base + ["perl", "-e", CAPTURE_STOP, operation], timeout=30)
+    return {"status": "stopped", "container": container, "operation": operation, "admissionFenced": True}
 
 
 def receipt_candidate(directory: PinnedDirectory, value: dict) -> str:
@@ -1103,6 +1315,9 @@ def main(arguments=None) -> int:
         mode, values = parse_cli(arguments)
         if mode == "capture-member":
             print(json.dumps(capture_member(values["output_dir"]), sort_keys=True, separators=(",", ":")))
+            return 0
+        if mode == "fence-capture":
+            print(json.dumps(fence_capture(values["container"], values["operation"]), sort_keys=True, separators=(",", ":")))
             return 0
         if mode == "restore-clone":
             result = restore_clone(values["archive"], values["target_database"], values["receipt"])

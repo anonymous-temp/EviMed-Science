@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS evimed_product.maintenance_lease (
   expires_at timestamptz(3) NOT NULL CHECK (expires_at > requested_at)
 );
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-maintenance-lease-v1') ON CONFLICT DO NOTHING;
+ALTER TABLE evimed_product.maintenance_lease ADD COLUMN IF NOT EXISTS durable_hold boolean NOT NULL DEFAULT false;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-01-maintenance-durable-hold-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.documents (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   kind text NOT NULL CONSTRAINT product_documents_kind_check CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")})),

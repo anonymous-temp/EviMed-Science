@@ -28,6 +28,14 @@ test("every host release script parses", async () => {
   for (const name of scripts) await run("bash", ["-n", path.join(opsDir, name)]);
 });
 
+test("gateway-enabled releases apply keyless mounts after the private override", async () => {
+  const text = await code("host-release-switch.sh");
+  const override = text.indexOf('COMPOSE+=(-f "$OVERRIDE")');
+  const keyless = text.indexOf('COMPOSE+=(-f docker-compose.engine-keyless.yml)');
+  assert.ok(override > 0 && keyless > override);
+  assert.match(text.slice(override, keyless), /OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED/);
+});
+
 test("the switch moves `current` first and runs compose through it", async () => {
   const text = await code("host-release-switch.sh");
   const moved = text.indexOf('require("node:fs").renameSync(process.argv[1], process.argv[2])');

@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
+import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
@@ -4019,10 +4020,12 @@ export function createWebApiApp(overrides = {}) {
         let data;
         if (action === "request") {
           data = await maintenanceService.request({ requestId: body.requestId, ttlSeconds: body.ttlSeconds });
+        } else if (action === "hold") {
+          data = await maintenanceService.hold({ requestId: body.requestId });
         } else if (action === "release") {
           data = await maintenanceService.release({ requestId: body.requestId });
         } else {
-          throw new HttpError(400, "maintenance_request_invalid", "Maintenance action must be request or release.");
+          throw new HttpError(400, "maintenance_request_invalid", "Maintenance action must be request, hold or release.");
         }
         sendJson(res, 200, { data });
         return;
@@ -8029,7 +8032,8 @@ export async function readinessBackup(config, database = null) {
   if (mode === "external") {
     if (!config.backupExternalAck) throw readinessFailure("backup_external_unconfirmed");
     if (!config.restoreDrillAck) throw readinessFailure("restore_drill_unconfirmed");
-    return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database) };
+    return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database),
+      ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}) };
   }
 
   const backupDir = String(config.backupDir ?? "").trim();
@@ -8121,6 +8125,7 @@ export async function readinessBackup(config, database = null) {
     encrypted: true,
     schedulerHealthy: true,
     postgres: await postgresBackupReadiness(config, database),
+    ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
   };
 }
 
