@@ -3695,6 +3695,7 @@ export class AgentRunStore {
       throw new TypeError("AgentRunStore maxClinicalStructuralRepairAttempts must be a non-negative integer.");
     }
     this.monitors = new Map();
+    this.closing = false;
     /** One reconciliation per project session; monitor and explicit callers join it. */
     this.reconciles = new Map();
     this.projects = new Map();
@@ -4356,6 +4357,7 @@ export class AgentRunStore {
    * @param {any} project @param {readonly Record<string, any>[]} runs @param {{ limit?: number }} [options]
    */
   backfillQuestions(project, runs, { limit = 3 } = {}) {
+    if (this.closing) return;
     const nowMs = this.now().getTime();
     const due = runs
       .filter((run) => run?.question == null && run?.sessionId
@@ -5016,6 +5018,7 @@ export class AgentRunStore {
   }
 
   async reconcileSession(project, sessionId, runId = null) {
+    if (this.closing) return null;
     let targetRunId = runId;
     if (!targetRunId) {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
@@ -5027,6 +5030,7 @@ export class AgentRunStore {
     const key = JSON.stringify([project.userId, project.id, sessionId, targetRunId]);
     const existing = this.reconciles.get(key);
     if (existing) return existing;
+    if (this.closing) return null;
     const active = this.reconcileSessionOnce(project, sessionId, targetRunId).finally(() => {
       if (this.reconciles.get(key) === active) this.reconciles.delete(key);
     });
@@ -6141,7 +6145,7 @@ export class AgentRunStore {
   }
 
   scheduleMonitor(project, runId) {
-    if (this.monitors.has(runId)) return;
+    if (this.closing || this.monitors.has(runId)) return;
     let canceled = false;
     /**
      * Wakes the monitor out of its inter-poll sleep.
@@ -6779,6 +6783,9 @@ export class AgentRunStore {
   }
 
   async closeAll() {
+    this.closing = true;
+    const monitors = [...this.monitors.values()];
+    for (const monitor of monitors) monitor.cancel();
     for (const project of this.projects.values()) {
       try {
         await this.closeProject(project, "canceled");
@@ -6788,6 +6795,9 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
+    // A terminal ledger row can precede its completion hook. Drain every
+    // producer, including direct reconciliations, before storage is released.
+    await Promise.allSettled([...monitors.map(monitor => monitor.promise), ...this.reconciles.values()]);
     await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();

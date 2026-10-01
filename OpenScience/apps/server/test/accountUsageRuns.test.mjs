@@ -85,7 +85,9 @@ async function withAccount(fn, ledger) {
     await fn({ app, base, cookie });
   } finally {
     await app.close();
-    await rm(dataDir, { recursive: true, force: true });
+    // Match the bounded teardown retry used by other HTTP/runtime fixtures:
+    // a final filesystem write can land during recursive removal under load.
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 
