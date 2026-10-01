@@ -56,7 +56,7 @@
         }
       ],
       "limitations": "本文核对了原始摘要；未完成全文亚组或剂量规则审查。一般房颤试验结果不能代替机械瓣、中重度二尖瓣狭窄或透析人群的专门证据。ESC 依据为官方出版页短摘录。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-aristotle-benefit-bleeding",
       "content": {
@@ -159,7 +159,7 @@
         }
       ],
       "limitations": "RE-ALIGN 与 INVICTUS 仅核对原始摘要；摘要未给出完整结局分母或统一随访期，未制作百分比比较图，也未计算 NNT。两项试验研究不同疾病和药物，不能合并为效应量。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-valve-exclusions",
       "content": {
@@ -222,7 +222,7 @@
         }
       ],
       "limitations": "仅核对原始摘要，未复核具体肾病亚型或完整安全性表。试验因获益提前停止；低白蛋白尿、eGFR <25 或已经接受肾替代治疗的人群不能由本试验直接推断。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-dapa-ckd-albuminuria",
       "content": {
@@ -324,7 +324,7 @@
         }
       ],
       "limitations": "主文及表 2 已核对；试验因获益提前停止。低 UACR 亚组进展较慢、主要结局数量有限，eGFR 斜率是补充证据而非透析事件的直接替代。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-empa-kidney-scope",
       "content": {
@@ -410,7 +410,7 @@
         }
       ],
       "limitations": "仅核对原始摘要；预设中期分析后因获益提前停止。未证明非糖尿病 CKD 的同等获益，也未检验药物间优劣或完整联合治疗策略；具体风险与禁忌需另查说明书。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-flow-semaglutide-kidney",
       "content": {
@@ -498,7 +498,7 @@
         }
       ],
       "limitations": "绝对差随基础风险、结局定义和时间变化。这里不估计派生差值的置信区间，不把中位随访当作每个人相同的固定时间，也不从年化率或 HR 求 NNT。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-absolute-relative-time",
       "content": {
@@ -587,7 +587,7 @@
         }
       ],
       "limitations": "这是结局解释卡，不是重新进行多重检验。组成结局的分析精度、层级和临床重要性均应单独判断；不同结局人数不能直接相加，因为同一患者可能经历不同事件。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-composite-endpoint-components",
       "content": {
@@ -687,7 +687,7 @@
         }
       ],
       "limitations": "ARISTOTLE 此处仅核对摘要，未替代对完整非劣效界值、分析集及多重检验方案的审查。方法学来源是分析论文，不是新药疗效证据。",
-      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review pending; no human review or drug ranking is claimed.",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
       "state": "published",
       "requestId": "evimed-evidence-seed-20261001-noninferiority-superiority",
       "content": {

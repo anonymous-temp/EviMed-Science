@@ -6788,6 +6788,12 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
+    // The terminal ledger row precedes final callback writes. Drain these only
+    // at global shutdown: onRunFinished can stop its bounded runtime, whose
+    // stop callback calls closeProject and must not wait for its own monitor.
+    const finishing = [...this.monitors.values()];
+    for (const monitor of finishing) monitor.cancel();
+    await Promise.allSettled(finishing.map((monitor) => monitor.promise));
     await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();
