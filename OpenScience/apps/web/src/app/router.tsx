@@ -30,6 +30,9 @@ const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ def
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
+const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
+const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m) => ({ default: m.EvidenceZonePage })));
+const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
@@ -74,6 +77,9 @@ export const routes: RouteObject[] = [
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
+        { path: "frontier/zones", element: <EvidenceZonesPage /> },
+        { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
+        { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         // 「循证 GEO」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.

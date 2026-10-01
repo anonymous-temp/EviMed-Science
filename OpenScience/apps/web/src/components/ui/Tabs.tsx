@@ -49,7 +49,7 @@ export function Tabs<V extends string>({
     refs.current[next]?.focus();
   };
   return (
-    <div role="tablist" aria-label={label} className={cn("flex items-end gap-6 border-b border-border", className)}>
+    <div role="tablist" aria-label={label} className={cn("flex min-w-0 items-end gap-6 overflow-x-auto border-b border-border", className)}>
       {items.map((item, index) => {
         const selected = item.value === value;
         return (
@@ -67,7 +67,7 @@ export function Tabs<V extends string>({
             className={cn(
               // One weight for every tab: the selected one is told by its
               // colour and its rule, so a tab list is one kind of control.
-              "-mb-px inline-flex h-10 items-center gap-1 border-b-2 text-ui font-medium outline-none transition-colors duration-fast",
+              "-mb-px inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap border-b-2 text-ui font-medium outline-none transition-colors duration-fast focus-visible:outline-focus",
               selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >

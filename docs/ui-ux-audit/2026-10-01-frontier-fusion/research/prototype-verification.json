@@ -1,0 +1,891 @@
+{
+  "viewports": [
+    1440,
+    768,
+    390,
+    320
+  ],
+  "pageChecks": 24,
+  "interactionChecks": [
+    "topic filter",
+    "topic membership",
+    "evidence reading",
+    "star",
+    "scoped question draft",
+    "copy",
+    "Escape dismissal",
+    "saved filter",
+    "search empty state",
+    "following aggregate",
+    "follow management",
+    "report anchor and period switch",
+    "dark theme"
+  ],
+  "observations": [
+    {
+      "view": "feed",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": null,
+        "firstNews": 496.96875,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topics",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": null,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topic/emergency",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": 421.171875,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "evidence",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": 251.59375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "brief",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": 628.9375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "following",
+      "metrics": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "firstEvidence": 501.765625,
+        "firstNews": 284.984375,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "feed",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": null,
+        "firstNews": 488.96875,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topics",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": null,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topic/emergency",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": 413.171875,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "evidence",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": 243.59375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "brief",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": 644.734375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "following",
+      "metrics": {
+        "width": 768,
+        "scrollWidth": 768,
+        "firstEvidence": 493.765625,
+        "firstNews": 276.984375,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "feed",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": null,
+        "firstNews": 468.15625,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topics",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": null,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topic/emergency",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": 515.546875,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "evidence",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": 274.578125,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "brief",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": 749.109375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "following",
+      "metrics": {
+        "width": 390,
+        "scrollWidth": 390,
+        "firstEvidence": 588.546875,
+        "firstNews": 307.96875,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "feed",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": null,
+        "firstNews": 496.546875,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topics",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": null,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "topic/emergency",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": 549.140625,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "evidence",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": 274.578125,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "brief",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": 749.109375,
+        "firstNews": null,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    },
+    {
+      "view": "following",
+      "metrics": {
+        "width": 320,
+        "scrollWidth": 320,
+        "firstEvidence": 634.328125,
+        "firstNews": 307.96875,
+        "tabs": [
+          {
+            "text": "动态",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "专题",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "证据",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "简报",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          },
+          {
+            "text": "关注",
+            "height": 43.796875,
+            "whiteSpace": "nowrap"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

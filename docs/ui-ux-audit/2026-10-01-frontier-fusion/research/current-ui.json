@@ -1,0 +1,353 @@
+{
+  "observations": [
+    {
+      "name": "current-selected",
+      "dataKind": "local fixture with unchanged main components",
+      "details": {
+        "width": 1200,
+        "scrollWidth": 1200,
+        "tabs": [
+          {
+            "text": "精选",
+            "rect": {
+              "x": 104,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 132,
+              "bottom": 108,
+              "left": 104
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "热榜",
+            "rect": {
+              "x": 156,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 184,
+              "bottom": 108,
+              "left": 156
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "日报",
+            "rect": {
+              "x": 208,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 236,
+              "bottom": 108,
+              "left": 208
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "全部",
+            "rect": {
+              "x": 260,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 288,
+              "bottom": 108,
+              "left": 260
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "与我相关",
+            "rect": {
+              "x": 312,
+              "y": 68,
+              "width": 56,
+              "height": 40,
+              "top": 68,
+              "right": 368,
+              "bottom": 108,
+              "left": 312
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "关注",
+            "rect": {
+              "x": 392,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 420,
+              "bottom": 108,
+              "left": 392
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "周刊",
+            "rect": {
+              "x": 444,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 472,
+              "bottom": 108,
+              "left": 444
+            },
+            "scrollHeight": 38
+          }
+        ],
+        "firstItem": {
+          "x": 104,
+          "y": 478,
+          "width": 992,
+          "height": 175,
+          "top": 478,
+          "right": 1096,
+          "bottom": 653,
+          "left": 104
+        },
+        "text": "前沿动态\n精选\n热榜\n日报\n全部\n与我相关\n关注\n周刊\n全部\n临床证据\n指南共识\n药物安全\n审批监管\n研发产业\n更多\n专科\n收藏\n当前热点\n完整热榜 ›\n1\n示例热点 1：同一事件的多项报道\n43 热度\n新\n2\n示例热点 2：同一事件的多项报道\n40 热度\n新\n3\n示例热点 3：同一事件的多项报道\n37 热度\n新\n4\n示例热点 4：同一事件的多项报道\n34 热度\n新\n5\n示例热点 5：同一事件的多项报道\n31 热度\n新\n10月1日 周四\n5 条\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：一项新研究公布主要终点\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：指南发布更新说明\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：研究方法与适用范围\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：试验长期随访结果\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：相关研究的补充材料\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究"
+      }
+    },
+    {
+      "name": "current-following",
+      "dataKind": "local fixture with unchanged main components",
+      "details": {
+        "width": 1200,
+        "scrollWidth": 1200,
+        "tabs": [
+          {
+            "text": "精选",
+            "rect": {
+              "x": 104,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 132,
+              "bottom": 108,
+              "left": 104
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "热榜",
+            "rect": {
+              "x": 156,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 184,
+              "bottom": 108,
+              "left": 156
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "日报",
+            "rect": {
+              "x": 208,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 236,
+              "bottom": 108,
+              "left": 208
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "全部",
+            "rect": {
+              "x": 260,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 288,
+              "bottom": 108,
+              "left": 260
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "与我相关",
+            "rect": {
+              "x": 312,
+              "y": 68,
+              "width": 56,
+              "height": 40,
+              "top": 68,
+              "right": 368,
+              "bottom": 108,
+              "left": 312
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "关注",
+            "rect": {
+              "x": 392,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 420,
+              "bottom": 108,
+              "left": 392
+            },
+            "scrollHeight": 38
+          },
+          {
+            "text": "周刊",
+            "rect": {
+              "x": 444,
+              "y": 68,
+              "width": 28,
+              "height": 40,
+              "top": 68,
+              "right": 472,
+              "bottom": 108,
+              "left": 444
+            },
+            "scrollHeight": 38
+          }
+        ],
+        "firstItem": null,
+        "text": "前沿动态\n精选\n热榜\n日报\n全部\n与我相关\n关注\n周刊\n关注类型\n主题\n药物\n专科\n关注内容\n添加关注\n我的关注\n关注内容\t状态\t管理\n示例主题\t关注中\t\n屏蔽\n移除\n\n选择关注内容，查看相关动态"
+      }
+    },
+    {
+      "name": "current-mobile",
+      "dataKind": "local fixture with unchanged main components",
+      "details": {
+        "width": 390,
+        "scrollWidth": 390,
+        "tabs": [
+          {
+            "text": "精选",
+            "rect": {
+              "x": 24,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 48.75,
+              "bottom": 152,
+              "left": 24
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "热榜",
+            "rect": {
+              "x": 72.75,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 97.5,
+              "bottom": 152,
+              "left": 72.75
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "日报",
+            "rect": {
+              "x": 121.5,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 146.25,
+              "bottom": 152,
+              "left": 121.5
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "全部",
+            "rect": {
+              "x": 170.25,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 195,
+              "bottom": 152,
+              "left": 170.25
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "与我相关",
+            "rect": {
+              "x": 219,
+              "y": 112,
+              "width": 49.5,
+              "height": 40,
+              "top": 112,
+              "right": 268.5,
+              "bottom": 152,
+              "left": 219
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "关注",
+            "rect": {
+              "x": 292.5,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 317.25,
+              "bottom": 152,
+              "left": 292.5
+            },
+            "scrollHeight": 41
+          },
+          {
+            "text": "周刊",
+            "rect": {
+              "x": 341.25,
+              "y": 112,
+              "width": 24.75,
+              "height": 40,
+              "top": 112,
+              "right": 366,
+              "bottom": 152,
+              "left": 341.25
+            },
+            "scrollHeight": 41
+          }
+        ],
+        "firstItem": {
+          "x": 24,
+          "y": 522,
+          "width": 342,
+          "height": 197,
+          "top": 522,
+          "right": 366,
+          "bottom": 719,
+          "left": 24
+        },
+        "text": "前沿动态\n精选\n热榜\n日报\n全部\n与我相关\n关注\n周刊\n全部\n专科\n收藏\n当前热点\n完整热榜 ›\n1\n示例热点 1：同一事件的多项报道\n43 热度\n新\n2\n示例热点 2：同一事件的多项报道\n40 热度\n新\n3\n示例热点 3：同一事件的多项报道\n37 热度\n新\n4\n示例热点 4：同一事件的多项报道\n34 热度\n新\n5\n示例热点 5：同一事件的多项报道\n31 热度\n新\n10月1日 周四\n5 条\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：一项新研究公布主要终点\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：指南发布更新说明\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：研究方法与适用范围\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：试验长期随访结果\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究\n01:00\n示例期刊\nRCT\n编辑评分\n86\n示例：相关研究的补充材料\n\n这是用于检查界面布局的示例摘要，不表示真实研究结果。查看详情可核对研究设计、适用人群与原始来源。\n\n另有 2 家报道 ›\n#心血管\n深入研究"
+      }
+    }
+  ],
+  "errors": []
+}

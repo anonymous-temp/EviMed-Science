@@ -5,6 +5,7 @@ import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
+import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -18,6 +19,12 @@ const MAX_BYTES = 64 * 1024 * 1024;
 // `exportedPriceLists`.
 const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin"];
 const queries = [
+  ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
+  ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
+  ["evidenceZoneFollows", "SELECT * FROM evimed_frontier.evidence_zone_follows WHERE user_id=$1 ORDER BY zone_id"],
+  ["evidenceComments", "SELECT * FROM evimed_frontier.evidence_comments WHERE user_id=$1 ORDER BY id"],
+  ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
+  ["evidenceZoneFeedback", "SELECT * FROM evimed_frontier.evidence_zone_feedback WHERE user_id=$1 ORDER BY id"],
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
@@ -175,6 +182,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateProductStore(database);
   await migrateNotifications(database);
   await migrateUsageLedger(database);
+  await migrateEvidenceZones(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -226,6 +234,8 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents,
+      evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
+      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,
     };
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();

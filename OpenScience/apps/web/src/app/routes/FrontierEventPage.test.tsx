@@ -169,3 +169,18 @@ describe("where there is no event to show", () => {
     expect(client.fetchFrontierEvent).not.toHaveBeenCalled();
   });
 });
+
+it("returns to the originating filtered feed rather than resetting its address", async () => {
+  render(<MemoryRouter initialEntries={[
+    "/app/frontier?view=all&lane=safety&q=lipid",
+    { pathname: "/app/frontier/events/ev1", state: { frontierOrigin: "/app/frontier?view=all&lane=safety&q=lipid" } },
+  ]} initialIndex={1}><Routes>
+    <Route path="/app/frontier/events/:eventId" element={<FrontierEventPage />} />
+    <Route path="/app/frontier" element={<div>Originating feed</div>} />
+  </Routes></MemoryRouter>);
+  await screen.findByRole("heading", { level: 1, name: event().title });
+  const back = within(screen.getByRole("navigation", { name: "返回" })).getByRole("link", { name: "前沿动态" });
+  expect(back).toHaveAttribute("href", "/app/frontier?view=all&lane=safety&q=lipid");
+  await userEvent.click(back);
+  expect(await screen.findByText("Originating feed")).toBeInTheDocument();
+});

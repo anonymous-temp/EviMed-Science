@@ -151,6 +151,8 @@ import { FrontierPipeline } from "./frontierPipeline.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
   frontierReadiness } from "./frontierService.mjs";
 import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
@@ -1498,6 +1500,8 @@ export function createWebApiApp(overrides = {}) {
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?new EvidenceZoneService({database:productDatabase}):null,
+    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -3817,6 +3821,7 @@ export function createWebApiApp(overrides = {}) {
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceZoneRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;

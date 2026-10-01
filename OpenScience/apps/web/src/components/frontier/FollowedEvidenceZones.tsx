@@ -1,0 +1,117 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/cards/EmptyState";
+import { FrontierSkeleton } from "./FrontierSkeleton";
+import {
+  listEvidenceZones,
+  listFollowedEvidence,
+  type EvidenceCard,
+  type EvidenceZone,
+} from "@/lib/evidenceZoneClient";
+import { evidenceErrorMessage } from "@/lib/evidenceZoneClient";
+
+export function FollowedEvidenceZones() {
+  const [cards, setCards] = useState<EvidenceCard[]>([]);
+  const [zones, setZones] = useState<EvidenceZone[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      listEvidenceZones("", null, "following"),
+      listFollowedEvidence(),
+    ])
+      .then(([page, evidence]) => {
+        if (active) {
+          setZones(page.items.slice(0, 3));
+          setCards(evidence.items.slice(0, 3));
+        }
+      })
+      .catch((reason) => {
+        if (active) setError(evidenceErrorMessage(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refresh]);
+  return (
+    <section
+      aria-label="关注的证据专区"
+      className="mb-6 border-b border-border pb-4"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-ui font-medium text-text">证据专区</h2>
+        <Link
+          to="/app/frontier/zones?scope=following"
+          className="text-caption text-accent"
+        >
+          查看全部关注专区
+        </Link>
+      </div>
+      {error ? (
+        <EmptyState
+          title={error}
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => setRefresh((value) => value + 1)}
+            >
+              重试
+            </Button>
+          }
+        />
+      ) : loading ? (
+        <FrontierSkeleton />
+      ) : !zones.length ? (
+        <p className="mt-3 text-caption text-text-3">还没有关注证据专区</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-border">
+          {zones.map((zone) => (
+            <li key={zone.id} className="py-3">
+              <Link
+                to={`/app/frontier/zones/${encodeURIComponent(zone.id)}`}
+                className="text-ui text-text hover:text-accent"
+              >
+                {zone.title}
+              </Link>
+              {zone.evidenceCount !== null && (
+                <span className="ml-3 text-caption text-text-3">
+                  {zone.evidenceCount} 条证据
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {cards.length > 0 && (
+        <div>
+          <h3 className="mt-4 text-ui font-medium text-text">最近证据更新</h3>
+          <ul className="mt-3 divide-y divide-border">
+            {cards.map((card) => (
+              <li key={card.id} className="py-3">
+                <Link
+                  to={`/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`}
+                  className="text-ui text-text hover:text-accent"
+                >
+                  {card.title}
+                </Link>
+                {card.summary && (
+                  <p className="mt-1 line-clamp-2 max-w-measure text-caption text-text-2">
+                    {card.summary}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}

@@ -17,7 +17,7 @@ vi.mock("@/lib/frontierClient", async (importOriginal) => ({
 function Probe() {
   const location = useLocation();
   const intent = (location.state as { runtimeUiIntent?: { kind: string; draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="probe">{location.pathname}|{intent?.kind}|{intent?.draft}</div>;
+  return <div data-testid="probe">{location.pathname}{location.search}|{intent?.kind}|{intent?.draft}</div>;
 }
 
 function renderCard(item = frontierItem(), props: Partial<Parameters<typeof FrontierCard>[0]> = {}) {
@@ -261,4 +261,19 @@ it("follows a card's structured source identity without invoking hide or externa
   expect(client.addFrontierFollow).toHaveBeenCalledWith({ kind: "source", key: item.source.id, label: item.source.name, muted: false });
   expect(handlers.onHide).not.toHaveBeenCalled();
   expect(await screen.findByText("已关注")).toBeInTheDocument();
+});
+
+it("offers an explicit draft bridge from the feed to an evidence zone", async () => {
+  renderCard(frontierItem({ id: "source/item" }));
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "整理为证据卡片" }));
+  expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/zones?fromItem=source%2Fitem");
+});
+
+it("opens an event from more actions even when it has only one report", async () => {
+  renderCard(frontierItem({ alsoReportedCount: 0, alsoReportedBy: [], event: { id: "single-event", title: "Single-source event" } }));
+  expect(screen.queryByRole("button", { name: /另有/ })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "同一事件的全部报道" }));
+  expect(await screen.findByTestId("probe")).toHaveTextContent("/app/frontier/events/single-event");
 });
