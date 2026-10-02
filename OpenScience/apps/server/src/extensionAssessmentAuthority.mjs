@@ -7,7 +7,8 @@ import { HttpError, openScopedFileNoFollow, readStableFileHandle } from './secur
 export const EXTENSION_ASSESSMENT_DOMAIN = 'evimed-extension-assessment-admission-v1';
 const authorities = new WeakSet();
 const denied = () => new HttpError(403, 'extension_access_denied', 'The assessment admission is unavailable.');
-const factKeys = ['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','projectId','projectCreatedAt'];
+const factKeys = ['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerMembershipEpoch','projectId','projectCreatedAt'];
+const nullableFacts=new Set(['sourceCommit','actorMembershipEpoch','installerMembershipEpoch']);
 const digest = value => 'sha256:' + createHash('sha256').update(canonicalJson(value)).digest('hex');
 /** Constructor-only authority objects cannot be reconstructed from serialized flags. @param {any} value */
 export function assertExtensionAssessmentAuthority(value) { if (value !== null && !authorities.has(value)) throw denied(); }
@@ -45,11 +46,14 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
   };
   const admit = async context => {
     const { envelope, assessmentAdmissionDigest } = await read(), facts = await currentFacts(context);
+    if(!facts||factKeys.some(field=>!Object.hasOwn(facts,field)||facts[field]===undefined))throw denied();
     const matches = envelope.payload.admissions.filter(record => factKeys.every(field => canonicalJson(record[field] ?? null) === canonicalJson(facts?.[field] ?? null)));
     if (matches.length !== 1) throw denied();
     const record = matches[0];
     if (Object.keys(record).sort().join(',') !== [...factKeys,'assessmentId','issuedAt','expiresAt','allowedOperations'].sort().join(',')
-      || factKeys.some(field => record[field] === undefined || (record[field] === null && field !== 'sourceCommit'))
+      || factKeys.some(field => record[field] === undefined || (record[field] === null && !nullableFacts.has(field)))
+      || (record.actorId===record.ownerId ? record.actorMembershipEpoch!==null||record.installerMembershipEpoch!==null
+        : typeof record.actorMembershipEpoch!=='string'||!record.actorMembershipEpoch||typeof record.installerMembershipEpoch!=='string'||!record.installerMembershipEpoch)
       || typeof record.assessmentId !== 'string' || !record.assessmentId || !Number.isFinite(Date.parse(record.issuedAt))
       || !Number.isFinite(Date.parse(record.expiresAt)) || Date.parse(record.issuedAt) > now() || Date.parse(record.expiresAt) <= now()
       || Date.parse(record.expiresAt) <= Date.parse(record.issuedAt) || !Array.isArray(record.allowedOperations)
@@ -62,7 +66,7 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
       || record.sourceCommit !== identity.sourceCommit || record.adapterRevision !== identity.adapterRevision
       || record.runtimeImageDigest !== identity.runtimeImageDigest || record.dshVersion !== identity.dshVersion
       || record.permissionProfileRevision !== identity.permissionProfileRevision || record.suiteRevision !== identity.suiteRevision
-      || ['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','projectId','projectCreatedAt'].some(field => record[field] !== scope[field])
+      || ['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','projectId','projectCreatedAt'].some(field => record[field] !== scope[field])
       || (context.operation !== undefined && !record.allowedOperations.includes(context.operation))) throw denied();
     return Object.freeze({ assessmentAdmissionDigest });
   };
@@ -91,7 +95,8 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
         || manifest.identity.ownerId!==manifest.scope.ownerId || manifest.identity.projectId!==manifest.scope.projectId
         || binding.coordinate!==facts.coordinate || binding.integrity!==plugin.integrity || binding.artifactDigest!==plugin.artifactDigest
         || binding.configDigest!==plugin.configDigest || manifest.scope.actorId!==binding.actorId
-        || ['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','projectId','projectCreatedAt'].some(field=>manifest.scope[field]!==facts[field]))throw denied();
+        || binding.actorMembershipEpoch!==facts.installerMembershipEpoch
+        || ['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','projectId','projectCreatedAt'].some(field=>manifest.scope[field]!==facts[field]))throw denied();
       const admission = await admit({ ...context, entry: facts.entry, artifact: facts.artifact, identity: facts.identity,
         scope: { ...manifest.scope, actorId: binding.actorId, actorAccountCreatedAt: facts.actorAccountCreatedAt } });
       if (admission.assessmentAdmissionDigest !== plugin.assessmentAdmissionDigest) throw denied();

@@ -6,6 +6,7 @@ import { canonicalJson } from '@evimed/domain';
 import { extensionRequestObject } from '../../apps/server/src/extensionAccess.mjs';
 import { extensionToolArtifactDigest } from '../../apps/server/src/extensionToolController.mjs';
 import { currentExtensionSourcePolicy, loadExtensionDeployment } from '../../apps/server/src/extensionDeployment.mjs';
+import { openScopedFileNoFollow, readStableFileHandle } from '../../apps/server/src/security.mjs';
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const HEX = /^[a-f0-9]{64}$/;
@@ -13,6 +14,30 @@ const coordinate = Object.freeze({ kind: 'github', repository: 'Jesse-njx/dsh-co
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const root = path.join(repo, '.evimed-local/extensions/build/fixtures');
 export const ASSESSMENT_BOOTSTRAP = 'isolated-fixture-metadata-only; no fabricated qualification receipt';
+const shortParent='/private/tmp/evimed-extension-acceptance';
+/** Pure comparison of observations; the fixture reader below obtains both snapshots itself and never accepts caller permission flags. */
+export function assertShortFixtureParentSnapshots(before,after){
+  for(const snapshot of [before,after])if(snapshot.realPath!==shortParent||snapshot.directory!==true||snapshot.symlink!==false||snapshot.uid!==process.getuid()||snapshot.mode!==0o700)throw new Error('unsafe_assessment_parent');
+  if(before.dev!==after.dev||before.ino!==after.ino)throw new Error('unsafe_assessment_parent');
+}
+async function shortParentSnapshot(){const stat=await fs.lstat(shortParent);return{realPath:await fs.realpath(shortParent),directory:stat.isDirectory(),symlink:stat.isSymbolicLink(),uid:stat.uid,mode:stat.mode&0o7777,dev:stat.dev,ino:stat.ino};}
+/** Exactly the legacy owned tree or an operator-owned canonical short socket-compatible root. No arbitrary temporary directory is admitted. */
+export async function assertAssessmentFixtureRoot(dataDir){
+  if(typeof dataDir!=='string'||!path.isAbsolute(dataDir))throw new Error('invalid_assessment_root');
+  const legacy=path.dirname(dataDir)===root&&/^extension-saas-[a-f0-9-]{36}$/.test(path.basename(dataDir));
+  const short=path.dirname(dataDir)===shortParent&&/^[a-f0-9]{10}$/.test(path.basename(dataDir));
+  if(!legacy&&!short)throw new Error('invalid_assessment_root');
+  const info=await fs.lstat(dataDir);
+  if(!info.isDirectory()||info.isSymbolicLink()||info.uid!==process.getuid()||(info.mode&0o7777)!==0o700||await fs.realpath(dataDir)!==dataDir)throw new Error('unsafe_assessment_root');
+  if(short){const parentBefore=await shortParentSnapshot();assertShortFixtureParentSnapshots(parentBefore,parentBefore);
+    const opened=await openScopedFileNoFollow(dataDir,path.join(dataDir,'root-ownership.json'));let bytes;
+    try{if(opened.stat.uid!==process.getuid()||(opened.stat.mode&0o7777)!==0o400||opened.stat.size>4096)throw new Error('unsafe_assessment_root');bytes=await readStableFileHandle(opened.handle,opened.stat);}finally{await opened.handle.close();}
+    const marker=JSON.parse(bytes.toString('utf8'));extensionRequestObject(marker,['schemaVersion','kind','rootId','operatorUid']);
+    if(marker.schemaVersion!==1||marker.kind!=='extension-saas-assessment'||! /^[a-f0-9]{32}$/.test(marker.rootId)||marker.rootId.slice(0,10)!==path.basename(dataDir)||marker.operatorUid!==process.getuid()||canonicalJson(marker)+'\n'!==bytes.toString())throw new Error('unsafe_assessment_root');
+    assertShortFixtureParentSnapshots(parentBefore,await shortParentSnapshot());
+  }
+  return dataDir;
+}
 /** Inputs are a trusted image/closure observation, never a customer descriptor or pass flag. */
 export async function createAssessmentDescriptor(input) {
   extensionRequestObject(input, ['imageId', 'integrity', 'closureExpectedSHA']);
@@ -26,7 +51,8 @@ export async function createAssessmentDescriptor(input) {
 }
 /** A fixed owned disposable tree is the only write destination. Loader independently checks the prepared bytes. */
 export async function prepareAssessmentDeployment(dataDir, descriptor, suiteRevision) {
-  if (!path.isAbsolute(dataDir) || path.dirname(dataDir) !== root || !/^extension-saas-[a-f0-9-]{36}$/.test(path.basename(dataDir)) || !DIGEST.test(suiteRevision)) throw new Error('invalid_assessment_root');
+  if (!DIGEST.test(suiteRevision)) throw new Error('invalid_assessment_root');
+  await assertAssessmentFixtureRoot(dataDir);
   extensionRequestObject(descriptor, ['id', 'coordinate', 'integrity', 'imageId', 'closureExpectedSHA', 'runnerSHA', 'policySHA', 'inventorySHA', 'adapterDigest', 'artifactDigest']);
   const checked = await createAssessmentDescriptor({ imageId: descriptor.imageId, integrity: descriptor.integrity, closureExpectedSHA: descriptor.closureExpectedSHA });
   if (canonicalJson(checked) !== canonicalJson(descriptor)) throw new Error('assessment_descriptor_changed');

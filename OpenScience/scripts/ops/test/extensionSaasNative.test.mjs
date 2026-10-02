@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateNativeObservation, runNativeBoundaryControls } from '../extension-saas-acceptance-native.mjs';
+import { validateNativeObservation, runNativeBoundaryControls, observeRuntimeBusyDeferral, observeRuntimeCandidateRollback, observeQueuedOperationRevocation, validateCandidateFaultTarget } from '../extension-saas-acceptance-native.mjs';
+test('startup fault control fences immutable new candidate by owner/project/image/generation mount and creation time',()=>{
+ const expected={previousId:'a'.repeat(64),containerName:'fixture',imageId:'sha256:'+'a'.repeat(64),ownerId:'owner',projectId:'project',attemptStartedAt:1000,
+  selectedPath:'/owned/generation-new/selected',dataVolume:null};
+ const actual={Id:'b'.repeat(64),Name:'/fixture',Image:expected.imageId,Created:new Date(1001).toISOString(),State:{Running:true},
+  Config:{User:'10001:10001',Labels:{'open-science.web.runtime':'true','open-science.user':'owner','open-science.project':'project'}},
+  HostConfig:{ReadonlyRootfs:true,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Mounts:[{Target:'/opt/evimed/extensions',Type:'bind',Source:expected.selectedPath,ReadOnly:true}]},
+  Mounts:[{Destination:'/opt/evimed/extensions',RW:false}]};
+ assert.equal(validateCandidateFaultTarget(actual,expected),actual.Id);
+ for(const changed of [{...actual,Id:expected.previousId},{...actual,Created:new Date(999).toISOString()},
+  {...actual,Image:'sha256:'+'b'.repeat(64)}, {...actual,Config:{Labels:{...actual.Config.Labels,'open-science.user':'foreign'}}},
+  {...actual,HostConfig:{Mounts:[{...actual.HostConfig.Mounts[0],Source:'/owned/generation-old/selected'}]}},
+  {...actual,State:{Running:false}}, {...actual,Mounts:[{Destination:'/opt/evimed/extensions',RW:true}]}]) {
+  assert.throws(()=>validateCandidateFaultTarget(changed,expected),/identity_unconfirmed/);
+ }
+});
+test('main-path campaign helpers cannot convert duck-typed runtime/worker observations to measurements',async()=>{
+ for(const observe of [observeRuntimeBusyDeferral,observeRuntimeCandidateRollback,observeQueuedOperationRevocation]) {
+  await assert.rejects(observe({app:{runtimeManager:{pluginRuntimeBusy:async()=>true},hostedExtensions:{}},project:{userId:'fixture',id:'fixture'},job:{status:'running'},revoke:async()=>{}}),/real_.*campaign_required/);
+ }
+});
 test('native observation validation requires actual pin/registry and controlled gateway outcomes',()=>{
  const row={kernel:'fixture',uid:10001,readOnlyProjection:true,nativeTools:['doc_read','doc_write'],gatewayCalls:1,modelCalls:2,citation:{timeoutMs:4000},contextObservations:{forgedActorRefusedBeforeGateway:true,failedToolPreserved:true,priorSourceRetained:true,changedSourceAndAssumptionRetained:true,refusalEncoding:'completed-tool-with-error-output',turns:4}};
  assert.throws(()=>validateNativeObservation(row,{pin:'different',enabled:true}));

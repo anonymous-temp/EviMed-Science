@@ -8,8 +8,134 @@ import {assessmentDockerEnvironment} from './extension-saas-acceptance-docker.mj
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readAcceptanceInputs} from './extension-saas-acceptance-inputs.mjs';
+import { RuntimeManager } from '../../apps/server/src/runtimeManager.mjs';
+import { ExtensionGenerationService, extensionGenerationRoot } from '../../apps/server/src/extensionGenerationService.mjs';
+import { ExtensionGenerationWorker, assertExtensionGenerationRuntimeProof } from '../../apps/server/src/extensionGenerationWorker.mjs';
+import { ExtensionOperationService } from '../../apps/server/src/extensionOperationService.mjs';
+import { ExtensionOperationWorker } from '../../apps/server/src/extensionOperationWorker.mjs';
+import { canonicalJson } from '@evimed/domain';
+import { openScopedFileNoFollow, readStableFileHandle } from '../../apps/server/src/security.mjs';
 const exec=promisify(execFile), hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
+/** A campaign calls the real manager/worker; duck-typed fixtures cannot become measured runtime evidence. */
+function campaignGenerationServices(app, project, job) {
+ const runtime=app?.runtimeManager,service=app?.hostedExtensions?.generations,worker=app?.pluginApplyWorker?.generationWorker;
+ if(!(runtime instanceof RuntimeManager)||!(service instanceof ExtensionGenerationService)||!(worker instanceof ExtensionGenerationWorker)
+  ||worker.runtime!==runtime||worker.service!==service||job?.userId!==project?.userId||job?.projectId!==project?.id||job.status!=='running'||!worker.canHandle(job))throw new Error('real_generation_campaign_required');
+ return{runtime,service,worker};
+}
+async function completedWorkspaceDigest(runtime,project,relativePath) {
+ if(typeof relativePath!=='string'||relativePath.split('/').some(part=>!part||part==='.'||part==='..')||path.isAbsolute(relativePath)||relativePath.includes('\\'))throw new Error('invalid_completed_artifact');
+ const root=await runtime.workspaceRootForDelivery(project),opened=await openScopedFileNoFollow(root,path.join(root,relativePath));
+ try{if(opened.stat.size>8*1024*1024)throw new Error('completed_artifact_unbounded');return 'sha256:'+hash(await readStableFileHandle(opened.handle,opened.stat));}finally{await opened.handle.close();}
+}
+/** Root provisions a genuinely pending native turn and an owned leased normal apply job before this call. */
+export async function observeRuntimeBusyDeferral({app,project,job,completedArtifact}) {
+ const{runtime,service,worker}=campaignGenerationServices(app,project,job);
+ assert.equal(await runtime.pluginRuntimeBusy(project),true);
+ const before=await service.current(project),generation=runtime.runtimeGeneration(project),active=runtime.currentGeneration(project);
+ assert(before?.payload.effective&&active&&generation);assert.equal(canonicalJson(before.payload.effective.reference),canonicalJson(active.reference));
+ const preserved=await completedWorkspaceDigest(runtime,project,completedArtifact);
+ await worker.runClaimed(job);
+ const queued=await service.jobs.get(job.userId,job.id),after=await service.current(project);
+ assert.equal(queued.status,'queued');assert.equal(queued.leaseToken,null);
+ assert.equal(runtime.runtimeGeneration(project),generation);assert.equal(canonicalJson(runtime.currentGeneration(project)),canonicalJson(active));
+ assert.equal(canonicalJson(after.payload.effective),canonicalJson(before.payload.effective));
+ assert.equal(await completedWorkspaceDigest(runtime,project,completedArtifact),preserved);
+ return{caseId:'SAAS-18',scope:'actual-runtime-manager-native-busy-generation-deferral',setup:'Real owned pending native turn and leased normal generation apply; no patched busy/probe result',
+  expected:'Native busy update defers and preserves active generation and completed workspace bytes',actual:{runtimeGeneration:generation,jobId:job.id,jobStatus:queued.status,completedArtifactDigest:preserved},qualified:false};
+}
+/** Root injects only a bounded physical startup fault in the owned candidate, never a fake successful proof or changed ledger row. */
+export async function observeRuntimeCandidateRollback({app,project,job,completedArtifact}) {
+ const{runtime,service,worker}=campaignGenerationServices(app,project,job);
+ assert.equal(await runtime.pluginRuntimeBusy(project),false);
+ const before=await service.current(project),active=runtime.currentGeneration(project);
+ assert(before?.payload.lastGood&&active);assert.equal(canonicalJson(before.payload.lastGood.reference),canonicalJson(active.reference));
+ assert.notEqual(canonicalJson(before.payload.desired.reference),canonicalJson(active.reference));
+ const preserved=await completedWorkspaceDigest(runtime,project,completedArtifact);
+ await worker.runClaimed(job);
+ const after=await service.current(project),settled=await service.jobs.get(job.userId,job.id);
+ assert.equal(settled.status,'succeeded');assert.equal(settled.result.phase,'rolled-back');assert.equal(settled.result.error,'plugin_apply_failed');
+ assert.equal(after.payload.phase,'rolled-back');assert.equal(canonicalJson(after.payload.effective.reference),canonicalJson(before.payload.lastGood.reference));
+ assert.equal(canonicalJson(runtime.currentGeneration(project).reference),canonicalJson(before.payload.lastGood.reference));
+ const proof=await runtime.probeGeneration(project,after.payload.effective);
+ assertExtensionGenerationRuntimeProof(after.payload.effective,proof,runtime.runtimeGeneration(project));
+ assert.equal(await completedWorkspaceDigest(runtime,project,completedArtifact),preserved);
+ return{caseId:'SAAS-18',scope:'actual-runtime-manager-failed-candidate-rollback',setup:'Normal leased apply; externally observed bounded physical candidate startup failure; actual restore and probe',
+  expected:'Failed candidate restores exact still-authorized lastGood and preserves completed research',actual:{jobId:job.id,jobStatus:settled.status,phase:after.payload.phase,
+   restoredGenerationHash:after.payload.effective.reference.generationHash,runtimeGeneration:proof.runtimeGeneration,completedArtifactDigest:preserved},qualified:false};
+}
+/** Pure target fence. A reused name/image is insufficient: immutable ID, fresh creation and candidate generation mount must all agree. */
+export function validateCandidateFaultTarget(actual,expected) {
+ const labels=actual?.Config?.Labels,mount=actual?.HostConfig?.Mounts?.find(item=>item.Target==='/opt/evimed/extensions');
+ const physical=actual?.Mounts?.find(item=>item.Destination==='/opt/evimed/extensions');
+ if(!/^[a-f0-9]{64}$/.test(actual?.Id??'')||actual.Id===expected.previousId||actual.Name!=='/'+expected.containerName
+  ||actual.Image!==expected.imageId||labels?.['open-science.web.runtime']!=='true'||labels?.['open-science.user']!==expected.ownerId
+  ||labels?.['open-science.project']!==expected.projectId||!Number.isFinite(Date.parse(actual.Created))||Date.parse(actual.Created)<expected.attemptStartedAt
+  ||actual.State?.Running!==true||actual.Config?.User!=='10001:10001'||actual.HostConfig?.ReadonlyRootfs!==true||!actual.HostConfig?.CapDrop?.includes('ALL')
+  ||!actual.HostConfig?.SecurityOpt?.some(value=>value==='no-new-privileges'||value==='no-new-privileges:true')||mount?.ReadOnly!==true||physical?.RW!==false
+  ||(expected.dataVolume?mount.Type!=='volume'||mount.Source!==expected.dataVolume||mount.VolumeOptions?.Subpath!==expected.selectedRelativePath
+   :mount.Type!=='bind'||mount.Source!==expected.selectedPath))throw new Error('candidate_fault_identity_unconfirmed');
+ return actual.Id;
+}
+/** Actual serial campaign only. Kill one independently inspected new candidate ID, then let the unmodified worker restore/probe lastGood. */
+export async function runRuntimeCandidateFailureControl({app,project,job,completedArtifact,signal=null}) {
+ const{runtime,service}=campaignGenerationServices(app,project,job),config=runtime.config;
+ const live=runtime.runtimes.get(runtime.key(project)),state=await service.current(project),candidate=state?.payload.desired;
+ if(!live?.containerName||!candidate?.reference||candidate.reference.generationHash===state.payload.lastGood?.reference?.generationHash)throw new Error('candidate_fault_setup_incomplete');
+ const command=async args=>(await exec(config.runtimeContainerBin,args,{timeout:5000,maxBuffer:128*1024,env:assessmentDockerEnvironment(),...(signal?{signal}:{})})).stdout.trim();
+ const inspect=async target=>JSON.parse(await command(['inspect','--format','{{json .}}',target]));
+ const prior=await inspect(live.containerName),selectedPath=path.join(extensionGenerationRoot(config,candidate.reference),'selected');
+ if(!/^[a-f0-9]{64}$/.test(prior.Id)||prior.Image!==candidate.identity.baseRuntimeImageDigest)throw new Error('candidate_fault_setup_incomplete');
+ const expected={previousId:prior.Id,containerName:live.containerName,imageId:candidate.identity.baseRuntimeImageDigest,
+  ownerId:project.userId,projectId:project.id,attemptStartedAt:Date.now(),selectedPath,dataVolume:config.runtimeDataVolume,
+  selectedRelativePath:path.relative(config.dataDir,selectedPath).split(path.sep).join('/')};
+ let finished=false,injected=null,watcherFailure=null;
+ const watcher=(async()=>{
+  const deadline=Date.now()+30000;
+  while(Date.now()<deadline){
+   if(finished)break;
+   signal?.throwIfAborted();
+   let found;try{found=await inspect(expected.containerName);}catch(error){if(!/No such (?:object|container)/i.test(error.stderr??''))throw error;}
+   if(found&&found.Id!==prior.Id){
+    const id=validateCandidateFaultTarget(found,expected);
+    // Independently reread protected canonical generation bytes and identity immediately before destructive fault injection.
+    const verified=await service.verifyManifest(project,candidate.reference);
+    if(canonicalJson(verified)!==canonicalJson(candidate))throw new Error('candidate_fault_manifest_changed');
+    validateCandidateFaultTarget(await inspect(id),expected);
+    await command(['kill','--signal','KILL',id]);
+    injected={containerId:id,generationHash:candidate.reference.generationHash,manifestDigest:'sha256:'+hash(canonicalJson(candidate)),imageId:expected.imageId};return;
+   }
+   await new Promise(resolve=>setTimeout(resolve,100));
+  }
+ })().catch(error=>{watcherFailure=error;});
+ let observed,failure;
+ try{observed=await observeRuntimeCandidateRollback({app,project,job,completedArtifact});}catch(error){failure=error;}finally{finished=true;}
+ await watcher;
+ if(watcherFailure)throw watcherFailure;
+ if(!injected)throw Object.assign(new Error('candidate_startup_identity_not_observed'),{code:'candidate_startup_identity_not_observed',qualified:false});
+ if(failure)throw failure;
+ return{...observed,actual:{...observed.actual,startupFault:injected}};
+}
+/** The queued job must come from the real native gateway; caller performs a real API/membership/credential revocation. */
+export async function observeQueuedOperationRevocation({app,project,jobId,revoke,completedArtifact}) {
+ const service=app?.hostedExtensions?.operations,worker=app?.hostedExtensions?.worker,runtime=app?.runtimeManager;
+ if(!(service instanceof ExtensionOperationService)||!(worker instanceof ExtensionOperationWorker)||!(runtime instanceof RuntimeManager)
+  ||worker.service!==service||typeof revoke!=='function'||worker.running||worker.active.size)throw new Error('real_queued_revocation_campaign_required');
+ const queued=await service.jobs.get(project.userId,jobId);
+ assert.equal(queued?.kind,'extension-execute');assert.equal(queued.status,'queued');assert.equal(queued.projectId,project.id);
+ assert.equal(queued.payload.dispatch,null);assert(queued.payload.auth.invocation);
+ const preserved=await completedWorkspaceDigest(runtime,project,completedArtifact);
+ await revoke();
+ await worker.tick();
+ const failed=await service.jobs.get(project.userId,jobId);
+ assert.equal(failed.status,'failed');assert.equal(failed.payload.dispatch,null);
+ assert(['extension_access_denied','extension_proof_stale','product_state_unavailable','project_not_found','not_found','ENOENT','file_not_found'].includes(failed.error?.code));
+ assert.equal(await completedWorkspaceDigest(runtime,project,completedArtifact),preserved);
+ return{caseId:'SAAS-05',scope:'actual-native-queued-operation-current-authority-revocation',
+  setup:'Real native-gateway queued operation; real current-authority revocation; unmodified leased worker refuses before dispatch',
+  expected:'Queued revoked native request cannot dispatch; completed permitted bytes remain',actual:{jobId,status:failed.status,code:failed.error.code,dispatch:null,completedArtifactDigest:preserved},qualified:false};
+}
 export function validateNativeObservation(value,{pin,enabled}) {
  assert.equal(value.kernel,pin);assert.equal(value.uid,10001);assert.equal(value.readOnlyProjection,true);
  assert.deepEqual(value.nativeTools,enabled?['doc_read','doc_write']:[]);assert.equal(value.citation.timeoutMs,enabled?4000:5000);
