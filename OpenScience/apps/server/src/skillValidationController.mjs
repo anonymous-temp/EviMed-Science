@@ -42,8 +42,8 @@ function resourcePath(relative) {
 }
 /** Stable descriptor reads validate the exact set, types, names and hashes; no native code runs here.
  * @param {any} config @param {any} reference */
-async function snapshot(config, reference) {
-  const root = skillValidationRoot(config, reference)
+async function snapshot(config, reference, projectedRoot = null) {
+  const root = projectedRoot ?? skillValidationRoot(config, reference)
   const rootOpened = await openScopedDirectoryNoFollow(config.dataDir, root)
   const files = new Map()
   const metadata = []
@@ -53,7 +53,8 @@ async function snapshot(config, reference) {
   async function walk(directory, prefix) {
     const opened = await openScopedDirectoryNoFollow(config.dataDir, directory)
     try {
-      metadata.push([prefix, 'directory', opened.stat.dev, opened.stat.ino, opened.stat.mtimeMs, opened.stat.ctimeMs])
+      if (projectedRoot && (opened.stat.mode & 0o7777) !== 0o755) throw invalid()
+      metadata.push([prefix, 'directory', opened.stat.mode, opened.stat.dev, opened.stat.ino, opened.stat.mtimeMs, opened.stat.ctimeMs])
       for (const name of await fs.readdir(opened.path)) {
         const relative = prefix ? `${prefix}/${name}` : name
         resourcePath(relative)
@@ -64,9 +65,10 @@ async function snapshot(config, reference) {
         if (!info.isFile() || info.nlink !== 1 || files.size >= 130 || info.size > 4 * 1024 * 1024) throw invalid()
         const file = await openScopedFileNoFollow(config.dataDir, target)
         try {
+          if (projectedRoot && (file.stat.mode & 0o7777) !== 0o444) throw invalid()
           if (file.stat.size > 4 * 1024 * 1024 || (total += file.stat.size) > 16 * 1024 * 1024 + 65536) throw invalid()
           files.set(relative, await readStableFileHandle(file.handle, file.stat))
-          metadata.push([relative, 'file', file.stat.dev, file.stat.ino, file.stat.size, file.stat.mtimeMs, file.stat.ctimeMs])
+          metadata.push([relative, 'file', file.stat.mode, file.stat.dev, file.stat.ino, file.stat.size, file.stat.mtimeMs, file.stat.ctimeMs])
         } finally { await file.handle.close() }
       }
     } finally { await opened.handle.close() }
@@ -100,11 +102,53 @@ async function snapshot(config, reference) {
       if (expected.size !== files.size || [...files.keys()].some(key => !expected.has(key))
         || sha(canonicalJson({ file: skillText, resources: manifest.resources })) !== reference.contentId) throw invalid()
     }
-    return { root, dev: rootOpened.stat.dev, ino: rootOpened.stat.ino,
+    return { root, files, contentDigest: sha(canonicalJson([...files].sort(([a], [b]) => a.localeCompare(b)).map(([name, bytes]) => [name, sha(bytes)]))),
+      dev: rootOpened.stat.dev, ino: rootOpened.stat.ino,
       digest: sha(canonicalJson({ files: [...files].sort(([a], [b]) => a.localeCompare(b)).map(([name, bytes]) => [name, sha(bytes)]),
         metadata: metadata.sort(([a], [b]) => String(a).localeCompare(String(b))) })) }
   } catch { throw invalid() }
   finally { await rootOpened.handle.close() }
+}
+
+/** An opaque owned job selects its disposable readable tree. */
+function projectionRoot(config, reference, jobId) {
+  const checked = validateSkillReference(reference)
+  if (!/^[a-f0-9-]{36}$/u.test(jobId)) throw invalid()
+  return path.join(config.dataDir, '.openscience', 'skill-validation-state', 'projections', checked.ownerHash, jobId, 'input')
+}
+/** Copy bounded descriptor-verified regular bytes, never original permissions.
+ * @param {any} config @param {any} before @param {any} plan */
+async function projectSnapshot(config, before, plan) {
+  const directories = new Set([''])
+  for (const [relative, bytes] of before.files) {
+    const parts = relative.split('/')
+    for (let depth = 1; depth < parts.length; depth++) directories.add(parts.slice(0, depth).join('/'))
+    const target = path.join(plan.projectionRoot, relative)
+    await writeFileExclusiveNoFollow(config.dataDir, target, bytes, { mode: 0o444 })
+    const file = await openScopedFileNoFollow(config.dataDir, target)
+    try { await file.handle.chmod(0o444) } finally { await file.handle.close() }
+  }
+  for (const relative of directories) {
+    const directory = await openScopedDirectoryNoFollow(config.dataDir, path.join(plan.projectionRoot, relative), { create: true })
+    try { await directory.handle.chmod(0o755) } finally { await directory.handle.close() }
+  }
+}
+/** Only the owned job tree is removed after joined physical absence.
+ * @param {any} config @param {any} plan */
+async function removeProjection(config, plan) {
+  if (!plan?.projectionRoot) return
+  const root = path.dirname(plan.projectionRoot)
+  const directory = await openScopedDirectoryNoFollow(config.dataDir, root).catch(error => {
+    if (['ENOENT', 'file_not_found'].includes(error.code)) return null
+    throw error
+  })
+  if (!directory) return
+  try { await fs.rm(path.join(directory.path, 'input'), { recursive: true, force: true }); await directory.handle.sync() }
+  finally { await directory.handle.close() }
+  await fs.rmdir(root)
+  await fs.rmdir(path.dirname(root)).catch(error => {
+    if (!['ENOENT', 'ENOTEMPTY'].includes(error.code)) throw error
+  })
 }
 
 /** Deployment-owned shape, resolved to an immutable image ID before it executes.
@@ -113,12 +157,13 @@ export function skillValidationPlan(config, reference, imageId, jobId) {
   const checked = validateSkillReference(reference)
   if (!/^sha256:[a-f0-9]{64}$/u.test(imageId) || !/^[a-f0-9-]{36}$/u.test(jobId)) throw invalid()
   const identity = sha(canonicalJson(checked))
-  return { name: NAME, identity, jobId, args: ['create', '--name', NAME,
+  const selectedProjection = projectionRoot(config, checked, jobId)
+  return { name: NAME, identity, jobId, projectionRoot: selectedProjection, args: ['create', '--name', NAME,
     '--label', 'open-science.skill-validation=true', '--label', `open-science.skill-reference=${identity}`, '--label', `open-science.skill-job=${jobId}`,
     '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32', '--cpus=0.5', '--memory=256m', '--memory-swap=256m',
-    '--user', String(config.runtimeContainerUser || `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`),
+    '--user', '10001:10001',
     '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16m', '--env', 'HOME=/tmp', '--env', 'DSH_HOME=/tmp/dsh', '--env', 'DSH_AGENTS_HOME=/tmp/agents',
-    '--env', 'DSH_TELEMETRY_DISABLED=1', '--mount', `${dockerRuntimeMount(config, skillValidationRoot(config, checked), '/input')},readonly`,
+    '--env', 'DSH_TELEMETRY_DISABLED=1', '--mount', `${dockerRuntimeMount(config, selectedProjection, '/input')},readonly`,
     '--entrypoint', 'node', imageId, '/opt/evimed/socket/scripts/validate-personal-skill.mjs', checked.expectedName ?? ''] }
 }
 
@@ -143,8 +188,8 @@ export function createSkillValidationController(config, hooks = {}) {
     if (result.status !== 0 || !/^sha256:[a-f0-9]{64}$/u.test(result.stdout.trim())) throw new HttpError(503, 'product_state_unavailable', 'The skill validation image is unavailable.')
     return result.stdout.trim()
   })
-  const inventory = () => {
-    const result = docker(['inspect', '--format', '{{json .}}', NAME])
+  const inventory = (reference = NAME) => {
+    const result = docker(['inspect', '--format', '{{json .}}', reference])
     if (result.status !== 0) {
       if (/no such (object|container)/iu.test(result.stderr ?? '')) return null
       throw new HttpError(503, 'product_state_unavailable', 'Skill validation availability cannot be verified.')
@@ -153,15 +198,34 @@ export function createSkillValidationController(config, hooks = {}) {
   }
   /** Remove only this exact labeled job and join both Docker state and its CLI. */
   async function stop(job) {
-    const current = inventory()
-    if (current) {
-      if (current.Config?.Labels?.['open-science.skill-job'] !== job.plan.jobId
-        || current.Config?.Labels?.['open-science.skill-reference'] !== job.plan.identity) throw new HttpError(503, 'product_state_unavailable', 'Skill validation capacity remains reserved.')
-      if (!/^[a-f0-9]{64}$/u.test(current.Id) || docker(['rm', '-f', current.Id]).status !== 0 || inventory() !== null) throw new HttpError(503, 'product_state_unavailable', 'Skill validation cancellation remains pending.')
+    try {
+      if (job.uncertain || job.createdAttempted && !HEX.test(job.containerId ?? '')) {
+        throw new HttpError(503, 'product_state_unavailable', 'Skill validation creation remains uncertain.')
+      }
+      const current = inventory()
+      if (job.containerId) {
+        const owned = inventory(job.containerId)
+        if (owned) {
+          if (owned.Id !== job.containerId || owned.Config?.Labels?.['open-science.skill-job'] !== job.plan.jobId
+            || owned.Config?.Labels?.['open-science.skill-reference'] !== job.plan.identity) {
+            throw new HttpError(503, 'product_state_unavailable', 'Skill validation ownership cannot be confirmed.')
+          }
+          if (docker(['rm', '-f', job.containerId]).status !== 0 || inventory(job.containerId) !== null) {
+            throw new HttpError(503, 'product_state_unavailable', 'Skill validation cancellation remains pending.')
+          }
+        }
+        // A reused name, even with copied labels, is never this job's worker.
+        if (current && current.Id !== job.containerId || inventory() !== null) {
+          throw new HttpError(503, 'product_state_unavailable', 'Skill validation capacity has a replacement worker.')
+        }
+      } else if (current) {
+        throw new HttpError(503, 'product_state_unavailable', 'Skill validation capacity remains reserved.')
+      }
+    } finally {
+      if (job.child && job.child.exitCode === null && job.child.signalCode === null) job.child.kill('SIGKILL')
+      if (job.closed) await job.closed
     }
-    if (job.child && job.child.exitCode === null && job.child.signalCode === null) job.child.kill('SIGKILL')
-    if (job.closed) await job.closed
-    if (job.uncertain) throw new HttpError(503, 'product_state_unavailable', 'Skill validation creation remains uncertain.')
+    await removeProjection(config, job.plan)
     const marker = await openScopedFileNoFollow(config.dataDir, statePath).catch(error => {
       if (['ENOENT', 'file_not_found'].includes(error.code)) return null
       throw error
@@ -169,7 +233,8 @@ export function createSkillValidationController(config, hooks = {}) {
     if (marker) {
       try {
         const saved = JSON.parse((await readStableFileHandle(marker.handle, marker.stat)).toString('utf8'))
-        if (saved.jobId !== job.plan.jobId || saved.identity !== job.plan.identity) throw invalid()
+        if (saved.jobId !== job.plan.jobId || saved.identity !== job.plan.identity
+          || (saved.containerId ?? null) !== (job.containerId ?? null)) throw invalid()
       } finally { await marker.handle.close() }
       await fs.rm(statePath)
     }
@@ -210,10 +275,20 @@ export function createSkillValidationController(config, hooks = {}) {
       const jobId = current.Config.Labels['open-science.skill-job']
       if (current.Config.Labels['open-science.skill-validation'] !== 'true' || !/^[a-f0-9-]{36}$/u.test(jobId)
         || saved?.jobId !== jobId || saved?.identity !== identity) throw invalid()
-      await stop({ plan: { jobId, identity }, child: null, closed: null, uncertain: false })
+      if (!HEX.test(saved.containerId ?? '') || saved.containerId !== current.Id) {
+        throw new HttpError(503, 'product_state_unavailable', 'Skill validation cancellation identity is uncertain.')
+      }
+      await stop({ plan: { jobId, identity, projectionRoot: projectionRoot(config, checked, jobId) }, containerId: saved.containerId, createdAttempted: true, child: null, closed: null, uncertain: false })
       return { cancelled: true }
     }
-    if (saved?.identity === identity) throw new HttpError(503, 'product_state_unavailable', 'Skill validation cancellation could not be confirmed.')
+    if (saved?.identity === identity) {
+      if (!current && HEX.test(saved.containerId ?? '') && /^[a-f0-9-]{36}$/u.test(saved.jobId)) {
+        await stop({ plan: { jobId: saved.jobId, identity, projectionRoot: projectionRoot(config, checked, saved.jobId) },
+          containerId: saved.containerId, createdAttempted: true, child: null, closed: null, uncertain: false })
+        return { cancelled: true }
+      }
+      throw new HttpError(503, 'product_state_unavailable', 'Skill validation cancellation could not be confirmed.')
+    }
     return { cancelled: true }
   }
   /** @param {any} reference @param {AbortSignal} [signal] */
@@ -224,7 +299,7 @@ export function createSkillValidationController(config, hooks = {}) {
     const abort = new AbortController()
     signal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal
     let done = () => {}
-    const job = { identity: sha(canonicalJson(checked)), plan: null, child: null, closed: null, uncertain: false, createdAttempted: false, abort,
+    const job = { identity: sha(canonicalJson(checked)), plan: null, containerId: null, child: null, closed: null, uncertain: false, createdAttempted: false, marked: false, abort,
       done: new Promise(resolve => { done = () => resolve(undefined) }) }
     active = job
     try {
@@ -250,20 +325,32 @@ export function createSkillValidationController(config, hooks = {}) {
       if (await availableMemory() < 768 * 1024 * 1024) throw new HttpError(503, 'product_state_unavailable', 'Skill validation is waiting for host memory.')
       if (signal?.aborted) throw invalid()
       await writeFileExclusiveNoFollow(config.dataDir, statePath, `${canonicalJson({ jobId: job.plan.jobId, identity: job.plan.identity })}\n`, { mode: 0o600 })
+      job.marked = true
+      await projectSnapshot(config, before, job.plan)
+      const projection = await snapshot(config, checked, job.plan.projectionRoot)
+      if (projection.contentDigest !== before.contentDigest) throw invalid()
+      if (signal?.aborted) throw invalid()
       job.uncertain = true
       job.createdAttempted = true
       const created = docker(job.plan.args)
       if (created.status !== null) job.uncertain = false
       if (created.status !== 0) throw new HttpError(503, 'product_state_unavailable', 'Skill validation could not start.')
-      const createdState = inventory()
+      const containerId = created.stdout.trim()
+      if (!HEX.test(containerId)) {
+        job.uncertain = true
+        throw new HttpError(503, 'product_state_unavailable', 'Skill validation creation identity is uncertain.')
+      }
+      job.containerId = containerId
+      await writeFileAtomicNoFollow(config.dataDir, statePath, `${canonicalJson({ jobId: job.plan.jobId, identity: job.plan.identity, containerId })}\n`, { mode: 0o600 })
+      const createdState = inventory(containerId)
       const mounts = createdState?.HostConfig?.Mounts
-      const expectedSubpath = path.relative(path.resolve(config.dataDir), before.root).split(path.sep).join('/')
+      const expectedSubpath = path.relative(path.resolve(config.dataDir), job.plan.projectionRoot).split(path.sep).join('/')
       const mountMatches = Array.isArray(mounts) && mounts.length === 1 && mounts[0].Target === '/input' && mounts[0].ReadOnly === true
         && (config.runtimeDataVolume ? mounts[0].Type === 'volume' && mounts[0].Source === config.runtimeDataVolume
-          && mounts[0].VolumeOptions?.Subpath === expectedSubpath : mounts[0].Type === 'bind' && mounts[0].Source === before.root)
+          && mounts[0].VolumeOptions?.Subpath === expectedSubpath : mounts[0].Type === 'bind' && mounts[0].Source === job.plan.projectionRoot)
       if (!createdState || createdState.Config?.Labels?.['open-science.skill-job'] !== job.plan.jobId
-        || !/^[a-f0-9]{64}$/u.test(createdState.Id)
-        || createdState.Image !== imageId || createdState.HostConfig?.ReadonlyRootfs !== true || createdState.HostConfig?.NetworkMode !== 'none'
+        || createdState.Id !== job.containerId
+        || createdState.Config?.User !== '10001:10001' || createdState.Image !== imageId || createdState.HostConfig?.ReadonlyRootfs !== true || createdState.HostConfig?.NetworkMode !== 'none'
         || createdState.HostConfig?.Memory !== 256 * 1024 * 1024 || createdState.HostConfig?.MemorySwap !== 256 * 1024 * 1024
         || createdState.HostConfig?.NanoCpus !== 500000000 || createdState.HostConfig?.PidsLimit !== 32
         || !createdState.HostConfig?.CapDrop?.includes('ALL') || !createdState.HostConfig?.SecurityOpt?.some(value => /^no-new-privileges(?:=true)?$/u.test(value))
@@ -272,6 +359,8 @@ export function createSkillValidationController(config, hooks = {}) {
       }
       const mounted = await snapshot(config, checked)
       if (before.dev !== mounted.dev || before.ino !== mounted.ino || before.digest !== mounted.digest) throw invalid()
+      const projected = await snapshot(config, checked, job.plan.projectionRoot)
+      if (projection.dev !== projected.dev || projection.ino !== projected.ino || projection.digest !== projected.digest) throw invalid()
       const result = await new Promise((resolve, reject) => {
         const child = spawn(config.runtimeContainerBin, ['start', '--attach', createdState.Id], { stdio: ['ignore', 'pipe', 'pipe'] })
         job.child = child
@@ -317,10 +406,12 @@ export function createSkillValidationController(config, hooks = {}) {
       })
       const after = await snapshot(config, checked)
       if (before.dev !== after.dev || before.ino !== after.ino || before.digest !== after.digest) throw invalid()
+      const projectedAfter = await snapshot(config, checked, job.plan.projectionRoot)
+      if (projection.dev !== projectedAfter.dev || projection.ino !== projectedAfter.ino || projection.digest !== projectedAfter.digest) throw invalid()
       return result
     } finally {
       try {
-        if (job.createdAttempted) await stop(job)
+        if (job.createdAttempted || job.marked) await stop(job)
         active = null
         reserved = false
       } finally { done() }

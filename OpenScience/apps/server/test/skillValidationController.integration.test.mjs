@@ -127,3 +127,50 @@ test('near-limit native JSON survives the actual Unix client data envelope witho
   }), [], 'successful bounded output must not create a cancellation tombstone')
   assert.notEqual(spawnSync('docker', ['inspect', 'evimed-skill-validation'], { timeout: 5000 }).status, 0)
 })
+
+test('actual Linux author UID1000 keeps originals private while native UID10001 reads only disposable projection and joined cleanup', { timeout: 90000 }, async t => {
+  if (!selectedImage) return t.skip('An existing offline native SDK image is required.')
+  const { createRequire } = await import('node:module')
+  const requireWeb = createRequire(new URL('../../web/package.json', import.meta.url))
+  const esbuild = createRequire(requireWeb.resolve('vite'))('esbuild')
+  const base = process.env.EVIMED_SKILL_VALIDATION_TEST_DATA
+  assert.ok(base && path.isAbsolute(base))
+  await fs.mkdir(base, { recursive: true })
+  const proof = await fs.realpath(await fs.mkdtemp(path.join(base, 'linux-validation-proof-')))
+  await fs.chmod(proof, 0o755)
+  const { randomUUID } = await import('node:crypto')
+  const name = `evimed-validation-linux-${randomUUID()}`
+  const volume = `${name}-data`
+  const docker = args => {
+    const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 })
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim()
+  }
+  const image = docker(['image','inspect','--format','{{.Id}}',selectedImage])
+  try {
+    await esbuild.build({ entryPoints: [new URL('../src/skillValidationController.mjs', import.meta.url).pathname], outfile: path.join(proof,'controller.mjs'),
+      bundle: true, platform: 'node', format: 'esm', target: 'node22', logLevel: 'silent' })
+    await fs.copyFile(new URL('./helpers/skillValidationDockerHttp.mjs', import.meta.url), path.join(proof,'docker-proxy.mjs'))
+    await fs.copyFile(new URL('./helpers/skillValidationLinuxFixture.mjs', import.meta.url), path.join(proof,'fixture.mjs'))
+    for (const file of ['controller.mjs','fixture.mjs']) await fs.chmod(path.join(proof,file),0o644)
+    await fs.chmod(path.join(proof,'docker-proxy.mjs'),0o755)
+    docker(['volume','create','--driver','local','--opt','type=tmpfs','--opt','device=tmpfs','--opt','o=size=32m,mode=0755',volume])
+    docker(['create','--pull','never','--name',name,'--network','none','--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID',
+      '--security-opt','no-new-privileges','--pids-limit','128','--memory','512m','--cpus','1','--tmpfs','/tmp:size=16m,mode=1777',
+      '--mount',`type=bind,source=${proof},target=/proof,readonly`,'--mount',`type=volume,source=${volume},target=/data`,
+      '--mount','type=bind,source=/var/run/docker.sock,target=/docker.sock','--env',`FIXTURE_IMAGE_ID=${image}`,'--env',`FIXTURE_VOLUME=${volume}`,
+      '--entrypoint','node',image,'/proof/fixture.mjs'])
+    const output=docker(['start','--attach',name])
+    const result=JSON.parse(output)
+    assert.deepEqual(result,{linux:true,authorUid:1000,nativeReaderUid:10001,originalPrivateReadDenied:true,projectedNativeParse:true,
+      originalBytesAndModesUnchanged:true,joinedCleanup:['success','failure','timeout','cancel'],scratchAbsent:true,sameNameSameLabelsReplacementSurvived:true})
+  } finally {
+    const removed=spawnSync('docker',['rm','--force',name],{encoding:'utf8',timeout:15000})
+    assert.ok(removed.status===0||/no such/iu.test(removed.stderr))
+    assert.notEqual(spawnSync('docker',['inspect',name],{timeout:5000}).status,0)
+    const removedVolume=spawnSync('docker',['volume','rm',volume],{encoding:'utf8',timeout:15000})
+    assert.ok(removedVolume.status===0||/no such/iu.test(removedVolume.stderr))
+    assert.notEqual(spawnSync('docker',['volume','inspect',volume],{timeout:5000}).status,0)
+    await fs.rm(proof,{recursive:true,force:true})
+  }
+})

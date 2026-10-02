@@ -32,15 +32,15 @@ import fs from 'node:fs';
 const state=${JSON.stringify(state)},mode=${JSON.stringify(mode)},started=${JSON.stringify(started)},captured=${JSON.stringify(captured)};
 const args=process.argv.slice(2), behavior=fs.readFileSync(mode,'utf8');
 if(args[0]==='image'){console.log(${JSON.stringify(imageId)});process.exit(0);}
-if(args[0]==='inspect'){if(!fs.existsSync(state)){console.error('No such container');process.exit(1);}console.log(fs.readFileSync(state,'utf8'));process.exit(0);}
+if(args[0]==='inspect'){if(!fs.existsSync(state)){console.error('No such container');process.exit(1);}const current=JSON.parse(fs.readFileSync(state,'utf8'));if(/^[a-f0-9]{64}$/.test(args.at(-1))&&args.at(-1)!==current.Id){console.error('No such container');process.exit(1);}console.log(fs.readFileSync(state,'utf8'));process.exit(0);}
 if(args[0]==='create'){
  const labels=Object.fromEntries(args.filter((x,i)=>args[i-1]==='--label').map(x=>{const n=x.indexOf('=');return[x.slice(0,n),x.slice(n+1)];}));
  const mount=args[args.indexOf('--mount')+1];const source=mount.split(',').find(part=>part.startsWith('src=')).slice(4);
  fs.writeFileSync(captured,JSON.stringify(args));
- try{fs.writeFileSync(state,JSON.stringify({Id:'d'.repeat(64),Config:{Labels:labels},Image:${JSON.stringify(imageId)},State:{Running:false},
+ try{fs.writeFileSync(state,JSON.stringify({Id:'d'.repeat(64),Config:{Labels:labels,User:'10001:10001'},Image:${JSON.stringify(imageId)},State:{Running:false},
  HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Mounts:[{Type:'bind',Source:source,Target:'/input',ReadOnly:true}]},
  Mounts:[{Destination:'/input',RW:false}]}),{flag:'wx'});}catch{process.exit(1);}
- if(behavior==='uncertain'){setTimeout(()=>{},10000);}else{console.log('created');process.exit(0);}
+ if(behavior==='uncertain'){setTimeout(()=>{},10000);}else{console.log('d'.repeat(64));process.exit(0);}
 }
 if(args[0]==='rm'){if(behavior==='rm-fails')process.exit(1);fs.rmSync(state,{force:true});process.exit(0);}
 if(args[0]==='start'){
@@ -61,8 +61,8 @@ if(args[0]==='start'){
   const config = { dataDir: root, runtimeContainerBin: binary, runtimeContainerImage: 'trusted:fixture', runtimeContainerUser: '1000:1000' }
   const reference = { ownerHash: sha('alice'), kind: 'imports', contentId: sha('skill-one'), expectedName: null }
   const directory = skillValidationRoot(config, reference)
-  await fs.mkdir(path.join(directory, 'bundle'), { recursive: true })
-  await fs.writeFile(path.join(directory, 'bundle/SKILL.md'), '---\nname: imported-review\ndescription: Review the evidence\n---\n# Review\nUse evidence.\n')
+  await fs.mkdir(path.join(directory, 'bundle'), { recursive: true, mode: 0o700 })
+  await fs.writeFile(path.join(directory, 'bundle/SKILL.md'), '---\nname: imported-review\ndescription: Review the evidence\n---\n# Review\nUse evidence.\n', { mode: 0o400 })
   const controller = createSkillValidationController(config, { availableMemory: async () => 2 * 1024 ** 3, ...hooks })
   t.after(async () => {
     await fs.rm(state, { force: true })
@@ -86,7 +86,8 @@ test('only four opaque fields select one fixed private directory and sandbox com
   assert.equal(plan.args.at(-2), '/opt/evimed/socket/scripts/validate-personal-skill.mjs')
   assert.ok(plan.args.includes('--network=none') && plan.args.includes('--read-only'))
   assert.equal(plan.args.filter(value => value === '--mount').length, 1)
-  assert.ok(plan.args.includes(`type=bind,src=/srv/data/.openscience/skill-library/${reference.ownerHash}/imports/${reference.contentId},dst=/input,readonly`))
+  assert.ok(plan.args.includes(`type=bind,src=/srv/data/.openscience/skill-validation-state/projections/${reference.ownerHash}/00000000-0000-0000-0000-000000000001/input,dst=/input,readonly`))
+  assert.equal(plan.args[plan.args.indexOf('--user')+1], '10001:10001')
   assert.ok(plan.args.includes(imageId))
   for (const extra of ['path', 'image', 'argv', 'env', 'exec', 'root', 'command', 'ownerId']) assert.throws(() => validateSkillReference({ ...reference, [extra]: '/secret' }))
   assert.throws(() => validateSkillReference({ ...reference, contentId: '../escape' }))
@@ -94,12 +95,24 @@ test('only four opaque fields select one fixed private directory and sandbox com
 })
 
 test('normal lifecycle cleans its exact physical slot and omits paths/diagnostics', async t => {
-  const { controller, reference, state, captured } = await fixture(t)
+  const { controller, reference, state, captured, directory } = await fixture(t)
+  const sourceFile = path.join(directory, 'bundle/SKILL.md')
+  const original = await fs.readFile(sourceFile)
+  const originalStat = await fs.stat(sourceFile)
   assert.deepEqual(await controller.validate(reference), output)
   await assert.rejects(fs.stat(state), { code: 'ENOENT' })
   const args = JSON.parse(await fs.readFile(captured, 'utf8'))
   assert.equal(args.filter(value => value === '--mount').length, 1)
   assert.ok(!args.some(value => value.includes('credentials') || value.includes('docker.sock')))
+  const mount = args[args.indexOf('--mount')+1]
+  const projected = mount.split(',').find(value=>value.startsWith('src=')).slice(4)
+  assert.notEqual(projected,directory)
+  await assert.rejects(fs.stat(projected),{code:'ENOENT'})
+  assert.deepEqual(await fs.readFile(sourceFile),original)
+  const after = await fs.stat(sourceFile)
+  assert.equal(after.mode,originalStat.mode)
+  assert.equal(after.ino,originalStat.ino)
+  assert.equal(after.ctimeMs,originalStat.ctimeMs)
 })
 
 test('links, unexpected resources, foreign namespaces and bad package integrity are refused before creation', async t => {
@@ -261,4 +274,58 @@ test('real Unix-socket client disconnect joins the owned process before rejectio
   assert.equal((await pending).name, 'AbortError')
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' })
   await assert.rejects(fs.stat(state), { code: 'ENOENT' })
+})
+
+test('all settled non-success paths delete owned projection bytes; unknown creation retains them with its marker', async t => {
+  for (const behavior of ['output-path','overflow']) {
+    const f=await fixture(t)
+    await fs.writeFile(f.mode,behavior)
+    await assert.rejects(f.controller.validate(f.reference))
+    const owner=path.join(f.config.dataDir,'.openscience/skill-validation-state/projections',f.reference.ownerHash)
+    assert.deepEqual(await fs.readdir(owner).catch(error=>{if(error.code==='ENOENT')return[];throw error}),[])
+  }
+  const f=await fixture(t)
+  await fs.writeFile(f.mode,'uncertain')
+  await assert.rejects(f.controller.validate(f.reference))
+  const marker=JSON.parse(await fs.readFile(path.join(f.config.dataDir,'.openscience/skill-validation-state/creation-uncertain.json'),'utf8'))
+  const projected=path.join(f.config.dataDir,'.openscience/skill-validation-state/projections',f.reference.ownerHash,marker.jobId,'input')
+  assert.equal((await fs.stat(projected)).mode&0o7777,0o755)
+  assert.equal((await fs.stat(path.join(projected,'bundle/SKILL.md'))).mode&0o7777,0o444)
+  await assert.rejects(f.controller.cancel(f.reference),/uncertain/u)
+  await fs.stat(projected)
+})
+
+test('same-name copied-label replacement is never removed or acknowledged as the captured worker', async t => {
+  const f=await fixture(t)
+  await fs.writeFile(f.mode,'hang')
+  const pending=f.controller.validate(f.reference).catch(error=>error)
+  const pid=await waitStarted(f.started)
+  const original=JSON.parse(await fs.readFile(f.state,'utf8'))
+  const replacement={...original,Id:'e'.repeat(64)}
+  await fs.writeFile(f.state,JSON.stringify(replacement))
+  await assert.rejects(f.controller.cancel(f.reference),/replacement/u)
+  assert.equal((await pending).code,'product_state_unavailable')
+  assert.equal(JSON.parse(await fs.readFile(f.state,'utf8')).Id,replacement.Id)
+  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'})
+  const marker=JSON.parse(await fs.readFile(path.join(f.config.dataDir,'.openscience/skill-validation-state/creation-uncertain.json'),'utf8'))
+  assert.equal(marker.containerId,original.Id)
+  await assert.rejects(f.controller.validate(f.reference),/busy/u)
+})
+
+test('restart cancellation cannot claim a matching-name worker without persisted confirmed ID', async t => {
+  const f=await fixture(t)
+  await fs.writeFile(f.mode,'hang')
+  const pending=f.controller.validate(f.reference).catch(error=>error)
+  await waitStarted(f.started)
+  const markerPath=path.join(f.config.dataDir,'.openscience/skill-validation-state/creation-uncertain.json')
+  const marker=JSON.parse(await fs.readFile(markerPath,'utf8'))
+  delete marker.containerId
+  await fs.writeFile(markerPath,JSON.stringify(marker))
+  const restarted=createSkillValidationController(f.config,{availableMemory:async()=>2*1024**3})
+  await assert.rejects(restarted.cancel(f.reference),/uncertain/u)
+  await fs.stat(f.state)
+  // Test recovery explicitly restores the confirmed owner record; no source
+  // recovery path invents this identity from the current name occupant.
+  marker.containerId='d'.repeat(64);await fs.writeFile(markerPath,JSON.stringify(marker))
+  await f.controller.cancel(f.reference);await pending;await restarted.close()
 })
