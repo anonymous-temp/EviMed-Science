@@ -12,6 +12,12 @@ import { createFixtures } from '../runtime/extensions/cowork/fixtures.mjs';
 import { createAssessmentDescriptor } from './extension-saas-acceptance-manifest.mjs';
 import { assessmentDockerEnvironment, bindAssessmentDockerLauncher } from './extension-saas-acceptance-docker.mjs';
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname), hash = bytes => createHash('sha256').update(bytes).digest('hex');
+export function containedDocumentExecutionIdentity({descriptor,scope,preparation,sequence}){
+  return {jobId:'fixture-operation-'+sequence,leaseToken:'fixture-leased-attempt',attempts:1,operationId:'fixture-operation',
+    ...scope,accountCreatedAt:preparation.accountCreatedAt,projectCreatedAt:'fixture-project-epoch',runtimeGeneration:'fixture-native-generation',
+    extensionGenerationHash:'a'.repeat(64),descriptorId:descriptor.id,artifactDigest:descriptor.artifactDigest,
+    installationId:preparation.installationId,installationRevision:preparation.installationRevision};
+}
 export async function runContainedDocumentControls({ image, nativeImage, closureExpectedSHA, integrity, signal = null }) {
   assessmentDockerEnvironment();
   assert.match(image, /^sha256:[a-f0-9]{64}$/); assert.match(nativeImage, /^sha256:[a-f0-9]{64}$/);
@@ -23,16 +29,14 @@ export async function runContainedDocumentControls({ image, nativeImage, closure
     // Reuse the independently reviewed test-only definite missing-bind shim; never retry uncertain create/timeout.
     validator = await createNativeValidationFixture({ dataDir: root, image: nativeImage });
     await bindAssessmentDockerLauncher(path.join(root, 'docker-fixture.mjs'));
-    const inputRoot = path.join(root, 'public'), files = await createFixtures(inputRoot), scope = { userId: 'fixture-actor', projectId: 'fixture-project' };
-    const resources = new ExtensionResourceResolver({ lookupResource: async (_scope, id) => files[id] ? { ownerId: scope.userId, projectId: scope.projectId,
+    const inputRoot = path.join(root, 'public'), files = await createFixtures(inputRoot), scope = { userId: 'fixture-actor', ownerId: 'fixture-actor',
+      ownerAccountCreatedAt: 'fixture-account-epoch', membershipEpoch: null, projectId: 'fixture-project' };
+    const resources = new ExtensionResourceResolver({ lookupResource: async (_scope, id) => files[id] ? { ownerId: scope.ownerId, projectId: scope.projectId,
       relativePath: files[id].file, format: files[id].format, sha256: files[id].sha256, revision: 1 } : null,
     verifyProvenance: async () => ({ revision: 1, dataClass: 'public' }), rootFor: async () => inputRoot, lookupTarget: async () => null });
     const preparation = { jobId: 'fixture-prepare', leaseToken: 'fixture-leased-attempt', attempts: 1, installationId: 'fixture-installation', installationRevision: 1, accountCreatedAt: 'fixture-account-epoch', projectTarget: null };
     let sequence = 0;
-    const identity = () => ({ jobId: 'fixture-operation-' + (++sequence), leaseToken: 'fixture-leased-attempt', attempts: 1, operationId: 'fixture-operation',
-      ...scope, accountCreatedAt: 'fixture-account-epoch', projectCreatedAt: 'fixture-project-epoch', runtimeGeneration: 'fixture-native-generation',
-      extensionGenerationHash: 'a'.repeat(64), descriptorId: descriptor.id, artifactDigest: descriptor.artifactDigest,
-      installationId: preparation.installationId, installationRevision: 1 });
+    const identity = () => containedDocumentExecutionIdentity({descriptor,scope,preparation,sequence:++sequence});
     controller = new ExtensionToolController({ admittedDescriptors: [descriptor], stateRoot: path.join(root, 'controller'), inputRoot,
       adapterRoot: path.join(repo, 'OpenScience/scripts/runtime/extensions/cowork'), dockerBin: path.join(root, 'docker-fixture.mjs'),
       resolvePreparation: async (actual, selected) => { assert.deepEqual(actual, preparation); assert.equal(selected.artifactDigest, descriptor.artifactDigest); return { identity: actual, descriptorId: descriptor.id, artifactDigest: descriptor.artifactDigest }; },
