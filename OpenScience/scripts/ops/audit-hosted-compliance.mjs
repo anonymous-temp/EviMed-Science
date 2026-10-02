@@ -457,7 +457,9 @@ export function controllerLaunchPlanIsScoped(source) {
     // caller-owned environment, mounts, images or Docker arguments.
     && /import\{validatePluginConfig\}from["']\.\/pluginService\.mjs["'];/.test(compact)
     && /constpluginConfig=payload\.pluginConfig;if\(!pluginConfig\|\|Object\.keys\(pluginConfig\)\.sort\(\)\.join\(["'],["']\)!==["']enabled,revision,settings["']\)thrownewHttpError\(400,["']plugin_config_invalid["'],[^;]+;validatePluginConfig\(\{expectedRevision:pluginConfig\.revision,enabled:pluginConfig\.enabled,settings:pluginConfig\.settings\},config\.publicSourceGatewayTimeoutMs\?\?15000\);/.test(launch)
-    && launch.includes("constextension=payload.extensionGeneration?awaitverifyExtensionGeneration(config,project,payload.extensionGeneration):null;")
+    && compact.includes("constassessmentAuthority=hooks.extensionGenerationAssessmentAuthority??null;assertExtensionAssessmentAuthority(assessmentAuthority);")
+    && compact.includes("constverifyGeneration=(project,reference)=>verifyExtensionGeneration(config,project,reference,{assessmentAuthority});")
+    && launch.includes("constextension=payload.extensionGeneration?awaitverifyGeneration(project,payload.extensionGeneration):null;")
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
