@@ -221,9 +221,16 @@ test("no machine path is committed in the module's scripts, its CI or the runner
     "项目代码/vcr-engine/tests/run_all.R",
     "项目代码/vcr-engine/tests/service/test_service.py",
   ];
-  for (const name of await readdir(path.join(openScience, "scripts/vcr"))) {
-    if (name !== "__pycache__") files.push(`OpenScience/scripts/vcr/${name}`);
+  async function includeScripts(directory) {
+    for (const entry of await readdir(path.join(repoRoot, directory), { withFileTypes: true })) {
+      if (entry.name === "__pycache__") continue;
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await includeScripts(file);
+      else if (entry.isFile()) files.push(file);
+      else assert.fail(`Unsupported script entry: ${file}`);
+    }
   }
+  await includeScripts("OpenScience/scripts/vcr");
   assert.ok(files.length >= 12, "the scan named its files");
   const found = [];
   for (const file of files) {
