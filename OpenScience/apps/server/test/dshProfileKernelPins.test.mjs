@@ -79,3 +79,17 @@ test("a community bundle's own peer is pinned by override, never activated, and 
   assert.throws(() => peerPins(["cordis"]), /exact-version/);
   assert.throws(() => peerPins(["@deepseek-ai/cordis@4.0.2"]), /kernel closure/);
 });
+
+test("security override pins only the parser without activating or changing kernel bundles", (t) => {
+  const f = fixture(t), security = JSON.parse(readFileSync(new URL("../../../deps-version.json", import.meta.url))).$runtimeSecurity;
+  const pins = seedProfileKernelPins(f.cli, f.profileDir, policyUrl, pin, cordis, {}, { "js-yaml": security["js-yaml"].version });
+  const manifest = JSON.parse(readFileSync(path.join(f.profileDir, "package.json")));
+  assert.deepEqual(manifest.dependencies, f.manifest.dependencies);
+  assert.deepEqual(manifest.dsh, f.manifest.dsh);
+  assert.deepEqual(manifest.devDependencies, pins);
+  assert.match(readFileSync(path.join(f.profileDir, "pnpm-workspace.yaml"), "utf8"), /^ {2}"js-yaml": "4\.3\.2"$/m);
+  const other = fixture(t);
+  assert.throws(() => seedProfileKernelPins(other.cli, other.profileDir, policyUrl, pin, cordis,
+    { "js-yaml": "4.3.0" }, { "js-yaml": security["js-yaml"].version }), /weaken runtime security/);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(other.profileDir, "package.json"))), other.manifest);
+});

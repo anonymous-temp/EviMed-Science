@@ -216,6 +216,11 @@ ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
 COPY deploy/runtime-dsh/profile-seed.mjs /usr/local/bin/evimed-profile-seed.mjs
 COPY deploy/runtime-dsh/profile-kernel-pins.mjs /usr/local/bin/evimed-profile-kernel-pins.mjs
+# Late security backport preserves every preceding tool/kernel cache layer.
+COPY deps-version.json /opt/evimed/runtime-deps-version.json
+COPY deploy/runtime-dsh/runtime-yaml-security.mjs /usr/local/bin/runtime-yaml-security.mjs
+COPY deploy/runtime-dsh/profile-seed.mjs /usr/local/bin/profile-seed.mjs
+RUN node /usr/local/bin/runtime-yaml-security.mjs global
 
 # The committed composition snapshot, brought in so the build can compare it to
 # the one this image actually produces.
@@ -243,6 +248,7 @@ ARG DSH_ANNOTATION_BUNDLE="@changfenhuang/dsh-annotation@1.4.10"
 ARG DSH_MERMAID_BUNDLE="dsh-mermaid@0.4.0"
 ARG DSH_COMMUNITY_PEER_PINS="cordis@4.0.0-rc.10"
 RUN bash /usr/local/lib/evimed/install-runtime.sh profile-seed
+RUN node /usr/local/bin/runtime-yaml-security.mjs verify
 
 # Load the loader's native binding from the package it is installed in, rather
 # than from a copy the addon makes under /tmp.

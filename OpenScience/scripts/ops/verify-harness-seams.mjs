@@ -136,7 +136,7 @@ const modulesArg = args.indexOf("--modules");
 // and the image's `--before` cutoff (`kernel-install.mjs`). The `pnpm add` this
 // replaced had no cutoff, so from 2026-09-22 it verified a closure no image had
 // ever held and failed on cordis every night for that reason alone.
-const modulesDir = modulesArg >= 0 ? path.resolve(String(args[modulesArg + 1])) : installKernel(pins);
+const modulesDir = modulesArg >= 0 ? path.resolve(String(args[modulesArg + 1])) : await installKernel(pins);
 
 const installed = indexInstall(modulesDir);
 /** @type {string[]} */
