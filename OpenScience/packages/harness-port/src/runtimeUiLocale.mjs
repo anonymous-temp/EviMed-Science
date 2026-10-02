@@ -79,6 +79,8 @@ export function evimedDictionaries() {
       'tool.title.code': '运行代码',
       // The send button's tooltip and accessible name while a typed message
       // waits on a running agent (see the module note).
+      'input.upload': '上传附件',
+      'input.commands': '技能与工具',
       'input.send.queue': '排队发送 · Ctrl/⌘+Enter 插话',
     },
     chat: {

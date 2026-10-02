@@ -45,6 +45,7 @@ import {
 } from '@evimed/domain';
 
 import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
+import { BODY as COMPOSER } from './runtimeUiComposer.mjs';
 import { BODY as COMMANDS } from './runtimeUiCommands.mjs';
 import { KIT_PARTS } from './runtimeUiKit.mjs';
 import { BODY as LOCALE } from './runtimeUiLocale.mjs';
@@ -72,7 +73,7 @@ import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
  * in the language pack.)
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, SOURCES, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, COMPOSER, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, SOURCES, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));
