@@ -548,7 +548,6 @@ jobs:
       OPEN_SCIENCE_TEST_RESULT_ENGINES: "1"
       EVIMED_RESULT_REPLAY_SIGNED_VCR: "1"
       EVIMED_RESULT_REPLAY_PYTHON: ${{ github.workspace }}/.result-replay-venv/bin/python
-      EVIMED_RESULT_REPLAY_EVIDENCE_DIR: ${{ runner.temp }}/result-replay-evidence
     services:
       postgres:
         # The same image as the `web` job's: the production one.
@@ -634,6 +633,7 @@ jobs:
       - name: Test the control plane against the real engine
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_vcr
+          EVIMED_RESULT_REPLAY_EVIDENCE_DIR: ${{ runner.temp }}/result-replay-evidence
         shell: bash
         run: |
           node --test --test-concurrency=1 \

@@ -114,7 +114,13 @@ export async function observeVcrRun({ api, manifest, expectedRevision, capabilit
   }
   report.captureErrors = captureErrors;
   report.deliveryObserved = report.observation === 'terminal' && report.artifacts.length > 0;
-  report.accepted = report.deliveryObserved && run.status === 'succeeded' && !run.verification && captureErrors.length === 0;
+  report.usableDelivery = report.artifacts.length > 0;
+  // The run ledger uses null for completed checks, unverified for findings and unchecked for skipped checks.
+  // Delivery measurement preserves both latter states and their actual findings.
+  report.verificationComplete = report.observation === 'terminal' && run?.status === 'succeeded' && run.verification == null;
+  report.acceptanceIndependent = report.candidateVerified && report.deliveryObserved && run?.status === 'succeeded'
+    && captureErrors.length === 0;
+  report.accepted = report.acceptanceIndependent;
   report.finishedAt = new Date(now()).toISOString(); await persist(report);
   return report;
 }
@@ -139,7 +145,7 @@ async function main() {
     const response = await fetch(`${base}${route}`, { method: data === undefined ? 'GET' : 'POST',
       headers: { 'content-type': 'application/json', ...headers, ...(projectId ? { 'x-open-science-project': projectId } : {}) },
       ...(data === undefined ? {} : { body: JSON.stringify(data) }), redirect: 'error', signal: AbortSignal.timeout(30_000) });
-    assert.ok(response.ok(), `${route.split('?')[0]} returned ${response.status()}`);
+    assert.ok(response.ok, `${route.split('?')[0]} returned ${response.status}`);
     if (raw) {
       assert.ok(response.body, 'artifact body is missing');
       const reader = response.body.getReader(); const chunks = []; let size = 0;
@@ -170,7 +176,9 @@ async function main() {
   const report = await observeVcrRun({ api, manifest, expectedRevision, capability: args.capability, studyId: args.study,
     create, checkpoint, persist, saveArtifact, timeoutMs: Number(args['timeout-ms'] ?? 1_800_000) });
   process.stdout.write(JSON.stringify({ studyId: report.studyId, projectId: report.projectId, runId: report.runId ?? null,
-    observation: report.observation, accepted: report.accepted, deliveryObserved: report.deliveryObserved, evidence }) + '\n');
+    observation: report.observation, accepted: report.accepted, usableDelivery: report.usableDelivery,
+    verificationComplete: report.verificationComplete, acceptanceIndependent: report.acceptanceIndependent,
+    deliveryObserved: report.deliveryObserved, evidence }) + '\n');
   process.exitCode = report.observation === 'pending' ? 3 : report.accepted ? 0 : 1;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => {

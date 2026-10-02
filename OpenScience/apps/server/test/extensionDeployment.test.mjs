@@ -203,3 +203,33 @@ test('native HTML asset routing changes invalidate the permission profile identi
   const after=currentExtensionSourcePolicy();
   assert.notEqual(after.permissionProfileRevision,before.permissionProfileRevision);
 });
+
+test('owner-only project and real study role boundaries invalidate previously admitted deployment policy', async t => {
+  const f = await fixture();
+  try {
+    await f.write(fixtureManifest());
+    const loaded = loadExtensionDeployment({ dataDir: f.root });
+    assert.equal(loaded.status, 'configured');
+    const before = currentExtensionSourcePolicy();
+    const read = syncFs.readFileSync;
+    let changed = '';
+    t.mock.method(syncFs, 'readFileSync', (file, ...args) => {
+      const bytes = read(file, ...args);
+      return changed && String(file).endsWith(`/${changed}`)
+        ? Buffer.concat([bytes, Buffer.from('\n// controlled authorization revision\n')]) : bytes;
+    });
+    for (const source of ['apps/server/src/store.mjs', 'apps/server/src/sourceRoutes.mjs',
+      'apps/server/src/extensionConnections.mjs', 'apps/server/src/connectorCredentials.mjs',
+      'apps/server/src/vcrRoutes.mjs', 'apps/server/src/vcrStoreBase.mjs', 'apps/server/src/vcrStore.mjs',
+      'apps/server/src/vcrMembers.mjs', 'apps/server/src/vcrAccess.mjs', 'packages/domain/src/vcrVocabulary.mjs']) {
+      changed = source;
+      assert.notEqual(currentExtensionSourcePolicy().permissionProfileRevision, before.permissionProfileRevision, source);
+      assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable', source);
+      assert.throws(() => deploymentGenerationIdentities(loaded, 'sha256:' + '9'.repeat(64)),
+        { code: 'product_state_unavailable' }, source);
+    }
+    changed = '';
+    assert.equal(currentExtensionSourcePolicy().permissionProfileRevision, before.permissionProfileRevision);
+    assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'configured');
+  } finally { await f.close(); }
+});
