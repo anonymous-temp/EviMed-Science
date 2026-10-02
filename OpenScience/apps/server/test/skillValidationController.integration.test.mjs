@@ -7,7 +7,7 @@ import { execFile, spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { promisify } from 'node:util'
 import { canonicalJson } from '@evimed/domain'
-import { createSkillValidationController, skillValidationRoot } from '../src/skillValidationController.mjs'
+import { createSkillValidationController, skillValidationPlan, skillValidationRoot } from '../src/skillValidationController.mjs'
 import { RuntimeControllerClient } from '../src/runtimeControllerClient.mjs'
 import { createRuntimeController } from '../src/runtimeControllerServer.mjs'
 
@@ -32,26 +32,40 @@ test('the fixed fixture transport negotiates Docker 1.48 and preserves the minim
     requests.push({ url: req.url, body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null })
     res.setHeader('content-type', 'application/json')
     if (req.url === '/version') res.end(JSON.stringify({ ApiVersion: apiVersion }))
-    else if (req.url === `/v${apiVersion}/containers/create?name=owned-api-control`) res.end(JSON.stringify({ Id: 'a'.repeat(64) }))
+    else if (req.url === `/v${apiVersion}/containers/create?name=${plan.name}`) res.end(JSON.stringify({ Id: 'a'.repeat(64) }))
     else { res.statusCode = 400; res.end(JSON.stringify({ message: 'client API exceeds this daemon' })) }
   })
   await new Promise(resolve => server.listen(socket, resolve))
   t.after(() => new Promise(resolve => server.close(resolve)))
-  const args = ['create', '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32', '--cpus=0.5', '--memory=256m', '--memory-swap=256m', '--name', 'owned-api-control', '--label', 'fixture=true', '--user', '10001:10001', '--mount', 'type=volume,src=owned,dst=/input,volume-subpath=private/original,readonly', '--entrypoint', 'node', `sha256:${'b'.repeat(64)}`, '/fixed/reader.mjs']
-  const run = () => promisify(execFile)(process.execPath, [script, ...args], { timeout: 5000 })
+  const config = { dataDir: '/data', runtimeDataVolume: 'owned' }
+  const reference = { ownerHash: sha('api-control-owner'), contentId: sha('api-control-source'), kind: 'imports', expectedName: null }
+  const imageId = `sha256:${'b'.repeat(64)}`
+  const jobId = '12345678-1234-4234-8234-123456789abc'
+  const plan = skillValidationPlan(config, reference, imageId, jobId)
+  const run = () => promisify(execFile)(process.execPath, [script, ...plan.args], { timeout: 5000 })
   for (const supported of ['1.48', '1.45']) {
     apiVersion = supported
     requests.length = 0
     const result = await run()
     assert.equal(result.stdout.trim(), 'a'.repeat(64))
-    assert.deepEqual(requests.map(request => request.url), ['/version', `/v${supported}/containers/create?name=owned-api-control`])
+    assert.deepEqual(requests.map(request => request.url), ['/version', `/v${supported}/containers/create?name=${plan.name}`])
     const body = requests[1].body
+    assert.equal(body.Image, imageId)
+    assert.deepEqual(body.Entrypoint, ['node'])
+    assert.deepEqual(body.Cmd, ['/opt/evimed/socket/scripts/validate-personal-skill.mjs', ''])
     assert.equal(body.User, '10001:10001')
+    assert.deepEqual(body.Env, ['HOME=/tmp', 'DSH_HOME=/tmp/dsh', 'DSH_AGENTS_HOME=/tmp/agents', 'DSH_TELEMETRY_DISABLED=1'])
+    assert.deepEqual(body.Labels, { 'open-science.skill-validation': 'true', 'open-science.skill-reference': plan.identity, 'open-science.skill-job': jobId })
     assert.equal(body.HostConfig.NetworkMode, 'none')
     assert.equal(body.HostConfig.ReadonlyRootfs, true)
     assert.deepEqual(body.HostConfig.CapDrop, ['ALL'])
     assert.deepEqual(body.HostConfig.SecurityOpt, ['no-new-privileges'])
-    assert.deepEqual(body.HostConfig.Mounts, [{ Type: 'volume', Source: 'owned', Target: '/input', ReadOnly: true, VolumeOptions: { Subpath: 'private/original' } }])
+    assert.equal(body.HostConfig.Memory, 256 * 1024 * 1024)
+    assert.equal(body.HostConfig.MemorySwap, 256 * 1024 * 1024)
+    assert.equal(body.HostConfig.NanoCpus, 500000000)
+    assert.equal(body.HostConfig.PidsLimit, 32)
+    assert.deepEqual(body.HostConfig.Tmpfs, { '/tmp': 'rw,noexec,nosuid,nodev,size=16m', '/workspace': 'ro,noexec,nosuid,nodev,size=1m', '/runtime': 'ro,noexec,nosuid,nodev,size=1m' })
+    assert.deepEqual(body.HostConfig.Mounts, [{ Type: 'volume', Source: config.runtimeDataVolume, Target: '/input', ReadOnly: true, VolumeOptions: { Subpath: path.relative(config.dataDir, plan.projectionRoot) } }])
   }
   apiVersion = '1.44'
   requests.length = 0

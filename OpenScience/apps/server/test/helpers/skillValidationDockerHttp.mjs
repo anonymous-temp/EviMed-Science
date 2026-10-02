@@ -17,9 +17,11 @@ try{
   const option=k=>args[args.indexOf(k)+1];const labels=Object.fromEntries(args.filter((x,i)=>args[i-1]==='--label').map(x=>{const n=x.indexOf('=');return[x.slice(0,n),x.slice(n+1)];}));
   const mount=Object.fromEntries(option('--mount').split(',').map(x=>{const n=x.indexOf('=');return n<0?[x,true]:[x.slice(0,n),x.slice(n+1)];}));
   if(mount.type!=='volume'||mount.dst!=='/input'||mount.readonly!==true)throw Error('invalid_test_mount');
+  const fixedTmpfs={'/tmp':'rw,noexec,nosuid,nodev,size=16m','/workspace':'ro,noexec,nosuid,nodev,size=1m','/runtime':'ro,noexec,nosuid,nodev,size=1m'},tmpfs={'/tmp':fixedTmpfs['/tmp']};
+  for(const value of args.filter((x,i)=>args[i-1]==='--tmpfs')){const split=value.indexOf(':'),target=value.slice(0,split),options=value.slice(split+1);if(fixedTmpfs[target]!==options)throw Error('invalid_test_tmpfs');tmpfs[target]=options;}
   const imageIndex=args.findIndex(x=>/^sha256:[a-f0-9]{64}$/.test(x));
   const body={Image:args[imageIndex],Entrypoint:[option('--entrypoint')],Cmd:args.slice(imageIndex+1),User:option('--user'),Env:args.filter((x,i)=>args[i-1]==='--env'),Labels:labels,
-   HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,Tmpfs:{'/tmp':'rw,noexec,nosuid,nodev,size=16m'},Mounts:[{Type:'volume',Source:mount.src,Target:'/input',ReadOnly:true,VolumeOptions:{Subpath:mount['volume-subpath']}}]}};
+   HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,Tmpfs:tmpfs,Mounts:[{Type:'volume',Source:mount.src,Target:'/input',ReadOnly:true,VolumeOptions:{Subpath:mount['volume-subpath']}}]}};
   console.log((await json('POST','/containers/create?name='+encodeURIComponent(option('--name')),body)).Id);
  }else if(args[0]==='replace'){
   const original=await json('GET','/containers/evimed-skill-validation/json');
