@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {assertExtensionAssessmentAdmission} from './extensionAssessmentAdmission.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {canonicalJson,canonicalExtensionCoordinate,extensionGenerationIdentity,qualifyExtensionProof,extensionProofAdapterRevision} from '@evimed/domain';
@@ -7,7 +8,7 @@ import {migrateProductStore,productInteger} from './productPersistence.mjs';
 import {defaultConfiguration,exportPluginPayload} from './pluginService.mjs';
 import {extensionRequestObject} from './extensionAccess.mjs';
 import {HttpError,openScopedDirectoryNoFollow,openScopedFileNoFollow,readStableFileHandle,writeFileExclusiveNoFollow,directorySize} from './security.mjs';
-/** @typedef {{extensionId:string,coordinate:any,integrity:string,artifactDigest:string,configRevision:number,configDigest:string,enabled:boolean,settings:Record<string,any>,connectionRefs:string[],compatibility?:string,sourceDocumentId?:string,adapterRevision?:string,receiptDigest?:string,executionClass?:string}} GenerationPlugin */
+/** @typedef {{extensionId:string,coordinate:any,integrity:string,artifactDigest:string,configRevision:number,configDigest:string,enabled:boolean,settings:Record<string,any>,connectionRefs:string[],compatibility?:string,sourceDocumentId?:string,adapterRevision?:string,receiptDigest?:string,assessmentAdmissionDigest?:string,executionClass?:string}} GenerationPlugin */
 const sha=value=>createHash('sha256').update(value).digest('hex'),digest=value=>'sha256:'+sha(canonicalJson(value));
 const HEX=/^[a-f0-9]{64}$/,DIGEST=/^sha256:[a-f0-9]{64}$/;
 const invalid=()=>new HttpError(400,'extension_contract_invalid','The immutable extension generation is invalid.');
@@ -37,30 +38,41 @@ export async function legacyCitationProjection(plugins,project,client,identities
   return{extensionId:'dsh-cite',coordinate:{kind:'npm',name:'dsh-cite',version:value.binaryVersion},integrity:identities.legacyCitationArtifactDigest,artifactDigest:identities.legacyCitationArtifactDigest,
     configRevision:row?.revision??0,configDigest:digest({enabled:value.enabled,settings:value.settings}),enabled:value.enabled,settings:value.settings,connectionRefs:[],compatibility:'legacy-citation-v1',sourceDocumentId:id};
 }
-/** Independently verifies canonical, mode-bound manifest and readable projection; no code is loaded. @param {any} config @param {any} project @param {any} reference */
-export async function verifyExtensionGeneration(config,project,reference){
+/** Independently verifies canonical, mode-bound manifest and readable projection; no code is loaded. @param {any} config @param {any} project @param {any} reference @param {any} [assessmentAdmission] */
+export async function verifyExtensionGeneration(config,project,reference,assessmentAdmission=null){
   const checked=validateExtensionGenerationReference(project,reference),root=extensionGenerationRoot(config,checked);
   for(const directoryPath of [path.dirname(path.dirname(root)),path.dirname(root),root]){const directory=await openScopedDirectoryNoFollow(config.dataDir,directoryPath);try{if((directory.stat.mode&0o7777)!==0o700)throw invalid();}finally{await directory.handle.close();}}
   const read=async(filePath,mode)=>{const file=await openScopedFileNoFollow(config.dataDir,filePath);try{if(file.stat.size>1024*1024||(file.stat.mode&0o7777)!==mode)throw invalid();return await readStableFileHandle(file.handle,file.stat);}finally{await file.handle.close();}};
   const bytes=await read(path.join(root,'manifest.json'),0o400);let manifest;try{manifest=JSON.parse(bytes.toString());}catch{throw invalid();}
-  extensionRequestObject(manifest,['schemaVersion','reference','identity','scope','bindings','projection','findings']);
+  extensionRequestObject(manifest,['schemaVersion','reference','identity','scope','bindings','projection','findings',...(assessmentAdmission?['assessmentAdmission']:[])]);
+  if(assessmentAdmission)assertExtensionAssessmentAdmission(assessmentAdmission,config);
+  else if(manifest.assessmentAdmission)throw invalid();
   if(manifest.schemaVersion!==1||canonicalJson(manifest.reference)!==canonicalJson(checked)||bytes.toString()!==canonicalJson(manifest)+'\n'||generationHash(manifest)!==checked.generationHash)throw invalid();
   extensionRequestObject(manifest.projection,['plugins','personal']);
-  const selections=manifest.projection.plugins.map(plugin=>{extensionRequestObject(plugin,['extensionId','coordinate','integrity','artifactDigest','adapterRevision','configRevision','configDigest','enabled','settings','connectionRefs','receiptDigest','executionClass','compatibility','sourceDocumentId'],['extensionId','coordinate','integrity','artifactDigest','configRevision','configDigest','enabled','settings','connectionRefs']);canonicalExtensionCoordinate(plugin.coordinate);const expected=plugin.compatibility==='legacy-citation-v1'?digest({enabled:plugin.enabled,settings:plugin.settings}):digest({enabled:plugin.enabled,settings:plugin.settings,connectionRefs:plugin.connectionRefs});if(plugin.configDigest!==expected)throw invalid();return{extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,connectionRefs:plugin.connectionRefs};}).sort((a,b)=>a.extensionId.localeCompare(b.extensionId));
+  const selections=manifest.projection.plugins.map(plugin=>{extensionRequestObject(plugin,['extensionId','coordinate','integrity','artifactDigest','adapterRevision','configRevision','configDigest','enabled','settings','connectionRefs','receiptDigest',...(assessmentAdmission?['assessmentAdmissionDigest']:[]),'executionClass','compatibility','sourceDocumentId'],['extensionId','coordinate','integrity','artifactDigest','configRevision','configDigest','enabled','settings','connectionRefs']);canonicalExtensionCoordinate(plugin.coordinate);const expected=plugin.compatibility==='legacy-citation-v1'?digest({enabled:plugin.enabled,settings:plugin.settings}):digest({enabled:plugin.enabled,settings:plugin.settings,connectionRefs:plugin.connectionRefs});if(plugin.configDigest!==expected)throw invalid();return{extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,connectionRefs:plugin.connectionRefs};}).sort((a,b)=>a.extensionId.localeCompare(b.extensionId));
   const expectedSkills=manifest.projection.personal.pins.map(pin=>({skillId:pin.skillId,revision:pin.revision,digest:pin.digest})).sort((a,b)=>a.skillId.localeCompare(b.skillId));
   if(canonicalJson(selections)!==canonicalJson([...manifest.identity.selections].sort((a,b)=>a.extensionId.localeCompare(b.extensionId)))||canonicalJson(expectedSkills)!==canonicalJson([...manifest.identity.skills].sort((a,b)=>a.skillId.localeCompare(b.skillId))))throw invalid();
   const projectionRoot=path.join(root,'selected'),directory=await openScopedDirectoryNoFollow(config.dataDir,projectionRoot);try{if((directory.stat.mode&0o7777)!==0o755)throw invalid();}finally{await directory.handle.close();}
   const projection=await read(path.join(projectionRoot,'projection.json'),0o444);if(projection.toString()!==canonicalJson(manifest.projection)+'\n')throw invalid();
   if((await fs.readdir(root)).sort().join(',')!=='manifest.json,selected'||(await fs.readdir(projectionRoot)).join(',')!=='projection.json')throw invalid();
+  if(assessmentAdmission)await assessmentAdmission.verifyManifest(config,manifest);
   return manifest;
 }
 /** Metadata, immutable bytes and existing jobs ledger; no installer registry or serving package manager. */
 export class ExtensionGenerationService{
-  /** @param {any} database @param {{config:any,extensionService:any,pluginService:any,admittedArtifacts:any[],identities:any,proofAuthority:any}} options */
-  constructor(database,{config,extensionService,pluginService,admittedArtifacts,identities,proofAuthority}){
-    this.database=database;this.config=config;this.extensions=extensionService;this.plugins=pluginService;this.identities=identities;this.proofAuthority=proofAuthority;
+  /** @param {any} database @param {{config:any,extensionService:any,pluginService:any,admittedArtifacts:any[],identities:any,proofAuthority:any,assessmentAdmission?:any}} options */
+  constructor(database,{config,extensionService,pluginService,admittedArtifacts,identities,proofAuthority,assessmentAdmission=null}){
+    this.database=database;this.config=config;this.extensions=extensionService;this.plugins=pluginService;this.identities=identities;this.proofAuthority=proofAuthority;this.assessmentAdmission=assessmentAdmission?assertExtensionAssessmentAdmission(assessmentAdmission,config):null;
     this.documents=new ProductDocuments(database);this.jobs=new ProductJobs(database);this.artifacts=new Map(admittedArtifacts.map(item=>[item.id,structuredClone(item)]));
     for(const key of ['maxGlobalBytes','maxOwnerBytes','minFreeBytes'])if(!Number.isSafeInteger(config[key])||config[key]<1)throw invalid();
+  }
+  /** Trusted constructor strategy; serving always requires the existing complete qualification proof. @param {any} input */
+  async admission(input){
+    if(this.assessmentAdmission)return this.assessmentAdmission.evaluate(input);
+    const proof=this.proofAuthority?await this.proofAuthority(input):null;
+    if(!proof)throw new HttpError(400,'extension_proof_untrusted','The extension has no trusted proof.');
+    const qualified=qualifyExtensionProof(proof.receipt,input.identity,{...proof.authority,sha256Hex:sha});
+    return {receiptDigest:qualified.receiptDigest};
   }
   /** @param {any} user @param {string} projectId @param {any} client */
   async snapshot(user,projectId,client){
@@ -89,18 +101,17 @@ export class ExtensionGenerationService{
         const actor={id:selected.actorId,accountCreatedAt:prepared.payload.accountCreatedAt};await this.extensions.access.account(actor,client);await this.extensions.access.project(actor,project.id,{manage:true,client});
         const settings=this.extensions.settings(entry,selected.settings),connectionRefs=await this.extensions.access.connections(actor,selected.connectionRefs,{client,project,entry});
         const proofIdentity={packageIntegrity:entry.integrity,sourceCommit:entry.coordinate.kind==='github'?entry.coordinate.commit:null,adapterRevision:extensionProofAdapterRevision(artifact.adapterRevision,trusted.adapterRevision,sha),runtimeImageDigest:trusted.baseRuntimeImageDigest,dshVersion:'0.1.7-rc.2',executionClass:entry.executionClass,permissionProfileRevision:trusted.permissionProfileRevision,suiteRevision:artifact.suiteRevision};
-        const proof=this.proofAuthority?await this.proofAuthority({project,actor,entry,artifact,identity:proofIdentity}):null;if(!proof)throw new HttpError(400,'extension_proof_untrusted','The extension has no trusted proof.');
-        const qualification=qualifyExtensionProof(proof.receipt,proofIdentity,{...proof.authority,sha256Hex:sha});
+        const qualification=await this.admission({project,actor,entry,artifact,identity:proofIdentity});
         const configDigest=digest({enabled:selected.enabled,settings,connectionRefs});
-        bindings.push({extensionId:entry.id,installationId:row.id,actorId:selected.actorId,installationRevision:row.revision,prepareJobId:prepared.id,coordinate:canonicalExtensionCoordinate(selected.coordinate),integrity:selected.integrity,artifactDigest:artifact.artifactDigest,configDigest,receiptDigest:qualification.receiptDigest});
-        plugins.push({extensionId:entry.id,coordinate:selected.coordinate,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,adapterRevision:proofIdentity.adapterRevision,configRevision:desired.revision,configDigest,enabled:selected.enabled,settings,connectionRefs,receiptDigest:qualification.receiptDigest,executionClass:entry.executionClass});
+        bindings.push({extensionId:entry.id,installationId:row.id,actorId:selected.actorId,installationRevision:row.revision,prepareJobId:prepared.id,coordinate:canonicalExtensionCoordinate(selected.coordinate),integrity:selected.integrity,artifactDigest:artifact.artifactDigest,configDigest,...qualification});
+        plugins.push({extensionId:entry.id,coordinate:selected.coordinate,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,adapterRevision:proofIdentity.adapterRevision,configRevision:desired.revision,configDigest,enabled:selected.enabled,settings,connectionRefs,...qualification,executionClass:entry.executionClass});
       }catch(error){findings.push({extensionId:selected.catalogueId,code:['extension_proof_untrusted','extension_proof_stale','extension_proof_incomplete','extension_access_denied'].includes(error.code)?error.code:'extension_contract_invalid'});}
     }
     plugins.sort((a,b)=>a.extensionId.localeCompare(b.extensionId));bindings.sort((a,b)=>a.installationId.localeCompare(b.installationId));findings.sort((a,b)=>a.extensionId.localeCompare(b.extensionId));
     const pins=effectivePersonal?.pins??[];
     const identity={ownerId:project.userId,projectId:project.id,baseRuntimeImageDigest:trusted.baseRuntimeImageDigest,adapterRevision:trusted.adapterRevision,permissionProfileRevision:trusted.permissionProfileRevision,
       selections:plugins.map(plugin=>({extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,connectionRefs:plugin.connectionRefs})),skills:pins.map(pin=>({skillId:pin.skillId,revision:pin.revision,digest:pin.digest}))};
-    const manifest={schemaVersion:1,reference:null,identity,scope,bindings:{desiredRevision:desired?.revision??0,legacyRevision:legacy.configRevision,personalRevision:personal?.revision??0,installations:bindings},projection:{plugins,personal:{reference:effectivePersonal?.reference??null,pins}},findings};
+    const manifest={schemaVersion:1,...(this.assessmentAdmission?{assessmentAdmission:this.assessmentAdmission.marker}:{}),reference:null,identity,scope,bindings:{desiredRevision:desired?.revision??0,legacyRevision:legacy.configRevision,personalRevision:personal?.revision??0,installations:bindings},projection:{plugins,personal:{reference:effectivePersonal?.reference??null,pins}},findings};
     const hash=generationHash(manifest);manifest.reference={ownerHash:sha(project.userId),projectHash:sha(project.id),generationHash:hash};return{project,manifest};
   }
   /** Idempotent compatibility projection, without editing old citation rows or settings history. @param {any} user @param {string} projectId */
@@ -124,7 +135,7 @@ export class ExtensionGenerationService{
     for(const file of files){try{await writeFileExclusiveNoFollow(this.config.dataDir,path.join(root,file.name),file.bytes,{mode:file.mode});}catch(error){if(error.code!=='EEXIST')throw error;}const published=await openScopedFileNoFollow(this.config.dataDir,path.join(root,file.name));try{if(!file.bytes.equals(await readStableFileHandle(published.handle,published.stat)))throw invalid();await published.handle.chmod(file.mode);}finally{await published.handle.close();}}
     for(const privateRoot of [ownerRoot,path.dirname(root),root]){const directory=await openScopedDirectoryNoFollow(this.config.dataDir,privateRoot);try{if((directory.stat.mode&0o7777)!==0o700)throw invalid();}finally{await directory.handle.close();}}
     const selected=await openScopedDirectoryNoFollow(this.config.dataDir,path.join(root,'selected'));try{await selected.handle.chmod(0o755);}finally{await selected.handle.close();}
-    return verifyExtensionGeneration(this.config,project,manifest.reference);
+    return verifyExtensionGeneration(this.config,project,manifest.reference,this.assessmentAdmission);
   }
   /** Public input controls CAS only. Qualification and deployment identities come exclusively from trusted constructor adapters. @param {any} user @param {string} projectId @param {any} input */
   async reconcile(user,projectId,input){extensionRequestObject(input,['expectedRevision']);productInteger(input.expectedRevision,0,2147483646);await migrateProductStore(this.database);
@@ -148,20 +159,20 @@ export class ExtensionGenerationService{
   async operationIdentity(user,projectId,descriptorId,actualRuntimeGeneration){return this.database.transaction(client=>this.database.withTransactionClient(client,async()=>{
     const accountCreatedAt=await this.extensions.access.account(user,client),project=await this.extensions.access.project(user,projectId,{client}),owner=await this.plugins.scope(project.userId,project,client),state=await this.current(project),manifest=state?.payload.effective;
     if(!manifest||!['effective','rolled-back'].includes(state.payload.phase)||state.payload.runtimeGeneration!==actualRuntimeGeneration||manifest.scope.ownerAccountCreatedAt!==owner.accountCreatedAt||manifest.scope.projectCreatedAt!==owner.projectCreatedAt)throw new HttpError(503,'product_state_unavailable','The current extension runtime identity is unavailable.');
-    await verifyExtensionGeneration(this.config,project,manifest.reference);
+    await verifyExtensionGeneration(this.config,project,manifest.reference,this.assessmentAdmission);
     const selected=manifest.projection.plugins.find(plugin=>plugin.extensionId===descriptorId&&plugin.enabled),binding=manifest.bindings.installations.find(item=>item.extensionId===descriptorId&&item.artifactDigest===selected?.artifactDigest&&item.configDigest===selected?.configDigest),artifact=this.artifacts.get(descriptorId),entry=this.extensions.entries.get(descriptorId);
     if(!selected||!binding||!artifact||!entry||artifact.artifactDigest!==selected.artifactDigest||entry.integrity!==selected.integrity)throw new HttpError(404,'not_found','The operation descriptor is unavailable.');
     const preparation=await this.jobs.get(binding.actorId,binding.prepareJobId);if(preparation?.kind!=='extension-prepare'||preparation.status!=='succeeded'||preparation.payload.installationId!==binding.installationId||preparation.payload.installationRevision!==binding.installationRevision||preparation.result?.artifactDigest!==selected.artifactDigest||preparation.result.installationId!==binding.installationId||preparation.result.installationRevision!==binding.installationRevision||preparation.result.integrity!==selected.integrity)throw invalid();
     const actor={id:binding.actorId,accountCreatedAt:preparation.payload.accountCreatedAt};await this.extensions.access.account(actor,client);await this.extensions.access.project(actor,project.id,{manage:true,client});await this.extensions.access.connections(actor,selected.connectionRefs,{client,project,entry});
     const proofIdentity={packageIntegrity:selected.integrity,sourceCommit:selected.coordinate.kind==='github'?selected.coordinate.commit:null,adapterRevision:extensionProofAdapterRevision(artifact.adapterRevision,manifest.identity.adapterRevision,sha),runtimeImageDigest:manifest.identity.baseRuntimeImageDigest,dshVersion:'0.1.7-rc.2',executionClass:entry.executionClass,permissionProfileRevision:manifest.identity.permissionProfileRevision,suiteRevision:artifact.suiteRevision};
-    const proof=this.proofAuthority?await this.proofAuthority({project,actor,entry,artifact,identity:proofIdentity}):null;if(!proof)throw new HttpError(400,'extension_proof_untrusted','The operation has no current trusted proof.');
-    const qualified=qualifyExtensionProof(proof.receipt,proofIdentity,{...proof.authority,sha256Hex:sha});if(qualified.receiptDigest!==selected.receiptDigest)throw new HttpError(400,'extension_proof_stale','The operation proof changed.');
+    const qualified=await this.admission({project,actor,entry,artifact,identity:proofIdentity});
+    if(this.assessmentAdmission?qualified.assessmentAdmissionDigest!==selected.assessmentAdmissionDigest:qualified.receiptDigest!==selected.receiptDigest)throw new HttpError(400,'extension_proof_stale','The operation proof changed.');
     return extractExtensionGenerationOperationIdentity(manifest,{userId:user.id,ownerId:project.userId,projectId:project.id,accountCreatedAt,projectCreatedAt:owner.projectCreatedAt,runtimeGeneration:actualRuntimeGeneration},descriptorId);
   }));}
   /** Current system/actor authority independent of changed desired intent; used only for safe rollback. @param {any} job @param {any} client */
   async assertAuthority(job,client){const actor={id:job.payload.actorId,accountCreatedAt:job.payload.actorAccountCreatedAt};await this.extensions.access.account(actor,client);const project=await this.extensions.access.project(actor,job.projectId,{manage:true,client});const owner=await this.plugins.scope(project.userId,project,client);if(project.userId!==job.userId||owner.accountCreatedAt!==job.payload.accountCreatedAt||owner.projectCreatedAt!==job.payload.projectCreatedAt)throw new HttpError(409,'plugin_generation_changed','Project ownership changed.');return project;}
   /** A prior generation must still have current grants, receipts, base identity and coherent personal pins. @param {any} job @param {any} previous @param {any} client */
-  async canRestore(job,previous,client){const {manifest}=await this.snapshot({id:job.payload.actorId,accountCreatedAt:job.payload.actorAccountCreatedAt},job.projectId,client);return ['baseRuntimeImageDigest','adapterRevision','permissionProfileRevision'].every(key=>previous.identity[key]===manifest.identity[key])&&canonicalJson(previous.projection.personal)===canonicalJson(manifest.projection.personal)&&previous.projection.plugins.every(old=>manifest.projection.plugins.some(current=>current.extensionId===old.extensionId&&(!old.enabled||current.enabled)&&current.artifactDigest===old.artifactDigest&&canonicalJson(current.connectionRefs)===canonicalJson(old.connectionRefs)&&current.receiptDigest===old.receiptDigest));}
+  async canRestore(job,previous,client){const {manifest}=await this.snapshot({id:job.payload.actorId,accountCreatedAt:job.payload.actorAccountCreatedAt},job.projectId,client);return ['baseRuntimeImageDigest','adapterRevision','permissionProfileRevision'].every(key=>previous.identity[key]===manifest.identity[key])&&canonicalJson(previous.projection.personal)===canonicalJson(manifest.projection.personal)&&previous.projection.plugins.every(old=>manifest.projection.plugins.some(current=>current.extensionId===old.extensionId&&(!old.enabled||current.enabled)&&current.artifactDigest===old.artifactDigest&&canonicalJson(current.connectionRefs)===canonicalJson(old.connectionRefs)&&current.receiptDigest===old.receiptDigest&&current.assessmentAdmissionDigest===old.assessmentAdmissionDigest));}
   /** @param {any} project @param {any} candidate @param {any} proof @param {any} client */
   async markEffective(project,candidate,proof,client){const state=await this.current(project);if(state?.payload.desired?.reference.generationHash!==candidate.reference.generationHash)throw invalid();return this.documents.put(project.userId,'extension-generation',state.id,{...state.payload,effective:candidate,lastGood:candidate,phase:'effective',runtimeGeneration:proof.runtimeGeneration,findings:candidate.findings},{expectedRevision:state.revision,projectId:project.id,transactionClient:client});}
 }

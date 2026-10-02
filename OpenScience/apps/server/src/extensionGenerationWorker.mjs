@@ -32,7 +32,7 @@ export class ExtensionGenerationWorker{
       let renewing=false,pending=Promise.resolve();const timer=setInterval(()=>{if(renewing)return;renewing=true;pending=this.jobs.renew(job.userId,job.id,job.leaseToken,this.leaseMs).then(ok=>{if(!ok)lost=true;}).catch(()=>{lost=true;}).finally(()=>{renewing=false;});},Math.floor(this.leaseMs/3));timer.unref();
       try{
         await guard();const busy=async()=>{const prompts=await this.service.plugins.hasPendingPrompts(project),ledger=await this.ledgerBusy(project),kernel=await this.runtime.pluginRuntimeBusy(project);return [prompts,ledger,kernel].some(value=>typeof value!=='boolean'||value);};
-        if(await busy())return this.defer(job);await verifyExtensionGeneration(this.service.config,project,candidate.reference);
+        if(await busy())return this.defer(job);await verifyExtensionGeneration(this.service.config,project,candidate.reference,this.service.assessmentAdmission);
         const current=await this.runtime.currentGeneration(project),previous=state.payload.lastGood;
         const captured=previous&&canonicalJson(current?.reference??null)===canonicalJson(previous.reference)?previous:null;
         const baseline=()=>({...candidate,reference:null,projection:{plugins:candidate.projection.plugins.filter(plugin=>plugin.compatibility==='legacy-citation-v1'),personal:candidate.projection.personal},findings:candidate.findings});

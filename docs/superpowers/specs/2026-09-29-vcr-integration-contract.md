@@ -190,16 +190,20 @@ case N00 keeps the snapshot byte-identical to the live exports.
   fails with that reason instead of being rejected as a mismatch.
 - `manifest.outputHash` = sha256 of the canonical JSON (domain canonicalization) of
   `{ measures, counts, conclusion, notEstimableRule, tables: [{ name, sha256 }] }`; the control
-  plane recomputes it. `manifest.signature` = hex HMAC-SHA256(receiptKey,
+  plane recomputes it. When a receipt key is configured, `manifest.signature` = hex HMAC-SHA256(receiptKey,
   `jobId + "\n" + scenarioHash + "\n" + outputHash`). Both sides compute the scenario hash from the
   same canonical bytes: R parses job JSON with `simplifyVector = FALSE` and canonicalizes exactly as
   JS does (null kept, `{}` ≠ `[]`, one-element arrays stay arrays, JS key order).
 
 ### 3.5 The engine service
 
-- Secrets from files: `VCR_ENGINE_TOKEN_FILE` and `VCR_ENGINE_RECEIPT_KEY_FILE` (each ≥ 32 bytes,
-  opened without following symlinks). The service refuses to start without both unless
-  `VCR_ENGINE_INSECURE_DEV=1`. Bearer comparison is constant-time. `/health` needs the token too,
+- Secrets from files: required `VCR_ENGINE_TOKEN_FILE` and optional `VCR_ENGINE_RECEIPT_KEY_FILE`
+  (each configured file ≥ 32 bytes, opened without following symlinks). As clarified on 2026-10-02
+  under the owner's receipt policy, signed receipts are not a prerequisite for execution or
+  release evidence. With no receipt key, authenticated results retain all job/input/method
+  identity and output-hash checks. An explicitly configured invalid key is refused, never
+  silently downgraded. Only `VCR_ENGINE_INSECURE_DEV=1` permits a missing request token.
+  Bearer comparison is constant-time. `/health` needs the token too,
   except a bare liveness `GET /livez` that returns `{"ok":true}` and nothing else.
 - Paths: `VCR_ENGINE_WORK_DIR` (default and compose `/jobs`), `VCR_ENGINE_DATA_ROOT` (compose
   `/data-plane`, read-only). A job id is validated against the protocol id pattern and must not

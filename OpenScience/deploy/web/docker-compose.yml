@@ -505,10 +505,10 @@ services:
       OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
       # The engine's bearer token and receipt key are files, like every other
       # key this service holds (bound below; /dev/null where the deployment has
-      # no engine, which reads as none). Set the URL without both and the module
-      # says the engine is unconfigured and makes no client.
+      # no engine, which reads as none). The bearer token is required; signing
+      # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
-      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
@@ -954,7 +954,7 @@ services:
         read_only: true
       # 「虚拟临研」's engine token and receipt key (each at least 32 bytes,
       # owner-and-group readable: the engine reads the same files through its
-      # group). Optional: without them the engine is not composed.
+      # group). The token is required for an engine; the receipt key is optional.
       - type: bind
         source: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE:-/dev/null}
         target: /run/secrets/vcr-engine-token
@@ -1136,6 +1136,9 @@ services:
       context: ../../../项目代码/vcr-engine
       dockerfile: Dockerfile
       args:
+        RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:-untracked}
+        SOURCE_REVISION: ${OPEN_SCIENCE_SOURCE_REVISION:-untracked}
+        BUILD_CREATED: ${OPEN_SCIENCE_BUILD_CREATED:-1970-01-01T00:00:00.000Z}
         APT_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_ARCHIVE_MIRROR:-http://archive.ubuntu.com/ubuntu}
         UBUNTU_SECURITY_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}
         UBUNTU_PORTS_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_PORTS_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
@@ -1149,9 +1152,9 @@ services:
     environment:
       # The names the engine reads (`service/app.py`), one variable each. The
       # token the control plane presents and the key its results are signed
-      # with are files, never values: the service refuses to start without both.
+      # with are files, never values: the token is required, signing is optional.
       VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
-      VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
       # A job's directory, on the named volume below; and the only place a job's
       # inputs may be opened from, read-only.
       VCR_ENGINE_WORK_DIR: /jobs

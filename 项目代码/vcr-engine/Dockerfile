@@ -213,7 +213,9 @@ CMD ["python3", "-m", "uvicorn", "service.app:app", "--host", "0.0.0.0", "--port
 
 ARG BUILD_CREATED
 ARG RELEASE_ID
+ARG SOURCE_REVISION
 LABEL org.opencontainers.image.title="vcr-engine" \
       org.opencontainers.image.description="Deterministic statistics and simulation engine for EviMed 虚拟临研" \
       org.opencontainers.image.created="${BUILD_CREATED}" \
-      org.opencontainers.image.revision="${RELEASE_ID}"
+      org.opencontainers.image.version="${RELEASE_ID}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"

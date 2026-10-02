@@ -445,7 +445,10 @@ def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
     response_root.mkdir(parents=True, exist_ok=True)
+    disabled = server.disabled_tools()
     for tool, arguments in TASK_FIXTURES.items():
+        if tool in disabled:
+            continue
         started = time.monotonic()
         result = server.call_tool(tool, arguments)
         elapsed = round((time.monotonic() - started) * 1000)

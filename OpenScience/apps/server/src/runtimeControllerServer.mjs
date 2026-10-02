@@ -331,6 +331,8 @@ async function prepareControllerSocket(socketPath) {
 
 export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
+  // Constructor-only dependency; serving configuration and HTTP payloads cannot select assessment admission.
+  const extensionGenerationVerifier = hooks.extensionGenerationVerifier ?? verifyExtensionGeneration;
   const documents = createDocumentRenderController(config);
   const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
   // Protected construction supplies descriptors and signed/current authority resolvers.
@@ -478,7 +480,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
-    const extension = payload.extensionGeneration ? await verifyExtensionGeneration(config, project, payload.extensionGeneration) : null;
+    const extension = payload.extensionGeneration ? await extensionGenerationVerifier(config, project, payload.extensionGeneration) : null;
     if (extension) {
       if (inspectRuntimeImage(config).imageId !== extension.identity.baseRuntimeImageDigest) throw controllerFailure(409, 'extension_contract_invalid', 'The selected runtime image changed.');
       if (canonicalJson(extension.projection.personal.reference) !== canonicalJson(payload.personalSkillGeneration ?? null)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected personal roots do not match.');
@@ -567,7 +569,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
               && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative : mount.Type === 'bind' && mount.Source === expected)
               && state.Mounts?.some(item => item.Destination === '/opt/evimed/extensions' && item.RW === false);
             if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime selected projection did not match.');
-            await verifyExtensionGeneration(config, project, extension.reference); break;
+            await extensionGenerationVerifier(config, project, extension.reference); break;
           }
           await new Promise(resolve => setTimeout(resolve, 100));
         }

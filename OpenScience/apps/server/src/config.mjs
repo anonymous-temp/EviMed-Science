@@ -499,9 +499,10 @@ function vcrSettings(overrides) {
    * other key files: a file named by `<NAME>_FILE`, opened without following a
    * symlink, no wider than owner and group (the engine container reads the same
    * file through its group). There is no value-in-the-environment form: the
-   * token and the receipt key are the only thing that makes a result the
-   * engine's, and an environment is what a process listing and a crash report
-   * carry. An `overrides` value exists for tests alone.
+   * token authenticates requests; an optional receipt key adds HMAC checking.
+   * Engine/job/input identity and output hashes are checked in either case.
+   * A process listing or crash report must not carry either secret.
+   * An `overrides` value exists for tests alone.
    * @param {string} valueKey @param {string} fileKey @param {string} fileEnv @param {string} code
    * @returns {{ value: string, error: string | null }}
    */
@@ -537,19 +538,15 @@ function vcrSettings(overrides) {
     vcrBackupStateFile: String(overrides.vcrBackupStateFile ?? process.env.OPEN_SCIENCE_VCR_BACKUP_STATE_FILE ?? '').trim(),
     vcrBackupMaxAgeSeconds: integer('vcrBackupMaxAgeSeconds', 'OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS', 90_000, 60, 604_800),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-    // The engine's two secrets, read from the files the deployment mounts
-    // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
-    // the control plane presents and the key its results are signed with. With
-    // the URL set and either one missing, unreadable or under 32 bytes the
-    // module says the engine is unconfigured and no client is made: an engine
-    // that would take unauthenticated calls, or whose results could not be
-    // told from a forgery, is worse than the step saying 「暂不可用」.
-    // The `…Error` fields carry why, for readiness (never the secret).
+    // Request authentication is required; receipt signing is optional. An
+    // explicitly configured unreadable or invalid key is an error, never an
+    // invitation to fall back to unsigned verification. Readiness names only
+    // the error, never the secret. Hash and job identity checks always apply.
     vcrEngineToken: engineToken.value,
     vcrEngineTokenError: engineToken.error,
     vcrEngineReceiptKey: engineReceiptKey.value,
     vcrEngineReceiptKeyError: engineReceiptKey.error,
-    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && Boolean(engineReceiptKey.value),
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error && !engineReceiptKey.error,
     // One at a time on the shared host (plan §11.4).
     vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
     // Every job's own CPU ceiling; over it, the job stops at a checkpoint.
