@@ -12,10 +12,12 @@ import { createControllerExtensionComposition } from '../../apps/server/src/exte
 import { ExtensionPreparationWorker } from '../../apps/server/src/extensionPreparationWorker.mjs';
 import { readAcceptanceInputs } from './extension-saas-acceptance-inputs.mjs';
 import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOOTSTRAP } from './extension-saas-acceptance-manifest.mjs';
+import { assessmentDockerEnvironment, bindAssessmentDockerLauncher } from './extension-saas-acceptance-docker.mjs';
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const digest = value => 'sha256:' + createHash('sha256').update(value).digest('hex');
 /** Only local fixture connection/image inputs; credentials never enter observations. */
 export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, validatorImage, closureExpectedSHA, integrity, acceptanceInputsPath = null, signal = null }) {
+  assessmentDockerEnvironment();
   const preparedInputs = acceptanceInputsPath ? await readAcceptanceInputs(acceptanceInputsPath) : null;
   if (preparedInputs) { coworkImage = preparedInputs.images.coworkImageId; validatorImage = preparedInputs.images.nativeSdkImageId; closureExpectedSHA = preparedInputs.artifact.closureExpectedSHA; integrity = preparedInputs.artifact.integrity; }
   const parsed = new URL(databaseUrl);
@@ -34,11 +36,12 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
     const descriptor = await createAssessmentDescriptor({ imageId: coworkImage, integrity, closureExpectedSHA });
     const deployment = await prepareAssessmentDeployment(root, descriptor, digest(await fs.readFile(new URL(import.meta.url))));
     validator = await createNativeValidationFixture({ dataDir: root, image: validatorImage });
+    await bindAssessmentDockerLauncher(path.join(root, 'docker-fixture.mjs'));
     app = createWebApiApp({ dataDir: root, databaseUrl: isolated.url, databasePoolMax: 1, databaseConnectionTimeoutMs: 1000,
       stateStore: 'postgres', runtimeMode: 'mock', localAutoConfig: false, devAuth: false, authMode: 'local', selfRegistrationEnabled: true,
       bootstrapUser: 'assessment-bootstrap', bootstrapPassword: randomBytes(24).toString('hex'),
       deepseekProviderEnabled: false, learningEnabled: false, reviewEnabled: false, geoEnabled: false, vcrEnabled: false, frontierEnabled: false,
-      operatorUsers: 'assessment-bootstrap', modelGatewaySigningSecret: randomBytes(32).toString('hex'), runtimeContainerBin: 'docker', runtimeContainerImage: validatorImage,
+      operatorUsers: 'assessment-bootstrap', modelGatewaySigningSecret: randomBytes(32).toString('hex'), runtimeContainerBin: path.join(root, 'docker-fixture.mjs'), runtimeContainerImage: validatorImage,
       skillValidationController: { validatePersonalSkill: reference => validator.validate(reference) },
     });
     const address = await app.listen(0, '127.0.0.1'), base = `http://127.0.0.1:${address.port}`;

@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runDocumentBoundaryControls } from './extension-saas-acceptance-boundaries.mjs';
+import { assessmentDockerEnvironment } from './extension-saas-acceptance-docker.mjs';
+import { runProofRefusalControls } from './extension-saas-acceptance-proof.mjs';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -59,7 +61,7 @@ export function createCampaignReport(subject, observations = []) {
 /** Child environment is closed. No real provider/production/connector secret can be inherited by the local web fixture. */
 export function assessmentChildEnvironment(environment) {
   const allowed = ['PATH', 'HOME', 'TMPDIR', 'OPEN_SCIENCE_TEST_POSTGRES_URL', 'COWORK_TEST_IMAGE', 'NATIVE_SKILL_VALIDATOR_IMAGE', 'COWORK_TEST_CLOSURE_SHA256', 'COWORK_TEST_INTEGRITY', 'EVIMED_EXTENSION_ACCEPTANCE_INPUTS'];
-  return Object.fromEntries(allowed.filter(key => typeof environment[key] === 'string').map(key => [key, environment[key]]));
+  return { ...Object.fromEntries(allowed.filter(key => typeof environment[key] === 'string').map(key => [key, environment[key]])), ...assessmentDockerEnvironment(environment) };
 }
 /** A real child is not considered joined until its close event. Forced exit never proves resource cleanup.
  * No executable/path is accepted by this helper or the CLI; the caller owns the ChildProcess.
@@ -104,6 +106,15 @@ async function containedJourney() {
   if (!result.joined || result.failure || result.code !== 0) throw Object.assign(new Error('contained_journey_failed'), { assessmentFailure: result.failure ?? 'child-exit', childJoined: result.joined, forced: result.forced, cleanupConfirmed: result.cleanupConfirmed });
   return JSON.parse(result.stdout.toString('utf8').trim().split('\n').at(-1));
 }
+async function ledgerJourney() {
+  const child = spawn(process.execPath, [fileURLToPath(new URL('./extension-saas-acceptance-ledger.mjs', import.meta.url))], { env: assessmentChildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+  const abort = new AbortController(), interrupted = () => abort.abort(); process.once('SIGTERM', interrupted); process.once('SIGINT', interrupted);
+  let result;
+  try { result = await runBoundedAssessmentChild(child, { deadlineMs: 30000, signal: abort.signal }); }
+  finally { process.removeListener('SIGTERM', interrupted); process.removeListener('SIGINT', interrupted); }
+  if (!result.joined || result.failure || result.code !== 0) throw Object.assign(new Error('ledger_journey_failed'), { assessmentFailure: result.failure ?? 'child-exit', childJoined: result.joined, forced: result.forced, cleanupConfirmed: result.cleanupConfirmed });
+  return JSON.parse(result.stdout.toString('utf8').trim().split('\n').at(-1));
+}
 async function ordinaryJourney() {
   const child = spawn(process.execPath, [fileURLToPath(new URL('./extension-saas-acceptance-journey.mjs', import.meta.url))],
     { env: assessmentChildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
@@ -121,9 +132,11 @@ async function ordinaryJourney() {
   try { boundaries = await runDocumentBoundaryControls(boundaryRoot); }
   finally { await fs.rm(boundaryRoot, { recursive: true, force: true }); }
   const contained = await containedJourney();
+  const ledger = await ledgerJourney();
+  const proof = await runProofRefusalControls();
   if (contained.artifact.artifactDigest !== result.identity.descriptor.artifactDigest || contained.artifact.imageId !== result.identity.descriptor.imageId) throw new Error('campaign_artifact_changed');
   const report = createCampaignReport({ artifactDigest: result.identity.descriptor.artifactDigest, sourcePolicy: result.identity.sourcePolicy,
-    nativeImage: result.identity.nativeImage, descriptor: result.identity.descriptor }, [...result.observations, ...boundaries.observations, ...contained.observations]);
+    nativeImage: result.identity.nativeImage, descriptor: result.identity.descriptor }, [...result.observations, ...boundaries.observations, ...contained.observations, ...ledger.observations, ...proof.observations]);
   report.measurements = result.timing; report.cleanup = result.cleanup;
   return report;
 }

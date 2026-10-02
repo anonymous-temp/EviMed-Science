@@ -1,4 +1,5 @@
-/** Protected reproducible preparation inputs; neither a caller's options nor package health is authority. */
+/** Protected reproducible preparation inputs; all three image IDs are required (SDK/kernel may equal).
+ * A serving runtime image is deliberately not inferred from the kernel fixture. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
