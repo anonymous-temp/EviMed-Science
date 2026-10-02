@@ -41,7 +41,14 @@ export class ExtensionAccess {
     const id=extensionIdentifier(projectId);let resolved;
     try {
       if(this.projectAccess)resolved=await this.projectAccess(user,id,{manage,client});
-      else if(this.store) { const project=await this.store.requireProject(user,id);resolved={project,role:project.userId===user.id?'owner':null}; }
+      else if(this.store) {
+        // Store.requireProject also opens a transaction. Borrow the caller's
+        // checked client so scope checks remain atomic and work with pool one.
+        const resolve = () => this.store.requireProject(user,id);
+        const project = client && this.store.database?.withTransactionClient
+          ? await this.store.database.withTransactionClient(client, resolve) : await resolve();
+        resolved={project,role:project.userId===user.id?'owner':null};
+      }
     } catch(error) { if(error?.status===404)resolved=null;else throw error; }
     if(!resolved?.project || resolved.project.id!==id || !['owner','editor','viewer'].includes(resolved.role)
       || (manage&&!['owner','editor'].includes(resolved.role)))throw new HttpError(404,'project_not_found','Project not found.');

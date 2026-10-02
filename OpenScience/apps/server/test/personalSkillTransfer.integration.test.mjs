@@ -23,6 +23,14 @@ test('real pool1 transfer preserves authored histories and bytes across owners, 
   { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, timeout: 60000 }, async () => {
     const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'pst');
     let database, root, dataDir, validator;
+    const cleanup = async () => {
+      const failures = [];
+      for (const close of [() => validator?.close(), () => database?.close(), () => isolated.drop()]) {
+        try { await close(); } catch (error) { failures.push(error); }
+      }
+      if (failures.length) throw new AggregateError(failures, 'Personal transfer fixture cleanup was not fully joined.');
+      if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
+    };
     try {
       database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 1, databaseConnectionTimeoutMs: 1000 });
       await database.migrate();
@@ -92,5 +100,5 @@ test('real pool1 transfer preserves authored histories and bytes across owners, 
       }
       await database.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id='bob'");
       await assert.rejects(transfer.confirm(bob, input), { code: 'unauthorized' });
-    } finally { let failure;try{await validator?.close();}catch(error){failure=error;}finally{await database?.close();await isolated.drop();if(dataDir&&!failure)await fs.rm(dataDir,{recursive:true,force:true});}if(failure)throw failure; }
+    } finally { await cleanup(); }
   });

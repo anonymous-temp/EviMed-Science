@@ -22,7 +22,7 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
   try {
     await admin.query(`CREATE DATABASE "${isolated}"`);
     const validated = [];
-    app = createWebApiApp({ dataDir: directory, stateStore: "postgres", databaseUrl: database.href, databasePoolMax: 1, port: 0,
+    app = createWebApiApp({ dataDir: directory, stateStore: "postgres", databaseUrl: database.href, databasePoolMax: 1, databaseConnectionTimeoutMs: 500, port: 0,
       runtimeMode: "mock", devAuth: false, bootstrapUser: "extension-fixture", bootstrapPassword: "local fixture password only",
       learningEnabled: false, reviewEnabled: false, frontierEnabled: false, geoEnabled: false, vcrEnabled: false,
       extensionCatalogue: [{ id: "fixture-documents", title: "Fixture document tools", coordinate: { kind: "npm", name: "fixture-documents", version: "1.0.0" }, executionClass: "isolated-tool", integrity: `sha256:${"1".repeat(64)}` }],
@@ -50,6 +50,13 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     const catalogue = await request("/api/extensions/catalogue"); assert.equal(catalogue.items[0].evidenceState, "source-assessed");
     const install = await request("/api/extensions/installations", "POST", { coordinate: catalogue.items[0].coordinate, scope: "library", idempotencyKey: "http-install1" }, 201);
     assert.equal(install.installation.effective, false); assert(install.job.id);
+    const projectIntent = { coordinate: catalogue.items[0].coordinate, scope: "project", projectId: "default", idempotencyKey: "http-project-install" };
+    const projectInstall = await request("/api/extensions/installations", "POST", projectIntent, 201);
+    assert.equal(projectInstall.installation.effective, false);
+    const retried = await request("/api/extensions/installations", "POST", projectIntent, 201);
+    assert.equal(retried.job.id, projectInstall.job.id, "retry keeps the single project-scoped preparation job");
+    const extensionSelection = await request("/api/projects/default/extensions");
+    assert.equal(extensionSelection.selections[0].installationId, projectInstall.installation.id);
     const content = { expectedRevision: 0, title: "My method", description: "Check supplied material", instructions: "Preserve all source quotations." };
     const skill = await request("/api/skills", "POST", content, 201);
     assert.equal(validated.length, 1); assert.equal(skill.payload.prepared, true); assert.equal(skill.payload.instructions, content.instructions);
