@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { EXTENSION_SAAS_CASE_IDS } from '@evimed/domain';
 import { createAssessmentDescriptor, prepareAssessmentDeployment } from '../extension-saas-acceptance-manifest.mjs';
-import { createCampaignReport, assessmentCaseMatrix, assessmentChildEnvironment } from '../extension-saas-acceptance.mjs';
+import { createCampaignReport, assessmentCaseMatrix, assessmentChildEnvironment, runBoundedAssessmentChild } from '../extension-saas-acceptance.mjs';
 const input = { imageId: 'sha256:' + 'a'.repeat(64), integrity: 'sha256:' + 'b'.repeat(64), closureExpectedSHA: 'c'.repeat(64) };
 test('assessment inputs reject credential/command authority and accessors before reading data', async () => {
   await assert.rejects(createAssessmentDescriptor({ ...input, qualified: true }));
@@ -40,4 +41,29 @@ test('acceptance matrix has exactly22 unique cases and refuses untrusted verdict
 test('local fixture environment never inherits provider keys, production URLs or cloud state', () => {
   const actual = assessmentChildEnvironment({ PATH: '/fixture/bin', HOME: '/fixture/home', OPEN_SCIENCE_TEST_POSTGRES_URL: 'local-only', DEEPSEEK_API_KEY: 'canary', OPEN_SCIENCE_DATABASE_URL: 'production-canary', AWS_SECRET_ACCESS_KEY: 'canary' });
   assert.deepEqual(Object.keys(actual).sort(), ['HOME', 'OPEN_SCIENCE_TEST_POSTGRES_URL', 'PATH']); assert.equal(JSON.stringify(actual).includes('canary'), false);
+});
+
+const childFixture = source => spawn(process.execPath, ['-e', source], { stdio: ['ignore', 'pipe', 'pipe'] });
+test('child success and nonzero failure both physically join before returning', async () => {
+  const okay = await runBoundedAssessmentChild(childFixture("process.stdout.write('actual-output')"), { deadlineMs: 5000, terminationGraceMs: 100, forceJoinMs: 1000, maxOutputBytes: 4096 });
+  assert.equal(okay.code, 0); assert.equal(okay.joined, true); assert.equal(okay.stdout.toString(), 'actual-output'); assert.equal(okay.failure, null);
+  const failed = await runBoundedAssessmentChild(childFixture('process.exitCode=7'), { deadlineMs: 5000, terminationGraceMs: 100, forceJoinMs: 1000, maxOutputBytes: 4096 });
+  assert.equal(failed.code, 7); assert.equal(failed.joined, true); assert.equal(failed.failure, 'child-exit');
+});
+test('output overflow terminates and joins the actual child instead of merely discarding bytes', async () => {
+  const child = childFixture("setInterval(()=>process.stdout.write(Buffer.alloc(8192,65)),1)");
+  const result = await runBoundedAssessmentChild(child, { deadlineMs: 5000, terminationGraceMs: 100, forceJoinMs: 1000, maxOutputBytes: 4096 });
+  assert.equal(result.failure, 'output-limit'); assert.equal(result.joined, true); assert(result.stdout.length <= 4096); assert.equal(child.signalCode, 'SIGTERM');
+});
+test('deadline escalates an ignoring child and waits for physical exit without claiming descendant cleanup', async () => {
+  const child = childFixture("process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{},1000)");
+  await new Promise(resolve => child.stdout.once('data', resolve));
+  const result = await runBoundedAssessmentChild(child, { deadlineMs: 100, terminationGraceMs: 100, forceJoinMs: 1000, maxOutputBytes: 4096 });
+  assert.equal(result.failure, 'deadline'); assert.equal(result.forced, true); assert.equal(result.joined, true); assert.equal(result.cleanupConfirmed, false); assert.equal(child.signalCode, 'SIGKILL');
+});
+test('caller interruption lets cooperative child cleanup finish and joins before resolving', async () => {
+  const child = childFixture("process.on('SIGTERM',()=>{process.stdout.write('cleanup');process.exit(0)});process.stdout.write('ready');setInterval(()=>{},1000)");
+  await new Promise(resolve => child.stdout.once('data', resolve)); const abort = new AbortController();
+  const joined = runBoundedAssessmentChild(child, { deadlineMs: 5000, terminationGraceMs: 500, forceJoinMs: 1000, maxOutputBytes: 4096, signal: abort.signal }); abort.abort();
+  const result = await joined; assert.equal(result.failure, 'interrupted'); assert.equal(result.forced, false); assert.equal(result.joined, true); assert.equal(result.stdout.toString(), 'cleanup');
 });

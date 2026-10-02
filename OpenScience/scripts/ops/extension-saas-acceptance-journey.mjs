@@ -14,7 +14,7 @@ import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOO
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const digest = value => 'sha256:' + createHash('sha256').update(value).digest('hex');
 /** Only local fixture connection/image inputs; credentials never enter observations. */
-export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, validatorImage }) {
+export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, validatorImage, signal = null }) {
   const parsed = new URL(databaseUrl);
   assert(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)); assert.match(parsed.pathname, /^\/evimed_test[a-z0-9_]*$/);
   assert.match(coworkImage, /^sha256:[a-f0-9]{64}$/); assert.match(validatorImage, /^sha256:[a-f0-9]{64}$/);
@@ -22,8 +22,11 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
   const root = path.join(await fs.realpath(fixtureRoot), 'extension-saas-' + randomUUID()); await fs.mkdir(root, { mode: 0o700 });
   const isolated = await createGeoTestDatabase(databaseUrl, 'saas');
   const observations = [], timings = [], exchanges = [], started = performance.now();
-  let app, validator, composition, phase = 'bootstrap';
+  let app, validator, composition, report, failure = null, cleanupUnconfirmed = false, preparationDiagnostic = null, phase = 'bootstrap';
+  const checkInterrupted = () => signal?.throwIfAborted();
+  const requestSignal = () => signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
   try {
+    checkInterrupted();
     const descriptor = await createAssessmentDescriptor({ imageId: coworkImage, integrity: 'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',
       closureExpectedSHA: createHash('sha256').update(await fs.readFile(path.join(repo, '.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'))).digest('hex') });
     const deployment = await prepareAssessmentDeployment(root, descriptor, digest(await fs.readFile(new URL(import.meta.url))));
@@ -40,15 +43,16 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
     const accounts = [];
     for (const username of ['ordinary-a', 'ordinary-b']) {
       const response = await fetch(base + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username, password: randomBytes(24).toString('hex'), name: username, warm: false }) });
+        body: JSON.stringify({ username, password: randomBytes(24).toString('hex'), name: username, warm: false }), signal: requestSignal() });
       const body = await response.json(); assert.equal(response.status, 201, body.code);
       assert.notEqual(body.data.user.id, app.config.bootstrapUser);
       accounts.push({ username, user: body.data.user, headers: { Cookie: response.headers.get('set-cookie').split(';')[0], 'X-Open-Science-CSRF': body.data.csrfToken } });
     }
     const request = async (actor, route, method = 'GET', value = undefined, expected = 200) => {
+      checkInterrupted();
       const before = performance.now();
       const response = await fetch(base + route, { method, headers: { ...actor.headers, 'content-type': 'application/json' },
-        ...(value === undefined ? {} : { body: JSON.stringify(value) }) });
+        ...(value === undefined ? {} : { body: JSON.stringify(value) }), signal: requestSignal() });
       const body = await response.json(); assert.equal(response.status, expected, body.code);
       exchanges.push({ method, route, status: response.status, code: body.code ?? null, responseDigest: digest(JSON.stringify(body)) });
       timings.push({ operation: method + ' ' + route.replace(/skill%3A[^/]+/g, 'skill:owned'), elapsedMs: performance.now() - before, status: response.status });
@@ -64,7 +68,7 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
     await request(bob, skillUrl, 'GET', undefined, 404); await request(bob, skillUrl + '/portable', 'GET', undefined, 404);
     const archiveEntries = { 'SKILL.md': Buffer.from('---\nname: account-resource-check\ndescription: Owned public resource\n---\n\nRead references/public.txt and retain provenance.\n'), 'references/public.txt': Buffer.from('Synthetic public evidence canary; no patient rows.') };
     const archive = await nativeSkillSnapshotArchive(Object.entries(archiveEntries).map(([name, bytes]) => ({ path: name, size: bytes.length, digest: digest(bytes), bytesBase64: bytes.toString('base64') })));
-    const uploaded = await fetch(base + '/api/skills/uploads?kind=tar-gzip', { method: 'POST', headers: { ...alice.headers, 'content-type': 'application/octet-stream' }, body: archive });
+    const uploaded = await fetch(base + '/api/skills/uploads?kind=tar-gzip', { method: 'POST', headers: { ...alice.headers, 'content-type': 'application/octet-stream' }, body: archive, signal: requestSignal() });
     assert.equal(uploaded.status, 201); const resourceId = (await uploaded.json()).data.resourceId;
     const imported = await request(alice, '/api/skills/import', 'POST', { resourceId, title: 'Owned source with resource' }, 201);
     const resource = imported.payload.resources[0]; assert(resource);
@@ -83,32 +87,55 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
     assert.equal(again.installation.id, installed.installation.id); assert.equal(again.job.id, installed.job.id);
     phase = 'controller-composition';
     composition = createControllerExtensionComposition({ config: app.config, deployment, database: app.store.database }); assert(composition, JSON.stringify({ deploymentConfigured: deployment.status === 'configured', databaseConfigured: Boolean(app.config.databaseUrl), signerConfigured: typeof app.config.modelGatewaySigningSecret === 'string' && app.config.modelGatewaySigningSecret.length >= 32 }));
-    const preparation = new ExtensionPreparationWorker({ service: app.extensionService, controller: composition.tools, admittedArtifacts: deployment.admittedArtifacts });
+    const controller = {
+      admissionAvailable: () => composition.tools.admissionAvailable(),
+      cancelPreparation: identity => composition.tools.cancelPreparation(identity),
+      prepare: async (body, options) => {
+        try {
+          const signals = [options?.signal, signal].filter(Boolean);
+          return await composition.tools.prepare(body, { ...options, ...(signals.length ? { signal: AbortSignal.any(signals) } : {}) });
+        }
+        catch (error) { preparationDiagnostic = { code: error?.code ?? 'unknown', name: error?.name ?? 'Error', frames: String(error.stack ?? '').split('\n').slice(1, 9) }; throw error; }
+      },
+    };
+    class ObservedPreparationWorker extends ExtensionPreparationWorker {
+      async guard(job) {
+        try { return await super.guard(job); }
+        catch (error) { preparationDiagnostic = { boundary: 'worker-current-scope', code: error?.code ?? 'unknown', name: error?.name ?? 'Error', frames: String(error.stack ?? '').split('\n').slice(1, 9) }; throw error; }
+      }
+    }
+    const preparation = new ObservedPreparationWorker({ service: app.extensionService, controller, admittedArtifacts: deployment.admittedArtifacts });
     phase = 'contained-preparation';
     await preparation.tick();
     const current = await request(alice, '/api/extensions/installations/' + encodeURIComponent(installed.installation.id));
     assert.equal(current.prepareJobId, installed.job.id); assert.equal(current.effective, false);
     const job = await app.extensionService.jobs.get(alice.user.id, installed.job.id);
-    if (job.status !== 'succeeded') throw Object.assign(new Error('controlled_preparation_failed'), { code: job.error?.code ?? 'unknown_preparation_outcome', expected: 'succeeded', actual: job.status }); assert.equal(job.result.artifactDigest, descriptor.artifactDigest);
+    if (job.status !== 'succeeded') throw Object.assign(new Error('controlled_preparation_failed'), { code: job.error?.code ?? 'unknown_preparation_outcome', expected: 'succeeded', actual: job.status, preparationDiagnostic }); assert.equal(job.result.artifactDigest, descriptor.artifactDigest);
     observations.push({ caseId: 'SAAS-01', scope: 'actual-local-http-pg-native-preparation', setup: ASSESSMENT_BOOTSTRAP,
       expected: 'foreign metadata/history/resource/job/export denied; independent ordinary account operations usable', actual: { requests: exchanges, ownPrepared: own.payload.prepared },
       ordinaryActors: accounts.map(actor => ({ userId: actor.user.id, platformOperator: false })), artifactDigest: descriptor.artifactDigest });
     observations.push({ caseId: 'SAAS-16', scope: 'actual-default-controller-image-admission', setup: 'real leased preparation job; no qualification dependency used',
       expected: 'exact contained immutable artifact prepares without claiming effective or SaaS-qualified', actual: { status: job.status, artifactDigest: job.result.artifactDigest, effective: current.effective } });
-    return { status: 'partial', qualified: false, defaultNativeHostedJourney: 'pending-real-campaign-receipt', identity: { descriptor, sourcePolicy: deployment.policy, nativeImage: validatorImage },
+    report = { status: 'partial', qualified: false, defaultNativeHostedJourney: 'pending-real-campaign-receipt', identity: { descriptor, sourcePolicy: deployment.policy, nativeImage: validatorImage },
       observations, timing: { elapsedMs: performance.now() - started, operations: timings }, cleanup: 'owned processes and database joined in finally' };
-  } catch (error) { error.assessmentStage = phase; throw error; } finally {
+  } catch (error) { error.assessmentStage = phase; failure = error; } finally {
     let failed = false;
     for (const close of [() => composition?.close(), () => validator?.close(), () => app?.close()]) { try { await close(); } catch { failed = true; } }
     try { await isolated.drop(); } catch { failed = true; }
     if (!failed) await fs.rm(root, { recursive: true, force: true });
-    if (failed) throw new Error('assessment_cleanup_unconfirmed');
+    cleanupUnconfirmed = failed;
   }
+  if (cleanupUnconfirmed) throw new Error('assessment_cleanup_unconfirmed');
+  if (failure) throw failure;
+  return report;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const abort = new AbortController(), interrupted = () => abort.abort('assessment_interrupted');
+  process.once('SIGTERM', interrupted); process.once('SIGINT', interrupted);
   try {
-    const report = await runOrdinaryAssessmentJourney({ databaseUrl: process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, coworkImage: process.env.COWORK_TEST_IMAGE, validatorImage: process.env.NATIVE_SKILL_VALIDATOR_IMAGE });
+    const report = await runOrdinaryAssessmentJourney({ databaseUrl: process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, coworkImage: process.env.COWORK_TEST_IMAGE, validatorImage: process.env.NATIVE_SKILL_VALIDATOR_IMAGE, signal: abort.signal });
     process.stdout.write(JSON.stringify(report) + '\n');
-  } catch (error) { process.stderr.write(JSON.stringify({ status: 'failed', qualified: false, code: error?.code ?? error?.name ?? 'assessment_failed', phase: error?.assessmentStage ?? 'input', expected: ['string', 'number', 'boolean'].includes(typeof error?.expected) ? error.expected : undefined, actual: ['string', 'number', 'boolean'].includes(typeof error?.actual) ? error.actual : undefined, detail: error?.assessmentStage === 'controller-composition' ? error.message : undefined }) + '\n'); process.exitCode = 1; }
+  } catch (error) { process.stderr.write(JSON.stringify({ status: 'failed', qualified: false, code: error?.code ?? error?.name ?? 'assessment_failed', phase: error?.assessmentStage ?? 'input', expected: ['string', 'number', 'boolean'].includes(typeof error?.expected) ? error.expected : undefined, actual: ['string', 'number', 'boolean'].includes(typeof error?.actual) ? error.actual : undefined, detail: error?.assessmentStage === 'controller-composition' ? error.message : undefined, preparationDiagnostic: error?.preparationDiagnostic ?? null }) + '\n'); process.exitCode = 1; }
+  finally { process.removeListener('SIGTERM', interrupted); process.removeListener('SIGINT', interrupted); }
 }
