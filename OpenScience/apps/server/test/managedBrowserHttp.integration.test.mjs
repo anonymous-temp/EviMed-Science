@@ -1,4 +1,4 @@
-/** Real HTTP login/frame boundary and real disposable CDP; only the public site transport is controlled. */
+/** Real HTTP login/frame boundary and disposable CDP; kernel inventory and public site transport are controlled fixtures. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -45,9 +45,11 @@ test('signed native frames reach real isolated pages and logout physically joins
    const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify({username,password:'Disposable local managed browser fixture!'})});
    assert.equal(response.status,201);const data=(await response.json()).data;
-   return {cookie:response.headers.get('set-cookie').split(';')[0],csrf:data.csrfToken};
+   return {cookie:response.headers.get('set-cookie').split(';')[0],csrf:data.csrfToken,user:data.user};
   };
+  app.runtimeManager.callKernel=async(_runtime,_project,method)=>{assert.equal(method,'session/list');return{items:[{sessionId:'native'}]};};
   const frameFor=async actor=>{
+   const project=await app.store.requireProject(await app.store.userById(actor.user.id),'default');app.runtimeManager.runtimes.set(app.runtimeManager.key(project),{modelGatewayTokenJti:'synthetic-native-'+actor.user.id});
    const response=await fetch(base+'/api/runtime-ui/frames',{method:'POST',headers:{cookie:actor.cookie,
     'x-open-science-csrf':actor.csrf,'content-type':'application/json'},body:JSON.stringify({projectId:'default'})});
    assert.equal(response.status,201);const data=(await response.json()).data;
@@ -78,7 +80,7 @@ test('signed native frames reach real isolated pages and logout physically joins
   assert.equal((await response.json()).data.closed,true);assert.equal(await contextCount(),baseline);
   response=await request(bob,bf,'open',openBody);assert.equal(response.status,404);
  }finally{
-  await app?.close();await service?.close();await observer?.detach();await browser?.close();
+  app?.runtimeManager.runtimes.clear();await app?.close();await service?.close();await observer?.detach();await browser?.close();
   await new Promise(resolve=>site.close(resolve));await fs.rm(root,{recursive:true,force:true});
  }
 });
