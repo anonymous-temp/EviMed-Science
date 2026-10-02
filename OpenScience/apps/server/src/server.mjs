@@ -926,7 +926,7 @@ export function createWebApiApp(overrides = {}) {
   let skillStorageReady = false;
   const skillArtifacts = productDatabase ? new SkillLibraryArtifacts({
     root: skillRoot, decodeArchive: decodeSkillArchive,
-    sharedStorageRoot: path.join(config.dataDir, ".openscience", "personal-skill-generations"),
+    sharedStorageRoots: ["personal-skill-generations", "extension-generations"].map(namespace => path.join(config.dataDir, ".openscience", namespace)),
     parseSkill: async (root, options) => {
       if (!skillStorageReady) throw new HttpError(503, "product_state_unavailable", "Skill storage is unavailable.");
       const relative = path.relative(skillRoot, root).split(path.sep).join("/");
