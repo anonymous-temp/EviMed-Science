@@ -57,6 +57,13 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     assert.equal(retried.job.id, projectInstall.job.id, "retry keeps the single project-scoped preparation job");
     const extensionSelection = await request("/api/projects/default/extensions");
     assert.equal(extensionSelection.selections[0].installationId, projectInstall.installation.id);
+    const actorId = session.data.user.id, storedActor = await app.store.userById(actorId);
+    await app.store.database.transaction(async client => {
+      const partial = await app.extensionService.access.project({ id: actorId }, "default", { manage: true, client });
+      assert.equal(partial.userRoot, storedActor.rootDir, "background jobs hydrate their actor inside the checked transaction");
+      const forged = await app.extensionService.access.project({ id: actorId, rootDir: "/caller-supplied-root" }, "default", { client });
+      assert.equal(forged.userRoot, storedActor.rootDir, "caller or job metadata cannot select a filesystem root");
+    });
     const content = { expectedRevision: 0, title: "My method", description: "Check supplied material", instructions: "Preserve all source quotations." };
     const skill = await request("/api/skills", "POST", content, 201);
     assert.equal(validated.length, 1); assert.equal(skill.payload.prepared, true); assert.equal(skill.payload.instructions, content.instructions);

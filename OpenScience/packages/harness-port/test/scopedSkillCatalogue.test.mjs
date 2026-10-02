@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { tmpdir } from 'node:os'
 import process from 'node:process'
 import { Buffer } from 'node:buffer'
 import { Context } from '@deepseek-ai/cordis'
@@ -13,7 +14,7 @@ import { createScopedSkillCatalogue } from '../src/scopedSkillCatalogue.mjs'
 /** Real native registry/provider with public scope primitives; synthetic agent identity is a code control, not serving qualification.
  * @param {import('node:test').TestContext} t */
 async function fixture(t) {
-  const root = await fs.mkdtemp('/private/tmp/evimed-scoped-skills-'), builtin = path.join(root, 'builtin'), community = path.join(root, 'community')
+  const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'evimed-scoped-skills-'))), builtin = path.join(root, 'builtin'), community = path.join(root, 'community')
   for (const [directory, name, policy] of [[builtin, 'builtin-review', 'user-invocable: false\n'], [community, 'community-review', '']]) {
     await fs.mkdir(path.join(directory, name), { recursive: true })
     await fs.writeFile(path.join(directory, name, 'SKILL.md'), `---\nname: ${name}\ndescription: Native evidence review\n${policy}metadata:\n  title: 真实模板\n---\n\nUse [resource](资料/证据.csv).`)

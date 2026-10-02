@@ -3,6 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {canonicalJson} from '@evimed/domain';
@@ -100,7 +101,7 @@ test('actual execution cancellation joins its process and preserves exact attemp
 
 test('real Unix protocol carries execute/status/cancel bound to the actual Docker attempt',options,async()=>{
   const {createRuntimeController}=await import('../src/runtimeControllerServer.mjs');const {RuntimeControllerClient}=await import('../src/runtimeControllerClient.mjs');
-  const socketRoot=await fs.mkdtemp('/private/tmp/xt-');const tools=new ExtensionToolController({admittedDescriptors:[descriptor],stateRoot,adapterRoot:adapter,inputRoot,resolveOperation:controller.resolveOperation,resolveInputSnapshot:controller.resolveInputSnapshot});
+  const socketRoot=await fs.realpath(await fs.mkdtemp(path.join(tmpdir(),'xt-')));const tools=new ExtensionToolController({admittedDescriptors:[descriptor],stateRoot,adapterRoot:adapter,inputRoot,resolveOperation:controller.resolveOperation,resolveInputSnapshot:controller.resolveInputSnapshot});
   const config={dataDir:directory,runtimeControllerSocket:socketRoot+'/controller.sock',runtimeContainerImage:image};const server=createRuntimeController(config,{extensionTools:tools});
   try{await server.listen();const client=new RuntimeControllerClient(config),identity=executionIdentity();
     const result=await client.execute({descriptorId:descriptor.id,operationId:identity.operationId,request:{operation:'doc_read',resourceId:'res_docx'},identity});

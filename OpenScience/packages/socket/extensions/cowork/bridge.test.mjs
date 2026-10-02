@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {coworkToolSpecs} from './bridge.mjs';
 test('thin bridge retains invoking scope and cancellation; caller cannot select a host path',async()=>{
   const calls=[],specs=coworkToolSpecs(async input=>{calls.push(input);return{ok:true,data:{format:'xlsx'}};});
@@ -18,7 +20,7 @@ test('actual registry identity is projected; forged agents or foreign definition
   assert.throws(()=>nativeCoworkInvocation(ctx,call,'doc_read',{},'generation-owned'));
 });
 test('native gateway sends the exact service envelope and keeps same-call status pending through result',async()=>{
-  const {callCoworkGateway}=await import('./bridge.mjs');const fs=await import('node:fs/promises');const directory=await fs.mkdtemp('/private/tmp/cowork-transport-');const tokenFile=directory+'/token';await fs.writeFile(tokenFile,'fixture-only');
+  const {callCoworkGateway}=await import('./bridge.mjs');const fs=await import('node:fs/promises');const directory=await fs.realpath(await fs.mkdtemp(path.join(tmpdir(),'cowork-transport-')));const tokenFile=directory+'/token';await fs.writeFile(tokenFile,'fixture-only');
   const calls=[],invocation={sessionId:'s',agentId:'s',callId:'call-one',rootCallId:'call-one',toolName:'doc_read',runtimeGeneration:'generation'};
   try{const result=await callCoworkGateway({descriptorId:'cowork-portable',gatewayUrl:'http://localhost/internal/extensions/v1',tokenFile},invocation,{operation:'doc_read',resourceId:'opaque'},AbortSignal.timeout(3000),async(url,init)=>{
     calls.push({url,body:JSON.parse(init.body),invocation:JSON.parse(init.headers['x-evimed-extension-invocation'])});

@@ -44,7 +44,12 @@ export class ExtensionAccess {
       else if(this.store) {
         // Store.requireProject also opens a transaction. Borrow the caller's
         // checked client so scope checks remain atomic and work with pool one.
-        const resolve = () => this.store.requireProject(user,id);
+        const resolve = async () => {
+          // Durable jobs retain identity and epoch, not a trusted filesystem root.
+          const actor = this.store.userById ? await this.store.userById(user.id) : user;
+          if (!actor || actor.id !== user.id) throw new HttpError(404,'project_not_found','Project not found.');
+          return this.store.requireProject(actor,id);
+        };
         const project = client && this.store.database?.withTransactionClient
           ? await this.store.database.withTransactionClient(client, resolve) : await resolve();
         resolved={project,role:project.userId===user.id?'owner':null};
