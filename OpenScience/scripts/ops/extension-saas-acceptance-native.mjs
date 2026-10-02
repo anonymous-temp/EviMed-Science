@@ -37,7 +37,7 @@ export async function runNativeBoundaryControls({image,signal=null}) {
    const keeper=await create(['--user','0:0','--memory','128m','--pids-limit','32','--mount',`type=volume,source=${volume},target=/projection`,'--entrypoint','node',image,'-e',`const fs=require('fs');fs.copyFileSync('/fixture/generations/${scenario}/projection.json','/projection/projection.json');fs.chmodSync('/projection',0o755);fs.chmodSync('/projection/projection.json',0o444);setInterval(()=>{},1000);`]);
    await command(['start',keeper]);await command(['exec',keeper,'node','-e',"require('fs').statSync('/projection/projection.json')"]);
    const id=await create(['--user','10001:10001','--cpus','1','--memory','512m','--pids-limit','64','--tmpfs','/tmp:rw,nosuid,nodev,size=128m,mode=1777','--mount',`type=volume,source=${volume},target=/opt/evimed/extensions,readonly`,'--entrypoint','node',image,'/fixture/fixture.mjs']);
-   const actual=JSON.parse(await command(['inspect',id]))[0];assert.equal(actual.Id,id);assert.equal(actual.Image,image);assert.equal(actual.Config.User,'10001:10001');assert.equal(actual.HostConfig.NetworkMode,'none');assert.equal(actual.HostConfig.ReadonlyRootfs,true);assert(actual.HostConfig.CapDrop.includes('ALL'));assert.equal(actual.Mounts.find(row=>row.Destination==='/opt/evimed/extensions').RW,false);
+   const actual=JSON.parse(await command(['inspect',id]))[0];assert.equal(actual.Id,id);assert.equal(actual.Image,image);assert.equal(actual.Config.User,'10001:10001');assert.equal(actual.HostConfig.NetworkMode,'none');assert.equal(actual.HostConfig.ReadonlyRootfs,true);assert(actual.HostConfig.CapDrop.includes('ALL'));assert.equal(actual.Mounts.length,1);assert.equal(actual.Mounts.find(row=>row.Destination==='/opt/evimed/extensions').RW,false);
    const result=validateNativeObservation(JSON.parse(await command(['start','-a',id],45000)),{pin,enabled});controls.push({scenario,...result});
    await remove(id);await remove(keeper);await ownership.removeVolume(volume);
   }
@@ -67,7 +67,7 @@ export function createNativeAssessmentOwnership(command,owner) {
   if(scope.id&&!actual){if(await inspect(scope.name))throw new Error('native_name_replacement_retained');scopes.delete(scope.name);return;}
   if(!actual){scopes.delete(scope.name);return;}
   if(!matches(actual,scope)||(scope.id&&actual.Id!==scope.id)||(!scope.id&&actual.Name!=='/'+scope.name))throw new Error('native_container_ownership_unknown');
-  scope.id=actual.Id;await command(['rm','-f',scope.id],10000,null);
+  scope.id=actual.Id;await command(['rm','-f',scope.id,'-v'],10000,null);
   if(await inspect(scope.id))throw new Error('native_container_still_present');
   // Do not erase an uncertain replacement under the reserved name or claim complete cleanup.
   if(await inspect(scope.name))throw new Error('native_name_replacement_retained');scopes.delete(scope.name);
@@ -79,7 +79,7 @@ export function createNativeAssessmentOwnership(command,owner) {
  };
  return{
   async create(args){const name=owner+'-'+(++sequence),scope={name,id:null};scopes.set(name,scope);
-   const id=await command(['create','--pull','never','--name',name,'--label','io.evimed.saas-campaign='+owner,'--label','io.evimed.saas-instance='+name,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',...args]);
+   const id=await command(['create','--pull','never','--name',name,'--label','io.evimed.saas-campaign='+owner,'--label','io.evimed.saas-instance='+name,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--tmpfs','/runtime:ro,noexec,nosuid,nodev,size=1m,mode=0555','--tmpfs','/workspace:ro,noexec,nosuid,nodev,size=1m,mode=0555',...args]);
    if(!/^[a-f0-9]{64}$/.test(id))throw new Error('native_create_identity_unconfirmed');scope.id=id;return id;},
   async remove(id){const scope=[...scopes.values()].find(row=>row.id===id);if(!scope)throw new Error('native_container_not_registered');await removeScope(scope);},
   async volume(name){if(!name.startsWith(owner+'-'))throw new Error('native_volume_not_owned');volumes.add(name);await command(['volume','create','--label','io.evimed.saas-campaign='+owner,'--driver','local','--opt','type=tmpfs','--opt','device=tmpfs','--opt','o=size=4m,mode=0755',name]);},

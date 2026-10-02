@@ -1,0 +1,14 @@
+# Test-only projection from an operator-selected immutable, fully built runtime.
+ARG RUNTIME_IMAGE
+FROM ${RUNTIME_IMAGE}
+USER 0:0
+COPY platform/ /fixture/platform/
+COPY reuse-runtime-sdk.mjs make-fixtures.mjs /fixture/
+COPY validate-personal-skill.mjs /fixture/validate-personal-skill.mjs
+COPY catalogue-fixture.mjs fixture.mjs /fixture/
+RUN node /fixture/reuse-runtime-sdk.mjs && node /fixture/make-fixtures.mjs
+ENV NARB_DISABLE_NATIVE_CACHE=1 DSH_TELEMETRY_DISABLED=1
+LABEL io.evimed.acceptance.fixture="unverified"
+USER 10001:10001
+ENTRYPOINT ["node", "/fixture/fixture.mjs"]
+CMD []

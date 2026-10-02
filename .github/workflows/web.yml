@@ -20,7 +20,7 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     services:
       postgres:
         # The production image (deps-version.json `pgvector`), so the
@@ -180,12 +180,68 @@ jobs:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_auth
         run: node --test apps/server/test/postgresStore.integration.test.mjs
 
+      - name: Prepare immutable extension acceptance inputs
+        timeout-minutes: 35
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { prepareExtensionAcceptance } from './scripts/ops/prepare-extension-acceptance.mjs';
+          import { readAcceptanceInputs, readPreparedCatalogueSnapshot } from './scripts/ops/extension-saas-acceptance-inputs.mjs';
+          const prepared = await prepareExtensionAcceptance({ platform: 'linux/amd64' });
+          const inputs = await readAcceptanceInputs(prepared.inputsFile);
+          await readPreparedCatalogueSnapshot(inputs);
+          const values = {
+            EVIMED_EXTENSION_ACCEPTANCE_INPUTS: prepared.inputsFile,
+            COWORK_TEST_IMAGE: inputs.images.coworkImageId,
+            COWORK_TEST_INTEGRITY: inputs.artifact.integrity,
+            COWORK_TEST_CLOSURE_SHA256: inputs.artifact.closureExpectedSHA,
+            NATIVE_SKILL_VALIDATOR_IMAGE: inputs.images.nativeSdkImageId,
+            NATIVE_EXTENSION_TEST_IMAGE: inputs.images.nativeKernelImageId,
+            NATIVE_SKILL_CATALOGUE_SNAPSHOT: path.join(inputs.preparedRoot, inputs.fixtures.catalogueSnapshotPath),
+            OPEN_SCIENCE_TEST_PERSONAL_SKILL_IMAGE: inputs.images.nativeSdkImageId,
+            EVIMED_SKILL_VALIDATION_TEST_IMAGE: inputs.images.nativeSdkImageId,
+            EVIMED_SKILL_VALIDATION_TEST_DATA: path.resolve('../.evimed-local/extensions/build/fixtures'),
+          };
+          if (Object.values(values).some(value => typeof value !== 'string' || /[\r\n]/.test(value))) throw new Error('Invalid prepared CI inputs');
+          await fs.appendFile(process.env.GITHUB_ENV, Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''));
+          NODE
+
       - name: Test durable product state
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_product
         run: |
           psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE evimed_test_product'
           node scripts/ops/test-product-state.mjs
+
+      - name: Test actual contained and native extension boundaries
+        timeout-minutes: 10
+        env:
+          OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_product
+        run: |
+          node --test --test-concurrency=1 --test-timeout=180000 \
+            apps/server/test/extensionOperation.docker.test.mjs \
+            apps/server/test/extensionToolController.docker.test.mjs \
+            apps/server/test/extensionNativeRuntime.docker.test.mjs
+          node --test --test-concurrency=1 --test-timeout=180000 \
+            scripts/ops/test/prepareExtensionAcceptance.test.mjs \
+            scripts/ops/test/extensionSaas*.test.mjs
+          node scripts/ops/extension-saas-acceptance.mjs > "$RUNNER_TEMP/extension-boundary-campaign.json"
+
+      - name: Retain extension component evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-component-evidence-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/extension-boundary-campaign.json
+            .evimed-local/extensions/acceptance-preparation/run-*/publication-*/acceptance-inputs.json
+            .evimed-local/extensions/acceptance-preparation/run-*/publication-*/preparation-record.json
+            .evimed-local/extensions/acceptance-preparation/run-*/recovery-required.json
+            .evimed-local/extensions/acceptance-preparation/run-*/logs/*.log
 
       - name: Test DeepSeek compatibility and release gates
         run: >-
