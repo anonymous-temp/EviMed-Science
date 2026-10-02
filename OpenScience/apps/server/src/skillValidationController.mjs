@@ -1,4 +1,5 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { execFile, spawn, spawnSync } from 'node:child_process'
+import { promisify } from 'node:util'
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -7,6 +8,8 @@ import { canonicalJson, canonicalPersonalSkillResourcePath } from '@evimed/domai
 import { dockerRuntimeMount, assertDockerDataVolumeSupport } from './dockerMounts.mjs'
 import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, writeFileExclusiveNoFollow, writeFileAtomicNoFollow } from './security.mjs'
 
+const createContainer = promisify(execFile)
+export const SKILL_VALIDATION_CREATE_TIMEOUT_MS = 15000
 export const SKILL_VALIDATION_TIMEOUT_MS = 15000
 export const SKILL_VALIDATION_OUTPUT_BYTES = 512 * 1024
 const NAME = 'evimed-skill-validation'
@@ -347,14 +350,18 @@ export function createSkillValidationController(config, hooks = {}) {
       if (signal?.aborted) throw invalid()
       job.uncertain = true
       job.createdAttempted = true
-      const created = docker(job.plan.args)
-      if (created.status !== null) job.uncertain = false
-      if (created.status !== 0) throw new HttpError(503, 'product_state_unavailable', 'Skill validation could not start.')
+      // Cold image snapshot creation can exceed the short inspection budget.
+      // Await it without blocking controller health/cancellation requests; only
+      // an acknowledged immutable ID clears the uncertain reservation.
+      let created
+      try { created = await createContainer(config.runtimeContainerBin, job.plan.args, { encoding: 'utf8', timeout: SKILL_VALIDATION_CREATE_TIMEOUT_MS, maxBuffer: 65536 }) }
+      catch { throw new HttpError(503, 'product_state_unavailable', 'Skill validation could not start.') }
       const containerId = created.stdout.trim()
       if (!HEX.test(containerId)) {
         job.uncertain = true
         throw new HttpError(503, 'product_state_unavailable', 'Skill validation creation identity is uncertain.')
       }
+      job.uncertain = false
       job.containerId = containerId
       await writeFileAtomicNoFollow(config.dataDir, statePath, `${canonicalJson({ jobId: job.plan.jobId, identity: job.plan.identity, containerId })}\n`, { mode: 0o600 })
       const createdState = inventory(containerId)
@@ -377,6 +384,7 @@ export function createSkillValidationController(config, hooks = {}) {
       if (before.dev !== mounted.dev || before.ino !== mounted.ino || before.digest !== mounted.digest) throw invalid()
       const projected = await snapshot(config, checked, job.plan.projectionRoot)
       if (projection.dev !== projected.dev || projection.ino !== projected.ino || projection.digest !== projected.digest) throw invalid()
+      if (signal?.aborted) throw new HttpError(400, 'extension_contract_invalid', 'Skill validation stopped.')
       const result = await new Promise((resolve, reject) => {
         const child = spawn(config.runtimeContainerBin, ['start', '--attach', createdState.Id], { stdio: ['ignore', 'pipe', 'pipe'] })
         job.child = child
