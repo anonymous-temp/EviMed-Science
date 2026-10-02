@@ -23,3 +23,26 @@ test('connection references need current actor-scoped authority, never copied cr
   await assert.rejects(access.connections({id:'b'},['connection-one']),{status:403});
   active=false;await assert.rejects(access.connections({id:'a'},['connection-one']),{status:403});
 });
+
+
+test('study capabilities and membership epochs are resolved independently from ordinary project ownership', async () => {
+  let roles = ['viewer'], epoch = 'first-membership';
+  const access = new ExtensionAccess({
+    store: { userById: async id => ({ id }), requireProject: async (user, id) => {
+      if (user.id !== 'owner') throw Object.assign(new Error('Not owned'), { status: 404 });
+      return { id, userId: 'owner' };
+    } },
+    studyAccess: async () => ({ ownerId: 'owner', roles, epoch }),
+  });
+  const user = { id: 'member' };
+  assert.equal((await access.project(user, 'study-project')).extensionMembershipEpoch, epoch);
+  await assert.rejects(access.project(user, 'study-project', { ability: 'write' }), { status: 403 });
+  await assert.rejects(access.project(user, 'study-project', { manage: true }), { status: 403 });
+  roles = ['data_manager'];
+  assert.equal((await access.project(user, 'study-project', { ability: 'write' })).userId, 'owner');
+  await assert.rejects(access.project(user, 'study-project', { manage: true }), { status: 403 });
+  roles = [];
+  await assert.rejects(access.project(user, 'study-project'), { status: 403 });
+  roles = ['viewer']; epoch = 're-added-membership';
+  assert.equal((await access.project(user, 'study-project')).extensionMembershipEpoch, epoch);
+});

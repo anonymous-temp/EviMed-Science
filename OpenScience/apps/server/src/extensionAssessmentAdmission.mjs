@@ -46,7 +46,7 @@ export function createExtensionAssessmentAdmission({ dataDir, evaluate }) {
           &&value.assessmentAdmissionDigest===plugin.assessmentAdmissionDigest);
         if(!installation || installation.receiptDigest || installation.artifactDigest!==plugin.artifactDigest
           || installation.integrity!==plugin.integrity || installation.coordinate!==canonicalExtensionCoordinate(plugin.coordinate)
-          || installation.actorId!==input.actor.id || installation.configDigest!==plugin.configDigest)throw refused();
+          || installation.actorId!==input.actor.id || installation.actorMembershipEpoch!==(input.actor.membershipEpoch??null) || installation.configDigest!==plugin.configDigest)throw refused();
       }
       return true;
     },
