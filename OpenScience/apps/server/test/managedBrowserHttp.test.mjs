@@ -9,10 +9,13 @@ test('managed browser HTTP stays behind real login, signed frame, origin and pro
   const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'evimed-browser-http-'))),opened=[],closed=[];
   const service={enabled:true,open:async(scope,body)=>{opened.push({scope,body});return{id:'controlled-browser',sequence:0,state:{url:null}};},releaseFrame:async(userId,frameId)=>closed.push({userId,frameId}),closeOwner:async userId=>closed.push({userId}),closeProject:async()=>{},close:async()=>{}};
   const uiOrigin='http://127.0.0.1:18443',app=createWebApiApp({dataDir:root,port:0,host:'127.0.0.1',devAuth:false,authMode:'local',selfRegistrationEnabled:true,runtimeMode:'mock',runtimeUiProxyEnabled:true,runtimeUiPublicOrigin:uiOrigin,publicUrl:'http://127.0.0.1:18787',managedBrowserEnabled:true,managedBrowserService:service,modelGatewaySigningSecret:'synthetic-local-frame-signing-material-only',learningEnabled:false,autopilotEnabled:false});
-  t.after(async()=>{await app.close();await fs.rm(root,{recursive:true,force:true});});
+  t.after(async()=>{app.runtimeManager.runtimes.clear();await app.close();await fs.rm(root,{recursive:true,force:true});});
   const address=await app.listen(0,'127.0.0.1'),base=`http://127.0.0.1:${address.port}`,ui=`http://127.0.0.1:${app.runtimeUi.address().port}`;
   const register=async username=>{const r=await fetch(base+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password:'Disposable local browser fixture only!'})});assert.equal(r.status,201);const body=await r.json();return{cookie:r.headers.get('set-cookie').split(';')[0],csrf:body.data.csrfToken,userId:body.data.user.id};};
   const alice=await register('browser-alice'),bob=await register('browser-bob');
+  const project=await app.store.requireProject(await app.store.userById(alice.userId),'default'),runtime={modelGatewayTokenJti:'synthetic-native-http-generation'};
+  app.runtimeManager.runtimes.set(app.runtimeManager.key(project),runtime);
+  app.runtimeManager.callKernel=async(current,owned,method,args)=>{assert.equal(current,runtime);assert.equal(owned.userId,alice.userId);assert.equal(owned.id,'default');assert.equal(method,'session/list');assert.deepEqual(args,{_request:{}});return{items:[{sessionId:'native-session'}]};};
   const created=await fetch(base+'/api/runtime-ui/frames',{method:'POST',headers:{cookie:alice.cookie,'content-type':'application/json','x-open-science-csrf':alice.csrf},body:JSON.stringify({projectId:'default'})});assert.equal(created.status,201);
   const frame=(await created.json()).data,prefix=new URL(frame.frameUrl).pathname,frameCookie=created.headers.get('set-cookie').split(';')[0];
   const body={sessionId:'native-session',tabId:'tab-one',viewport:{width:800,height:600}};
@@ -23,6 +26,7 @@ test('managed browser HTTP stays behind real login, signed frame, origin and pro
   response=await request({Origin:uiOrigin,cookie:bob.cookie+'; '+frameCookie});assert.equal(response.status,401);
   response=await request({Origin:uiOrigin,cookie:alice.cookie+'; '+frameCookie},{userId:bob.userId});assert.equal(response.status,400);
   assert.equal(opened.length,0);
+  response=await request({Origin:uiOrigin,cookie:alice.cookie+'; '+frameCookie},{sessionId:'unknown-native'});assert.equal(response.status,404);assert.equal(opened.length,0);
   response=await request({Origin:uiOrigin,cookie:alice.cookie+'; '+frameCookie});assert.equal(response.status,200);assert.equal((await response.json()).data.id,'controlled-browser');
   assert.equal(opened[0].scope.userId,alice.userId);assert.equal(opened[0].scope.projectId,'default');assert.equal(opened[0].scope.frameId,frame.frameId);assert(!opened[0].scope.authSessionHash.includes(alice.cookie));
   const logout=await fetch(base+'/api/auth/logout',{method:'POST',headers:{cookie:alice.cookie,'x-open-science-csrf':alice.csrf}});assert.equal(logout.status,200);assert(closed.some(value=>value.userId===alice.userId));
