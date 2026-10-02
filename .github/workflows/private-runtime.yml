@@ -1,0 +1,113 @@
+name: private-runtime
+
+on:
+  push:
+    branches: [ops/private-runtime-20261002]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: private-runtime-20261002
+  cancel-in-progress: false
+
+jobs:
+  private-overlay:
+    if: github.repository == 'anonymous-temp/EviMed-Science' && github.event_name == 'push' && github.ref == 'refs/heads/ops/private-runtime-20261002'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            .github/workflows
+            OpenScience/scripts/ops
+      - name: Install isolated export cryptography
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-cryptography
+      - name: Test synthetic encryption and rejection controls
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: /usr/bin/python3 -m unittest discover -s OpenScience/scripts/ops/test -p test_private_runtime_overlay.py -v
+      - name: Derive fixed private runtime and encrypt its export
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          GH_TOKEN: ${{ github.token }}
+          EVIMED_GEO_CHUNK_01: ${{ secrets.EVIMED_GEO_CHUNK_01 }}
+          EVIMED_GEO_CHUNK_02: ${{ secrets.EVIMED_GEO_CHUNK_02 }}
+          EVIMED_GEO_CHUNK_03: ${{ secrets.EVIMED_GEO_CHUNK_03 }}
+          EVIMED_GEO_CHUNK_04: ${{ secrets.EVIMED_GEO_CHUNK_04 }}
+          EVIMED_GEO_CHUNK_05: ${{ secrets.EVIMED_GEO_CHUNK_05 }}
+          EVIMED_GEO_CHUNK_06: ${{ secrets.EVIMED_GEO_CHUNK_06 }}
+          EVIMED_GEO_CHUNK_07: ${{ secrets.EVIMED_GEO_CHUNK_07 }}
+          EVIMED_GEO_CHUNK_08: ${{ secrets.EVIMED_GEO_CHUNK_08 }}
+          EVIMED_GEO_CHUNK_09: ${{ secrets.EVIMED_GEO_CHUNK_09 }}
+          EVIMED_GEO_CHUNK_10: ${{ secrets.EVIMED_GEO_CHUNK_10 }}
+          EVIMED_GEO_CHUNK_11: ${{ secrets.EVIMED_GEO_CHUNK_11 }}
+          EVIMED_GEO_CHUNK_12: ${{ secrets.EVIMED_GEO_CHUNK_12 }}
+          EVIMED_GEO_CHUNK_13: ${{ secrets.EVIMED_GEO_CHUNK_13 }}
+          EVIMED_GEO_CHUNK_14: ${{ secrets.EVIMED_GEO_CHUNK_14 }}
+          EVIMED_GEO_CHUNK_15: ${{ secrets.EVIMED_GEO_CHUNK_15 }}
+          EVIMED_GEO_CHUNK_16: ${{ secrets.EVIMED_GEO_CHUNK_16 }}
+          EVIMED_GEO_CHUNK_17: ${{ secrets.EVIMED_GEO_CHUNK_17 }}
+          EVIMED_GEO_CHUNK_18: ${{ secrets.EVIMED_GEO_CHUNK_18 }}
+          EVIMED_GEO_CHUNK_19: ${{ secrets.EVIMED_GEO_CHUNK_19 }}
+          EVIMED_GEO_CHUNK_20: ${{ secrets.EVIMED_GEO_CHUNK_20 }}
+          EVIMED_GEO_CHUNK_21: ${{ secrets.EVIMED_GEO_CHUNK_21 }}
+          EVIMED_GEO_CHUNK_22: ${{ secrets.EVIMED_GEO_CHUNK_22 }}
+          EVIMED_GEO_CHUNK_23: ${{ secrets.EVIMED_GEO_CHUNK_23 }}
+          EVIMED_GEO_CHUNK_24: ${{ secrets.EVIMED_GEO_CHUNK_24 }}
+          EVIMED_GEO_CHUNK_25: ${{ secrets.EVIMED_GEO_CHUNK_25 }}
+          EVIMED_GEO_CHUNK_26: ${{ secrets.EVIMED_GEO_CHUNK_26 }}
+          EVIMED_GEO_CHUNK_27: ${{ secrets.EVIMED_GEO_CHUNK_27 }}
+          EVIMED_GEO_CHUNK_28: ${{ secrets.EVIMED_GEO_CHUNK_28 }}
+          EVIMED_GEO_CHUNK_29: ${{ secrets.EVIMED_GEO_CHUNK_29 }}
+          EVIMED_GEO_CHUNK_30: ${{ secrets.EVIMED_GEO_CHUNK_30 }}
+          EVIMED_GEO_CHUNK_31: ${{ secrets.EVIMED_GEO_CHUNK_31 }}
+          EVIMED_GEO_CHUNK_32: ${{ secrets.EVIMED_GEO_CHUNK_32 }}
+          EVIMED_GEO_CHUNK_33: ${{ secrets.EVIMED_GEO_CHUNK_33 }}
+          EVIMED_GEO_CHUNK_34: ${{ secrets.EVIMED_GEO_CHUNK_34 }}
+          EVIMED_GEO_CHUNK_35: ${{ secrets.EVIMED_GEO_CHUNK_35 }}
+          EVIMED_GEO_CHUNK_36: ${{ secrets.EVIMED_GEO_CHUNK_36 }}
+        run: |
+          umask 077
+          /usr/bin/python3 OpenScience/scripts/ops/private-runtime-overlay.py \
+            --work "$RUNNER_TEMP/evimed-private-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --public-out "$RUNNER_TEMP/evimed-private-runtime-public-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Upload only encrypted private runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-private-runtime-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/evimed-private-runtime-public-${{ github.run_id }}-${{ github.run_attempt }}/runtime.bundle.enc
+            ${{ runner.temp }}/evimed-private-runtime-public-${{ github.run_id }}-${{ github.run_attempt }}/protection.json
+            ${{ runner.temp }}/evimed-private-runtime-public-${{ github.run_id }}-${{ github.run_attempt }}/protection.json.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 3
+      - name: Remove only this job's private temporary inputs
+        if: always()
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          /usr/bin/python3 - <<'PYTHON'
+          import os, re, shutil, stat
+          from pathlib import Path
+          run, attempt = os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT']
+          assert re.fullmatch(r'[0-9]+', run) and re.fullmatch(r'[0-9]+', attempt)
+          parent = Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          root = parent / f'evimed-private-runtime-{run}-{attempt}'
+          if root.exists():
+              assert not root.is_symlink() and root.parent == parent and root.stat().st_uid == os.getuid()
+              for directory, dirs, files in os.walk(root, followlinks=False):
+                  os.chmod(directory, 0o700)
+                  for name in files:
+                      file = Path(directory) / name
+                      if not file.is_symlink():
+                          assert stat.S_ISREG(file.stat().st_mode) and file.stat().st_uid == os.getuid()
+                          os.chmod(file, 0o600)
+              shutil.rmtree(root)
+          PYTHON
