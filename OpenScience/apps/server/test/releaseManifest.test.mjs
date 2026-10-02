@@ -199,12 +199,14 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/restore-drill.sh",
         "scripts/ops/configure-oidc.mjs",
         "scripts/ops/host-preflight.mjs",
+      "scripts/ops/result-replay-deployment.mjs",
         "scripts/ops/hosted-production-e2e.mjs",
         "scripts/ops/audit-saas-alignment.mjs",
         "deploy/web/docker-compose.yml",
         "deploy/web/docker-compose.backup.yml",
         "deploy/web/docker-compose.vcr-backup.yml",
         "deploy/web/docker-compose.engine-keyless.yml",
+      "deploy/web/docker-compose.result-replay.yml",
         "deploy/web/docker-compose.local-auth.yml",
         "deploy/web/docker-compose.oidc.yml",
         "deploy/web/docker-compose.saas.yml",
@@ -377,4 +379,25 @@ test("node_modules is not part of a source digest, and every other symlink still
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+
+test("configured aggregate replay binds its exact image independently of native VCR", async (t) => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "release-replay-image-"));
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const output = path.join(tmp, "manifest.json");
+  const env = { OPEN_SCIENCE_RESULT_ENGINE_URL: "http://result-replay:8031",
+    OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "evimed-result-replay:qualified-revision",
+    OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: `sha256:${"a".repeat(64)}`, OPEN_SCIENCE_VCR_ENABLED: "false" };
+  await runManifest(output, [], env);
+  const manifest = JSON.parse(await readFile(output, "utf8"));
+  assert.deepEqual(manifest.services.find(value => value.name === "result-replay"), {
+    name: "result-replay", image: env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE, imageId: env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID,
+  });
+  assert.equal(manifest.services.some(value => value.name === "vcr-engine"), false);
+  await runManifest(output, ["--check", "--verify-images"], env);
+  await assert.rejects(runManifest(output, ["--check", "--verify-images"], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: `sha256:${"b".repeat(64)}` }));
+  await assert.rejects(runManifest(output, ["--check"], { ...env, OPEN_SCIENCE_RESULT_ENGINE_URL: "" }));
+  await assert.rejects(runManifest(output, [], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "" }));
+  await assert.rejects(runManifest(output, [], { ...env, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "evimed-result-replay:latest" }));
 });

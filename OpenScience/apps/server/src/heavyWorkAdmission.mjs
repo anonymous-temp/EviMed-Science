@@ -4,7 +4,7 @@ import { maintenanceAllowsClaims } from './maintenanceService.mjs';
  * Serialized admission on this host, shared by leased render and compute jobs.
  * Build/restore use the existing maintenance lease. Physical work with unknown
  * termination holds capacity even after its logical lease expires.
- * @param {any} client @param {'render'|'compute'} kind @param {string | null} [resumingComputeId]
+ * @param {any} client @param {'render'|'compute'|'replay'} kind @param {string | null} [resumingComputeId]
  */
 export async function heavyWorkAdmission(client, kind, resumingComputeId = null) {
   const product = await client.query("SELECT to_regclass('evimed_product.jobs') AS relation");
@@ -15,12 +15,19 @@ export async function heavyWorkAdmission(client, kind, resumingComputeId = null)
     const extension = await client.query(`SELECT 1 FROM evimed_product.jobs WHERE kind IN ('extension-prepare','extension-execute')
       AND (status='running' OR payload->>'recoveryRequired'='true') LIMIT 1`);
     if (extension.rows.length) return false;
+    // Physical result executions retain capacity beyond exhausted/canceled
+    // logical jobs. Recovery joins them before admitting the next claim.
+    const replay = await client.query(`SELECT 1 FROM evimed_product.documents d JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId'
+      WHERE d.kind='result-replay' AND d.deleted_at IS NULL AND d.payload->>'recordType'='result-replay'
+        AND ((j.status='running' AND j.lease_expires_at>clock_timestamp())
+          OR (d.payload->'execution' IS NOT NULL AND d.payload->'execution'<>'null'::jsonb AND COALESCE(d.payload->>'cleanup','pending')<>'confirmed')) LIMIT 1`);
+    if (replay.rows.length) return false;
     const uncertain = await client.query(`SELECT 1 FROM evimed_product.documents d JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId'
       WHERE d.kind='document-export' AND d.deleted_at IS NULL AND d.payload->'attempt' IS NOT NULL AND d.payload->'attempt' <> 'null'::jsonb
-        AND (j.status IN ('failed','canceled') OR ($1::boolean AND j.status='queued')) LIMIT 1`, [kind === 'compute']);
+        AND (j.status IN ('failed','canceled') OR ($1::boolean AND j.status='queued')) LIMIT 1`, [kind !== 'render']);
     if (uncertain.rows.length) return false;
     const render = await client.query(`SELECT 1 FROM evimed_product.jobs WHERE kind='document-export' AND status='running'
-      AND ($1::boolean OR lease_expires_at>clock_timestamp()) LIMIT 1`, [kind === 'compute']);
+      AND ($1::boolean OR lease_expires_at>clock_timestamp()) LIMIT 1`, [kind !== 'render']);
     if (render.rows.length) return false;
   }
   const exists = await client.query("SELECT to_regclass('evimed_vcr.jobs') AS relation");
@@ -28,7 +35,7 @@ export async function heavyWorkAdmission(client, kind, resumingComputeId = null)
   const active = await client.query(`SELECT 1 FROM evimed_vcr.jobs WHERE ($1::boolean AND state='running')
     OR (state IN ('canceled','failed','queued') AND (checkpoint ? 'engineJobId' OR checkpoint ? 'submissionIntent' OR checkpoint ? 'requestedEngineJobId')
       AND COALESCE(checkpoint->>'engineStopped','false') <> 'true'
-      AND NOT ($1::boolean=false AND state='queued' AND id=COALESCE($2::text,''))) LIMIT 1`, [kind === 'render', resumingComputeId]);
+      AND NOT ($1::boolean=false AND state='queued' AND id=COALESCE($2::text,''))) LIMIT 1`, [kind !== 'compute', resumingComputeId]);
   return !active.rows.length;
 }
 
@@ -43,6 +50,12 @@ export async function heavyWorkBlockerCount(database) {
     WHERE kind IN ('extension-prepare','extension-execute') AND ((status='running'
       AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp())) OR payload->>'recoveryRequired'='true')`);
   count += Number(extension.rows[0]?.n ?? 0);
+  const replay = await database.query(`SELECT count(*)::integer AS n FROM evimed_product.documents d
+    JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId' WHERE d.kind='result-replay' AND d.deleted_at IS NULL
+      AND d.payload->>'recordType'='result-replay' AND d.payload->'execution' IS NOT NULL AND d.payload->'execution'<>'null'::jsonb
+      AND COALESCE(d.payload->>'cleanup','pending')<>'confirmed'
+      AND NOT (j.status='running' AND j.lease_expires_at>clock_timestamp())`);
+  count += Number(replay.rows[0]?.n ?? 0);
   const exists = await database.query("SELECT to_regclass('evimed_vcr.jobs') AS relation");
   if (exists.rows[0]?.relation) {
     const compute = await database.query(`SELECT count(*)::integer AS n FROM evimed_vcr.jobs WHERE state='running'

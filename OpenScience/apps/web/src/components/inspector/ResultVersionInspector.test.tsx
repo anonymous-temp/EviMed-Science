@@ -1,0 +1,179 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ResultComparison, ResultVersionInspector } from "./ResultVersionInspector";
+import type { ResultVersion } from "@/lib/resultProvenance";
+
+const api = vi.hoisted(() => ({ list: vi.fn(), related: vi.fn(), get: vi.fn(), raw: vi.fn(), revision: vi.fn(), replay: vi.fn(), progress: vi.fn(), cancel: vi.fn(), export: vi.fn(), save: vi.fn() }));
+vi.mock("@/lib/resultProvenance", async (original) => ({ ...await original<typeof import("@/lib/resultProvenance")>(),
+  listResultVersions: api.list, listRelatedResultVersions: api.related, getResultVersion: api.get, readResultBytes: api.raw,
+  requestResultRevision: api.revision, replayResult: api.replay, getResultReplay: api.progress, cancelResultReplay: api.cancel,
+  exportResult: api.export, saveResultBlob: api.save,
+}));
+vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion }: { text: string; immutableVersion: ResultVersion }) => <p data-version={immutableVersion.versionId}>{text}</p> }));
+vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: () => null }));
+const old: ResultVersion = { artifactId: "a", versionId: "rv_old", projectId: "default", path: "report.md", digest: "a".repeat(64), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z",
+  producer: { kind: "tool", sessionId: "ses_1", runId: "run_1" }, inputs: [], code: null, environment: null,
+  findings: [{ id: "f_old", kind: "claim", status: "source_unavailable", message: "旧版本原文不可用" }], machineValues: [],
+  coverage: { snapshot: "complete", producer: "bound", inputs: "unknown", code: "unknown", environment: "unknown", gaps: [] }, supersedesVersionId: null };
+const latest: ResultVersion = { ...old, versionId: "rv_new", capturedAt: "2026-10-02T00:00:00Z", digest: "b".repeat(64), findings: [] };
+function Probe() { const location = useLocation(); return <pre data-testid="state">{JSON.stringify({ pathname: location.pathname, search: location.search, state: location.state })}</pre>; }
+function mount(initialVersionId?: string) { return render(<MemoryRouter><ResultVersionInspector path="report.md" initialVersionId={initialVersionId} /><Probe /></MemoryRouter>); }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:result") });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  api.list.mockResolvedValue({ items: [latest, old], nextCursor: null });
+  api.related.mockResolvedValue({ items: [], nextCursor: null });
+  api.get.mockImplementation(async (id: string) => id === old.versionId ? old : latest);
+  api.raw.mockImplementation(async (value: ResultVersion) => ({ text: async () => value.versionId === old.versionId ? "旧结论" : "新结论" }));
+});
+describe("immutable result inspection", () => {
+  it("opens a requested old version and its findings without reading current workspace bytes", async () => {
+    mount(old.versionId);
+    expect(await screen.findByText("旧结论")).toHaveAttribute("data-version", old.versionId);
+    expect(api.raw).toHaveBeenCalledWith(old);
+    expect(screen.getByText(/旧版本原文不可用/)).toBeInTheDocument();
+    expect(screen.queryByText("新结论")).toBeNull();
+  });
+  it("resets content and findings when a different immutable version is selected", async () => {
+    mount(old.versionId); await screen.findByText("旧结论");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
+    expect(await screen.findByText("新结论")).toBeInTheDocument();
+    expect(screen.queryByText(/旧版本原文不可用/)).toBeNull();
+    expect(screen.getByText(/尚未核实/)).toBeInTheDocument();
+  });
+  it("shows read failures with retry and never presents them as a clean review", async () => {
+    api.raw.mockRejectedValueOnce(new Error("保存的内容已删除")); mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("保存的内容已删除");
+    expect(screen.queryByText("新结论")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("新结论")).toBeInTheDocument();
+  });
+  it("shows list failure separately from an empty version history", async () => {
+    api.list.mockRejectedValueOnce(new Error("版本记录读取失败")); mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("版本记录读取失败");
+    expect(screen.queryByText(/暂无保存/)).toBeNull();
+  });
+  it("refuses a server response for a newer version instead of silently replacing the requested snapshot", async () => {
+    api.get.mockResolvedValue(latest); mount(old.versionId);
+    expect(await screen.findByRole("alert")).toHaveTextContent("返回的结果与所选版本不一致");
+    expect(api.raw).not.toHaveBeenCalled();
+    expect(screen.queryByText("新结论")).toBeNull();
+  });
+  it("opens immutable text differences and source changes for two selected versions", async () => {
+    mount(); await screen.findByText("新结论");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较版本" }), old.versionId);
+    expect(await screen.findByRole("region", { name: "版本差异" })).toHaveTextContent("− 1 旧结论");
+    expect(screen.getByRole("region", { name: "版本差异" })).toHaveTextContent("+ 1 新结论");
+  });
+  it("compares and opens a directly linked revision output at a different path", async () => {
+    const successor = { ...latest, artifactId: "revision-output", versionId: "rv_revision", path: "artifacts/result-revisions/rr_1/output/revised.md", supersedesVersionId: old.versionId };
+    api.related.mockResolvedValue({ items: [successor], nextCursor: null });
+    api.get.mockImplementation(async (id: string) => id === successor.versionId ? successor : old);
+    mount(old.versionId); await screen.findByText("旧结论");
+    await waitFor(() => expect(api.related).toHaveBeenCalledWith(old.versionId));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较版本" }), successor.versionId);
+    expect(await screen.findByRole("region", { name: "版本差异" })).toHaveTextContent("新结论");
+    expect(api.raw).toHaveBeenCalledWith(successor);
+    expect(screen.getByText("旧结论")).toHaveAttribute("data-version", old.versionId);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), successor.versionId);
+    const location = JSON.parse(screen.getByTestId("state").textContent!);
+    expect(location.pathname).toBe("/app/runs/run_1/files/artifacts/result-revisions/rr_1/output/revised.md");
+    expect(location.search).toBe("?version=rv_revision");
+  });
+  it("rejects unrelated cross-path versions even with the same artifact identifier", async () => {
+    const unrelated = { ...latest, path: "another/report.md", versionId: "rv_unrelated" };
+    api.related.mockResolvedValue({ items: [unrelated], nextCursor: null });
+    mount(old.versionId); await screen.findByText("旧结论");
+    expect(await screen.findByRole("alert")).toHaveTextContent("关联版本关系无法确认");
+    expect(screen.queryByRole("option", { name: /another/ })).toBeNull();
+    expect(api.raw).not.toHaveBeenCalledWith(unrelated);
+  });
+  it("rechecks the fetched comparison relation before reading cross-path bytes", async () => {
+    const successor = { ...latest, artifactId: "revision-output", versionId: "rv_revision", path: "output/revised.md", supersedesVersionId: old.versionId };
+    api.related.mockResolvedValue({ items: [successor], nextCursor: null });
+    api.get.mockImplementation(async (id: string) => id === successor.versionId ? { ...successor, supersedesVersionId: null } : old);
+    mount(old.versionId); await screen.findByText("旧结论");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "比较版本" })).toHaveTextContent("revised.md"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较版本" }), successor.versionId);
+    expect(await screen.findByRole("alert")).toHaveTextContent("不能比较没有关联的结果");
+    expect(api.raw).not.toHaveBeenCalledWith(expect.objectContaining({ versionId: successor.versionId }));
+  });
+  it("keeps rerun and export disabled without eligibility", async () => {
+    mount(); await screen.findByText("新结论");
+    expect(screen.getByRole("button", { name: "重算此结果" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导出研究包" })).toBeDisabled();
+  });
+  it("uses server eligibility and keeps the original after a successful rerun", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "partial", reasons: ["部分来源不能导出"] } } };
+    api.get.mockResolvedValue(admitted); api.replay.mockResolvedValue({ id: "job_1", state: "succeeded", versionId: latest.versionId, resultVersionId: "rv_successor" });
+    api.export.mockResolvedValue(new Blob(["package"])); mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByRole("button", { name: "打开新结果" })).toBeInTheDocument();
+    expect(api.replay).toHaveBeenCalledWith(admitted);
+    expect(screen.getByText("新结论")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "导出研究包" }));
+    expect(api.export).toHaveBeenCalledWith(admitted); expect(api.save).toHaveBeenCalled();
+  });
+  it("stages selected text with the exact version before opening the existing native composer", async () => {
+    api.revision.mockResolvedValue({ referenceId: "ref_1", sessionId: "ses_1", draft: "修改要求：" });
+    mount(old.versionId); const paragraph = await screen.findByText("旧结论");
+    const range = document.createRange(); range.selectNodeContents(paragraph);
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    fireEvent(document, new Event("selectionchange"));
+    await userEvent.click(await screen.findByRole("button", { name: "在对话中修改所选内容" }));
+    await waitFor(() => expect(api.revision).toHaveBeenCalledWith(old, expect.objectContaining({ kind: "text", selectedText: "旧结论", elementId: expect.any(String) }), "ses_1"));
+    expect(JSON.parse(screen.getByTestId("state").textContent!).state.runtimeUiIntent.draft).toBe("修改要求：");
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+  it("does not open the original replay version as a successor and allows confirmed cancellation", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };
+    api.get.mockResolvedValue(admitted);
+    api.replay.mockResolvedValue({ id: "job_pending", state: "queued", versionId: latest.versionId });
+    api.cancel.mockResolvedValue({ id: "job_pending", state: "canceled", versionId: latest.versionId });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByText("等待重算")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开新结果" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "取消重算" }));
+    expect(await screen.findByText("重算已取消")).toBeInTheDocument();
+    expect(api.cancel).toHaveBeenCalledWith("job_pending");
+    expect(screen.getByText("新结论")).toBeInTheDocument();
+  });
+  it("shows structured replay failures without treating the original as completed", async () => {
+    api.get.mockResolvedValue({ ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } });
+    api.replay.mockResolvedValue({ id: "job_failed", state: "failed", versionId: latest.versionId, error: { code: "recipe_failed" } });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByText("重算失败")).toBeInTheDocument();
+    expect(screen.getByText("计算未完成，请查看进度后重试")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开新结果" })).toBeNull();
+  });
+  it("clears a prior version's replay state when another immutable version is selected", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };
+    api.get.mockImplementation(async (id: string) => id === old.versionId ? old : admitted);
+    api.replay.mockResolvedValue({ id: "job_pending", state: "queued", versionId: latest.versionId });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    await screen.findByText("等待重算");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), old.versionId);
+    await screen.findByText("旧结论");
+    expect(screen.queryByText("等待重算")).toBeNull();
+    expect(screen.queryByRole("button", { name: "取消重算" })).toBeNull();
+  });
+  it("drops an old selection on version change instead of retargeting it", async () => {
+    mount(old.versionId); const paragraph = await screen.findByText("旧结论");
+    const range = document.createRange(); range.selectNodeContents(paragraph); const selection = window.getSelection()!;
+    selection.removeAllRanges(); selection.addRange(range); fireEvent(document, new Event("selectionchange"));
+    await screen.findByRole("button", { name: "在对话中修改所选内容" });
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
+    await screen.findByText("新结论"); expect(screen.queryByRole("button", { name: "在对话中修改所选内容" })).toBeNull();
+  });
+  it("does not compare different numerical units as identical", () => {
+    render(<ResultComparison current={{ ...latest, machineValues: [{ name: "dose", value: 1, unit: "g" }] }} prior={{ ...old, machineValues: [{ name: "dose", value: 1, unit: "mg" }] }} before={null} after={null} />);
+    expect(screen.getByText(/无法比较单位/)).toBeInTheDocument();
+  });
+});

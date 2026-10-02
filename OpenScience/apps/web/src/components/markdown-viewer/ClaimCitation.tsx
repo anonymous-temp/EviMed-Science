@@ -9,6 +9,7 @@ import {
   type ClaimSource,
   type ClaimVerification,
   type SourceUpdate,
+  type SourceUpdateStatus,
 } from "@/lib/claimCitations";
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
@@ -46,12 +47,15 @@ function safeHref(url: string | undefined): string | null {
 }
 
 /** The reader route for a preserved source, with the quotation to find in it. */
-export function preservedSourceHref(runId: string, artifactPath: string, quote?: string): string {
+export function preservedSourceHref(runId: string, artifactPath: string, quote?: string, versionId?: string): string {
   const path = artifactPath.split("/").map(encodeURIComponent).join("/");
-  return `/app/runs/${encodeURIComponent(runId)}/files/${path}${quote ? `?quote=${encodeURIComponent(quote.slice(0, 400))}` : ""}`;
+  const query: string[] = [];
+  if (quote) query.push(`quote=${encodeURIComponent(quote.slice(0, 400))}`);
+  if (versionId) query.push(`version=${encodeURIComponent(versionId)}`);
+  return `/app/runs/${encodeURIComponent(runId)}/files/${path}${query.length ? `?${query.join("&")}` : ""}`;
 }
 
-function Source({ source, index, status, runId, pagesRead, updates, sourceType }: {
+function Source({ source, index, status, runId, pagesRead, updates, updateStatus, sourceType }: {
   source: ClaimSource;
   index: number;
   status?: string;
@@ -59,6 +63,7 @@ function Source({ source, index, status, runId, pagesRead, updates, sourceType }
   pagesRead?: readonly WebReadPage[];
   /** The cited work's retraction and correction notices, when Crossref answered. */
   updates?: readonly SourceUpdate[];
+  updateStatus?: SourceUpdateStatus;
   /** What the preserving tool stamped beside the capture (C8), when the check read it. */
   sourceType?: string;
 }) {
@@ -93,14 +98,14 @@ function Source({ source, index, status, runId, pagesRead, updates, sourceType }
         ) : (
           <span>{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>
         )}
-        <SourceUpdateBadges updates={updates} />
+        <SourceUpdateBadges updates={updates} updateStatus={updateStatus} />
       </p>
       {/* The page this quotation was read from, when the run read it on the
         * web: where, when, whether it is an authority's, and its snapshot. */}
       {page && <ReadPageCard page={page} runId={runId} compact showSnapshot={!source.artifactPath} />}
       {runId && source.artifactPath && (
         <Link
-          to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)}
+          to={preservedSourceHref(runId, source.artifactPath, source.supportQuote, source.resultVersionId)}
           className="inline-flex items-center gap-1 text-caption text-link hover:underline"
         >
           <FileText size={16} aria-hidden="true" />定位原文
@@ -150,6 +155,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
                 runId={reading?.runId}
                 pagesRead={reading?.pagesRead}
                 updates={verified?.sources[index]?.updates}
+                updateStatus={verified?.sources[index]?.updateStatus}
                 sourceType={verified?.sources[index]?.sourceType}
               />
             ))}

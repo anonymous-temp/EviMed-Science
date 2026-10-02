@@ -181,3 +181,36 @@ describe("ReportReader", () => {
     expect(await screen.findByRole("note")).toHaveTextContent("未找到这段引文");
   });
 });
+
+describe("version-bound report evidence", () => {
+  function version(review?: import("@/lib/resultProvenance").ResultVersion["review"]): import("@/lib/resultProvenance").ResultVersion {
+    return { artifactId: "a", versionId: "rv_old", projectId: "default", path: REPORT_PATH, digest: "a".repeat(64), size: 1,
+      mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z", producer: { kind: "deliverable", runId: "run_1" },
+      inputs: [{ kind: "source", id: "source", path: ".evimed-sources/aspree/fulltext.md", versionId: "rv_source", digest: "b".repeat(64), availability: "captured" }],
+      code: null, environment: null, findings: [], machineValues: [], coverage: { snapshot: "complete", producer: "bound", inputs: "captured", code: "unknown", environment: "unknown", gaps: [] }, supersedesVersionId: null, review };
+  }
+  it("never borrows the current matrix or verification for old report bytes", () => {
+    renderReader({ immutableVersion: version() });
+    expect(mocks.readArtifact).not.toHaveBeenCalled();
+    expect(mocks.readClaimVerification).not.toHaveBeenCalled();
+    expect(screen.getByText(/此版本尚无可读取的逐句证据核对记录/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /引文均已核对/ })).toBeNull();
+  });
+  it("opens the quotation and the exact source version from a frozen review", async () => {
+    renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix),
+      verification: { claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }], counts: { verified: 1 } } }) });
+    await userEvent.click(screen.getByRole("button", { name: "查看这句话的依据（1 条结论，引文均已核对）" }));
+    const quotes = await screen.findAllByText(/did not result in a significantly lower risk/, { selector: "mark" });
+    const entry = quotes.map((quote) => quote.closest("[data-claim-id]")).find(Boolean)!;
+    expect(within(entry as HTMLElement).getByRole("link", { name: /定位原文/ })).toHaveAttribute("href", "/app/runs/run_1/files/.evimed-sources/aspree/fulltext.md?quote=did%20not%20result%20in%20a%20significantly%20lower%20risk&version=rv_source");
+    expect(mocks.readArtifact).not.toHaveBeenCalled();
+    expect(mocks.readClaimVerification).not.toHaveBeenCalled();
+  });
+  it("does not offer a current-workspace source link when its old snapshot is absent", async () => {
+    const selected = version({ status: "available", matrixText: JSON.stringify(matrix) }); selected.inputs = [];
+    renderReader({ immutableVersion: selected });
+    await userEvent.click(screen.getAllByRole("button", { name: /查看这句话的依据/ })[0]);
+    const popover = (await screen.findAllByText(/did not result in a significantly lower risk/, { selector: "mark" })).map((quote) => quote.closest("[data-claim-id]")).find(Boolean)!;
+    expect(within(popover as HTMLElement).queryByRole("link", { name: /定位原文/ })).toBeNull();
+  });
+});

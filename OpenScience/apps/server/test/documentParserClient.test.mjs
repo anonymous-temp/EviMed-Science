@@ -327,3 +327,33 @@ test("the revision label is required and bounded, so the index key is never empt
   assert.throws(() => new DocumentParserClient({ revision: "has space" }), /revision/);
   assert.throws(() => new DocumentParserClient({ baseUrl: "http://user:fake@parser.example" }), /URL/);
 });
+
+test("caller cancellation interrupts a streamed parser response and does not start another attempt", async () => {
+  const controller = new AbortController();
+  let asked = 0;
+  let canceled = 0;
+  const parser = new DocumentParserClient({ baseUrl: "https://parser.example", timeoutMs: 1000,
+    fetchImpl: async () => {
+      asked += 1;
+      return new Response(new ReadableStream({ start(stream) { stream.enqueue(new TextEncoder().encode('{"data":')); }, cancel() { canceled += 1; } }));
+    } });
+  const pending = parser.parseBytes({ bytes: PDF, filename: "paper.pdf", signal: controller.signal });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(pending, { code: "source_parser_canceled" });
+  assert.equal(asked, 1);
+  assert.equal(canceled, 1);
+  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "paper.pdf", signal: controller.signal }), { code: "source_parser_canceled" });
+  assert.equal(asked, 1, "an already canceled parse sends no bytes");
+});
+
+test("the total parse deadline covers an injected transport's hanging streamed body", async () => {
+  let canceled = false;
+  const parser = new DocumentParserClient({ baseUrl: "https://parser.example", timeoutMs: 1000,
+    fetchImpl: async () => new Response(new ReadableStream({ cancel() { canceled = true; } })) });
+  const keepAlive = setInterval(() => {}, 2000);
+  const started = Date.now();
+  try { await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "paper.pdf" }), { code: "source_parser_timeout" }); }
+  finally { clearInterval(keepAlive); }
+  assert.ok(Date.now() - started < 1500);
+  assert.equal(canceled, true);
+});

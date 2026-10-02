@@ -1,3 +1,4 @@
+import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 
 /**
@@ -47,6 +48,7 @@ export const repairableEvidencePackageErrorCodes = new Set([
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
 export const recoverableEvidenceSourceErrorCodes = new Set([
+  ...Object.keys(RESULT_WORKBENCH_ERROR_MESSAGES),
   "tooluniverse_upstream_unavailable",
   "tooluniverse_unavailable",
   "tooluniverse_busy",
@@ -1341,6 +1343,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
   document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
   ...DOCUMENT_EXPORT_ERROR_MESSAGES,
+  ...RESULT_WORKBENCH_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',

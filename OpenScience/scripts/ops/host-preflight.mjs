@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { resultReplayDeployment } from "./result-replay-deployment.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -355,6 +356,7 @@ function normalizeScriptPaths(values, envFile) {
     "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE",
     "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE",
     "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE",
+    "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE",
   ]) {
     if (normalized[name] && !path.isAbsolute(normalized[name])) {
       normalized[name] = resolveDeploymentPath(normalized[name], envFile);
@@ -401,6 +403,13 @@ export function validateDeploymentConfig(values, envFile) {
     required(values, "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE"),
     "Runtime image",
   );
+  const resultReplay = resultReplayDeployment(values);
+  if (resultReplay) {
+    validateImageReference(resultReplay.image, "Result replay image");
+    readModelGatewaySigningSecretFile(resolveDeploymentPath(
+      required(values, "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE"), envFile,
+    ));
+  }
   const caddyVersion = required(values, "OPEN_SCIENCE_CADDY_VERSION");
   if (!/^\d+\.\d+\.\d+-alpine$/.test(caddyVersion)) {
     throw failure("preflight_caddy_version", "OPEN_SCIENCE_CADDY_VERSION must use an exact x.y.z-alpine tag.");
@@ -648,6 +657,7 @@ export function validateDeploymentConfig(values, envFile) {
     objectStorageUri,
     publicUrl,
     releaseId,
+    resultReplay,
     runtimeEgress,
     runtimeImage,
     sourceRevision,
@@ -672,6 +682,7 @@ export function buildComposeArgs(config, envFile) {
     files.push(path.join(repoRoot, "deploy/web/docker-compose.monitoring.yml"));
     profiles.push("monitoring");
   }
+  if (config.resultReplay) files.push(path.join(repoRoot, "deploy/web/docker-compose.result-replay.yml"));
   const args = ["compose", "--env-file", envFile];
   for (const file of files) args.push("-f", file);
   for (const profile of profiles) args.push("--profile", profile);
@@ -849,6 +860,11 @@ export async function runHostPreflight({
     engine.architecture,
     "Caddy",
   );
+  if (config.resultReplay) {
+    parseImageInfo(execute("docker", ["image", "inspect", "--format", imageFormat, config.resultReplay.image], commandOptions),
+      engine.architecture, "Result replay");
+    onCheck("result-replay-image", "isolated executor image matches host architecture");
+  }
   onCheck("container-images", "Web, Runtime, and Caddy images match host architecture");
 
   // The runtime image is only used while a job runs, so between jobs no

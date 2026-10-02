@@ -59,6 +59,17 @@ test("the tests that need the engine's R and Python are exactly the ones the dur
   const named = [...String(step.run).matchAll(/apps\/server\/test\/(\S+\.test\.mjs)/g)].map((match) => match[1]);
   assert.deepEqual(named.sort(), [...ENGINE_BACKED_INTEGRATION_TESTS].sort());
   assert.match(step.env.OPEN_SCIENCE_TEST_POSTGRES_URL, /^postgresql:\/\/postgres@127\.0\.0\.1:5432\/evimed_test/, "a loopback test database the tests accept");
+  assert.equal(seam.env.OPEN_SCIENCE_TEST_RESULT_ENGINES, "1");
+  assert.equal(seam.env.EVIMED_RESULT_REPLAY_SIGNED_VCR, "1");
+  assert.match(step.run, /skipped 0/, "the required numerical proof cannot appear green by skipping itself");
+  assert.match(step.run, /receipt.*signed/, "the R proof must verify signed HTTP receipts");
+  const python = seam.steps.find(entry => entry.name === "Install the fixed Python numerical replay environment from existing locks");
+  assert.ok(python, "the deterministic Python engines need their existing pinned numerical environment");
+  assert.match(python.run, /specialist-adapter\/requirements\.lock/);
+  assert.match(python.run, /meta\/requirements\.lock/);
+  assert.match(python.run, /文献剂量分析\/requirements\.lock/);
+  const receipts = seam.steps.find(entry => entry.name === "Preserve five-path numerical replay receipts and log");
+  assert.equal(receipts?.if, "always()"); assert.equal(receipts?.with?.["if-no-files-found"], "error");
 });
 
 test("the three engine jobs are wired to one R library, and a missing R is a red job rather than a skipped test", async () => {

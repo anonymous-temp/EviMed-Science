@@ -555,3 +555,30 @@ test('a session change says whether the session is a fork or a delegated child, 
   assert.deepEqual(sessions().slice(before).map(row => row.sessionId), ['session-next']);
   f.ctx.dispose();
 });
+
+test('immutable revision references are staged only after their native draft and cleared on plain navigation', async () => {
+  const f = fixture();
+  /** @type {any[]} */
+  const lifecycle = [];
+  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear: () => lifecycle.push('clear'), stage: (/** @type {any} */ value) => lifecycle.push(value) };
+  apply(f.ctx, {}, f.target); await settle();
+  const referenceId = `rr_${'a'.repeat(64)}`;
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Frozen selection:\n', resultRevision: { referenceId } } }); await settle();
+  assert.deepEqual(lifecycle, ['clear', { sessionId: 'session-new', referenceId, draft: 'Frozen selection:\n' }]);
+  f.navigate({ requestId: 'request-b', seq: 2, intent: { kind: 'open', sessionId: 'session-new' } }); await settle();
+  assert.equal(lifecycle.at(-1), 'clear');
+  f.ctx.dispose();
+});
+
+test('malformed or altered revision references cannot reuse a navigation acknowledgement', async () => {
+  const f = fixture();
+  /** @type {any[]} */
+  const staged = [];
+  /** @type {any} */ (f.target).__EVIMED_RESULT_REVISION__ = { clear() {}, stage: (/** @type {any} */ value) => staged.push(value) };
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: 'forged' } } }); await settle();
+  assert.equal(f.calls.length, 0);
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'a'.repeat(64)}` } } }); await settle();
+  f.navigate({ seq: 2, intent: { kind: 'create', sessionId: 'session-new', draft: 'x', resultRevision: { referenceId: `rr_${'b'.repeat(64)}` } } }); await settle();
+  assert.equal(staged.length, 1); f.ctx.dispose();
+});

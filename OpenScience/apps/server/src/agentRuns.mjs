@@ -2851,7 +2851,7 @@ async function specialistCompletionOutcome(
  * @param {Record<string, any>} project
  * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
  */
-async function readDeliveryReceipt(project, run = null) {
+export async function readDeliveryReceipt(project, run = null) {
   let text;
   try {
     text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");

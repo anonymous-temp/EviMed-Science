@@ -164,7 +164,7 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   const web = path.join(rel, "deploy/web");
   await mkdir(path.join(web, "monitoring"), { recursive: true });
   await mkdir(path.join(rel, "scripts/ops"), { recursive: true });
-  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs"]) {
+  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
@@ -552,4 +552,25 @@ test("a leased switch fails closed on another owner, expired or invalid expiry, 
       } finally { await rm(root, { recursive: true, force: true }); }
     }
   }
+});
+
+
+test("release switch includes the isolated replay overlay only for a configured executor", async (t) => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = path.join(rel, "deploy/web/.env");
+  await writeFile(env, "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:revision\n");
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.equal(result.code, 0, result.stderr);
+  const log = await readFile(path.join(root, "docker.log"), "utf8");
+  assert.match(log, /-f docker-compose.result-replay.yml/);
+});
+
+test("release switch rejects a replay URL outside its internal network before moving current", async (t) => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(rel, "deploy/web/.env"), "OPEN_SCIENCE_RESULT_ENGINE_URL=http://outside:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=replay:revision\n");
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.notEqual(result.code, 0);
+  await assert.rejects(realpath(path.join(root, "current")));
 });

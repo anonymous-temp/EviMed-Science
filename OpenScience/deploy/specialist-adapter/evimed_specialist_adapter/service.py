@@ -1654,6 +1654,8 @@ def _create_app() -> FastAPI:
         )
 
     instance.add_api_route(spec["endpoint"], specialist_call, methods=["POST"])
+    from .replay_service import install_replay_routes
+    install_replay_routes(instance, workspace_for_claims)
     return instance
 
 

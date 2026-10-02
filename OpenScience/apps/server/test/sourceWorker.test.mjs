@@ -270,3 +270,19 @@ test("the repair cycle sweeps memory whose document or project is gone, and says
   release();
   await first;
 });
+
+test("canceling while the parser is streaming aborts owned transport and cannot publish or retry", async () => {
+  const f = fixture();
+  let aborted = false;
+  f.worker.parser.parse = async ({ signal }) => new Promise((resolve, reject) => {
+    const keepAlive = setInterval(() => {}, 1000);
+    setTimeout(() => { f.source.payload.status = "canceled"; f.source.payload.generation += 1; }, 10);
+    signal.addEventListener("abort", () => { aborted = true; clearInterval(keepAlive); reject(Object.assign(new Error("Canceled"), { code: "source_parser_canceled" })); }, { once: true });
+  });
+  await f.worker.tick();
+  assert.equal(aborted, true);
+  assert.equal(f.calls.some(call => ["materialize", "publishUnderstanding", "recordFailure"].includes(call.method)), false);
+  const failure = f.calls.find(call => call.method === "fail");
+  assert.equal(failure.args[3].code, "source_generation_stale");
+  assert.equal(failure.args[4].retry, false);
+});

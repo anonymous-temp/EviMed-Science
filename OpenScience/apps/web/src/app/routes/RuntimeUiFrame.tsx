@@ -681,7 +681,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     iframe.current.contentWindow.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}) },
     }, origin);
   }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
 

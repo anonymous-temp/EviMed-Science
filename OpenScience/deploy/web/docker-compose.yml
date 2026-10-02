@@ -332,6 +332,12 @@ services:
       # derives the list from config.mjs. Value-less: unset, the code's default
       # holds.
       # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
+      OPEN_SCIENCE_RESULTS_ENABLED:
+      OPEN_SCIENCE_RESULT_ENGINE_URL:
+      OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS:
+      OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS:
+      OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES:
+      OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES:
       OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED:
       # A run's budgets, the delivery retry ceiling and the runtime's own
       # switches, read wherever a launch plan is built — here and in the

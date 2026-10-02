@@ -2538,6 +2538,20 @@ export function loadConfig(overrides = {}) {
     // from Crossref when its 「依据」 are opened. A notice, never a gate
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
+    resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    resultEngineUrl: String(overrides.resultEngineUrl ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_URL ?? "").trim(),
+    resultEngineRequestTimeoutMs: Math.max(1000, Math.min(60000, Number(
+      overrides.resultEngineRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS ?? 15000,
+    ) || 15000)),
+    resultReplayTimeoutMs: Math.max(1000, Math.min(1800000, Number(
+      overrides.resultReplayTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS ?? 300000,
+    ) || 300000)),
+    resultSnapshotMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultSnapshotMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
+    resultExportMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultExportMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
     // One Crossref request for twenty cited works, made while a reader waits
     // for a report's 「依据」 marks: past this the badges are simply absent.
     // Counted in open_science_source_updates_total{outcome="failed"}. Six

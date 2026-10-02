@@ -1,6 +1,6 @@
 import { FileWarning } from "lucide-react";
 import { SOURCE_UPDATE_LABELS_ZH, SOURCE_UPDATE_WEIGHT } from "@evimed/domain";
-import type { SourceUpdate } from "@/lib/claimCitations";
+import type { SourceUpdate, SourceUpdateStatus } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
 import { tagClasses } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -17,14 +17,20 @@ import { Tooltip } from "@/components/ui/Tooltip";
  * must not miss; an expression of concern or a correction in amber, "check the
  * notice". Each links the notice itself.
  */
-export function SourceUpdateBadges({ updates, className }: {
+export function SourceUpdateBadges({ updates, updateStatus, className }: {
   updates: readonly SourceUpdate[] | null | undefined;
+  updateStatus?: SourceUpdateStatus;
   className?: string;
 }) {
   const shown = (updates ?? []).filter((update) => update.kind in SOURCE_UPDATE_LABELS_ZH);
-  if (shown.length === 0) return null;
+  if (shown.length === 0 && !updateStatus) return null;
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
+      {updateStatus && <Tooltip content={updateStatus.checkedAt ? `查询于 ${new Date(updateStatus.checkedAt).toLocaleString("zh-CN")}` : "尚无可用的查询时间"}>
+        <span className={tagClasses({ tone: updateStatus.state === "unavailable" || updateStatus.state === "changed" ? "warn" : "neutral" })}>
+          {({ no_update: "未发现更新", changed: "文献有更新", unknown: "更新状态未知", unavailable: "更新查询不可用" })[updateStatus.state]}
+        </span>
+      </Tooltip>}
       {shown.map((update, index) => {
         const label = SOURCE_UPDATE_LABELS_ZH[update.kind as keyof typeof SOURCE_UPDATE_LABELS_ZH];
         const withdrawn = SOURCE_UPDATE_WEIGHT[update.kind as keyof typeof SOURCE_UPDATE_WEIGHT] === "withdrawn";

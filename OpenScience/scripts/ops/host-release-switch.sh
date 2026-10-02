@@ -116,6 +116,12 @@ finish() {
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
 
+# Validate the optional executor before moving current or changing host state.
+RESULT_REPLAY=$(node --env-file="${REL}/OpenScience/deploy/web/.env" --input-type=module -e '
+  const { resultReplayDeployment } = await import(process.argv[1]);
+  process.stdout.write(resultReplayDeployment(process.env) ? "enabled" : "disabled");
+' "${REL}/OpenScience/scripts/ops/result-replay-deployment.mjs")
+
 echo "=== probe targets follow .env ==="
 # In the new release's own tree and before anything moves: an invalid URL in
 # `.env` stops the switch while the old release is still in front.
@@ -203,6 +209,7 @@ COMPOSE=(docker compose -p "$PROJECT"
 # private override; the keyless security overlay must follow that override.
 if grep -qE '^EVIMED_KNOWLEDGE_PLUGIN_IMAGE=.+' .env; then COMPOSE+=(-f docker-compose.knowledge.yml); fi
 COMPOSE+=(-f "$OVERRIDE")
+if [ "$RESULT_REPLAY" = enabled ]; then COMPOSE+=(-f docker-compose.result-replay.yml); fi
 if grep -qE '^OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR=.+' .env; then COMPOSE+=(-f docker-compose.vcr-backup.yml); fi
 if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(process.env.OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED || "").toLowerCase()) ? 0 : 1)'; then
   COMPOSE+=(-f docker-compose.engine-keyless.yml)

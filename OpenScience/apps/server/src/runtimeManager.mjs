@@ -1560,6 +1560,12 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // switch is off, so the tool says "disabled" without asking.
     const kbSearchGatewayUrl = gateways ? String(gateways.kbSearch ?? "") : kbSearchGatewayProviderUrl(config);
     if (kbSearchGatewayUrl) environment.EVIMED_KB_SEARCH_GATEWAY_URL = kbSearchGatewayUrl;
+    if (config.resultsEnabled && config.stateStore === "postgres"
+      && (String(config.resultEngineUrl ?? "").trim() || config.vcrEnabled && config.vcrEngineConfigured)) {
+      const resultGatewayUrl = new URL(modelGatewayProviderUrl(config));
+      resultGatewayUrl.pathname = "/internal/results/v1";
+      environment.EVIMED_RESULT_GATEWAY_URL = gateways ? String(gateways.results ?? "") : resultGatewayUrl.href;
+    }
     // So does 「前沿动态」 search, and it is absent for the same reason — and
     // also for an account the module is not open to yet (the operators-only
     // dry run): that runtime's tool answers `frontier_disabled` without asking
@@ -1701,6 +1707,9 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // is the shape of "the lever was moved and nothing happened"; an explicit
   // empty string is the deployment saying "everything is offered".
   environment.EVIMED_DISABLED_TOOLS = String(config.evimedDisabledTools ?? "");
+  if (!environment.EVIMED_RESULT_GATEWAY_URL) {
+    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "research_calculate"])].join(",");
+  }
   // `OPEN_SCIENCE_WEB_READ_ENABLED=false` is the one switch for web reading
   // (plan §3.5): the gateway refuses the mode, and the tool is not offered.
   if (config.webReadEnabled === false) {
@@ -6504,7 +6513,7 @@ export class RuntimeManager {
    * session and endpoint policies. Capacity is reserved through socket close.
    * @param {any} req @param {any} socket @param {Buffer} head
    * @param {Record<string, any>} project @param {string} suffix
-   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void> }} policy
+   * @param {{ revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void>, observe?: (endpoint: string, payload?: any) => Promise<void>, prepare?: (endpoint: string, payload?: any) => Promise<void> }} policy
    */
   async proxyUpgrade(req, socket, head, project, suffix, policy) {
     this.enforceUiProxyEnabled();

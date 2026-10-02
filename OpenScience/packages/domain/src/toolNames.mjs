@@ -112,6 +112,7 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'vcr_simulate',
   'trial_registry_record',
   'evidence_pool',
+  'research_calculate',
 ])
 
 /** Model-visible MCP tool names. */
@@ -230,6 +231,7 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // So is "what is new in X": the answer persona's optional feed lookup
   // (frontier plan 2026-09-21 §4.8; model-chosen, never forced).
   'frontier_search',
+  'research_calculate',
 ])
 
 /** @param {string} baseName @returns {string} */

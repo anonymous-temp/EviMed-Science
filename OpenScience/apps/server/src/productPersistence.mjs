@@ -9,13 +9,13 @@ export const PRODUCT_KINDS = Object.freeze([
   // project. Its own kind rather than a field on `method`, because it is a
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
-  "method-trial", "document-export", ...EXTENSION_PRODUCT_KINDS,
+  "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", ...EXTENSION_JOB_KINDS]);
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay", ...EXTENSION_JOB_KINDS]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -261,6 +261,23 @@ BEGIN
   END IF;
 END $extension_center_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-02-extension-center-kinds-v1') ON CONFLICT DO NOTHING;
+DO $result_workbench_kinds$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check'
+      AND ${["result-version", "result-impact", "result-revision", "result-replay"].map(kind => `position('''${kind}''' in pg_get_constraintdef(c.oid)) > 0`).join(" AND ")}) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+      AND c.conname='product_jobs_kind_check' AND position('''result-replay''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $result_workbench_kinds$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-02-result-workbench-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
   id text PRIMARY KEY,
   user_id text NOT NULL,

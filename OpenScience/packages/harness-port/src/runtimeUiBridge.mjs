@@ -126,11 +126,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         if (disposed) return;
         // Retains the session for the main view, which is what makes its
         // scope (and so its composer) exist for the draft below.
+        target.__EVIMED_RESULT_REVISION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
         if (intent.draft !== undefined) {
           const scope = ctx.sessions.scope(sessionId);
           if (!scope) throw new Error('Native session scope unavailable');
           ctx.conversation.input.for(scope).setDraft(intent.draft);
+          if (intent.resultRevision) {
+            if (!target.__EVIMED_RESULT_REVISION__) throw new Error('Result revision transport unavailable');
+            target.__EVIMED_RESULT_REVISION__.stage({ sessionId, referenceId: intent.resultRevision.referenceId, draft: intent.draft });
+          }
         }
         activated = true; selectedSession = sessionId; previousSession = sessionId;
         request.ack = { requestId, ok: true, sessionId };
@@ -175,6 +180,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
     if (sessionId === previousSession) return;
+    target.__EVIMED_RESULT_REVISION__?.clear();
     previousSession = sessionId;
     selectedSession = sessionId;
     const lineage = sessionId === null ? {} : lineageOf(snapshot, sessionId);
@@ -437,8 +443,10 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (!intent || !['create', 'open'].includes(intent.kind)
       || typeof intent.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
       || (intent.draft !== undefined && (typeof intent.draft !== 'string' || intent.draft.length > 100_000))) return;
+    if (intent.resultRevision && (typeof intent.resultRevision.referenceId !== 'string'
+      || !/^rr_[a-f0-9]{64}$/.test(intent.resultRevision.referenceId) || typeof intent.draft !== 'string' || !intent.draft)) return;
     incoming = data.seq;
-    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null]);
+    const signature = JSON.stringify([intent.kind, intent.sessionId, intent.draft ?? null, intent.resultRevision?.referenceId ?? null]);
     const existing = requests.get(data.requestId);
     if (existing) {
       if (existing.signature !== signature) return;
@@ -604,7 +612,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     searches.clear();
     pendingNavigation = undefined;
     if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
-    requests.clear(); target.__DSH_TRANSPORT__?.dispose?.();
+    requests.clear(); target.__EVIMED_RESULT_REVISION__?.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }
 

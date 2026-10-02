@@ -1,0 +1,57 @@
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.11-slim-bookworm
+FROM ${PYTHON_BASE_IMAGE}
+
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=untracked
+ARG BUILD_CREATED=untracked
+LABEL org.opencontainers.image.version=${RELEASE_ID} \
+    org.opencontainers.image.revision=${SOURCE_REVISION} \
+    org.opencontainers.image.created=${BUILD_CREATED}
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    EVIMED_DATA_ROOT=/data \
+    EVIMED_SPECIALIST_KIND=bibliometric-analysis \
+    EVIMED_AGENT_ROOT=/engines/bibliometric \
+    EVIMED_REPLAY_META_ROOT=/engines/meta \
+    EVIMED_REPLAY_SAFETY_ROOT=/engines/safety \
+    EVIMED_REPLAY_BIBLIOMETRIC_ROOT=/engines/bibliometric
+
+WORKDIR /adapter
+COPY OpenScience/deploy/specialist-adapter/requirements.lock /tmp/adapter.lock
+# Numeric dependency pins are derived from the existing specialist locks, not
+# another independently maintained numerical environment.
+COPY 项目代码/meta/requirements.lock /tmp/meta.lock
+COPY 项目代码/文献剂量分析/requirements.lock /tmp/bibliometric.lock
+RUN python - <<'PY'
+import re
+from pathlib import Path
+selected = {}
+for filename, names in [('/tmp/meta.lock', {'numpy', 'scipy', 'pandas', 'python-dateutil', 'pytz', 'tzdata', 'six'}),
+                        ('/tmp/bibliometric.lock', {'networkx'})]:
+    for line in Path(filename).read_text().splitlines():
+        match = re.fullmatch(r'([a-z0-9-]+)==([^ ]+)', line)
+        if match and match[1] in names:
+            selected[match[1]] = line
+    if not names.issubset(selected):
+        raise SystemExit('The existing specialist lock lacks a numerical dependency.')
+Path('/tmp/numeric.lock').write_text('\n'.join(selected[name] for name in sorted(selected)) + '\n')
+PY
+RUN pip install --index-url "${PIP_INDEX_URL}" --no-cache-dir -r /tmp/adapter.lock -r /tmp/numeric.lock
+
+COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter
+COPY 项目代码/meta/new_meta/__init__.py /engines/meta/new_meta/__init__.py
+COPY 项目代码/meta/new_meta/engines /engines/meta/new_meta/engines
+COPY 项目代码/meta/new_meta/schemas /engines/meta/new_meta/schemas
+COPY 项目代码/药物安全分析agent/safety_agent/__init__.py /engines/safety/safety_agent/__init__.py
+COPY 项目代码/药物安全分析agent/safety_agent/signals /engines/safety/safety_agent/signals
+COPY 项目代码/文献剂量分析/src/bibliometric/__init__.py /engines/bibliometric/src/bibliometric/__init__.py
+COPY 项目代码/文献剂量分析/src/bibliometric/analysis /engines/bibliometric/src/bibliometric/analysis
+RUN python -m compileall -q /adapter /engines
+
+VOLUME ["/data"]
+EXPOSE 8031
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import json,urllib.request; result=json.load(urllib.request.urlopen('http://127.0.0.1:8031/health', timeout=3)); raise SystemExit(0 if result.get('ready') else 1)"
+CMD ["uvicorn", "evimed_specialist_adapter.replay_app:app", "--host", "0.0.0.0", "--port", "8031", "--no-access-log"]
