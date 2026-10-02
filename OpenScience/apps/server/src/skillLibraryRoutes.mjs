@@ -41,6 +41,7 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
         return reply(await service.removeUpload(user, decode(action)));
       }
       if (id === "import" && !action && req.method === "POST") return reply(await service.import(user, await body()), 201);
+      if (id === "import-preview" && !action && req.method === "POST") return reply(await service.previewImport(user, await body()));
       if (id === "defaults" && !action && req.method === "GET") return reply(await service.defaults(user));
       if (id === "defaults" && !action && req.method === "PUT") return reply(await service.saveDefaults(user, await body()));
       if (id && !action && req.method === "GET") return reply(await service.get(user, id));

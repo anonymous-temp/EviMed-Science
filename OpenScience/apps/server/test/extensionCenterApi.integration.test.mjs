@@ -61,6 +61,10 @@ test("actual hosted API binds library, native parsing, PostgreSQL CAS and CSRF w
     await request(`/api/projects/default/skills/${encodeURIComponent(skill.id)}/invoke`, "POST", { revision: 1, sessionId: "fixture-session", idempotencyKey: "fixture-invoke" }, 503);
     const uploaded = await fetch(`${base}/api/skills/uploads?kind=skill`, { method: "POST", headers: { ...auth, "content-type": "application/octet-stream" }, body: "---\nname: imported-native\ndescription: Upload\n---\n\nRead this source.\n" });
     assert.equal(uploaded.status, 201); const resourceId = (await uploaded.json()).data.resourceId;
+    const beforePreview = (await request("/api/skills")).items.length;
+    const preview = await request("/api/skills/import-preview", "POST", { resourceId });
+    assert.equal(preview.instructions, "Read this source.");
+    assert.equal((await request("/api/skills")).items.length, beforePreview, "preview cannot create a library record or project activation");
     const imported = await request("/api/skills/import", "POST", { resourceId, title: "Imported method" }, 201);
     assert.equal(imported.payload.instructions, "Read this source.");
     await request(`/api/skills/uploads/${encodeURIComponent(resourceId)}`, "DELETE", {});

@@ -27,6 +27,13 @@ export const savePersonalSkillDefaults = (expectedRevision: number, skills: Skil
 export const projectSkills = (projectId: string) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`);
 export const saveProjectSkills = (projectId: string, expectedRevision: number, skills: SkillSelection[]) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`, "PUT", { expectedRevision, skills: skills.map(({ skillId, revision }) => ({ skillId, revision })) });
 export const importPersonalSkill = (resourceId: string, title: string) => productRequest<PersonalSkill>("/skills/import", "POST", { resourceId, title });
+export interface SkillImportPreview {
+  description: string; instructions: string;
+  invocation: { userInvocable: boolean; modelInvocable: boolean };
+  resources: PersonalSkillPayload["resources"]; scripts: Array<{ path: string; size: number }>;
+  metadata: Record<string, unknown>; whenToUse: string | null;
+}
+export const previewPersonalSkillImport = (resourceId: string) => productRequest<SkillImportPreview>("/skills/import-preview", "POST", { resourceId });
 
 /** Raw bounded uploads use the existing cookie/CSRF transport, never a submitted host path. */
 export async function uploadPersonalSkill(file: File) {

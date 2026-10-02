@@ -127,3 +127,21 @@ test("stale native revisions do not publish orphan packages before their durable
   assert.equal(outcomes.filter(outcome => outcome.status === "fulfilled").length, 1);
   assert.equal((await fs.readdir(packageRoot)).length, before.length + 1);
 });
+
+test("native import preview exposes resources and invocation policy without persistent blobs or library activation", options, async () => {
+  const previewRoot = path.join(root, "preview-only"); await fs.mkdir(previewRoot);
+  const previewArtifacts = new SkillLibraryArtifacts({ root: previewRoot, parseSkill: parsePersonalSkill, resolveImport: async () => [
+    { type: "file", path: "SKILL.md", bytes: Buffer.from("---\nname: preview-fixture\ndescription: Inspect supplied sources\nuser-invocable: false\ndisable-model-invocation: true\n---\n\nKeep uncertainty.\n") },
+    { type: "file", path: "scripts/check.py", bytes: Buffer.from("print('inert fixture')\n") },
+  ] });
+  const previewService = new SkillLibraryService(database, { artifacts: previewArtifacts });
+  const before = (await previewService.list(owner)).items.length;
+  const preview = await previewService.previewImport(owner, { resourceId: "preview-upload" });
+  assert.equal(preview.instructions, "Keep uncertainty.");
+  assert.deepEqual(preview.invocation, { userInvocable: false, modelInvocable: false });
+  assert.equal(preview.scripts[0].path, "scripts/check.py"); assert.equal(preview.resources.length, 1);
+  assert.equal((await previewService.list(owner)).items.length, before);
+  await assert.rejects(fs.stat(path.join(previewArtifacts.ownerRoot(owner), "blobs")), { code: "ENOENT" });
+  await assert.rejects(fs.stat(path.join(previewArtifacts.ownerRoot(owner), "packages")), { code: "ENOENT" });
+  assert.deepEqual(await fs.readdir(path.join(previewArtifacts.ownerRoot(owner), "imports")), []);
+});

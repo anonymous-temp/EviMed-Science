@@ -10,7 +10,7 @@ import type { ExtensionConnection } from "@/lib/extensionsClient";
 
 // These are component regressions with explicitly mocked HTTP clients, not SaaS qualification probes.
 const extensions = vi.hoisted(() => ({ extensionCatalogue: vi.fn(), extensionInstallation: vi.fn(), projectExtensions: vi.fn(), extensionHistory: vi.fn(), saveProjectExtensions: vi.fn(), updateExtension: vi.fn(), extensionConnections: vi.fn(), extensionInstallations: vi.fn() }));
-const skills = vi.hoisted(() => ({ getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), saveProjectSkills: vi.fn(), savePersonalSkillDefaults: vi.fn(), listPersonalSkills: vi.fn() }));
+const skills = vi.hoisted(() => ({ getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), saveProjectSkills: vi.fn(), savePersonalSkillDefaults: vi.fn(), listPersonalSkills: vi.fn(), uploadPersonalSkill: vi.fn(), previewPersonalSkillImport: vi.fn(), importPersonalSkill: vi.fn() }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), getWebProjectId: () => "project-1" }));
@@ -41,6 +41,41 @@ beforeEach(() => {
   skills.saveProjectSkills.mockResolvedValue({});
   skills.savePersonalSkillDefaults.mockResolvedValue({});
   skills.listPersonalSkills.mockResolvedValue({ items: [], nextCursor: null });
+  skills.uploadPersonalSkill.mockResolvedValue({ resourceId: "upload:fixture" });
+  skills.previewPersonalSkillImport.mockResolvedValue({ description: "预览描述", instructions: "Preserve source uncertainty.", invocation: { userInvocable: true, modelInvocable: false }, metadata: {}, whenToUse: null, resources: [{ path: "scripts/check.py", size: 20, id: "resource:fixture", digest: "sha256:fixture" }], scripts: [{ path: "scripts/check.py", size: 20 }] });
+  skills.importPersonalSkill.mockResolvedValue(skill);
+});
+
+it("previews native skill content and scripts before the explicit import action", async () => {
+  const user = userEvent.setup(); openSkills();
+  await screen.findByText("还没有个人技能");
+  await user.click(screen.getByRole("button", { name: "导入" }));
+  await user.type(screen.getByLabelText("技能名称"), "我的检查方法");
+  await user.upload(screen.getByLabelText("技能文件"), new File(["fixture"], "SKILL.md", { type: "text/markdown" }));
+  expect((screen.getByLabelText("技能文件") as HTMLInputElement).files).toHaveLength(1);
+  // JSDOM does not implement native file-required validity like a browser.
+  fireEvent.submit(screen.getByRole("button", { name: "预览" }).closest("form")!);
+  expect(await screen.findByText("Preserve source uncertainty.")).toBeInTheDocument();
+  expect(screen.getByText("scripts/check.py")).toBeInTheDocument();
+  expect(skills.importPersonalSkill).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "确认导入" }));
+  await waitFor(() => expect(skills.importPersonalSkill).toHaveBeenCalledWith("upload:fixture", "我的检查方法"));
+});
+
+it("failed preview creates no skill and a changed file invalidates the earlier preview", async () => {
+  const user = userEvent.setup(); openSkills(); await screen.findByText("还没有个人技能");
+  await user.click(screen.getByRole("button", { name: "导入" }));
+  await user.type(screen.getByLabelText("技能名称"), "重试方法");
+  await user.upload(screen.getByLabelText("技能文件"), new File(["one"], "first.md", { type: "text/markdown" }));
+  skills.previewPersonalSkillImport.mockRejectedValueOnce(new Error("Preview unavailable"));
+  fireEvent.submit(screen.getByRole("button", { name: "预览" }).closest("form")!);
+  expect(await screen.findByRole("alert")).toHaveTextContent("操作未完成，请重试。");
+  expect(skills.importPersonalSkill).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "确认导入" })).not.toBeInTheDocument();
+  fireEvent.submit(screen.getByRole("button", { name: "预览" }).closest("form")!);
+  await screen.findByRole("button", { name: "确认导入" });
+  await user.upload(screen.getByLabelText("技能文件"), new File(["two"], "second.md", { type: "text/markdown" }));
+  expect(screen.queryByRole("button", { name: "确认导入" })).not.toBeInTheDocument();
 });
 it("shows the installed pin and evidence while a newer qualified catalogue schema stays unavailable", async () => {
   extensions.extensionCatalogue.mockResolvedValue({ items: [{ ...descriptor, coordinate: nextCoordinate, integrity: "sha256:new", evidenceState: "saas-qualified", settingsSchema: { newField: { type: "string" } } }] });

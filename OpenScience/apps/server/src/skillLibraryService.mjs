@@ -142,6 +142,22 @@ export class SkillLibraryService {
       return this.saveContent(user, skillId, content, imported.resources, imported, () => this.artifacts.verifyUpload(user, input.resourceId));
     });
   }
+  /** Native parsing previews data only; it creates no library revision,
+   * persistent blob, project selection or permission grant.
+   * @param {any} user @param {any} body */
+  async previewImport(user, body) {
+    const input = exact(body, ["resourceId"]); productId(input.resourceId);
+    if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");
+    return this.withLibraryAccount(user, async () => {
+      const skillId = `skill:${randomUUID()}`;
+      const preview = await this.artifacts.import(user, { resourceId: input.resourceId, skillId,
+        nativeName: personalSkillName(user.id, skillId, sha256), preview: true });
+      return { description: preview.description, instructions: preview.instructions, invocation: preview.invocation,
+        whenToUse: preview.whenToUse, metadata: preview.metadata, resources: preview.resources,
+        scripts: preview.resources.filter(resource => /^scripts\//.test(resource.path)).map(resource => ({ path: resource.path, size: resource.size })),
+      };
+    });
+  }
   /** @param {any} user @param {string} kind @param {Buffer} bytes */
   async upload(user, kind, bytes) {
     if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");

@@ -29,13 +29,16 @@ function digestHex(value) {
 
 /** Private content-addressed artifacts. No public handler accepts a path, owner or filesystem root. */
 export class SkillLibraryArtifacts {
-  /** Admission callback takes a deployment-wide PostgreSQL advisory lock across processes. Limits are server-only. @param {{root:string,parseSkill:any,resolveImport?:any,decodeArchive?:any,withStorageAdmission?:any,sharedStorageRoot?:string,maxOwnerBytes?:number,maxGlobalBytes?:number,minFreeBytes?:number}} options */
+  /** Admission callback takes a deployment-wide PostgreSQL advisory lock across processes. Limits are server-only. @param {{root:string,parseSkill:any,resolveImport?:any,decodeArchive?:any,withStorageAdmission?:any,sharedStorageRoot?:string,sharedStorageRoots?:string[],maxOwnerBytes?:number,maxGlobalBytes?:number,minFreeBytes?:number}} options */
   constructor({ root, parseSkill, resolveImport = null, decodeArchive = null, withStorageAdmission = null,
-    sharedStorageRoot = null, maxOwnerBytes = 128 * 1024 * 1024, maxGlobalBytes = 1024 * 1024 * 1024, minFreeBytes = 512 * 1024 * 1024 }) {
+    sharedStorageRoot = null, sharedStorageRoots = [], maxOwnerBytes = 128 * 1024 * 1024, maxGlobalBytes = 1024 * 1024 * 1024, minFreeBytes = 512 * 1024 * 1024 }) {
     this.root = path.resolve(root);
-    this.sharedStorageRoot = sharedStorageRoot == null ? null : path.resolve(sharedStorageRoot);
-    if (this.sharedStorageRoot && (this.sharedStorageRoot === this.root || this.sharedStorageRoot.startsWith(this.root + path.sep)
-      || this.root.startsWith(this.sharedStorageRoot + path.sep))) throw new Error("Shared skill storage roots must be disjoint.");
+    if (!Array.isArray(sharedStorageRoots) || sharedStorageRoots.length > 2) throw new Error("Shared skill storage roots must be bounded.");
+    this.sharedStorageRoots = [...(sharedStorageRoot == null ? [] : [sharedStorageRoot]), ...sharedStorageRoots].map(value => path.resolve(value));
+    if (this.sharedStorageRoots.length > 2) throw new Error("Shared skill storage roots must be bounded.");
+    const allRoots = [this.root, ...this.sharedStorageRoots];
+    if (allRoots.some((value, index) => allRoots.slice(index + 1).some(other => other === value || other.startsWith(value + path.sep)
+      || value.startsWith(other + path.sep)))) throw new Error("Shared skill storage roots must be disjoint.");
     this.parseSkill = parseSkill;
     this.resolveImport = resolveImport;
     this.decodeArchive = decodeArchive;
@@ -63,10 +66,11 @@ export class SkillLibraryArtifacts {
       await directory.handle.close();
       const size = Buffer.byteLength(bytes);
       await assertProjectCapacity({ baseDir: this.ownerRoot(user), maxBytes: this.maxOwnerBytes }, target, size, { maxProjectUsageScanEntries: 20000 });
-      const companionBytes = this.sharedStorageRoot ? await directorySize(this.sharedStorageRoot, { maxEntries: 50000 }).catch(error => {
+      let companionBytes = 0;
+      for (const companion of this.sharedStorageRoots) companionBytes += await directorySize(companion, { maxEntries: 50000 }).catch(error => {
         if (["ENOENT", "file_not_found"].includes(error.code)) return 0;
         throw error;
-      }) : 0;
+      });
       const used = await directorySize(this.root, { maxEntries: 50000 }) + companionBytes;
       const disk = await fs.statfs(this.root);
       if (used + size > this.maxGlobalBytes || disk.bavail * disk.bsize < size + this.minFreeBytes) {
@@ -138,7 +142,7 @@ export class SkillLibraryArtifacts {
     return { nativeName, digest };
   }
   /** The trusted resolver authorizes opaque upload IDs and produces bounded extracted entries; client paths never reach it. @param {any} user @param {any} input */
-  async import(user, { resourceId, skillId, nativeName }) {
+  async import(user, { resourceId, skillId, nativeName, preview = false }) {
     const entries = this.resolveImport ? await this.resolveImport(user, resourceId) : await this.uploadEntries(user, resourceId);
     if (!Array.isArray(entries) || entries.length < 1 || entries.length > MAX_FILES + 1) throw new HttpError(400, "extension_contract_invalid", "Invalid skill package.");
     const normalized = [];
@@ -163,7 +167,7 @@ export class SkillLibraryArtifacts {
       const resources = [];
       for (const entry of normalized.filter(item => item.path !== "SKILL.md")) {
         const hex = hash(entry.bytes);
-        await this.publish(user, path.join("blobs", hex), entry.bytes);
+        if (!preview) await this.publish(user, path.join("blobs", hex), entry.bytes);
         resources.push({ id: `resource:${hex}`, path: entry.path, digest: `sha256:${hex}`, size: entry.bytes.length });
       }
       // Namespace replacement happens when the service renders the authored revision, never by editing a native provider's result.
