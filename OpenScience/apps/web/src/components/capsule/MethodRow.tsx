@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { announceMemoryChanged } from "@/lib/memoryClient";
@@ -48,13 +48,25 @@ export function methodHistory(versions: readonly MethodVersion[]): string[] {
  * There is nothing to edit: a method is what the model learned from the work,
  * never a form the researcher fills in (owner ruling 2026-09-20).
  */
-export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged: () => void }) {
+export function MethodRow({ method, onChanged, highlighted = false }: { method: WebMethod; onChanged: () => void; highlighted?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<"steps" | "history" | null>(null);
   /** The bodies it has held, read when 历史版本 is opened; "failed" when it could not be. */
   const [versions, setVersions] = useState<MethodVersion[] | "failed" | null>(null);
   const retired = method.status === "retired";
   const version = method.version ?? 1;
+  const anchor = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!highlighted) return;
+    let active = true;
+    anchor.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    if (method.steps || method.body) setDetail("steps");
+    else {
+      setDetail("history"); setVersions(null);
+      void methodVersions({ id: method.id }).then(page => { if (active) setVersions(page.items); }, () => { if (active) setVersions("failed"); });
+    }
+    return () => { active = false; };
+  }, [highlighted, method.id, method.steps, method.body]);
 
   const run = async (operation: () => Promise<void>) => {
     setBusy(true);
@@ -95,8 +107,9 @@ export function MethodRow({ method, onChanged }: { method: WebMethod; onChanged:
 
   return (
     <ListRow
+      className={highlighted ? "bg-accent-soft" : undefined}
       leading={<RowOrigin label="做法" />}
-      title={<RowSentence text={methodLine(method)} inferred={method.origin !== "explicit"} clamp={!retired && detail === null} />}
+      title={<span ref={anchor} data-method-id={method.id}><RowSentence text={methodLine(method)} inferred={method.origin !== "explicit"} clamp={!retired && detail === null} /></span>}
       onOpen={retired ? undefined : () => (detail ? setDetail(null) : firstView === "history" ? openHistory() : setDetail("steps"))}
       expanded={retired ? undefined : detail !== null}
       muted={retired}

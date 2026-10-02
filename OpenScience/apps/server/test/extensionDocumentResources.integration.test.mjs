@@ -45,11 +45,18 @@ test('actual product ledger binds public documents to current account/project, r
       await assert.rejects(resources.provenance({ ...scope, accountCreatedAt: 'new-account' }, record), { code: 'extension_access_denied' });
       await assert.rejects(resources.provenance(scope, { ...record, dataClass: 'aggregate' }), { code: 'extension_access_denied' });
       const notebook = Buffer.from(JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [] }));
+      const initialBinding = await resources.resolver.targetBinding(scope, 'public_result_ipynb');
+      project.workspaceDir = path.join(directory, 'active-study');
+      await fs.mkdir(project.workspaceDir);
+      const activeBinding = await resources.resolver.targetBinding(scope, 'public_result_ipynb');
+      assert.notEqual(activeBinding.rootIdentity, initialBinding.rootIdentity, 'queued target bindings cannot follow a workspace switch');
+      assert.deepEqual((await resources.resolver.snapshot(scope, result.resourceId)).bytes, bytes, 'public source references keep their signed project root');
       const written = await resources.resolver.publish(scope, { targetId: 'public_result_ipynb', format: 'ipynb' }, { ok: true, data: {
         targetId: 'public_result_ipynb', format: 'ipynb', codeExecuted: false, bytes: notebook.length,
         contentBase64: notebook.toString('base64'), sha256: createHash('sha256').update(notebook).digest('hex') } });
       assert.equal(written.artifactPath, 'outputs/extensions/public_result_ipynb.ipynb');
-      assert.deepEqual(await fs.readFile(path.join(directory, written.artifactPath)), notebook);
+      assert.deepEqual(await fs.readFile(path.join(project.workspaceDir, written.artifactPath)), notebook);
+      await assert.rejects(fs.stat(path.join(directory, written.artifactPath)), { code: 'ENOENT' });
       await assert.rejects(resources.target(scope, '../foreign'), { code: 'extension_access_denied' });
       await database.query("UPDATE evimed_product.documents SET payload=jsonb_set(payload,'{signature}',to_jsonb(repeat('0',64))) WHERE kind='extension-resource'");
       await assert.rejects(resources.resolver.snapshot(scope, result.resourceId), { code: 'extension_access_denied' });

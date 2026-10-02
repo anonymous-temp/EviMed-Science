@@ -45,9 +45,9 @@ per-project workspace + JSONL provenance.
   workspace layout, the four state vocabularies, the error-code registry and the
   delivery-gate rules), `harness-port` (the only package that may import
   `@deepseek-ai/*`), `socket` (`@evimed/dsh-socket` — the plug: the
-  `evimed-universal` composition and its thirteen plugins — eight agent-scope
-  rows in the preset, each switchable off from the environment, and five
-  host-scope rows the bundle's own `cordis.patch.yml` inserts), `contracts` (one
+  `evimed-universal` composition and its sixteen plugins — eight core agent
+  policies plus the scoped Cowork bridge in the preset, and seven host-scope
+  rows the bundle's own `cordis.patch.yml` inserts), `contracts` (one
   directory per tracked upstream pin).
 - `capabilities/` — one directory per capability: `capability.yaml` (the only
   definition of a capability) plus its SKILL.md and scripts. `capability-skills/`

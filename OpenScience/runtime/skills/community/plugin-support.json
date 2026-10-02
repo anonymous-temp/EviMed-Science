@@ -4,6 +4,7 @@
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-runtime-ui",
+    "evimed-skill-catalogue",
     "evimed-plugin-probe",
     "evimed-engine-context",
     "evimed-seam-probe",
@@ -16,7 +17,8 @@
     "evimed-screening",
     "evimed-review",
     "evimed-citation-bridge",
-    "evimed-compaction"
+    "evimed-compaction",
+    "evimed-cowork-bridge"
   ],
   "communitySkills": [
     "dsh-ppt@0db836e8251a10bf93f26e702534ab9d8b2a1818",

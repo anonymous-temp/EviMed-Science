@@ -84,6 +84,17 @@ COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops
+# Hosted extension execution imports these fixed adapters. The source closure
+# is also measured in the serving image before accepting qualification records.
+COPY --from=build /app/scripts/runtime/extensions/cowork ./scripts/runtime/extensions/cowork
+COPY --from=build /app/packages/domain/index.mjs ./packages/domain/index.mjs
+COPY --from=build /app/packages/domain/src ./packages/domain/src
+COPY --from=build /app/packages/harness-port/index.mjs /app/packages/harness-port/seam-manifest.json ./packages/harness-port/
+COPY --from=build /app/packages/harness-port/src ./packages/harness-port/src
+COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.patch.yml ./packages/socket/
+COPY --from=build /app/packages/socket/extensions ./packages/socket/extensions
+COPY --from=build /app/packages/socket/plugins ./packages/socket/plugins
+COPY --from=build /app/packages/socket/presets/evimed-universal/agent.cordis.yml ./packages/socket/presets/evimed-universal/agent.cordis.yml
 # 「虚拟临研」's snapshot profiler: the data plane runs it as a child process
 # (`VCR_PROFILER_SCRIPT` in vcrDataPlane.mjs resolves it from the server's own
 # directory, `../../../scripts/vcr`). Without it every snapshot profile fails on

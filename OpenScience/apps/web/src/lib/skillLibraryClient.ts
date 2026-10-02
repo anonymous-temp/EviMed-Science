@@ -45,3 +45,75 @@ export async function uploadPersonalSkill(file: File) {
   if (!response.ok || !value?.data) throw new WebApiError(value?.error ?? "Skill upload failed.", { status: response.status, code: value?.code });
   return value.data;
 }
+
+export interface EffectiveSkill {
+  key: string; name: string; description: string;
+  invocation: { userInvocable: boolean; modelInvocable: boolean };
+  source: "builtin" | "community" | "personal" | "unknown";
+  canDuplicate: boolean;
+  personalRef?: { skillId: string; revision: number; title: string };
+}
+export interface EffectiveSkillCatalogue {
+  state: "available" | "unavailable" | "unknown";
+  runtimeGeneration: string | null; sessionId: string | null;
+  items: EffectiveSkill[];
+  learnedMethods: Array<{ id: string; title: string; href: string }>;
+  findings: Array<{ code: string }>;
+}
+export interface EffectiveSkillDetail {
+  state: "available"; runtimeGeneration: string; sessionId: string;
+  skill: EffectiveSkill & { instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
+    resources: Array<{ path: string; size: number; digest: string }>; scripts: Array<{ path: string; size: number }>; digest: string };
+  findings: Array<{ code: string }>;
+}
+const effectivePath = (projectId: string) => `/projects/${encodeURIComponent(projectId)}/skills/effective`;
+export const effectiveSkills = (projectId: string, sessionId: string) => productRequest<EffectiveSkillCatalogue>(`${effectivePath(projectId)}?${new URLSearchParams({ sessionId })}`);
+export const effectiveSkill = (projectId: string, key: string, sessionId: string, expectedRuntimeGeneration: string) => productRequest<EffectiveSkillDetail>(`${effectivePath(projectId)}/${encodeURIComponent(key)}?${new URLSearchParams({ sessionId, expectedRuntimeGeneration })}`);
+export const duplicateEffectiveSkill = (projectId: string, input: { sessionId: string; key: string; title: string; idempotencyKey: string; expectedRuntimeGeneration: string }) => productRequest<PersonalSkill>(`/projects/${encodeURIComponent(projectId)}/skills/duplicate`, "POST", { sessionId: input.sessionId, key: input.key, title: input.title, idempotencyKey: input.idempotencyKey, expectedRuntimeGeneration: input.expectedRuntimeGeneration });
+
+export interface SkillRepositoryPreview {
+  resourceId: string;
+  immutableSource: { repository: string; commit: string; subdirectory?: string };
+  preview: SkillImportPreview;
+  findings: Array<{ code: string }>;
+}
+export const previewPersonalSkillRepository = (input: { repository: string; commit: string; subdirectory?: string }) => productRequest<SkillRepositoryPreview>("/skills/repository-preview", "POST", { repository: input.repository, commit: input.commit, ...(input.subdirectory ? { subdirectory: input.subdirectory } : {}) });
+
+export type SkillTransferFormat = "portable" | "account";
+export interface SkillTransferUpload {
+  reference: string; sourceDigest: string; format: SkillTransferFormat;
+  sourceSkills: Array<{ sourceId: string; title: string; revision: number }>;
+}
+export interface SkillTransferPreview {
+  reference: string; sourceDigest: string; format: SkillTransferFormat; nativeValidation: "pending"; activation: false;
+  skills: Array<{ sourceId: string; title: string; revisions: number;
+    resources: Array<{ path: string; digest: string; size: number }>;
+    invocation: { userInvocable: boolean; modelInvocable: boolean } }>;
+}
+export interface SkillTransferResult {
+  status: "complete" | "in-progress"; reference: string; activation: false;
+  mappings: Array<{ sourceId: string; targetId: string; imported: number; revisions: Array<{ sourceRevision: number; targetRevision: number }> }>;
+}
+export interface SkillTransferIntent { reference: string; sourceSkillIds?: string[] }
+export async function uploadPersonalSkillTransfer(file: File, format: SkillTransferFormat): Promise<SkillTransferUpload> {
+  if (file.size === 0 || file.size > 32 * 1024 * 1024) throw new Error("请上传不超过 32 MB 的迁移文件。");
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}/skills/transfers/uploads?format=${format}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  const value = await response.json().catch(() => null) as { data?: SkillTransferUpload; error?: string; code?: string } | null;
+  if (!response.ok || !value?.data) throw new WebApiError(value?.error ?? "Skill transfer upload failed.", { status: response.status, code: value?.code });
+  return value.data;
+}
+const transferIntent = (input: SkillTransferIntent) => ({ reference: input.reference, ...(input.sourceSkillIds ? { sourceSkillIds: [...input.sourceSkillIds] } : {}) });
+export const previewPersonalSkillTransfer = (input: SkillTransferIntent) => productRequest<SkillTransferPreview>("/skills/transfers/preview", "POST", transferIntent(input));
+export const confirmPersonalSkillTransfer = (input: SkillTransferIntent & { idempotencyKey: string }) => productRequest<SkillTransferResult>("/skills/transfers/confirm", "POST", { ...transferIntent(input), idempotencyKey: input.idempotencyKey });
+export function personalSkillPortableUrl(id: string) {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  return `${root}${skillPath(id)}/portable`;
+}
+
+export interface PendingSkillTransfer {
+  reference: string; format: SkillTransferFormat; sourceSkillIds: string[]; idempotencyKey: string;
+  status: "in-progress" | "complete";
+  mappings: Array<{ sourceId: string; targetId: string; imported: number; total: number; revisions: Array<{ sourceRevision: number; targetRevision: number }> }>;
+}
+export const pendingPersonalSkillTransfers = (cursor?: string | null) => productRequest<{ items: PendingSkillTransfer[]; nextCursor: string | null }>(`/skills/transfers/pending${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);

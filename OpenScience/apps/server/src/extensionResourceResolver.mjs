@@ -8,18 +8,20 @@ const denied = () => new HttpError(403, 'extension_access_denied', 'The document
 const invalid = () => new HttpError(400, 'extension_contract_invalid', 'The document result is invalid.');
 /** Authoritative record/provenance callbacks are deployment-owned, never package or request data. */
 export class ExtensionResourceResolver {
-  /** @param {{lookupResource:any,verifyProvenance:any,rootFor:any,lookupTarget:any,maxProjectBytes?:number}} options */
+  /** @param {{lookupResource:any,verifyProvenance:any,rootFor:any,capacityRootFor?:any,lookupTarget:any,maxProjectBytes?:number}} options */
   constructor({
     lookupResource,
     verifyProvenance,
     rootFor,
+    capacityRootFor = rootFor,
     lookupTarget,
     maxProjectBytes = 128 * 1024 * 1024
   }) {
-    if ([lookupResource, verifyProvenance, rootFor, lookupTarget].some(fn => typeof fn !== 'function') || !Number.isSafeInteger(maxProjectBytes) || maxProjectBytes < 1) throw invalid();
+    if ([lookupResource, verifyProvenance, rootFor, capacityRootFor, lookupTarget].some(fn => typeof fn !== 'function') || !Number.isSafeInteger(maxProjectBytes) || maxProjectBytes < 1) throw invalid();
     this.lookupResource = lookupResource;
     this.verifyProvenance = verifyProvenance;
     this.rootFor = rootFor;
+    this.capacityRootFor = capacityRootFor;
     this.lookupTarget = lookupTarget;
     this.maxProjectBytes = maxProjectBytes;
   }
@@ -67,7 +69,8 @@ export class ExtensionResourceResolver {
     return {
       targetId,
       revision: record.revision,
-      relativePath: record.relativePath
+      relativePath: record.relativePath,
+      rootIdentity: sha(root)
     };
   }
   /** @param {any} scope @param {any} request @param {any} result */
@@ -86,8 +89,10 @@ export class ExtensionResourceResolver {
     if (record.format && record.format !== request.format) throw invalid();
     const root = path.resolve(await this.rootFor(scope, record)),
       target = this.target(root, record);
+    const capacityRoot = path.resolve(await this.capacityRootFor(scope, record));
+    if (root !== capacityRoot && !root.startsWith(capacityRoot + path.sep)) throw denied();
     await assertProjectCapacity({
-      baseDir: root,
+      baseDir: capacityRoot,
       maxBytes: this.maxProjectBytes
     }, target, bytes.length, {
       maxProjectUsageScanEntries: 20000

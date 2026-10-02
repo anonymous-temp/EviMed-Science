@@ -134,9 +134,10 @@ export class SkillLibraryArtifacts {
     }
     await this.publish(user, path.join(prefix, "SKILL.md"), file);
     if (typeof this.parseSkill !== "function") throw new HttpError(503, "product_state_unavailable", "Native skill validation is unavailable.");
+    // The isolated validator independently binds package bytes through this authored manifest.
+    await this.publish(user, path.join("packages", hex, "manifest.json"), `${canonicalJson({ schemaVersion: 1, nativeName, digest, resources })}\n`);
     const parsed = await this.parse(root, { expectedName: nativeName });
     if (parsed?.name !== nativeName) throw new HttpError(400, "extension_contract_invalid", "Native skill validation failed.");
-    await this.publish(user, path.join("packages", hex, "manifest.json"), `${canonicalJson({ schemaVersion: 1, nativeName, digest, resources })}\n`);
     return { nativeName, digest };
   }
   /** The trusted resolver authorizes opaque upload IDs and produces bounded extracted entries; client paths never reach it. @param {any} user @param {any} input */

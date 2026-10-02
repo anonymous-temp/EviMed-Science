@@ -117,3 +117,27 @@ test('trusted targets are scoped and exclusive; contained outputs never choose p
     });
   }
 });
+
+test('active-workspace outputs share project-wide quota and target binding changes with the workspace', async () => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'extension-workspace-output-')));
+  const bytes = Buffer.from(JSON.stringify({ cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }));
+  let workspace = path.join(root, 'study-one');
+  await fs.mkdir(workspace);
+  await fs.mkdir(path.join(root, 'study-two'));
+  await fs.writeFile(path.join(root, 'other-project-file'), Buffer.alloc(1024));
+  const resolver = new ExtensionResourceResolver({
+    lookupResource: async () => null, verifyProvenance: async () => null,
+    rootFor: async () => workspace, capacityRootFor: async () => root,
+    lookupTarget: async () => ({ ownerId: 'alice', projectId: 'project', relativePath: 'new.ipynb', revision: 1 }),
+    maxProjectBytes: 1024,
+  });
+  try {
+    const first = await resolver.targetBinding(scope, 'result_one');
+    workspace = path.join(root, 'study-two');
+    assert.notEqual((await resolver.targetBinding(scope, 'result_one')).rootIdentity, first.rootIdentity);
+    const output = { ok: true, data: { targetId: 'result_one', format: 'ipynb', bytes: bytes.length,
+      sha256: sha(bytes), contentBase64: bytes.toString('base64'), codeExecuted: false } };
+    await assert.rejects(resolver.publish(scope, { targetId: 'result_one', format: 'ipynb' }, output), { status: 413 });
+    await assert.rejects(fs.stat(path.join(workspace, 'new.ipynb')), { code: 'ENOENT' });
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

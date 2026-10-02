@@ -187,7 +187,10 @@
       "evimedPlugins/status",
       "evimedPlugins/verify",
       "evimedPlugins/verifyExtensions",
-      "evimedPlugins/extensionInvocationFacts"
+      "evimedPlugins/extensionInvocationFacts",
+      "evimedSkills/list",
+      "evimedSkills/read",
+      "evimedSkills/snapshotBuiltin"
     ],
     "denied": [
       "account/ackBonusNotified",
@@ -345,6 +348,15 @@
       "evimedPlugins/verify": [],
       "evimedPlugins/verifyExtensions": [],
       "evimedPlugins/extensionInvocationFacts": [
+        "request"
+      ],
+      "evimedSkills/list": [
+        "request"
+      ],
+      "evimedSkills/read": [
+        "request"
+      ],
+      "evimedSkills/snapshotBuiltin": [
         "request"
       ]
     },

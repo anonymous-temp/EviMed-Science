@@ -8,6 +8,7 @@ import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
+import { createPluginInventoryRoutes } from "./pluginInventoryRoutes.mjs";
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
@@ -17,6 +18,11 @@ import { EXTENSION_GATEWAY_PATH } from "./extensionGateway.mjs";
 import { SkillLibraryService } from "./skillLibraryService.mjs";
 import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
 import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
+import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
+import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
+import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
+import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
+import { sessionListItems } from "./dshRuntimeAdapter.mjs";
 import { decodeSkillArchive } from "./skillArchive.mjs";
 import { ExtensionConnections } from "./extensionConnections.mjs";
 import { PersonalSkillGenerationService } from "./personalSkillGenerationService.mjs";
@@ -917,6 +923,7 @@ export function createWebApiApp(overrides = {}) {
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
+  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
   const extensionAccess = new ExtensionAccess({ store, connectionAccess: overrides.extensionConnectionAccess ?? null });
   const extensionConnections = new ExtensionConnections({ credentials: connectorCredentials, access: extensionAccess,
     adapters: overrides.extensionConnectionAdapters ?? new Map() });
@@ -995,6 +1002,9 @@ export function createWebApiApp(overrides = {}) {
       return { ...selection, activation: { phase: "waiting", ...(candidate.waiting ? { code: "runtime_image_unavailable" } : {}) } };
     })),
   });
+  const personalSkillTransfer = skillLibraryService ? new PersonalSkillTransfer({ skills: skillLibraryService, artifacts: skillArtifacts }) : null;
+  const personalSkillTransferRoutes = createPersonalSkillTransferRoutes({ store, service: personalSkillTransfer, skills: skillLibraryService,
+    artifacts: skillArtifacts, maxJsonBytes: config.maxJsonBytes });
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
@@ -2173,6 +2183,20 @@ export function createWebApiApp(overrides = {}) {
   runtimeManager.learningService = learningService;
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
+  if (skillLibraryService && config.runtimeMode === "kernel") {
+    skillLibraryService.nativeCatalogue = new NativeSkillCatalogue({ runtimeManager,
+      authorizeSession: async (user, project, sessionId) => {
+        const current = await store.requireProject(user, project.id);
+        if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+        await assertPublicSessionPrompt(current, sessionId);
+        const runtime = runtimeManager.runtimes.get(runtimeManager.key(current));
+        if (!runtime || !runtimeManager.runtimeGeneration(current)) throw new HttpError(503, "product_state_unavailable", "The native skill catalogue is unavailable.");
+        const listed = await runtimeManager.callKernel(runtime, current, "session/list", { _request: {} }, AbortSignal.timeout(10000));
+        if (!sessionListItems(listed).some(item => item.sessionId === sessionId)) throw new HttpError(404, "runtime_session_not_found", "The current native session is unavailable.");
+      },
+    });
+    skillLibraryService.learnedMethods = user => learningService ? learningService.listMethods(user.id, { limit: 50 }) : [];
+  }
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
   const pluginApplyWorker = pluginService ? new PluginApplyWorker({
     service: pluginService, runtime: runtimeManager,
@@ -3442,6 +3466,10 @@ export function createWebApiApp(overrides = {}) {
     directTimeoutMs: config.webReadDirectTimeoutMs,
     edgeFallback: config.webReadEdgeFallback !== false,
   });
+  if (skillLibraryService) {
+    const repositoryImport = new PersonalSkillRepositoryImport({ transport: webTransport, skills: skillLibraryService });
+    skillLibraryService.repositoryPreview = (user, body) => repositoryImport.preview(user, body);
+  }
   const webReader = createWebReader(config, {
     transport: webTransport,
     renderer: overrides.webRenderer ?? createConfiguredWebRenderer(config),
@@ -4228,6 +4256,8 @@ export function createWebApiApp(overrides = {}) {
       }
       if (await evimedAuthRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
+      if (await personalSkillTransferRoutes(req, res)) return;
+      if (await pluginInventoryRoutes(req, res)) return;
       if (await extensionRoutes(req, res)) return;
       if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;

@@ -69,10 +69,16 @@ test("every patch row carries an explicit id", async () => {
 
 test("the composition mounts every agent plugin we own and nothing we ruled out", async () => {
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  const patch = await readFile(new URL("../cordis.patch.yml", import.meta.url), "utf8");
   // Counted, not named in the title: it said "five" while there were eight,
   // and a number in a sentence is a number nothing checks.
   assert.equal(AGENT_PLUGIN_IDS.length, 8, "add the row here when a plugin is added, so the count stays a fact");
-  assert.equal(HOST_PLUGIN_IDS.length, 6);
+  assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
+    "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
+    "evimed-evidence-store", "evimed-web", "evimed-engine-context",
+  ].sort());
+  assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
+    [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");
   for (const id of AGENT_PLUGIN_IDS) assert.match(preset, new RegExp(`id: ${id}\\b`), id);
   for (const banned of ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "tool-goal"]) {
     const mounted = new RegExp(`^\\s*-?\\s*id: ${banned}\\s*$`, "m");

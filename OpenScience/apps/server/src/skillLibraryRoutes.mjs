@@ -6,7 +6,8 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
     const url = new URL(req.url ?? "/", "http://evimed.local");
     const personal = /^\/api\/skills(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
     const projectRoute = /^\/api\/projects\/([^/]+)\/skills(?:\/([^/]+)\/invoke)?$/.exec(url.pathname);
-    if (!personal && !projectRoute) return false;
+    const catalogueRoute = /^\/api\/projects\/([^/]+)\/skills\/(effective|duplicate)(?:\/([^/]+))?$/.exec(url.pathname);
+    if (!personal && !projectRoute && !catalogueRoute) return false;
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     await store.assertCsrf(req, url.pathname);
     if (!service) throw new HttpError(503, "product_state_unavailable", "Skill library storage is unavailable.");
@@ -16,7 +17,17 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       try { return decodeURIComponent(value); }
       catch { throw new HttpError(400, "extension_contract_invalid", "Invalid skill path."); }
     };
-    if (projectRoute) {
+    if (catalogueRoute) {
+      const project = await store.requireProject(user, decode(catalogueRoute[1]));
+      if (catalogueRoute[2] === 'effective' && req.method === 'GET') {
+        const allowed = catalogueRoute[3] ? ['sessionId', 'expectedRuntimeGeneration'] : ['sessionId'];
+        if ([...url.searchParams.keys()].some(key => !allowed.includes(key)) || allowed.some(key => url.searchParams.getAll(key).length > 1)) throw new HttpError(400, 'extension_contract_invalid', 'Invalid catalogue query.');
+        return reply(catalogueRoute[3] ? await service.effectiveDetail(user, project, { key: decode(catalogueRoute[3]),
+          sessionId: url.searchParams.get('sessionId'), expectedRuntimeGeneration: url.searchParams.get('expectedRuntimeGeneration') })
+          : await service.effectiveCatalogue(user, project, url.searchParams.get('sessionId')));
+      }
+      if (catalogueRoute[2] === 'duplicate' && !catalogueRoute[3] && req.method === 'POST') return reply(await service.duplicateNative(user, project, await body()), 201);
+    } else if (projectRoute) {
       const project = await store.requireProject(user, decode(projectRoute[1]));
       if (!projectRoute[2] && req.method === "GET") return reply(await service.projectSelections(user, project));
       if (!projectRoute[2] && req.method === "PUT") {
@@ -42,6 +53,7 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       }
       if (id === "import" && !action && req.method === "POST") return reply(await service.import(user, await body()), 201);
       if (id === "import-preview" && !action && req.method === "POST") return reply(await service.previewImport(user, await body()));
+      if (id === 'repository-preview' && !action && req.method === 'POST') return reply(await service.previewRepository(user, await body()));
       if (id === "defaults" && !action && req.method === "GET") return reply(await service.defaults(user));
       if (id === "defaults" && !action && req.method === "PUT") return reply(await service.saveDefaults(user, await body()));
       if (id && !action && req.method === "GET") return reply(await service.get(user, id));

@@ -25,7 +25,8 @@ export class ExtensionDocumentResources {
     this.resolver = new ExtensionResourceResolver({
       lookupResource: (scope, id) => this.lookup(scope, id),
       verifyProvenance: (scope, record) => this.provenance(scope, record),
-      rootFor: scope => this.projectRoot(scope),
+      rootFor: (scope, record) => this.projectRoot(scope, record),
+      capacityRootFor: async scope => (await this.project(scope)).baseDir,
       lookupTarget: (scope, id) => this.target(scope, id),
       maxProjectBytes: config.maxProjectBytes ?? 128 * 1024 * 1024,
     });
@@ -38,8 +39,12 @@ export class ExtensionDocumentResources {
     if (!user) throw denied();
     return this.access.project(user, scope.projectId);
   }
-  /** @param {any} scope */
-  async projectRoot(scope) { return (await this.project(scope)).baseDir; }
+  /** Public sources belong to the project; authored results belong to its active workspace.
+   * @param {any} scope @param {any} record */
+  async projectRoot(scope, record) {
+    const project = await this.project(scope);
+    return record?.originType === 'checked-open-access-pdf' ? project.baseDir : project.workspaceDir ?? project.baseDir;
+  }
   /** Capture epochs before the public transport starts, never after its bytes arrive.
    * @param {any} principal */
   async prepareCapture(principal) {

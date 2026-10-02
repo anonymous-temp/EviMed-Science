@@ -13,6 +13,18 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/u,
   HEX = /^[a-f0-9]{64}$/u;
 const ADAPTER_SOURCES = Object.freeze(['apps/server/src/extensionDeployment.mjs', 'apps/server/src/extensionHostedIntegration.mjs', 'apps/server/src/extensionGateway.mjs', 'apps/server/src/server.mjs', 'apps/server/src/extensionRoutes.mjs', 'apps/server/src/runtimeControllerClient.mjs', 'apps/server/src/runtimeControllerServer.mjs', 'apps/server/src/runtimeControllerIndex.mjs', 'apps/server/src/dshRuntimeAdapter.mjs', 'apps/server/src/extensionAccountExport.mjs', 'apps/server/src/extensionActorBindings.mjs', 'apps/server/src/extensionControllerComposition.mjs', 'apps/server/src/extensionOperationService.mjs', 'apps/server/src/extensionOperationWorker.mjs', 'apps/server/src/extensionOperationGrants.mjs', 'apps/server/src/extensionResourceResolver.mjs', 'apps/server/src/extensionDocumentResources.mjs', 'apps/server/src/extensionInvocationLookup.mjs', 'apps/server/src/extensionQualification.mjs', 'apps/server/src/extensionToolController.mjs', 'apps/server/src/extensionGenerationService.mjs', 'apps/server/src/extensionGenerationWorker.mjs', 'apps/server/src/extensionPreparationWorker.mjs', 'apps/server/src/productJobs.mjs', 'apps/server/src/productPersistence.mjs', 'apps/server/src/heavyWorkAdmission.mjs', 'apps/server/src/productStore.mjs', 'apps/server/src/controlPlaneDatabase.mjs', 'apps/server/src/config.mjs', 'packages/domain/index.mjs', 'packages/harness-port/index.mjs', 'apps/server/src/publicSourceGateway.mjs', 'packages/domain/src/extensions.mjs', 'packages/socket/extensions/cowork/bridge.mjs', 'packages/harness-port/src/pluginProbe.mjs', 'packages/harness-port/seam-manifest.json', 'scripts/runtime/extensions/cowork/runner.mjs', 'scripts/runtime/extensions/cowork/policy.mjs', 'scripts/runtime/extensions/cowork/image-inventory.mjs', 'deps-version.json']);
 const PERMISSION_SOURCES = Object.freeze(['apps/server/src/runtimeManager.mjs', 'apps/server/src/runtimeUiServer.mjs', 'apps/server/src/dshProfilePatch.mjs', 'apps/server/src/extensionAccess.mjs', 'apps/server/src/pluginService.mjs', 'apps/server/src/security.mjs', 'apps/server/src/runtimeGatewayEntry.mjs', 'apps/server/src/modelGateway.mjs', 'packages/socket/presets/evimed-universal/agent.cordis.yml']);
+const PERSONAL_SOURCES = Object.freeze([
+  'apps/server/src/pluginInventoryRoutes.mjs',
+  'apps/server/src/nativeSkillCatalogue.mjs', 'apps/server/src/skillLibraryService.mjs', 'apps/server/src/skillLibraryRoutes.mjs',
+  'apps/server/src/skillLibraryArtifacts.mjs', 'apps/server/src/skillArchive.mjs', 'apps/server/src/skillValidationController.mjs',
+  'apps/server/src/personalSkillRepositoryImport.mjs', 'apps/server/src/personalSkillTransfer.mjs',
+  'apps/server/src/personalSkillTransferRoutes.mjs', 'apps/server/src/personalSkillTransferArchive.mjs',
+  'apps/server/src/personalSkillGenerationService.mjs', 'apps/server/src/personalSkillGenerationWorker.mjs',
+  'apps/server/src/personalSkillMount.mjs', 'apps/server/src/extensionPrivateCleanup.mjs', 'apps/server/src/webReadNetwork.mjs',
+  'packages/harness-port/src/scopedSkillCatalogue.mjs', 'packages/harness-port/src/personalSkills.mjs',
+  'packages/socket/plugins/skill-catalogue.mjs', 'packages/socket/cordis.patch.yml', 'packages/socket/index.mjs',
+  'runtime/mcp/evimed-research/open_access_fulltext.py', 'runtime/mcp/evimed-research/public_sources.py',
+]);
 const failure = () => new HttpError(503, 'product_state_unavailable', 'The protected extension deployment is unavailable.');
 /** Hash only a closed source list; no environment, private configuration or package-defined path participates.
  * @param {readonly string[]} sources */
@@ -35,7 +47,7 @@ function sourceDigest(sources) {
 /** Actual deployed source bytes define policy freshness; manifest assertions alone never authorize a package. */
 export function currentExtensionSourcePolicy() {
   return Object.freeze({
-    adapterRevision: sourceDigest(ADAPTER_SOURCES),
+    adapterRevision: sourceDigest([...ADAPTER_SOURCES, ...PERSONAL_SOURCES]),
     permissionProfileRevision: sourceDigest(PERMISSION_SOURCES)
   });
 }

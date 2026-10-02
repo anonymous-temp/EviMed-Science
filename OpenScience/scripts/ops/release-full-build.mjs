@@ -153,7 +153,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-02: the merged recipe retains the VCR snapshot profiler and public
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
-export const WEB_DOCKERFILE_SHA256 = "sha256:9b4e7dc28a33a1e41ec598615d41f10294e35adf2ebbe413b086cc47e88c53fa";
+// The hosted extension adapters and measured source closure now ship in the Web image.
+export const WEB_DOCKERFILE_SHA256 = "sha256:5af3a0e1430bc73d50206223e686e3fa4cefd9eb467f9212477954ebdb39951e";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

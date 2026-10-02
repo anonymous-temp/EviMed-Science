@@ -1264,3 +1264,5 @@ export {
 export { decorateEngineToolContext, ENGINE_EXECUTION_CONTEXT } from './src/engineContext.mjs'
 export { parsePersonalSkill, createPersonalSkillProvider, validatePersonalSkillRoot } from './src/personalSkills.mjs'
 export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer } from './src/extensionPreparation.mjs'
+
+export { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from './src/scopedSkillCatalogue.mjs'

@@ -79,8 +79,9 @@ function matches(text: string, query: string) {
 export function MemoryHubPage() {
   const [params, setParams] = useSearchParams();
   const highlightId = params.get("record");
+  const highlightMethodId = params.get("method");
   const projects = useProjectStore((state) => state.projects);
-  const [filter, setFilter] = useState<MemoryFilter>("all");
+  const [filter, setFilter] = useState<MemoryFilter>(highlightMethodId ? "methods" : "all");
   // Which project 「项目」 narrows to; null is every project.
   const [projectChoice, setProjectChoice] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -133,6 +134,9 @@ export function MemoryHubPage() {
   const methods: WebMethod[] = useMemo(() => data?.methods?.items ?? [], [data]);
   const entries: OwnCapsuleEntry[] = useMemo(() => data?.mine?.entries ?? [], [data]);
   const records: WebStructuredMemory[] = useMemo(() => data?.profile.records ?? [], [data]);
+  useEffect(() => {
+    if (highlightMethodId) { setFilter("methods"); setProjectChoice(null); setQuery(""); }
+  }, [highlightMethodId]);
 
   const text = query.trim();
   // A run summary names a conversation and is not a memory, searched or not.
@@ -196,7 +200,7 @@ export function MemoryHubPage() {
     ? <MemoryRecordRow key={rowKey(row)} record={row.record} origin={label(row)} highlighted={row.record.id === highlightId}
         formerly={formerlyOf.get(row.record.id) ?? []} onChanged={reload} />
     : row.kind === "method"
-      ? <MethodRow key={rowKey(row)} method={row.method} onChanged={reload} />
+      ? <MethodRow key={rowKey(row)} method={row.method} highlighted={row.method.id === highlightMethodId} onChanged={reload} />
       : <CapsuleEntryRow key={rowKey(row)} entry={row.entry} origin={label(row)} onChanged={reload} />;
 
   const loading = data === null;
@@ -235,6 +239,7 @@ export function MemoryHubPage() {
       )}
       {searchFailed && <LoadError className="mt-4" message="搜索没有完成。" onRetry={() => setSearchAttempt((value) => value + 1)} />}
       <div className="mt-4">
+        {highlightMethodId && !loading && !methods.some(method => method.id === highlightMethodId) && <p role="status" className="mb-4 text-ui text-text-2">{data?.methods === null ? "暂时读不到已学方法，请重试。" : "当前列表中没有找到这条做法。"}</p>}
         {loading || (searching && !found) ? (!failed && <RunsSkeleton filter={false} />)
           : rows.length === 0 ? (
             <EmptyState icon={Brain} title={text ? "没有找到" : records.length + methods.length + entries.length === 0 ? "还没有记忆" : "暂无"} />

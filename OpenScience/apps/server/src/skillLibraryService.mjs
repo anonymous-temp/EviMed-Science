@@ -3,6 +3,7 @@ import { canonicalJson, personalSkillName, validateSkillWriteRequest } from "@ev
 import { ProductDocuments } from "./productStore.mjs";
 import { migrateProductStore, productId, productInteger, productPayload } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
+import { nativeSkillSnapshotArchive } from "./nativeSkillCatalogue.mjs";
 
 /** @param {string} value */
 const sha256 = value => createHash("sha256").update(value).digest("hex");
@@ -31,14 +32,16 @@ function summary(row) {
 
 /** Personal instructions are account records, never executable authority or a copy of a learned method. */
 export class SkillLibraryService {
-  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,onRemoved?:any}} [options] */
-  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, onRemoved = null } = {}) {
+  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,nativeCatalogue?:any,repositoryPreview?:any,onRemoved?:any}} [options] */
+  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, nativeCatalogue = null, repositoryPreview = null, onRemoved = null } = {}) {
     this.database = database;
     this.documents = documents;
     this.artifacts = artifacts;
     this.projectAccess = projectAccess;
     this.dispatchInvocation = invoke;
     this.learnedMethods = learnedMethods;
+    this.nativeCatalogue = nativeCatalogue;
+    this.repositoryPreview = repositoryPreview;
     this.onRemoved = onRemoved;
   }
 
@@ -120,6 +123,7 @@ export class SkillLibraryService {
     if (prepared?.nativeName !== nativeName || prepared?.digest !== digest) {
       throw new HttpError(502, "extension_contract_invalid", "Native skill validation did not match the saved content.");
     }
+    if (verifySource) await verifySource();
     return this.documents.put(user.id, "skill", skillId, payload, { expectedRevision: content.expectedRevision, transactionClient: client });
     };
     if (!this.database) return save(null);
@@ -162,6 +166,82 @@ export class SkillLibraryService {
   async upload(user, kind, bytes) {
     if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");
     return this.withLibraryAccount(user, () => this.artifacts.upload(user, kind, bytes));
+  }
+  /** Repository acquisition is a separate trusted controlled-egress adapter; no caller host path or token.
+   * @param {any} user @param {any} body */
+  async previewRepository(user, body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['repository', 'commit', 'subdirectory'].includes(key))
+      || !Object.hasOwn(body, 'repository') || !Object.hasOwn(body, 'commit')) throw new HttpError(400, 'extension_contract_invalid', 'Invalid repository import.');
+    if (!this.repositoryPreview) throw new HttpError(503, 'product_state_unavailable', 'Repository skill import is unavailable.');
+    return this.withLibraryAccount(user, () => this.repositoryPreview(user, body));
+  }
+  /** The catalogue is observed from the actual current native registry. Learned records stay in their original store.
+   * @param {any} user @param {any} project @param {string|null} sessionId */
+  async effectiveCatalogue(user, project, sessionId) {
+    return this.withLibraryAccount(user, async () => {
+      await this.requireProject(user, project);
+      const catalogue = this.nativeCatalogue ? await this.nativeCatalogue.list(user, project, sessionId)
+        : { state: 'unavailable', runtimeGeneration: null, sessionId, items: [], findings: [{ code: 'skill_catalogue_unavailable' }] };
+      const items = [];
+      for (const item of catalogue.items) items.push(await this.personalCatalogueRef(user, project, item));
+      const observed = this.learnedMethods ? await this.learnedMethods(user) : [];
+      const rows = Array.isArray(observed) ? observed : observed?.items ?? [];
+      const learnedMethods = rows.slice(0, 50).filter(row => typeof row.id === 'string').map(row => ({ id: row.id,
+        title: String(row.payload?.title ?? row.title ?? row.id).slice(0, 240), href: '/app/memory?method=' + encodeURIComponent(row.id) }));
+      if (catalogue.state === 'available') await this.nativeCatalogue.assertCurrent(user, project, sessionId, catalogue.runtimeGeneration);
+      return { ...catalogue, items, learnedMethods };
+    });
+  }
+  /** Labels refer to the mounted historical revision, not a newer library edit. @param {any} user @param {any} project @param {any} item */
+  async personalCatalogueRef(user, project, item) {
+    if (item.source !== 'personal' || !this.nativeCatalogue) return item;
+    const pin = this.nativeCatalogue.runtime.runtimePersonalSkillPins(project).find(entry => entry.nativeName === item.name);
+    if (!pin) return item;
+    try { const row = await this.atRevision(user, pin.skillId, pin.revision);
+      if (row.payload.digest !== pin.digest) return item;
+      return { ...item, personalRef: { skillId: row.id, revision: pin.revision, title: row.payload.title } };
+    } catch (error) { if (error?.status !== 404) throw error; return item; }
+  }
+  /** @param {any} user @param {any} project @param {any} body */
+  async effectiveDetail(user, project, body) {
+    const input = exact(body, ['sessionId', 'key', 'expectedRuntimeGeneration']);
+    return this.withLibraryAccount(user, async () => {
+      await this.requireProject(user, project);
+      if (!this.nativeCatalogue) throw new HttpError(503, 'product_state_unavailable', 'The native skill catalogue is unavailable.');
+      const detail = await this.nativeCatalogue.read(user, project, input);
+      const skill = await this.personalCatalogueRef(user, project, detail.skill);
+      await this.nativeCatalogue.assertCurrent(user, project, input.sessionId, detail.runtimeGeneration);
+      return { ...detail, skill };
+    });
+  }
+  /** Real source bytes pass the existing archive importer and native validator, under the captured account lifetime.
+   * Idempotency receipts contain only a record pointer, never another method body or executable authority.
+   * @param {any} user @param {any} project @param {any} body */
+  async duplicateNative(user, project, body) {
+    const input = exact(body, ['sessionId', 'key', 'title', 'idempotencyKey', 'expectedRuntimeGeneration']);productId(input.idempotencyKey);
+    if (typeof input.title !== 'string' || !input.title.trim() || Buffer.byteLength(input.title) > 240) throw new HttpError(400, 'extension_contract_invalid', 'Invalid skill title.');
+    return this.withLibraryAccount(user, async client => {
+      await this.requireProject(user, project);
+      if (!this.nativeCatalogue || !this.artifacts) throw new HttpError(503, 'product_state_unavailable', 'Native skill duplication is unavailable.');
+      const operationId = `skill-copy:${sha256(input.idempotencyKey)}`, requestDigest = sha256(canonicalJson({ projectId: project.id, ...input }));
+      if (client) await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`skill-library-account:${user.id}`]);
+      const existing = await this.documents.get(user.id, 'extension-resource', operationId);
+      if (existing) {
+        if (existing.payload.requestDigest !== requestDigest) throw new HttpError(409, 'product_revision_conflict', 'This copy request already names different content.');
+        return this.get(user, existing.payload.skillId);
+      }
+      const snapshot = await this.nativeCatalogue.read(user, project, { sessionId: input.sessionId, key: input.key, expectedRuntimeGeneration: input.expectedRuntimeGeneration }, true);
+      const archive = await nativeSkillSnapshotArchive(snapshot.skill.entries), uploaded = await this.upload(user, 'tar-gzip', archive);
+      const skillId = `skill:${randomUUID()}`, nativeName = personalSkillName(user.id, skillId, sha256);
+      try {
+        const imported = await this.artifacts.import(user, { resourceId: uploaded.resourceId, skillId, nativeName });
+        const content = writeRequest({ expectedRevision: 0, title: input.title, description: imported.description, instructions: imported.instructions });
+        const row = await this.saveContent(user, skillId, content, imported.resources, imported,
+          () => this.nativeCatalogue.assertCurrent(user, project, input.sessionId, input.expectedRuntimeGeneration));
+        await this.documents.put(user.id, 'extension-resource', operationId, { schemaVersion: 1, kind: 'skill-copy', requestDigest, skillId: row.id }, { expectedRevision: 0, transactionClient: client });
+        return row;
+      } finally { await this.removeUpload(user, uploaded.resourceId); }
+    });
   }
   /** Deleting raw input cannot remove any adopted revision. @param {any} user @param {string} resourceId */
   async removeUpload(user, resourceId) {

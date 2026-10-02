@@ -144,9 +144,10 @@ export class ExtensionService {
     let acknowledgment;
     try{acknowledgment=await this.cancelPreparation(structuredClone(captured.identity));}
     catch{throw new HttpError(503,'product_state_unavailable','Preparation stop could not be confirmed.');}
-    if(acknowledgment?.settled!==true)throw new HttpError(503,'product_state_unavailable','Preparation execution is still unconfirmed.');
-    if(Object.keys(captured.identity).some(key=>!Object.hasOwn(acknowledgment,key)))throw new HttpError(409,'product_revision_conflict','The cancellation acknowledgment is incomplete.');
-    const received=Object.fromEntries(Object.keys(captured.identity).map(key=>[key,acknowledgment[key]]));
+    if(acknowledgment?.settled!==true||acknowledgment.joined!==true||acknowledgment.physicallyAbsent!==true)throw new HttpError(503,'product_state_unavailable','Preparation execution is still unconfirmed.');
+    const acknowledgedIdentity=acknowledgment.identity??acknowledgment;
+    if(Object.keys(captured.identity).some(key=>!Object.hasOwn(acknowledgedIdentity,key)))throw new HttpError(409,'product_revision_conflict','The cancellation acknowledgment is incomplete.');
+    const received=Object.fromEntries(Object.keys(captured.identity).map(key=>[key,acknowledgedIdentity[key]]));
     if(canonicalJson(received)!==canonicalJson(captured.identity))throw new HttpError(409,'product_revision_conflict','The cancellation acknowledgment names another attempt.');
     await this.database.transaction(async client=>{
       const current=await this.cancellationSnapshot(user,id,client);
