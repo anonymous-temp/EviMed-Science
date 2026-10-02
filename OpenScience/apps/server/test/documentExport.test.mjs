@@ -24,6 +24,9 @@ test('render plan exposes only input and output with bounded offline isolation',
   assert.ok(plan.args.includes('--security-opt=no-new-privileges'));
   assert.equal(plan.args.filter(x => x === '--mount').length, 2);
   assert.ok(plan.args.some(x => x.includes('/input,readonly')));
+  const env=Object.fromEntries(plan.args.filter((value,index)=>plan.args[index-1]==='--env').map(value=>value.split('=')));
+  for(const key of ['XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME'])assert.ok(env[key]?.startsWith('/tmp/'));
+  for(const target of ['/workspace','/runtime'])assert.ok(plan.args.includes(`${target}:ro,noexec,nosuid,nodev,size=1m`));
   assert.ok(plan.args.includes('python3'));
   assert.ok(!plan.args.join(' ').match(/credentials|docker.sock|data-plane|remote.mux/));
   assert.throws(() => documentRenderPlan(config, { ownerId: '../alice', projectId: 'p1', exportId: 'e1', attemptId: 'a1' }));
