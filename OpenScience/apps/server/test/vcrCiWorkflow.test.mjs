@@ -232,9 +232,19 @@ test("no machine path is committed in the module's scripts, its CI or the runner
     "项目代码/vcr-engine/tests/run_all.R",
     "项目代码/vcr-engine/tests/service/test_service.py",
   ];
-  for (const name of await readdir(path.join(openScience, "scripts/vcr"))) {
-    if (name !== "__pycache__") files.push(`OpenScience/scripts/vcr/${name}`);
+  async function collectScripts(directory) {
+    for (const entry of await readdir(path.join(repoRoot, directory), { withFileTypes: true })) {
+      if (entry.name === "__pycache__") continue;
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await collectScripts(file);
+      else {
+        assert.ok(entry.isFile(), `the script scan requires a regular file: ${file}`);
+        files.push(file);
+      }
+    }
   }
+  await collectScripts("OpenScience/scripts/vcr");
+  assert.ok(files.includes(path.join("OpenScience", "scripts/vcr/test/live-acceptance.test.mjs")), "the nested acceptance test is scanned");
   assert.ok(files.length >= 12, "the scan named its files");
   const found = [];
   for (const file of files) {
