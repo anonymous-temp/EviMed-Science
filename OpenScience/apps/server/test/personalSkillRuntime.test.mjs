@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { RuntimeManager } from '../src/runtimeManager.mjs'
+import { RuntimeManager, DockerRuntimeProvider } from '../src/runtimeManager.mjs'
 import { runtimeEnvironment } from '../src/dshProfilePatch.mjs'
 
 test('personal source pins remain on the live generation and native invoke uses one admitted slash prompt', async () => {
@@ -44,4 +44,20 @@ test('cold preparation exceptions select baseline without consulting retired las
   manager.provider = { preflight: async () => {}, prepare: async (_project, args) => { observed = args.personalSkillGeneration; throw new Error('provider boundary fixture') } }
   await assert.rejects(manager.startKernel(project), /provider boundary fixture/u)
   assert.equal(observed, null)
+})
+
+
+test('hosted personal image verification stays behind the controller and refuses an image mismatch', async () => {
+  const expected = 'sha256:' + 'a'.repeat(64)
+  let actual = expected, calls = 0
+  const provider = new DockerRuntimeProvider({ config: { runtimeContainerBin: '/no-host-docker-access' }, runtimeController: {},
+    inspectRuntimeImage: async () => { calls++; return { imageId: actual } } })
+  await provider.assertPersonalImage(expected)
+  assert.equal(calls, 1)
+  actual = 'sha256:' + 'b'.repeat(64)
+  await assert.rejects(provider.assertPersonalImage(expected), { code: 'runtime_image_unavailable' })
+  provider.manager.inspectRuntimeImage = async () => { throw new Error('controller unavailable') }
+  await assert.rejects(provider.assertPersonalImage(expected), /controller unavailable/u)
+  const direct = new DockerRuntimeProvider({ config: { runtimeContainerBin: '/no-host-docker-access' } })
+  await assert.rejects(direct.assertPersonalImage(expected), { code: 'runtime_image_unavailable' })
 })

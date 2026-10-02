@@ -3011,6 +3011,19 @@ export class DockerRuntimeProvider {
     }
   }
 
+  /** The web process has no Docker socket in a hosted stack. The controller
+   * verifies the configured immutable image and rechecks the selected pin at launch.
+   * @param {string} imageId */
+  async assertPersonalImage(imageId) {
+    if (this.manager.runtimeController) {
+      if ((await this.manager.inspectRuntimeImage())?.imageId !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
+      return;
+    }
+    const checked = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', imageId],
+      { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+    if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
+  }
+
   /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, extensionGeneration?:any }} input */
   async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, extensionGeneration = null }) {
     const manager = this.manager;
@@ -3022,11 +3035,7 @@ export class DockerRuntimeProvider {
     if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
-    if (personal) {
-      const checked = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest],
-        { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
-      if (checked.status !== 0 || checked.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
-    }
+    if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
