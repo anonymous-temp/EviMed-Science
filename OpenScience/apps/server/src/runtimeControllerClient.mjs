@@ -184,7 +184,7 @@ export class RuntimeControllerClient {
       return await this.request("POST", "/v1/skills/validate", reference,
         // Native stdout retains its 512 KiB cap; this bounded headroom covers
         // the controller's JSON data envelope around a valid near-limit result.
-        { signal, timeoutMs: 45000, maxResponseBytes: 512 * 1024 + 1024, onDispatch: () => { dispatched = true; } });
+        { signal, timeoutMs: 60000, maxResponseBytes: 512 * 1024 + 1024, onDispatch: () => { dispatched = true; } });
     } catch (error) {
       if (dispatched && (signal?.aborted || error?.name === "AbortError"
         || ["runtime_controller_timeout", "runtime_controller_unavailable", "runtime_controller_response_too_large"].includes(error?.code))) {

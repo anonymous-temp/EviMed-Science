@@ -40,12 +40,12 @@ if(args[0]==='create'){
  try{fs.writeFileSync(state,JSON.stringify({Id:'d'.repeat(64),Config:{Labels:labels,User:'10001:10001'},Image:${JSON.stringify(imageId)},State:{Running:false},
  HostConfig:{Tmpfs:{'/workspace':'ro,noexec,nosuid,nodev,size=1m','/runtime':'ro,noexec,nosuid,nodev,size=1m'},ReadonlyRootfs:true,NetworkMode:'none',Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Mounts:[{Type:'bind',Source:source,Target:'/input',ReadOnly:true}]},
  Mounts:[{Destination:'/input',RW:false}]}),{flag:'wx'});}catch{process.exit(1);}
- if(behavior==='uncertain'){setTimeout(()=>{},10000);}else{console.log('d'.repeat(64));process.exit(0);}
+ if(behavior==='gated-create'){setInterval(()=>{if(fs.existsSync(mode+'.release')){console.log('d'.repeat(64));process.exit(0);}},10);}else if(behavior==='uncertain'){setTimeout(()=>{},10000);}else{console.log('d'.repeat(64));process.exit(0);}
 }
 if(args[0]==='rm'){if(behavior==='rm-fails')process.exit(1);fs.rmSync(state,{force:true});process.exit(0);}
 if(args[0]==='start'){
  fs.writeFileSync(started,String(process.pid));
- if(behavior==='ok'){console.log(${JSON.stringify(JSON.stringify(output))});process.exit(0);}
+ if(behavior==='ok'||behavior==='gated-create'){console.log(${JSON.stringify(JSON.stringify(output))});process.exit(0);}
  if(behavior==='rewrite'){
   const capturedArgs=JSON.parse(fs.readFileSync(captured,'utf8'));
   const mount=capturedArgs[capturedArgs.indexOf('--mount')+1];
@@ -339,4 +339,33 @@ test('the isolated validator resolves through the actual runtime image seed, nev
   assert.ok(seed?.startsWith('/opt/evimed/'))
   assert.ok(script.includes(`createRequire('${seed}/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json')`))
   assert.ok(!script.includes('/usr/local/share/evimed/dsh-home-seed'))
+})
+
+
+test('container creation yields the controller event loop while awaiting its owned acknowledgement', {timeout:5000}, async t=>{
+  const f=await fixture(t)
+  await fs.writeFile(f.mode,'gated-create')
+  let released=false
+  const timer=setInterval(()=>{void fs.stat(f.captured).then(async()=>{if(released)return;released=true;clearInterval(timer);await fs.writeFile(f.mode+'.release','owned acknowledgement may finish');},()=>{});},10)
+  t.after(()=>clearInterval(timer))
+  assert.deepEqual(await f.controller.validate(f.reference),output)
+  assert.equal(released,true)
+})
+
+
+test('cancellation during create acknowledgement joins the owned container without starting it', {timeout:5000}, async t=>{
+  const f=await fixture(t),abort=new AbortController()
+  await fs.writeFile(f.mode,'gated-create')
+  const running=f.controller.validate(f.reference,abort.signal)
+  const rejected=assert.rejects(running,{code:'extension_contract_invalid'})
+  for(let attempt=0;attempt<200;attempt++){
+    if(await fs.stat(f.captured).then(()=>true,()=>false))break
+    await new Promise(resolve=>setTimeout(resolve,5))
+  }
+  await fs.stat(f.captured)
+  abort.abort()
+  await fs.writeFile(f.mode+'.release','return owned ID after cancellation')
+  await rejected
+  await assert.rejects(fs.stat(f.started),{code:'ENOENT'})
+  await assert.rejects(fs.stat(f.state),{code:'ENOENT'})
 })

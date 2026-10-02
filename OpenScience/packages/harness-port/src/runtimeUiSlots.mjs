@@ -106,6 +106,8 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // table.
   'conversation.composer.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.
+  'conversation.composer.bar': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
+  'conversation.input.left': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The transcript: the `chat` view's children table. `assistant-step` is
