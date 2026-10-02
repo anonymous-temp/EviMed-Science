@@ -191,3 +191,11 @@ test('maintenance timer start is idempotent and pause stops it synchronously eve
  const failing=fixture(options);await failing.service.open(scope,request);const paused=failing.service.pause();assert.equal(failing.egresses[0].closed,true);await assert.rejects(paused,{code:'managed_browser_unavailable'});
  await assert.rejects(failing.service.open(scope,{...request,tabId:'blocked'}),{code:'managed_browser_unavailable'});options.closeFailure=false;await failing.service.pause();assert.equal(failing.contexts[0].closed,true);await failing.service.close();
 });
+
+
+test('history operations wait for commit while new navigation and reload keep their document readiness contract',async t=>{
+ const f=fixture();t.after(()=>f.service.close());const opened=await f.service.open(scope,request),page=f.contexts[0].page,base={id:opened.id,sessionId:request.sessionId,tabId:request.tabId};const waits=[];
+ for(const method of ['goto','goBack','goForward','reload']){const original=page[method];page[method]=async(...args)=>{waits.push({method,options:args.at(-1)});return original(...args);};}
+ for(const [index,command]of [{type:'navigate',url:'https://public.example.org/first'},{type:'navigate',url:'https://public.example.org/second'},{type:'back'},{type:'forward'},{type:'reload'}].entries())assert.equal((await f.service.command(scope,{...base,sequence:index+1,command})).state.error,null);
+ assert.deepEqual(waits.map(value=>[value.method,value.options.waitUntil,value.options.timeout]),[['goto','domcontentloaded',500],['goto','domcontentloaded',500],['goBack','commit',500],['goForward','commit',500],['reload','domcontentloaded',500]]);
+});

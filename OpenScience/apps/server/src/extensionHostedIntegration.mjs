@@ -35,6 +35,12 @@ export function createHostedExtensionIntegration({ config, database, store, agen
     identities: currentIdentity, proofAuthority: ({ entry, identity }) => qualification.authority(entry, { identity }),
   });
   extensions.proofAuthority = entry => qualification.authority(entry);
+  return composeExtensionExecution({config,database,store,agentRuns,runtimeManager,controller,extensions,plugins,pluginWorker,deployment,resolveProject,audit},{qualification,generations});
+}
+/** Shared execution composition; metadata always uses the genuine qualification reader.
+ * @param {any} dependencies @param {{qualification:any,generations:any}} services */
+export function composeExtensionExecution({config,database,store,agentRuns,runtimeManager,controller,extensions,pluginWorker,deployment,resolveProject,audit},{qualification,generations}) {
+  extensions.proofAuthority = entry => qualification.authority(entry);
   runtimeManager.extensionArtifacts = new Map(deployment.admittedDescriptors.map(item => [item.id, item]));
   runtimeManager.extensionGenerationResolver = async project => {
     const state = await generations.current(project), candidate = state?.payload.effective;

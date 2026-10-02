@@ -922,7 +922,8 @@ function clientAddress(req, config) {
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} overrides
  */
-export function createWebApiApp(overrides = {}) {
+export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
+  if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
@@ -2165,7 +2166,7 @@ export function createWebApiApp(overrides = {}) {
   // the two halves are a handoff, and a Map owned by one of them would read as
   // that one's private state.
   const preStopTranscripts = new PreStopTranscripts();
-  const runtimeManager = new RuntimeManager(config, {
+  const runtimeManager = runtimeManagerFactory(config, {
     agentRegistry,
     // Read the conversations while the container is still answering.
     //
@@ -2930,7 +2931,7 @@ export function createWebApiApp(overrides = {}) {
   runtimeManager.personalSkillGenerations = personalSkillGenerations;
   if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
     && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {
-    hostedExtensions = createHostedExtensionIntegration({ config, database: productDatabase, store, agentRuns, runtimeManager,
+    hostedExtensions = extensionIntegrationFactory({ config, database: productDatabase, store, agentRuns, runtimeManager,
       controller: skillController, extensions: extensionService, plugins: pluginService, pluginWorker: pluginApplyWorker,
       deployment: extensionDeployment, resolveProject: sourceProject,
       audit: (event, status, details) => securityAudit(config, event, status, details),
