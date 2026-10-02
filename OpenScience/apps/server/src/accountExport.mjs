@@ -5,6 +5,7 @@ import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
+import { EXTENSION_CUSTOMER_KINDS, EXTENSION_DERIVED_KINDS, exportExtensionAccountRow, exportPersonalSkillResources } from "./extensionAccountExport.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -16,7 +17,7 @@ const MAX_BYTES = 64 * 1024 * 1024;
 // all — they live in `@evimed/domain`'s price-list registry — and the export
 // carries the lists its own usage rows name, from there. See
 // `exportedPriceLists`.
-const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin"];
+const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin", ...EXTENSION_CUSTOMER_KINDS];
 const queries = [
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
@@ -162,7 +163,7 @@ export function exportedPriceLists(usageRows) {
  * user row stays shared-locked: account deletion locks it before removing files.
  * @param {any} database @param {any} user @param {Record<string,any>} config
  * @param {(snapshot:any) => Promise<any>} operation
- * @param {{maxRows?:number,maxBytes?:number}} limits */
+ * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
   if (!database) return operation(null);
   if (typeof user.accountCreatedAt !== "string" || !user.accountCreatedAt) {
@@ -188,7 +189,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     // in PRODUCT_KINDS but no product code reads or writes it, so a row under it
     // has no known customer meaning, and refusing the whole export over one
     // would be a 503 for something nothing in the product put there.
-    const unsupported = await client.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND NOT(kind=ANY($2::text[])) LIMIT 1", [user.id, [...customerKinds, "price-list"]]);
+    const unsupported = await client.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND NOT(kind=ANY($2::text[])) LIMIT 1", [user.id, [...customerKinds, "price-list", ...EXTENSION_DERIVED_KINDS]]);
     if (unsupported.rowCount) throw new HttpError(503, "account_export_unsupported_state", "Stored settings need a supported customer export shape.");
     const tables = {};
     let rows = 0;
@@ -203,6 +204,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
       if (key === "documents" || key === "revisions") tables[key] = tables[key].map(row => {
+        if (EXTENSION_CUSTOMER_KINDS.includes(row.kind)) return exportExtensionAccountRow(row);
         if (row.kind === "source") return { ...row, payload: projectSourceManifestRecord(row).payload };
         const sourceDerived = projectSourceDerivedRecord(row);
         if (sourceDerived) return { ...row, payload: sourceDerived };
@@ -227,6 +229,9 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents,
     };
+    const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,
+      rows: [...tables.documents, ...tables.revisions], maxBytes: Math.min(32 * 1024 * 1024, maxBytes) });
+    if (skillResources.resources.length) state.personalSkillResources = skillResources.resources;
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();
     return operation({ projects: tables.projects, data });

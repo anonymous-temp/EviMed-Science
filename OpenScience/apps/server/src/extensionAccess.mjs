@@ -47,16 +47,17 @@ export class ExtensionAccess {
       || (manage&&!['owner','editor'].includes(resolved.role)))throw new HttpError(404,'project_not_found','Project not found.');
     extensionIdentifier(resolved.project.userId);
     if(client) {
-      const present=await client.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE',[resolved.project.userId,id]);
+      const present=await client.query('SELECT id,created_at::text AS "projectCreatedAt" FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE',[resolved.project.userId,id]);
       if(!present.rows[0])throw new HttpError(404,'project_not_found','Project not found.');
+      return { ...resolved.project, projectCreatedAt: present.rows[0].projectCreatedAt };
     }
     return resolved.project;
   }
-  /** These references resolve only in the invoking actor's connection boundary. @param {any} user @param {any} values @param {{client?:any,project?:any}} options */
-  async connections(user,values,{client=null,project=null}={}) {
+  /** These references resolve only in the invoking actor's connection boundary. @param {any} user @param {any} values @param {{client?:any,project?:any,entry?:any}} options */
+  async connections(user,values,{client=null,project=null,entry=null}={}) {
     const refs=extensionArray(values,64).map(extensionIdentifier);
     if(new Set(refs).size!==refs.length)throw new HttpError(400,'extension_contract_invalid','Duplicate connection references.');
-    for(const ref of refs)if(!this.connectionAccess || !await this.connectionAccess(user,ref,{client,project}))throw new HttpError(403,'extension_access_denied','This connection is not authorized for this operation.');
+    for(const ref of refs)if(!this.connectionAccess || !await this.connectionAccess(user,ref,{client,project,entry}))throw new HttpError(403,'extension_access_denied','This connection is not authorized for this operation.');
     return refs;
   }
 }

@@ -8,6 +8,18 @@ import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
+import { ExtensionAccess } from "./extensionAccess.mjs";
+import { ExtensionService } from "./extensionService.mjs";
+import { createExtensionRoutes } from "./extensionRoutes.mjs";
+import { SkillLibraryService } from "./skillLibraryService.mjs";
+import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
+import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
+import { decodeSkillArchive } from "./skillArchive.mjs";
+import { ExtensionConnections } from "./extensionConnections.mjs";
+import { PersonalSkillGenerationService } from "./personalSkillGenerationService.mjs";
+import { PersonalSkillGenerationWorker } from "./personalSkillGenerationWorker.mjs";
+import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs";
+import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -895,8 +907,72 @@ export function createWebApiApp(overrides = {}) {
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
+  const extensionAccess = new ExtensionAccess({ store, connectionAccess: overrides.extensionConnectionAccess ?? null });
+  const extensionConnections = new ExtensionConnections({ credentials: connectorCredentials, access: extensionAccess,
+    adapters: overrides.extensionConnectionAdapters ?? new Map() });
+  if (!overrides.extensionConnectionAccess) extensionAccess.connectionAccess = (user, ref, scope) => extensionConnections.authorize(user, ref, scope);
+  const extensionService = productDatabase ? new ExtensionService(productDatabase, {
+    access: extensionAccess, catalogue: overrides.extensionCatalogue ?? [],
+    proofAuthority: overrides.extensionProofAuthority ?? null,
+    catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? "1970-01-01T00:00:00.000Z",
+    connectionList: (user, entry, projectId) => extensionConnections.list(user, entry, projectId),
+  }) : null;
+  const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes });
+  const skillRoot = path.join(config.dataDir, ".openscience", "skill-library");
+  const skillController = overrides.skillValidationController ?? new RuntimeControllerClient(config);
+  let skillStorageReady = false;
+  const skillArtifacts = productDatabase ? new SkillLibraryArtifacts({
+    root: skillRoot, decodeArchive: decodeSkillArchive,
+    sharedStorageRoot: path.join(config.dataDir, ".openscience", "personal-skill-generations"),
+    parseSkill: async (root, options) => {
+      if (!skillStorageReady) throw new HttpError(503, "product_state_unavailable", "Skill storage is unavailable.");
+      const relative = path.relative(skillRoot, root).split(path.sep).join("/");
+      const match = /^([a-f0-9]{64})\/(imports|packages)\/([a-f0-9]{64})$/.exec(relative);
+      if (!match) throw new HttpError(400, "extension_contract_invalid", "Invalid owned skill reference.");
+      return skillController.validatePersonalSkill({ ownerHash: match[1], kind: match[2], contentId: match[3], expectedName: options.expectedName ?? null }, { signal: options.signal });
+    },
+    withStorageAdmission: async (work, existingClient) => {
+      if (!skillStorageReady) throw new HttpError(503, "product_state_unavailable", "Skill storage is unavailable.");
+      const admit = async client => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["evimed-personal-skill-storage"]);
+        return work();
+      };
+      return existingClient ? admit(existingClient) : productDatabase.transaction(admit);
+    },
+  }) : null;
+  const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
+    artifacts: skillArtifacts,
+    projectAccess: async (user, project) => {
+      const current = await store.requireProject(user, project.id);
+      if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+    },
+    invoke: overrides.personalSkillInvocation ?? (input => {
+      if (config.runtimeMode !== "kernel") throw new HttpError(503, "product_state_unavailable", "Native skill invocation is unavailable.");
+      return runtimeManager.invokePersonalSkill(input);
+    }),
+    onRemoved: async (user, skillId) => {
+      if (config.runtimeMode !== "kernel") return;
+      const affected = await productDatabase.query(`SELECT project_id FROM evimed_product.documents
+        WHERE user_id=$1 AND kind='extension-defaults' AND id LIKE 'skills:project:%' AND deleted_at IS NULL
+        AND payload->'skills' @> $2::jsonb ORDER BY project_id LIMIT 1001`, [user.id, JSON.stringify([{ skillId }])]);
+      if (affected.rows.length > 1000) throw new HttpError(413, "project_scan_too_large", "Too many projects select this skill.");
+      for (const row of affected.rows) {
+        const project = await store.requireProject(user, row.project_id);
+        await pluginService.withAdmission(project, () => personalSkillGenerations.reconcile(user, project));
+      }
+    },
+  }) : null;
+  const skillLibraryRoutes = createSkillLibraryRoutes({ store, service: skillLibraryService, maxJsonBytes: config.maxJsonBytes,
+    saveProject: (user, project, input) => pluginService.withAdmission(project, () => productDatabase.transaction(async () => {
+      const selection = await skillLibraryService.saveProjectSelections(user, project, input);
+      if (config.runtimeMode !== "kernel") return selection;
+      const candidate = await personalSkillGenerations.reconcile(user, project);
+      return { ...selection, activation: { phase: "waiting", ...(candidate.waiting ? { code: "runtime_image_unavailable" } : {}) } };
+    })),
+  });
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
@@ -1203,7 +1279,9 @@ export function createWebApiApp(overrides = {}) {
   const capsuleService = productDocuments
     ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
-  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner }) : null;
+  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
+  }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
@@ -1562,6 +1640,10 @@ export function createWebApiApp(overrides = {}) {
     }
     const data = await store.createProject(user, id, name);
     const project = await store.requireProject(user, id);
+    if (skillLibraryService && !existing.some(item => item.id === id)) {
+      // Defaults snapshot only on actual creation. An optional method must never prevent ordinary research project creation.
+      await skillLibraryService.initializeProject(user, project).catch(() => { process.stderr.write("new-project personal skill defaults snapshot failed\n"); });
+    }
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
@@ -2040,10 +2122,12 @@ export function createWebApiApp(overrides = {}) {
     // slot to another project: the stop would close that run as cancelled.
     hasRunningRuns: async (project) => Boolean(agentRuns) && (await agentRuns.list(project)).some((run) => run.status === "running"),
     onRuntimeStart: (project, runtime) => {
-      runtimeEventPump.attach(project, runtime);
-      if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
-        void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
-      }
+      independentProductWork(() => {
+        runtimeEventPump.attach(project, runtime);
+        if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
+          void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
+        }
+      });
     },
   });
   runtimeManager.pluginService = pluginService;
@@ -2147,6 +2231,7 @@ export function createWebApiApp(overrides = {}) {
   });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
+    independentWork: independentProductWork,
     maxClinicalRepairAttempts: config.gateRepairRounds,
     model: `deepseek/${config.deepseekModel}`,
     // Both poll counts are periods of this interval. It was assumed rather than
@@ -2172,6 +2257,18 @@ export function createWebApiApp(overrides = {}) {
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimePersonalSkills: (project, observation = {}) => {
+      if (observation.nativeTurn) {
+        const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
+        // Recovered historical native turns predate this installation. Their
+        // logged skill content remains authoritative; today's pins are not
+        // retroactively attributed to an earlier conversation.
+        const observedAt = Date.parse(observation.startedAt ?? ""), launchedAt = Date.parse(runtime?.startedAt ?? "");
+        if (!Number.isFinite(observedAt) || !Number.isFinite(launchedAt) || observedAt < launchedAt) return null;
+      }
+      const generation = runtimeManager.runtimePersonalSkillGeneration(project);
+      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project) } : null;
+    },
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
     // restarted has to answer the same as when it was dispatched — otherwise the
@@ -2208,7 +2305,7 @@ export function createWebApiApp(overrides = {}) {
       // a fresh run's session becomes routable the moment the ledger knows
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
-      runTitles.consider(project, run);
+      independentProductWork(() => runTitles.consider(project, run));
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
@@ -2218,7 +2315,7 @@ export function createWebApiApp(overrides = {}) {
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
       if (geo && !isInternalProject(project.id)) {
-        geo.importDelivery(project, run).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
+        independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
     },
     // The run's own projection of itself — evidence counts and budget — read
@@ -2671,6 +2768,23 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  const personalSkillGenerations = productDatabase ? new PersonalSkillGenerationService(productDatabase, {
+    config, skillService: skillLibraryService, pluginService, jobs: productJobs,
+    resolveUser: async project => {
+      const user = await store.userById(project.userId);
+      if (!user) throw new HttpError(404, "project_not_found", "Project not found.");
+      const current = await store.requireProject(user, project.id);
+      if (current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+      return user;
+    },
+    identities: overrides.personalSkillRuntimeIdentities ?? (() => personalSkillRuntimeIdentity(runtimeManager)),
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+  }) : null;
+  runtimeManager.personalSkillGenerations = personalSkillGenerations;
+  const personalSkillWorker = personalSkillGenerations ? new PersonalSkillGenerationWorker({
+    service: personalSkillGenerations, runtime: runtimeManager, resolveProject: sourceProject,
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+  }) : null;
   const ownedContextDependencies = {
     learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
@@ -3678,6 +3792,7 @@ export function createWebApiApp(overrides = {}) {
           capsuleCleanupRun,
           autopilotScheduleRun,
           pluginApplyWorker?.running,
+          personalSkillWorker?.running,
           memoryIndexWorker?.status?.().running,
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
@@ -4055,6 +4170,8 @@ export function createWebApiApp(overrides = {}) {
       }
       if (await evimedAuthRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
+      if (await extensionRoutes(req, res)) return;
+      if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
@@ -5026,7 +5143,7 @@ export function createWebApiApp(overrides = {}) {
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        });
+        }, { skillArtifacts });
         return;
       }
 
@@ -5825,7 +5942,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -5855,6 +5972,7 @@ export function createWebApiApp(overrides = {}) {
     recurringWorkStarted = true;
     try {
       pluginApplyWorker?.start();
+      if (config.runtimeMode === "kernel") personalSkillWorker?.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
       kbIndex?.start();
@@ -5970,6 +6088,10 @@ export function createWebApiApp(overrides = {}) {
     vcrService: vcr?.service ?? null,
     capsuleService,
     pluginService,
+    extensionService,
+    skillLibraryService,
+    personalSkillGenerations,
+    personalSkillWorker,
     pluginApplyWorker,
     im,
     commands,
@@ -5985,6 +6107,12 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      if (skillArtifacts) {
+        try {
+          const directory = await openScopedDirectoryNoFollow(config.dataDir, skillRoot, { create: true });
+          await directory.handle.close(); skillStorageReady = true;
+        } catch { process.stderr.write("personal skill storage initialization failed\n"); }
+      }
       // Optional module: a failed migration is named here and turns the
       // `frontier` readiness check red; it does not stop the control plane.
       if (frontier) {
@@ -6028,6 +6156,7 @@ export function createWebApiApp(overrides = {}) {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
+      await personalSkillWorker?.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await kbIndex?.close();

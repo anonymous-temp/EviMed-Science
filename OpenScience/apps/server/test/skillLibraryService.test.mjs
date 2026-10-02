@@ -7,6 +7,7 @@ import { after, test } from "node:test";
 import { SkillLibraryService, renderPersonalSkill } from "../src/skillLibraryService.mjs";
 import { SkillLibraryArtifacts } from "../src/skillLibraryArtifacts.mjs";
 import { canonicalJson, personalSkillName } from "@evimed/domain";
+import { HttpError } from "../src/security.mjs";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
 const owner = { id: "skill-owner" }, other = { id: "skill-other" };
@@ -145,4 +146,19 @@ test("global capacity and physical headroom stop admission without replacing exi
   assert.deepEqual(await artifacts.upload(owner, "skill", Buffer.alloc(1000, 1)), saved);
   const noRoom = new SkillLibraryArtifacts({ root, parseSkill: null, minFreeBytes: Number.MAX_SAFE_INTEGER });
   await assert.rejects(noRoom.upload(other, "skill", Buffer.from("new")), { code: "extension_storage_capacity" });
+});
+test("a missing validation executor is unavailable, not an invented malformed skill", async () => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "evimed-skill-unavailable-"))); roots.push(root);
+  const artifacts = new SkillLibraryArtifacts({ root, parseSkill: async () => { throw new HttpError(503, "runtime_controller_unavailable", "Private diagnostic."); } });
+  await assert.rejects(artifacts.parse(root, {}), { code: "product_state_unavailable", status: 503 });
+});
+
+test("library writes count existing immutable generations against the same finite global budget", async () => {
+  const base = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "evimed-shared-skill-quota-"))); roots.push(base);
+  const root = path.join(base, "library"), sharedStorageRoot = path.join(base, "generations");
+  await fs.mkdir(root); await fs.mkdir(sharedStorageRoot); await fs.writeFile(path.join(sharedStorageRoot, "existing"), Buffer.alloc(900));
+  const artifacts = new SkillLibraryArtifacts({ root, sharedStorageRoot, parseSkill: null, maxOwnerBytes: 10000, maxGlobalBytes: 1000, minFreeBytes: 0 });
+  await assert.rejects(artifacts.upload(owner, "skill", Buffer.alloc(200)), { code: "extension_storage_capacity" });
+  assert.equal((await fs.stat(path.join(sharedStorageRoot, "existing"))).size, 900);
+  assert.throws(() => new SkillLibraryArtifacts({ root, sharedStorageRoot: root, parseSkill: null }), /disjoint/);
 });

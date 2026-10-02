@@ -14,18 +14,36 @@ import { generateCapsuleIdentity } from "../src/capsuleContainer.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
+import { removePrivateExtensionFiles } from "../src/extensionPrivateCleanup.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
 const run=promisify(execFile);
 const repoRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../../..");
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??"";
 if(url){const parsed=new URL(url);assert.ok(["127.0.0.1","localhost"].includes(parsed.hostname));assert.match(parsed.pathname,/evimed_test/);}
 const options={skip:!url};const password="test-only-lifecycle-passphrase";
 let root,db,documents,capsules,identities,transfers;const users=[];
-before(async()=>{if(!url)return;root=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-lifecycle-"));db=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:6,databaseConnectionTimeoutMs:2000});await migrateResearchMemory(db);documents=new ProductDocuments(db);capsules=new CapsuleService(documents);identities=new CapsuleIdentityStore(root);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:root});});
+before(async()=>{if(!url)return;root=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-lifecycle-"));db=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:6,databaseConnectionTimeoutMs:2000});await migrateResearchMemory(db);await migrateProductStore(db);documents=new ProductDocuments(db);capsules=new CapsuleService(documents);identities=new CapsuleIdentityStore(root);transfers=new CapsuleTransferService({documents,capsules,identities,dataDir:root});});
 after(async()=>{if(db){await db.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])",[users]);await db.close();}if(root)await fs.rm(root,{recursive:true,force:true});});
 async function account(){const id=`lifecycle_${randomUUID()}`;users.push(id);await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Lifecycle fixture','development')",[id]);return id;}
 async function source(owner){const capsule=await capsules.create(owner,{title:"Lifecycle methods"});await capsules.addEntry(owner,capsule.id,{factKind:"method_preference",layer:"methods",content:"Retain study uncertainty."});return capsule;}
 async function deleteOwner(owner){await db.transaction(async client=>{await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`evimed-user:${owner}`]);await transfers.prepareAccountDeletion(owner,client);await client.query("DELETE FROM evimed_control.users WHERE id=$1",[owner]);});return transfers.finishAccountDeletion(owner);}
 function deferred(){let resolve;const promise=new Promise(done=>{resolve=done;});return{promise,resolve};}
+
+test("durable account cleanup includes private skill roots and retries failure without purging a live account",options,async()=>{
+  const owner=await account();const hash=createHash("sha256").update(owner).digest("hex");
+  const owned=path.join(root,".openscience","skill-library",hash,"packages");
+  await fs.mkdir(owned,{recursive:true});await fs.writeFile(path.join(owned,"source"),"private method");
+  let fail=true,calls=0;
+  const service=new CapsuleTransferService({documents,capsules,identities:new CapsuleIdentityStore(root),dataDir:root,
+    privateAccountCleanup:async id=>{calls++;if(fail)throw new Error("test-only-cleanup-failure");await removePrivateExtensionFiles(root,id);}});
+  await assert.rejects(db.transaction(async client=>{await service.prepareAccountDeletion(owner,client);throw new Error("test-only-rollback");}));
+  await service.recoverPendingDeletions();assert.equal(calls,0);assert.equal(await fs.readFile(path.join(owned,"source"),"utf8"),"private method");
+  await db.transaction(async client=>{await service.prepareAccountDeletion(owner,client);await client.query("DELETE FROM evimed_control.users WHERE id=$1",[owner]);});
+  await assert.rejects(service.finishAccountDeletion(owner),{code:"capsule_cleanup_pending"});assert.equal(calls,1);
+  fail=false;const recovered=await service.recoverPendingDeletions();assert.equal(recovered.completed,1);
+  await assert.rejects(fs.stat(owned),{code:"ENOENT"});
+  await service.finishAccountDeletion(owner);assert.equal(calls,2,"completed tombstones do not repeat cleanup");
+});
 
 test("account deletion removes private keys and ciphertext, revokes old envelopes, and preserves imported copies",options,async()=>{
   const owner=await account(),recipient=await account(),other=await account();

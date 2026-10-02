@@ -29,10 +29,13 @@ function digestHex(value) {
 
 /** Private content-addressed artifacts. No public handler accepts a path, owner or filesystem root. */
 export class SkillLibraryArtifacts {
-  /** Admission callback takes a deployment-wide PostgreSQL advisory lock across processes. Limits are server-only. @param {{root:string,parseSkill:any,resolveImport?:any,decodeArchive?:any,withStorageAdmission?:any,maxOwnerBytes?:number,maxGlobalBytes?:number,minFreeBytes?:number}} options */
+  /** Admission callback takes a deployment-wide PostgreSQL advisory lock across processes. Limits are server-only. @param {{root:string,parseSkill:any,resolveImport?:any,decodeArchive?:any,withStorageAdmission?:any,sharedStorageRoot?:string,maxOwnerBytes?:number,maxGlobalBytes?:number,minFreeBytes?:number}} options */
   constructor({ root, parseSkill, resolveImport = null, decodeArchive = null, withStorageAdmission = null,
-    maxOwnerBytes = 128 * 1024 * 1024, maxGlobalBytes = 1024 * 1024 * 1024, minFreeBytes = 512 * 1024 * 1024 }) {
+    sharedStorageRoot = null, maxOwnerBytes = 128 * 1024 * 1024, maxGlobalBytes = 1024 * 1024 * 1024, minFreeBytes = 512 * 1024 * 1024 }) {
     this.root = path.resolve(root);
+    this.sharedStorageRoot = sharedStorageRoot == null ? null : path.resolve(sharedStorageRoot);
+    if (this.sharedStorageRoot && (this.sharedStorageRoot === this.root || this.sharedStorageRoot.startsWith(this.root + path.sep)
+      || this.root.startsWith(this.sharedStorageRoot + path.sep))) throw new Error("Shared skill storage roots must be disjoint.");
     this.parseSkill = parseSkill;
     this.resolveImport = resolveImport;
     this.decodeArchive = decodeArchive;
@@ -60,7 +63,11 @@ export class SkillLibraryArtifacts {
       await directory.handle.close();
       const size = Buffer.byteLength(bytes);
       await assertProjectCapacity({ baseDir: this.ownerRoot(user), maxBytes: this.maxOwnerBytes }, target, size, { maxProjectUsageScanEntries: 20000 });
-      const used = await directorySize(this.root, { maxEntries: 50000 });
+      const companionBytes = this.sharedStorageRoot ? await directorySize(this.sharedStorageRoot, { maxEntries: 50000 }).catch(error => {
+        if (["ENOENT", "file_not_found"].includes(error.code)) return 0;
+        throw error;
+      }) : 0;
+      const used = await directorySize(this.root, { maxEntries: 50000 }) + companionBytes;
       const disk = await fs.statfs(this.root);
       if (used + size > this.maxGlobalBytes || disk.bavail * disk.bsize < size + this.minFreeBytes) {
         throw new HttpError(503, "extension_storage_capacity", "Skill preparation is waiting for storage space.");
@@ -278,7 +285,10 @@ export class SkillLibraryArtifacts {
   async parse(root, options) {
     if (typeof this.parseSkill !== "function") throw new HttpError(503, "product_state_unavailable", "Native skill validation is unavailable.");
     try { return await this.parseSkill(root, options); }
-    catch { throw new HttpError(400, "extension_contract_invalid", "The native skill format is invalid."); }
+    catch (error) {
+      if (error instanceof HttpError && error.status >= 500) throw new HttpError(503, "product_state_unavailable", "Native skill validation is unavailable.");
+      throw new HttpError(400, "extension_contract_invalid", "The native skill format is invalid.");
+    }
   }
   /** Trusted controller materialization revalidates the manifest before mounting a read-only root. @param {any} user @param {any} input */
   async preparedRoot(user, { nativeName, digest, resources }) {

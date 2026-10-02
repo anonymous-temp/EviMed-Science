@@ -11,10 +11,11 @@ const digest=value=>`sha256:${hash(canonicalJson(value))}`;
 const RESERVED=/^(?:ownerid|userid|role|qualified|proof|apikey|token|secret|password|credentials|hostpath|env|cmd|command|url|baseurl|endpoint|path)$/i;
 /** Persistent metadata only. Native installation, qualification authority and activation are separate trusted workers. */
 export class ExtensionService {
-  /** @param {any} database @param {{catalogue?:any[],access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,catalogueGeneratedAt?:string}} options */
-  constructor(database,{catalogue=[],access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z'}={}) {
+  /** @param {any} database @param {{catalogue?:any[],access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,connectionList?:any,catalogueGeneratedAt?:string}} options */
+  constructor(database,{catalogue=[],access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,connectionList=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z'}={}) {
     this.database=database;this.documents=new ProductDocuments(database);this.jobs=new ProductJobs(database);this.access=access;
     this.proofAuthority=proofAuthority;this.cancelPreparation=cancelPreparation;this.catalogueGeneratedAt=catalogueGeneratedAt;
+    this.connectionList=connectionList;
     this.entries=new Map();
     for(const source of catalogue) {
       const row=structuredClone(source);extensionIdentifier(row.id);canonicalExtensionCoordinate(row.coordinate);
@@ -47,6 +48,13 @@ export class ExtensionService {
       coordinate:entry.coordinate,executionClass:entry.executionClass,integrity:entry.integrity,settingsSchema:entry.settingsSchema,...await this.evidence(entry)});
     return{items,generatedAt:this.catalogueGeneratedAt};
   }
+  /** Only current actor/project references are listed; never credential values. @param {any} user @param {any} input */
+  async connections(user,input) {
+    const request=extensionRequestObject(input,['catalogueId','projectId']);extensionIdentifier(request.catalogueId);extensionIdentifier(request.projectId);
+    const entry=this.entries.get(request.catalogueId);if(!entry)throw missing();
+    await this.access.project(user,request.projectId,{manage:true});
+    return this.connectionList?this.connectionList(user,entry,request.projectId):{items:[],supportedKinds:[]};
+  }
   /** @param {any} user @param {string} kind @param {string} id @param {any} client @param {boolean} [includeDeleted] */
   async read(user,kind,id,client,includeDeleted=false) {
     const result=await client.query(`SELECT id,payload,revision,deleted_at FROM evimed_product.documents WHERE user_id=$1 AND kind=$2 AND id=$3 ${includeDeleted?'':'AND deleted_at IS NULL'} FOR UPDATE`,[user.id,kind,extensionIdentifier(id)]);
@@ -73,7 +81,7 @@ export class ExtensionService {
     const preparation=bound?this.publicPreparation(job):null;
     const phase=row.deletedAt||row.deleted_at?'removed':!preparation?row.payload.phase:preparation.status==='succeeded'
       ?preparation.outcome==='prepared'?'waiting':'saved':preparation.status==='failed'?'failed':preparation.status==='canceled'?'saved':'preparing';
-    return{id:row.id,revision:row.revision,coordinate:row.payload.coordinate,catalogueId:row.payload.catalogueId,
+    return{id:row.id,revision:row.revision,coordinate:row.payload.coordinate,integrity:row.payload.integrity,catalogueId:row.payload.catalogueId,
       prepareJobId:row.payload.prepareJobId??null,preparation,phase,effective:false,...evidence};
   }
   /** @param {any} user @param {any} input */
@@ -94,7 +102,7 @@ export class ExtensionService {
       let job=null;
       if(entry.executionClass!=='local-only')job=await this.jobs.enqueue(user.id,'extension-prepare',{installationId:id,installationRevision:1,
         catalogueId:entry.id,coordinate:canonicalExtensionCoordinate(entry.coordinate),integrity:entry.integrity,accountCreatedAt,
-        projectTarget:project?{ownerId:project.userId,projectId:project.id}:null},{idempotencyKey:`extension-prepare:${id}:1`,transactionClient:client});
+        projectTarget:project?{ownerId:project.userId,projectId:project.id,projectCreatedAt:project.projectCreatedAt}:null},{idempotencyKey:`extension-prepare:${id}:1`,transactionClient:client});
       const row=await this.documents.put(user.id,'extension-installation',id,{schemaVersion:1,catalogueId:entry.id,coordinate:request.coordinate,integrity:entry.integrity,
         requestFingerprint:fingerprint,phase:entry.executionClass==='local-only'?'unsupported':'preparing',prepareJobId:job?.id??null},{expectedRevision:0,transactionClient:client});
       if(project) {
@@ -159,7 +167,8 @@ export class ExtensionService {
     if(!installation)throw missing();
     if(row.payload.accountCreatedAt!==accountCreatedAt)throw new HttpError(401,'unauthorized','The preparation account generation changed.');
     const target=row.payload.projectTarget??null;
-    if(target){const project=await this.access.project(user,target.projectId,{manage:true,client});if(project.userId!==target.ownerId)throw missing();}
+    if(target){const project=await this.access.project(user,target.projectId,{manage:true,client});if(project.userId!==target.ownerId
+      || (target.projectCreatedAt&&target.projectCreatedAt!==project.projectCreatedAt))throw missing();}
     return{job:{status:row.status},identity:{jobId:row.id,leaseToken:row.lease_token,attempts:row.attempts,installationId:row.payload.installationId,
       installationRevision:row.payload.installationRevision,accountCreatedAt,projectTarget:target}};
   }
@@ -236,11 +245,23 @@ export class ExtensionService {
       for(const id of [...ids].sort()){const installation=await this.read(user,'extension-installation',id,client);if(!installation)throw missing();installations.set(id,installation);}
       // Install also takes this mutex only after its installation lock.
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`extension-project:${project.userId}:${project.id}`]);
+      const previous=await this.read({id:project.userId},'extension-defaults',this.projectDocumentId(project.id),client);
+      if((previous?.revision??0)!==body.expectedRevision)throw new HttpError(409,'product_revision_conflict','Reload before changing project extensions.');
       for(const selected of requested) {
         if(typeof selected.enabled!=='boolean')throw new HttpError(400,'extension_contract_invalid','Invalid extension selection.');
         const installation=installations.get(selected.installationId);
+        const prior=previous?.payload.selections?.find(item=>item.installationId===selected.installationId);
+        const moved=prior&&(prior.integrity!==installation.payload.integrity||canonicalExtensionCoordinate(prior.coordinate)!==canonicalExtensionCoordinate(installation.payload.coordinate));
+        if(moved){
+          const sameSettings=canonicalJson(selected.settings)===canonicalJson(prior.settings);
+          const refs=extensionArray(selected.connectionRefs,64).map(extensionIdentifier);
+          const sameRefs=canonicalJson([...refs].sort())===canonicalJson([...prior.connectionRefs].sort());
+          if(!sameSettings||!sameRefs||selected.enabled&&!prior.enabled)throw new HttpError(409,'product_revision_conflict','The project uses another extension version. Remove it before selecting the new version.');
+          // Updating a library installation must never migrate another project's pinned configuration implicitly.
+          selections.push({...prior,enabled:selected.enabled});continue;
+        }
         const entry=this.descriptor(installation.payload.coordinate);const settings=this.settings(entry,selected.settings);
-        const refs=await this.access.connections(user,selected.connectionRefs,{client,project});
+        const refs=await this.access.connections(user,selected.connectionRefs,{client,project,entry});
         selections.push({installationId:installation.id,catalogueId:entry.id,coordinate:installation.payload.coordinate,integrity:entry.integrity,enabled:selected.enabled,settings,connectionRefs:refs,actorId:user.id});
       }
       if(new Set(selections.map(item=>item.catalogueId)).size!==selections.length)throw new HttpError(400,'extension_contract_invalid','Duplicate selected extension.');

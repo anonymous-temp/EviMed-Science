@@ -700,3 +700,27 @@ Arbitrary-URL Europe PMC full-text tools are deliberately excluded from this
 sidecar. Use EviMed’s existing controlled full-text/source gateway instead.
 Execution accepts only declared parameters and canonical publication/trial IDs;
 caller-provided URLs cannot select a sidecar network destination.
+
+
+## October 2 internal-test release sequence
+
+The owner requires completion of the local platform/VCR gap audit and the DSH
+extension-center implementation before further deployment or live acceptance.
+The c58 candidate is staged only; it is not permission to switch current.
+
+After local completion, remove verified obsolete EviMed images, build caches,
+old release files and temporary artifacts before deploying the final integrated
+source. For this internal-test release the owner accepts downtime and waives
+online platform rollback-image retention. Identify references and local original
+code/data coverage before deleting historical data; preserve other products,
+active databases/volumes, credentials and the invariant customer CDSS token.
+Do not use this waiver to remove functional per-project extension/skill revision
+rollback or encrypted data-recovery tests. Package caches still retain active or
+pinned immutable generations until their references are released.
+
+Prepare extension packages with the pinned native manager in a separate bounded
+job. The live profile remains read-only. Native host bundles are platform-admitted
+code; arbitrary user packages use verified isolated paths. Qualification and
+activation records belong to the trusted control plane and bind exact package,
+adapter, runtime image, permission and test identities. Never install a package
+in the web process or treat a package-written health file as a SaaS proof.

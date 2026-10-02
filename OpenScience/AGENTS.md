@@ -185,6 +185,22 @@ per-project workspace + JSONL provenance.
   imported workstyle pack says can loosen a contract, relax a safety rule, or
   reach a host the gateway would not.
 
+## Hosted extension preparation
+
+The owner authorized an ordinary-user extension and personal-skill center. Reuse
+native DSH package inspection, preparation, skill parsing and scoped loading;
+only harness-port may import upstream DSH packages. Do not expose unrestricted
+profile administration or enable HMR in a serving research installation.
+
+Exact packages may be prepared in bounded disposable jobs outside the web
+process, without customer workspaces, provider credentials or host-control
+sockets. Activate a deployment-owned read-only generation after current work
+finishes; retain the exact extension and skill identities on each run. Unknown
+host code uses an admitted isolated tool/viewer boundary or stays unsupported.
+Only independently measured artifact/adapter/runtime/permission combinations
+may be offered as SaaS qualified. Personal imports cannot grant permissions,
+shadow required methods, supply qualification flags or export connection secrets.
+
 ## Working conventions
 
 - Default working language for discussion is Chinese; **all project files and

@@ -1,7 +1,7 @@
 import { HttpError, readBody, readJson, sendJson } from "./security.mjs";
 
-/** @param {{store:any,service:any,maxJsonBytes:number}} dependencies */
-export function createSkillLibraryRoutes({ store, service, maxJsonBytes }) {
+/** @param {{store:any,service:any,maxJsonBytes:number,saveProject?:any}} dependencies */
+export function createSkillLibraryRoutes({ store, service, maxJsonBytes, saveProject = null }) {
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
     const personal = /^\/api\/skills(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
@@ -19,7 +19,10 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes }) {
     if (projectRoute) {
       const project = await store.requireProject(user, decode(projectRoute[1]));
       if (!projectRoute[2] && req.method === "GET") return reply(await service.projectSelections(user, project));
-      if (!projectRoute[2] && req.method === "PUT") return reply(await service.saveProjectSelections(user, project, await body()));
+      if (!projectRoute[2] && req.method === "PUT") {
+        const input = await body();
+        return reply(await (saveProject ? saveProject(user, project, input) : service.saveProjectSelections(user, project, input)));
+      }
       if (projectRoute[2] && req.method === "POST") return reply(await service.invoke(user, project, decode(projectRoute[2]), await body()));
     } else {
       const [, rawId, action, rawResource] = personal;

@@ -10,7 +10,7 @@ export const EXTENSION_EXECUTION_CLASSES = Object.freeze(['isolated-tool', 'rest
 export const EXTENSION_EVIDENCE_STATES = Object.freeze(['discovered', 'source-assessed', 'runtime-verified', 'saas-qualified'])
 export const EXTENSION_APPLY_PHASES = Object.freeze(['saved', 'preparing', 'waiting', 'applying', 'effective', 'connection-needed', 'unsupported', 'failed', 'rolled-back'])
 export const EXTENSION_PRODUCT_KINDS = Object.freeze(['extension-installation', 'extension-generation', 'extension-proof', 'skill', 'extension-defaults'])
-export const EXTENSION_JOB_KINDS = Object.freeze(['extension-prepare'])
+export const EXTENSION_JOB_KINDS = Object.freeze(['extension-prepare', 'personal-skill-apply'])
 export const EXTENSION_SAAS_CASE_IDS = Object.freeze(Array.from({ length: 22 }, (_, i) => `SAAS-${String(i + 1).padStart(2, '0')}`))
 const DIGEST = /^sha256:[a-f0-9]{64}$/u
 const SHA = /^[a-f0-9]{64}$/u

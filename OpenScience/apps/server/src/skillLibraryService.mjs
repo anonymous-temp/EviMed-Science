@@ -31,27 +31,48 @@ function summary(row) {
 
 /** Personal instructions are account records, never executable authority or a copy of a learned method. */
 export class SkillLibraryService {
-  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any}} [options] */
-  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null } = {}) {
+  /** @param {any} database @param {{documents?:any,artifacts?:any,projectAccess?:any,invoke?:any,learnedMethods?:any,onRemoved?:any}} [options] */
+  constructor(database, { documents = new ProductDocuments(database), artifacts = null, projectAccess = null, invoke = null, learnedMethods = null, onRemoved = null } = {}) {
     this.database = database;
     this.documents = documents;
     this.artifacts = artifacts;
     this.projectAccess = projectAccess;
     this.dispatchInvocation = invoke;
     this.learnedMethods = learnedMethods;
+    this.onRemoved = onRemoved;
+  }
+
+  /** A delayed request retains its authenticated account generation. The row
+   * lock joins account deletion without introducing an inverse project lock.
+   * Private writes and their metadata settle before that lock is released.
+   * @param {any} user @param {(client:any)=>Promise<any>} work */
+  async withLibraryAccount(user, work) {
+    if (!this.database) return work(null);
+    await migrateProductStore(this.database);
+    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      const account = await client.query(`SELECT id FROM evimed_control.users WHERE id=$1
+        AND ($2::timestamptz IS NULL OR created_at=$2::timestamptz) FOR KEY SHARE`, [productId(user.id), user.accountCreatedAt ?? null]);
+      if (account.rowCount !== 1) throw new HttpError(401, "unauthorized", "This account generation is unavailable.");
+      const operation = () => work(client);
+      return this.artifacts?.withTransaction ? this.artifacts.withTransaction(client, operation) : operation();
+    }));
   }
 
   /** @param {any} user @param {{cursor?:string|null,limit?:number}} [options] */
   async list(user, options = {}) {
-    const page = await this.documents.list(user.id, "skill", { ...options, projectId: null });
-    return { ...page, items: page.items.map(summary) };
+    return this.withLibraryAccount(user, async () => {
+      const page = await this.documents.list(user.id, "skill", { ...options, projectId: null });
+      return { ...page, items: page.items.map(summary) };
+    });
   }
   /** @param {any} user @param {string} skillId @param {{includeDeleted?:boolean}} [options] */
   async get(user, skillId, options = {}) {
     productId(skillId);
-    const row = await this.documents.get(user.id, "skill", skillId, options);
-    if (!row) throw new HttpError(404, "product_document_not_found", "The skill is unavailable.");
-    return row;
+    return this.withLibraryAccount(user, async () => {
+      const row = await this.documents.get(user.id, "skill", skillId, options);
+      if (!row) throw new HttpError(404, "product_document_not_found", "The skill is unavailable.");
+      return row;
+    });
   }
   /** @param {any} user @param {any} body */
   async create(user, body) {
@@ -102,8 +123,7 @@ export class SkillLibraryService {
     return this.documents.put(user.id, "skill", skillId, payload, { expectedRevision: content.expectedRevision, transactionClient: client });
     };
     if (!this.database) return save(null);
-    await migrateProductStore(this.database);
-    return this.database.transaction(save);
+    return this.withLibraryAccount(user, save);
   }
   /** Explicit owned import resolves bytes through the artifact boundary, never a submitted host path. @param {any} user @param {any} body */
   async import(user, body) {
@@ -113,17 +133,19 @@ export class SkillLibraryService {
       throw new HttpError(400, "extension_contract_invalid", "Invalid skill title.");
     }
     if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");
-    const skillId = `skill:${randomUUID()}`;
-    const nativeName = personalSkillName(user.id, skillId, sha256);
-    const imported = await this.artifacts.import(user, { resourceId: input.resourceId, skillId, nativeName });
-    const content = writeRequest({ expectedRevision: 0, title: input.title,
-      description: imported.description, instructions: imported.instructions });
-    return this.saveContent(user, skillId, content, imported.resources, imported, () => this.artifacts.verifyUpload(user, input.resourceId));
+    return this.withLibraryAccount(user, async () => {
+      const skillId = `skill:${randomUUID()}`;
+      const nativeName = personalSkillName(user.id, skillId, sha256);
+      const imported = await this.artifacts.import(user, { resourceId: input.resourceId, skillId, nativeName });
+      const content = writeRequest({ expectedRevision: 0, title: input.title,
+        description: imported.description, instructions: imported.instructions });
+      return this.saveContent(user, skillId, content, imported.resources, imported, () => this.artifacts.verifyUpload(user, input.resourceId));
+    });
   }
   /** @param {any} user @param {string} kind @param {Buffer} bytes */
   async upload(user, kind, bytes) {
     if (!this.artifacts) throw new HttpError(503, "product_state_unavailable", "Skill preparation is unavailable.");
-    return this.artifacts.upload(user, kind, bytes);
+    return this.withLibraryAccount(user, () => this.artifacts.upload(user, kind, bytes));
   }
   /** Deleting raw input cannot remove any adopted revision. @param {any} user @param {string} resourceId */
   async removeUpload(user, resourceId) {
@@ -133,7 +155,7 @@ export class SkillLibraryService {
       const operation = () => this.artifacts.removeUpload(user, resourceId);
       return this.artifacts.withTransaction ? this.artifacts.withTransaction(client, operation) : operation();
     };
-    return this.database ? this.database.transaction(remove) : remove(null);
+    return this.withLibraryAccount(user, remove);
   }
   /** @param {any} user @param {string} skillId */
   async history(user, skillId) {
@@ -164,7 +186,12 @@ export class SkillLibraryService {
     const input = exact(body, ["expectedRevision"]);
     await this.get(user, skillId);
     // Resource bytes are retained for existing pinned generations; a deleted library record cannot admit new invocations.
-    return this.documents.remove(user.id, "skill", skillId, productInteger(input.expectedRevision, 1, 2_147_483_646));
+    const remove = async () => {
+      const result = await this.documents.remove(user.id, "skill", skillId, productInteger(input.expectedRevision, 1, 2_147_483_646));
+      await this.onRemoved?.(user, skillId);
+      return result;
+    };
+    return this.withLibraryAccount(user, remove);
   }
   /** @param {any} user @param {any} value */
   async selections(user, value) {
@@ -183,15 +210,17 @@ export class SkillLibraryService {
   }
   /** @param {any} user */
   async defaults(user) {
-    return await this.documents.get(user.id, "extension-defaults", "skills:defaults")
-      ?? { id: "skills:defaults", revision: 0, payload: { skills: [] } };
+    return this.withLibraryAccount(user, async () => await this.documents.get(user.id, "extension-defaults", "skills:defaults")
+      ?? { id: "skills:defaults", revision: 0, payload: { skills: [] } });
   }
   /** @param {any} user @param {any} body */
   async saveDefaults(user, body) {
     const input = exact(body, ["expectedRevision", "skills"]);
-    const skills = await this.selections(user, input.skills);
-    return this.documents.put(user.id, "extension-defaults", "skills:defaults", { skills }, {
-      expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646),
+    return this.withLibraryAccount(user, async () => {
+      const skills = await this.selections(user, input.skills);
+      return this.documents.put(user.id, "extension-defaults", "skills:defaults", { skills }, {
+        expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646),
+      });
     });
   }
   /** @param {any} user @param {any} project */
@@ -204,13 +233,20 @@ export class SkillLibraryService {
   async saveProjectSelections(user, project, body) {
     await this.requireProject(user, project);
     const input = exact(body, ["expectedRevision", "skills"]);
-    const skills = await this.selections(user, input.skills);
-    return this.documents.put(user.id, "extension-defaults", `skills:project:${project.id}`, { skills }, {
-      expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
+    return this.withLibraryAccount(user, async () => {
+      await this.requireProject(user, project);
+      const skills = await this.selections(user, input.skills);
+      return this.documents.put(user.id, "extension-defaults", `skills:project:${project.id}`, { skills }, {
+        expectedRevision: productInteger(input.expectedRevision, 0, 2_147_483_646), projectId: project.id,
+      });
     });
   }
   /** Snapshot defaults once; never change an existing project's override. @param {any} user @param {any} project */
   async initializeProject(user, project) {
+    return this.withLibraryAccount(user, () => this.initializeOwnedProject(user, project));
+  }
+  /** @param {any} user @param {any} project */
+  async initializeOwnedProject(user, project) {
     await this.requireProject(user, project);
     const id = `skills:project:${project.id}`;
     const current = await this.documents.get(user.id, "extension-defaults", id);

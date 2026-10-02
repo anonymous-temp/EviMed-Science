@@ -5,7 +5,7 @@ import { extensionIdentifier, extensionRequestObject } from './extensionAccess.m
 export function createExtensionRoutes({store,service,maxJsonBytes}) {
   return async(req,res)=>{
     const url=new URL(req.url??'/','http://evimed.local');
-    const personal=/^\/api\/extensions\/(catalogue|installations|jobs)(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
+    const personal=/^\/api\/extensions\/(catalogue|installations|jobs|connections)(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
     const project=/^\/api\/projects\/([^/]+)\/extensions(?:\/(revisions))?$/.exec(url.pathname);
     if(!personal&&!project)return false;
     const {user}=await store.ensureSessionUser(req,res,{allowDevAuth:false});await store.assertCsrf(req,url.pathname);
@@ -23,6 +23,7 @@ export function createExtensionRoutes({store,service,maxJsonBytes}) {
     } else {
       const [,area,rawId,action]=personal,id=rawId?decode(rawId):null;
       if(area==='catalogue'&&!id&&!action&&req.method==='GET')return reply(await service.catalogue({query:url.searchParams.get('query')??''}));
+      if(area==='connections'&&!id&&!action&&req.method==='GET')return reply(await service.connections(user,extensionRequestObject(Object.fromEntries(url.searchParams),['catalogueId','projectId'])));
       if(area==='installations') {
         if(!id&&req.method==='GET')return reply(await service.list(user,{cursor:url.searchParams.get('cursor')??null}));
         if(!id&&req.method==='POST')return reply(await service.install(user,await body()),201);

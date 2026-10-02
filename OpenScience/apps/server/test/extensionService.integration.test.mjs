@@ -48,6 +48,24 @@ test('project settings CAS keeps precise pins, separate configurations and curre
   const disabled=await service.saveProject(a,'p1',{expectedRevision:2,selections:[{...selected,enabled:false}]});
   assert.equal(disabled.selections[0].enabled,false);assert.equal((await service.projectHistory(a,'p1')).items.length,3);
 });
+test('changing another project setting never silently adopts an updated library installation pin',options,async()=>{
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'p_pins','Pinned versions',1048576)",[a.id]);
+  const other={...descriptor,id:'pin-other',coordinate:{kind:'npm',name:'pin-other',version:'1.0.0'}};service.entries.set(other.id,other);
+  const first=await service.install(a,request('pin-old'));
+  const second=await service.install(a,{...request('pin-other'),coordinate:other.coordinate});
+  const old={installationId:first.installation.id,enabled:true,settings:{rowLimit:20},connectionRefs:[]};
+  const unrelated={installationId:second.installation.id,enabled:true,settings:{rowLimit:10},connectionRefs:[]};
+  await service.saveProject(a,'p_pins',{expectedRevision:0,selections:[old,unrelated]});
+  const newer={...descriptor,id:'pins-v2',coordinate:{...descriptor.coordinate,version:'2.0.0'},integrity:hash('pins-v2')};service.entries.set(newer.id,newer);
+  await service.update(a,first.installation.id,{expectedRevision:1,coordinate:newer.coordinate});
+  const changed=await service.saveProject(a,'p_pins',{expectedRevision:1,selections:[old,{...unrelated,settings:{rowLimit:30}}]});
+  const preserved=changed.selections.find(row=>row.installationId===first.installation.id);
+  assert.deepEqual(preserved.coordinate,descriptor.coordinate);assert.equal(preserved.integrity,descriptor.integrity);
+  await assert.rejects(service.saveProject(a,'p_pins',{expectedRevision:2,selections:[{...old,settings:{rowLimit:40}},unrelated]}),{status:409});
+  const removed=await service.saveProject(a,'p_pins',{expectedRevision:2,selections:[unrelated]});
+  const replaced=await service.saveProject(a,'p_pins',{expectedRevision:removed.revision,selections:[old,unrelated]});
+  assert.deepEqual(replaced.selections.find(row=>row.installationId===first.installation.id).coordinate,newer.coordinate);
+});
 test('remove and retry preserve owned histories and cannot adopt a foreign installation or job',options,async()=>{
   const first=await service.install(a,request('retry'));
   await service.cancelJob(a,first.job.id);
