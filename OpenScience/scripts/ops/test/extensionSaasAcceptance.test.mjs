@@ -34,6 +34,8 @@ test('component observations never become22 passes or a trusted receipt', () => 
 });
 test('acceptance matrix has exactly22 unique cases and refuses untrusted verdict controls', () => {
   assert.equal(assessmentCaseMatrix.length, 22); assert.equal(new Set(assessmentCaseMatrix.map(row => row.caseId)).size, 22);
+  assert(assessmentCaseMatrix.every(row => typeof row.requiredObservation === 'string' && row.requiredObservation.length > 50));
+  assert.equal(assessmentCaseMatrix.filter(row => row.unreachableSurface).length, 5);
   const subject = { artifactDigest: input.integrity, sourcePolicy: {} };
   assert.throws(() => createCampaignReport(subject, [{ caseId: 'SAAS-99', scope: 'unknown', actual: {} }]));
   assert.throws(() => createCampaignReport(subject, [{ caseId: 'SAAS-01', scope: 'unknown', actual: {}, status: 'pass' }]));
@@ -66,4 +68,15 @@ test('caller interruption lets cooperative child cleanup finish and joins before
   await new Promise(resolve => child.stdout.once('data', resolve)); const abort = new AbortController();
   const joined = runBoundedAssessmentChild(child, { deadlineMs: 5000, terminationGraceMs: 500, forceJoinMs: 1000, maxOutputBytes: 4096, signal: abort.signal }); abort.abort();
   const result = await joined; assert.equal(result.failure, 'interrupted'); assert.equal(result.forced, false); assert.equal(result.joined, true); assert.equal(result.stdout.toString(), 'cleanup');
+});
+test('case records distinguish measured component scope from remaining full campaign requirements', () => {
+  const report = createCampaignReport({ artifactDigest: input.integrity, sourcePolicy: {} }, [{ caseId: 'SAAS-08', scope: 'actual-archive-guard', setup: 'Fixture bytes; real guards', expected: 'Name disagreement refused', actual: { refused: true } }]);
+  const observed = report.cases.find(row => row.caseId === 'SAAS-08'); assert.equal(observed.componentOutcome, 'observed-partial'); assert.equal(observed.status, 'unknown'); assert.equal(observed.verifiedScopes.length, 1); assert(observed.uncovered.length > 0);
+  assert.equal(report.cases.find(row => row.caseId === 'SAAS-09').componentOutcome, 'not-measured'); assert.equal(report.cases.find(row => row.caseId === 'SAAS-09').applicability, 'unresolved'); assert.equal(report.qualified, false);
+});
+test('ordinary driver rejects redirected/nonPG fixture URLs before filesystem or database setup', async () => {
+  const { runOrdinaryAssessmentJourney } = await import('../extension-saas-acceptance-journey.mjs');
+  for (const databaseUrl of ['postgresql://fixture@127.0.0.1/evimed_test?host=example.invalid', 'postgresql://fixture@127.0.0.1/evimed_test?sslkey=/unowned/private.key', 'postgresql://fixture@127.0.0.1/evimed_test#fragment', 'https://fixture@127.0.0.1/evimed_test']) {
+    await assert.rejects(runOrdinaryAssessmentJourney({ databaseUrl, coworkImage: input.imageId, validatorImage: input.imageId }));
+  }
 });

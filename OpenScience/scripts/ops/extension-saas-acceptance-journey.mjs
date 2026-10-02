@@ -10,12 +10,16 @@ import { createGeoTestDatabase } from '../../apps/server/test/helpers/geoTestDat
 import { createNativeValidationFixture } from '../../apps/server/test/helpers/nativeSkillValidationFixture.mjs';
 import { createControllerExtensionComposition } from '../../apps/server/src/extensionControllerComposition.mjs';
 import { ExtensionPreparationWorker } from '../../apps/server/src/extensionPreparationWorker.mjs';
+import { readAcceptanceInputs } from './extension-saas-acceptance-inputs.mjs';
 import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOOTSTRAP } from './extension-saas-acceptance-manifest.mjs';
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const digest = value => 'sha256:' + createHash('sha256').update(value).digest('hex');
 /** Only local fixture connection/image inputs; credentials never enter observations. */
-export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, validatorImage, signal = null }) {
+export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, validatorImage, closureExpectedSHA, integrity, acceptanceInputsPath = null, signal = null }) {
+  const preparedInputs = acceptanceInputsPath ? await readAcceptanceInputs(acceptanceInputsPath) : null;
+  if (preparedInputs) { coworkImage = preparedInputs.images.coworkImageId; validatorImage = preparedInputs.images.nativeSdkImageId; closureExpectedSHA = preparedInputs.artifact.closureExpectedSHA; integrity = preparedInputs.artifact.integrity; }
   const parsed = new URL(databaseUrl);
+  assert(['postgres:', 'postgresql:'].includes(parsed.protocol)); assert.equal(parsed.search, ''); assert.equal(parsed.hash, '');
   assert(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)); assert.match(parsed.pathname, /^\/evimed_test[a-z0-9_]*$/);
   assert.match(coworkImage, /^sha256:[a-f0-9]{64}$/); assert.match(validatorImage, /^sha256:[a-f0-9]{64}$/);
   const fixtureRoot = path.join(repo, '.evimed-local/extensions/build/fixtures'); await fs.mkdir(fixtureRoot, { recursive: true });
@@ -27,8 +31,7 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
   const requestSignal = () => signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
   try {
     checkInterrupted();
-    const descriptor = await createAssessmentDescriptor({ imageId: coworkImage, integrity: 'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',
-      closureExpectedSHA: createHash('sha256').update(await fs.readFile(path.join(repo, '.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'))).digest('hex') });
+    const descriptor = await createAssessmentDescriptor({ imageId: coworkImage, integrity, closureExpectedSHA });
     const deployment = await prepareAssessmentDeployment(root, descriptor, digest(await fs.readFile(new URL(import.meta.url))));
     validator = await createNativeValidationFixture({ dataDir: root, image: validatorImage });
     app = createWebApiApp({ dataDir: root, databaseUrl: isolated.url, databasePoolMax: 1, databaseConnectionTimeoutMs: 1000,
@@ -134,7 +137,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const abort = new AbortController(), interrupted = () => abort.abort('assessment_interrupted');
   process.once('SIGTERM', interrupted); process.once('SIGINT', interrupted);
   try {
-    const report = await runOrdinaryAssessmentJourney({ databaseUrl: process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, coworkImage: process.env.COWORK_TEST_IMAGE, validatorImage: process.env.NATIVE_SKILL_VALIDATOR_IMAGE, signal: abort.signal });
+    const report = await runOrdinaryAssessmentJourney({ databaseUrl: process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, coworkImage: process.env.COWORK_TEST_IMAGE, validatorImage: process.env.NATIVE_SKILL_VALIDATOR_IMAGE, closureExpectedSHA: process.env.COWORK_TEST_CLOSURE_SHA256, integrity: process.env.COWORK_TEST_INTEGRITY, acceptanceInputsPath: process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS ?? null, signal: abort.signal });
     process.stdout.write(JSON.stringify(report) + '\n');
   } catch (error) { process.stderr.write(JSON.stringify({ status: 'failed', qualified: false, code: error?.code ?? error?.name ?? 'assessment_failed', phase: error?.assessmentStage ?? 'input', expected: ['string', 'number', 'boolean'].includes(typeof error?.expected) ? error.expected : undefined, actual: ['string', 'number', 'boolean'].includes(typeof error?.actual) ? error.actual : undefined, detail: error?.assessmentStage === 'controller-composition' ? error.message : undefined, preparationDiagnostic: error?.preparationDiagnostic ?? null }) + '\n'); process.exitCode = 1; }
   finally { process.removeListener('SIGTERM', interrupted); process.removeListener('SIGINT', interrupted); }
