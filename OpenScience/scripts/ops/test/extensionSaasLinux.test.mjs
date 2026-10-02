@@ -63,3 +63,13 @@ test('target is loopback-only single bind and close joins listener idempotently'
  relay.bindTarget('http://127.0.0.1:42/');assert.throws(()=>relay.bindTarget('http://127.0.0.1:43/'));await relay.close();await relay.close();assert.equal(server.closeCount,1);
  const second=fakeServer({address:'172.28.0.1',port:42}),unbound=await bindInspectedNativeLinuxRelay({gateway:'172.28.0.1'},{createServer:()=>second});await unbound.close();assert.throws(()=>unbound.bindTarget('http://127.0.0.1:42/'));
 });
+
+import {validateOwnedLinuxBridgeKernel} from '../extension-saas-acceptance-linux.mjs';
+test('kernel bridge proof accepts assigned no-carrier DOWN bridge omitted by Node but rejects changed identity/type/address',()=>{
+ const id='a'.repeat(64),device='br-'+id.slice(0,12),expected={id,name:'owned',rootDigest:'sha256:root'},network={Id:id,Name:'owned',Internal:true,Driver:'bridge',Labels:{'io.evimed.campaign-root':expected.rootDigest},IPAM:{Config:[{Subnet:'192.168.224.0/20',Gateway:'192.168.224.1'}]}};
+ const link={ifindex:123,ifname:device,flags:['NO-CARRIER','BROADCAST','MULTICAST','UP'],operstate:'DOWN',linkinfo:{info_kind:'bridge'}},address={ifindex:123,ifname:device,addr_info:[{family:'inet',local:'192.168.224.1',prefixlen:20,scope:'global'}]};
+ assert.throws(()=>validateOwnedLinuxBridge(network,expected,{}));assert.equal(validateOwnedLinuxBridgeKernel(network,expected,[link],[address]).addressProof,'iproute2-kernel-json');
+ for(const patch of [{ifindex:124},{ifname:'other'},{linkinfo:{info_kind:'dummy'}},{flags:['LOOPBACK','UP']},{flags:[]}])assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[{...link,...patch}],[address]));
+ for(const patch of [{ifindex:124},{addr_info:[{family:'inet',local:'192.168.224.2',prefixlen:20,scope:'global'}]},{addr_info:[{family:'inet',local:'192.168.224.1',prefixlen:16,scope:'global'}]}])assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[link],[{...address,...patch}]));
+ assert.throws(()=>validateOwnedLinuxBridgeKernel({...network,Internal:false},expected,[link],[address]));assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[],[address]));
+});

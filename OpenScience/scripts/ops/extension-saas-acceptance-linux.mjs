@@ -1,6 +1,5 @@
 /** Native Linux operator transport. Constructor-owned observations, never a public deployment switch or a sandbox fallback. */
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import http from 'node:http';
 import { isIP } from 'node:net';
 import { execFile } from 'node:child_process';
@@ -39,6 +38,18 @@ export function validateOwnedLinuxBridge(network,{id,name,rootDigest},interfaces
  if(matches.length!==1)throw new Error('native_linux_bridge_interface_refused');
  return{id,name,rootDigest,subnet,gateway,interfaceName};
 }
+/** iproute2 observes assigned bridge addresses even before an endpoint gives the bridge carrier. */
+export function validateOwnedLinuxBridgeKernel(network,expected,links,addresses){
+ const interfaceName=network.Options?.['com.docker.network.bridge.name']||'br-'+expected.id.slice(0,12);
+ if(!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}$/.test(interfaceName)||links?.length!==1||addresses?.length!==1)throw new Error('native_linux_bridge_interface_refused');
+ const link=links[0],address=addresses[0],prefix=Number(network.IPAM?.Config?.[0]?.Subnet?.split('/')[1]);
+ if(link.ifname!==interfaceName||address.ifname!==interfaceName||link.linkinfo?.info_kind!=='bridge'||!Number.isSafeInteger(link.ifindex)||link.ifindex<=0||address.ifindex!==link.ifindex
+  ||!Array.isArray(link.flags)||!link.flags.includes('UP')||link.flags.includes('LOOPBACK'))throw new Error('native_linux_bridge_interface_refused');
+ const assigned=(address.addr_info??[]).filter(item=>item.family==='inet'&&item.local===network.IPAM?.Config?.[0]?.Gateway&&item.prefixlen===prefix&&item.scope==='global');
+ if(assigned.length!==1)throw new Error('native_linux_bridge_interface_refused');
+ const bridge=validateOwnedLinuxBridge(network,expected,{[interfaceName]:[{family:'IPv4',address:assigned[0].local,internal:false}]});
+ return{...bridge,interfaceIndex:link.ifindex,interfaceKind:'bridge',addressProof:'iproute2-kernel-json',operstate:link.operstate};
+}
 /** Shared fixed handler: no filesystem, Docker, credential resolver or arbitrary destination is available in its closure. */
 export function createFixedCampaignRelayHandler(httpModule,getTarget,clock={setTimeout,clearTimeout}){
  const allowed=new Set(['/internal/model/v1/messages','/internal/extensions/v1/execute','/internal/extensions/v1/status','/internal/extensions/v1/cancel']);let active=0;
@@ -55,7 +66,10 @@ export function createFixedCampaignRelayHandler(httpModule,getTarget,clock={setT
 }
 export async function bindNativeLinuxRelay({network,root}){
  const env=nativeLinuxDockerEnvironment(),observed=JSON.parse((await exec('docker',['--context','default','network','inspect',network.id],{env,timeout:5000,maxBuffer:65536})).stdout)[0];
- const bridge=validateOwnedLinuxBridge(observed,network,os.networkInterfaces());if(bridge.rootDigest!==digest(root))throw new Error('native_linux_bridge_identity_refused');
+ const device=observed.Options?.['com.docker.network.bridge.name']||'br-'+network.id.slice(0,12);
+ if(!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}$/.test(device))throw new Error('native_linux_bridge_interface_refused');
+ const options={env,timeout:5000,maxBuffer:65536},links=JSON.parse((await exec('ip',['-j','-d','link','show','dev',device],options)).stdout),addresses=JSON.parse((await exec('ip',['-j','addr','show','dev',device],options)).stdout);
+ const bridge=validateOwnedLinuxBridgeKernel(observed,network,links,addresses);if(bridge.rootDigest!==digest(root))throw new Error('native_linux_bridge_identity_refused');
  return bindInspectedNativeLinuxRelay(bridge);
 }
 /** Trusted constructor seam; only bindNativeLinuxRelay supplies independently inspected bridge facts in production. */
