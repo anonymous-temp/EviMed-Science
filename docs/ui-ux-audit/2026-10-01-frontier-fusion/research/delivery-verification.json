@@ -1,0 +1,78 @@
+{
+  "baseCommit": "04e8b3509297b81973f076a275f67535500aef05",
+  "branch": "codex/frontier-evidence-integration-20261001",
+  "date": "2026-10-01",
+  "implementationComplete": true,
+  "web": {
+    "command": "pnpm test",
+    "passed": 1456,
+    "files": 166,
+    "failed": 0
+  },
+  "backend": {
+    "command": "OPEN_SCIENCE_TEST_POSTGRES_URL=<isolated local PostgreSQL> pnpm --filter @ai4s/server exec node --test --test-concurrency=1 test/frontier*.test.mjs test/evidenceZones.integration.test.mjs test/accountExport.test.mjs",
+    "passed": 309,
+    "failed": 0,
+    "skipped": 0
+  },
+  "broaderChecks": {
+    "command": "pnpm test:web",
+    "result": "Every pre-web stage passed. Two web regressions found in this first run were fixed; the complete web suite was rerun and all 1456 tests passed.",
+    "serverBaseline": {
+      "passed": 3812,
+      "failed": 0,
+      "skipped": 615
+    },
+    "skipBoundary": "Unconfigured unrelated integration environments; the final targeted frontier/evidence PostgreSQL run has zero skips."
+  },
+  "staticChecks": [
+    "pnpm lint",
+    "pnpm typecheck",
+    "pnpm typecheck:server",
+    "pnpm build:web",
+    "pnpm audit:source-secrets",
+    "git diff --check"
+  ],
+  "ciFollowup": {
+    "finding": "An existing FAERS test assigned mocked query counts by nondeterministic worker order. The first push CI exposed the race; reversing worker completion reproduced it deterministically.",
+    "change": "Six test fixtures now bind counts to query identity, with one reversed-completion regression. Production statistical formulas and existing assertions are unchanged.",
+    "researchMcp": [
+      { "python": "3.10.21", "passed": 393, "failed": 0 },
+      { "python": "3.12.3", "passed": 393, "failed": 0 }
+    ]
+  },
+  "browser": {
+    "native": 20,
+    "reader": 16,
+    "viewports": [
+      320,
+      390,
+      768,
+      1440
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "jsExceptions": 0,
+    "data": "Isolated acceptance fixtures, actual built React app, HTTP authentication and PostgreSQL; one deliberate API failure is injected only for retry acceptance."
+  },
+  "researchBoundary": "Authorized source content is verified in the existing chat-frame navigation draft; existing bridge component tests cover native frame delivery. No live model was started for acceptance.",
+  "excludedOperations": [
+    "Implicit legacy-content migration",
+    "Merge into main",
+    "Production deployment"
+  ],
+  "existingWarnings": [
+    "Unchanged LoginPage autoFocus lint warning",
+    "Existing vendor eval and large-bundle Vite warnings"
+  ],
+  "resultArtifacts": {
+    "implementation-browser.json": {
+      "sha256": "966aae69f21693d0e71421cda26ad5926c9a4d74affb69b7202d10c4938db6e5"
+    },
+    "reader-browser.json": {
+      "sha256": "c63892753bc46729adb0375e439ba19716f5a1b2af6aabced944c19253893eac"
+    }
+  }
+}

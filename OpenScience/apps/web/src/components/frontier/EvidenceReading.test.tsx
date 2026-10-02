@@ -1,0 +1,10 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { EvidenceReading } from "./EvidenceReading";
+import type { EvidenceCard } from "@/lib/evidenceZoneClient";
+const card: EvidenceCard = { id: "one", revision: 1, state: "published", canEdit: false, zoneId: "zone", body: "<script>untrusted</script>", title: "急诊证据", subtype: "academic", summary: "结论", creator: null, reviewer: null, reviewedAt: null, claims: [{ text: "证据结论 [1]" }], sources: [{ title: "不安全链接", url: "javascript:alert(1)", excerpt: "原文引句" }, { title: "论文", url: "https://example.org/paper", excerpt: null }], limitations: "样本较少", discussion: [], review: null, canResearch: true };
+describe("evidence reading", () => {
+  it("offers deletion only for the reader-owned discussion", async () => { const remove = vi.fn(); render(<EvidenceReading evidence={{ ...card, discussion: [{ id: "mine", canDelete: true, author: "Me", text: "My discussion", createdAt: null }, { id: "other", canDelete: false, author: "Other", text: "Other discussion", createdAt: null }] }} onDeleteComment={remove} />); expect(screen.getAllByRole("button", { name: "删除我的讨论" })).toHaveLength(1); await userEvent.click(screen.getByRole("button", { name: "删除我的讨论" })); expect(remove).toHaveBeenCalledWith("mine"); });
+  it("preserves evidence/source/limitations without inventing author or grade", () => { const { container } = render(<EvidenceReading evidence={card} />); expect(screen.getByText("学术证据")).toBeInTheDocument(); expect(screen.getByText("样本较少")).toBeInTheDocument(); expect(screen.getByText("原文引句")).toBeInTheDocument(); expect(screen.getByText("暂无讨论")).toBeInTheDocument(); expect(screen.queryByText(/创作者|审核者|学术评议/)).not.toBeInTheDocument(); expect(container.querySelector("script")).toBeNull(); expect(screen.getByRole("link", { name: "论文" })).toHaveAttribute("href", "https://example.org/paper"); expect(screen.queryByRole("link", { name: "不安全链接" })).not.toBeInTheDocument(); });
+});

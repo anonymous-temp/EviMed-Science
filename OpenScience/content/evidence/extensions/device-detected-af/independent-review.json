@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "reviewer": {
+    "kind": "ai",
+    "name": "EviMed 证据独立核对 AI",
+    "model": "gpt-6.1-sol"
+  },
+  "reviewedAt": "2026-10-01T13:57:57.273681Z",
+  "cards": [
+    {
+      "key": "device-detected-af-anticoagulation",
+      "contentHash": "08600360cb7d6ac9ada53f36f801e6f9b6427b3f74e564e9285fd1fab5a4a62e",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "已独立核对 ARTESiA 原始主文的方法、结果与表 2/3；未核对补充附录、完整研究方案或后续个体亚组。",
+          "sourceIndex": 1
+        },
+        {
+          "kind": "coverage",
+          "text": "已独立核对 NOAH-AFNET 6 原始主文的方法、结果与表 2/3；未核对补充附录、完整研究方案或后续个体亚组。",
+          "sourceIndex": 2
+        },
+        {
+          "kind": "interpretation",
+          "text": "表格保留 ITT、服药期间及改良 ITT 的不同分析集，区分事件人数、累计观察人年与年化率。两试验的复合终点、对照与事件持续时间不同；结果不能直接合并、用于药物排名或换算固定期限 NNT/个人净获益。"
+        },
+        {
+          "kind": "scope",
+          "text": "适用范围为植入设备检出、临床房颤尚未确诊且符合相应试验条件的人群；不构成消费级设备报警者、排除人群或具体患者的处方建议。"
+        }
+      ]
+    }
+  ]
+}

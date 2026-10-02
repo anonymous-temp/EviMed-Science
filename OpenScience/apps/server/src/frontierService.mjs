@@ -280,7 +280,7 @@ export function normalizeItemsQuery(params, vocabulary) {
   const sort = params.get("sort") || "relevance";
   if (!SORTS.includes(sort)) throw invalid("sort");
   const follow = params.get("follow") || null;
-  if (follow && !/^\d{1,18}$/.test(follow)) throw invalid("follow");
+  if (follow && follow !== "all" && !/^\d{1,18}$/.test(follow)) throw invalid("follow");
   return { view, by, lane, specialty, window, follow, q: rawQuery || null, starred: starredValue === "1", safety: safetyValue === "1", cursor, limit, sort };
 }
 
@@ -562,6 +562,10 @@ export class FrontierService {
     const where = ["i.state = 'published'", "s.enabled"];
     if (query.by === "published") where.push("i.published_at IS NOT NULL");
     const subscribed = query.subscriptions;
+    if (query.follow === "all") {
+      const positive = (subscribed?.follows ?? []).filter((follow) => !follow.muted);
+      where.push(positive.length ? `(${positive.map((follow) => `(${frontierFollowPredicate(follow, param)})`).join(" OR ")})` : "FALSE");
+    }
     if (subscribed?.selected && !(subscribed.selected.kind === "topic" && search)) {
       where.push(`(${frontierFollowPredicate(subscribed.selected, param)})`);
     }

@@ -1,3 +1,4 @@
+import concurrent.futures
 import math
 import json
 import os
@@ -13,6 +14,54 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import public_sources as sources
 import build_pharmacy_reference as pharmacy_builder
+
+
+def faers_count_responses(totals, drug="observed drug", event="observed event"):
+    """Bind each fixture count to its query, independent of worker scheduling."""
+    drug_query = 'patient.drug.medicinalproduct:"%s"' % drug
+    event_query = 'patient.reaction.reactionmeddrapt:"%s"' % event
+    responses = {
+        "%s AND %s" % (drug_query, event_query): totals[0],
+        drug_query: totals[1],
+        event_query: totals[2],
+        None: totals[3],
+    }
+
+    def response(base, search=None):
+        if search not in responses:
+            raise AssertionError("Unexpected FAERS count query: %r" % search)
+        return responses[search]
+
+    return response
+
+
+class ReverseCountExecutor:
+    """Complete the independent reads in reverse order when results are collected."""
+    def __init__(self, max_workers):
+        self.pending = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def submit(self, function, *args):
+        executor = self
+
+        class DeferredFuture(concurrent.futures.Future):
+            def result(self, timeout=None):
+                pending, executor.pending = executor.pending, []
+                for future, call, parameters in reversed(pending):
+                    try:
+                        future.set_result(call(*parameters))
+                    except Exception as error:
+                        future.set_exception(error)
+                return super().result(timeout)
+
+        future = DeferredFuture()
+        self.pending.append((future, function, args))
+        return future
 
 
 class PublicSourceConnectorTests(unittest.TestCase):
@@ -1018,7 +1067,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             (50, "https://source.test/event"),
             (1000, "https://source.test/total"),
         ]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)):
             result = sources.adr_signal({
                 "drug": "observed drug",
                 "adverseEvent": "observed event",
@@ -1037,7 +1086,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             (50, "https://source.test/event"),
             (1000, "https://source.test/total"),
         ]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)):
             result = sources.adr_signal({
                 "drug": "observed drug",
                 "adverseEvent": "observed event",
@@ -1063,7 +1112,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             (43, "https://source.test/event"),
             (1000, "https://source.test/total"),
         ]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)):
             result = sources.adr_signal({
                 "drug": "observed drug",
                 "adverseEvent": "observed event",
@@ -1074,6 +1123,26 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertIn("chiSquaredYates", metrics)
         self.assertFalse(metrics["evansSignal"])
 
+    def test_faers_statistics_preserve_query_identity_when_reads_complete_in_reverse_order(self):
+        totals = [
+            (3, "https://source.test/joint"),
+            (100, "https://source.test/drug"),
+            (43, "https://source.test/event"),
+            (1000, "https://source.test/total"),
+        ]
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)), \
+             mock.patch.object(sources.concurrent.futures, "ThreadPoolExecutor", ReverseCountExecutor):
+            result = sources.adr_signal({
+                "drug": "observed drug",
+                "adverseEvent": "observed event",
+                "metrics": ["prr"],
+            })
+        self.assertEqual(result["data"]["cells"], {"a": 3, "b": 97, "c": 40, "d": 860})
+        self.assertTrue(math.isclose(result["data"]["metrics"]["prr"], (3 / 100) / (40 / 900)))
+        self.assertIn("prr95CI", result["data"]["metrics"])
+        self.assertFalse(result["data"]["metrics"]["evansSignal"])
+        self.assertEqual([source["url"] for source in result["sources"]], [url for _, url in totals])
+
     def test_zero_faers_cells_are_reported_as_not_estimable_without_corrected_pseudo_signals(self):
         # Both terms are in the vocabulary; they were simply never co-reported.
         totals = [
@@ -1082,7 +1151,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             (50, "https://source.test/event"),
             (1000, "https://source.test/total"),
         ]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)):
             result = sources.adr_signal({
                 "drug": "observed drug",
                 "adverseEvent": "observed event",
@@ -1109,7 +1178,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
             {"term": "Stress cardiomyopathy", "reportCount": 5710},
             {"term": "Cardiomyopathy", "reportCount": 20351},
         ]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals), \
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals, "nitroglycerin", "Takotsubo cardiomyopathy")), \
                 mock.patch.object(sources, "_openfda_term_candidates", return_value=(candidates, "https://source.test/candidates")):
             result = sources.adr_signal({
                 "drug": "nitroglycerin",
@@ -1180,7 +1249,7 @@ class PublicSourceConnectorTests(unittest.TestCase):
 
     def test_ebgm_is_never_fabricated(self):
         totals = [(1, "https://source.test/a"), (10, "https://source.test/b"), (20, "https://source.test/c"), (100, "https://source.test/d")]
-        with mock.patch.object(sources, "_openfda_total", side_effect=totals):
+        with mock.patch.object(sources, "_openfda_total", side_effect=faers_count_responses(totals)):
             result = sources.adr_signal({
                 "drug": "observed drug",
                 "adverseEvent": "observed event",

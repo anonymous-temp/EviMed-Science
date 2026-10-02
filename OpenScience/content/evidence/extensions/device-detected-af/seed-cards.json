@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-01T13:54:00.980280+00:00",
+  "zones": [
+    {
+      "key": "af-anticoagulation",
+      "title": "房颤抗凝",
+      "description": "从原始试验判断获益、出血与瓣膜病适用边界。",
+      "background": "聚焦已诊断房颤的抗凝证据，区分一般房颤、机械瓣和风湿性瓣膜病；所有结论均保留研究人群与比较对象。",
+      "state": "published",
+      "requestId": "evimed-evidence-zone-20261001-af-anticoagulation"
+    }
+  ],
+  "cards": [
+    {
+      "key": "device-detected-af-anticoagulation",
+      "zoneKey": "af-anticoagulation",
+      "title": "设备检出的亚临床房颤或 AHRE：能直接套用抗凝策略吗？",
+      "subtype": "knowledge",
+      "summary": "设备提示亚临床房颤或房性高频事件（AHRE），不能直接套用确诊临床房颤的抗凝结论。ARTESiA 中阿哌沙班比阿司匹林减少卒中或系统性栓塞，同时增加大出血；NOAH-AFNET 6 未证明依度沙班减少其主要复合终点，且死亡或大出血增加。是否抗凝需要结合事件持续时间、卒中风险和出血风险讨论，不能由这两项试验给所有设备报警者作统一决定。",
+      "body": "阅读提醒：AHRE 是设备记录的房性高频事件；这里讨论的是临床房颤尚未确诊时的证据边界，不是按设备报警直接开药。",
+      "sources": [
+        {
+          "id": "artesia",
+          "title": "Apixaban for Stroke Prevention in Subclinical Atrial Fibrillation.",
+          "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2310234",
+          "excerpt": "6 minutes to 24 hours.",
+          "sha256": "d188ca76087e72ce026f94acc0cbcddb72a9e0bd23be0b271623fb8f7d21872d",
+          "checkedAt": "2026-10-01T13:48:11.683795+00:00",
+          "coverage": "full-text"
+        },
+        {
+          "id": "noah-afnet-6",
+          "title": "Anticoagulation with Edoxaban in Patients with Atrial High-Rate Episodes.",
+          "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2303062",
+          "excerpt": "a median follow-up of 21 months",
+          "sha256": "9025e15d16792d7725023c8e48e8cd0c018d3b8ace118c92f2f7f16971d3ad6d",
+          "checkedAt": "2026-10-01T13:48:15.580740+00:00",
+          "coverage": "full-text"
+        }
+      ],
+      "limitations": "两项随机双盲试验的人群、对照和复合终点不同，不构成阿哌沙班与依度沙班的直接比较。NOAH 提前终止；其疗效置信区间跨 1，不等于证明无效或等效。ARTESiA 也未达到原计划疗效事件数，论文说明最终随访结束与无法继续供药有关，决策时未获知治疗效果。全文主文已核对，未核对补充附录或个体亚组；不能据此确定某一具体患者的净获益、剂量或处方。 ARTESiA 排除了肌酐清除率 <25 mL/min 或近 6 个月未纠正大出血的患者；NOAH 排除了抗凝或依度沙班禁忌者，不能直接外推至这些人群。",
+      "provenance": "AI authored by gpt-6.1-sol; checked against the two retained original NEJM main-paper PDFs and official Europe PMC abstract records on 2026-10-01. Annualized rates, analysis populations and trial stopping are distinguished. Independent review is recorded separately; no human peer review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-extension-20261001-device-detected-af-anticoagulation",
+      "content": {
+        "question": "没有常规心电图确诊临床房颤，只有植入设备检出的亚临床房颤或 AHRE，随机试验支持怎样理解抗凝的获益与出血？",
+        "answer": "设备提示亚临床房颤或房性高频事件（AHRE），不能直接套用确诊临床房颤的抗凝结论。ARTESiA 中阿哌沙班比阿司匹林减少卒中或系统性栓塞，同时增加大出血；NOAH-AFNET 6 未证明依度沙班减少其主要复合终点，且死亡或大出血增加。是否抗凝需要结合事件持续时间、卒中风险和出血风险讨论，不能由这两项试验给所有设备报警者作统一决定。",
+        "population": "ARTESiA：4,012 人（阿哌沙班 2,015、阿司匹林 1,997），设备检出至少一次 6 分钟至 24 小时的亚临床房颤，且无超过 24 小时的事件，无临床房颤病史；平均年龄 76.8 岁、平均 CHA₂DS₂-VASc 3.9。NOAH：≥65 岁、AHRE ≥6 分钟且至少一项额外卒中危险因素，无心电图记录的房颤；AHRE 无 24 小时上限。随机 2,608 人，改良意向治疗分析 2,536 人（依度沙班 1,270、对照 1,266），AHRE 时长中位数 2.8 小时。",
+        "context": "本卡作为房颤抗凝专区的适用边界：植入设备提示的短阵事件与已经确诊的临床房颤不能混为同一研究人群；两项试验也未研究仅凭消费级穿戴设备通知就开始用药。",
+        "nextStep": "阅读或讨论具体病例时，先列出是否已有心电图确诊房颤、最长设备事件持续时间、卒中与出血危险因素，再问：患者与哪项试验的人群和对照更接近？不要把研究平均结果直接当成个人处方。",
+        "sections": [
+          {
+            "title": "两项试验回答的问题不同",
+            "text": "ARTESiA 对照为阿司匹林；NOAH 对照为安慰剂，对照组约 54% 因适应证接受阿司匹林。ARTESiA 主要终点是卒中或系统性栓塞；NOAH 加入心血管死亡，系统性栓塞的定义也不同。因此不能简单合并事件率，或据此排列两种药的优劣。",
+            "sourceIndexes": [
+              1,
+              2
+            ]
+          },
+          {
+            "title": "时间、分析集与提前终止",
+            "text": "ARTESiA 平均随访 3.5±1.8 年，疗效用意向治疗（ITT）人群，大出血用服药期间（on-treatment）人群；发生 >24 小时亚临床房颤或临床房颤时停研究药并启动开放标签抗凝，疗效随访在该时点删失。NOAH 中位随访 21 个月，疗效与安全用至少服药一次的改良 ITT 人群；因安全顾虑及非正式无效性评估提前终止。下列是每 100 人年的事件率，不是固定一年或整个随访期的个人概率，不能直接换算固定期 NNT 或相减得到净获益。",
+            "sourceIndexes": [
+              1,
+              2
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "ARTESiA：疗效与出血必须保留不同分析集",
+            "columns": [
+              "结局与分析集",
+              "阿哌沙班",
+              "阿司匹林",
+              "HR（95% CI）"
+            ],
+            "rows": [
+              [
+                "卒中或系统性栓塞；ITT",
+                "55/2,015 人；0.78/100 人年",
+                "86/1,997 人；1.24/100 人年",
+                "0.63（0.45–0.88）"
+              ],
+              [
+                "大出血；on-treatment",
+                "86/1,989 人；1.71/100 人年",
+                "47/1,972 人；0.94/100 人年",
+                "1.80（1.26–2.57）"
+              ]
+            ],
+            "caption": "人数为发生结局的人数/该分析集人数；年化率保留原文报告值，不由人数比例计算。ITT 平均随访 3.5 年不代表 on-treatment 出血观察时间相同。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "NOAH-AFNET 6：安全复合终点包含死亡",
+            "columns": [
+              "结局",
+              "依度沙班：人数/人年；年化率",
+              "对照：人数/人年；年化率",
+              "HR（95% CI）"
+            ],
+            "rows": [
+              [
+                "心血管死亡、卒中或系统性栓塞",
+                "83/2,557 人年；3.2/100 人年",
+                "101/2,495 人年；4.0/100 人年",
+                "0.81（0.60–1.08）"
+              ],
+              [
+                "全因死亡或大出血",
+                "149/2,534 人年；5.9/100 人年",
+                "114/2,508 人年；4.5/100 人年",
+                "1.31（1.02–1.67）"
+              ],
+              [
+                "大出血单独结果",
+                "53/2,534 人年；2.1/100 人年",
+                "25/2,508 人年；1.0/100 人年",
+                "2.10（1.30–3.38）"
+              ]
+            ],
+            "caption": "分母是相应结局的累计观察人年，不是患者人数。改良 ITT 组人数为 1,270 与 1,266；中位随访 21 个月。HR 为论文调整后的危险比（hazard ratio）；大出血单项是安全复合终点的组成项，不能把复合结果解释为单纯大出血。",
+            "sourceIndexes": [
+              2
+            ]
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T13:48:15.580740+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    }
+  ]
+}

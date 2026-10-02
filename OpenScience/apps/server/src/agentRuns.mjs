@@ -6834,9 +6834,16 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
-    // A terminal ledger row can precede its completion hook. Drain every
-    // producer, including direct reconciliations, before storage is released.
-    await Promise.allSettled([...monitors.map(monitor => monitor.promise), ...this.reconciles.values()]);
+    // The terminal row can precede callback writes. Drain the initial monitors,
+    // finishing monitors and direct reconciliations only at global shutdown:
+    // a completion hook may stop its runtime and re-enter closeProject.
+    const finishing = [...this.monitors.values()];
+    for (const monitor of finishing) monitor.cancel();
+    await Promise.allSettled([...new Set([
+      ...monitors.map(monitor => monitor.promise),
+      ...finishing.map(monitor => monitor.promise),
+      ...this.reconciles.values(),
+    ])]);
     await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();

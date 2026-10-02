@@ -62,8 +62,8 @@ export class FrontierSubscriptions {
         ? glossary.entityKey("drug", String(row.key).startsWith("drug:") ? String(row.key).slice(5) : row.key) : row.key,
       label: row.label, muted: row.muted === true, createdAt: new Date(row.created_at).toISOString(),
     })));
-    const selected = selectedId == null ? null : follows.find((follow) => follow.id === selectedId) ?? null;
-    if (selectedId != null && !selected) throw new HttpError(404, "frontier_follow_not_found", "No such follow.");
+    const selected = selectedId == null || selectedId === "all" ? null : follows.find((follow) => follow.id === selectedId) ?? null;
+    if (selectedId != null && selectedId !== "all" && !selected) throw new HttpError(404, "frontier_follow_not_found", "No such follow.");
     return { selected, muted: follows.filter((follow) => follow.muted), follows };
   }
 }

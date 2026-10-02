@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { CalendarClock, ChevronLeft, SearchX } from "lucide-react";
 import { WebApiError } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
@@ -69,11 +69,12 @@ export function FrontierEventPage() {
   const feature = useFrontierFeature();
   const { eventId = "" } = useParams();
   if (feature === "off") return <FrontierOffPage />;
-  return <EventView eventId={eventId} ready={feature !== "loading"} />;
+  return <EventView key={eventId} eventId={eventId} ready={feature !== "loading"} />;
 }
 
 function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [state, setState] = useState<EventState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -85,7 +86,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       (event) => {
         if (!active) return;
         setState({ kind: "ready", event });
-        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}`, { replace: true });
+        if (event.id !== eventId) navigate(`/app/frontier/events/${encodeURIComponent(event.id)}`, { replace: true, state: location.state });
       },
       (error: unknown) => {
         if (!active) return;
@@ -97,7 +98,7 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
       },
     );
     return () => { active = false; };
-  }, [eventId, ready, attempt, navigate]);
+  }, [eventId, ready, attempt, navigate, location.state]);
 
   if (state.kind === "off") return <FrontierOffPage />;
   if (state.kind !== "ready") {
@@ -123,11 +124,15 @@ function EventView({ eventId, ready }: { eventId: string; ready: boolean }) {
 
 /** The page's column, its way back and its one-line header, shared by every state of it. */
 function EventFrame({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const origin = (location.state as { frontierOrigin?: string } | null)?.frontierOrigin;
+  const fromReader = origin === "/app/frontier" || (typeof origin === "string" && origin.startsWith("/app/frontier?"));
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-bg">
       <div className="mx-auto w-full max-w-page px-6 py-6">
         <nav aria-label="返回">
-          <Link to="/app/frontier" className={cn(INLINE_ACTION, "-ml-1.5 gap-1 px-1.5 text-text-3 hover:text-text")}>
+          <Link to={fromReader ? origin! : "/app/frontier"} onClick={fromReader ? (event) => { event.preventDefault(); navigate(-1); } : undefined} className={cn(INLINE_ACTION, "-ml-1.5 gap-1 px-1.5 text-text-3 hover:text-text")}>
             <ChevronLeft size={16} aria-hidden="true" />前沿动态
           </Link>
         </nav>
@@ -140,6 +145,7 @@ function EventFrame({ title, actions, children }: { title: string; actions?: Rea
 
 function EventBody({ event }: { event: FrontierEvent }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const timeline = useMemo(() => [...event.items]
     .sort((a, b) => Date.parse(b.timelineAt) - Date.parse(a.timelineAt)), [event.items]);
   const research = () => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(eventResearchDraft(event)) } });
@@ -184,7 +190,7 @@ function EventBody({ event }: { event: FrontierEvent }) {
               <ul className="mt-2 space-y-2">
                 {event.related.map((related) => (
                   <li key={`${related.relation}-${related.id}`}>
-                    <Link to={`/app/frontier/events/${encodeURIComponent(related.id)}`} className="text-ui text-text hover:text-accent">{related.title}</Link>
+                    <Link state={location.state} replace to={`/app/frontier/events/${encodeURIComponent(related.id)}`} className="text-ui text-text hover:text-accent">{related.title}</Link>
                     <p className="text-caption text-text-3">{RELATION_WORDS[related.relation] ?? "相关"}{related.at ? ` · ${dateClock(related.at)}` : ""}</p>
                   </li>
                 ))}
@@ -224,7 +230,7 @@ function TimelineRow({ item }: { item: FrontierItem & { role: FrontierEventRole 
   return (
     <li className="relative py-2 pl-5">
       <span aria-hidden="true" className={cn("absolute -left-[5px] top-3.5 h-2.5 w-2.5 rounded-full", primary ? "bg-accent" : "bg-bg ring-1 ring-inset ring-border-control")} />
-      <p className="text-ui font-medium text-text">{primary && <span className="sr-only">一手来源：</span>}{item.title}</p>
+      <p className="text-ui font-medium text-text">{primary && <span className="sr-only">一手来源：</span>}<a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-caption text-text-3">
         <span>{item.source.name}</span>
         {item.sourceTypeLabel && <><span aria-hidden="true">·</span><span>{item.sourceTypeLabel}</span></>}

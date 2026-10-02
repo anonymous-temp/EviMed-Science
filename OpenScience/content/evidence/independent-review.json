@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "reviewer": {
+    "kind": "ai",
+    "name": "EviMed 证据独立核对 AI",
+    "model": "gpt-6.1-sol"
+  },
+  "reviewedAt": "2026-10-01T09:32:54.780Z",
+  "cards": [
+    {
+      "key": "aristotle-benefit-bleeding",
+      "contentHash": "cbae6997f28c774b063ffaba55e22a6003aa4450aaeaf671ff790690a0025dfe",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "原始试验依据为摘要；未核对全文亚组、剂量规则或完整安全性表。",
+          "sourceIndex": 1
+        },
+        {
+          "kind": "coverage",
+          "text": "指南依据为官方出版页相关短摘录，未审核整部指南。",
+          "sourceIndex": 2
+        }
+      ]
+    },
+    {
+      "key": "valve-exclusions",
+      "contentHash": "85c1e6c94ef72d780e1b05c79586bbcf00dd2323cea337454ae037573964cab3",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "RE-ALIGN 依据为原始摘要；提前停止期间的事件数没有转换为一年风险。",
+          "sourceIndex": 1
+        },
+        {
+          "kind": "coverage",
+          "text": "INVICTUS 依据为原始摘要；未补充摘要未提供的结局分母或统一随访期。",
+          "sourceIndex": 2
+        },
+        {
+          "kind": "coverage",
+          "text": "指南依据为官方出版页相关短摘录。",
+          "sourceIndex": 3
+        }
+      ]
+    },
+    {
+      "key": "dapa-ckd-albuminuria",
+      "contentHash": "cce9bd601e9accfb94c42ccb0f1075fd17c1ec327f8830f430b470da23421383",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "依据原始摘要核对；未完成肾病亚型及完整安全性表审查。图展示试验观察期计数，而非固定 2.4 年风险。",
+          "sourceIndex": 1
+        }
+      ]
+    },
+    {
+      "key": "empa-kidney-scope",
+      "contentHash": "6905f7dbf75ef137d3d457078a40f3ed50f7981dd16b85eab35c60f7e7709f55",
+      "findings": []
+    },
+    {
+      "key": "flow-semaglutide-kidney",
+      "contentHash": "bc5c41646c2149dc7444f7d732e4841dd3677c2894a9791a5de2226ba298f90f",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "依据原始摘要核对；未核对完整背景用药、亚组与联合治疗资料。",
+          "sourceIndex": 1
+        }
+      ]
+    },
+    {
+      "key": "absolute-relative-time",
+      "contentHash": "a513adc900450ec9782263210f96a6cd680cee9b5a4498615a82cb6b950552b7",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "试验计数、HR 与原文 NNT 依据原始摘要；派生粗差值已复算，未估计其置信区间或固定时点风险。",
+          "sourceIndex": 1
+        },
+        {
+          "kind": "coverage",
+          "text": "方法学依据为 Cochrane 本章有关风险差与时间至事件资料的片段。",
+          "sourceIndex": 2
+        }
+      ]
+    },
+    {
+      "key": "composite-endpoint-components",
+      "contentHash": "4468a04daeec3fbfd8d3d367852a75375772d4b8d342b51d93a89e29b1dda3d9",
+      "findings": []
+    },
+    {
+      "key": "noninferiority-superiority",
+      "contentHash": "4d57b0fd5f74b4f4d4c28defa125be3a5a0bafc06dc4a830db52544cbbb3fcc8",
+      "findings": [
+        {
+          "kind": "coverage",
+          "text": "ARISTOTLE 依据为原始摘要；未审核全文非劣效界值、完整分析集或多重检验方案。",
+          "sourceIndex": 1
+        },
+        {
+          "kind": "coverage",
+          "text": "方法学依据为原文有关非劣效界值、分析集和不依从的片段。",
+          "sourceIndex": 2
+        }
+      ]
+    }
+  ]
+}

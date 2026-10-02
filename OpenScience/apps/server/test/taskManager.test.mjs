@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -47,6 +47,46 @@ function controlledInvoker(records) {
       );
     });
 }
+
+test("close waits for terminal task writes after the active count reaches zero", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-task-terminal-close-"));
+  const project = await makeProject(root, "alice", "default");
+  const config = { maxConcurrentTasks: 1, commandTimeoutMs: 0 };
+  const manager = new TaskManager(config, async () => {});
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let entered;
+  const terminalWrite = new Promise((resolve) => { entered = resolve; });
+  const persist = manager.persistProject.bind(manager);
+  manager.persistProject = async (owner) => {
+    await persist(owner);
+    if ([...manager.tasks.values()].some((task) => task.status === "succeeded")) {
+      entered();
+      await held;
+      await writeFile(path.join(owner.metaDir, "terminal-tail.json"), "finished");
+    }
+  };
+  let closing;
+  try {
+    const task = await manager.enqueue("synthetic", {}, context(project, config));
+    await terminalWrite;
+    assert.equal(manager.active, 0);
+    assert.equal(manager.tasks.get(task.id).status, "succeeded");
+    let closed = false;
+    closing = manager.close().then(() => { closed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(closed, false, "terminal status is not completion of its persistence");
+    release();
+    await closing;
+    assert.equal(await readFile(path.join(project.metaDir, "terminal-tail.json"), "utf8"), "finished");
+  } finally {
+    release();
+    await closing;
+    await Promise.allSettled([...manager.tasks.values()].map((task) => task.runPromise));
+    await manager.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 async function waitForStatus(manager, ctx, taskId, status) {
   const deadline = Date.now() + 1_000;

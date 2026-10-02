@@ -1,0 +1,62 @@
+{
+  "revision": 2,
+  "branch": "codex/frontier-evidence-integration-20261001",
+  "base": "04e8b3509297",
+  "names": {
+    "module": "前沿动态",
+    "sections": [
+      "动态",
+      "证据专区",
+      "简报",
+      "关注"
+    ],
+    "content": "证据卡片"
+  },
+  "decisions": [
+    "Keep existing frontier URLs and news original-source title links.",
+    "Collapse feed modes beneath dynamics and daily/weekly beneath briefs.",
+    "Do not add a separate global evidence marketplace or authoring center.",
+    "Implement native zones/cards with real PostgreSQL persistence and authoring; the old service requires an independent login not available in this environment.",
+    "Old authenticated content is not silently migrated or assumed public.",
+    "News can become an author-edited evidence draft with a validated source item identity; publication remains explicit.",
+    "Preserve real creator/reviewer identity and cited sources; no fabricated grades, experts or scores.",
+    "Comments, feedback and optional peer evaluation are author-attributed and visible to the relevant reader/owner.",
+    "Changes stay on the implementation branch; do not merge main or replace a live production deployment implicitly."
+  ],
+  "references": [
+    {
+      "url": "https://aihot.news/topics",
+      "use": "Persistent topic organization and compact discovery."
+    },
+    {
+      "url": "https://github.com/KKKKhazix/AIHOT/tree/cf8f8d07d68dfa9079becc72b0717a45b33485f3",
+      "use": "Public source snapshot, publication and reading-state patterns; not an exact deployed-build claim."
+    },
+    {
+      "url": "https://www.nngroup.com/articles/tabs-used-right/",
+      "use": "Few concise destinations, visible selection, consistent navigation vs in-page controls."
+    },
+    {
+      "url": "https://www.nngroup.com/articles/progressive-disclosure/",
+      "use": "Background and secondary actions revealed on demand."
+    },
+    {
+      "url": "https://evidence.nihr.ac.uk/browse-content/",
+      "use": "Separate recent research summaries and themed collections; retain source type/date facets."
+    }
+  ],
+  "acceptance": [
+    "Native login and real HTTP/database persistence.",
+    "Create zone, draft evidence, publish, edit, withdraw, re-publish.",
+    "Owner vs other-account draft/private isolation and mutation authorization.",
+    "Published counts and full corpus scoped search including matches beyond page one.",
+    "Follow/unfollow, aggregate feed and followed-zone updates.",
+    "Real attributed discussion, readable feedback, optional revision-bound peer review.",
+    "Feed item to owned zone draft and back to the original dynamic item.",
+    "Scoped research draft prepared by authorized revision and handed to existing composer without auto-send.",
+    "Query/cursor/scroll/expansion restoration after event reading.",
+    "320/390/768/1440 widths, dark/light, keyboard navigation, all list states.",
+    "Frontend/backend focused and broad tests, real PostgreSQL integration, lint/typecheck/build/secrets audit.",
+    "Independent agent review findings addressed and acceptance results recorded."
+  ]
+}

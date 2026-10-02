@@ -1,0 +1,287 @@
+{
+  "url": "https://aihot.news/leaderboard",
+  "status": 200,
+  "title": "AIHOT大模型排行榜",
+  "capturedAt": "2026-10-01T01:44:32.027416+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\nAIHOT LEADERBOARD\nAI 模型排行榜\n评测来源\n排名怎么算\n综合\n编程\n推理\n知识\n专业办公\n\n汇集多种能力的真实评测，找到综合表现更强的模型。\n\n20 项评测·9 家机构·10/01 08:05 更新\n\nNO.01\n20 项评测\n证据敏感\nGPT-6 Astra\nOpenAI\n共识指数\n96.6\nNO.02\n12 项评测\n证据敏感\nGPT-6.1 Sol\nOpenAI\n共识指数\n95.5\nNO.03\n15 项评测\n持续积累\nClaude Opus 5.5\nAnthropic\n共识指数\n95.4\n综合榜TOP 30\n国产模型\n开源模型\n当前展示 30 个模型，可按列重排；名次来自原榜\n排名\t模型\t\n上线日期\n▲\n\t\n评测证据\n▲\n\t\n缓存价格\n人民币 / 百万 Token\n▲\n\t\n输入价格\n人民币 / 百万 Token\n▲\n\t\n输出价格\n人民币 / 百万 Token\n▲\n\t共识指数\ni\n\n01\t\nGPT-6 Astra\nOpenAI\n\t2026-09-03\t\n20 项评测\n证据敏感\n\t¥6.7\t¥67.05\t¥335.23\t96.6\n02\t\nGPT-6.1 Sol\nOpenAI\n\t2026-09-29\t\n12 项评测\n证据敏感\n\t¥0.67\t¥13.41\t¥67.05\t95.5\n03\t\nClaude Opus 5.5\nAnthropic\n\t2026-09-22\t\n15 项评测\n持续积累\n\t¥1.34\t¥26.82\t¥134.09\t95.4\n04\t\nClaude Fable 5.1\nAnthropic\n\t2026-09-01\t\n17 项评测\n持续积累\n\t¥1.68\t¥67.05\t¥335.23\t94.8\n05\t\nClaude Sonnet 5.5\nAnthropic\n\t2026-09-28\t\n11 项评测\n持续积累\n\t¥1.34\t¥13.41\t¥67.05\t94.2\n06\t\nClaude Fable 5\nAnthropic\n\t2026-06-09\t\n19 项评测\n证据敏感\n\t¥6.7\t¥67.05\t¥335.23\t93.9\n07\t\nClaude Opus 5\nAnthropic\n\t2026-07-24\t\n20 项评测\n较充分\n\t¥3.35\t¥33.52\t¥167.61\t93.8\n08\t\nMuse Spark 1.3\nMeta\n\t2026-09-02\t\n16 项评测\n较充分\n\t—\t¥8.38\t¥28.49\t91.5\n09\t\nGPT-6 Sol\nOpenAI\n\t2026-09-22\t\n16 项评测\n证据敏感\n\t¥1.34\t¥13.41\t¥67.05\t89.5\n10\t\nGPT-5.6 Sol\nOpenAI\n\t2026-07-09\t\n20 项评测\n较充分\n\t¥2.68\t¥26.82\t¥134.09\t88.6\n11\t\nGrok 4.7\nxAI\n\t2026-09-21\t\n11 项评测\n证据敏感\n\t¥3.35\t¥13.41\t¥40.23\t86.3\n12\t\nMiMo-V2.6-Pro\nXiaomi\n\t2026-09-21\t\n6 项评测\n证据敏感\n\t¥0.025\t¥3\t¥6\t85.0\n13\t\nQwen3.8 Max\nAlibaba\n\t2026-07-19\t\n18 项评测\n证据敏感\n\t—\t¥12\t¥36\t83.8\n14\t\nGLM-5.3\n开源权重 ↗\nZ.ai\n\t2026-08-18\t\n19 项评测\n证据敏感\n\t¥1.74\t¥9.39\t¥29.5\t80.7\n15\t\nGrok 4.6\nxAI\n\t2026-08-12\t\n18 项评测\n证据敏感\n\t¥3.35\t¥13.41\t¥40.23\t78.9\n16\t\nKimi K3\n开源权重 ↗\nMoonshot AI\n\t2026-07-16\t\n19 项评测\n证据敏感\n\t¥2\t¥20\t¥100\t78.0\n17\t\nGPT-5.6 Terra\nOpenAI\n\t2026-07-09\t\n20 项评测\n证据敏感\n\t¥1.34\t¥13.41\t¥80.45\t75.6\n18\t\nClaude Opus 4.8\nAnthropic\n\t2026-05-28\t\n20 项评测\n证据敏感\n\t¥3.35\t¥33.52\t¥167.61\t74.0\n19\t\nGemini 3.8 Flash\nGoogle\n\t2026-09-02\t\n20 项评测\n证据敏感\n\t¥0.5\t¥5.03\t¥25.14\t73.4\n20\t\nQwen3.8 Max 0902\nAlibaba\n\t2026-09-01\t\n7 项评测\n证据敏感\n\t—\t¥12\t¥36\t73.3\n21\t\nGLM-5.3 Flash\n开源权重 ↗\nZ.ai\n\t2026-08-26\t\n17 项评测\n证据敏感\n\t¥0.23\t¥0.8\t¥2.8\t72.7\n22\t\nClaude Opus 4.7\nAnthropic\n\t2026-04-16\t\n18 项评测\n证据敏感\n\t¥3.35\t¥33.52\t¥167.61\t71.8\n23\t\nQwen3.8 Flash Next\nAlibaba\n\t2026-08-26\t\n5 项评测\n证据敏感\n\t—\t¥0.8\t¥2.7\t70.1\n24\t\nMuse Spark 1.2\nMeta\n\t2026-08-05\t\n14 项评测\n证据敏感\n\t—\t¥8.38\t¥28.49\t68.7\n25\t\nDeepSeek V4.1 Flash\n开源权重 ↗\nDeepSeek\n\t2026-09-10\t\n12 项评测\n证据敏感\n\t¥0.0402\t¥2.01\t¥8.05\t66.0\n26\t\nGemini 3.7 Flash\nGoogle\n\t2026-08-13\t\n18 项评测\n证据敏感\n\t¥0.5\t¥5.03\t¥25.14\t65.5\n27\t\nGPT-5.4\nOpenAI\n\t2026-03-05\t\n12 项评测\n证据敏感\n\t¥1.68\t¥16.76\t¥100.57\t62.1\n28\t\nGrok 4.5\nxAI\n\t2026-07-08\t\n18 项评测\n证据敏感\n\t¥2.01\t¥13.41\t¥40.23\t60.0\n29\t\nGPT-5.5\nOpenAI\n\t2026-04-23\t\n19 项评测\n证据敏感\n\t¥3.35\t¥33.52\t¥201.14\t59.8\n30\t\nClaude Sonnet 5\nAnthropic\n\t2026-06-30\t\n20 项评测\n证据敏感\n\t¥1.34\t¥13.41\t¥67.05\t55.2\n\n按多项公开评测的共同证据排名。每个榜单或筛选结果最多展示 30 个模型，筛选后保留原榜名次与分数。\n\n共识指数不是正确率；同分仍按共同证据确定的名次展示。\n\n如何看这张榜\n\n综合多家公开评测，不同模型的参评覆盖不同。价格不参与排名，缺测不记零分，指数不是正确率。\n\n了解计算方法 →\n关于价格\n\nAPI 价格来自厂商官网，按每百万 Token 展示。美元报价按 2026-09-30 汇率折算成人民币。缓存价格指命中后的输入价格，缓存写入、存储及订阅费用另计。",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "评测来源",
+      "href": "/leaderboard/sources"
+    },
+    {
+      "text": "排名怎么算",
+      "href": "/leaderboard/rules"
+    },
+    {
+      "text": "综合",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "编程",
+      "href": "/leaderboard/category/coding"
+    },
+    {
+      "text": "推理",
+      "href": "/leaderboard/category/reasoning"
+    },
+    {
+      "text": "知识",
+      "href": "/leaderboard/category/knowledge"
+    },
+    {
+      "text": "专业办公",
+      "href": "/leaderboard/category/professional"
+    },
+    {
+      "text": "NO.0120 项评测证据敏感GPT-6 AstraOpenAI共识指数96.6",
+      "href": "/leaderboard/gpt-6-astra"
+    },
+    {
+      "text": "NO.0212 项评测证据敏感GPT-6.1 SolOpenAI共识指数95.5",
+      "href": "/leaderboard/gpt-6-1-sol"
+    },
+    {
+      "text": "NO.0315 项评测持续积累Claude Opus 5.5Anthropic共识指数95.4",
+      "href": "/leaderboard/claude-opus-5-5"
+    },
+    {
+      "text": "GPT-6 Astra",
+      "href": "/leaderboard/gpt-6-astra"
+    },
+    {
+      "text": "GPT-6.1 Sol",
+      "href": "/leaderboard/gpt-6-1-sol"
+    },
+    {
+      "text": "Claude Opus 5.5",
+      "href": "/leaderboard/claude-opus-5-5"
+    },
+    {
+      "text": "Claude Fable 5.1",
+      "href": "/leaderboard/claude-fable-5-1"
+    },
+    {
+      "text": "Claude Sonnet 5.5",
+      "href": "/leaderboard/claude-sonnet-5-5"
+    },
+    {
+      "text": "Claude Fable 5",
+      "href": "/leaderboard/claude-fable-5"
+    },
+    {
+      "text": "Claude Opus 5",
+      "href": "/leaderboard/claude-opus-5"
+    },
+    {
+      "text": "Muse Spark 1.3",
+      "href": "/leaderboard/muse-spark-1-3"
+    },
+    {
+      "text": "GPT-6 Sol",
+      "href": "/leaderboard/gpt-6-sol"
+    },
+    {
+      "text": "GPT-5.6 Sol",
+      "href": "/leaderboard/gpt-5-6-sol"
+    },
+    {
+      "text": "Grok 4.7",
+      "href": "/leaderboard/grok-4-7"
+    },
+    {
+      "text": "MiMo-V2.6-Pro",
+      "href": "/leaderboard/mimo-v-2-6-pro"
+    },
+    {
+      "text": "Qwen3.8 Max",
+      "href": "/leaderboard/qwen-3-8-max"
+    },
+    {
+      "text": "GLM-5.3",
+      "href": "/leaderboard/glm-5-3"
+    },
+    {
+      "text": "开源权重 ↗",
+      "href": "https://huggingface.co/zai-org/GLM-5.3"
+    },
+    {
+      "text": "Grok 4.6",
+      "href": "/leaderboard/grok-4-6"
+    },
+    {
+      "text": "Kimi K3",
+      "href": "/leaderboard/kimi-k-3"
+    },
+    {
+      "text": "开源权重 ↗",
+      "href": "https://huggingface.co/moonshotai/Kimi-K3"
+    },
+    {
+      "text": "GPT-5.6 Terra",
+      "href": "/leaderboard/gpt-5-6-terra"
+    },
+    {
+      "text": "Claude Opus 4.8",
+      "href": "/leaderboard/claude-opus-4-8"
+    },
+    {
+      "text": "Gemini 3.8 Flash",
+      "href": "/leaderboard/gemini-3-8-flash"
+    },
+    {
+      "text": "Qwen3.8 Max 0902",
+      "href": "/leaderboard/qwen-3-8-max-0902"
+    },
+    {
+      "text": "GLM-5.3 Flash",
+      "href": "/leaderboard/glm-5-3-flash"
+    },
+    {
+      "text": "开源权重 ↗",
+      "href": "https://huggingface.co/zai-org/GLM-5.3-Flash"
+    },
+    {
+      "text": "Claude Opus 4.7",
+      "href": "/leaderboard/claude-opus-4-7"
+    },
+    {
+      "text": "Qwen3.8 Flash Next",
+      "href": "/leaderboard/qwen-3-8-flash-next"
+    },
+    {
+      "text": "Muse Spark 1.2",
+      "href": "/leaderboard/muse-spark-1-2"
+    },
+    {
+      "text": "DeepSeek V4.1 Flash",
+      "href": "/leaderboard/deepseek-v-4-1-flash"
+    },
+    {
+      "text": "开源权重 ↗",
+      "href": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash"
+    },
+    {
+      "text": "Gemini 3.7 Flash",
+      "href": "/leaderboard/gemini-3-7-flash"
+    },
+    {
+      "text": "GPT-5.4",
+      "href": "/leaderboard/gpt-5-4"
+    },
+    {
+      "text": "Grok 4.5",
+      "href": "/leaderboard/grok-4-5"
+    },
+    {
+      "text": "GPT-5.5",
+      "href": "/leaderboard/gpt-5-5"
+    },
+    {
+      "text": "Claude Sonnet 5",
+      "href": "/leaderboard/claude-sonnet-5"
+    },
+    {
+      "text": "了解计算方法 →",
+      "href": "/leaderboard/rules"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 2706.1875,
+      "top": 0,
+      "right": 1440,
+      "bottom": 2706.1875,
+      "left": 180
+    },
+    "firstArticle": null
+  }
+}

@@ -7,6 +7,7 @@ import {
   FRONTIER_TEXT_HOLD_MS,
   FRONTIER_TEXT_RETRY_MS,
   FrontierPipeline,
+  frontierProviderUnavailable,
   allowedLanes,
   entryKeys,
   frontierBudgetState,
@@ -36,6 +37,19 @@ const regulator = { id: "r-ema", source_type: "regulator", authority: 5, lane: "
 const company = { id: "c-novo", source_type: "company", authority: 2, lane: "pipeline", safety_feed: false };
 const preprint = { id: "p-medrxiv", source_type: "preprint", authority: 3, lane: "evidence", safety_feed: false };
 const chinese = { id: "m-cn", source_type: "media", authority: 2, lane: "mixed", safety_feed: false, region: "CN" };
+
+test("provider waits require a timeout, a confirmed temporary status or transport failure",()=>{
+  assert.equal(frontierProviderUnavailable({code:"model_gateway_upstream_error",upstreamStatus:429}),true);
+  assert.equal(frontierProviderUnavailable({code:"model_gateway_upstream_error",upstreamStatus:503}),true);
+  assert.equal(frontierProviderUnavailable({code:"frontier_model_failed",cause:{cause:{code:"ECONNRESET"}}}),true);
+  for (const error of [
+    {code:"model_gateway_upstream_error",upstreamStatus:400},
+    {code:"model_gateway_upstream_error"},
+    {code:"frontier_model_failed"},
+    {code:"frontier_model_failed",cause:new TypeError("Programming failure")},
+    {code:"evidence_invalid"},{code:"evidence_author_invalid"},{code:"evidence_revision_conflict"},
+  ]) assert.equal(frontierProviderUnavailable(error),false);
+});
 
 test("a day in Asia/Shanghai starts at 16:00 UTC the day before", () => {
   const window = frontierDayWindow(new Date("2026-09-22T15:59:59Z"), "Asia/Shanghai");

@@ -1,0 +1,169 @@
+{
+  "mode": "real HTTP application; isolated PostgreSQL; native seeded import; worker paused; no HTTP mocks",
+  "checks": [
+    {
+      "check": "native seed import is idempotent after PostgreSQL JSONB persistence",
+      "passed": true,
+      "cards": 8
+    },
+    {
+      "check": "four navigation destinations retained",
+      "passed": true
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "aristotle-benefit-bleeding",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "valve-exclusions",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "dapa-ckd-albuminuria",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "empa-kidney-scope",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "flow-semaglutide-kidney",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "absolute-relative-time",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "composite-endpoint-components",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "seed reading, source anchors, truthful AI receipt, responsive themes",
+      "passed": true,
+      "card": "noninferiority-superiority",
+      "viewports": [
+        320,
+        390,
+        1440
+      ],
+      "themes": [
+        "light",
+        "dark"
+      ]
+    },
+    {
+      "check": "DAPA chart preserves original counts, time denominator and fixed-horizon caveat",
+      "passed": true
+    },
+    {
+      "check": "owner upkeep settings save, pause and reload through real API; reader denied",
+      "passed": true
+    },
+    {
+      "check": "native owner refresh accepts empty body and remains bounded by saved settings",
+      "passed": true
+    },
+    {
+      "check": "manual edit preserves structured scientific data/source hash, invalidates AI review and records revision",
+      "passed": true
+    },
+    {
+      "check": "manual card create/edit/publish round trip and user-review wording without AI/human clinician fabrication",
+      "passed": true
+    },
+    {
+      "check": "published pending/reviewed status is distinct in real zone list and followed preview",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "captures": [
+    "captures/content-aristotle-benefit-bleeding-320-light.png",
+    "captures/content-aristotle-benefit-bleeding-320-dark.png",
+    "captures/content-aristotle-benefit-bleeding-390-light.png",
+    "captures/content-aristotle-benefit-bleeding-390-dark.png",
+    "captures/content-aristotle-benefit-bleeding-1440-light.png",
+    "captures/content-aristotle-benefit-bleeding-1440-dark.png",
+    "captures/content-dapa-ckd-albuminuria-320-light.png",
+    "captures/content-dapa-ckd-albuminuria-320-dark.png",
+    "captures/content-dapa-ckd-albuminuria-390-light.png",
+    "captures/content-dapa-ckd-albuminuria-390-dark.png",
+    "captures/content-dapa-ckd-albuminuria-1440-light.png",
+    "captures/content-dapa-ckd-albuminuria-1440-dark.png",
+    "captures/content-maintenance-paused-1440-light.png",
+    "captures/content-edit-pending-1440-light.png",
+    "captures/content-followed-status-1440-light.png"
+  ],
+  "completed": true
+}

@@ -617,7 +617,7 @@ test("a control-plane call the provider refuses outright is released, not held a
   const lost = [];
   await assert.rejects(callModelForControlPlane({
     config: config("https://api.deepseek.com"), usageLedger: ledger(lost),
-    fetchImpl: async () => { throw new TypeError("fetch failed"); },
+    fetchImpl: async () => { throw new TypeError("fetch failed", { cause: Object.assign(new Error("Connect refused"), { code: "ECONNREFUSED" }) }); },
   }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }));
   assert.deepEqual(lost.map((event) => [event.type, event.code]).slice(1), [["release", "provider_not_accepted"]]);
 });
@@ -686,4 +686,52 @@ test("an exhausted DeepSeek balance is named, counted by provider, and released,
   }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "x" }] } }),
   (error) => error.code === "model_gateway_upstream_error");
   assert.equal(providerRefusalCount("deepseek", 503), 0);
+});
+
+test("a real control-plane request received before headers is uncertain after abort, while a written refusal is released", async (t) => {
+  for (const status of [null, 402]) {
+    const events = []; const controller = new AbortController();
+    const upstream = createServer(async (req, res) => {
+      for await (const _chunk of req) { /* consume the complete real POST */ }
+      events.push({ type: "provider-received" });
+      if (status === null) controller.abort(new DOMException("Fixture abort after provider accepted POST", "AbortError"));
+      else { res.writeHead(status, { "content-type": "application/json" }); res.end('{"error":{"message":"Refused"}}'); }
+    });
+    const base = await listen(upstream);
+    t.after(() => new Promise(resolve => { upstream.closeAllConnections(); upstream.close(resolve); }));
+    await assert.rejects(callModelForControlPlane({ config: config(base), usageLedger: ledger(events) }, {
+      userId: "usage-owner", projectId: "evimed-frontier", purpose: "frontier", signal: controller.signal,
+      body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "A real local transport request." }] },
+    }), error => status === null ? error.name === "AbortError" : error.upstreamStatus === status);
+    assert.deepEqual(events.map(event => event.type), ["reserve", "provider-received", status === null ? "uncertain" : "release"]);
+    assert.equal(events[2].code, status === null ? "provider_response_incomplete" : "provider_refused_402");
+  }
+});
+
+test("control-plane pre-abort and validation never dispatch, including abort during the reservation", async () => {
+  const body = { model: "deepseek-v4-flash", messages: [{ role: "user", content: "Do not send." }] };
+  const controller = new AbortController(); controller.abort();
+  const events = []; let fetchCalls = 0;
+  const fetchImpl = async () => { fetchCalls++; throw new Error("Must not reach fetch"); };
+  await assert.rejects(callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: ledger(events), fetchImpl }, { userId: "usage-owner", projectId: "default", body, signal: controller.signal }), { name: "AbortError" });
+  await assert.rejects(callModelForControlPlane({ config: config("not a URL"), usageLedger: ledger(events), fetchImpl }, { userId: "usage-owner", projectId: "default", body }));
+  const circular = {}; circular.self = circular;
+  await assert.rejects(callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: ledger(events), fetchImpl }, { userId: "usage-owner", projectId: "default", body: { ...body, extra: circular } }));
+  assert.equal(fetchCalls, 0); assert.equal(events.length, 0);
+  const during = new AbortController(), held = ledger(events), reserve = held.reserveModel;
+  held.reserveModel = async input => { const reservation = await reserve(input); during.abort(); return reservation; };
+  await assert.rejects(callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: held, fetchImpl }, { userId: "usage-owner", projectId: "default", body, signal: during.signal }), { name: "AbortError" });
+  assert.equal(fetchCalls, 0); assert.deepEqual(events.map(event => event.type), ["reserve", "release"]); assert.equal(events[1].code, "provider_not_accepted");
+});
+
+test("only definite non-aborted DNS or connect failures release control-plane reservations", async () => {
+  for (const [code, abort, expected] of [["ENOTFOUND", false, "release"], ["ECONNREFUSED", false, "release"], ["ECONNRESET", false, "uncertain"], [null, false, "uncertain"], ["ECONNREFUSED", true, "uncertain"]]) {
+    const events = []; const controller = new AbortController();
+    await assert.rejects(callModelForControlPlane({ config: config("https://api.deepseek.com"), usageLedger: ledger(events), fetchImpl: async () => {
+      if (abort) controller.abort();
+      throw new TypeError("Synthetic transport failure", { cause: Object.assign(new Error("Synthetic cause"), code ? { code } : {}) });
+    } }, { userId: "usage-owner", projectId: "default", body: { model: "deepseek-v4-flash", messages: [{ role: "user", content: "A controlled failure." }] }, signal: controller.signal }));
+    assert.deepEqual(events.map(event => event.type), ["reserve", expected]);
+    assert.equal(events[1].code, expected === "release" ? "provider_not_accepted" : "provider_response_incomplete");
+  }
 });

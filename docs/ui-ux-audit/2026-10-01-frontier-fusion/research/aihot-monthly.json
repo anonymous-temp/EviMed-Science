@@ -1,0 +1,384 @@
+{
+  "url": "https://aihot.news/monthly",
+  "status": 200,
+  "title": "AI 月报 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:23.380329+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\n日报\n周报\n月报\n往期\n2026 年\n4\n08\nDeepSeek V4 Flash 开源登顶\n07\n智能体落地与算力竞逐\n06\nAI基础设施与智能体生态加速\n05\n模型开源与智能体生态加速\n2026 年 8 月\n人工智能 · 每月盘点\n每月 1 日出刊\nAI 月报 · 2026 年 8 月\n\nAIHOT · AIHOT.NEWS\n\n第 4 期\n08\n2026 年\n8 月\n2026 年\n全年 4 期\n20\n件大事\n357\n条精选\n31\n期日报\n约 9 分钟读完\n本期导读\nDeepSeek V4 Flash 开源登顶\n\n2026年8月，AI 行业在模型开源、智能体基础设施与版权诉讼三条线上密集推进。模型侧，DeepSeek、Qwen、智谱、腾讯混元、Meta、NVIDIA、Google DeepMind、xAI 等相继发布或开源旗舰与轻量模型，覆盖语言、多模态、视频、语音与自动驾驶；产品侧，Cursor、Cloudflare、OpenRouter、OpenAI 桌面端等围绕智能体工作流推出新工具；行业侧，德国法院裁定 Suno 侵权、索尼与华纳起诉 Anthropic，版权与安全议题持续升温。\n\n图 · DeepSeek V4 Flash 0731 开源，登顶开源模型前三\n本月看点\n1\nDeepSeek V4 Flash 0731 开源，登顶开源模型前三\nArtificial Analysis\n2\nQwen3.8-Max 发布：开源最强编码与协作模型，2.4T 参数\nQwen：Blog Retrieval\n3\nxAI 发布 Grok 4.6，强化长时运行智能体能力\nxAI：News\n本期版面\n01\n模型发布与开源\n10 件\n02\n研究与科学突破\n3 件\n03\n版权与法律\n2 件\n04\n智能体与开发工具\n3 件\n05\n行业活动与生态\n2 件\n01\n模型发布与开源\n\n本版导读本月开源与旗舰模型密集发布：DeepSeek V4 Flash 0731 以 MIT 许可开源并进入开源前三；Qwen3.8-Max 发布 2.4T 参数并首次开源 Qwen-Max 级权重；腾讯混元 Hy4 preview 以 770B 总参数、1M 上下文开源；智谱 GLM-5.3 与 GLM-5.3-Flash 相继开源，AA 指数 60 分并列开源第一；xAI Grok 4.6 强化长时智能体；Google DeepMind 推出 Gemini 3.7 Flash 与 Gemini Omni 1.1 Flash；Meta 发布 30B 开源模型 Muse Glimmer；NVIDIA 推出 Nemotron 3.5 Lightning。\n\nArtificial Analysis\n08.01\nDeepSeek V4 Flash 0731 开源，登顶开源模型前三\n\nDeepSeek 发布开源模型 DeepSeek V4 Flash 0731，在 Artificial Analysis 智能指数上得分 50，位列开源模型前三。该模型采用 MIT 许可，总参数 284B（激活 13B），FP4/FP8 混合精度约 167GB，与 V4 Flash 架构和定价一致，并已上线官方 API。\n\n原文\nQwen：Blog Retrieval\n一手\n08.03\nQwen3.8-Max 发布：开源最强编码与协作模型，2.4T 参数\n\nQwen 正式发布 Qwen3.8-Max，这是 Qwen 家族迄今最强的模型，拥有 2.4T 参数（95B 激活），并首次开源 Qwen-Max 级权重，开放权重将于下周发布。\n\n原文\nxAI：News\n一手\n08.12\nxAI 发布 Grok 4.6，强化长时运行智能体能力\n\nxAI 今日发布 Grok 4.6，在 Grok 4.5 基础上重点强化长时运行智能体及更复杂的交互式与视觉工作能力。该模型在多项智能体编码与知识工作基准上达到前沿水平，在 Artificial Analysis Intelligence Index（九项基准综合分）上追平 GPT-5.6 Sol。\n\n原文\n公\n公众号：腾讯混元\n08.28\n腾讯混元发布 Hy4 preview：770B 总参数、1M 上下文，开源上线\n\n腾讯混元发布新一代旗舰模型 Hy4 preview，总参数 770B、激活参数 49B、上下文长度 1M，现已开源并在腾讯云 TokenHub 和 OpenRouter 上线。\n\n原文\nIT之家\n08.29\n智谱开源 GLM-5.3 模型权重，主打智能体编程与网络防御\n\n智谱宣布开源 GLM-5.3 模型权重，支持本地运行与个性化定制，擅长复杂编码、防御性网络安全及长程任务。该模型在 AA 综合智能指数中取得 60 分，与 Claude Fable 5、GPT-5.6 Sol 等闭源旗舰同级，并与 Kimi K3 并列开源模型第一。仅年营业额超 100 亿美元的机构将其作为外部模型服务提供时才需安全审查。\n\n原文\n公\n公众号：智谱（GLM）\n08.26\nGLM-5.3-Flash 开源：320B 总参数、AA 指数 57 分，定价为 Opus 4.8 的 1/40\n\n智谱上线并开源 GLM-5.3-Flash（320B-A18B），这是 GLM-5 系列首个原生多模态模型，AA 综合智能指数 57 分，与 Claude Opus 4.8 持平。其定价为 GLM-5.3 的 1/10，限时折扣内为 Opus 4.8 的 1/40，并已接入 ZCode 等平台开放 API 调用。该模型采用稀疏注意力与线性注意力混合架构，推理服务已跑在国产芯片集群上。\n\n原文\nGoogle DeepMind：Blog\n一手\n08.14\nGoogle DeepMind 推出 Gemini 3.7 Flash：面向编程与智能体的最强工作模型\n\nGoogle DeepMind 发布 Gemini 3.7 Flash，距 3.6 Flash 仅三周，主打编程与智能体任务，输入/输出价格分别为每百万 token $0.75 和 $3.75，为原 3.6 Flash 的一半。\n\n原文\nGoogle DeepMind：Blog\n一手\n08.28\nGemini Omni 1.1 Flash 发布，为开发者提供更强生成式视频控制\n\nGoogle 推出 Gemini Omni 1.1 Flash，为开发者提供更强的生成式视频控制能力。新模型支持场景扩展（可分析最多 10 秒先前上下文，以 10 秒为增量累计延长至 40 秒）、指定首尾帧生成平滑过渡，以及 4K 高清输出。\n\n原文\nAI at Meta\n08.10\nMeta 发布开源模型 Muse Glimmer\n\n推出 Muse Glimmer，一款开放权重、300 亿参数的模型，专为本地、常驻运行的智能体工作流优化。 与同尺寸领先模型相比，Muse Glimmer 在关键智能体用例和基准测试中表现出色，并设计为完全在消费级硬件（如 Mac 或配备高性能 GPU 的 PC）上运行。 秉承我们长期分享基础 AI 研究的传统，我们以宽松的 Apache 2.0 许可证发布模型权重。\n\n原文\nNVIDIA Blog\n一手\n08.11\nNVIDIA 推出 Nemotron 3.5 Lightning，加速本地智能体任务\n\nNVIDIA 发布 Nemotron 3.5 Lightning，一款可定制的开源 30B 混合专家（MoE）模型，专为常驻智能体设计。相比同类开源模型，其 token 生成速度最高提升 4 倍，任务完成时间缩短 30%。该模型采用开放权重，支持用户微调以匹配特定任务，并可在 RTX PC、DGX Spark 及 Jetson 等设备上运行。\n\n原文\n02\n研究与科学突破\n\n本版导读OpenAI 用下一代模型 Astra 内部版以约 2000 美元成本证明 10 项数学与理论计算机科学难题，并发布 Lean 证书与 CoT 推导；Google DeepMind 联合多家机构推出 WeatherNext 气旋预测模型，将有效预报时长从 2 天延长至 3 天，并在 2025 飓风季实战中提前五天预测飓风 Melissa 登陆，代码与权重已开源。\n\nGreg Brockman\n08.01\nOpenAI Astra 以约2000美元证明10项数学难题\n\nOpenAI 用下一代模型 Astra 内部版解决了数学与理论计算机科学领域的10项重大进展，总成本约2000美元（按 Sol API 价格计算）。Astra 证明了非 sofic 群的存在，并推翻 Connes 刚性猜想，成果涵盖 von Neumann 代数、高维球堆积、电路复杂度等。OpenAI 已发布全部10项证明，附 Lean 证书与 CoT 逐步推导。\n\n原文\nIT之家\n08.07\n谷歌推出 WeatherNext 气旋模型，AI 高精度预报飓风平均提前 24 小时\n\n谷歌 DeepMind 联合多家机构推出 WeatherNext Cyclones 气旋预测模型，在路径、强度和风场结构预测精度上达到业界领先。该模型将有效预报时长从 2 天延长至 3 天，平均提前 24 小时，预测量级约相当于 10 年气象进展。\n\n原文\nGoogle AI\n08.25\nWeatherNext 预测气旋：提前五天预警五级飓风\n\nGoogle AI 发布 WeatherNext 气旋预测模型，可同时预测风暴路径、强度和规模，比现有系统多提供一整天的预警时间。该模型在 2025 飓风季实战测试中，提前五天预测飓风 Melissa 在牙买加的五级登陆，系美国国家飓风中心首次实时使用 AI 模型。模型单场风暴可生成多达 1000 次模拟，代码与权重已开源。\n\n原文\n03\n版权与法律\n\n本版导读德国慕尼黑法院裁定 AI 音乐生成器 Suno 在训练与输出中均侵犯版权，驳回合理使用抗辩，认定其模型可复现知名歌曲元素构成记忆化侵权；索尼音乐、华纳音乐等唱片公司起诉 Anthropic 及其高管，指控未经许可使用数万首版权音乐训练 Claude，每件侵权作品索赔最高 15 万美元。\n\nThe Decoder：AI News\n08.01\n德国法院裁定AI音乐生成器Suno侵犯版权，驳回合理使用抗辩\n\n慕尼黑法院裁定，AI音乐生成器Suno在训练过程及输出结果中均侵犯版权，并驳回其合理使用抗辩。法院认定Suno 3.5和4版本模型可复现六首知名歌曲的原创元素，构成“记忆化”侵权，且责任归于Suno而非用户。该判决还认定美国版权法下的合理使用不适用于此案，目前尚未最终生效。\n\n原文\nThe Decoder：AI News\n08.30\n索尼与华纳起诉Anthropic，指控其大规模盗用版权音乐训练Claude\n\n索尼音乐、华纳音乐等唱片公司起诉Anthropic及其CEO Dario Amodei和联合创始人Benjamin Mann，指控其未经许可使用数万首受版权保护的音乐作品（主要是歌词）训练Claude模型。原告称Amodei明确指示并促成侵权行为，每件侵权作品索赔最高15万美元。此前Anthropic已于2025年9月就盗版书籍训练达成15亿美元和解。\n\n原文\n04\n智能体与开发工具\n\n本版导读Cursor 推出 Origin 代码托管服务作为 GitHub 替代方案，向付费用户开放早期测试；Cloudflare 开源 Cloudflare OS，为员工提供基于公司上下文的智能体工作区；OpenAI 桌面端 ChatGPT 上线语音交互，可语音操控电脑执行多步骤任务；OpenRouter 推出 Activity 仪表盘与 Analytics API，按智能体、模型、请求追踪成本。\n\nHacker News 热门（buzzing.cc 中文翻译）\n08.18\nCursor 推出 Origin 代码托管服务，作为 GitHub 的替代方案\n\nCursor 今日起向所有付费计划用户开放 Origin 代码托管的早期测试版，提供仓库、拉取请求、代码浏览及 GitHub 同步功能。用户可创建以 cursor.com/codebase/ 为前缀的仓库，或将 GitHub 仓库同步至 Origin，双向同步评论与审查。Vercel、Depot 和 Buildkite 集成已可用，智能体功能即将推出。\n\n原文\nCloudflare Blog\n一手\n08.05\nCloudflare OS：面向智能体、应用与工作的开放平台\n\nCloudflare 开源新版 Cloudflare OS，任何组织均可部署并连接内部系统。该平台为每位员工提供基于公司上下文与技能的智能体工作区，包含隔离运行时、安全治理框架及可共享修改的个人应用。此前内部版本已供数千名员工日常使用，新版针对协作中的信息暴露风险重建了安全基础。\n\n原文\nIT之家\n08.09\nOpenAI 桌面端 ChatGPT 上线语音交互功能，可语音操控电脑执行多步骤任务\n\nOpenAI 更新 ChatGPT 桌面应用，新增对 ChatGPT Voice 的支持，用户可直接通过语音对话控制 AI 智能体并让其在电脑上执行任务。该功能基于全新语音模型系列 ChatGPT-Live，支持 ChatGPT Work 和 Codex，在 macOS 上还可借助 Appshots 访问屏幕内容。\n\n原文\n05\n行业活动与生态\n\n本版导读第二届世界人形机器人运动会在国家速滑馆开幕，666 支队伍、2056 台机器人参赛，天工 Ultra 百米预赛跑出 9.39 秒；一项对 14,419 本自出版电子书的分析显示，AI 生成书籍正以数量挤占人类作者市场，七个类型中无 AI 文本书籍单书收入下降。\n\nIT之家\n08.22\n第二届世界人形机器人运动会开幕：2056 台机器人齐聚“冰丝带”，666 支队伍竞技 51 赛项\n\n第二届世界人形机器人运动会今晚在国家速滑馆“冰丝带”开幕，666 支队伍、2056 台机器人参赛，队伍数量较首届增长 138%，机器人数量翻了两番。天工 Ultra 在百米预赛跑出 9.39 秒，打破博尔特 9.58 秒的人类世界纪录；荣耀“闪电”以 41.95 秒完成 400 米，同样破人类纪录。本届赛项增至 51 项，多项竞技赛取消人工遥控，全程全自主运行。\n\n原文\nThe Decoder：AI News\n08.15\nAI生成书籍正淹没亚马逊，并拉低人类作者的单书收入\n\n一项对14,419本自出版电子书的分析显示，AI生成书籍正以数量而非质量挤占人类作者市场，即便未检测到AI文本的书籍，单书收入也在下滑。2023年Q1至2026年Q1，书目总量增长38.3倍，而季度收入仅增长8.9倍；在八个类型中，七个类型的无AI文本书籍单书收入下降。\n\n原文\n上一期 · 7 月\n智能体落地与算力竞逐\n往期 AI 月报\n2026-07\n智能体落地与算力竞逐\n2026-06\nAI基础设施与智能体生态加速\n2026-05\n模型开源与智能体生态加速\n（本期完）\n\nAIHOT 月报由编辑系统根据公开来源自动综合，每条均附原文 · 往期月报",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "周报",
+      "href": "/weekly"
+    },
+    {
+      "text": "月报",
+      "href": "/monthly"
+    },
+    {
+      "text": "08DeepSeek V4 Flash 开源登顶",
+      "href": "/monthly/2026-08"
+    },
+    {
+      "text": "07智能体落地与算力竞逐",
+      "href": "/monthly/2026-07"
+    },
+    {
+      "text": "06AI基础设施与智能体生态加速",
+      "href": "/monthly/2026-06"
+    },
+    {
+      "text": "05模型开源与智能体生态加速",
+      "href": "/monthly/2026-05"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "周报",
+      "href": "/weekly"
+    },
+    {
+      "text": "月报",
+      "href": "/monthly"
+    },
+    {
+      "text": "8 月",
+      "href": "/monthly/2026-08"
+    },
+    {
+      "text": "7 月",
+      "href": "/monthly/2026-07"
+    },
+    {
+      "text": "6 月",
+      "href": "/monthly/2026-06"
+    },
+    {
+      "text": "更早",
+      "href": "/monthly#report-history"
+    },
+    {
+      "text": "1DeepSeek V4 Flash 0731 开源，登顶开源模型前三Artificial Analysis",
+      "href": "/monthly#r-cms9hiyz80fdvro9kepvm1qvk"
+    },
+    {
+      "text": "2Qwen3.8-Max 发布：开源最强编码与协作模型，2.4T 参数Qwen：Blog Retrieval",
+      "href": "/monthly#r-cmscldw820c4kroeu7bw1kb27"
+    },
+    {
+      "text": "3xAI 发布 Grok 4.6，强化长时运行智能体能力xAI：News",
+      "href": "/monthly#r-cmsqabu0f001krouc6sfhic2d"
+    },
+    {
+      "text": "01模型发布与开源10 件",
+      "href": "#s-1"
+    },
+    {
+      "text": "02研究与科学突破3 件",
+      "href": "#s-2"
+    },
+    {
+      "text": "03版权与法律2 件",
+      "href": "#s-3"
+    },
+    {
+      "text": "04智能体与开发工具3 件",
+      "href": "#s-4"
+    },
+    {
+      "text": "05行业活动与生态2 件",
+      "href": "#s-5"
+    },
+    {
+      "text": "DeepSeek V4 Flash 0731 开源，登顶开源模型前三",
+      "href": "/items/cms9hiyz80fdvro9kepvm1qvk"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/ArtificialAnlys/status/2083306229074739285"
+    },
+    {
+      "text": "Qwen3.8-Max 发布：开源最强编码与协作模型，2.4T 参数",
+      "href": "/items/cmscldw820c4kroeu7bw1kb27"
+    },
+    {
+      "text": "原文",
+      "href": "https://qwen.ai/blog?id=qwen3.8"
+    },
+    {
+      "text": "xAI 发布 Grok 4.6，强化长时运行智能体能力",
+      "href": "/items/cmsqabu0f001krouc6sfhic2d"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.ai/news/grok-4-6"
+    },
+    {
+      "text": "腾讯混元发布 Hy4 preview：770B 总参数、1M 上下文，开源上线",
+      "href": "/items/cmtcjzlxy03f8rodbxqdotbhg"
+    },
+    {
+      "text": "原文",
+      "href": "https://mp.weixin.qq.com/s?__biz=MzkwODU2OTQyNQ%3D%3D&mid=2247498484&idx=1&sn=0db140a12b8e18601ac933788045c831"
+    },
+    {
+      "text": "智谱开源 GLM-5.3 模型权重，主打智能体编程与网络防御",
+      "href": "/items/cmtdxtxi809gyro2m2zykqzli"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/0/995/896.htm"
+    },
+    {
+      "text": "GLM-5.3-Flash 开源：320B 总参数、AA 指数 57 分，定价为 Opus 4.8 的 1/40",
+      "href": "/items/cmta7bh1k04u6roj2e4pt7bob"
+    },
+    {
+      "text": "原文",
+      "href": "https://mp.weixin.qq.com/s?__biz=MzkyMzI3NzQ0Mg%3D%3D&mid=2247494157&idx=1&sn=6837b15a07d2518842eb6c6b53a3eb3c"
+    },
+    {
+      "text": "Google DeepMind 推出 Gemini 3.7 Flash：面向编程与智能体的最强工作模型",
+      "href": "/items/cmsrscwfn03f7ro0n7qijclds"
+    },
+    {
+      "text": "原文",
+      "href": "https://deepmind.google/blog/introducing-gemini-3-7-flash"
+    },
+    {
+      "text": "Gemini Omni 1.1 Flash 发布，为开发者提供更强生成式视频控制",
+      "href": "/items/cmtbq1hfq156croamzzo9gno2"
+    },
+    {
+      "text": "原文",
+      "href": "https://deepmind.google/blog/gemini-omni-1-1-flash-lets-you-build-with-more-control"
+    },
+    {
+      "text": "Meta 发布开源模型 Muse Glimmer",
+      "href": "/items/cmsn2u3mt067ero8opidmwvz7"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/AIatMeta/status/2086757844544811485"
+    },
+    {
+      "text": "NVIDIA 推出 Nemotron 3.5 Lightning，加速本地智能体任务",
+      "href": "/items/cmsoolxde07isrop2eb5rrtvq"
+    },
+    {
+      "text": "原文",
+      "href": "https://blogs.nvidia.com/blog/local-ai-open-source-models-agents-nemotron"
+    },
+    {
+      "text": "OpenAI Astra 以约2000美元证明10项数学难题",
+      "href": "/items/cmsa302cc01xaro41omun2e1h"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/gdb/status/2083457463337287721"
+    },
+    {
+      "text": "谷歌推出 WeatherNext 气旋模型，AI 高精度预报飓风平均提前 24 小时",
+      "href": "/items/cmsilvone1jf1ronk6fs8o4d4"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/0/986/951.htm"
+    },
+    {
+      "text": "WeatherNext 预测气旋：提前五天预警五级飓风",
+      "href": "/items/cmt8uphwp3qmhro73czv8pbpv"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/GoogleAI/status/2092275116503707733"
+    },
+    {
+      "text": "德国法院裁定AI音乐生成器Suno侵犯版权，驳回合理使用抗辩",
+      "href": "/items/cmsa9czys01chrojdrdvterw0"
+    },
+    {
+      "text": "原文",
+      "href": "https://the-decoder.com/german-court-rules-ai-music-generator-suno-violated-copyrights-rejects-fair-use-defense"
+    },
+    {
+      "text": "索尼与华纳起诉Anthropic，指控其大规模盗用版权音乐训练Claude",
+      "href": "/items/cmtfkvjwn0by7rou8vil9ysf1"
+    },
+    {
+      "text": "原文",
+      "href": "https://the-decoder.com/sony-and-warner-sue-anthropic-over-one-of-the-largest-and-most-blatant-ongoing-thefts-of-intellectual-property-in-history"
+    },
+    {
+      "text": "Cursor 推出 Origin 代码托管服务，作为 GitHub 的替代方案",
+      "href": "/items/cmsxsvb5s0a4troz0z2q2nu3h"
+    },
+    {
+      "text": "原文",
+      "href": "https://cursor.com/changelog/origin-code-hosting"
+    },
+    {
+      "text": "Cloudflare OS：面向智能体、应用与工作的开放平台",
+      "href": "/items/cmsg5h9ay06durolg6bwl0p8e"
+    },
+    {
+      "text": "原文",
+      "href": "https://blog.cloudflare.com/cloudflare-os"
+    },
+    {
+      "text": "OpenAI 桌面端 ChatGPT 上线语音交互功能，可语音操控电脑执行多步骤任务",
+      "href": "/items/cmskzmhrs03rwrowg146pdv9j"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/0/987/452.htm"
+    },
+    {
+      "text": "第二届世界人形机器人运动会开幕：2056 台机器人齐聚“冰丝带”，666 支队伍竞技 51 赛项",
+      "href": "/items/cmt4gz31f1l1qro6tprhfg5ys"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/0/993/105.htm"
+    },
+    {
+      "text": "AI生成书籍正淹没亚马逊，并拉低人类作者的单书收入",
+      "href": "/items/cmsuaf2hr05zgroe0y1e7275v"
+    },
+    {
+      "text": "原文",
+      "href": "https://the-decoder.com/ai-generated-books-are-flooding-amazon-and-tanking-sales-for-human-authors"
+    },
+    {
+      "text": "上一期 · 7 月智能体落地与算力竞逐",
+      "href": "/monthly/2026-07"
+    },
+    {
+      "text": "2026-07智能体落地与算力竞逐",
+      "href": "/monthly/2026-07"
+    },
+    {
+      "text": "2026-06AI基础设施与智能体生态加速",
+      "href": "/monthly/2026-06"
+    },
+    {
+      "text": "2026-05模型开源与智能体生态加速",
+      "href": "/monthly/2026-05"
+    },
+    {
+      "text": "往期月报",
+      "href": "/monthly#report-history"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 6094.796875,
+      "top": 0,
+      "right": 1440,
+      "bottom": 6094.796875,
+      "left": 180
+    },
+    "firstArticle": {
+      "x": 500,
+      "y": 36,
+      "width": 900,
+      "height": 5994.796875,
+      "top": 36,
+      "right": 1400,
+      "bottom": 6030.796875,
+      "left": 500
+    }
+  }
+}
