@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -32,6 +32,13 @@ test('trusted project resolution hydrates store actor and never derives private 
  const app={store:{userById:async id=>{assert.equal(id,actor.user.id);return hydrated;},requireProject:async(user,id)=>{assert.equal(user,hydrated);assert.equal(id,actor.projectId);return{id,userId:user.id};}}};
  assert.deepEqual(await resolveCampaignProject(app,actor),{id:'default',userId:'owner'});
  await assert.rejects(resolveCampaignProject({store:{userById:async()=>null}},actor),/actor_unavailable/);
+});
+test('candidate setup fails fast on its exact desired generation terminal job and keeps typed rootcause',async()=>{
+ const project={userId:'owner',id:'project'},hash='a'.repeat(64),state={payload:{phase:'waiting',desired:{reference:{generationHash:hash}}}};
+ const app={hostedExtensions:{generations:{current:async()=>state}},store:{database:{query:async(_sql,args)=>{assert.deepEqual(args,[project.userId,project.id,hash]);return{rows:[{id:'owned-job',status:'failed',error:{code:'runtime_exited'}}]};}}}};
+ await assert.rejects(campaignGenerationReady(app,project),error=>error.code==='runtime_exited'&&error.terminalJob.id==='owned-job');
+ app.store.database.query=async()=>({rows:[{id:'owned-job',status:'queued'}]});assert.equal(await campaignGenerationReady(app,project),null);
+ const controller=new AbortController();controller.abort(new DOMException('Assessment interrupted.','AbortError'));assert.throws(()=>controller.signal.throwIfAborted(),{name:'AbortError'});
 });
 test('short Unix transport root is exact canonical operator-owned700 with protected400 identity marker',async()=>{
  const root=await createShortCampaignRoot();

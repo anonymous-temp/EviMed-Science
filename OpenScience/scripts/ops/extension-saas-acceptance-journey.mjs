@@ -192,6 +192,16 @@ async function campaignPoll(check, deadline, signal) {
   while (Date.now() < deadline) { signal?.throwIfAborted(); const result = await check(); if (result) return result; await new Promise(resolve=>setTimeout(resolve,200)); }
   throw Object.assign(new Error('private_campaign_deadline'), { code:'private_campaign_deadline' });
 }
+/** Stop on the exact desired generation's durable terminal outcome; unrelated older jobs never short-circuit an active apply. */
+export async function campaignGenerationReady(app,project){
+  const current=await app.hostedExtensions.generations.current(project);
+  const desired=current?.payload.desired?.reference?.generationHash;
+  if(desired&&current?.payload.phase==='effective'&&current.payload.effective?.reference?.generationHash===desired&&current.payload.effective?.projection.plugins.some(plugin=>Object.hasOwn(plugin,'assessmentAdmissionDigest')))return current;
+  if(desired){const jobs=(await app.store.database.query("SELECT id,status,error FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='plugin-apply' AND payload->>'variant'='extension-generation-v1' AND payload->'reference'->>'generationHash'=$3 ORDER BY created_at DESC LIMIT 1",[project.userId,project.id,desired])).rows;
+    const job=jobs[0];if(job&&['failed','canceled'].includes(job.status))throw Object.assign(new Error('candidate_generation_terminal'),{code:typeof job.error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(job.error.code)?job.error.code:'candidate_generation_terminal',terminalJob:{id:job.id,status:job.status,generationHash:desired}});
+  }
+  return null;
+}
 async function scanOwnedCampaignTree(root,needle){
   let files=0,bytes=0,symlinksSkipped=0;const matches=[];
   const visit=async directory=>{for(const entry of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,entry.name),stat=await fs.lstat(target);
@@ -255,7 +265,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     relay=await startOwnedCampaignRelay({root,imageId:inputs.runtimeImageId,network,fixtureUrl:privateFixture.baseUrl+'/',gatewayHost:inputs.gatewayHost});
     const privateApp=privateFixture.app,project=await resolveCampaignProject(privateApp,owner),view=await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
-    await campaignPoll(async()=>{const current=await privateApp.hostedExtensions.generations.current(project);return current?.payload.phase==='effective'&&current.payload.effective?.projection.plugins.some(plugin=>plugin.extensionId===descriptor.id&&plugin.assessmentAdmissionDigest)?current:null;},Date.now()+inputs.deadlineMs,signal);
+    await campaignPoll(()=>campaignGenerationReady(privateApp,project),Date.now()+inputs.deadlineMs,signal);
     stage='physical-runtime-image-uid-mount-verification';const runtime=privateApp.runtimeManager.runtimes.get(privateApp.runtimeManager.key(project));assert(runtime?.containerName);
     const actual=JSON.parse((await execute(path.join(root,'docker-fixture.mjs'),['inspect','--format','{{json .}}',runtime.containerName],{timeout:10000,maxBuffer:256*1024,env:assessmentDockerEnvironment()})).stdout);
     const volume=volumeName?JSON.parse((await execute('docker',['volume','inspect',volumeName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0]:null;
@@ -269,7 +279,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     await privateFixture.close();privateFixture=null;
     await saveProtected(path.join(root,'campaign-state.json'),state);success=true;
     result={status:state.status,qualified:false,statePath:path.join(root,'campaign-state.json'),physicalSetup:state.physicalSetup};
-  }catch(error){failure=error;error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
+  }catch(error){failure=error;error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,terminalJob:error.terminalJob??null,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
   }finally{
     let cleanupFailed=false;const cleanupFailures=[];
     for(const [resource,release] of [['private-app-controller',()=>privateFixture?.close()],['bootstrap-controller',()=>composition?.close()],['bootstrap-app',()=>app?.close()],['owned-relay',()=>relay?.close()],['controlled-upstream',()=>transport.close()]])try{await release();}catch(error){cleanupFailed=true;cleanupFailures.push({resource,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}
@@ -587,7 +597,7 @@ export async function runOrdinaryAssessmentJourney({ databaseUrl, coworkImage, v
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const abort = new AbortController(), interrupted = () => abort.abort('assessment_interrupted');
+  const abort = new AbortController(), interrupted = () => abort.abort(new DOMException('Assessment interrupted.','AbortError'));
   process.once('SIGTERM', interrupted); process.once('SIGINT', interrupted);
   try {
     let report;
