@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import pg from 'pg';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
+test('nested suite databases retain unique suffixes within PostgreSQL identifier limits and reject unsafe names',async t=>{
+ const created=[];class FakeClient{async connect(){}async query(sql){created.push(sql);return{rows:[]};}async end(){}}
+ const originalClient=pg.Client;t.after(()=>{pg.Client=originalClient;});pg.Client=FakeClient;
+ const base='evimed_test_product_extensiongenerationservice_12345678';
+ const first=await createGeoTestDatabase(`postgresql://fixture@127.0.0.1/${base}`,'extgenroles');
+ const second=await createGeoTestDatabase(`postgresql://fixture@127.0.0.1/${base}`,'extgenroles');
+ assert.equal(first.name.length,63);assert.notEqual(first.name,second.name);
+ assert.match(first.name,/^evimed_test[a-z0-9_]*_[a-f0-9]{8}$/);
+ assert.equal(new URL(first.url).pathname,`/${first.name}`);
+ await first.drop();await second.drop();
+ assert.ok(created.includes(`DROP DATABASE IF EXISTS "${first.name}" WITH (FORCE)`));
+ const before=created.length;
+ for(const url of ['postgresql://fixture@127.0.0.1/production',`postgresql://fixture@127.0.0.1/evimed_test${'a'.repeat(64)}`])await assert.rejects(createGeoTestDatabase(url,'fixture'));
+ await assert.rejects(createGeoTestDatabase('postgresql://fixture@127.0.0.1/evimed_test','bad-label'));
+ assert.equal(created.length,before);
+});
 test('staged isolated DB preservation closes its actual admin handle without DROP; later DROP reconnects only to its owned name',async t=>{
  const clients=[];
  class FakeClient{

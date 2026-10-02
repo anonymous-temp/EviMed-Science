@@ -155,7 +155,9 @@ test('actual Linux author UID1000 keeps originals private while native UID10001 
     for (const file of ['controller.mjs','fixture.mjs']) await fs.chmod(path.join(proof,file),0o644)
     await fs.chmod(path.join(proof,'docker-proxy.mjs'),0o755)
     docker(['volume','create','--driver','local','--opt','type=tmpfs','--opt','device=tmpfs','--opt','o=size=32m,mode=0755',volume])
-    docker(['create','--pull','never','--name',name,'--network','none','--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID',
+    // Only this trusted fixture initializes its own tmpfs before dropping to
+    // author UID1000; the separately launched native parser remains UID10001.
+    docker(['create','--pull','never','--name',name,'--user','0:0','--network','none','--read-only','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID',
       '--security-opt','no-new-privileges','--pids-limit','128','--memory','512m','--cpus','1','--tmpfs','/tmp:size=16m,mode=1777',
       '--mount',`type=bind,source=${proof},target=/proof,readonly`,'--mount',`type=volume,source=${volume},target=/data`,
       '--mount','type=bind,source=/var/run/docker.sock,target=/docker.sock','--env',`FIXTURE_IMAGE_ID=${image}`,'--env',`FIXTURE_VOLUME=${volume}`,

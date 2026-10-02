@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 
 /**
- * Create `<test database>_<label>_<8 hex>` and hand back its URL and the way to
+ * Create a bounded `<test database>_<label>_<8 hex>` name and hand back its URL and the way to
  * drop it. Refuses anything but a local `evimed_test` database.
  * @param {string} databaseUrl the configured OPEN_SCIENCE_TEST_POSTGRES_URL
  * @param {string} label a short lowercase tag naming the suite
@@ -18,9 +18,13 @@ export async function createGeoTestDatabase(databaseUrl, label) {
   assert.ok(["postgres:", "postgresql:"].includes(source.protocol) && !source.search && !source.hash,
     "test database parameters cannot override the endpoint or read TLS files");
   assert.ok(["127.0.0.1", "localhost", "[::1]"].includes(source.hostname), "a test database is local");
-  const name = `${decodeURIComponent(source.pathname.slice(1))}_${label}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
-  assert.match(name, /^evimed_test[a-z0-9_]*$/);
-  assert.ok(name.length <= 63, "PostgreSQL names are at most 63 bytes");
+  const base = decodeURIComponent(source.pathname.slice(1));
+  assert.match(base, /^evimed_test[a-z0-9_]*$/);
+  assert.ok(base.length <= 63, "PostgreSQL names are at most 63 bytes");
+  assert.match(label, /^[a-z0-9_]+$/);
+  // The product runner already isolates each suite. Leave room for another
+  // independent suffix when that suite creates a database of its own.
+  const name = `${`${base}_${label}`.slice(0, 54)}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
   const admin = new pg.Client({ connectionString: databaseUrl, application_name:`evimed-isolated-${name}` });
   try {
     await admin.connect();
