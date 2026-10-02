@@ -29,8 +29,11 @@ before(async () => {
   await database.migrate()
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Generation fixture','development')", [user.id])
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Project',1048576)", [user.id, project.id])
-  const parent = process.env.OPEN_SCIENCE_TEST_PERSONAL_SKILL_IMAGE ? new URL('../../../../.planning/platform-followups-20260929/extension-center-20261002/personal-reader-tests/', import.meta.url).pathname : os.tmpdir()
+  const selectedParent = process.env.OPEN_SCIENCE_TEST_PERSONAL_SKILL_DATA
+  if (selectedParent && !path.isAbsolute(selectedParent)) throw new Error('Personal fixture parent must be absolute')
+  const parent = selectedParent ?? (process.env.OPEN_SCIENCE_TEST_PERSONAL_SKILL_IMAGE ? new URL('../../../../.evimed-local/extensions/build/fixtures/', import.meta.url).pathname : os.tmpdir())
   await fs.mkdir(parent, { recursive: true, mode: 0o700 })
+  if (selectedParent) { const info = await fs.lstat(parent); if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077)) throw new Error('Personal fixture parent must be an owned private directory') }
   root = await fs.realpath(await fs.mkdtemp(path.join(parent, 'personal-generation-')))
   const libraryRoot = path.join(root, '.openscience', 'skill-library'); await fs.mkdir(libraryRoot, { recursive: true })
   const artifacts = new SkillLibraryArtifacts({ root: libraryRoot, parseSkill: parsePersonalSkill })
@@ -239,12 +242,12 @@ test('actual Linux UID1000 generation is read by UID10001 native provider only a
   const writer = `evimed-personal-writer-${suffix}`
   const reader = `evimed-personal-reader-container-${suffix}`
   const nodeWriter = `const fs=require('node:fs');const root='/fixture/owner/project/generation/skills';fs.chownSync('/fixture',1000,1000);process.setgid(1000);process.setuid(1000);if(process.argv[1]==='private'){fs.mkdirSync(root,{recursive:true,mode:0o700});fs.cpSync('/source',root,{recursive:true});}function mode(p){const s=fs.lstatSync(p);fs.chmodSync(p,s.isDirectory()?(process.argv[1]==='private'?0o700:0o755):(process.argv[1]==='private'?0o400:0o444));if(s.isDirectory())for(const n of fs.readdirSync(p))mode(p+'/'+n);}mode(root);if(process.argv[1]==='private'){console.log('fixture-ready');setTimeout(()=>{},45000);}`
-  const nodeReader = `const fs=require('node:fs');const {createRequire}=require('node:module');const {pathToFileURL}=require('node:url');const stat=fs.statSync('/input/'+process.argv[1]+'/SKILL.md');const info={readerUid:process.getuid(),fileUid:stat.uid,fileMode:stat.mode&4095};(async()=>{try{const r=createRequire('/usr/local/share/evimed/dsh-home-seed/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json');const {parsePersonalSkill}=await import(pathToFileURL(r.resolve('@evimed/harness-port/personal-skills')).href);const skill=await parsePersonalSkill('/input',{expectedName:process.argv[1]});console.log(JSON.stringify({...info,name:skill.name,instructions:skill.instructions}));}catch{console.log(JSON.stringify({...info,failed:true}));process.exitCode=1;}})();`
-  const limits = ['--pull','never','--network','none','--read-only','--pids-limit','64','--memory','256m','--cpus','0.5','--tmpfs','/tmp:size=16m,mode=1777','--security-opt','no-new-privileges']
+  const nodeReader = `const fs=require('node:fs');const {createRequire}=require('node:module');const {pathToFileURL}=require('node:url');const stat=fs.statSync('/input/'+process.argv[1]+'/SKILL.md');const info={readerUid:process.getuid(),fileUid:stat.uid,fileMode:stat.mode&4095};(async()=>{try{const r=createRequire('/opt/evimed/dsh-home-seed/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json');const {parsePersonalSkill}=await import(pathToFileURL(r.resolve('@evimed/harness-port/personal-skills')).href);const skill=await parsePersonalSkill('/input',{expectedName:process.argv[1]});console.log(JSON.stringify({...info,name:skill.name,instructions:skill.instructions}));}catch{console.log(JSON.stringify({...info,failed:true}));process.exitCode=1;}})();`
+  const limits = ['--pull','never','--network','none','--read-only','--pids-limit','64','--memory','256m','--cpus','0.5','--tmpfs','/tmp:size=16m,mode=1777','--tmpfs','/runtime:ro,noexec,nosuid,nodev,size=1m,mode=0555','--tmpfs','/workspace:ro,noexec,nosuid,nodev,size=1m,mode=0555','--security-opt','no-new-privileges']
   try {
     await docker('docker', ['volume','create','--driver','local','--opt','type=tmpfs','--opt','device=tmpfs','--opt','o=size=32m,mode=0755',volume], { timeout: 10000 })
     const write = async action => {
-      await docker('docker', ['create',...limits,'--name',writer,'--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID',
+      await docker('docker', ['create',...limits,'--name',writer,'--user','0:0','--cap-drop','ALL','--cap-add','CHOWN','--cap-add','SETUID','--cap-add','SETGID',
         '--mount',`type=bind,source=${verified.mountRoot},target=/source,readonly`,'--mount',`type=volume,source=${volume},target=/fixture`,'--entrypoint','node',image,'-e',nodeWriter,action], { timeout: 15000 })
       await docker('docker',['start',writer],{timeout:15000})
       let ready = false
@@ -253,7 +256,7 @@ test('actual Linux UID1000 generation is read by UID10001 native provider only a
         if (logs.stdout.includes('fixture-ready')) { ready = true; break }
         await new Promise(resolve => setTimeout(resolve,20))
       }
-      assert.equal(ready,true)
+      assert.equal(ready,true,(await docker('docker',['logs',writer],{timeout:1000,maxBuffer:32768})).stderr)
     }
     await write('private')
     await docker('docker', ['create',...limits,'--name',reader,'--cap-drop','ALL','--user','10001:10001',
@@ -274,7 +277,7 @@ test('actual Linux UID1000 generation is read by UID10001 native provider only a
     assert.equal(JSON.parse((await docker('docker',['inspect',reader])).stdout)[0].State.ExitCode,0)
   } finally {
     for(const name of [writer,reader]){
-      await docker('docker',['rm','--force',name],{timeout:15000}).catch(error=>{if(!/no such (?:container|object)/iu.test(String(error.stderr)))throw error})
+      await docker('docker',['rm','--force','--volumes',name],{timeout:15000}).catch(error=>{if(!/no such (?:container|object)/iu.test(String(error.stderr)))throw error})
       await assert.rejects(docker('docker',['inspect',name]),/no such/iu)
     }
     await docker('docker',['volume','rm',volume],{timeout:15000})

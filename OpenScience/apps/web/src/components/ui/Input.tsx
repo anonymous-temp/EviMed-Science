@@ -1,4 +1,4 @@
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -60,7 +60,7 @@ interface FieldShellProps {
 function FieldShell({ id, label, error, children }: FieldShellProps) {
   if (!label && !error) return <>{children}</>;
   return (
-    <div>
+    <div className="min-w-0">
       {label != null && (
         <label htmlFor={id} className="mb-2 block text-ui font-medium text-text">
           {label}
@@ -101,6 +101,23 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       />
     </FieldShell>
   );
+});
+
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label?: ReactNode;
+  error?: ReactNode;
+}
+
+/** Native selection uses the same field shell and control geometry as text/date/time inputs. */
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
+  { label, error, id, className, children, ...rest }, ref,
+) {
+  const autoId = useId(), inputId = id ?? autoId, hasError = error != null;
+  return <FieldShell id={inputId} label={label} error={error}>
+    <select ref={ref} id={inputId} aria-invalid={hasError || undefined}
+      aria-errormessage={hasError ? `${inputId}-error` : undefined}
+      className={inputClasses({ error: hasError, className })} {...rest}>{children}</select>
+  </FieldShell>;
 });
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {

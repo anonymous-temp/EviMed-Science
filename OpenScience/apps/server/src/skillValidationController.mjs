@@ -175,7 +175,9 @@ export function skillValidationPlan(config, reference, imageId, jobId) {
     '--label', 'open-science.skill-validation=true', '--label', `open-science.skill-reference=${identity}`, '--label', `open-science.skill-job=${jobId}`,
     '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32', '--cpus=0.5', '--memory=256m', '--memory-swap=256m',
     '--user', '10001:10001',
-    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16m', '--env', 'HOME=/tmp', '--env', 'DSH_HOME=/tmp/dsh', '--env', 'DSH_AGENTS_HOME=/tmp/agents',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=16m',
+    // Override the runtime image's VOLUME declarations without writable anonymous volumes.
+    '--tmpfs', '/workspace:ro,noexec,nosuid,nodev,size=1m', '--tmpfs', '/runtime:ro,noexec,nosuid,nodev,size=1m', '--env', 'HOME=/tmp', '--env', 'DSH_HOME=/tmp/dsh', '--env', 'DSH_AGENTS_HOME=/tmp/agents',
     '--env', 'DSH_TELEMETRY_DISABLED=1', '--mount', `${dockerRuntimeMount(config, selectedProjection, '/input')},readonly`,
     '--entrypoint', 'node', imageId, '/opt/evimed/socket/scripts/validate-personal-skill.mjs', checked.expectedName ?? ''] }
 }
@@ -367,6 +369,7 @@ export function createSkillValidationController(config, hooks = {}) {
         || createdState.HostConfig?.Memory !== 256 * 1024 * 1024 || createdState.HostConfig?.MemorySwap !== 256 * 1024 * 1024
         || createdState.HostConfig?.NanoCpus !== 500000000 || createdState.HostConfig?.PidsLimit !== 32
         || !createdState.HostConfig?.CapDrop?.includes('ALL') || !createdState.HostConfig?.SecurityOpt?.some(value => /^no-new-privileges(?:=true)?$/u.test(value))
+        || !['/workspace','/runtime'].every(target => createdState.HostConfig?.Tmpfs?.[target] === 'ro,noexec,nosuid,nodev,size=1m')
         || !mountMatches || createdState.Mounts?.length !== 1 || createdState.Mounts[0].Destination !== '/input' || createdState.Mounts[0].RW !== false) {
         throw new HttpError(503, 'product_state_unavailable', 'Skill validation startup could not be verified.')
       }

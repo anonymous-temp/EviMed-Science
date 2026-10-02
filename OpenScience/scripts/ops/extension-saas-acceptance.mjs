@@ -115,6 +115,15 @@ async function ledgerJourney() {
   if (!result.joined || result.failure || result.code !== 0) throw Object.assign(new Error('ledger_journey_failed'), { assessmentFailure: result.failure ?? 'child-exit', childJoined: result.joined, forced: result.forced, cleanupConfirmed: result.cleanupConfirmed });
   return JSON.parse(result.stdout.toString('utf8').trim().split('\n').at(-1));
 }
+async function nativeJourney() {
+  const child = spawn(process.execPath, [fileURLToPath(new URL('./extension-saas-acceptance-native.mjs', import.meta.url))], { env: assessmentChildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
+  const abort = new AbortController(), interrupted = () => abort.abort(); process.once('SIGTERM', interrupted); process.once('SIGINT', interrupted);
+  let result;
+  try { result = await runBoundedAssessmentChild(child, { deadlineMs: 120000, signal: abort.signal }); }
+  finally { process.removeListener('SIGTERM', interrupted); process.removeListener('SIGINT', interrupted); }
+  if (!result.joined || result.failure || result.code !== 0) throw Object.assign(new Error('native_journey_failed'), { assessmentFailure: result.failure ?? 'child-exit', childJoined: result.joined, forced: result.forced, cleanupConfirmed: result.cleanupConfirmed });
+  return JSON.parse(result.stdout.toString('utf8').trim().split('\n').at(-1));
+}
 async function ordinaryJourney() {
   const child = spawn(process.execPath, [fileURLToPath(new URL('./extension-saas-acceptance-journey.mjs', import.meta.url))],
     { env: assessmentChildEnvironment(process.env), stdio: ['ignore', 'pipe', 'pipe'] });
@@ -134,10 +143,12 @@ async function ordinaryJourney() {
   const contained = await containedJourney();
   const ledger = await ledgerJourney();
   const proof = await runProofRefusalControls();
+  const native = process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS ? await nativeJourney() : null;
   if (contained.artifact.artifactDigest !== result.identity.descriptor.artifactDigest || contained.artifact.imageId !== result.identity.descriptor.imageId) throw new Error('campaign_artifact_changed');
   const report = createCampaignReport({ artifactDigest: result.identity.descriptor.artifactDigest, sourcePolicy: result.identity.sourcePolicy,
-    nativeImage: result.identity.nativeImage, descriptor: result.identity.descriptor }, [...result.observations, ...boundaries.observations, ...contained.observations, ...ledger.observations, ...proof.observations]);
+    nativeImage: result.identity.nativeImage, descriptor: result.identity.descriptor }, [...result.observations, ...boundaries.observations, ...contained.observations, ...ledger.observations, ...proof.observations, ...(native?.observations ?? [])]);
   report.measurements = result.timing; report.cleanup = result.cleanup;
+  report.nativeCampaign = native ? { imageMatched: true, cleanup: native.cleanup } : { state: 'not-measured', reason: 'Fresh protected preparer inputs are required; cached source-stale images never imply success' };
   return report;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

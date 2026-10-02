@@ -1,9 +1,10 @@
+import {containedExtensionDescriptor} from './helpers/containedExtensionFixture.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { canonicalJson, EXTENSION_SAAS_CASE_IDS, extensionProofDigest } from '@evimed/domain';
+import { EXTENSION_SAAS_CASE_IDS, extensionProofDigest } from '@evimed/domain';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { createControllerExtensionComposition } from '../src/extensionControllerComposition.mjs';
@@ -16,13 +17,12 @@ import { ExtensionGenerationService } from '../src/extensionGenerationService.mj
 import { ExtensionOperationService } from '../src/extensionOperationService.mjs';
 import { ExtensionOperationWorker } from '../src/extensionOperationWorker.mjs';
 import { ExtensionResourceResolver } from '../src/extensionResourceResolver.mjs';
-import { extensionToolArtifactDigest } from '../src/extensionToolController.mjs';
 import { createFixtures } from '../../../scripts/runtime/extensions/cowork/fixtures.mjs';
 const hash = value => createHash('sha256').update(value).digest('hex');
-const image = process.env.COWORK_TEST_IMAGE,
-  baseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
+let image = process.env.COWORK_TEST_IMAGE;
+const baseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 test('default controller composition independently validates actual ledger/grants/generation/proof and executes joined public documents', {
-  skip: !image || !baseUrl,
+  skip: (!image && !process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS) || !baseUrl,
   timeout: 60000
 }, async () => {
   // The receipt and runtime/invocation stamp are synthetic authorization controls ONLY.
@@ -56,28 +56,9 @@ test('default controller composition independently validates actual ledger/grant
         id: 'p',
         baseDir: publicRoot
       };
-    const resources = await createFixtures(publicRoot),
-      adapter = path.join(repo, 'OpenScience/scripts/runtime/extensions/cowork');
-    const descriptor = {
-      id: 'cowork-portable',
-      coordinate: {
-        kind: 'github',
-        repository: 'Jesse-njx/dsh-cowork',
-        commit: '2ae5cf755c4294a1e988eebf3b12dd062425d84c'
-      },
-      integrity: 'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',
-      imageId: image,
-      closureExpectedSHA: hash(await fs.readFile(path.join(repo, '.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'))),
-      runnerSHA: hash(await fs.readFile(path.join(adapter, 'runner.mjs'))),
-      policySHA: hash(await fs.readFile(path.join(adapter, 'policy.mjs'))),
-      inventorySHA: hash(await fs.readFile(path.join(adapter, 'image-inventory.mjs')))
-    };
-    descriptor.adapterDigest = 'sha256:' + hash(canonicalJson({
-      runnerSHA: descriptor.runnerSHA,
-      policySHA: descriptor.policySHA,
-      inventorySHA: descriptor.inventorySHA
-    }));
-    descriptor.artifactDigest = extensionToolArtifactDigest(descriptor);
+    const resources = await createFixtures(publicRoot);
+    const descriptor = await containedExtensionDescriptor();
+    image = descriptor.imageId;
     const entry = {
       id: descriptor.id,
       title: 'Synthetic factory authority control',
