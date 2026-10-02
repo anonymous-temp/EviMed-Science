@@ -108,7 +108,8 @@ export function createManagedBrowserService(config,deps={}){
     let bounded='';for(let i=0;i<200&&i<value.length;i++)bounded+=value[i];return bounded;
   }),history=await slot.cdp.send('Page.getNavigationHistory');checkSlot(slot);
   slot.state.title=String(title).replace(/\p{Cc}/gu,'').slice(0,200);
-  slot.state.canGoBack=Number.isSafeInteger(history.currentIndex)&&history.currentIndex>0;
+  const firstPageIndex=history.entries?.[0]?.url==='about:blank'?1:0;
+  slot.state.canGoBack=Number.isSafeInteger(history.currentIndex)&&history.currentIndex>firstPageIndex;
   slot.state.canGoForward=Array.isArray(history.entries)&&Number.isSafeInteger(history.currentIndex)&&history.currentIndex<history.entries.length-1;
   slot.state.viewport={...slot.viewport};return clone(slot.state);
  }

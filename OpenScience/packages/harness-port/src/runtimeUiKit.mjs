@@ -397,7 +397,8 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     const options = { name: spec.slot };
     if (spec.inherit) {
       if (!['single','keyed'].includes(contract.kind) || !ctx.slots.entries(spec.slot).includes(spec.inherit) || (contract.kind === 'keyed' && spec.inherit.options.key !== spec.key)) throw new Error('[evimed-frame] inherited entry must be a current matching single/keyed registration');
-      for (const field of ['inject', 'children', 'store', 'locale']) if (spec.inherit[field] !== undefined) options[field] = spec.inherit[field];
+      if (spec.inherit.children) throw new Error('[evimed-frame] native child declarations have a sole owner; shadow a child slot instead');
+      for (const field of ['inject', 'store', 'locale']) if (spec.inherit[field] !== undefined) options[field] = spec.inherit[field];
     }
     if (contract.kind === 'list') {
       if (typeof spec.id !== 'string' || !spec.id) throw new Error(`[evimed-frame] list slot "${spec.slot}" needs an id (a key registers nothing here)`);

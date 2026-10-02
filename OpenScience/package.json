@@ -22,7 +22,7 @@
     "test:specialist-driver": "python3 -m unittest discover -s evals/capability-audit -p 'test_specialist_driver.py'",
     "test:release-audit": "python3 -m unittest discover -s evals/capability-audit -p 'test_release_audit.py'",
     "test:phi-masking": "python3 -m unittest discover -s evals/capability-audit -p 'test_dataset_phi_masking.py'",
-    "test:ops": "python3 -m unittest discover -s scripts/ops/test -p 'test_*.py'",
+    "test:ops": "python3 -m unittest discover -s scripts/ops/test -p 'test_*.py' && node --import ./scripts/test/localhostProbeGuard.mjs --test scripts/ops/test/*.test.mjs scripts/vcr/test/*.test.mjs",
     "eval:drug-evidence": "python3 evals/drug-evidence-quality/run_benchmark.py",
     "eval:open-domain": "python3 evals/open-domain-answer-quality/run_eval.py && python3 evals/open-domain-answer-quality/judge.py",
     "eval:method-quality": "python3 evals/method-quality/run_paired.py",

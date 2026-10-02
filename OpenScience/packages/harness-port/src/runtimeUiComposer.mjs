@@ -24,20 +24,22 @@ export function createComposerUploadStore(sessionId) {
 /** @param {any} ctx @param {any} config @param {any} target @param {any} require @param {any} kit */
 export function apply(ctx, config, target, require, kit) {
   if (!kit.ours || !kit.react || !kit.h) return;
-  const React = kit.react, h = kit.h, Context = React.createContext(null);
-  if (typeof ctx.slots.subscribe !== 'function') return;
-  const barSlot = 'conversation.composer.bar', attachmentSlot = 'conversation.input.attachments';
-  /** Render the native composer with its original owner props and a scope-local callback channel. @param {any} props */
-  function Composer(props) {
+  const React = kit.react, h = kit.h;
+  // Child slots keep the native bar as their sole declarer. Share only its
+  // public Session identity and connection epoch, never a parent React root.
+  const fallback = new Map(), generations = new WeakMap();
+  function useUploadStore(/** @type {any} */ props) {
     const generation = ctx.connection?.generation;
     const epoch = React.useSyncExternalStore((/** @type {()=>void} */ listener) => generation?.subscribe(listener) ?? (() => {}), () => generation?.getSnapshot() ?? null, () => null);
-    const store = React.useMemo(() => createComposerUploadStore(props.sessionId), [props.sessionId, epoch]);
-    const Native = kit.shadowed(barSlot, null, Composer);
-    return Native ? h(Context.Provider, { value: store }, h(Native, props)) : null;
+    const map = epoch && typeof epoch === 'object' ? generations.get(epoch) ?? (() => { const created = new Map();generations.set(epoch,created);return created; })() : fallback;
+    const sessionId = typeof props.sessionId === 'string' ? props.sessionId : undefined;
+    if (!map.has(sessionId)) map.set(sessionId,createComposerUploadStore(sessionId));
+    return map.get(sessionId);
   }
+  const attachmentSlot = 'conversation.input.attachments';
   /** The native attachment rail/drop/retry/removal body retains every original owner prop. @param {any} props */
   function Attachments(props) {
-    const store = React.useContext(Context);
+    const store = useUploadStore(props);
     React.useLayoutEffect(() => {
       if (!store) return undefined;
       store.publish(props); return () => { store.clear(props); };
@@ -47,7 +49,7 @@ export function apply(ctx, config, target, require, kit) {
   }
   /** @param {any} props */
   function Upload(props) {
-    const store = React.useContext(Context), input = React.useRef(null), opened = React.useRef(null);
+    const store = useUploadStore(props), input = React.useRef(null), opened = React.useRef(null);
     const owner = React.useSyncExternalStore(store?.subscribe ?? (() => () => {}), store?.getSnapshot ?? (() => null), () => null);
     const available = Boolean(store?.sessionId && owner?.canAcceptDrop === true && typeof owner.onAddFiles === 'function');
     const label = typeof props.t === 'function' ? props.t('input.upload') : '上传附件';
@@ -65,19 +67,7 @@ export function apply(ctx, config, target, require, kit) {
     );
   }
   kit.guarded('native upload controls', () => {
-    ctx.effect(() => {
-      /** @type {any} */ let native = null;
-      /** @type {(() => void) | null} */ let dispose = null;
-      const refresh = () => kit.guarded('native composer registration', () => {
-        const next = ctx.slots.entries(barSlot).find((/** @type {any} */ entry) => (entry.options.priority ?? 0) === 0);
-        if (next === native) return;
-        const previous = dispose; dispose = null; native = next; previous?.();
-        if (next) dispose = kit.occupy({ slot: barSlot, priority: -1, inherit: next }, Composer);
-      });
-      const unsubscribe = ctx.slots.subscribe(barSlot, refresh); refresh();
-      return () => { unsubscribe(); dispose?.(); };
-    });
-    kit.occupy({ slot: attachmentSlot, priority: -1 }, Attachments);
+    kit.occupy({ slot: attachmentSlot, priority: -1, locale: 'conversation' }, Attachments);
     kit.occupy({ slot: 'conversation.input.left', id: 'evimed-upload', order: -100, locale: 'conversation' }, Upload);
   });
 }

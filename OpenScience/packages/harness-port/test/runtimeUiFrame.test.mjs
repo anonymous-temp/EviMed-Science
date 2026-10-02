@@ -80,7 +80,8 @@ test('every body and the kit evaluate from their emitted text alone, and still r
 test('no body text reaches for a module: React arrives through the loader, everything else is a parameter', () => {
   const source = renderFrameClient();
   assert.doesNotMatch(source, /\bimport\s*[({'"]|\bfrom\s+['"]|require\(\s*['"](?!react['"])/);
-  assert.doesNotMatch(source, /@deepseek-ai\/|node:/);
+  assert.doesNotMatch(source, /(?:import|require)\s*\(?['"](?:@deepseek-ai\/|node:)/);
+  assert.equal(FRAME_VOCABULARY.nativeBrowserKey, '@deepseek-ai/dsh-client-ui-sidebar-browser', 'The public slot key is data, not a module import');
 });
 
 test('no body calls a session-facade member 0.1.7 retired', () => {
