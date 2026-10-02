@@ -172,7 +172,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
@@ -195,13 +195,19 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"publicSourceGatewayUrl", "pluginConfig"]', '"publicSourceGatewayUrl", "pluginConfig", "args"]')],
+    ["unknown fields allowed", controller.replace('"personalSkillGeneration", "extensionGeneration"]', '"personalSkillGeneration", "extensionGeneration", "args"]')],
     ["plugin shape guard removed", controller.replace(pluginGuard, "")],
     ["plugin validator removed", controller.replace(pluginValidation, "")],
     ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
     ["plugin extra fields allowed", controller.replace('"enabled,revision,settings"', '"args,enabled,revision,settings"')],
     ["plugin gateway timeout ceiling removed", controller.replace("config.publicSourceGatewayTimeoutMs ?? 15000);", "15000);")],
     ["unvalidated plugin reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig: payload.pluginConfig })")],
+    ["personal manifest verification removed", controller.replace("await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration)", "payload.personalSkillGeneration")],
+    ["extension manifest verification removed", controller.replace("await verifyExtensionGeneration(config, project, payload.extensionGeneration)", "payload.extensionGeneration")],
+    ["caller personal image forwarded", controller.replace("personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null", "personalSkillImageId: payload.personalSkillImageId")],
+    ["caller extension reference forwarded", controller.replace("extensionGeneration: extension?.reference ?? null", "extensionGeneration: payload.extensionGeneration")],
+    ["personal projection comparison removed", controller.replace("canonicalJson(extension.projection.personal.reference) !== canonicalJson(payload.personalSkillGeneration ?? null)", "false")],
+    ["current extension image check removed", controller.replace("inspectRuntimeImage(config).imageId !== extension.identity.baseRuntimeImageDigest", "false")],
     ["key validation skipped", controller.replace("assertExactKeys(payload, allowed);", "")],
     ["key validator disabled", controller.replace("if (unexpected) {", "if (false) {")],
     ["project scope bypassed", controller.replace("await projectFromReference(config, payload)", "payload")],
@@ -334,6 +340,14 @@ test("the boot proof boots under the environment production actually emits", asy
   assert.equal(shell.status, 0, shell.stderr);
   const defaults = runtimeEnvironment({ flags: {}, limits: {} });
   assert.deepEqual(shell.stdout.trim().split("\n"), citeNames.map(name => defaults[name]), "the actual shell exports must equal shipped plugin defaults");
+  const optionalNames = ["EVIMED_PERSONAL_SKILLS_DIR", "EVIMED_EXTENSION_PROJECTION_FILE", "EVIMED_EXTENSION_GATEWAY_URL"];
+  const optionalExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_(?:PERSONAL_SKILLS_DIR|EXTENSION_(?:PROJECTION_FILE|GATEWAY_URL))=/.test(line)).join("\n");
+  const optionalShell = spawnSync("bash", ["-c", `${optionalExport}\nfor name in ${optionalNames.join(" ")}; do printf '%s\\n' "\${!name}"; done`], {
+    encoding: "utf8", env: { PATH: process.env.PATH },
+  });
+  assert.equal(optionalShell.status, 0, optionalShell.stderr);
+  assert.deepEqual(optionalShell.stdout.split("\n").slice(0, -1), optionalNames.map(name => defaults[name]),
+    "the boot proof uses the ordinary optional roots with no selected generation or gateway");
   const commented = exportedNames(smoke.replace(citeExport, `# ${citeExport}`));
   for (const name of citeNames) assert.equal(commented.has(name), false, "commented settings must not count as a boot environment");
   assert.ok(produced.length >= 10, `expected a real environment surface, got ${produced.length} names`);

@@ -101,8 +101,10 @@ test("every setting the runtime depends on still holds in the composition the im
   // kernel's subagent, subagent-control, workflow and workflow-worker tools)
   // left the preset; delegation is evimed_delegate over the host's subagent
   // service, and nothing called the workflow tool.
-  assert.equal(report.counts.presetRows, 20, "the preset includes the managed citation bridge, the compaction provider, and grouped native tools");
+  assert.equal(report.counts.presetRows, 21, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
+  assert.equal(preset.rows.filter(row => row.id === "evimed-cowork-bridge").length, 1);
+  assert.equal(preset.byId.get("evimed-cowork-bridge").name, "@evimed/dsh-socket/extensions/cowork");
   assert.equal(preset.rows.filter(row => row.id === "evimed-compaction").length, 1);
   assert.equal(preset.rows.filter(row => row.id === "evimed-citation-bridge").length, 1);
   assert.equal(preset.byId.get("evimed-citation-bridge").name, "@evimed/dsh-socket/plugins/citation-bridge");

@@ -24,6 +24,8 @@ function runsWith(listImpl) {
   runs.monitorMaxPolls = 1;
   runs.monitorStallPolls = 0;
   runs.monitorIntervalMs = 1;
+  // This prototype-only ledger uses the constructor's ordinary non-PG work boundary.
+  runs.independentWork = work => work();
   runs.finished = [];
   runs.list = listImpl;
   runs.reconcileSession = async () => ({ status: "running" });

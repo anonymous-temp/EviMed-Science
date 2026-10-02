@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { SEAMS, loadHarnessModule, registerPluginProbe } from "@evimed/harness-port";
+import { SEAMS, loadHarnessModule, registerPluginProbe, registerScopedSkillCatalogue } from "@evimed/harness-port";
 
 import {
   ALLOWED_WIRE_METHODS,
@@ -179,10 +179,10 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // Nine kernel calls and two EviMed probe calls, 122 refused methods and
+  // Nine kernel calls, four EviMed probe calls and three scoped skill calls, 122 refused methods and
   // the gateway acknowledgement. Browser model-selection methods have their
   // own validated policy, so they no longer belong to this denied inventory.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 134);
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 139);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -207,7 +207,7 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   assert.ok(!isAllowedWireMethod("session/status"), "the kernel publishes no such method");
 });
 
-test("the two plugin probe methods are actual Typert registrations with no caller arguments", async () => {
+test("owned plugin probe methods have exact actual Typert registrations and closed argument framing", async () => {
   const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
   const { remoteMethods } = await loadHarnessModule("@deepseek-ai/dsh-typert-protocol");
   const ctx = new Context();
@@ -215,12 +215,30 @@ test("the two plugin probe methods are actual Typert registrations with no calle
     const probe = await registerPluginProbe(ctx);
     assert.equal(probe.typertRemote.namespace, "evimedPlugins");
     const actual = remoteMethods(probe).map(item => `${probe.typertRemote.namespace}/${item.method}`).sort();
-    assert.deepEqual(actual, ["evimedPlugins/status", "evimedPlugins/verify"]);
+    assert.deepEqual(actual, ["evimedPlugins/extensionInvocationFacts", "evimedPlugins/status", "evimedPlugins/verify", "evimedPlugins/verifyExtensions"]);
     assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedPlugins/")).sort(), actual);
     for (const method of actual) {
       assert.ok(ALLOWED_WIRE_METHODS.has(method));
-      assert.deepEqual(SEAMS.wire.unaryArgs[method], []);
-      assert.equal(probe[method.split("/")[1]].length, 0);
+      const expectedArgs = method === "evimedPlugins/extensionInvocationFacts" ? ["request"] : [];
+      assert.deepEqual(SEAMS.wire.unaryArgs[method], expectedArgs);
+      assert.equal(probe[method.split("/")[1]].length, expectedArgs.length);
+    }
+  } finally { await ctx.fiber.dispose(); }
+});
+
+test("scoped skill methods have exact actual Typert registrations and one request argument", async () => {
+  const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
+  const { remoteMethods } = await loadHarnessModule("@deepseek-ai/dsh-typert-protocol");
+  const ctx = new Context();
+  try {
+    const catalogue = await registerScopedSkillCatalogue(ctx);
+    const actual = remoteMethods(catalogue).map(item => `${catalogue.typertRemote.namespace}/${item.method}`).sort();
+    assert.deepEqual(actual, ["evimedSkills/list", "evimedSkills/read", "evimedSkills/snapshotBuiltin"]);
+    assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedSkills/")).sort(), actual);
+    for (const method of actual) {
+      assert.ok(ALLOWED_WIRE_METHODS.has(method));
+      assert.deepEqual(SEAMS.wire.unaryArgs[method], ["request"]);
+      assert.equal(catalogue[method.split("/")[1]].length, 2, "the local signal is transport-owned");
     }
   } finally { await ctx.fiber.dispose(); }
 });
