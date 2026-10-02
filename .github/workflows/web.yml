@@ -452,6 +452,10 @@ jobs:
     env:
       VCR_R_LIBS: ${{ github.workspace }}/.vcr-rlib
       VCR_ENGINE_TESTS: required
+      OPEN_SCIENCE_TEST_RESULT_ENGINES: "1"
+      EVIMED_RESULT_REPLAY_SIGNED_VCR: "1"
+      EVIMED_RESULT_REPLAY_PYTHON: ${{ github.workspace }}/.result-replay-venv/bin/python
+      EVIMED_RESULT_REPLAY_EVIDENCE_DIR: ${{ runner.temp }}/result-replay-evidence
     services:
       postgres:
         # The same image as the `web` job's: the production one.
@@ -502,6 +506,26 @@ jobs:
       - name: Install the engine service's Python requirements
         run: python3 -m pip install -r ../项目代码/vcr-engine/requirements.txt
 
+      - name: Install the fixed Python numerical replay environment from existing locks
+        shell: bash
+        run: |
+          python3 -m venv ../.result-replay-venv
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          selected = {}
+          for filename, names in [('../项目代码/meta/requirements.lock', {'numpy', 'scipy', 'pandas', 'python-dateutil', 'pytz', 'tzdata', 'six'}),
+                                  ('../项目代码/文献剂量分析/requirements.lock', {'networkx'})]:
+              for line in Path(filename).read_text().splitlines():
+                  match = re.fullmatch(r'([a-z0-9-]+)==([^ ]+)', line)
+                  if match and match[1] in names:
+                      selected[match[1]] = line
+              if not names.issubset(selected):
+                  raise SystemExit('The existing specialist lock lacks a numerical dependency.')
+          Path(os.environ['RUNNER_TEMP'], 'result-replay-numeric.lock').write_text('\n'.join(selected[name] for name in sorted(selected)) + '\n')
+          PY
+          "$EVIMED_RESULT_REPLAY_PYTHON" -m pip install -r deploy/specialist-adapter/requirements.lock -r "$RUNNER_TEMP/result-replay-numeric.lock"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -517,10 +541,39 @@ jobs:
       - name: Test the control plane against the real engine
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_vcr
-        run: >-
-          node --test --test-concurrency=1
-          apps/server/test/vcrEngineContract.integration.test.mjs
-          apps/server/test/vcrIntake.integration.test.mjs
+        shell: bash
+        run: |
+          node --test --test-concurrency=1 \
+            apps/server/test/vcrEngineContract.integration.test.mjs \
+            apps/server/test/vcrIntake.integration.test.mjs
+          NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
+            apps/server/test/resultReplayLifecycle.integration.test.mjs \
+            2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"
+          if ! grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/result-replay-five-paths.log"; then
+            echo "::error::the required five-path numerical replay proof did not complete without skips"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['EVIMED_RESULT_REPLAY_EVIDENCE_DIR'])
+          for method in ('meta.dl', 'faers.signals', 'bibliometric.network', 'design.analytic', 'comparator.evalue'):
+              evidence = json.loads((root / f'{method}.evidence.json').read_text())
+              if evidence['comparison']['numbers']['status'] != 'identical' or not evidence['originalRetained']:
+                  raise SystemExit(f'{method}: the frozen-input replay did not preserve numerical agreement and original bytes')
+              if method in ('design.analytic', 'comparator.evalue') and evidence['receipt']['signed'] is not True:
+                  raise SystemExit(f'{method}: the real R HTTP receipt was not verified')
+          PY
+
+      - name: Preserve five-path numerical replay receipts and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-replay-five-paths-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/result-replay-five-paths.log
+            ${{ runner.temp }}/result-replay-evidence
+          if-no-files-found: error
 
   docker-hosted:
     runs-on: ubuntu-24.04
