@@ -132,7 +132,7 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 25 exports
+// errorCodes
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
@@ -144,6 +144,7 @@ export {
   EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
+  MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
   VCR_MODULE_ERROR_CODES,
   VCR_PROTOCOL_ISSUE_CODES,

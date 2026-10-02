@@ -653,8 +653,13 @@ test("startup arms every recurring sweep, and each timer really drives its own s
   }
 });
 
-test("a maintenance pause clears every recurring timer and reopening re-arms them", async (t) => {
-  const fixture = await composedApp(t);
+for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
+  const fixture = await composedApp(t, {
+    managedBrowserEnabled,
+    managedBrowserCdpUrl: "http://127.0.0.1:9222",
+    edgeProxyUrl: "https://proxy.example.org",
+    edgeProxyCredentials: "synthetic:fixture",
+  });
   const armedAtStartup = live(fixture.armed).length;
   assert.ok(armedAtStartup >= RECURRING_SWEEPS.length, "startup armed fewer timers than there are sweeps");
 

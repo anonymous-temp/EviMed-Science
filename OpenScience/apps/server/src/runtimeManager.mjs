@@ -422,7 +422,7 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options 
   });
   if (surface === "ui") {
     const embedder = options.frameAncestors ? String(options.frameAncestors) : "'none'";
-    responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}`;
+    responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}${options.managedBrowser ? "; frame-src 'self' blob:" : ""}`;
     responseHeaders["x-content-type-options"] = "nosniff";
     // A file whose URL names its content is kept, privately, and revalidated
     // by its validators when the browser asks; everything else — the
@@ -5961,6 +5961,7 @@ export class RuntimeManager {
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
+        managedBrowser: this.config.managedBrowserEnabled === true,
         uiBasePath,
         immutable,
       });

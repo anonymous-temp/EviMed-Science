@@ -94,7 +94,7 @@ export function localAddressToward(host, port, { timeoutMs = 5_000 } = {}) {
  *   maxHosts: number,
  *   maxConnections?: number,
  *   counts: EgressCounts,
- *   connectImpl?: (options: { host: string, port: number }) => net.Socket,
+ *   connectImpl?: (options: { host: string, port: number }, signal?: AbortSignal) => net.Socket | Promise<net.Socket>,
  * }} options `maxConnections`: the browser's connections to the proxy at
  *   once (Chromium itself opens at most 32 to one proxy); `connectImpl` opens
  *   the upstream socket to an address that has already been checked (tests
@@ -120,6 +120,9 @@ export async function openRenderEgress({
   let downloaded = 0;
   let capped = false;
   let closed = false;
+  const connecting = new Set();
+  const shutdown = new AbortController();
+  let closing = null;
 
   function cutEverything() {
     for (const socket of sockets) socket.destroy();
@@ -182,9 +185,14 @@ export async function openRenderEgress({
     if (!EGRESS_PORTS.has(port)) throw new Error("port");
     const address = await checkedAddress(hostname);
     if (closed || capped) throw new Error("closed");
-    const socket = connectImpl({ host: address, port });
-    track(socket);
-    return socket;
+    const pending = Promise.resolve(connectImpl({ host: address, port }, AbortSignal.any([shutdown.signal, AbortSignal.timeout(15_000)])));
+    connecting.add(pending);
+    try {
+      const socket = await pending;
+      if (closed || capped) { socket.destroy(); throw new Error("closed"); }
+      track(socket);
+      return socket;
+    } finally { connecting.delete(pending); }
   }
 
   let clients = 0;
@@ -214,8 +222,8 @@ export async function openRenderEgress({
     const hostname = match[1];
     const port = Number(match[2]);
     upstream(hostname, port).then((remote) => {
-      remote.once("connect", () => {
-        if (client.destroyed) {
+      const wire = () => {
+        if (client.destroyed || closed || capped) {
           remote.destroy();
           return;
         }
@@ -229,7 +237,9 @@ export async function openRenderEgress({
         client.once("end", () => remote.end());
         remote.once("close", () => client.destroy());
         client.once("close", () => remote.destroy());
-      });
+      };
+      if (remote.connecting) remote.once("connect", wire);
+      else wire();
       remote.once("error", () => {
         if (!client.destroyed) client.end("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
       });
@@ -297,9 +307,14 @@ export async function openRenderEgress({
     capped: () => capped,
     downloaded: () => downloaded,
     async close() {
-      closed = true;
-      cutEverything();
-      await new Promise((resolve) => server.close(() => resolve(undefined)));
+      closing ??= (async () => {
+        closed = true;
+        shutdown.abort();
+        cutEverything();
+        await Promise.allSettled([...connecting]);
+        await new Promise((resolve) => server.close(() => resolve(undefined)));
+      })();
+      await closing;
     },
   };
 }

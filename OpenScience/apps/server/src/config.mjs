@@ -2505,6 +2505,11 @@ export function loadConfig(overrides = {}) {
     // or with neither, a page that needs a browser is the named error
     // `web_read_needs_browser` and the run uses another source.
     webRenderEnabled: overrides.webRenderEnabled ?? boolEnv("OPEN_SCIENCE_WEB_RENDER_ENABLED", false),
+    // Interactive browser contexts are opt-in and remain separate from research runtimes.
+    managedBrowserEnabled: overrides.managedBrowserEnabled ?? boolEnv("OPEN_SCIENCE_MANAGED_BROWSER_ENABLED", false),
+    managedBrowserCdpUrl: String(overrides.managedBrowserCdpUrl ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL ?? "").trim(),
+    managedBrowserMaxContexts: Number(overrides.managedBrowserMaxContexts ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS ?? 4),
+    managedBrowserMaxContextsPerUser: Number(overrides.managedBrowserMaxContextsPerUser ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER ?? 2),
     // The DevTools address of the deployment's own browser (the knowledge
     // overlay's `frontier-browser`). Empty = no local browser.
     webRenderCdpUrl: String(overrides.webRenderCdpUrl ?? process.env.OPEN_SCIENCE_WEB_RENDER_CDP_URL ?? "").trim(),

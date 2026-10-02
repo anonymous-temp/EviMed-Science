@@ -75,6 +75,8 @@ export function validFrame(value) {
     .filter((/** @type {unknown} */ name) => typeof name === 'string' && /^[a-z]{1,32}$/.test(name));
   return {
     version: 1,
+    prefix: /^[A-Za-z0-9_-]{32}$/.test(value.frameId ?? '') && value.prefix === '/__evimed/f/' + value.frameId + '/' ? value.prefix : null,
+    managedBrowser: value.managedBrowser == null ? null : { provider: 'managed', available: value.managedBrowser.provider === 'managed' && value.managedBrowser.available === true && Object.keys(value.managedBrowser).sort().join() === 'available,provider' },
     frameId: typeof value.frameId === 'string' ? value.frameId : '',
     projectId: typeof value.projectId === 'string' ? value.projectId : '',
     shellOrigin: typeof value.shellOrigin === 'string' ? value.shellOrigin : '',
@@ -394,7 +396,7 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     /** @type {Record<string, any>} */
     const options = { name: spec.slot };
     if (spec.inherit) {
-      if (contract.kind !== 'single' || !ctx.slots.entries(spec.slot).includes(spec.inherit)) throw new Error('[evimed-frame] inherited entry must be a current single-slot registration');
+      if (!['single','keyed'].includes(contract.kind) || !ctx.slots.entries(spec.slot).includes(spec.inherit) || (contract.kind === 'keyed' && spec.inherit.options.key !== spec.key)) throw new Error('[evimed-frame] inherited entry must be a current matching single/keyed registration');
       for (const field of ['inject', 'children', 'store', 'locale']) if (spec.inherit[field] !== undefined) options[field] = spec.inherit[field];
     }
     if (contract.kind === 'list') {

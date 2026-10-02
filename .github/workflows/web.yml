@@ -175,6 +175,14 @@ jobs:
           CI=true pnpm test:mcp
           CI=true pnpm --filter @ai4s/server test
 
+      - name: Test actual managed browser frame isolation
+        env:
+          OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME: /usr/bin/chromium
+          EVIMED_MANAGED_BROWSER_DOM: "1"
+        run: |
+          test -x "$OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME"
+          node --test --test-concurrency=1 apps/server/test/managedBrowserService.integration.test.mjs apps/server/test/managedBrowserHttp.integration.test.mjs packages/harness-port/test/runtimeUiManagedBrowser.chromium.test.mjs
+
       - name: Test shared authentication state
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_auth

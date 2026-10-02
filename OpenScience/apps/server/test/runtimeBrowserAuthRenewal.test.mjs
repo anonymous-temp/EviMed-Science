@@ -103,4 +103,10 @@ test("the same runtime getter renews credentials for shared assets and the UI HT
   const rendered = await fetch(`http://127.0.0.1:${proxy.address().port}/assets/plain.js`, { headers: { cookie: "browser-login=not-the-kernel-cookie" } });
   assert.equal(rendered.status, 200);
   assert.equal(await rendered.text(), "authenticated asset");
+  assert.doesNotMatch(rendered.headers.get("content-security-policy"), /frame-src/);
+  manager.config.managedBrowserEnabled = true;
+  const managed = await fetch(`http://127.0.0.1:${proxy.address().port}/assets/plain.js`);
+  assert.equal(managed.status, 200);
+  assert.match(managed.headers.get("content-security-policy"), /; frame-src 'self' blob:$/);
+  assert.equal(await managed.text(), "authenticated asset");
 });
