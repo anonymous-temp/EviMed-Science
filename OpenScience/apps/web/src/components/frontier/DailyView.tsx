@@ -1,3 +1,4 @@
+import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { CalendarDays, Copy } from "lucide-react";
@@ -16,6 +17,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChips";
 import { Menu } from "@/components/ui/Menu";
+import { FrontierDetails } from "./FrontierDetails";
 import { FrontierSkeleton } from "./FrontierSkeleton";
 import { EXTERNAL, INLINE_ACTION, dailyMeta, rankLabel, shortDate } from "./frontierText";
 
@@ -94,6 +96,7 @@ async function copyMarkdown(markdown: string) {
  * is the grey line under the summary, never a block before the title.
  */
 export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState; onDay: (day: string) => void; weekly?: boolean }) {
+  const origin = useFrontierOrigin();
   const rangeLabel = (day: string) => {
     const last = new Date(`${day}T00:00:00Z`);
     last.setUTCDate(last.getUTCDate() + 6);
@@ -101,8 +104,8 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
   };
   if (state.loading && !state.issue) return <FrontierSkeleton />;
   if (state.error) return <LoadError message={state.error} onRetry={state.retry} />;
-  if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周刊" : "暂无日报"} />;
-  if (!state.issue) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周刊" : "今日日报 07:30 发布"} />;
+  if (state.index === null) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "暂无日报"} />;
+  if (!state.issue) return <EmptyState icon={CalendarDays} title={weekly ? "暂无周报" : "今日日报 07:30 发布"} />;
   const issue = state.issue;
   const { previous, next } = neighbours(issue, state.index);
   const archive = state.index.slice(0, ARCHIVE_SHOWN);
@@ -132,7 +135,7 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
             <p className="mt-2 max-w-measure text-ui text-text-2">
               {leadText}
               {issue.lead.event && (
-                <Link to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
+                <Link state={origin} onClick={rememberFrontierPosition} to={`/app/frontier/events/${encodeURIComponent(issue.lead.event.id)}`} className={cn(INLINE_ACTION, "ml-1 px-1 align-middle text-accent")}>
                   事件页 ›
                 </Link>
               )}
@@ -152,7 +155,7 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
       )}
 
       {(previous || next) && (
-        <nav aria-label={weekly ? "周刊翻页" : "日报翻页"} className="mt-8 flex items-center justify-between">
+        <nav aria-label={weekly ? "周报翻页" : "日报翻页"} className="mt-8 flex items-center justify-between">
           {previous ? <Button variant="text" onClick={() => onDay(previous)}>{weekly ? "‹ 前一期" : "‹ 前一日"}</Button> : <span />}
           {next ? <Button variant="text" onClick={() => onDay(next)}>{weekly ? "后一期 ›" : "后一日 ›"}</Button> : <span />}
         </nav>
@@ -182,20 +185,23 @@ function DailySection({ id, title, items, safety = false }: { id: string; title:
  * the interface it was read through — with 「原文 ↗」.
  */
 function DailyRow({ item, number, safety }: { item: FrontierItem; number: number; safety: boolean }) {
+  const [details, setDetails] = useState(false);
   return (
     <li className="flex gap-2 border-b border-border py-3">
       <span className="w-8 shrink-0 text-caption leading-6 tabular-nums text-text-3">{rankLabel(number)}</span>
       <div className="min-w-0 flex-1">
-        <p data-row-title className="text-body font-semibold leading-6 text-text">{item.title}</p>
+        <p data-row-title className="text-body font-semibold leading-6 text-text"><a href={item.url} {...EXTERNAL} className="hover:text-accent hover:underline">{item.title}</a></p>
         {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
+          <Button size="sm" variant="text" onClick={() => setDetails(true)}>阅读详情</Button>
           <span aria-hidden="true">·</span>
           <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
             <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>
           </a>
         </div>
       </div>
+      {details && <FrontierDetails item={item} onClose={() => setDetails(false)} />}
     </li>
   );
 }

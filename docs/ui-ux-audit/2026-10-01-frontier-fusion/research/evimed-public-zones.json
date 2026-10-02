@@ -1,0 +1,35 @@
+{
+  "url": "https://www.evimed.com/home",
+  "status": 200,
+  "title": "EviMed",
+  "capturedAt": "2026-10-01T01:44:43.557943+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "EviMed\n新建任务\n科研工作流\n证据卡片\n证据专区\n所有任务\n新建一个任务以开始\n返回旧版\n登录\n让医学知识触手可及\nAI搜索\n搜文献\n查指南\n找药品\n临床试验\n© EviMed\nevimed.com",
+  "links": [
+    {
+      "text": "EviMed",
+      "href": "/home"
+    },
+    {
+      "text": "返回旧版",
+      "href": "https://second.evimed.com/"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 280,
+      "y": 80,
+      "width": 1160,
+      "height": 852.765625,
+      "top": 80,
+      "right": 1440,
+      "bottom": 932.765625,
+      "left": 280
+    },
+    "firstArticle": null
+  }
+}

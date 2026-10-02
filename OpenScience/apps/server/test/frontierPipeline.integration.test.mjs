@@ -93,7 +93,7 @@ const SOURCES = [
 async function reset() {
   await database.query(`TRUNCATE evimed_frontier.item_vectors, evimed_frontier.item_texts, evimed_frontier.item_keys, evimed_frontier.item_mentions,
     evimed_frontier.item_links, evimed_frontier.item_changes, evimed_frontier.user_state, evimed_frontier.event_items, evimed_frontier.items,
-    evimed_frontier.entries, evimed_frontier.sources, evimed_frontier.glossary RESTART IDENTITY CASCADE`);
+    evimed_frontier.entries, evimed_frontier.sources, evimed_frontier.glossary, evimed_frontier.dailies RESTART IDENTITY CASCADE`);
   await database.query("UPDATE evimed_frontier.meta SET value='0'::jsonb WHERE key IN ('content_version','hot_version','daily_version')");
   await database.query("DELETE FROM evimed_usage.model_requests WHERE user_id=$1", [operator]);
   for (const source of SOURCES) {
@@ -371,6 +371,73 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.match(retexts.model_input, /摘要：In 17,604 patients/);
 });
 
+test("recently generated dailies keep old referenced items eligible for an owed edit without opening all history", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T02:00:00Z");
+  const { pipeline, editor, plugin } = pipelineWith({ now: () => clock });
+  const deliveries = [];
+  for (const title of DISTINCT_TOPICS.slice(0, 4)) {
+    const delivered = await deliver({ source_id: "m-stat", title: `${title} [score:60]`, summary: "S".repeat(200) });
+    plugin.texts.set(delivered.pluginEntryId, { entry_id: delivered.pluginEntryId, revision: 1, status: "unavailable", enrichment: {} });
+    deliveries.push(delivered);
+  }
+  await pipeline.processBatch();
+  const ids = [];
+  for (const delivered of deliveries) ids.push(Number((await entry(delivered.id)).item_id));
+  assert.equal(new Set(ids).size, 4);
+  await database.query("UPDATE evimed_frontier.items SET timeline_at=$2,visible_at=$2 WHERE id=ANY($1::bigint[])",
+    [ids, new Date("2026-09-01T00:00:00Z")]);
+  clock = new Date("2026-09-22T11:00:00Z");
+  // item_ids holds internal bigint IDs. Only the first daily was actually
+  // generated in the current seven-day window; an old or future receipt is not eligible.
+  for (const [index, generatedAt] of ["2026-09-21T23:30:00Z", "2026-09-14T23:30:00Z", "2026-09-23T23:30:00Z"].entries()) {
+    await database.query(`INSERT INTO evimed_frontier.dailies
+      (day,window_start,window_end,lead,sections,markdown,item_ids,model,generated_at)
+      VALUES ($1,$2,$2,'{}'::jsonb,'[]'::jsonb,'Daily',$3::bigint[],'fixture',$2)`,
+    [generatedAt.slice(0, 10), new Date(generatedAt), [ids[index]]]);
+  }
+  const editsBefore = editor.calls.edit.length;
+  const result = await pipeline.processBatch();
+  assert.equal(result.edited, 1);
+  assert.equal(editor.calls.edit.length, editsBefore + 1);
+  assert.equal((await item(ids[0])).editor_version, FRONTIER_EDITOR_VERSION);
+  for (const id of ids.slice(1)) {
+    const untouched = await item(id);
+    assert.deepEqual([untouched.state, untouched.editor_version, untouched.attempts], ["published", null, 0]);
+  }
+  for (const id of ids) assert.equal((await item(id)).timeline_at.toISOString(), "2026-09-01T00:00:00.000Z");
+});
+
+test("old source dates remain eligible for owed edits when recently published here, without scanning old unreferenced history",options,async()=>{
+  await reset();
+  let clock=new Date("2026-09-22T02:00:00Z");
+  const {pipeline,editor,plugin}=pipelineWith({now:()=>clock});
+  const sourceDate=new Date("2026-09-01T00:00:00Z"),ids=[];
+  for(const title of DISTINCT_TOPICS.slice(0,2)) {
+    const delivered=await deliver({source_id:"m-stat",title:`${title} [score:60]`,summary:"S".repeat(200),published_at:sourceDate});
+    plugin.texts.set(delivered.pluginEntryId,{entry_id:delivered.pluginEntryId,revision:1,status:"unavailable",enrichment:{}});
+    ids.push(delivered.id);
+  }
+  await pipeline.processBatch();
+  const items=[];for(const id of ids)items.push(await item(Number((await entry(id)).item_id)));
+  for(const published of items) {
+    assert.equal(published.timeline_at.toISOString(),sourceDate.toISOString());
+    assert.equal(published.visible_at.toISOString(),clock.toISOString(),"visible_at records publication in this module, not the source date");
+    assert.equal(published.editor_version,null);
+  }
+  await database.query("UPDATE evimed_frontier.items SET visible_at=$2 WHERE id=$1",[items[1].id,sourceDate]);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_frontier.dailies")).rows[0].n,0);
+  const calls=editor.calls.edit.length;
+  clock=new Date("2026-09-22T11:00:00Z");
+  const result=await pipeline.processBatch();
+  assert.equal(result.edited,1);
+  assert.equal(editor.calls.edit.length,calls+1);
+  assert.equal((await item(Number(items[0].id))).editor_version,FRONTIER_EDITOR_VERSION);
+  const old=await item(Number(items[1].id));
+  assert.deepEqual([old.state,old.editor_version,old.attempts],["published",null,0]);
+  for(const published of items)assert.equal((await item(Number(published.id))).timeline_at.toISOString(),sourceDate.toISOString());
+});
+
 test("peak hours and the budget: non-urgent items are published title-only and edited later; a spent budget collects only", options, async () => {
   await reset();
   // Tuesday 10:00 in Beijing: the provider's peak.
@@ -575,6 +642,67 @@ test("the day's budget counts an uncertain call at its recorded bound, not its r
   // With no bound recorded (an answer lost before it arrived) the reservation stands.
   await uncertain(0.5, null, "d");
   assert.equal((await pipeline.budget(clock)).spentCny, 0.75);
+});
+
+test("transient owed edits preserve attempts and existing prose across restart; schema failures still exhaust", options, async () => {
+  await reset();
+  let clock = new Date("2026-09-22T02:00:00Z");
+  const setup = pipelineWith({now:()=>clock});
+  const delivered = await deliver({source_id:"m-stat",title:"Kidney therapy trial [score:60]",summary:"S".repeat(200)});
+  setup.plugin.texts.set(delivered.pluginEntryId,{entry_id:delivered.pluginEntryId,revision:1,status:"unavailable",enrichment:{}});
+  await setup.pipeline.processBatch();
+  const id = Number((await entry(delivered.id)).item_id);
+  await database.query("UPDATE evimed_frontier.items SET title_zh='Existing title',summary_zh='Existing valid prose',attempts=2 WHERE id=$1",[id]);
+  const edit = setup.editor.edit.bind(setup.editor);
+  clock = new Date("2026-09-22T12:00:00Z");
+  for (const failure of [
+    {error:"frontier_model_timeout"},
+    {error:"model_gateway_upstream_error",upstreamStatus:429},
+    {error:"model_gateway_upstream_error",upstreamStatus:503,verification:"title-only"},
+    {error:"frontier_model_failed",networkCode:"ECONNRESET"},
+    {error:"model_gateway_payment_required",verification:"title-only",waitMinutes:30},
+  ]) {
+    let calls=0;
+    setup.editor.edit=async()=>{calls++;clock=new Date(clock.getTime()+120_000);return {verification:"pending",...failure};};
+    const {pipeline}=pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin});
+    await pipeline.processBatch();
+    const waiting=await item(id);
+    assert.deepEqual([waiting.attempts,waiting.editor_version,waiting.summary_zh,waiting.lease_owner],[2,null,"Existing valid prose",null]);
+    const waitMs=(failure.waitMinutes??5)*60_000;
+    assert.equal(new Date(waiting.lease_until).getTime(),clock.getTime()+waitMs);
+    assert.equal((await entry(delivered.id)).state_reason,failure.error);
+    // A fresh process must respect the ownerless durable cooldown too.
+    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    assert.equal(calls,1);
+    clock=new Date(clock.getTime()+waitMs+1);
+  }
+  setup.editor.edit=edit;
+  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  assert.equal((await item(id)).verification,"passed");
+  assert.equal((await item(id)).attempts,0);
+  // A promoted update whose content repair lost the provider keeps its old
+  // valid prose too, without reporting that partial response as an edit.
+  await database.query("UPDATE evimed_frontier.items SET state='screened',editor_version=NULL,attempts=2 WHERE id=$1",[id]);
+  const validProse=(await item(id)).summary_zh;
+  setup.editor.edit=async()=>({verification:"title-only",error:"frontier_model_timeout",output:{titleZh:"Partial repair",summaryZh:null}});
+  const deferred=await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  const promotedWait=await item(id);
+  assert.deepEqual([promotedWait.state,promotedWait.attempts,promotedWait.summary_zh,promotedWait.lease_owner],["screened",2,validProse,null]);
+  assert.equal(deferred.edited,0);
+  clock=new Date(clock.getTime()+5*60_000+1);
+  setup.editor.edit=edit;
+  await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+  assert.equal((await item(id)).state,"published");
+  // Invalid content and an explicit HTTP 400 are not provider waits.
+  for (const failure of [{error:"frontier_edit_invalid"},{error:"model_gateway_upstream_error",upstreamStatus:400}]) {
+    await database.query("UPDATE evimed_frontier.items SET editor_version=NULL,attempts=2 WHERE id=$1",[id]);
+    setup.editor.edit=async()=>({verification:"pending",...failure});
+    await pipelineWith({now:()=>clock,editor:setup.editor,plugin:setup.plugin}).pipeline.processBatch();
+    const exhausted=await item(id);
+    assert.equal(exhausted.attempts,3);
+    assert.equal(exhausted.editor_version,FRONTIER_EDITOR_VERSION);
+    assert.equal(exhausted.lease_until,null);
+  }
 });
 
 test("vectors come after publication and never block it; two concurrent batches never claim one entry twice", options, async () => {

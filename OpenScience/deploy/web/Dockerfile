@@ -89,6 +89,7 @@ COPY --from=build /app/scripts/ops ./scripts/ops
 # directory, `../../../scripts/vcr`). Without it every snapshot profile fails on
 # a missing file the day the module first meets real data.
 COPY --from=build /app/scripts/vcr ./scripts/vcr
+COPY --from=build /app/content/evidence ./content/evidence
 COPY --from=build /app/evals/method-quality ./evals/method-quality
 COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
 COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden

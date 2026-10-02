@@ -1,7 +1,8 @@
+import { FRONTIER_LEAVING, readFrontierPosition, type FrontierReadingPosition } from "@/components/frontier/frontierReadingState";
 import { WeeklyView } from "@/components/frontier/WeeklyView";
 import { FrontierLinkedItem } from "@/components/frontier/FrontierLinkedItem";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 import { getWebProjectId } from "@/lib/apiClient";
 import {
   fetchFrontierForYou,
@@ -32,6 +33,8 @@ import {
 import { toast } from "@/lib/toast";
 import { PageShell } from "@/components/layout/PageShell";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { FilterChips } from "@/components/ui/FilterChips";
+import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { DailyIssue, useFrontierDaily } from "@/components/frontier/DailyView";
 import { FeedList, FEED_PAGE_SIZE, type Listing } from "@/components/frontier/FrontierFeed";
@@ -43,8 +46,10 @@ import { FrontierOffPage } from "@/components/frontier/FrontierStates";
 import { ForYouView, type ForYouState } from "@/components/frontier/ForYouView";
 import { SafetyStrip, recentAlerts, type SafetyAlerts } from "@/components/frontier/SafetyStrip";
 import { SourcesLink } from "@/components/frontier/SourcesList";
+import { FollowedEvidenceZones } from "@/components/frontier/FollowedEvidenceZones";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
-import { EmptyState } from "@/components/cards/EmptyState";
+import { Button } from "@/components/ui/Button";
+import { Drawer } from "@/components/ui/Drawer";
 import { stamp, type CardTag } from "@/components/frontier/frontierText";
 
 type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | "weekly";
@@ -52,11 +57,8 @@ type PageView = "selected" | "hot" | "daily" | "all" | "foryou" | "following" | 
 const VIEWS: readonly TabItem<PageView>[] = [
   { value: "selected", label: "精选" },
   { value: "hot", label: "热榜" },
-  { value: "daily", label: "日报" },
   { value: "all", label: "全部" },
   { value: "foryou", label: "与我相关" },
-  { value: "following", label: "关注" },
-  { value: "weekly", label: "周刊" },
 ];
 
 /** 「有 N 条新的」 asks this often (plan §10.5.2): almost every answer is an empty 304. */
@@ -121,8 +123,16 @@ export function FrontierPage() {
 
 function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const restore = useRef(readFrontierPosition((location.state as { frontierReading?: unknown } | null)?.frontierReading));
+  const pages = useRef(1);
+  const [expanded, setExpanded] = useState<string[]>(restore.current?.query === params.toString() ? restore.current.expanded ?? [] : []);
+  const pageRoot = useRef<HTMLDivElement>(null);
+  const restoreObserver = useRef<ResizeObserver | null>(null);
+  useEffect(() => () => restoreObserver.current?.disconnect(), []);
   const view = readView(params.get("view"));
-  const follow = view === "following" ? params.get("follow") : null;
+  const follow = view === "following" ? params.get("follow") ?? "all" : null;
+  const [manageFollows, setManageFollows] = useState(false);
   const listingView = view === "selected" || view === "all" || (view === "following" && Boolean(follow));
   const q = (params.get("q") ?? "").trim();
   const lane = readKey(params.get("lane"), FRONTIER_LANES);
@@ -194,17 +204,50 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     try {
       const page = await listFrontierItems({ ...query, limit: FEED_PAGE_SIZE });
       if (current !== generation.current) return;
-      show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
+      let restored = page;
+      const position = restore.current;
+      if (position?.query === params.toString()) {
+        let restoredPages = 1;
+        for (let index = 1; index < position.pages && restored.nextCursor; index++) {
+          const next = await listFrontierItems({ ...query, cursor: restored.nextCursor, limit: FEED_PAGE_SIZE });
+          if (current !== generation.current) return;
+          if (next.restarted) { restored = next; restoredPages = 1; break; }
+          const known = new Set(restored.items.map((item) => item.id));
+          restored = { ...next, items: [...restored.items, ...next.items.filter((item) => !known.has(item.id))] };
+          restoredPages += 1;
+        }
+        pages.current = restoredPages;
+        requestAnimationFrame(() => {
+          if (current !== generation.current) return;
+          const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
+          if (!scroller) return;
+          scroller.scrollTop = position.scroll;
+          if (scroller.scrollTop < position.scroll && typeof ResizeObserver !== "undefined") {
+            restoreObserver.current?.disconnect();
+            const observer = new ResizeObserver(() => {
+              if (current !== generation.current) { observer.disconnect(); return; }
+              scroller.scrollTop = position.scroll;
+              if (scroller.scrollTop >= position.scroll) observer.disconnect();
+            });
+            if (scroller.firstElementChild) observer.observe(scroller.firstElementChild);
+            restoreObserver.current = observer;
+          }
+        });
+        restore.current = undefined;
+      } else pages.current = 1;
+      show({ key, items: restored.items, nextCursor: restored.nextCursor, version: restored.version, loadedAt: Date.now() });
     } catch (error) {
       if (current !== generation.current) return;
       if (frontierAbsence(error) === "off") { onOff(); return; }
       setListError(frontierErrorMessage(error));
     }
-  }, [key, query, show, onOff]);
+  }, [key, query, show, onOff, params]);
 
   useEffect(() => {
+    setLoadingMore(false);
     if (!ready || !listingView) return;
     void loadList(false);
+    return () => { generation.current += 1; };
   }, [ready, listingView, loadList]);
 
   /** The list on screen and its cached copy, changed together. */
@@ -225,11 +268,13 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       const page = await listFrontierItems({ ...query, cursor: listing.nextCursor, limit: FEED_PAGE_SIZE });
       if (current !== generation.current) return;
       if (page.restarted) {
+        pages.current = 1;
         // The list changed under the cursor: page one again, in place.
         show({ key, items: page.items, nextCursor: page.nextCursor, version: page.version, loadedAt: Date.now() });
         scrollToListTop();
         return;
       }
+      pages.current += 1;
       patchListing((list) => {
         const known = new Set(list.items.map((item) => item.id));
         return { ...list, items: [...list.items, ...page.items.filter((item) => !known.has(item.id))], nextCursor: page.nextCursor };
@@ -245,7 +290,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   // only what is new above its top — counted with the reader's own filters.
   const contentVersion = status?.versions.content ?? null;
   useEffect(() => {
-    if (!listing || listing.key !== key || q || !contentVersion || contentVersion === seenVersion.current) return;
+    if (!listingView || !listing || listing.key !== key || q || !contentVersion || contentVersion === seenVersion.current) return;
     let active = true;
     const current = generation.current;
     listFrontierItems({ ...query, limit: FEED_PAGE_SIZE }).then((page) => {
@@ -259,7 +304,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       }
     }, () => { /* a hint, not a read: it is asked again when the list or the version next changes */ });
     return () => { active = false; };
-  }, [contentVersion, listing, key, q, query]);
+  }, [contentVersion, listing, listingView, key, q, query]);
 
   /* ------------------------------------------------------------ 与我相关 */
 
@@ -501,6 +546,39 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
     return () => clearTimeout(timer);
   }, [draft, composed, q, params, setParams, view]);
 
+  useEffect(() => {
+    const position = restore.current;
+    if (!position || position.query !== params.toString() || listingView || !ready) return;
+    const settled = view === "hot" ? Boolean(hot[hotWindow]) : view === "daily" ? !daily.loading : view === "foryou" ? forYou.kind !== "loading" : view === "weekly";
+    if (!settled) return;
+    const frame = requestAnimationFrame(() => {
+      const scroller = pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto");
+      if (!scroller) return;
+      scroller.scrollTop = position.scroll;
+      if (view === "weekly" && scroller.scrollTop < position.scroll && typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(() => {
+          scroller.scrollTop = position.scroll;
+          if (scroller.scrollTop >= position.scroll) observer.disconnect();
+        });
+        if (scroller.firstElementChild) observer.observe(scroller.firstElementChild);
+        restoreObserver.current = observer;
+      }
+      restore.current = undefined;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [params, listingView, ready, view, hot, hotWindow, daily.loading, forYou.kind]);
+
+  useEffect(() => {
+    const remember = () => {
+      const position: FrontierReadingPosition = { query: params.toString(), pages: Math.min(pages.current, 20),
+        scroll: pageRoot.current?.querySelector<HTMLElement>(".overflow-y-auto")?.scrollTop ?? 0, expanded };
+      const history = window.history.state as { usr?: Record<string, unknown> } | null;
+      window.history.replaceState({ ...history, usr: { ...history?.usr, frontierReading: position } }, "");
+    };
+    window.addEventListener(FRONTIER_LEAVING, remember);
+    return () => window.removeEventListener(FRONTIER_LEAVING, remember);
+  }, [params, expanded]);
+
   /* ---------------------------------------------------------- render */
 
   const staleAt = status && STALE_PLUGIN.has(status.plugin.state) ? status.plugin.lastPullAt ?? status.lastPublishedAt : null;
@@ -510,6 +588,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       key={item.id}
       item={item}
       grouped={grouped}
+      expanded={expanded.includes(item.id)}
+      onExpand={() => setExpanded((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
       markSelected={view !== "selected"}
       onStar={(target) => void toggleStar(target)}
       onHide={hide}
@@ -532,7 +612,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
       loadingMore={loadingMore}
       renderItem={card}
       onRetry={() => void loadList(true)}
-      onFresh={() => { if (fresh) { show(fresh.listing); scrollToListTop(); } }}
+      onFresh={() => { if (fresh) { pages.current = 1; show(fresh.listing); scrollToListTop(); } }}
       onMore={() => void loadMore()}
       onAll={() => setView("all")}
     />
@@ -569,14 +649,24 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         return <ForYouView state={forYou} renderItem={(item) => card(item, false)} onRetry={() => setForYouAttempt((value) => value + 1)} />;
       case "following":
         return <div className="space-y-6">
-          <FrontierFollows selected={follow} onSelect={(id) => {
-            setParams((current) => {
-              const updated = new URLSearchParams(current);
-              if (id) updated.set("follow", id); else updated.delete("follow");
-              return updated;
-            });
-          }} onChanged={() => { cache.current.clear(); setForYouAttempt((value) => value + 1); }} />
-          {follow ? <>{filters}{feed}</> : <EmptyState title="选择关注内容，查看相关动态" />}
+          <div className="flex items-center gap-2">
+            {follow !== "all" && <Button variant="text" onClick={() => setParams((current) => {
+              const updated = new URLSearchParams(current); updated.delete("follow"); return updated;
+            })}>全部关注</Button>}
+            <Button variant="secondary" onClick={() => setManageFollows(true)}>管理关注</Button>
+          </div>
+          <FollowedEvidenceZones />
+          {filters}{feed}
+          {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
+            <FrontierFollows selected={follow === "all" ? null : follow} onSelect={(id) => {
+              setParams((current) => {
+                const updated = new URLSearchParams(current);
+                if (id) updated.set("follow", id); else updated.delete("follow");
+                return updated;
+              });
+              setManageFollows(false);
+            }} onChanged={() => { cache.current.clear(); void loadList(true); }} />
+          </Drawer>}
         </div>;
       case "all":
         return (
@@ -601,7 +691,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   })();
 
   return (
-    <PageShell
+    <div ref={pageRoot} className="h-full min-h-0"><PageShell
       title="前沿动态"
       meta={staleAt ? `${stamp(staleAt)} 更新` : undefined}
       contentClassName="mt-2"
@@ -616,12 +706,14 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
         />
       )}
     >
+      <FrontierNavigation active={view === "following" ? "following" : view === "daily" || view === "weekly" ? "brief" : "feed"} onChange={(section) => setView(section === "feed" ? "selected" : section === "brief" ? "daily" : "following")} />
+      {view !== "daily" && view !== "weekly" && view !== "following" && <FilterChips label="动态视图" className="mt-4 [&>div]:overflow-x-auto" options={VIEWS} value={view} onChange={setView} />}
+      {(view === "daily" || view === "weekly") && <Tabs label="简报周期" className="mt-4" items={[{ value: "daily", label: "日报" }, { value: "weekly", label: "周报" }]} value={view} onChange={setView} panelId="frontier-view" />}
       {ready && params.get("item") && <FrontierLinkedItem id={params.get("item")!} />}
-      <Tabs label="视图" items={VIEWS} value={view} onChange={setView} panelId="frontier-view" />
-      <div role="tabpanel" id="frontier-view" aria-labelledby={`frontier-view-tab-${view}`} className="mt-5">
+      <div role={view === "daily" || view === "weekly" ? "tabpanel" : "region"} id="frontier-view" aria-labelledby={view === "daily" || view === "weekly" ? `frontier-view-tab-${view}` : undefined} aria-label={view === "daily" || view === "weekly" ? undefined : view === "following" ? "关注动态" : "动态"} className="mt-5">
         {ready ? main : <FrontierSkeleton />}
       </div>
-    </PageShell>
+    </PageShell></div>
   );
 }
 

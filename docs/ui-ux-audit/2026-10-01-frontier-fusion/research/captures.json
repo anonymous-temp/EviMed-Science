@@ -1,0 +1,528 @@
+[
+  {
+    "url": "https://aihot.news/",
+    "status": 200,
+    "title": "AIHOT — AI 行业动态聚合 · 每日精选与 AI 日报",
+    "capturedAt": "2026-10-01T01:44:10.221223+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 4988.828125,
+        "top": 0,
+        "right": 1440,
+        "bottom": 4988.828125,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 294,
+        "y": 475.5,
+        "width": 1118,
+        "height": 167.34375,
+        "top": 475.5,
+        "right": 1412,
+        "bottom": 642.84375,
+        "left": 294
+      }
+    },
+    "name": "aihot-home"
+  },
+  {
+    "url": "https://aihot.news/all",
+    "status": 200,
+    "title": "全部 AI 动态 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:12.868925+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 9543.75,
+        "top": 0,
+        "right": 1440,
+        "bottom": 9543.75,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 294,
+        "y": 181.1875,
+        "width": 1118,
+        "height": 261.5,
+        "top": 181.1875,
+        "right": 1412,
+        "bottom": 442.6875,
+        "left": 294
+      }
+    },
+    "name": "aihot-all"
+  },
+  {
+    "url": "https://aihot.news/hot",
+    "status": 200,
+    "title": "AI 热点榜 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:14.829783+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 1259.546875,
+        "top": 0,
+        "right": 1440,
+        "bottom": 1259.546875,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 208,
+        "y": 132.046875,
+        "width": 797.328125,
+        "height": 364.1875,
+        "top": 132.046875,
+        "right": 1005.328125,
+        "bottom": 496.234375,
+        "left": 208
+      }
+    },
+    "name": "aihot-hot"
+  },
+  {
+    "url": "https://aihot.news/topics",
+    "status": 200,
+    "title": "主题 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:16.927910+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 2028.5625,
+        "top": 0,
+        "right": 1440,
+        "bottom": 2028.5625,
+        "left": 180
+      },
+      "firstArticle": null
+    },
+    "name": "aihot-topics"
+  },
+  {
+    "url": "https://aihot.news/daily",
+    "status": 200,
+    "title": "AI 日报 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:18.057669+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 6711.9375,
+        "top": 0,
+        "right": 1440,
+        "bottom": 6711.9375,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 500,
+        "y": 36,
+        "width": 900,
+        "height": 6611.9375,
+        "top": 36,
+        "right": 1400,
+        "bottom": 6647.9375,
+        "left": 500
+      }
+    },
+    "name": "aihot-daily"
+  },
+  {
+    "url": "https://aihot.news/weekly",
+    "status": 200,
+    "title": "AI 周报 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:20.480236+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 5455.359375,
+        "top": 0,
+        "right": 1440,
+        "bottom": 5455.359375,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 500,
+        "y": 36,
+        "width": 900,
+        "height": 5355.359375,
+        "top": 36,
+        "right": 1400,
+        "bottom": 5391.359375,
+        "left": 500
+      }
+    },
+    "name": "aihot-weekly"
+  },
+  {
+    "url": "https://aihot.news/monthly",
+    "status": 200,
+    "title": "AI 月报 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:23.380329+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 6094.796875,
+        "top": 0,
+        "right": 1440,
+        "bottom": 6094.796875,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 500,
+        "y": 36,
+        "width": 900,
+        "height": 5994.796875,
+        "top": 36,
+        "right": 1400,
+        "bottom": 6030.796875,
+        "left": 500
+      }
+    },
+    "name": "aihot-monthly"
+  },
+  {
+    "url": "https://aihot.news/starred",
+    "status": 200,
+    "title": "我的收藏 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:25.447531+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 1000,
+        "top": 0,
+        "right": 1440,
+        "bottom": 1000,
+        "left": 180
+      },
+      "firstArticle": null
+    },
+    "name": "aihot-starred"
+  },
+  {
+    "url": "https://aihot.news/agent",
+    "status": 200,
+    "title": "Agent 接入 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:27.689427+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 2215.671875,
+        "top": 0,
+        "right": 1440,
+        "bottom": 2215.671875,
+        "left": 180
+      },
+      "firstArticle": null
+    },
+    "name": "aihot-agent"
+  },
+  {
+    "url": "https://aihot.news/changelog",
+    "status": 200,
+    "title": "更新日志 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:30.915412+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 14564.515625,
+        "top": 0,
+        "right": 1440,
+        "bottom": 14564.515625,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 357,
+        "y": 185.6875,
+        "width": 686,
+        "height": 131.515625,
+        "top": 185.6875,
+        "right": 1043,
+        "bottom": 317.203125,
+        "left": 357
+      }
+    },
+    "name": "aihot-changelog"
+  },
+  {
+    "url": "https://aihot.news/leaderboard",
+    "status": 200,
+    "title": "AIHOT大模型排行榜",
+    "capturedAt": "2026-10-01T01:44:32.027416+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 2706.1875,
+        "top": 0,
+        "right": 1440,
+        "bottom": 2706.1875,
+        "left": 180
+      },
+      "firstArticle": null
+    },
+    "name": "aihot-leaderboard"
+  },
+  {
+    "url": "https://aihot.news/codex-reset",
+    "status": 200,
+    "title": "Tibo重置监控 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:33.502379+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 2057.71875,
+        "top": 0,
+        "right": 1440,
+        "bottom": 2057.71875,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 826,
+        "y": 133.6875,
+        "width": 553,
+        "height": 377.75,
+        "top": 133.6875,
+        "right": 1379,
+        "bottom": 511.4375,
+        "left": 826
+      }
+    },
+    "name": "aihot-codex-reset"
+  },
+  {
+    "url": "https://aihot.news/story/daf111a0-908f-4f9c-8639-fc469d9ec53b",
+    "status": 200,
+    "title": "谷歌发布 Gemini 4 Argon 前沿模型 · AIHOT",
+    "capturedAt": "2026-10-01T01:44:35.842156+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 7357.390625,
+        "top": 0,
+        "right": 1440,
+        "bottom": 7357.390625,
+        "left": 180
+      },
+      "firstArticle": null
+    },
+    "name": "aihot-story"
+  },
+  {
+    "url": "https://aihot.news/topics/openai",
+    "status": 200,
+    "title": "OpenAI / ChatGPT · AIHOT",
+    "capturedAt": "2026-10-01T01:44:38.322447+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 180,
+        "y": 0,
+        "width": 1260,
+        "height": 5566.78125,
+        "top": 0,
+        "right": 1440,
+        "bottom": 5566.78125,
+        "left": 180
+      },
+      "firstArticle": {
+        "x": 294,
+        "y": 479.1875,
+        "width": 1118,
+        "height": 219.59375,
+        "top": 479.1875,
+        "right": 1412,
+        "bottom": 698.78125,
+        "left": 294
+      }
+    },
+    "name": "aihot-topic"
+  },
+  {
+    "url": "https://aihot.news/",
+    "status": 200,
+    "title": "AIHOT — AI 行业动态聚合 · 每日精选与 AI 日报",
+    "capturedAt": "2026-10-01T01:44:39.353579+00:00",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "metrics": {
+      "scrollWidth": 390,
+      "main": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 5955.828125,
+        "top": 0,
+        "right": 390,
+        "bottom": 5955.828125,
+        "left": 0
+      },
+      "firstArticle": {
+        "x": 64,
+        "y": 585.3125,
+        "width": 310,
+        "height": 206.5625,
+        "top": 585.3125,
+        "right": 374,
+        "bottom": 791.875,
+        "left": 64
+      }
+    },
+    "name": "aihot-home-mobile"
+  },
+  {
+    "url": "https://www.evimed.com/home",
+    "status": 200,
+    "title": "EviMed",
+    "capturedAt": "2026-10-01T01:44:40.892764+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 280,
+        "y": 80,
+        "width": 1160,
+        "height": 852.765625,
+        "top": 80,
+        "right": 1440,
+        "bottom": 932.765625,
+        "left": 280
+      },
+      "firstArticle": null
+    },
+    "name": "evimed-public-home"
+  },
+  {
+    "url": "https://www.evimed.com/home",
+    "status": 200,
+    "title": "EviMed",
+    "capturedAt": "2026-10-01T01:44:43.557943+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "metrics": {
+      "scrollWidth": 1440,
+      "main": {
+        "x": 280,
+        "y": 80,
+        "width": 1160,
+        "height": 852.765625,
+        "top": 80,
+        "right": 1440,
+        "bottom": 932.765625,
+        "left": 280
+      },
+      "firstArticle": null
+    },
+    "name": "evimed-public-zones"
+  },
+  {
+    "url": "https://aihot.news/items/ska7k3allx8q9uu8yv5vzy8zw",
+    "status": 200,
+    "title": "OpenRouter 教程：如何在 CI 中用 LLM eval 门禁拦截 Pull Request · AIHOT",
+    "capturedAt": "2026-10-01T02:03:06.026632+00:00",
+    "viewport": {
+      "width": 1440,
+      "height": 1000
+    },
+    "name": "aihot-item"
+  }
+]

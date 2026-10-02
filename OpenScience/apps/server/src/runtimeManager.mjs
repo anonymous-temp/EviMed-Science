@@ -1976,7 +1976,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       screeningBatchSize: config.screeningBatchSize,
     },
     flags: {
-      hosted: Boolean(config.production),
+      // The browser proxy enforces hosted method restrictions in test deployments too.
+      hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
       // Read from config, not written as literals. `requiredEnforcement` in
       // this same object literal already did, which is what makes this a local
       // omission rather than an architectural one: an operator could set
@@ -2392,7 +2393,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsDir = capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
-    const isolatedControlMount = Boolean(config.runtimeDataVolume);
+    const legacyControlDir = path.join(runtimeRoot, "control");
+    const isolatedControlMount = Boolean(config.runtimeDataVolume)
+      || Buffer.byteLength(path.join(legacyControlDir, RUNTIME_SOCKET_FILE_NAME), "utf8") + 1 > UNIX_SOCKET_PATH_LIMIT;
     const controlDir = isolatedControlMount
       ? path.join(
           config.dataDir,
@@ -2402,9 +2405,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             .digest("hex")
             .slice(0, 24),
         )
-      : path.join(runtimeRoot, "control");
+      : legacyControlDir;
     const socketPath = path.join(controlDir, RUNTIME_SOCKET_FILE_NAME);
-    assertConnectableSocketPath(socketPath, Boolean(config.runtimeDataVolume));
+    assertConnectableSocketPath(socketPath, isolatedControlMount);
     const containerName = runtimeContainerName(project);
     const readOnlyViews = readOnlyWorkspaceViews(config, project);
     return {
@@ -2565,7 +2568,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // container's env that nothing reads, which is the same defect as a
           // row reading a name nobody sends, pointing the other way.
           flags: {
-            hosted: Boolean(config.production),
+            hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),
@@ -2841,21 +2844,19 @@ export function readOnlyWorkspaceViews(config, project) {
  *  readiness probe whose errors were being discarded. The observable result was
  *  a runtime that starts, serves, and is unreachable.
  *
- *  The volume-backed layout puts the socket in a short hashed directory and
- *  never comes near this; a deployment without it puts the socket under the
- *  project, where the length depends on how deep the operator put the data
- *  directory. */
+ *  Volume-backed layouts and long bind paths use a short hashed directory.
+ *  Its prefix still depends on where the operator put the data directory. */
 const UNIX_SOCKET_PATH_LIMIT = 108;
 
-/** @param {string} socketPath @param {boolean} volumeBacked */
-function assertConnectableSocketPath(socketPath, volumeBacked) {
+/** @param {string} socketPath @param {boolean} isolatedControlMount */
+function assertConnectableSocketPath(socketPath, isolatedControlMount) {
   const bytes = Buffer.byteLength(socketPath, "utf8") + 1; // the terminating NUL counts
   if (bytes <= UNIX_SOCKET_PATH_LIMIT) return;
   throw new HttpError(
     500,
     "runtime_socket_path_too_long",
     `The runtime control socket path needs ${bytes} bytes and the kernel allows ${UNIX_SOCKET_PATH_LIMIT}. ` +
-      (volumeBacked
+      (isolatedControlMount
         ? "Shorten OPEN_SCIENCE_DATA_DIR."
         : "Shorten OPEN_SCIENCE_DATA_DIR, or set OPEN_SCIENCE_RUNTIME_DATA_VOLUME, which places the socket in a short hashed directory instead of under the project."),
   );
@@ -3975,6 +3976,8 @@ export class RuntimeManager {
       }
       throw error;
     }
+    const runtimeUrl = plan.runtimeUrl ?? `http://127.0.0.1:${port}`;
+    const browserSessionAuthority = new URL(runtimeUrl).host;
     const runtime = {
       pluginConfig: plan.pluginConfig,
       // The kernel that is actually running, from one binding. This was once
@@ -3983,19 +3986,22 @@ export class RuntimeManager {
       // with a kernel that had not run it — harmless on its own, and
       // kernel-blind for any reader that branches on it.
       kind: RUNTIME_KERNEL_NAME,
-      url: plan.runtimeUrl ?? `http://127.0.0.1:${port}`,
+      url: runtimeUrl,
       socketPath: plan.socketPath ?? null,
       // Bound to the authority the kernel will actually receive in the `Host`
       // header, which is the URL's host even when the connection is dialled
       // over a unix socket. The kernel derives its cookie name from what it
       // received, so a cookie minted for anything else is not a weaker
       // credential — it is a different cookie the kernel never looks for.
-      cookie: browserSessionSecret
-        ? browserSessionCookie({
-          secret: browserSessionSecret,
-          authority: new URL(plan.runtimeUrl ?? `http://127.0.0.1:${port}`).host,
-        })
-        : null,
+      // Every HTTP request and mux reconnect reads this field. A startup-only
+      // cookie expires after 24 hours even while its runtime remains healthy.
+      // Renew with the same kernel secret, retaining the bounded lifetime and
+      // authority binding without rotating credentials or interrupting a turn.
+      get cookie() {
+        return browserSessionSecret
+          ? browserSessionCookie({ secret: browserSessionSecret, authority: browserSessionAuthority })
+          : null;
+      },
       sandboxMode: plan.sandboxMode,
       networkMode: plan.networkMode ?? this.config.runtimeNetworkMode,
       workspaceDir: project.workspaceDir,
@@ -4026,6 +4032,8 @@ export class RuntimeManager {
       project,
       close: async () => this.provider.close(project, plan, child),
     };
+    // Keep the credential out of generic runtime enumeration/serialization.
+    Object.defineProperty(runtime, "cookie", { enumerable: false });
     /** @type {any} */ (child).once("error", (err) => {
       runtime.spawnError = err;
       runtime.exitedAt = new Date().toISOString();

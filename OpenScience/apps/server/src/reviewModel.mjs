@@ -1,13 +1,15 @@
 /**
- * The independent reviewer's model call: Qwen3.8-Max on DashScope, metered.
+ * The reviewer's metered model call, using DashScope or an explicit DeepSeek deployment.
+ * DeepSeek uses JSON mode plus the supplied schema in the system prompt;
+ * reviewService still validates findings and their source evidence.
  *
  * Hidden knowledge: why this is not `callModelForControlPlane`. That function
  * is the DeepSeek boundary — its model allow-list, its upstream URL and its
  * usage fields (`prompt_cache_hit_tokens`) are DeepSeek's, and its body is
- * non-streaming. The reviewer is a different family on purpose (a reviewer of
+ * non-streaming. The default reviewer is a different family on purpose (a reviewer of
  * the generator's own family false-rejects its correct answers and adds
  * nothing; a stronger cross-family one adds twelve points — plan §1), so it is
- * a different provider, and three things differ on the wire (recorded
+ * a different provider by default, and three things differ on the wire (recorded
  * 2026-09-23, `packages/contracts/dashscope/fixtures`):
  *
  * - cached prompt tokens are `usage.prompt_tokens_details.cached_tokens`, and
@@ -23,15 +25,16 @@
  * refused outright (a 4xx before any output), mark uncertain one that was sent
  * and lost (`closeUnsettledReservation`). Purpose `review`, charged to the run
  * reviewed.
- * The key is the operator's DashScope key, the same file the reranker and the
- * embedder read; it never reaches a runtime.
+ * The configured provider selects its key; a DeepSeek deployment never sends
+ * that key to DashScope. Neither key reaches a runtime.
  *
  * @module reviewModel
  */
 
 import { createHash, randomUUID } from "node:crypto";
 import { REFERENCE_PRICE_LIST, isPeak, priceUsage } from "@evimed/domain";
-import { estimateModelReservation, uncertainCallCost } from "./modelGateway.mjs";
+import { deepSeekChatUrl, estimateModelReservation, supportedDeepSeekModels, uncertainCallCost } from "./modelGateway.mjs";
+import { reasoningFields } from "./modelReasoningPolicy.mjs";
 import { PAYMENT_REQUIRED, recordProviderRefusal } from "./providerRefusals.mjs";
 import { closeUnsettledReservation } from "./usageLedger.mjs";
 
@@ -40,6 +43,10 @@ const IDLE_MS = 120_000;
 
 /** Answer bytes one call may return; far above any honest review. */
 const MAX_ANSWER_CHARS = 2_000_000;
+
+// The same never-sent causes as Jev: an ambiguous disconnect or deadline
+// before response headers is not proof that the provider did no work.
+const NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN|EHOSTDOWN|UND_ERR_CONNECT_TIMEOUT|ERR_TLS_\w+|CERT_\w+|UNABLE_TO_\w+|DEPTH_ZERO_SELF_SIGNED_CERT|SELF_SIGNED_CERT_IN_CHAIN|ERR_SSL_\w+)$/;
 
 /** A failure with a code the caller can report and count. */
 export class ReviewModelError extends Error {
@@ -73,12 +80,17 @@ const ARREARS = "Arrearage";
 function failureFor(status, providerCode) {
   if (status === 401 || status === 403) return new ReviewModelError("review_model_auth_failed", "The reviewer's key was refused.", { status });
   if (status === 402 || providerCode === ARREARS) {
-    return new ReviewModelError("review_model_payment_required", "The reviewer's DashScope account cannot pay: its balance is exhausted or in arrears.", { status });
+    return new ReviewModelError("review_model_payment_required", "The reviewer's provider account cannot pay: its balance is exhausted or in arrears.", { status });
   }
   if (status === 404 || providerCode === "model_not_found") return new ReviewModelError("review_model_unavailable", "The reviewer model is not available to this account.", { status });
   if (status === 429) return new ReviewModelError("review_model_rate_limited", "The reviewer model is rate limited.", { status, retryable: true });
   if (status === 400) return new ReviewModelError("review_model_request_invalid", `The reviewer refused the request (${providerCode || "bad request"}).`, { status });
   return new ReviewModelError("review_model_upstream_error", `The reviewer's provider returned HTTP ${status}.`, { status, retryable: status >= 500 });
+}
+
+/** @param {Record<string, any>} config */
+export function reviewModelApiKey(config) {
+  return String(config.reviewProvider === "deepseek" ? config.deepseekApiKey ?? "" : config.dashscopeApiKey ?? "");
 }
 
 /**
@@ -95,19 +107,27 @@ function failureFor(status, providerCode) {
  * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */
 export async function callReviewModel({ config, usageLedger = null, fetchImpl = fetch }, call) {
-  const apiKey = String(config.dashscopeApiKey ?? "");
-  if (!apiKey) throw new ReviewModelError("review_model_unconfigured", "No DashScope key is configured for the reviewer.");
+  const deepseek = config.reviewProvider === "deepseek";
+  if (deepseek && !supportedDeepSeekModels.has(config.reviewModel)) {
+    throw new ReviewModelError("review_model_unconfigured", "The requested reviewer model is not supported.");
+  }
+  const apiKey = reviewModelApiKey(config);
+  if (!apiKey) throw new ReviewModelError("review_model_unconfigured", "No key is configured for the reviewer's provider.");
+  const endpoint = deepseek ? String(deepSeekChatUrl(config.reviewApiBase, config.production))
+    : `${String(config.reviewApiBase).replace(/\/+$/, "")}/chat/completions`;
   const at = call.at ?? new Date();
   const thinking = call.thinking ?? { enabled: false };
   const body = {
     model: String(config.reviewModel),
-    messages: call.messages,
+    messages: deepseek ? [{ role: "system", content: `Return only a JSON object conforming to this schema: ${JSON.stringify(call.schema)}` }, ...call.messages] : call.messages,
     stream: true,
     stream_options: { include_usage: true },
-    enable_thinking: Boolean(thinking.enabled),
-    ...(thinking.enabled && Number(thinking.budget) > 0 ? { thinking_budget: Math.floor(Number(thinking.budget)) } : {}),
+    ...(deepseek ? reasoningFields({ thinking: { type: thinking.enabled ? "enabled" : "disabled" } }, "chat", config) : {
+      enable_thinking: Boolean(thinking.enabled),
+      ...(thinking.enabled && Number(thinking.budget) > 0 ? { thinking_budget: Math.floor(Number(thinking.budget)) } : {}),
+    }),
     max_tokens: Math.floor(Number(call.maxTokens ?? config.reviewMaxOutputTokens ?? 16_000)),
-    response_format: { type: "json_schema", json_schema: { name: call.schemaName, strict: true, schema: call.schema } },
+    response_format: deepseek ? { type: "json_object" } : { type: "json_schema", json_schema: { name: call.schemaName, strict: true, schema: call.schema } },
   };
   if (config.requireDurableUsageLedger === true && !usageLedger) {
     throw new ReviewModelError("usage_ledger_unavailable", "Durable usage accounting is unavailable.");
@@ -118,7 +138,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
   if (usageLedger) {
     // The estimate counts the thinking budget as output: reasoning bills as
     // completion tokens, and a reservation below the ceiling is not a ceiling.
-    estimate = estimateModelReservation({ ...body, max_tokens: body.max_tokens + (body.thinking_budget ?? 0) }, config, at);
+    estimate = estimateModelReservation({ ...body, max_tokens: body.max_tokens + ("thinking_budget" in body ? Number(body.thinking_budget) || 0 : 0) }, config, at);
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
       runId: call.runId ?? null, purpose: "review",
@@ -159,19 +179,21 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
   try {
     let response;
     try {
+      if (controller.signal.aborted) throw controller.signal.reason;
       quiet();
-      response = await fetchImpl(`${String(config.reviewApiBase).replace(/\/+$/, "")}/chat/completions`, {
+      dispatched = true;
+      response = await fetchImpl(endpoint, {
         method: "POST",
         headers: { accept: "text/event-stream", authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
     } catch (error) {
+      if (!controller.signal.aborted && NEVER_SENT.test(networkCause(error))) dispatched = false;
       throw controller.signal.aborted && controller.signal.reason instanceof ReviewModelError
         ? controller.signal.reason
         : new ReviewModelError("review_model_unreachable", `The reviewer's provider could not be reached (${networkCause(error)}).`, { retryable: true });
     }
-    dispatched = true;
     if (!response.ok) {
       refusedStatus = response.status;
       let providerCode = "";
@@ -181,7 +203,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       } catch {
         providerCode = "";
       }
-      recordProviderRefusal("dashscope", providerCode === ARREARS ? PAYMENT_REQUIRED : response.status);
+      recordProviderRefusal(deepseek ? "deepseek" : "dashscope", providerCode === ARREARS ? PAYMENT_REQUIRED : response.status);
       throw failureFor(response.status, providerCode);
     }
     streamedEvents = 0;
@@ -198,7 +220,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     const decoder = new TextDecoder();
     let buffer = "";
     try {
-      for await (const chunk of /** @type {any} */ (response.body)) {
+      stream: for await (const chunk of /** @type {any} */ (response.body)) {
         quiet();
         buffer += decoder.decode(chunk, { stream: true });
         let newline;
@@ -207,7 +229,8 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
           buffer = buffer.slice(newline + 1);
           if (!line.startsWith("data:")) continue;
           const data = line.slice(5).trim();
-          if (!data || data === "[DONE]") continue;
+          if (data === "[DONE]") break stream;
+          if (!data) continue;
           let event;
           try { event = JSON.parse(data); } catch { continue; }
           if (event?.error) throw failureFor(Number(event.error?.status ?? 500), String(event.error?.code ?? ""));
@@ -228,9 +251,11 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
         ? controller.signal.reason
         : new ReviewModelError("review_model_stream_broken", "The reviewer's stream broke off.", { retryable: true });
     }
+    const cacheHitTokens = Number(deepseek ? usage?.prompt_cache_hit_tokens ?? usage?.prompt_tokens_details?.cached_tokens : usage?.prompt_tokens_details?.cached_tokens) || 0;
     const counted = {
-      cacheHitTokens: Number(usage?.prompt_tokens_details?.cached_tokens) || 0,
-      cacheMissTokens: Math.max(0, (Number(usage?.prompt_tokens) || 0) - (Number(usage?.prompt_tokens_details?.cached_tokens) || 0)),
+      cacheHitTokens,
+      cacheMissTokens: deepseek && Number.isSafeInteger(usage?.prompt_cache_miss_tokens) && usage.prompt_cache_miss_tokens >= 0
+        ? usage.prompt_cache_miss_tokens : Math.max(0, (Number(usage?.prompt_tokens) || 0) - cacheHitTokens),
       completionTokens: Number(usage?.completion_tokens) || 0,
       reasoningTokens: Number(usage?.completion_tokens_details?.reasoning_tokens) || 0,
     };
@@ -239,7 +264,7 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
       output: counted.completionTokens, peak: isPeak(at),
     });
     if (usageLedger && reservation) {
-      if (Number.isFinite(Number(usage?.completion_tokens))) {
+      if (Number.isSafeInteger(usage?.completion_tokens) && usage.completion_tokens >= 0) {
         await usageLedger.settleModel(call.userId, reservation.id, {
           usage: { cacheHitTokens: counted.cacheHitTokens, cacheMissTokens: counted.cacheMissTokens, completionTokens: counted.completionTokens },
           actualCost: price.cost, priced: price.priced, providerRequestId: requestId,

@@ -1,3 +1,4 @@
+import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { Link } from "react-router";
 import { Flame } from "lucide-react";
 import { FRONTIER_HEAT_METHOD_ZH } from "@evimed/domain";
@@ -26,6 +27,7 @@ const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: valu
  * cannot keep.
  */
 export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void }) {
+  const origin = useFrontierOrigin();
   const top = events.slice(0, 5);
   if (top.length === 0) return null;
   return (
@@ -39,11 +41,11 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       )}
     >
       <ol aria-label="当前热点" className="px-1">
-        {top.map((event) => {
+        {top.map((event, index) => {
           const change = rankChangeLabel(event.rankChange);
           return (
-            <li key={event.id}>
-              <Link to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
+            <li key={event.id} className={index >= 3 ? "hidden sm:list-item" : undefined}>
+              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
                 <span className={cn("w-5 shrink-0 text-right font-semibold tabular-nums", rankTone(event.rank))}>{event.rank}</span>
                 <span data-row-title className="min-w-0 flex-1 truncate font-medium text-text group-hover:text-accent">{event.title}</span>
                 {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
@@ -120,12 +122,13 @@ export function HotBoard({ state, window, windows, onWindow, onRetry }: {
  * or a month's ranking is by institutions, and says so in its line instead.
  */
 function HotRow({ event }: { event: FrontierHotEvent }) {
+  const origin = useFrontierOrigin();
   return (
     <li className="flex gap-3 border-b border-border py-4">
       <span className={cn("w-10 shrink-0 text-body font-semibold leading-9 tabular-nums", rankTone(event.rank))}>{rankLabel(event.rank)}</span>
       <div className="min-w-0 flex-1">
         <Tooltip content={event.title} kind="label" whenTruncated>
-          <Link to={eventPath(event.id)} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
+          <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} data-row-title className="group flex h-control min-w-0 items-center gap-1.5 rounded text-ui">
             {event.badge && <Tag tone={event.badge === "new" ? "accent" : "warn"}>{event.badge === "new" ? "新" : "升温"}</Tag>}
             <span className="min-w-0 truncate text-body font-semibold text-text group-hover:text-accent">{event.title}</span>
           </Link>

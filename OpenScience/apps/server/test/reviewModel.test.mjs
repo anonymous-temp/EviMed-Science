@@ -1,9 +1,11 @@
 // The reviewer's model call: the stream read, the usage priced, the ledger
 // settled, and every failure named (reviewModel.mjs).
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 import { providerRefusalCount } from "../src/providerRefusals.mjs";
 import { callReviewModel, ReviewModelError } from "../src/reviewModel.mjs";
+import { ReviewService } from "../src/reviewService.mjs";
 
 const config = {
   dashscopeApiKey: "test-dashscope-key",
@@ -16,13 +18,13 @@ const config = {
 };
 
 /** An SSE response the way DashScope streams one (recorded shape, 2026-09-23). @param {string[]} contents @param {any} usage */
-function streamed(contents, usage, finish = "stop") {
+function streamed(contents, usage, finish = "stop", model = "qwen3.8-max-0902") {
   const events = [
     ...contents.map((content, index) => ({ id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [{ index: 0, delta: index === 0 ? { role: "assistant", content, reasoning_content: "思考。" } : { content } }] })),
     { id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: finish }] },
     { id: "chatcmpl-test", model: "qwen3.8-max-0902", object: "chat.completion.chunk", choices: [], usage },
   ];
-  const text = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
+  const text = `${events.map((event) => `data: ${JSON.stringify({ ...event, model })}\n\n`).join("")}data: [DONE]\n\n`;
   return new Response(new ReadableStream({
     start(controller) {
       // Cut mid-line on purpose: a reader that assumes one event per chunk loses the answer.
@@ -91,6 +93,139 @@ test("thinking off is said, not assumed: the provider thinks unless told not to"
   assert.equal("thinking_budget" in body, false);
 });
 
+test("DeepSeek review uses its own credential, JSON mode, thinking controls and cached-token accounting", async () => {
+  const configured = new ReviewService({ config: { ...config, reviewProvider: "deepseek", deepseekApiKey: "test-key", dashscopeApiKey: "" }, database: null, store: null });
+  assert.equal(configured.configured, true);
+  const missing = new ReviewService({ config: { ...config, reviewProvider: "deepseek" }, database: null, store: null });
+  assert.equal(missing.configured, false);
+  for (const enabled of [true, false]) {
+    const ledger = fakeLedger();
+    const result = await callReviewModel({
+      config: { ...config, reviewProvider: "deepseek", deepseekApiKey: "test-deepseek-key", reviewApiBase: "https://api.deepseek.com", reviewModel: "deepseek-v4-pro" },
+      usageLedger: ledger,
+      fetchImpl: /** @type {any} */ (async (/** @type {string} */ url, /** @type {any} */ init) => {
+        assert.equal(url, "https://api.deepseek.com/chat/completions");
+        assert.equal(init.headers.authorization, "Bearer test-deepseek-key");
+        const body = JSON.parse(init.body);
+        assert.deepEqual(body.response_format, { type: "json_object" });
+        assert.equal(body.thinking.type, enabled ? "enabled" : "disabled");
+        assert.equal(body.reasoning_effort, enabled ? "high" : undefined);
+        assert.equal("enable_thinking" in body, false);
+        assert.equal("thinking_budget" in body, false);
+        assert.ok(body.messages[0].content.includes(JSON.stringify(call.schema)));
+        return streamed(['{"findings":[]}'], { prompt_tokens: 100, completion_tokens: 10, prompt_cache_hit_tokens: 40 }, "stop", "deepseek-v4-pro");
+      }),
+    }, { ...call, thinking: { enabled } });
+    assert.deepEqual(result.value, { findings: [] });
+    assert.deepEqual(result.usage, { cacheHitTokens: 40, cacheMissTokens: 60, completionTokens: 10, reasoningTokens: 0 });
+    assert.equal(ledger.calls[1][2].priced, true);
+  }
+  await assert.rejects(callReviewModel({ config: { ...config, reviewProvider: "deepseek" } }, call),
+    (error) => error instanceof ReviewModelError && error.code === "review_model_unconfigured");
+});
+
+test("DeepSeek HTTP streaming bills its reported counts, releases refusals and keeps missing usage uncertain", async (t) => {
+  const requests = [];
+  let status = 200;
+  let usage = { prompt_tokens: 100, prompt_cache_hit_tokens: 40, prompt_cache_miss_tokens: 47, completion_tokens: 10, completion_tokens_details: { reasoning_tokens: 6 } };
+  const server = createServer(async (req, res) => {
+    let text = "";
+    for await (const chunk of req) text += chunk;
+    requests.push({ path: req.url, authorization: req.headers.authorization, body: JSON.parse(text) });
+    res.writeHead(status, { "content-type": status === 200 ? "text/event-stream" : "application/json" });
+    res.end(status === 200 ? await streamed(['{"findings":[]}'], usage, "stop", "deepseek-v4-pro").text() : '{"error":{"code":"invalid_api_key"}}');
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const settings = { ...config, reviewProvider: "deepseek", reviewModel: "deepseek-v4-pro", deepseekApiKey: "test-deepseek-key", reviewApiBase: `http://127.0.0.1:${server.address().port}` };
+  const ledger = fakeLedger();
+  const result = await callReviewModel({ config: settings, usageLedger: ledger }, call);
+  assert.deepEqual(result.usage, { cacheHitTokens: 40, cacheMissTokens: 47, completionTokens: 10, reasoningTokens: 6 });
+  assert.equal(requests[0].path, "/chat/completions");
+  assert.equal(requests[0].authorization, "Bearer test-deepseek-key");
+  assert.equal(requests[0].body.stream_options.include_usage, true);
+  assert.equal(ledger.calls[0][1].purpose, "review");
+  assert.equal(ledger.calls[0][1].runId, "run_1");
+  assert.equal(ledger.calls[1][2].providerRequestId, "chatcmpl-test");
+  assert.equal(ledger.calls[1][2].usage.completionTokens, 10, "reasoning is already included in provider completion tokens");
+  assert.equal(ledger.calls[1][2].actualCost, result.cost);
+  assert.equal(ledger.calls[1][2].priced, true);
+
+  status = 401;
+  const before = providerRefusalCount("deepseek", 401);
+  const refused = fakeLedger();
+  await assert.rejects(callReviewModel({ config: settings, usageLedger: refused }, call), { code: "review_model_auth_failed" });
+  assert.deepEqual(refused.calls.map(entry => entry[0]), ["reserve", "release"]);
+  assert.equal(refused.calls[1][2], "provider_refused_401");
+  assert.equal(providerRefusalCount("deepseek", 401), before + 1);
+
+  for (const [code, transition] of [[402, "release"], [503, "uncertain"]]) {
+    status = code;
+    const failed = fakeLedger();
+    await assert.rejects(callReviewModel({ config: settings, usageLedger: failed }, call), {
+      code: code === 402 ? "review_model_payment_required" : "review_model_upstream_error",
+    });
+    assert.deepEqual(failed.calls.map(entry => entry[0]), ["reserve", transition]);
+    assert.equal(failed.calls[1][2], code === 402 ? "provider_refused_402" : "provider_response_incomplete");
+  }
+
+  status = 200;
+  usage = { ...usage, completion_tokens: null };
+  const missing = fakeLedger();
+  await callReviewModel({ config: settings, usageLedger: missing }, call);
+  assert.deepEqual(missing.calls.map(entry => entry[0]), ["reserve", "uncertain"]);
+  assert.equal(missing.calls[1][2], "response_usage_missing");
+});
+
+test("unsupported DeepSeek models and foreign production endpoints fail before reservation or credentials leave", async () => {
+  for (const override of [{ reviewModel: "unknown" }, { production: true, reviewApiBase: "https://dashscope.example" }]) {
+    const ledger = fakeLedger();
+    await assert.rejects(callReviewModel({
+      config: { ...config, reviewProvider: "deepseek", reviewModel: "deepseek-v4-pro", deepseekApiKey: "test-key", reviewApiBase: "https://api.deepseek.com", ...override },
+      usageLedger: ledger,
+      fetchImpl: async () => { assert.fail("configuration failure must precede dispatch"); },
+    }, call), error => ["review_model_unconfigured", "model_gateway_configuration_invalid"].includes(error.code));
+    assert.equal(ledger.calls.length, 0);
+  }
+});
+
+test("a real DeepSeek request accepted before headers stays uncertain when its deadline expires", async (t) => {
+  let accepted = false;
+  const server = createServer(async (req) => {
+    for await (const _chunk of req) { /* Consume the actual dispatched request. */ }
+    accepted = true;
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const ledger = fakeLedger();
+  await assert.rejects(callReviewModel({
+    config: { ...config, reviewProvider: "deepseek", reviewModel: "deepseek-v4-pro", deepseekApiKey: "test-key", reviewApiBase: `http://127.0.0.1:${server.address().port}` },
+    usageLedger: ledger,
+  }, { ...call, timeoutMs: 1000 }), { code: "review_model_timeout" });
+  assert.equal(accepted, true, "the provider really received the whole POST before the timeout");
+  assert.deepEqual(ledger.calls.map(entry => entry[0]), ["reserve", "uncertain"]);
+  assert.equal(ledger.calls[1][2], "provider_response_incomplete");
+});
+
+test("DeepSeek's terminal SSE event settles actual usage without waiting for HTTP EOF", async (t) => {
+  const server = createServer(async (req, res) => {
+    req.resume();
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(await streamed(['{"findings":[]}'], { prompt_tokens: 10, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 10, completion_tokens: 5 }, "stop", "deepseek-v4-pro").text());
+    // Keep the response open: the protocol's final event already ended the generation.
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const ledger = fakeLedger();
+  const result = await callReviewModel({
+    config: { ...config, reviewProvider: "deepseek", reviewModel: "deepseek-v4-pro", deepseekApiKey: "test-key", reviewApiBase: `http://127.0.0.1:${server.address().port}` },
+    usageLedger: ledger,
+  }, { ...call, timeoutMs: 1000 });
+  assert.deepEqual(result.value, { findings: [] });
+  assert.deepEqual(ledger.calls.map(entry => entry[0]), ["reserve", "settle"]);
+  assert.equal(ledger.calls[1][2].usage.completionTokens, 5);
+});
+
 test("every failure is a named code, and the reservation is closed the way the call ended", async () => {
   /** @param {number} status @param {any} payload */
   const answering = (status, payload) => /** @type {any} */ (async () => new Response(JSON.stringify(payload), { status }));
@@ -100,7 +235,7 @@ test("every failure is a named code, and the reservation is closed the way the c
     [answering(429, { error: { code: "Throttling" } }), "review_model_rate_limited"],
     [answering(400, { error: { code: "invalid_parameter" } }), "review_model_request_invalid"],
     [answering(503, {}), "review_model_upstream_error"],
-    [/** @type {any} */ (async () => { throw new TypeError("fetch failed"); }), "review_model_unreachable"],
+    [/** @type {any} */ (async () => { throw new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } }); }), "review_model_unreachable"],
     [/** @type {any} */ (async () => streamed(["not json"], { prompt_tokens: 1, completion_tokens: 1 })), "review_model_response_invalid"],
     // Cut off at the ceiling mid-string: the ceiling is what to look at, not the model's JSON.
     [/** @type {any} */ (async () => streamed(['{"findings":[{"location":"CLM-0'], { prompt_tokens: 1, completion_tokens: 32_000 }, "length")), "review_model_truncated"],

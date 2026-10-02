@@ -1,0 +1,729 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-01T09:13:20.616769+00:00",
+  "zones": [
+    {
+      "key": "af-anticoagulation",
+      "title": "房颤抗凝",
+      "description": "从原始试验判断获益、出血与瓣膜病适用边界。",
+      "background": "聚焦已诊断房颤的抗凝证据，区分一般房颤、机械瓣和风湿性瓣膜病；所有结论均保留研究人群与比较对象。",
+      "state": "published",
+      "requestId": "evimed-evidence-zone-20261001-af-anticoagulation"
+    },
+    {
+      "key": "cardiorenal-ckd",
+      "title": "心肾与慢性肾病",
+      "description": "用入组标准、肾脏终点与随访读懂心肾保护研究。",
+      "background": "以 DAPA-CKD、EMPA-KIDNEY 和 FLOW 原始试验为起点，帮助研究者核对糖尿病状态、eGFR、白蛋白尿与结局定义。",
+      "state": "published",
+      "requestId": "evimed-evidence-zone-20261001-cardiorenal-ckd"
+    },
+    {
+      "key": "research-interpretation",
+      "title": "研究解读",
+      "description": "把相对效应、绝对差异与试验设计转化为可核对的结论。",
+      "background": "通过真实试验学习风险沟通、复合终点和非劣效设计；计算标明方法与时间范围，避免把统计量写成患者承诺。",
+      "state": "published",
+      "requestId": "evimed-evidence-zone-20261001-research-interpretation"
+    }
+  ],
+  "cards": [
+    {
+      "key": "aristotle-benefit-bleeding",
+      "zoneKey": "af-anticoagulation",
+      "title": "阿哌沙班对比华法林：卒中与大出血分别改善多少？",
+      "subtype": "knowledge",
+      "summary": "ARISTOTLE 中，阿哌沙班的卒中或全身栓塞年化事件率为 1.27%，华法林为 1.60%；大出血分别为 2.13% 与 3.09%。这是对华法林的直接比较，不能据此给不同 DOAC 排名。",
+      "body": "阅读延伸：把卒中预防与出血的结果分别列出，再核对华法林组的 INR 控制质量；这样更容易判断研究结果能否用于自己的临床场景。",
+      "sources": [
+        {
+          "id": "aristotle",
+          "title": "Apixaban versus warfarin in patients with atrial fibrillation.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21870978/",
+          "excerpt": "The median duration of follow-up was 1.8 years.",
+          "sha256": "6f07a806fb6a0910520187bc3580e386d1d18091a11f75715190f9d4d11af0fc",
+          "checkedAt": "2026-10-01T09:05:36.555762+00:00",
+          "coverage": "abstract"
+        },
+        {
+          "id": "esc-af-2024",
+          "title": "2024 ESC Guidelines for the management of atrial fibrillation (section 6.2.3)",
+          "url": "https://academic.oup.com/eurheartj/article/45/36/3314/7738779",
+          "excerpt": "Vitamin K antagonists are currently the only treatment option in AF patients with mechanical heart valves or moderate-to-severe mitral valve stenosis.",
+          "sha256": "9555cb9dc4780851e1d1d2ef2c8626d104d17614e71066242c7fbd59a840f715",
+          "checkedAt": "2026-10-01T09:13:20.616769+00:00",
+          "coverage": "excerpt"
+        }
+      ],
+      "limitations": "本文核对了原始摘要；未完成全文亚组或剂量规则审查。一般房颤试验结果不能代替机械瓣、中重度二尖瓣狭窄或透析人群的专门证据。ESC 依据为官方出版页短摘录。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-aristotle-benefit-bleeding",
+      "content": {
+        "question": "对符合 ARISTOTLE 入组条件的房颤患者，阿哌沙班相对华法林的卒中预防与大出血结果是什么？",
+        "answer": "ARISTOTLE 中，阿哌沙班的卒中或全身栓塞年化事件率为 1.27%，华法林为 1.60%；大出血分别为 2.13% 与 3.09%。这是对华法林的直接比较，不能据此给不同 DOAC 排名。",
+        "population": "18,201 名房颤且至少有一项额外卒中危险因素的患者；随机、双盲；中位随访 1.8 年。",
+        "nextStep": "阅读原文时分别记录疗效与出血的分析人群；讨论具体患者前，确认瓣膜情况、肾功能和华法林控制质量。",
+        "sections": [
+          {
+            "title": "比较的究竟是什么",
+            "text": "阿哌沙班试验方案对比剂量调整的华法林（INR 目标 2.0–3.0）；主要结局为缺血性或出血性卒中、全身栓塞。年化率以人时为基础，不是每位患者在固定一年后的风险。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "先确认能否外推",
+            "text": "2024 ESC 指南把机械心脏瓣膜和中重度二尖瓣狭窄列为 DOAC 常规优先选择的例外。药物和剂量的个体选择仍需核对肾功能、相互作用及当地说明书。",
+            "sourceIndexes": [
+              2
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "原文报告的年化结果",
+            "columns": [
+              "结局",
+              "阿哌沙班",
+              "华法林",
+              "HR（95% CI）"
+            ],
+            "rows": [
+              [
+                "卒中或全身栓塞",
+                "1.27%/年",
+                "1.60%/年",
+                "0.79（0.66–0.95）"
+              ],
+              [
+                "大出血",
+                "2.13%/年",
+                "3.09%/年",
+                "0.69（0.60–0.80）"
+              ]
+            ],
+            "sourceIndexes": [
+              1
+            ],
+            "caption": "随机入组总数 18,201；中位随访 1.8 年。摘要未给出各结局分析分母；此处保留年化率，未反推事件人数或 NNT。"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "valve-exclusions",
+      "zoneKey": "af-anticoagulation",
+      "title": "有机械瓣或风湿性瓣膜病，还能照搬 DOAC 的房颤结论吗？",
+      "subtype": "knowledge",
+      "summary": "不能直接照搬。RE-ALIGN 因达比加群组血栓栓塞与出血增多提前终止；INVICTUS 在风湿性心脏病相关房颤中支持维生素 K 拮抗剂，而非利伐沙班。",
+      "body": "问题设定练习：将笼统的“瓣膜病合并房颤”改写成机械瓣、生物瓣、风湿性二尖瓣狭窄或其他具体情境，再选择对应证据。",
+      "sources": [
+        {
+          "id": "realign",
+          "title": "Dabigatran versus warfarin in patients with mechanical heart valves.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/23991661/",
+          "excerpt": "The primary end point was the trough plasma level of dabigatran.",
+          "sha256": "a23232e056bd5b290a3e9c6b852b00663efa410c7740d10a3cf41b17cd27b1d7",
+          "checkedAt": "2026-10-01T09:05:40.090240+00:00",
+          "coverage": "abstract"
+        },
+        {
+          "id": "invictus",
+          "title": "Rivaroxaban in Rheumatic Heart Disease-Associated Atrial Fibrillation.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36036525/",
+          "excerpt": "Survival curves were nonproportional.",
+          "sha256": "da470e086c755932f000d001037b25ebc519777c14c3ef15fbc839540ea05f2b",
+          "checkedAt": "2026-10-01T09:05:38.583138+00:00",
+          "coverage": "abstract"
+        },
+        {
+          "id": "esc-af-2024",
+          "title": "2024 ESC Guidelines for the management of atrial fibrillation (section 6.2.3)",
+          "url": "https://academic.oup.com/eurheartj/article/45/36/3314/7738779",
+          "excerpt": "Vitamin K antagonists are currently the only treatment option in AF patients with mechanical heart valves or moderate-to-severe mitral valve stenosis.",
+          "sha256": "9555cb9dc4780851e1d1d2ef2c8626d104d17614e71066242c7fbd59a840f715",
+          "checkedAt": "2026-10-01T09:13:20.616769+00:00",
+          "coverage": "excerpt"
+        }
+      ],
+      "limitations": "RE-ALIGN 与 INVICTUS 仅核对原始摘要；摘要未给出完整结局分母或统一随访期，未制作百分比比较图，也未计算 NNT。两项试验研究不同疾病和药物，不能合并为效应量。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-valve-exclusions",
+      "content": {
+        "question": "机械瓣和风湿性心脏病相关房颤为何需要单独看抗凝证据？",
+        "answer": "不能直接照搬。RE-ALIGN 因达比加群组血栓栓塞与出血增多提前终止；INVICTUS 在风湿性心脏病相关房颤中支持维生素 K 拮抗剂，而非利伐沙班。",
+        "population": "RE-ALIGN：机械主动脉瓣或二尖瓣置换后患者；INVICTUS：超声证实风湿性心脏病并房颤、满足试验风险条件的患者。",
+        "nextStep": "先查看超声或手术记录：机械瓣还是生物瓣？二尖瓣狭窄程度如何？再按对应人群查指南原文和专门试验。",
+        "sections": [
+          {
+            "title": "机械瓣：不是普通房颤的替代场景",
+            "text": "RE-ALIGN 为二期剂量验证试验，按 2:1 随机分配，入组 252 人后提前终止。摘要按实际治疗分析报告：达比加群组缺血性或未明确类型卒中 9 例（5%），华法林组 0 例；大出血分别 7 例（4%）与 2 例（2%）。这些是提前停止期间的观察数，不能改写成一年风险。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "风湿性心脏病：看实际比较结果",
+            "text": "INVICTUS 最终分析 4,531 人，主要复合结局发生数为利伐沙班组 560 例、维生素 K 拮抗剂组 446 例。生存曲线不满足比例风险，主要结局的限制平均生存时间差为 −76 天（95% CI −121 至 −31）；不能把这解释为每个人寿命减少 76 天。",
+            "sourceIndexes": [
+              2
+            ]
+          },
+          {
+            "title": "指南边界",
+            "text": "2024 ESC 指南对机械瓣或中重度二尖瓣狭窄的房颤患者保留维生素 K 拮抗剂路径。这不等于所有轻度瓣膜异常、生物瓣或瓣膜修复都禁止 DOAC。",
+            "sourceIndexes": [
+              3
+            ]
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "dapa-ckd-albuminuria",
+      "zoneKey": "cardiorenal-ckd",
+      "title": "没有糖尿病但有蛋白尿，DAPA-CKD 提供了什么证据？",
+      "subtype": "knowledge",
+      "summary": "DAPA-CKD 纳入有或无 2 型糖尿病的慢性肾病患者；达格列净组主要复合结局为 197/2,152（9.2%），安慰剂组为 312/2,152（14.5%），HR 0.61（95% CI 0.51–0.72）。",
+      "body": "研究延伸：按糖尿病状态和肾病病因分别提出问题，并预先写明所关注的是肾功能下降、肾替代治疗还是死亡。",
+      "sources": [
+        {
+          "id": "dapa-ckd",
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32970396/",
+          "excerpt": "197 of 2152 participants (9.2%)",
+          "sha256": "0deea2222c033f22ddad424171abf1fc43d21745fcebed80943ea01fa6bf421d",
+          "checkedAt": "2026-10-01T09:05:41.731626+00:00",
+          "coverage": "abstract"
+        }
+      ],
+      "limitations": "仅核对原始摘要，未复核具体肾病亚型或完整安全性表。试验因获益提前停止；低白蛋白尿、eGFR <25 或已经接受肾替代治疗的人群不能由本试验直接推断。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-dapa-ckd-albuminuria",
+      "content": {
+        "question": "DAPA-CKD 是否只支持糖尿病患者的肾脏保护？",
+        "answer": "DAPA-CKD 纳入有或无 2 型糖尿病的慢性肾病患者；达格列净组主要复合结局为 197/2,152（9.2%），安慰剂组为 312/2,152（14.5%），HR 0.61（95% CI 0.51–0.72）。",
+        "population": "eGFR 25–75 mL/min/1.73 m²、尿白蛋白/肌酐比（UACR）200–5,000 mg/g；4,304 人随机；中位随访 2.4 年。",
+        "nextStep": "核对 eGFR 和 UACR 是否同时符合试验范围；继续读非糖尿病亚组与安全性，而不是只根据“无糖尿病也有效”决定治疗。",
+        "sections": [
+          {
+            "title": "回答的是有白蛋白尿的 CKD",
+            "text": "达格列净 10 mg/日对比安慰剂。主要结局包括 eGFR 持续下降至少 50%、终末期肾病、肾脏或心血管死亡；不能把整个复合结局统称为“避免透析”。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "数字怎样用于沟通",
+            "text": "原文报告试验期 NNT 为 19（95% CI 15–27），并指出有无 2 型糖尿病的结果相似。总体 HR 不等于非糖尿病亚组的精确效应量。",
+            "sourceIndexes": [
+              1
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "同一试验期的主要复合结局",
+            "columns": [
+              "达格列净",
+              "安慰剂",
+              "相对效应",
+              "时间"
+            ],
+            "rows": [
+              [
+                "197/2,152（9.2%）",
+                "312/2,152（14.5%）",
+                "HR 0.61（95% CI 0.51–0.72）",
+                "中位随访 2.4 年"
+              ]
+            ],
+            "sourceIndexes": [
+              1
+            ],
+            "caption": "原文事件比例是试验观察期汇总，不表示每人均完成恰好 2.4 年随访。"
+          }
+        ],
+        "comparisons": [
+          {
+            "title": "主要复合结局事件人数",
+            "outcome": "eGFR 持续下降≥50%、终末期肾病、肾脏或心血管死亡",
+            "denominator": 2152,
+            "timeframe": "试验观察期；中位随访 2.4 年",
+            "control": {
+              "label": "安慰剂",
+              "events": 312
+            },
+            "intervention": {
+              "label": "达格列净",
+              "events": 197
+            },
+            "relativeEffect": "HR 0.61（95% CI 0.51–0.72）",
+            "sourceIndexes": [
+              1
+            ],
+            "note": "两组随机分母相同；图显示观察到的人数，不是固定 2.4 年的 Kaplan–Meier 风险。",
+            "measure": "risk",
+            "denominatorUnit": "people"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "empa-kidney-scope",
+      "zoneKey": "cardiorenal-ckd",
+      "title": "低 eGFR 或白蛋白尿较少，EMPA-KIDNEY 的边界在哪里？",
+      "subtype": "knowledge",
+      "summary": "EMPA-KIDNEY 扩展了 CKD 人群证据：恩格列净组主要复合结局 432/3,304（13.1%），安慰剂组 558/3,305（16.9%），HR 0.72（95% CI 0.64–0.82）。低白蛋白尿亚组事件少，不能把总体获益幅度照搬给每个亚组。",
+      "body": "研究延伸：针对低白蛋白尿人群，可分别核对主要事件终点与慢性 eGFR 斜率，记录两类结果的随访长度和不确定性。",
+      "sources": [
+        {
+          "id": "empa-kidney",
+          "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7614055/",
+          "excerpt": "Those with polycystic kidney disease or a kidney transplant were excluded.",
+          "sha256": "568c1ec0b1e09fddb087e6e3bde4ed170ff7952745e7aa4a14bde19a318af237",
+          "checkedAt": "2026-10-01T09:05:45.110633+00:00",
+          "coverage": "full-text"
+        }
+      ],
+      "limitations": "主文及表 2 已核对；试验因获益提前停止。低 UACR 亚组进展较慢、主要结局数量有限，eGFR 斜率是补充证据而非透析事件的直接替代。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-empa-kidney-scope",
+      "content": {
+        "question": "EMPA-KIDNEY 比较宽的入组范围，是否意味着所有 CKD 患者获益一样？",
+        "answer": "EMPA-KIDNEY 扩展了 CKD 人群证据：恩格列净组主要复合结局 432/3,304（13.1%），安慰剂组 558/3,305（16.9%），HR 0.72（95% CI 0.64–0.82）。低白蛋白尿亚组事件少，不能把总体获益幅度照搬给每个亚组。",
+        "population": "eGFR 20 至 <45 mL/min/1.73 m²（不要求最低 UACR），或 eGFR 45 至 <90 且 UACR≥200 mg/g；6,609 人随机，中位随访 2.0 年。",
+        "nextStep": "先分别核对 eGFR 与 UACR；读对应亚组的事件数及置信区间，并把安全性和基础治疗写入讨论。",
+        "sections": [
+          {
+            "title": "覆盖更广，仍有明确排除",
+            "text": "3569/6609（54%）没有糖尿病；多囊肾和肾移植患者被排除。通常在适当 RAS 抑制剂背景上比较恩格列净 10 mg/日与安慰剂，不耐受或无适应证者可以例外入组。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "肾脏效应与心血管效应分别读",
+            "text": "主要结局为肾病进展或心血管死亡；肾病进展 HR 0.71（95% CI 0.62–0.81），单独心血管死亡 HR 0.84（0.60–1.19）。不能据总体阳性结局宣布本试验已经证明降低心血管死亡。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "安全性需要和获益一起看",
+            "text": "严重急性肾损伤为 107/3304 与 135/3305；酮症酸中毒为 6/3304 与 1/3305，其中一例发生在基线无糖尿病者。这些少见事件有较大不确定性，不能据此宣称零风险。",
+            "sourceIndexes": [
+              1
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "观察期主要结局",
+            "columns": [
+              "恩格列净",
+              "安慰剂",
+              "HR（95% CI）",
+              "时间"
+            ],
+            "rows": [
+              [
+                "432/3,304（13.1%）",
+                "558/3,305（16.9%）",
+                "0.72（0.64–0.82）",
+                "中位随访 2.0 年"
+              ]
+            ],
+            "sourceIndexes": [
+              1
+            ],
+            "caption": "两组分母不同；保留原始分母，不把人数直接画成等规模人群图。"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "flow-semaglutide-kidney",
+      "zoneKey": "cardiorenal-ckd",
+      "title": "FLOW 的肾脏获益，适用于哪类糖尿病患者？",
+      "subtype": "knowledge",
+      "summary": "FLOW 支持特定的 2 型糖尿病合并白蛋白尿性 CKD 人群：司美格鲁肽组 331/1,767、安慰剂组 410/1,766 发生主要结局，HR 0.76（95% CI 0.66–0.88）；不能外推为所有 CKD 或所有 GLP-1 药物的共同结论。",
+      "body": "阅读延伸：继续查背景用药和预设亚组，明确在研究所采用的基础治疗上，新增治疗回答了哪些肾脏问题。",
+      "sources": [
+        {
+          "id": "flow",
+          "title": "Effects of Semaglutide on Chronic Kidney Disease in Patients with Type 2 Diabetes.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/38785209/",
+          "excerpt": "median follow-up was 3.4 years",
+          "sha256": "228369066f81146f661991d2a7697dda276f1ffad859ec8452628b3151b79633",
+          "checkedAt": "2026-10-01T09:05:46.935661+00:00",
+          "coverage": "abstract"
+        }
+      ],
+      "limitations": "仅核对原始摘要；预设中期分析后因获益提前停止。未证明非糖尿病 CKD 的同等获益，也未检验药物间优劣或完整联合治疗策略；具体风险与禁忌需另查说明书。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-flow-semaglutide-kidney",
+      "content": {
+        "question": "FLOW 能否支持“司美格鲁肽对所有慢性肾病患者都保护肾脏”？",
+        "answer": "FLOW 支持特定的 2 型糖尿病合并白蛋白尿性 CKD 人群：司美格鲁肽组 331/1,767、安慰剂组 410/1,766 发生主要结局，HR 0.76（95% CI 0.66–0.88）；不能外推为所有 CKD 或所有 GLP-1 药物的共同结论。",
+        "population": "2 型糖尿病；eGFR 50–75 且 UACR >300 至 <5000 mg/g，或 eGFR 25 至 <50 且 UACR >100 至 <5000 mg/g；3,533 人随机，中位随访 3.4 年。",
+        "nextStep": "核对糖尿病类型、eGFR 与 UACR 的组合范围；读全文背景用药和安全性，避免将安慰剂对照结果改写成药物之间的排名。",
+        "sections": [
+          {
+            "title": "不是单纯降糖终点",
+            "text": "每周皮下注射司美格鲁肽 1.0 mg 对比安慰剂。主要结局包括肾衰竭、eGFR 下降至少 50%、肾脏或心血管死亡；其中肾衰竭定义包括透析、移植或 eGFR <15 mL/min/1.73 m²。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "拆开结局检查一致性",
+            "text": "去掉心血管死亡后的肾脏特异性复合结局 HR 0.79（95% CI 0.66–0.94）；心血管死亡 HR 0.71（0.56–0.89）。这些支持研究人群内的结论，但不是与 SGLT2 抑制剂直接比较的证据。",
+            "sourceIndexes": [
+              1
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "主要结局的真实分母",
+            "columns": [
+              "司美格鲁肽",
+              "安慰剂",
+              "HR（95% CI）",
+              "随访"
+            ],
+            "rows": [
+              [
+                "331/1,767",
+                "410/1,766",
+                "0.76（0.66–0.88）",
+                "中位 3.4 年"
+              ]
+            ],
+            "sourceIndexes": [
+              1
+            ],
+            "caption": "原始计数保留不同分母；不由 HR 单独计算绝对获益或 NNT。"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "absolute-relative-time",
+      "zoneKey": "research-interpretation",
+      "title": "“风险下降 39%”与“少 5.3 个百分点”怎样同时成立？",
+      "subtype": "academic",
+      "summary": "HR 0.61 表示随时间分析的瞬时风险比；同一试验观察期的事件比例为 9.2% 对 14.5%。按原始人数计算，粗绝对差为约 5.34 个百分点；两种指标回答不同问题。",
+      "body": "练习：把“风险下降 39%”改写为同时包含人群、复合结局、两组人数、相对效应和随访范围的一句话。",
+      "sources": [
+        {
+          "id": "dapa-ckd",
+          "title": "Dapagliflozin in Patients with Chronic Kidney Disease.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32970396/",
+          "excerpt": "197 of 2152 participants (9.2%)",
+          "sha256": "0deea2222c033f22ddad424171abf1fc43d21745fcebed80943ea01fa6bf421d",
+          "checkedAt": "2026-10-01T09:05:41.731626+00:00",
+          "coverage": "abstract"
+        },
+        {
+          "id": "cochrane-effects",
+          "title": "Cochrane Handbook, Chapter 6: Choosing effect measures and computing estimates of effect",
+          "url": "https://www.cochrane.org/authors/handbooks-and-manuals/handbook/current/chapter-06",
+          "excerpt": "The number needed to treat is obtained from the risk difference.",
+          "sha256": "a84cf5956085bdc58f9f655a15570eb753e985bef567de059cf3283325fc1b52",
+          "checkedAt": "2026-10-01T09:06:30.040077+00:00",
+          "coverage": "excerpt"
+        }
+      ],
+      "limitations": "绝对差随基础风险、结局定义和时间变化。这里不估计派生差值的置信区间，不把中位随访当作每个人相同的固定时间，也不从年化率或 HR 求 NNT。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-absolute-relative-time",
+      "content": {
+        "question": "阅读 DAPA-CKD 时，怎样把相对效应转成有时间范围的绝对差异？",
+        "answer": "HR 0.61 表示随时间分析的瞬时风险比；同一试验观察期的事件比例为 9.2% 对 14.5%。按原始人数计算，粗绝对差为约 5.34 个百分点；两种指标回答不同问题。",
+        "population": "DAPA-CKD 的 4,304 名有白蛋白尿 CKD 患者；中位随访 2.4 年；这是研究解读示例，不是个体风险预测。",
+        "nextStep": "写研究摘要时同时列出两组人数/分母、HR 与 CI、结局定义和随访；若要固定时点 NNT，查该时点的生存分析风险及其不确定性。",
+        "sections": [
+          {
+            "title": "先辨别统计量",
+            "text": "HR 使用事件发生时间和删失信息，不等同于两组累计风险的比值。“风险下降 39%”不能写成“每 100 人少 39 人发生肾衰竭”。Cochrane 将风险、事件率和时间至事件资料分开处理。",
+            "sourceIndexes": [
+              2
+            ]
+          },
+          {
+            "title": "可复算的派生结果",
+            "text": "派生计算：312/2152 − 197/2152 = 115/2152 = 0.0534387，即约 5.34 个百分点；仅描述该试验观察期的粗事件比例差，不是固定 2.4 年的生存分析风险差。原文 NNT 为 19（95% CI 15–27），应连同试验期保留，不据 HR 重算。",
+            "sourceIndexes": [
+              1,
+              2
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "同一研究的三种表达",
+            "columns": [
+              "指标",
+              "数值",
+              "能回答的问题"
+            ],
+            "rows": [
+              [
+                "原文 HR",
+                "0.61（95% CI 0.51–0.72）",
+                "随时间比较瞬时事件风险"
+              ],
+              [
+                "原始事件比例",
+                "197/2152 对 312/2152",
+                "观察期发生结局的人数比例"
+              ],
+              [
+                "派生粗绝对差",
+                "约 5.34 个百分点",
+                "这次试验观察期相差多少"
+              ]
+            ],
+            "sourceIndexes": [
+              1,
+              2
+            ],
+            "caption": "派生差值由原始计数确定性计算；与原文模型估计的 HR 保持区分。"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "composite-endpoint-components",
+      "zoneKey": "research-interpretation",
+      "title": "肾病复合终点阳性，能否直接写“降低心血管死亡”？",
+      "subtype": "academic",
+      "summary": "不能。EMPA-KIDNEY 主要复合结局 HR 0.72（95% CI 0.64–0.82），但单独心血管死亡 HR 0.84（0.60–1.19），置信区间跨 1；本试验不能给这一组成结局下确定的降低结论。",
+      "body": "练习：选择读者最关心的一个组成结局，用该结局自己的计数和置信区间重新写结论，再与复合终点标题对照。",
+      "sources": [
+        {
+          "id": "empa-kidney",
+          "title": "Empagliflozin in Patients with Chronic Kidney Disease.",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7614055/",
+          "excerpt": "Those with polycystic kidney disease or a kidney transplant were excluded.",
+          "sha256": "568c1ec0b1e09fddb087e6e3bde4ed170ff7952745e7aa4a14bde19a318af237",
+          "checkedAt": "2026-10-01T09:05:45.110633+00:00",
+          "coverage": "full-text"
+        }
+      ],
+      "limitations": "这是结局解释卡，不是重新进行多重检验。组成结局的分析精度、层级和临床重要性均应单独判断；不同结局人数不能直接相加，因为同一患者可能经历不同事件。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-composite-endpoint-components",
+      "content": {
+        "question": "EMPA-KIDNEY 的复合主要结局改善，是否证明每个组成结局都改善？",
+        "answer": "不能。EMPA-KIDNEY 主要复合结局 HR 0.72（95% CI 0.64–0.82），但单独心血管死亡 HR 0.84（0.60–1.19），置信区间跨 1；本试验不能给这一组成结局下确定的降低结论。",
+        "population": "EMPA-KIDNEY：6,609 名进展风险 CKD 患者，恩格列净对比安慰剂，中位随访 2.0 年。",
+        "nextStep": "在引用“主要终点显著降低”之前，列出组成结局和各自 CI；若研究目的关心透析或死亡，就直接核对相应终点。",
+        "sections": [
+          {
+            "title": "把一个标题拆成读者关心的结局",
+            "text": "复合主要结局合并肾病进展与心血管死亡。肾病进展又包含维持性透析/肾移植、eGFR 持续 <10、eGFR 持续下降≥40%或肾脏死亡。改善这个复合终点不等于同样幅度减少透析、死亡和住院。",
+            "sourceIndexes": [
+              1
+            ]
+          },
+          {
+            "title": "置信区间跨 1 的含义",
+            "text": "心血管死亡为 59/3304 与 69/3305。现有区间仍兼容不同幅度的获益或风险增加；“未证实差异”也不能写成“确定无效”。主文指出心血管事件少于预期、检验效能有限。",
+            "sourceIndexes": [
+              1
+            ]
+          }
+        ],
+        "tables": [
+          {
+            "title": "同一试验，不同问题",
+            "columns": [
+              "结局",
+              "恩格列净",
+              "安慰剂",
+              "HR（95% CI）"
+            ],
+            "rows": [
+              [
+                "主要复合结局",
+                "432/3304",
+                "558/3305",
+                "0.72（0.64–0.82）"
+              ],
+              [
+                "肾病进展",
+                "384/3304",
+                "504/3305",
+                "0.71（0.62–0.81）"
+              ],
+              [
+                "心血管死亡",
+                "59/3304",
+                "69/3305",
+                "0.84（0.60–1.19）"
+              ]
+            ],
+            "sourceIndexes": [
+              1
+            ],
+            "caption": "来自原文表 2；观察期中位随访 2.0 年。组成结局不能直接相加来重建首次复合结局人数。"
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    },
+    {
+      "key": "noninferiority-superiority",
+      "zoneKey": "research-interpretation",
+      "title": "非劣效成立，为什么还要另做优效检验？",
+      "subtype": "academic",
+      "summary": "不矛盾。非劣效检验关注是否排除预先允许的劣势，优效检验关注是否优于对照。ARISTOTLE 的同一主要结局分别报告非劣效 P<0.001、优效 P=0.01；结论需要对应预设设计与检验顺序。",
+      "body": "练习：在论文图上标出无差异线与非劣效界值；检查置信区间的位置，再用与检验目标一致的措辞总结结果。",
+      "sources": [
+        {
+          "id": "aristotle",
+          "title": "Apixaban versus warfarin in patients with atrial fibrillation.",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21870978/",
+          "excerpt": "The median duration of follow-up was 1.8 years.",
+          "sha256": "6f07a806fb6a0910520187bc3580e386d1d18091a11f75715190f9d4d11af0fc",
+          "checkedAt": "2026-10-01T09:05:36.555762+00:00",
+          "coverage": "abstract"
+        },
+        {
+          "id": "ni-methods",
+          "title": "Non-adherence in non-inferiority trials: pitfalls and recommendations",
+          "url": "https://www.bmj.com/content/370/bmj.m2215",
+          "excerpt": "Non-inferiority is concluded if the upper confidence interval bound is less than the non-inferiority margin.",
+          "sha256": "2f115c68d1c95f79d3193a670438b92352e69a9bf0a98b71404b0138c8a8c68f",
+          "checkedAt": "2026-10-01T09:07:07.907800+00:00",
+          "coverage": "excerpt"
+        }
+      ],
+      "limitations": "ARISTOTLE 此处仅核对摘要，未替代对完整非劣效界值、分析集及多重检验方案的审查。方法学来源是分析论文，不是新药疗效证据。",
+      "provenance": "AI authored evidence interpretation; checked against the cited original publication records on 2026-10-01. Source coverage and exact short anchors are preserved. Independent AI review is recorded separately; no human review or drug ranking is claimed.",
+      "state": "published",
+      "requestId": "evimed-evidence-seed-20261001-noninferiority-superiority",
+      "content": {
+        "question": "论文同时写“非劣效 P<0.001”和“优效 P=0.01”，两个结果是否矛盾？",
+        "answer": "不矛盾。非劣效检验关注是否排除预先允许的劣势，优效检验关注是否优于对照。ARISTOTLE 的同一主要结局分别报告非劣效 P<0.001、优效 P=0.01；结论需要对应预设设计与检验顺序。",
+        "population": "以 ARISTOTLE 的 18,201 名房颤患者、阿哌沙班对比华法林为实例；这是试验设计阅读，不是药物排名。",
+        "nextStep": "读一篇非劣效试验时依次查：界值的临床依据、CI 与界值的位置、ITT/符合方案结果、缺失和停药、是否预设转做优效。",
+        "sections": [
+          {
+            "title": "“没有显著差异”不是非劣效",
+            "text": "非劣效需要事先设定有临床理由的界值，并看置信区间是否排除超过界值的劣势。优效未显著可能源于样本小或估计不精确，不能自动推出两种治疗等效。",
+            "sourceIndexes": [
+              2
+            ]
+          },
+          {
+            "title": "看设计与执行，而不只看 P 值",
+            "text": "ARISTOTLE 摘要说明首先设计为非劣效，优效为关键次要目标；主要结局 HR 0.79（95% CI 0.66–0.95）。方法学研究指出，不依从可能使组间差异变小，影响非劣效解释；应核对意向治疗与符合方案分析及处理规则。",
+            "sourceIndexes": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "editorial": {
+        "author": {
+          "kind": "ai",
+          "name": "EviMed 证据编辑 AI",
+          "model": "gpt-6.1-sol"
+        },
+        "sourceCheckedAt": "2026-10-01T09:13:20.616769+00:00",
+        "reviewRevision": 1,
+        "status": "review-pending",
+        "findings": []
+      }
+    }
+  ]
+}

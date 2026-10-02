@@ -10,6 +10,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
+import { UsageLedger } from "../src/usageLedger.mjs";
 import { ReviewService, replyOfRun } from "../src/reviewService.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -73,10 +74,10 @@ after(async () => {
 });
 
 /** A streamed answer from the reviewer model. @param {any} value */
-function modelAnswer(value) {
+function modelAnswer(value, model = "qwen3.8-max-0902") {
   const events = [
-    { id: "chatcmpl-x", model: "qwen3.8-max-0902", choices: [{ index: 0, delta: { content: JSON.stringify(value) } }] },
-    { id: "chatcmpl-x", model: "qwen3.8-max-0902", choices: [], usage: { prompt_tokens: 2_000, completion_tokens: 300, prompt_tokens_details: { cached_tokens: 0 } } },
+    { id: "chatcmpl-x", model, choices: [{ index: 0, delta: { content: JSON.stringify(value) } }] },
+    { id: "chatcmpl-x", model, choices: [], usage: { prompt_tokens: 2_000, completion_tokens: 300, prompt_tokens_details: { cached_tokens: 0 } } },
   ];
   return new Response(`${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
@@ -86,8 +87,9 @@ const QUIET = Object.freeze({ findings: [], checklist: [{ item: "E2", status: "a
 /** An editor that said nothing at all. */
 const SILENT = Object.freeze({ findings: [], checklist: [], acceptance: [] });
 
-/** @param {{ modelAnswers: any[], notifications?: any, imService?: any, runtimeManager?: any, outputs?: { path: string }[] }} input */
+/** @param {{ modelAnswers: any[], settings?: Record<string, any>, usageLedger?: any, notifications?: any, imService?: any, runtimeManager?: any, outputs?: { path: string }[] }} input */
 function service({ modelAnswers, notifications = null, imService = null, runtimeManager = null,
+  settings = config, usageLedger = null,
   outputs = [{ path: "clinical-evidence-report.md" }, { path: "clinical-evidence-matrix.json" }] }) {
   /** @type {any[]} */
   const prompts = [];
@@ -95,7 +97,7 @@ function service({ modelAnswers, notifications = null, imService = null, runtime
   return {
     prompts,
     review: new ReviewService({
-      config, database, store: {
+      config: settings, database, usageLedger, store: {
         userById: async (/** @type {string} */ id) => (id === userId ? { id } : null),
         requireProject: async () => ({ id: projectId, userId, workspaceDir: workspace }),
       },
@@ -128,6 +130,34 @@ async function settled(review, reviewId) {
   }
   throw new Error("the review never finished");
 }
+
+test("an explicit DeepSeek reviewer persists its independent operation and actual metering in PostgreSQL", options, async () => {
+  const { review, prompts } = service({
+    settings: { ...config, reviewProvider: "deepseek", reviewModel: "deepseek-v4-pro", reviewApiBase: "https://api.deepseek.com", deepseekApiKey: "test-deepseek-key", dashscopeApiKey: "" },
+    usageLedger: new UsageLedger(database),
+    modelAnswers: [modelAnswer(QUIET, "deepseek-v4-pro")],
+  });
+  await review.ready();
+  const started = await review.startDeliverableReview({ userId, projectId }, {
+    runId: "native_deepseek", sessionId: "deepseek-session", deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", attempt: 1,
+  });
+  const done = await settled(review, started.reviewId);
+  assert.equal(done.status, "done", JSON.stringify(done));
+  assert.equal(done.model, "deepseek-v4-pro");
+  assert.equal(prompts.length, 1);
+  assert.deepEqual(prompts[0].response_format, { type: "json_object" });
+  const rows = await database.query("SELECT status, model, purpose, run_id, cache_hit_tokens, cache_miss_tokens, output_tokens, actual_cost, priced FROM evimed_usage.model_requests WHERE user_id=$1 AND project_id=$2 AND model='deepseek-v4-pro'", [userId, projectId]);
+  assert.equal(rows.rows.length, 1);
+  const row = rows.rows[0];
+  assert.equal(row.status, "settled");
+  assert.equal(row.purpose, "review");
+  assert.equal(row.run_id, "run_review_1");
+  assert.equal(Number(row.cache_hit_tokens), 0);
+  assert.equal(Number(row.cache_miss_tokens), 2000);
+  assert.equal(Number(row.output_tokens), 300);
+  assert.equal(row.priced, true);
+  assert.ok(Number(row.actual_cost) > 0);
+});
 
 test("a package is reviewed whole: references resolved, located findings kept, the rest dropped and counted", options, async () => {
   const { review, prompts } = service({ modelAnswers: [{

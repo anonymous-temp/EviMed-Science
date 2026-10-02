@@ -5371,6 +5371,89 @@ test("a stored verification value outside the three is read as null", async () =
 // project directory the caller had already finished with, and the failure
 // surfaced as "agent run not found" somewhere unrelated. It only reproduced
 // under load, which is the worst kind of true.
+test("closing all recovered projects waits for a terminal monitor's remaining writes", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-terminal-close-"));
+  const project = { id: "default", userId: "alice", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let entered;
+  const terminalWrite = new Promise((resolve) => { entered = resolve; });
+  const store = new AgentRunStore({}, {
+    model: "deepseek/deepseek-v4-flash",
+    readSessionHistory: async () => { throw new HttpError(409, "runtime_not_running", "Runtime is stopped."); },
+    onRunFinished: async () => {
+      entered();
+      await held;
+      await writeFile(path.join(project.metaDir, "terminal-tail.json"), "finished");
+    },
+  });
+  let closing;
+  let monitor;
+  try {
+    const run = await store.createRun(project, { sessionId: "ses_terminal", mode: "open-domain",
+      agentId: null, agentVersion: null, runtimeAgent: null });
+    await store.recover(project);
+    await terminalWrite;
+    const terminalSnapshot = await store.list(project);
+    assert.equal(terminalSnapshot.find((item) => item.id === run.id).status, "failed");
+    assert.equal(store.monitors.has(run.id), true);
+    monitor = store.monitors.get(run.id).promise;
+    // Use the actual terminal ledger snapshot, without unrelated disk I/O
+    // delaying close enough to hide a missing await on the held monitor.
+    store.list = async () => terminalSnapshot;
+    let closed = false;
+    closing = store.closeAll().then(() => { closed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(closed, false, "the terminal ledger row does not mean its monitor has stopped writing");
+    release();
+    await closing;
+    assert.equal(store.monitors.has(run.id), false);
+    assert.equal(await readFile(path.join(project.metaDir, "terminal-tail.json"), "utf8"), "finished");
+  } finally {
+    release();
+    await closing;
+    await monitor;
+    await store.closeAll();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a terminal monitor can close its bounded runtime project without awaiting itself", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-terminal-stop-"));
+  const project = { id: "bounded", userId: "alice", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  let completed = false;
+  const store = new AgentRunStore({}, {
+    model: "deepseek/deepseek-v4-flash",
+    readSessionHistory: async () => { throw new HttpError(409, "runtime_not_running", "Runtime is stopped."); },
+    onRunFinished: async () => {
+      // The server's bounded-runtime completion stops the runtime, which
+      // awaits onRuntimeStop -> closeProject before this callback can finish.
+      await store.closeProject(project, "failed");
+      await writeFile(path.join(project.metaDir, "bounded-complete.json"), "finished");
+      completed = true;
+    },
+  });
+  try {
+    const run = await store.createRun(project, { sessionId: "ses_bounded", mode: "open-domain",
+      agentId: null, agentVersion: null, runtimeAgent: null });
+    await store.recover(project);
+    const monitor = store.monitors.get(run.id).promise;
+    await awaitBackgroundMonitor(monitor);
+    assert.equal(completed, true);
+    assert.equal(store.monitors.has(run.id), false);
+    assert.equal(await readFile(path.join(project.metaDir, "bounded-complete.json"), "utf8"), "finished");
+  } finally {
+    await store.closeAll();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("closing a project waits for its monitor instead of only asking it to stop", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-close-"));
   try {

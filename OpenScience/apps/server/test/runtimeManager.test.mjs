@@ -30,7 +30,7 @@ import {
   syncRuntimeDshProfile,
 } from "../src/runtimeManager.mjs";
 import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
-import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
+import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
@@ -52,6 +52,28 @@ const project = {
   workspaceDir: "/srv/open-science/users/alice/projects/paper1/workspace",
   runtimeDir: "/srv/open-science/users/alice/projects/paper1/runtime",
 };
+
+test("a test deployment with the browser proxy uses the hosted permission and UI policy", () => {
+  const config = {
+    production: false,
+    modelGatewayInternalUrl: "http://gateway:8787/internal/model/v1",
+    runtimeSandboxEnforcement: "partial",
+  };
+  const plan = { sandboxMode: "docker", dshHomeDir: "/runtime/dsh-home", capsuleMethodCount: 0 };
+  for (const runtimeUiProxyEnabled of [false, true]) {
+    const patch = renderProfilePatch(dshProfileInput(
+      { ...config, runtimeUiProxyEnabled }, project, plan, "deepseek-flash", "/runtime/workload-token",
+    ));
+    if (runtimeUiProxyEnabled) {
+      assert.match(patch, /defaultPreset: 'evimed-hosted'/);
+      assert.match(patch, /- id: ui-settings-models\n  disabled: true/);
+      assert.doesNotMatch(patch, /\n      danger-full-access:/);
+    } else {
+      assert.match(patch, /defaultPreset: 'workspace-write'/);
+      assert.doesNotMatch(patch, /- id: ui-settings-models/);
+    }
+  }
+});
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

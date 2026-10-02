@@ -1,0 +1,109 @@
+{
+  "base": "http://127.0.0.1:5183",
+  "dataKind": "real HTTP application; isolated PostgreSQL acceptance fixtures",
+  "checks": [
+    {
+      "name": "real acceptance-account login",
+      "passed": true,
+      "status": 200
+    },
+    {
+      "name": "real second feed page loaded",
+      "passed": true,
+      "before": 30,
+      "after": 45
+    },
+    {
+      "name": "associated event reachable from card menu",
+      "passed": true,
+      "associatedCard": "t8c034053baa3df8e"
+    },
+    {
+      "name": "event return restores filtered URL",
+      "passed": true,
+      "before": "/app/frontier?view=all&lane=evidence",
+      "after": "/app/frontier?view=all&lane=evidence"
+    },
+    {
+      "name": "event return restores every loaded feed page",
+      "passed": true,
+      "beforeCount": 45,
+      "afterCount": 45
+    },
+    {
+      "name": "event return restores expanded summary",
+      "passed": true,
+      "before": [
+        "t8c034053baa3df8e"
+      ],
+      "after": [
+        "t8c034053baa3df8e"
+      ]
+    },
+    {
+      "name": "event return restores internal scroll",
+      "passed": true,
+      "before": 420,
+      "after": 420
+    },
+    {
+      "name": "320px page has no horizontal overflow",
+      "passed": true,
+      "viewport": 320,
+      "document": 320,
+      "main": 320,
+      "overflow": []
+    },
+    {
+      "name": "320px navigation names remain readable",
+      "passed": true,
+      "labels": [
+        "动态",
+        "证据专区",
+        "简报",
+        "关注"
+      ]
+    },
+    {
+      "name": "daily archive URL survives reload",
+      "passed": true,
+      "url": "http://127.0.0.1:5183/app/frontier?view=daily&day=2026-10-01"
+    },
+    {
+      "name": "weekly archive URL survives reload",
+      "passed": true,
+      "url": "http://127.0.0.1:5183/app/frontier?view=weekly&week=2026-09-21"
+    },
+    {
+      "name": "keyboard selects daily tab and retains focus",
+      "passed": true
+    },
+    {
+      "name": "keyboard selects weekly tab",
+      "passed": true
+    },
+    {
+      "name": "system dark theme reaches reader",
+      "passed": true
+    },
+    {
+      "name": "system light theme restores reader",
+      "passed": true
+    },
+    {
+      "name": "no browser JavaScript errors",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "captures": [
+    "implementation-reader-desktop-expanded.png",
+    "implementation-reader-event.png",
+    "implementation-reader-returned-position.png",
+    "implementation-reader-mobile-320.png",
+    "implementation-reader-daily.png",
+    "implementation-reader-weekly.png",
+    "implementation-reader-dark.png"
+  ],
+  "passed": true
+}

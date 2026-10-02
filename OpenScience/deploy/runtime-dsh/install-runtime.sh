@@ -421,6 +421,9 @@ profile_seed() {
   cp -a "${DSH_HOME_SEED}/." "${relocated}/"
   DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null
   rm -rf "${relocated}"
+  # The plugin manager writes this image-owned manifest with mode 0600.
+  # Runtime users must be able to read it before the seed becomes read-only.
+  chmod 0644 "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime
   chmod -R a-w "${DSH_HOME_SEED}"
 }

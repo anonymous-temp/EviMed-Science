@@ -607,7 +607,7 @@ export class AgentBayRuntimeProvider {
         compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
         disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
         flags: {
-          hosted: Boolean(config.production),
+          hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
           askUser: Boolean(config.runtimeAskUserEnabled),
           review: Boolean(config.runtimeReviewEnabled),
           capsule: Boolean(gateways.capsule),

@@ -1521,6 +1521,21 @@ test("the profile is pre-initialized outside the path the runtime volume mounts 
   assert.match(smoke, /evimed-profile-seed\.mjs sync/);
 });
 
+test("the immutable public profile is readable and the actual build boot drops root before syncing it", async () => {
+  const install = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
+  const publicMode = install.indexOf('chmod 0644 "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"');
+  const seal = install.indexOf('evimed-profile-seed.mjs seal "${DSH_HOME_SEED}"');
+  assert.ok(publicMode >= 0 && publicMode < seal, "the plugin manager's private manifest must become public before the immutable seed is sealed");
+  const rootGuard = smoke.indexOf('if [ "$(id -u)" -eq 0 ]');
+  const dropRoot = smoke.indexOf('exec runuser -u nobody -- "$0" "$@"');
+  assert.ok(rootGuard >= 0 && dropRoot > rootGuard && dropRoot < smoke.indexOf("evimed-profile-seed.mjs sync"), "the CI image must boot the profile as an unprivileged user");
+  assert.match(smoke, /export HOME="\$\{smoke_home\}\/home" XDG_CONFIG_HOME=/);
+  assert.match(smoke, /chmod 600 "\$\{smoke_home\}\/\.credentials.yaml"/);
+  assert.match(smoke, /sed .*\/runtime\/dsh-home\/sessions.*\$\{smoke_home\}\/sessions/);
+  assert.match(smoke, /DSH_HOME="\$\{smoke_home\}" dsh --profile "\$\{profile\}" --patch "\$\{patch\}"/);
+});
+
 // Confirmed against a real installed `dsh` binary: `--patch` is a *launcher*
 // flag, resolved before the web app's own arguments begin — `dsh --profile web
 // --no-open --port 0 --patch x.yml` answers "error: unknown option '--patch'"

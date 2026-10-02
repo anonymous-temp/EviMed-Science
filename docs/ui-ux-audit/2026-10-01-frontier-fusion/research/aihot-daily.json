@@ -1,0 +1,436 @@
+{
+  "url": "https://aihot.news/daily",
+  "status": 200,
+  "title": "AI 日报 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:18.057669+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\n日报\n周报\n月报\n往期\n2026 年 10 月\n1\n01\n周四\nOpenAI 被曝无视员工安全警告，FTC 启动 AI 实验室调查\n2026 年 9 月\n30\n2026 年 8 月\n31\n2026 年 7 月\n31\n2026 年 6 月\n30\n2026 年 5 月\n31\n2026 年 4 月\n9\n日报合订本\n2026 年 10 月 1 日 · 星期四\n人工智能 · 每日要闻\n每天 08:00 出刊\nAI 日报 · 2026 年 10 月 1 日 · 星期四\n\nAIHOT · AIHOT.NEWS\n\n第 163 期\n01\n2026 年 10 月\n星期四\n十月\n本月 1 期\n一\n二\n三\n四\n五\n六\n日\n27\n件大事\n20\n个来源\n14\n件一手发布\n7\n个新模型\n约 10 分钟读完\n头条\nOpenAI 被曝无视员工安全警告，FTC 启动 AI 实验室调查\n\n《纽约时报》报道称，OpenAI 员工在模型失控前数月已邮件警告高层测试监控不足，但被要求按期发布。同日，FTC 以消费者保护为由对 OpenAI、Anthropic 等头部 AI 实验室启动调查，并计划强制调取文件、质询高管。\n\n今日看点\n1\nOpenAI 发布 GPT-6.1 Sol：以 Astra 五分之一价格接近其编码与计算机操作水平\nMarkTechPost\n2\nGemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%\nArena\n3\nGoogle DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放\nGoogle DeepMind：Blog\n本期版面\n01\n模型发布/更新\n7 件\n02\n产品发布/更新\n5 件\n03\n行业动态\n8 件\n04\n论文研究\n2 件\n05\n技巧与观点\n5 件\n06\n快讯\n3 条\n01\n模型发布/更新\nMarkTechPost\nOpenAI 发布 GPT-6.1 Sol：以 Astra 五分之一价格接近其编码与计算机操作水平\n\nOpenAI 发布 GPT-6.1 Sol，定价为每百万 token 2 美元输入、10 美元输出、0.10 美元缓存输入，为 GPT-6 Astra 标准价格约五分之一。\n\n原文\nArena\nGemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%\n\nArena 公布 Gemini 4 Argon (High) 在 Agent Arena 排名第 8，净提升分 +7.92%，每任务成本 $0.62。\n\n原文\nGoogle DeepMind：Blog\n一手\nGoogle DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放\n\nGoogle DeepMind 发布新前沿模型 Gemini 4 Argon，先通过 Fairwind Program 向可信网络防御者开放，后续将逐步面向开发者、企业和消费者推出。\n\n原文\nArtificial Analysis 完整文章\n一手\nArtificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队\n\nArtificial Analysis 评测 Google DeepMind 的 Gemini 4 Argon，其高推理档在 Artificial Analysis Intelligence Index 得分 53，追平 GPT-6 Astra (max)、领先 GPT-6.1 Sol (max) 1 分。\n\n原文\n公\n公众号：DeepSeek（深度求索）\nDeepSeek 开源面向华为昇腾平台的基础设施组件\n\nDeepSeek 开源面向华为昇腾算力平台的基础设施组件，包括 TileLang 编译工具、DeepGEMM、DeepEP、TileKernels、FlashMLA、DeepSelect，与此前英伟达平台开源组件一一对应。\n\n原文\nArena\nGPT-6.1 Sol (Max) 以 1759 分登上 Code Arena: WebDev 第 3 名\n\nArena 评测榜单显示，OpenAI 的 GPT-6.1 Sol (Max) 以 1759 分位列 Code Arena: WebDev 第 3 名，混合价格为 $8/MToken。相比 GPT-6 Sol (Max) 同价提升 70 分，排名上升 4 位，且在 Consumer Product 等所有类目均有提升。\n\n原文\n公\n公众号：蚂蚁百灵（Ling）\n蚂蚁百灵发布 Ling-3.1-flash，面向真实世界长任务升级\n\n蚂蚁百灵推出 Ling-3.1-flash，总参数约 560B，每个 Token 激活约 25B，上下文窗口上限 1M，延续混合线性架构并提高线性 Attention 层比例（7 层 KDA 配 1 层 Gated MLA，512 个路由专家选 8 个加 1 个共享专家）。\n\n原文\n02\n产品发布/更新\nArena\nArena 开放限时测试 Claude Sonnet 5.5，Direct Mode 可用 48 小时\n\nArena 宣布在 Direct Mode 限时开放 Anthropic 的 Claude Sonnet 5.5（High），截止 10 月 2 日上午 8 点（太平洋时间），之后仍可在 Battle 和 Agent Mode 使用。引用内容称 Claude Sonnet 5.5 是 Claude 5.5 系列第二款模型，比 Sonnet 5 快 30% 以上，多数工作成本最高降低 30%。\n\n原文\nGoogle DeepMind：Blog\n一手\nGoogle DeepMind 发布 SynthID Bio，为 AI 生成的蛋白质嵌入可验证水印\n\nGoogle DeepMind 于 9 月 30 日发布 SynthID Bio，将水印技术引入合成生物学，把不可见签名嵌入生物序列和预测结构中，使水印可在合成的物理蛋白质上验证，且在湿实验中不损害生物功能。\n\n原文\nAravind Srinivas\nPerplexity 开放 Computer 邮件委托入口并限时免费运行任务\n\nPerplexity 向所有人开放 Computer 的邮件委托功能，无需 Perplexity 账号，将转发或抄送 computer@perplexity.com 的任务限时免费运行。智能体会在后台完成任务并保留邮件上下文，每个邮件任务在 Computer 中作为正常会话运行，可在网页和移动端查看，并带有与应用内任务相同的审计记录。\n\n原文\nArtificial Analysis 完整文章\n一手\nArtificial Analysis 开源 AA-AgentPerf-Local，测试笔记本与工作站上本地 AI 智能体推理性能\n\nArtificial Analysis 发布开源工具 AA-AgentPerf-Local，通过重放 8 个真实智能体任务（168 轮、上下文增长至约 56K tokens）测试本地推理性能，并上线笔记本与工作站排行榜。\n\n原文\nFactory 研究 / 产品\n一手\nFactory Automations 正式开放：Droid 可定时或按事件自动执行工程工作流\n\nFactory 宣布 Automations 正式向所有用户开放，用自然语言描述工作流后，Droid 可按定时或 Slack、GitHub、webhook 触发运行，支持自选模型（含 BYOK 和 Factory Router）与自选机器。\n\n原文\n03\n行业动态\nIT之家\n纽约时报报道 OpenAI 在 AI 失控前已接到员工安全警告但被无视\n\n《纽约时报》报道称，OpenAI 两名员工在模型脱离管控数月前已邮件警告高层测试阶段监控不足，但被告知须按期推进发布，公司未增设安全流程。\n\n原文\nIT之家\nAnthropic 与 SpaceX 签署最高 845 亿美元算力协议，可提前 90 天通知解除\n\nAnthropic 与 SpaceX 签署算力协议，据路透社查阅的 IPO 申报文件，合同金额上限最高达 845 亿美元，用于租用 SpaceX 数据中心内的英伟达 GPU。\n\n原文\nThe Decoder：AI News\nFTC 以消费者保护为由对 OpenAI、Anthropic 等 AI 实验室启动全面调查\n\nFTC 正以潜在消费者保护违规为由调查 OpenAI、Anthropic 等头部 AI 实验室，主席 Andrew Ferguson 计划通过具法律约束力的 Civil Investigative Demands 强制调取文件并质询高管，命令将在数周内发出，METR 也在审查范围之列。\n\n原文\nOpenAI：官网动态（RSS · 排除企业/客户案例）\n一手\nOpenAI 披露并处置一起有组织的模型蒸馏攻击行动\n\nOpenAI 披露其识别并处置了一起有组织的攻击行动，该行动旨在系统性提取模型受保护的推理内容，最早活动出现在 7 月第一周。\n\n原文\nHacker News 热门（buzzing.cc 中文翻译）\nGamersNexus 分析内存厂商以长期协议锁定产能，消费级 RAM 与 SSD 价格一年大涨\n\nGamersNexus 撰文指出，Micron、Samsung、SK Hynix 等内存厂商正以 3-5 年长期协议（LTA）把 50%-70% 产能分配给最大的 5-16 家客户，试图消除行业原有的周期性低价。\n\n原文\nArs Technica：AI\nTrump 推动二十余家科技公司签署自愿性 AI 安全协议\n\n约二十余家科技公司签署白宫超级智能协议，承诺实施独立安全审计、定期会商并制定共同安全标准，涵盖网络安全、生物安全和化学威胁等风险。协议无法律约束力，Trump 称其具有道德约束力。文章指出 OpenAI 近期多起事故源于今年 5 至 7 月开发中的一个未发布模型，其安全委员会有效性受到特拉华和加州总检察长调查，FTC 也就 AI 智能体潜在消费者损害发起调查。\n\n原文\nPromptArmor：Threat Intelligence\n一手\nPromptArmor 披露 Copilot Cowork AI 网关被劫持绕过沙箱外传文件漏洞\n\nPromptArmor 披露 Microsoft Copilot Cowork 的 AI 网关可被恶意 Skill 劫持以绕过沙箱并外传文件。\n\n原文\nClément Delangue\nHugging Face CEO 称收到数千条私信，将花几天逐一处理\n\nClément Delangue 表示收到数千条私信，但 @bot 无法自动分析私信，需要几天时间处理。他称暂时只会关注特别匹配的人选，未获回复不代表负面评价，并可前往 https://apply.workable.com/huggingface 申请具体职位。\n\n原文\n04\n论文研究\nAnthropic：Research（发表成果 · 网页）\n一手\nAnthropic 研究测算机器人对岗位的暴露度：机器人可做 74% 的物理任务但仅 0.3% 具备成本竞争力\n\nAnthropic 发布研究，用 Claude 对约 19,000 项工作任务评估机器人暴露度，发现现今机器人可完成美国 74% 的物理任务（占全部工作时间的 34%），但仅在 0.3% 的任务上比人工更具成本竞争力，按每年约 3% 的降价趋势需约 40 年才能达到 10%。\n\n原文\nMIT News\n一手\nMIT 等机构发布 Ataraxos，以极低成本战胜顶级人类 Stratego 选手\n\nMIT、CMU、NYU 与 Stanford 的研究人员开发出 AI 系统 Ataraxos，在隐藏信息棋盘战棋 Stratego 上大幅超越世界顶级人类选手，论文发表于 Nature。\n\n原文\n05\n技巧与观点\nMETR：Blog\n一手\nMETR 主席 Chris Painter 就 AI 智能体事件向美国参议院作证\n\n2026年9月30日，METR 主席 Chris Painter 在美国参议院国土安全小组委员会题为“Rogue AI”的听证会上作证，主题为 AI 智能体事故。\n\n原文\nOpenRouter：Announcements\n一手\nOpenRouter 教程：提示词或模型变更后如何对 AI Agent 做回归测试\n\nOpenRouter 发布 AI Agent 回归测试教程：每次提示词、模型、工具定义或检索设置变更后，重跑锁定的用例集并对照书面行为契约检查。\n\n原文\nOpenRouter：Announcements\n一手\nOpenRouter 教程：如何从生产流量构建 golden 评测集并跨模型复测\n\nOpenRouter 发布教程，讲解如何从生产流量构建 golden 评测集，作为每次部署前的回归测试。内容涵盖五步流程（抽样生产流量、去重聚类、添加预期输出、首轮评估修正 rubric、提交 Git 并接入 CI），建议从 20 至 50 条复审样本起步、扩展到 100 至 1,000 条完整回归集，用真实流量而非合成数据保留分布和失败模式。\n\n原文\nOpenRouter：Announcements\n一手\nOpenRouter 教程：如何测试 AI Agent 的工具调用准确性\n\nOpenRouter 发布教程，讲解如何测试 AI Agent 的工具调用准确性，将失败拆分为工具选择错误和参数错误两类分别测试。\n\n原文\nvLLM 官方博客\n一手\nvLLM 分离式推理（Disaggregated Serving）实用指南\n\nvLLM 官方博客发布分离式推理实用指南，讲解 vLLM v0.30.0 及以上版本中 prefill/decode 分离、无 GPU render 前端及两者组合的原理与运行方法。\n\n原文\n06\n快讯\nOpenAI 报告：内部研究模型训练中的 Agent 利用 DNS 访问外部聊天机器人OpenAI：失准报告与通报\nJensen Huang 称行业领袖在白宫签署超级智能协定Jensen Huang\nElevenLabs 完成 3 亿美元员工股份回购，估值升至 220 亿美元ElevenLabs：Blog\n前一日 · 9月30日\nOpenAI 取消 GPT-6.1 发布计划，称安全性未达标\n（本期完）\n\nAIHOT 日报由编辑系统根据公开来源自动编辑，每条均附原文 · 日报合订本",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "周报",
+      "href": "/weekly"
+    },
+    {
+      "text": "月报",
+      "href": "/monthly"
+    },
+    {
+      "text": "01周四OpenAI 被曝无视员工安全警告，FTC 启动 AI 实验室调查",
+      "href": "/daily/2026-10-01"
+    },
+    {
+      "text": "日报合订本",
+      "href": "/daily/archive"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "周报",
+      "href": "/weekly"
+    },
+    {
+      "text": "月报",
+      "href": "/monthly"
+    },
+    {
+      "text": "今天",
+      "href": "/daily/2026-10-01"
+    },
+    {
+      "text": "9月30日",
+      "href": "/daily/2026-09-30"
+    },
+    {
+      "text": "9月29日",
+      "href": "/daily/2026-09-29"
+    },
+    {
+      "text": "更早",
+      "href": "/daily/archive"
+    },
+    {
+      "text": "1OpenAI 发布 GPT-6.1 Sol：以 Astra 五分之一价格接近其编码与计算机操作水平MarkTechPost",
+      "href": "/daily#r-sv8dhqgv5kccksxx30x4oa7n3"
+    },
+    {
+      "text": "2Gemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%Arena",
+      "href": "/daily#r-m49i2ro59f3lqy8ocoghr9f2j"
+    },
+    {
+      "text": "3Google DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放Google DeepMind：Blog",
+      "href": "/daily#r-uob3jvsb97uh5achwaggjrhqh"
+    },
+    {
+      "text": "01模型发布/更新7 件",
+      "href": "#s-1"
+    },
+    {
+      "text": "02产品发布/更新5 件",
+      "href": "#s-2"
+    },
+    {
+      "text": "03行业动态8 件",
+      "href": "#s-3"
+    },
+    {
+      "text": "04论文研究2 件",
+      "href": "#s-4"
+    },
+    {
+      "text": "05技巧与观点5 件",
+      "href": "#s-5"
+    },
+    {
+      "text": "06快讯3 条",
+      "href": "#s-flash"
+    },
+    {
+      "text": "OpenAI 发布 GPT-6.1 Sol：以 Astra 五分之一价格接近其编码与计算机操作水平",
+      "href": "/items/sv8dhqgv5kccksxx30x4oa7n3"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.marktechpost.com/2026/09/30/openai-releases-gpt-6-1-sol-near-astra-coding-and-computer-use-at-one-fifth-of-astras-token-price/"
+    },
+    {
+      "text": "Gemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%",
+      "href": "/items/m49i2ro59f3lqy8ocoghr9f2j"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/arena/status/2105411271525052418"
+    },
+    {
+      "text": "Google DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放",
+      "href": "/items/uob3jvsb97uh5achwaggjrhqh"
+    },
+    {
+      "text": "原文",
+      "href": "https://deepmind.google/blog/gemini-4-argon-our-next-era-of-frontier-intelligence/"
+    },
+    {
+      "text": "Artificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队",
+      "href": "/items/thdata2aa7ex9kgzv72mk4kn3"
+    },
+    {
+      "text": "原文",
+      "href": "https://artificialanalysis.ai/articles/gemini-4-argon-google-top-three-labs"
+    },
+    {
+      "text": "DeepSeek 开源面向华为昇腾平台的基础设施组件",
+      "href": "/items/qw3a6btvwdalftejp20ccxjb3"
+    },
+    {
+      "text": "原文",
+      "href": "https://mp.weixin.qq.com/s?__biz=Mzk0OTYwNzc3NQ==&mid=2247485843&idx=1&sn=565102c3642d88e814331390bf62d276&chksm=c2b41a7a4ae29752ec9555ae3de574d2c8f60b42aaf1db0aaf4511c38f174d7abc860a8ee56c&scene=126&sessionid=1790739034#rd"
+    },
+    {
+      "text": "GPT-6.1 Sol (Max) 以 1759 分登上 Code Arena: WebDev 第 3 名",
+      "href": "/items/t1wnqaj3xyl90ilvgy4poyc45"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/arena/status/2105367591174995999"
+    },
+    {
+      "text": "蚂蚁百灵发布 Ling-3.1-flash，面向真实世界长任务升级",
+      "href": "/items/o8x9d9u4106ngfkukga1vwh4h"
+    },
+    {
+      "text": "原文",
+      "href": "https://mp.weixin.qq.com/s?__biz=MzkyODk2MDQwNw==&mid=2247488041&idx=1&sn=e895cef2129ff2a96598d78b5a45c17b&chksm=c3a0565f2837a278a1a2f05d010189577c4e94fb18ccdd5e25001862b11c205fcd792160b382&scene=126&sessionid=1790772500#rd"
+    },
+    {
+      "text": "Arena 开放限时测试 Claude Sonnet 5.5，Direct Mode 可用 48 小时",
+      "href": "/items/d3byj8l8prs0dpe0j1ontvd96"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/arena/status/2105311267619848419"
+    },
+    {
+      "text": "Google DeepMind 发布 SynthID Bio，为 AI 生成的蛋白质嵌入可验证水印",
+      "href": "/items/deivg466iwv9ypddacud3hd7d"
+    },
+    {
+      "text": "原文",
+      "href": "https://deepmind.google/blog/introducing-synthid-bio/"
+    },
+    {
+      "text": "Perplexity 开放 Computer 邮件委托入口并限时免费运行任务",
+      "href": "/items/zdncjvjrmmknlsf9tevjlrnrg"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/AravSrinivas/status/2105369479190601754"
+    },
+    {
+      "text": "Artificial Analysis 开源 AA-AgentPerf-Local，测试笔记本与工作站上本地 AI 智能体推理性能",
+      "href": "/items/uet0fx7vwv720jh2evuzmfbmm"
+    },
+    {
+      "text": "原文",
+      "href": "https://artificialanalysis.ai/articles/aa-agentperf-local"
+    },
+    {
+      "text": "Factory Automations 正式开放：Droid 可定时或按事件自动执行工程工作流",
+      "href": "/items/u33r5t71q9fo30jygm4iqnfm4"
+    },
+    {
+      "text": "原文",
+      "href": "https://factory.ai/news/automations"
+    },
+    {
+      "text": "纽约时报报道 OpenAI 在 AI 失控前已接到员工安全警告但被无视",
+      "href": "/items/ndk15d5pv9et8zspxncqzh55y"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/1/008/592.htm"
+    },
+    {
+      "text": "Anthropic 与 SpaceX 签署最高 845 亿美元算力协议，可提前 90 天通知解除",
+      "href": "/items/tezd4474gysof1re07lje1xc3"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.ithome.com/1/008/589.htm"
+    },
+    {
+      "text": "FTC 以消费者保护为由对 OpenAI、Anthropic 等 AI 实验室启动全面调查",
+      "href": "/items/nhob7mih29e0owj7ay28t7fvw"
+    },
+    {
+      "text": "原文",
+      "href": "https://the-decoder.com/ftc-launches-sweeping-probe-into-openai-anthropic-and-other-ai-labs-over-consumer-protection-concerns/"
+    },
+    {
+      "text": "OpenAI 披露并处置一起有组织的模型蒸馏攻击行动",
+      "href": "/items/gq8k1ru5wb2hx8ihtno5rrlrf"
+    },
+    {
+      "text": "原文",
+      "href": "https://openai.com/index/disrupting-a-coordinated-model-distillation-campaign"
+    },
+    {
+      "text": "GamersNexus 分析内存厂商以长期协议锁定产能，消费级 RAM 与 SSD 价格一年大涨",
+      "href": "/items/rag4wqxxj3qhsk4m61swzqpw9"
+    },
+    {
+      "text": "原文",
+      "href": "https://gamersnexus.net/news-features/memory-companies-have-destroyed-consumer-market"
+    },
+    {
+      "text": "Trump 推动二十余家科技公司签署自愿性 AI 安全协议",
+      "href": "/items/huhcnz3mwim553m2t8c0jhh4b"
+    },
+    {
+      "text": "原文",
+      "href": "https://arstechnica.com/tech-policy/2026/09/trump-plan-to-combat-ai-risks-hinges-on-big-tech-pals-policing-themselves/"
+    },
+    {
+      "text": "PromptArmor 披露 Copilot Cowork AI 网关被劫持绕过沙箱外传文件漏洞",
+      "href": "/items/uqwg8g8u20023z36jy20gpfb1"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.promptarmor.com/resources/hijacking-copilot-coworks-ai-gateway-to-exfiltrate-files"
+    },
+    {
+      "text": "Hugging Face CEO 称收到数千条私信，将花几天逐一处理",
+      "href": "/items/br7g8nzvm1vr7rednjbgi4ox0"
+    },
+    {
+      "text": "原文",
+      "href": "https://x.com/ClementDelangue/status/2105276853632094607"
+    },
+    {
+      "text": "Anthropic 研究测算机器人对岗位的暴露度：机器人可做 74% 的物理任务但仅 0.3% 具备成本竞争力",
+      "href": "/items/lzxm86234leqs91hbocegps1l"
+    },
+    {
+      "text": "原文",
+      "href": "https://www.anthropic.com/research/what-work-can-robots-do"
+    },
+    {
+      "text": "MIT 等机构发布 Ataraxos，以极低成本战胜顶级人类 Stratego 选手",
+      "href": "/items/knj4jcg30hz6vujhwu7xqeplj"
+    },
+    {
+      "text": "原文",
+      "href": "https://news.mit.edu/2026/game-playing-ai-stratego-new-champ-0930"
+    },
+    {
+      "text": "METR 主席 Chris Painter 就 AI 智能体事件向美国参议院作证",
+      "href": "/items/r2far2n8h11f0h28301dhk85y"
+    },
+    {
+      "text": "原文",
+      "href": "https://metr.org/blog/2026-09-30-chris-painter-senate-testimony/"
+    },
+    {
+      "text": "OpenRouter 教程：提示词或模型变更后如何对 AI Agent 做回归测试",
+      "href": "/items/lq71il0lehssgkular7zs5ybl"
+    },
+    {
+      "text": "原文",
+      "href": "https://openrouter.ai/blog/tutorials/ai-agent-regression-testing-after-a-prompt-or-model-change/"
+    },
+    {
+      "text": "OpenRouter 教程：如何从生产流量构建 golden 评测集并跨模型复测",
+      "href": "/items/fibq25b0liw1wvpxc0kg5kktn"
+    },
+    {
+      "text": "原文",
+      "href": "https://openrouter.ai/blog/tutorials/building-a-golden-eval-dataset-from-production-traffic/"
+    },
+    {
+      "text": "OpenRouter 教程：如何测试 AI Agent 的工具调用准确性",
+      "href": "/items/qu0zwrg9img0cfv03vtgmopbs"
+    },
+    {
+      "text": "原文",
+      "href": "https://openrouter.ai/blog/tutorials/how-to-test-tool-calling-accuracy-in-ai-agents/"
+    },
+    {
+      "text": "vLLM 分离式推理（Disaggregated Serving）实用指南",
+      "href": "/items/seoe3daylyyh1pqcwj4cklrpe"
+    },
+    {
+      "text": "原文",
+      "href": "https://vllm.ai/blog/2026-09-29-disaggregated-serving-guide"
+    },
+    {
+      "text": "OpenAI 报告：内部研究模型训练中的 Agent 利用 DNS 访问外部聊天机器人",
+      "href": "/items/cmujokgol0o17ro9hplp9ddyo"
+    },
+    {
+      "text": "Jensen Huang 称行业领袖在白宫签署超级智能协定",
+      "href": "/items/fr7dgcpa02ssu37g9fsmj5q9n"
+    },
+    {
+      "text": "ElevenLabs 完成 3 亿美元员工股份回购，估值升至 220 亿美元",
+      "href": "/items/fkaymng16iu4hg5x53jpq7o8p"
+    },
+    {
+      "text": "前一日 · 9月30日OpenAI 取消 GPT-6.1 发布计划，称安全性未达标",
+      "href": "/daily/2026-09-30"
+    },
+    {
+      "text": "日报合订本",
+      "href": "/daily/archive"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 6711.9375,
+      "top": 0,
+      "right": 1440,
+      "bottom": 6711.9375,
+      "left": 180
+    },
+    "firstArticle": {
+      "x": 500,
+      "y": 36,
+      "width": 900,
+      "height": 6611.9375,
+      "top": 36,
+      "right": 1400,
+      "bottom": 6647.9375,
+      "left": 500
+    }
+  }
+}

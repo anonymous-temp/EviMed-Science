@@ -159,6 +159,10 @@ import { FrontierPipeline } from "./frontierPipeline.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
   frontierReadiness } from "./frontierService.mjs";
 import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
+import { EvidenceEditorial } from "./evidenceEditorial.mjs";
+import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
@@ -1447,7 +1451,7 @@ export function createWebApiApp(overrides = {}) {
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
@@ -1506,8 +1510,11 @@ export function createWebApiApp(overrides = {}) {
     const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
+    const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
+      readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -1518,10 +1525,12 @@ export function createWebApiApp(overrides = {}) {
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
+    frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
+    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -4061,6 +4070,7 @@ export function createWebApiApp(overrides = {}) {
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceZoneRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;

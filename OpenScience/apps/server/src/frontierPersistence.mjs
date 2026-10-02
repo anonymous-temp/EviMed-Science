@@ -1,3 +1,5 @@
+import { EVIDENCE_ZONE_SQL } from "./evidenceZonePersistence.mjs";
+
 /**
  * The frontier feed's own schema, `evimed_frontier` (「前沿动态」, plan §10.4).
  *
@@ -538,6 +540,7 @@ export async function migrateFrontier(database, { dimension }) {
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-frontier-v1'))");
     await client.query(sql());
+    await client.query(EVIDENCE_ZONE_SQL);
     const trigramVersion = await ensureExtension(client, "pg_trgm");
     if (trigramVersion) {
       await client.query(`CREATE INDEX IF NOT EXISTS frontier_items_title_trgm_idx
