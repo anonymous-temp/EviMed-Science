@@ -14,7 +14,9 @@ const coordinate = Object.freeze({ kind: 'github', repository: 'Jesse-njx/dsh-co
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const root = path.join(repo, '.evimed-local/extensions/build/fixtures');
 export const ASSESSMENT_BOOTSTRAP = 'isolated-fixture-metadata-only; no fabricated qualification receipt';
-export const ASSESSMENT_SHORT_PARENT=process.platform==='darwin'?'/private/tmp/evimed-extension-acceptance':process.platform==='linux'?'/tmp/evimed-extension-acceptance':null;
+/** Operator-specific Linux namespace preserves earlier UID1000 evidence without widening its permissions. */
+export function assessmentShortParent(platform,uid){return platform==='darwin'?'/private/tmp/evimed-extension-acceptance':platform==='linux'?(uid===10001?'/tmp/evimed-extension-acceptance-10001':'/tmp/evimed-extension-acceptance'):null;}
+export const ASSESSMENT_SHORT_PARENT=assessmentShortParent(process.platform,process.getuid?.());
 const shortParent=ASSESSMENT_SHORT_PARENT;
 /** Pure comparison of observations; the fixture reader below obtains both snapshots itself and never accepts caller permission flags. */
 export function assertShortFixtureParentSnapshots(before,after){

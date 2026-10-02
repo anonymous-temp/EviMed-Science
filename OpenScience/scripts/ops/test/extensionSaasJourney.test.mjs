@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { createShortCampaignRoot } from '../extension-saas-acceptance-journey.mjs';
-import { assertAssessmentFixtureRoot, assertShortFixtureParentSnapshots, ASSESSMENT_SHORT_PARENT } from '../extension-saas-acceptance-manifest.mjs';
+import { assertAssessmentFixtureRoot, assertShortFixtureParentSnapshots, ASSESSMENT_SHORT_PARENT, assessmentShortParent } from '../extension-saas-acceptance-manifest.mjs';
 test('full runtime default empty USER is only image metadata; launch UID pin and separate physical proof remain mandatory',()=>{
  const image={Id:'sha256:'+'a'.repeat(64),Os:'linux',Architecture:'amd64',Config:{User:''}},expected={imageId:image.Id,platform:'linux/amd64',launchUser:'10001:10001'};
  const observed=validateFullRuntimeImagePreflight(image,expected);assert.equal(observed.defaultImageUser,'');assert.equal(observed.physicalContainerUidProof,'required-before-measurement');
@@ -66,9 +66,9 @@ test('private staged CLI accepts only closed setup tuple or protected measuremen
 test('physical setup validation rejects root authority mounts, runtime root UID and telemetry/provider env without supplied pass flags',()=>{
  const network={Name:'owned-network',Id:'b'.repeat(64),Internal:true,Driver:'bridge',Labels:{'io.evimed.campaign-root':'sha256:'+createHash('sha256').update(canonicalJson('/owned')).digest('hex')}};
  const expected={imageId:'sha256:'+'a'.repeat(64),ownerId:'owner',projectId:'project',authorityRoot:'/owned/admission',qualificationRoot:'/owned/qualification',dataDir:'/owned',network};
- const actual={Id:'a'.repeat(64),Image:expected.imageId,Config:{User:'10001:10001',Env:['DSH_TELEMETRY_DISABLED=1'],Labels:{'open-science.user':'owner','open-science.project':'project'}},State:{Running:true},HostConfig:{ReadonlyRootfs:true,Privileged:false,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],NetworkMode:network.Name},NetworkSettings:{Networks:{[network.Name]:{NetworkID:network.Id}}},Mounts:[{Type:'bind',Source:'/owned/workspace',Destination:'/workspace',RW:true}]};
+ const actual={Id:'a'.repeat(64),Image:expected.imageId,Config:{User:'10001:10001',Env:['DSH_TELEMETRY_DISABLED=1'],Labels:{'open-science.user':'owner','open-science.project':'project'}},State:{Running:true},HostConfig:{ReadonlyRootfs:true,NanoCpus:1_000_000_000,Memory:1536*1024*1024,Privileged:false,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],NetworkMode:network.Name},NetworkSettings:{Networks:{[network.Name]:{NetworkID:network.Id}}},Mounts:[{Type:'bind',Source:'/owned/workspace',Destination:'/workspace',RW:true}]};
  assert.equal(validatePrivateRuntimeMounts(actual,expected).uid,10001);
- for(const changed of [{...actual,Config:{...actual.Config,User:'0:0'}},{...actual,Mounts:[{...actual.Mounts[0],Source:'/owned'}]},{...actual,Mounts:[{...actual.Mounts[0],Source:'/owned/admission/record'}]},{...actual,Config:{...actual.Config,Env:['DEEPSEEK_API_KEY=synthetic-canary']}}])assert.throws(()=>validatePrivateRuntimeMounts(changed,expected));
+ for(const changed of [{...actual,HostConfig:{...actual.HostConfig,NanoCpus:2_000_000_000,Memory:8*1024*1024*1024}},{...actual,HostConfig:{...actual.HostConfig,Memory:0}},{...actual,Config:{...actual.Config,User:'0:0'}},{...actual,Mounts:[{...actual.Mounts[0],Source:'/owned'}]},{...actual,Mounts:[{...actual.Mounts[0],Source:'/owned/admission/record'}]},{...actual,Config:{...actual.Config,Env:['DEEPSEEK_API_KEY=synthetic-canary']}}])assert.throws(()=>validatePrivateRuntimeMounts(changed,expected));
 });
 test('controlled transport emits registered real tool requests by explicit stage and cannot invent a missing native tool',()=>{
  const id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',key=id+':read-write',plans=new Map([[key,[{name:'doc_read',input:{resourceId:'public-fixture'}}]]]),counts=new Map();
@@ -78,4 +78,17 @@ test('controlled transport emits registered real tool requests by explicit stage
  assert.throws(()=>controlledCampaignTurn({...body,tools:[{name:'read'}]},plans,new Map()),/not_registered/);
  const ancillaryCounts=new Map();assert.equal(controlledCampaignTurn({...body,tools:[]},plans,ancillaryCounts).ancillary,true);assert.equal(ancillaryCounts.size,0);
  assert.throws(()=>controlledCampaignTurn({...body,messages:[{role:'user',content:'EVIMED_ASSESSMENT_STAGE:'+id+':unknown'}]},plans,new Map()),/unexpected/);
+});
+
+test('native fixtures require production-shaped mount ownership and explicit closed-controller limits',()=>{
+ assert.doesNotThrow(()=>assertNativeCampaignOperator('linux',10001));
+ for(const [platform,uid] of [['linux',1000],['linux',0],['darwin',10001]])assert.throws(()=>assertNativeCampaignOperator(platform,uid),/operator_uid/);
+ assert.deepEqual(CAMPAIGN_RUNTIME_LIMITS,{runtimeCpuLimit:'1',runtimeMemoryLimit:'1536m'});assert.equal(Object.isFrozen(CAMPAIGN_RUNTIME_LIMITS),true);
+});
+
+test('native UID10001 has a distinct short root and never widens earlier UID1000 evidence',()=>{
+ const parent=assessmentShortParent('linux',10001);assert.notEqual(parent,assessmentShortParent('linux',1000));
+ assert.equal(parent,'/tmp/evimed-extension-acceptance-10001');
+ assert.ok(Buffer.byteLength(parent+'/0123456789/.runtime-sockets/'+ 'a'.repeat(24)+'/dsh.sock')+1<=104);
+ assert.equal(assessmentShortParent('darwin',10001),'/private/tmp/evimed-extension-acceptance');
 });
