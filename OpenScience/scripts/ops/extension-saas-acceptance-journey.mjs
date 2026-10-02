@@ -12,6 +12,7 @@ import { createControllerExtensionComposition } from '../../apps/server/src/exte
 import { ExtensionPreparationWorker } from '../../apps/server/src/extensionPreparationWorker.mjs';
 import { readAcceptanceInputs } from './extension-saas-acceptance-inputs.mjs';
 import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOOTSTRAP, ASSESSMENT_SHORT_PARENT } from './extension-saas-acceptance-manifest.mjs';
+import { bindNativeLinuxRelay, observeNativeLinuxPrerequisites, nativeLinuxDockerEnvironment } from './extension-saas-acceptance-linux.mjs';
 import { assessmentDockerEnvironment, bindAssessmentDockerLauncher } from './extension-saas-acceptance-docker.mjs';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
@@ -34,18 +35,21 @@ const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const digest = value => 'sha256:' + createHash('sha256').update(value).digest('hex');
 /** Protected data-only tuple. No caller boolean, provider credential or executable pathname is accepted. */
 export function validatePrivateCampaignInputs(value) {
-  extensionRequestObject(value, ['schemaVersion','phase','acceptanceInputsPath','runtimeImageId','databaseUrl','gatewayHost','mountMode','statePath','qualificationRecordPath','signingKeyPath','deadlineMs'], ['schemaVersion','phase','deadlineMs']);
+  extensionRequestObject(value, ['operatorPlatform','schemaVersion','phase','acceptanceInputsPath','runtimeImageId','databaseUrl','gatewayHost','mountMode','statePath','qualificationRecordPath','signingKeyPath','deadlineMs'], ['schemaVersion','phase','deadlineMs']);
+  if(value.operatorPlatform!==undefined&&value.operatorPlatform!=='linux-native')throw new Error('invalid_private_campaign_inputs');
+  const inputKeys=Object.keys(value).filter(key=>key!=='operatorPlatform').sort().join(',');
+  if(value.phase!=='measure'&&value.operatorPlatform==='linux-native'&&value.gatewayHost!=='127.0.0.1')throw new Error('invalid_private_campaign_inputs');
   if (value.schemaVersion !== 1 || !['setup','measure','qualified-smoke'].includes(value.phase) || !Number.isSafeInteger(value.deadlineMs)
     || value.deadlineMs < 30000 || value.deadlineMs > 900000) throw new Error('invalid_private_campaign_inputs');
   if(value.phase==='qualified-smoke'){
-    if(Object.keys(value).sort().join(',')!=='deadlineMs,gatewayHost,mountMode,phase,qualificationRecordPath,schemaVersion,signingKeyPath,statePath'
+    if(inputKeys!=='deadlineMs,gatewayHost,mountMode,phase,qualificationRecordPath,schemaVersion,signingKeyPath,statePath'
       ||![value.statePath,value.qualificationRecordPath,value.signingKeyPath].every(file=>typeof file==='string'&&path.isAbsolute(file))
       ||path.basename(value.statePath)!=='campaign-state.json'||path.basename(value.signingKeyPath)!=='qualification-signing.key'
       ||!['host.lima.internal','host.docker.internal','127.0.0.1'].includes(value.gatewayHost)||!['bind','volume-subpath'].includes(value.mountMode))throw new Error('invalid_ordinary_qualified_smoke_inputs');
   }else if (value.phase === 'measure') {
-    if (Object.keys(value).sort().join(',') !== 'deadlineMs,phase,schemaVersion,statePath' || !path.isAbsolute(value.statePath) || path.basename(value.statePath) !== 'campaign-state.json') throw new Error('invalid_private_campaign_state');
+    if (inputKeys !== 'deadlineMs,phase,schemaVersion,statePath' || !path.isAbsolute(value.statePath) || path.basename(value.statePath) !== 'campaign-state.json') throw new Error('invalid_private_campaign_state');
   } else {
-    if (Object.keys(value).sort().join(',') !== 'acceptanceInputsPath,databaseUrl,deadlineMs,gatewayHost,mountMode,phase,runtimeImageId,schemaVersion'
+    if (inputKeys !== 'acceptanceInputsPath,databaseUrl,deadlineMs,gatewayHost,mountMode,phase,runtimeImageId,schemaVersion'
       || !path.isAbsolute(value.acceptanceInputsPath) || !/^sha256:[a-f0-9]{64}$/.test(value.runtimeImageId)
       || !['host.lima.internal','host.docker.internal','127.0.0.1'].includes(value.gatewayHost) || !['bind','volume-subpath'].includes(value.mountMode)) throw new Error('invalid_private_campaign_tuple');
     const db = new URL(value.databaseUrl);
@@ -73,7 +77,7 @@ export function validateFullRuntimeImagePreflight(image,{imageId,platform,launch
     ||!image.Config||typeof defaultUser!=='string'||!['','10001:10001'].includes(defaultUser))throw new Error('full_runtime_image_preflight_refused');
   return{imageId,platform,defaultImageUser:defaultUser,configuredLaunchUser:launchUser,physicalContainerUidProof:'required-before-measurement'};
 }
-const INTERNAL_CAMPAIGN_CODES=new Set(['full_runtime_image_preflight_refused','invalid_private_campaign_inputs','invalid_private_campaign_state','invalid_private_campaign_tuple','invalid_private_campaign_database','invalid_private_campaign_path','untrusted_private_campaign_parent','untrusted_private_campaign_record','private_runtime_identity_unconfirmed','private_runtime_internal_network_unconfirmed','runtime_host_control_socket_refused','private_runtime_volume_identity_unconfirmed','private_runtime_mount_type_unconfirmed','protected_authority_runtime_mount_refused','runtime_provider_or_telemetry_configuration_refused','private_campaign_setup_required','explicit_owned_campaign_context_required','private_campaign_setup_untrusted','private_campaign_measure_required','private_campaign_deadline','private_campaign_http_failure','private_campaign_preparation_failed','private_campaign_setup_cleanup_unconfirmed','private_campaign_cleanup_unconfirmed','private_fixture_configuration_refused','assessment_requires_real_kernel','assessment_fact_sources_unavailable','assessment_fixture_root_changed','assessment_deployment_unavailable','assessment_image_unconfirmed','assessment_subject_unavailable','assessment_database_subject_unavailable','assessment_surface_unavailable','assessment_controller_unavailable','private_assessment_composition_missing','explicit_fixture_signing_secret_required','external_model_transport_refused','private_assessment_cleanup_unconfirmed','private_controller_failed','private_controller_unexpected_exit','private_controller_ready_deadline','private_controller_joined_deadline','private_controller_physical_join_unconfirmed','private_controller_cleanup_unconfirmed','campaign_internal_network_unconfirmed','campaign_network_cleanup_unconfirmed','campaign_relay_destination_refused','campaign_actual_fixture_url_required','campaign_relay_id_unconfirmed','campaign_relay_cleanup_identity_unconfirmed','campaign_relay_physical_boundary_unconfirmed','campaign_relay_cleanup_unconfirmed','campaign_volume_ownership_unconfirmed','unexpected_controlled_campaign_stage','unsupported_controlled_transport_route','controlled_transport_request_unbounded','campaign_canary_scan_unbounded','campaign_export_unbounded','foreign_generation_claim_refused','candidate_fault_identity_unconfirmed','candidate_fault_setup_incomplete','candidate_fault_manifest_changed','candidate_startup_identity_not_observed','real_generation_campaign_required','real_queued_revocation_campaign_required','invalid_completed_artifact','completed_artifact_unbounded','ordinary_smoke_protected_tuple_unavailable','ordinary_smoke_signing_configuration_invalid','ordinary_smoke_receipt_path_invalid','ordinary_smoke_genuine_receipt_required','ordinary_fixture_configuration_refused','ordinary_qualification_integration_missing','ordinary_controller_unavailable','ordinary_fixture_cleanup_unconfirmed','ordinary_preparation_failed','ordinary_smoke_cleanup_unconfirmed']);
+const INTERNAL_CAMPAIGN_CODES=new Set(['native_linux_remote_docker_refused','native_linux_sandbox_prerequisite_refused','native_linux_docker_socket_untrusted','native_linux_bridge_identity_refused','native_linux_bridge_interface_refused','native_linux_relay_binding_refused','native_linux_relay_target_rebind_refused','native_linux_relay_target_refused','full_runtime_image_preflight_refused','invalid_private_campaign_inputs','invalid_private_campaign_state','invalid_private_campaign_tuple','invalid_private_campaign_database','invalid_private_campaign_path','untrusted_private_campaign_parent','untrusted_private_campaign_record','private_runtime_identity_unconfirmed','private_runtime_internal_network_unconfirmed','runtime_host_control_socket_refused','private_runtime_volume_identity_unconfirmed','private_runtime_mount_type_unconfirmed','protected_authority_runtime_mount_refused','runtime_provider_or_telemetry_configuration_refused','private_campaign_setup_required','explicit_owned_campaign_context_required','private_campaign_setup_untrusted','private_campaign_measure_required','private_campaign_deadline','private_campaign_http_failure','private_campaign_preparation_failed','private_campaign_setup_cleanup_unconfirmed','private_campaign_cleanup_unconfirmed','private_fixture_configuration_refused','assessment_requires_real_kernel','assessment_fact_sources_unavailable','assessment_fixture_root_changed','assessment_deployment_unavailable','assessment_image_unconfirmed','assessment_subject_unavailable','assessment_database_subject_unavailable','assessment_surface_unavailable','assessment_controller_unavailable','private_assessment_composition_missing','explicit_fixture_signing_secret_required','external_model_transport_refused','private_assessment_cleanup_unconfirmed','private_controller_failed','private_controller_unexpected_exit','private_controller_ready_deadline','private_controller_joined_deadline','private_controller_physical_join_unconfirmed','private_controller_cleanup_unconfirmed','campaign_internal_network_unconfirmed','campaign_network_cleanup_unconfirmed','campaign_relay_destination_refused','campaign_actual_fixture_url_required','campaign_relay_id_unconfirmed','campaign_relay_cleanup_identity_unconfirmed','campaign_relay_physical_boundary_unconfirmed','campaign_relay_cleanup_unconfirmed','campaign_volume_ownership_unconfirmed','unexpected_controlled_campaign_stage','unsupported_controlled_transport_route','controlled_transport_request_unbounded','campaign_canary_scan_unbounded','campaign_export_unbounded','foreign_generation_claim_refused','candidate_fault_identity_unconfirmed','candidate_fault_setup_incomplete','candidate_fault_manifest_changed','candidate_startup_identity_not_observed','real_generation_campaign_required','real_queued_revocation_campaign_required','invalid_completed_artifact','completed_artifact_unbounded','ordinary_smoke_protected_tuple_unavailable','ordinary_smoke_signing_configuration_invalid','ordinary_smoke_receipt_path_invalid','ordinary_smoke_genuine_receipt_required','ordinary_fixture_configuration_refused','ordinary_qualification_integration_missing','ordinary_controller_unavailable','ordinary_fixture_cleanup_unconfirmed','ordinary_preparation_failed','ordinary_smoke_cleanup_unconfirmed']);
 for(const code of ['invalid_measurement_admission','invalid_measurement_window','unowned_assessment_root','invalid_measurement_admissions','duplicate_measurement_subject','assessment_factory_reused','assessment_composition_sources_changed','invalid_assessment_fact_sources','invalid_assessment_artifact','invalid_assessment_root','assessment_descriptor_changed','unsafe_assessment_root','assessment_deployment_refused'])INTERNAL_CAMPAIGN_CODES.add(code);
 export function safeCampaignDiagnosticCode(error){
   if(typeof error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(error.code))return error.code;
@@ -215,7 +219,9 @@ async function scanOwnedCampaignTree(root,needle){
 /** Explicit setup stage launches an idle candidate only to obtain physical image/mount proof; it issues no native prompt. */
 export async function setupPrivateCampaign(inputs, { signal=null }={}) {
   inputs = validatePrivateCampaignInputs(inputs); if (inputs.phase !== 'setup') throw new Error('private_campaign_setup_required');
-  if (assessmentDockerEnvironment().DOCKER_CONTEXT !== 'colima-evimed-extension-acceptance') throw new Error('explicit_owned_campaign_context_required');
+  const nativeLinux=inputs.operatorPlatform==='linux-native';
+  if(nativeLinux){nativeLinuxDockerEnvironment();await observeNativeLinuxPrerequisites(inputs.runtimeImageId);}
+  if (!nativeLinux&&assessmentDockerEnvironment().DOCKER_CONTEXT !== 'colima-evimed-extension-acceptance') throw new Error('explicit_owned_campaign_context_required');
   const prepared = await readAcceptanceInputs(inputs.acceptanceInputsPath),root=await createShortCampaignRoot();
   const isolated = await createGeoTestDatabase(inputs.databaseUrl,'campaign'), transport = await controlledCampaignTransport();
   let app,composition,privateFixture,success=false,state,volumeName='',network,relay,stage='image-and-fixture-preflight',failure=null,result;
@@ -232,7 +238,8 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const descriptor=prepared.descriptor,suiteRevision=digest(await fs.readFile(new URL(import.meta.url))),deployment=await prepareAssessmentDeployment(root,descriptor,suiteRevision);
     await fs.mkdir(deployment.qualificationRoot,{mode:0o700,recursive:true});
     const ephemeralSecret=randomBytes(32).toString('hex'),webPort=await new Promise(resolve=>{const probe=http.createServer();probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});});
-    const gateway='http://assessment-gateway:8787';
+    if(nativeLinux)relay=await bindNativeLinuxRelay({root,network});
+    const gateway=relay?.gatewayUrl??'http://assessment-gateway:8787';
     const overrides={dataDir:root,databaseUrl:isolated.url,databasePoolMax:2,databaseConnectionTimeoutMs:1000,stateStore:'postgres',
       production:false,localAutoConfig:false,devAuth:false,authMode:'local',selfRegistrationEnabled:true,
       bootstrapUser:'assessment-bootstrap',bootstrapPassword:randomBytes(24).toString('hex'),operatorUsers:'assessment-bootstrap',
@@ -243,7 +250,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
       runtimeContainerBin:path.join(root,'docker-fixture.mjs'),runtimeContainerImage:inputs.runtimeImageId,runtimeContainerUser:'10001:10001',
       runtimeDataVolume:volumeName,runtimeControllerMode:'socket',runtimeControllerSocket:path.join(root,'.openscience/runtime-controller.sock'),
       runtimeTransport:'unix',runtimeNetworkMode:network.name,runtimeInternalNetworkName:network.name,allowRuntimeNetworkEgress:false,allowRuntimeHostNetwork:false,
-      host:'0.0.0.0',port:webPort,modelGatewayInternalUrl:gateway+'/internal/model/v1',extensionGatewayInternalUrl:gateway+'/internal/extensions/v1'};
+      host:nativeLinux?'127.0.0.1':'0.0.0.0',port:webPort,modelGatewayInternalUrl:gateway+'/internal/model/v1',extensionGatewayInternalUrl:gateway+'/internal/extensions/v1'};
     stage='ordinary-registration-and-owned-preparation';app=createWebApiApp({...overrides,runtimeMode:'mock'});const address=await app.listen(0,'127.0.0.1'),base=`http://127.0.0.1:${address.port}`;
     const actors=[];
     for(const username of ['campaign-owner','campaign-other']){
@@ -262,7 +269,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     stage='protected-measurement-admission';const admission=await writeMeasurementAdmission({root,admissions});
     await composition.close();composition=null;await app.close();app=null;
     stage='independent-controller-real-candidate-application';privateFixture=await openPrivateAssessmentFixture({overrides:{...overrides,runtimeMode:'kernel'},admission});
-    relay=await startOwnedCampaignRelay({root,imageId:inputs.runtimeImageId,network,fixtureUrl:privateFixture.baseUrl+'/',gatewayHost:inputs.gatewayHost});
+    if(nativeLinux)relay.bindTarget(privateFixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root,imageId:inputs.runtimeImageId,network,fixtureUrl:privateFixture.baseUrl+'/',gatewayHost:inputs.gatewayHost});
     const privateApp=privateFixture.app,project=await resolveCampaignProject(privateApp,owner),view=await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     await campaignPoll(()=>campaignGenerationReady(privateApp,project),Date.now()+inputs.deadlineMs,signal);
@@ -273,9 +280,9 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const physical=validatePrivateRuntimeMounts(actual,{imageId:inputs.runtimeImageId,ownerId:owner.user.id,projectId:owner.projectId,authorityRoot:admission.root,qualificationRoot:deployment.qualificationRoot,dataDir:root,dataVolume:volumeName,volume,network:inspectedNetwork});
     assert.equal(transport.requests.length,0);
     const current=await privateApp.hostedExtensions.generations.current(project);
-    state={schemaVersion:1,status:'setup-physical-observed-not-measured',root,databaseName:isolated.name,databaseUrl:isolated.url,overrides,actors,network,gatewayHost:inputs.gatewayHost,
+    state={operatorPlatform:inputs.operatorPlatform??'darwin-colima',schemaVersion:1,status:'setup-physical-observed-not-measured',root,databaseName:isolated.name,databaseUrl:isolated.url,overrides,actors,network,gatewayHost:inputs.gatewayHost,
       admission,descriptor,sourcePolicy:deployment.policy,preparerInputSHA:prepared.recordSHA256,installedId:installed.installation.id,
-      qualificationRoot:deployment.qualificationRoot,physicalSetup:{...physical,imagePreflight,relay:{containerId:relay.containerId,sourceDigest:relay.sourceDigest,upstreamPinnedUrl:relay.upstreamPinnedUrl,scope:relay.scope},generationHash:current.payload.effective.reference.generationHash,manifestDigest:digest(canonicalJson(current.payload.effective)),observedAt:new Date().toISOString(),operatorUid:process.getuid(),controllerProcessId:privateFixture.controllerProcess.processId,scope:privateFixture.controllerProcess.scope},qualified:false};
+      qualificationRoot:deployment.qualificationRoot,physicalSetup:{...physical,imagePreflight,relay:{bridge:relay.bridge??null,containerId:relay.containerId??null,sourceDigest:relay.sourceDigest,upstreamPinnedUrl:relay.upstreamPinnedUrl,scope:relay.scope},generationHash:current.payload.effective.reference.generationHash,manifestDigest:digest(canonicalJson(current.payload.effective)),observedAt:new Date().toISOString(),operatorUid:process.getuid(),controllerProcessId:privateFixture.controllerProcess.processId,scope:privateFixture.controllerProcess.scope},qualified:false};
     await privateFixture.close();privateFixture=null;
     await saveProtected(path.join(root,'campaign-state.json'),state);success=true;
     result={status:state.status,qualified:false,statePath:path.join(root,'campaign-state.json'),physicalSetup:state.physicalSetup};
@@ -300,8 +307,10 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
   const transport=await controlledCampaignTransport(),observations=[];let fixture,relay,report,failure=null,cleanupConfirmed=false;
   const deadline=Date.now()+inputs.deadlineMs;let stage='independent-controller-start';
   try{
-    fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});
-    relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:fixture.baseUrl+'/',gatewayHost:state.gatewayHost});
+    const nativeLinux=state.operatorPlatform==='linux-native';if(nativeLinux){await observeNativeLinuxPrerequisites(state.overrides.runtimeContainerImage);relay=await bindNativeLinuxRelay({root:state.root,network:state.network});}
+    const gatewayOverrides=nativeLinux?{host:'127.0.0.1',modelGatewayInternalUrl:relay.gatewayUrl+'/internal/model/v1',extensionGatewayInternalUrl:relay.gatewayUrl+'/internal/extensions/v1'}:{};
+    fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,...gatewayOverrides,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});
+    if(nativeLinux)relay.bindTarget(fixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:fixture.baseUrl+'/',gatewayHost:state.gatewayHost});
     const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);stage='ordinary-selection-and-current-candidate-apply';
     const view=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
@@ -438,13 +447,14 @@ export async function ordinaryQualifiedSmoke(inputs,{signal=null}={}){
     const validator=await createNativeValidationFixture({dataDir:root,image:prior.overrides.runtimeContainerImage});await validator.close();await bindAssessmentDockerLauncher(path.join(root,'docker-fixture.mjs'));
     if(inputs.mountMode==='volume-subpath'){volumeName='evimed-saas-campaign-'+randomUUID();await execute('docker',['volume','create','--label','io.evimed.campaign-root='+digest(canonicalJson(root)),'--driver','local','--opt','type=none','--opt','o=bind','--opt','device='+root,volumeName],{env:assessmentDockerEnvironment(),timeout:10000,maxBuffer:8192});}
     const webPort=await new Promise(resolve=>{const probe=http.createServer();probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});});
+    const nativeLinux=inputs.operatorPlatform==='linux-native';if(nativeLinux){await observeNativeLinuxPrerequisites(prior.overrides.runtimeContainerImage);relay=await bindNativeLinuxRelay({root,network});}
     const overrides={...prior.overrides,dataDir:root,databaseUrl:isolated.url,modelGatewaySigningSecret:secret,evimedWorkloadSigningSecret:randomBytes(32).toString('hex'),bootstrapPassword:randomBytes(24).toString('hex'),
       runtimeContainerBin:path.join(root,'docker-fixture.mjs'),runtimeDataVolume:volumeName,runtimeControllerSocket:path.join(root,'.openscience/runtime-controller.sock'),runtimeMode:'kernel',
       runtimeNetworkMode:network.name,runtimeInternalNetworkName:network.name,allowRuntimeNetworkEgress:false,allowRuntimeHostNetwork:false,
       deepseekProviderEnabled:true,deepseekApiKey:'assessment-controlled-transport',deepseekApiKeyFile:'',deepseekBaseUrl:transport.url,port:webPort,
-      modelGatewayInternalUrl:'http://assessment-gateway:8787/internal/model/v1'};
+      host:nativeLinux?'127.0.0.1':prior.overrides.host,modelGatewayInternalUrl:(relay?.gatewayUrl??'http://assessment-gateway:8787')+'/internal/model/v1',extensionGatewayInternalUrl:(relay?.gatewayUrl??'http://assessment-gateway:8787')+'/internal/extensions/v1'};
     fixture=await openOrdinaryQualificationFixture({overrides});const {app,baseUrl}=fixture;
-    relay=await startOwnedCampaignRelay({root,imageId:overrides.runtimeContainerImage,network,fixtureUrl:baseUrl+'/',gatewayHost:inputs.gatewayHost});
+    if(nativeLinux)relay.bindTarget(baseUrl+'/');else relay=await startOwnedCampaignRelay({root,imageId:overrides.runtimeContainerImage,network,fixtureUrl:baseUrl+'/',gatewayHost:inputs.gatewayHost});
     stage='fresh-ordinary-registration-install-prepare';const response=await fetch(baseUrl+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'ordinary-qualified-smoke',password:randomBytes(24).toString('hex'),name:'Ordinary qualified smoke',warm:false}),signal:signal??AbortSignal.timeout(30000)});
     const body=await response.json();assert.equal(response.status,201);const actor={user:body.data.user,headers:{Cookie:response.headers.get('set-cookie').split(';')[0],'X-Open-Science-CSRF':body.data.csrfToken}},me=await campaignRequest(baseUrl,actor,'/api/me');assert.equal(me.operator,false);
     actor.projectId=me.project.id;actor.headers['X-Open-Science-Project']=me.project.id;const project=await resolveCampaignProject(app,actor),catalogue=await campaignRequest(baseUrl,actor,'/api/extensions/catalogue');
