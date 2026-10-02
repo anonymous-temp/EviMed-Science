@@ -1,3 +1,4 @@
+import {containedExtensionDescriptor} from './helpers/containedExtensionFixture.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
@@ -5,8 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {canonicalJson} from '@evimed/domain';
-import {ExtensionToolController,extensionToolArtifactDigest} from '../src/extensionToolController.mjs';
+import {ExtensionToolController} from '../src/extensionToolController.mjs';
 import {ControlPlaneDatabase} from '../src/controlPlaneDatabase.mjs';
 import {ExtensionAccess} from '../src/extensionAccess.mjs';
 import {ExtensionService} from '../src/extensionService.mjs';
@@ -64,12 +64,11 @@ test('current account epoch is checked again after actual leased preparation tra
 });
 
 async function actualController(){
-  const image=process.env.COWORK_TEST_IMAGE;if(!image)throw new Error('Actual immutable Cowork image is required for this PG/container case');
+  const image=process.env.COWORK_TEST_IMAGE;if(!image&&!process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS)throw new Error('Actual immutable Cowork image is required for this PG/container case');
   const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../../'),adapter=path.join(root,'OpenScience/scripts/runtime/extensions/cowork');
-  const directory=await fs.mkdtemp(path.join(root,'.evimed-local/extensions/build/fixtures/worker-'));
-  const h=bytes=>createHash('sha256').update(bytes).digest('hex');
-  const pinned={id:'cowork-portable',title:'Cowork',executionClass:'isolated-tool',coordinate:{kind:'github',repository:'Jesse-njx/dsh-cowork',commit:'2ae5cf755c4294a1e988eebf3b12dd062425d84c'},integrity:'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',imageId:image,closureExpectedSHA:h(await fs.readFile(path.join(root,'.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'))),runnerSHA:h(await fs.readFile(path.join(adapter,'runner.mjs'))),policySHA:h(await fs.readFile(path.join(adapter,'policy.mjs'))),inventorySHA:h(await fs.readFile(path.join(adapter,'image-inventory.mjs')))};
-  pinned.adapterDigest='sha256:'+h(canonicalJson({runnerSHA:pinned.runnerSHA,policySHA:pinned.policySHA,inventorySHA:pinned.inventorySHA}));pinned.artifactDigest=extensionToolArtifactDigest(pinned);
+  const parent=path.join(root,'.evimed-local/extensions/build/fixtures');await fs.mkdir(parent,{recursive:true});
+  const directory=await fs.realpath(await fs.mkdtemp(path.join(parent,'worker-')));
+  const pinned={...await containedExtensionDescriptor(),title:'Cowork',executionClass:'isolated-tool'};
   const runtime=new ExtensionToolController({admittedDescriptors:[pinned],stateRoot:directory,adapterRoot:adapter,inputRoot:path.join(directory,'public'),
     resolvePreparation:async(identity,descriptor)=>{const current=await service.jobs.get(user.id,identity.jobId);
       if(current?.status!=='running'||current.leaseToken!==identity.leaseToken||current.attempts!==identity.attempts)throw Object.assign(new Error('Fixture attempt changed'),{code:'product_state_unavailable'});

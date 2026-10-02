@@ -1,3 +1,4 @@
+import {containedExtensionDescriptor} from './helpers/containedExtensionFixture.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import http from 'node:http';
@@ -6,26 +7,24 @@ import {callCoworkGateway} from '../../../packages/socket/extensions/cowork/brid
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {canonicalJson} from '@evimed/domain';
 import {ControlPlaneDatabase} from '../src/controlPlaneDatabase.mjs';
 import {createGeoTestDatabase} from './helpers/geoTestDatabase.mjs';
 import {ExtensionOperationService} from '../src/extensionOperationService.mjs';
 import {ExtensionOperationWorker} from '../src/extensionOperationWorker.mjs';
 import {ExtensionResourceResolver} from '../src/extensionResourceResolver.mjs';
-import {ExtensionToolController,extensionToolArtifactDigest} from '../src/extensionToolController.mjs';
+import {ExtensionToolController} from '../src/extensionToolController.mjs';
 import {createFixtures} from '../../../scripts/runtime/extensions/cowork/fixtures.mjs';
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const image=process.env.COWORK_TEST_IMAGE;
-test('one actual isolated PostgreSQL and admitted-image controller journey reads Chinese public DOCX and exports XLSX without vendor code on host',{skip:!image||!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL,timeout:60000},async()=>{
+test('one actual isolated PostgreSQL and admitted-image controller journey reads Chinese public DOCX and exports XLSX without vendor code on host',{skip:(!image&&!process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS)||!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL,timeout:60000},async()=>{
  const repo=new URL('../../../../',import.meta.url).pathname;
  const base=path.join(repo,'.evimed-local/extensions/build/fixtures');await fs.mkdir(base,{recursive:true});const directory=await fs.realpath(await fs.mkdtemp(path.join(base,'hosted-operation-')));
  const isolated=await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL,'od');const db=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:1,databaseConnectionTimeoutMs:1000});let controller,service,httpServer,httpWorker;
  try{
   await db.migrate();await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('alice','Actual controller fixture','development')");await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES('alice','p','Portable operation',1048576)");
   const account=(await db.query("SELECT created_at::text AS epoch FROM evimed_control.users WHERE id='alice'")).rows[0].epoch,projectEpoch=(await db.query("SELECT created_at::text AS epoch FROM evimed_control.projects WHERE user_id='alice' AND id='p'")).rows[0].epoch;
-  const publicRoot=path.join(directory,'public');const resources=await createFixtures(publicRoot),adapter=path.join(repo,'OpenScience/scripts/runtime/extensions/cowork');const closure=await fs.readFile(path.join(repo,'.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'));
-  const descriptor={id:'cowork-portable',coordinate:{kind:'github',repository:'Jesse-njx/dsh-cowork',commit:'2ae5cf755c4294a1e988eebf3b12dd062425d84c'},integrity:'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',imageId:image,closureExpectedSHA:sha(closure),runnerSHA:sha(await fs.readFile(path.join(adapter,'runner.mjs'))),policySHA:sha(await fs.readFile(path.join(adapter,'policy.mjs'))),inventorySHA:sha(await fs.readFile(path.join(adapter,'image-inventory.mjs')))};
-  descriptor.adapterDigest='sha256:'+sha(canonicalJson({runnerSHA:descriptor.runnerSHA,policySHA:descriptor.policySHA,inventorySHA:descriptor.inventorySHA}));descriptor.artifactDigest=extensionToolArtifactDigest(descriptor);
+  const publicRoot=path.join(directory,'public');const resources=await createFixtures(publicRoot),adapter=path.join(repo,'OpenScience/scripts/runtime/extensions/cowork');
+  const descriptor=await containedExtensionDescriptor();
   const resolver=new ExtensionResourceResolver({lookupResource:async(_scope,id)=>resources[id]?{ownerId:'alice',projectId:'p',revision:1,relativePath:resources[id].file,format:resources[id].format,sha256:resources[id].sha256}:null,verifyProvenance:async()=>({revision:1,dataClass:'public'}),rootFor:async()=>publicRoot,lookupTarget:async(_scope,id)=>id==='owned_target'?{ownerId:'alice',projectId:'p',revision:1,relativePath:'exports/public.xlsx'}:null,maxProjectBytes:1048576});
   const scope={userId:'alice',projectId:'p',accountCreatedAt:account,projectCreatedAt:projectEpoch,runtimeGeneration:'fixture-runtime',extensionGenerationHash:'a'.repeat(64),descriptorId:descriptor.id,artifactDigest:descriptor.artifactDigest,installationId:'fixture-installation',installationRevision:1};
   const preparationIdentity={jobId:'preparation-fixture',leaseToken:'fixture-private-lease',attempts:1,installationId:'fixture-installation',installationRevision:1,accountCreatedAt:account,projectTarget:null};
