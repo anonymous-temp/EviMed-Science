@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { acceptancePlatform, validatePreparedAcceptanceInputs, verifyAcquiredSource, preparationEnvironment, verifyAcceptanceImage, ACCEPTANCE_NODE_BASES, runPreparationCommand } from '../prepare-extension-acceptance.mjs';
+const dshVersion=JSON.parse(await fs.readFile(new URL('../../../deps-version.json',import.meta.url),'utf8')).dsh.version;
 const hex='a'.repeat(64),digest='sha256:'+hex;
-const input=()=>({schemaVersion:1,platform:'linux/amd64',sourceCommit:'b'.repeat(40),dshVersion:'0.1.7-rc.2',images:{coworkImageId:digest,nativeSdkImageId:digest,nativeKernelImageId:digest},artifact:{closureExpectedSHA:hex,integrity:digest,runnerSHA:hex,policySHA:hex,inventorySHA:hex,adapterDigest:digest,artifactDigest:digest},fixtures:{catalogueSnapshotPath:'fixtures/catalogue-snapshot.json',catalogueSnapshotSHA:hex},qualification:'unverified'});
+const input=()=>({schemaVersion:1,platform:'linux/amd64',sourceCommit:'b'.repeat(40),dshVersion,images:{coworkImageId:digest,nativeSdkImageId:digest,nativeKernelImageId:digest},artifact:{closureExpectedSHA:hex,integrity:digest,runnerSHA:hex,policySHA:hex,inventorySHA:hex,adapterDigest:digest,artifactDigest:digest},fixtures:{catalogueSnapshotPath:'fixtures/catalogue-snapshot.json',catalogueSnapshotSHA:hex},qualification:'unverified'});
 test('protected prepared tuple has no caller paths, commands, credentials or qualification authority',()=>{
  assert.deepEqual(validatePreparedAcceptanceInputs(input()),input());
  for(const mutate of [x=>x.qualified=true,x=>x.argv=['sh'],x=>x.env={key:'secret'},x=>x.images.customerImage=digest,x=>x.fixtures.catalogueSnapshotPath='/private/customer-plane',x=>x.qualification='qualified',x=>x.platform='darwin/arm64',x=>x.images.nativeSdkImageId='node:latest']){
