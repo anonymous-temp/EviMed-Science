@@ -187,6 +187,10 @@ const FALLBACK_RULES = {
   // ...and web reading at the plugin's browser; the code's default is no
   // local browser.
   OPEN_SCIENCE_WEB_RENDER_CDP_URL: ["deployment", "url"],
+  // The optional interactive browser overlay names its own isolated service.
+  OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL: ["deployment", "url"],
+  OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS: ["eq", "managedBrowserMaxContexts", "browser capacity"],
+  OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER: ["eq", "managedBrowserMaxContextsPerUser", "browser capacity"],
   EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ["deployment", "url"],
   EVIMED_ADR_CASE_QUERY_URL: ["deployment", "url"],
   EVIMED_ADR_SIGNAL_ANALYSIS_URL: ["deployment", "url"],

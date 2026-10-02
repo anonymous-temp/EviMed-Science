@@ -158,7 +158,7 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
@@ -172,7 +172,7 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     app: { releaseId: `evimed-${NEW}-1` }, source: { revision: NEW },
     runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
   }));
-  await writeFile(path.join(web, ".env"), "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\n");
+  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
   await writeFile(path.join(root, "shared", `ops-source-${NEW}`, "compose.builtin.override.yml"), "services: {}\n");
@@ -232,6 +232,7 @@ function runSwitch(root, flags = []) {
   const env = { ...process.env };
   delete env.OPEN_SCIENCE_PUBLIC_HEALTH_URL;
   delete env.OPEN_SCIENCE_EDGE_PROXY_URL;
+  delete env.OPEN_SCIENCE_MANAGED_BROWSER_ENABLED;
   return new Promise((resolve) => {
     execFile("bash", [path.join(repoRoot, "scripts/ops/host-release-switch.sh"), NEW, ...flags], {
       env: {
@@ -573,4 +574,16 @@ test("release switch rejects a replay URL outside its internal network before mo
   const result = await runSwitch(root, ["--no-prune"]);
   assert.notEqual(result.code, 0);
   await assert.rejects(realpath(path.join(root, "current")));
+});
+
+test("the enabled managed browser overlay follows private overrides in the actual release composition", { skip }, async () => {
+  const { root } = await host({ managedBrowser: true });
+  try {
+    const result = await runSwitch(root, ["--plan"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const compose = calls.find(line => line.startsWith("compose ") && line.includes(" config --hash"));
+    assert(compose);
+    assert(compose.indexOf("docker-compose.browser.yml") > compose.indexOf("compose.builtin.override.yml"));
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

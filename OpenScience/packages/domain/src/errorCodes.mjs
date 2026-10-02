@@ -1263,8 +1263,11 @@ export const EXTENSION_ERROR_CODES = Object.freeze([
   'extension_proof_stale', 'extension_proof_incomplete', 'extension_access_denied', 'extension_storage_capacity',
 ])
 
+export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
+
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EXTENSION_ERROR_CODES,
+  ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
@@ -1331,6 +1334,13 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  managed_browser_invalid: '网址或操作无效，请检查后重试。',
+  managed_browser_not_found: '浏览会话已结束，请重新打开。',
+  managed_browser_sequence_conflict: '页面状态已更新，请刷新后再操作。',
+  managed_browser_busy: '浏览器正在处理操作，请稍后重试。',
+  managed_browser_unavailable: '浏览器暂时无法连接，可稍后重试。',
+  managed_browser_action_unknown: '本次操作结果尚未确认，请先查看页面再继续。',
+
   extension_contract_invalid: '扩展信息格式不正确，请检查后重新提交。',
   extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
   extension_proof_stale: '扩展或运行环境版本已变化，兼容记录需要重新核对。',
@@ -2064,6 +2074,8 @@ export function errorCodeOutcome(code) {
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
+  if (text === 'managed_browser_busy') return 'capped'
+  if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
   // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.

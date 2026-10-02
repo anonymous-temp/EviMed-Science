@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -1469,4 +1469,32 @@ test('HTTP and mux bind only the authenticated actor after generation admission,
   f.manager.assertPersonalSkillPromptGeneration=async()=>{};
   const frame=open('actor-mux','session/prompt',{request:{...request,requestId:'actual-actor-mux'}});connection.send(frame);assert.equal((await connection.next()).type,'item');assert.deepEqual(bindings[1],{actor:f.user.id,request:frame.payload.args.request});
   fail=true;assert.equal((await post({...request,requestId:'unbound-core'})).status,200);assert(audits.some(item=>item.event==='extension.actor.bind'&&item.userId===f.user.id));assert.equal(bindings.length,2);
+});
+
+test("unconfirmed managed browser release cannot keep native frame transports alive", { timeout: 5000 }, async t => {
+  const f = await fixture(t, {}, {}, { managedBrowser: {
+    releaseFrame: async () => { throw new HttpError(503, "managed_browser_unavailable", "Cleanup unconfirmed"); },
+    close: async () => {},
+  } });
+  const project = await f.store.requireProject(f.user, "default");
+  const connection = f.connect();assert.equal(await connection.opened, 101);
+  await eventually(() => f.manager.activeProxyCountForProject(project) === 1);
+  const closed = once(connection.ws, "close");
+  await assert.rejects(f.ui.releaseFrame(f.frame.frameId, f.user.id), { code: "managed_browser_unavailable" });
+  await closed;
+  assert.equal(f.manager.activeProxyCountForProject(project), 0);
+});
+
+test("runtime UI shutdown joins its sockets and listener even when browser cleanup fails", { timeout: 5000 }, async t => {
+  let refuse = true;
+  const f = await fixture(t, {}, {}, { managedBrowser: {
+    releaseFrame: async () => {},
+    close: async () => { if (refuse) throw new HttpError(503, "managed_browser_unavailable", "Cleanup unconfirmed"); },
+  } });
+  const connection = f.connect();assert.equal(await connection.opened, 101);
+  const closed = once(connection.ws, "close");
+  try { await assert.rejects(f.ui.close(), { code: "managed_browser_unavailable" }); }
+  finally { refuse = false; }
+  await closed;
+  assert.equal(f.ui.address(), null);
 });

@@ -278,6 +278,7 @@ import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
+import { createManagedBrowserService } from "./managedBrowserService.mjs";
 import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame, releaseRuntimeUiFrameCookie, renewRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
@@ -923,6 +924,7 @@ function clientAddress(req, config) {
  */
 export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
+  const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
@@ -1893,7 +1895,7 @@ export function createWebApiApp(overrides = {}) {
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
       remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
       }),
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
@@ -4547,6 +4549,7 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/auth/logout" && req.method === "POST") {
         const { user } = await store.ensureSessionUser(req, res);
         await store.logout(req);
+        await managedBrowser.closeOwner(user.id).catch(async () => { await securityAudit(config, "browser.cleanup", "pending", { userId: user.id }); });
         clearSessionCookie(res, config.sessionCookieName);
         await securityAudit(config, "auth.logout", "completed", { userId: user.id });
         sendJson(res, 200, { data: true });
@@ -5362,6 +5365,7 @@ export function createWebApiApp(overrides = {}) {
           }
         }
         await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
         // institution is gone, and nothing else would ever delete it.
@@ -5547,6 +5551,7 @@ export function createWebApiApp(overrides = {}) {
           let vcrArtifacts = null;
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
+              await managedBrowser.closeProject(user.id, project.id);
               if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
                 throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
               }
@@ -5953,6 +5958,7 @@ export function createWebApiApp(overrides = {}) {
     runtimeManager,
     agentRegistry,
     usageLedger,
+    managedBrowser,
     authorizePrompt: assertPublicSessionPrompt,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
@@ -6142,6 +6148,9 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
+    void Promise.resolve(managedBrowser.pause?.()).catch(() => {
+      process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
+    });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
@@ -6171,6 +6180,7 @@ export function createWebApiApp(overrides = {}) {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
     try {
+      managedBrowser.start?.();
       pluginApplyWorker?.start();
       if (config.runtimeMode === "kernel") personalSkillWorker?.start();
       hostedExtensions?.preparation.start();

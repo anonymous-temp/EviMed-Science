@@ -210,6 +210,9 @@ COMPOSE=(docker compose -p "$PROJECT"
 if grep -qE '^EVIMED_KNOWLEDGE_PLUGIN_IMAGE=.+' .env; then COMPOSE+=(-f docker-compose.knowledge.yml); fi
 COMPOSE+=(-f "$OVERRIDE")
 if [ "$RESULT_REPLAY" = enabled ]; then COMPOSE+=(-f docker-compose.result-replay.yml); fi
+if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(process.env.OPEN_SCIENCE_MANAGED_BROWSER_ENABLED || "").toLowerCase()) ? 0 : 1)'; then
+  COMPOSE+=(-f docker-compose.browser.yml)
+fi
 if grep -qE '^OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR=.+' .env; then COMPOSE+=(-f docker-compose.vcr-backup.yml); fi
 if node --env-file=.env -e 'process.exit(["1","true","yes"].includes(String(process.env.OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED || "").toLowerCase()) ? 0 : 1)'; then
   COMPOSE+=(-f docker-compose.engine-keyless.yml)
