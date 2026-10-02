@@ -9,16 +9,17 @@ import { createExtensionAssessmentAdmission, assertExtensionAssessmentAdmission 
 import { ExtensionGenerationService, verifyExtensionGeneration } from '../src/extensionGenerationService.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const digest = value => 'sha256:' + sha(canonicalJson(value));
-async function fixture(t) {
+async function fixture(t, { installerId = 'owner', installerEpoch = 'epoch' } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'evimed-assessment-admission-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   let allowed = true;
-  const input = { project: { id: 'project', userId: 'owner' }, actor: { id: 'owner', accountCreatedAt: 'epoch' },
+  const scope = { ownerId: 'owner', projectId: 'project', actorId: 'owner', actorAccountCreatedAt: 'epoch', ownerAccountCreatedAt: 'epoch', projectCreatedAt: 'project-epoch' };
+  const input = { project: { id: 'project', userId: 'owner', projectCreatedAt: 'project-epoch' }, actor: { id: installerId, accountCreatedAt: installerEpoch }, scope,
     entry: { id: 'cowork', integrity: digest('pinned package'), coordinate: {kind:'github',repository:'Jesse-njx/dsh-cowork',commit:'a'.repeat(40)}, executionClass:'isolated-tool' },
-    artifact: { artifactDigest: digest('owned exact artifact'), adapterRevision:digest('contained adapter') },
+    artifact: { artifactDigest: digest('owned exact artifact'), adapterRevision:digest('contained adapter'), suiteRevision:digest('fixture suite') },
     identity: { runtimeImageDigest: digest('actual fixture image'), permissionProfileRevision:digest('permissions'),
       adapterRevision:extensionProofAdapterRevision(digest('contained adapter'),digest('adapter'),sha), packageIntegrity:digest('pinned package'),
-      sourceCommit:'a'.repeat(40),executionClass:'isolated-tool' } };
+      sourceCommit:'a'.repeat(40),executionClass:'isolated-tool',dshVersion:'0.1.7-rc.2',suiteRevision:digest('fixture suite') } };
   const authority = createExtensionAssessmentAdmission({ dataDir: root, evaluate: async value => allowed && canonicalJson(value) === canonicalJson(input) });
   t.after(() => authority.close());
   const admission = await authority.evaluate(input);
@@ -29,9 +30,8 @@ async function fixture(t) {
   const identity = { ownerId: 'owner', projectId: 'project', baseRuntimeImageDigest: input.identity.runtimeImageDigest,
     adapterRevision: digest('adapter'), permissionProfileRevision: digest('permissions'),
     selections: [{ extensionId: plugin.extensionId, artifactDigest: plugin.artifactDigest, configRevision: 1, configDigest: plugin.configDigest, connectionRefs: [] }], skills: [] };
-  const scope = { ownerId: 'owner', projectId: 'project', actorId: 'owner', actorAccountCreatedAt: 'epoch', ownerAccountCreatedAt: 'epoch', projectCreatedAt: 'project-epoch' };
   const content = { schemaVersion: 1, identity, scope, assessmentAdmission: authority.marker,
-    bindings: { desiredRevision: 1, legacyRevision: 0, personalRevision: 0, installations: [{extensionId:plugin.extensionId,assessmentAdmissionDigest:admission.assessmentAdmissionDigest,artifactDigest:plugin.artifactDigest,integrity:plugin.integrity,coordinate:canonicalExtensionCoordinate(plugin.coordinate)}] },
+    bindings: { desiredRevision: 1, legacyRevision: 0, personalRevision: 0, installations: [{extensionId:plugin.extensionId,installationId:'installation',actorId:installerId,installationRevision:1,prepareJobId:'prepare-job',configDigest:plugin.configDigest,assessmentAdmissionDigest:admission.assessmentAdmissionDigest,artifactDigest:plugin.artifactDigest,integrity:plugin.integrity,coordinate:canonicalExtensionCoordinate(plugin.coordinate)}] },
     projection: { plugins: [plugin], personal: { reference: null, pins: [] } }, findings: [] };
   const manifest = { ...content, reference: { ownerHash: sha('owner'), projectHash: sha('project'),
     generationHash: sha(canonicalJson({ ...content, domainIdentity: extensionGenerationIdentity(identity, { ownerId: 'owner', projectId: 'project' }, sha) })) } };
@@ -117,4 +117,97 @@ test('actual apply-worker verification forwards only the service constructor ass
   assert.equal(await worker.runClaimed(job),null);assert.equal(prepared,1);
   service.assessmentAdmission=null;const refused=await worker.runClaimed(job);
   assert.equal(refused.error.code,'extension_contract_invalid');assert.equal(prepared,1);
+});
+
+function rehash(manifest) {
+  const { reference: _reference, ...content } = manifest;
+  manifest.reference.generationHash = sha(canonicalJson({ ...content,
+    domainIdentity: extensionGenerationIdentity(manifest.identity,
+      { ownerId: manifest.scope.ownerId, projectId: manifest.scope.projectId }, sha) }));
+  return manifest;
+}
+
+test('real immutable files reject rehashed duplicate, dangling and ambiguous admission bonds', async t => {
+  const f = await fixture(t);
+  const changes = [
+    value => value.bindings.installations.push(structuredClone(value.bindings.installations[0])),
+    value => value.bindings.installations.push({ ...value.bindings.installations[0], extensionId: 'not-selected' }),
+    value => value.projection.plugins.push(structuredClone(value.projection.plugins[0])),
+    value => { value.bindings.installations[0].receiptDigest = digest('unrelated receipt'); },
+    value => { value.projection.plugins[0].receiptDigest = digest('unrelated receipt'); },
+    value => { delete value.bindings.installations[0].assessmentAdmissionDigest; },
+    value => { value.bindings.installations[0].configDigest = digest('unrelated settings'); },
+    value => { value.bindings.installations[0].authority = true; },
+    value => { value.bindings.authority = true; },
+    value => { value.scope.authority = true; },
+  ];
+  for (const change of changes) {
+    const altered = structuredClone(f.manifest); change(altered); rehash(altered);
+    await assert.rejects(f.service.publish(f.input.project, altered, { query: async () => ({ rows: [] }) }));
+    await assert.rejects(verifyExtensionGeneration(f.config, f.input.project, altered.reference, f.authority));
+  }
+});
+
+test('frozen reconcile scope and separately bound installer survive while scope or installer drift refuses', async t => {
+  const f = await fixture(t, { installerId: 'installer', installerEpoch: 'installer-epoch' });
+  assert.notEqual(f.manifest.scope.actorId, f.manifest.bindings.installations[0].actorId);
+  assert.deepEqual(await verifyExtensionGeneration(f.config, f.input.project, f.manifest.reference, f.authority), f.manifest);
+  const changes = [
+    value => { value.scope.actorId = 'unrelated-reconciler'; },
+    value => { value.scope.actorAccountCreatedAt = 'other-reconciler-epoch'; },
+    value => { value.scope.ownerAccountCreatedAt = 'other-owner-epoch'; },
+    value => { value.scope.projectCreatedAt = 'other-project-epoch'; },
+    value => { value.bindings.installations[0].actorId = 'unrelated-installer'; },
+  ];
+  for (const change of changes) {
+    const altered = structuredClone(f.manifest); change(altered); rehash(altered);
+    await assert.rejects(f.service.publish(f.input.project, altered, { query: async () => ({ rows: [] }) }));
+    await assert.rejects(verifyExtensionGeneration(f.config, f.input.project, altered.reference, f.authority));
+  }
+});
+
+test('current operation retains frozen reconcile scope when the caller and installer differ', async t => {
+  const f = await fixture(t, { installerId: 'installer', installerEpoch: 'installer-epoch' });
+  const calls = [], client = {};
+  f.service.database = { transaction: work => work(client), withTransactionClient: (_client, work) => work() };
+  f.service.extensions = { entries: new Map([[f.input.entry.id, f.input.entry]]), access: {
+    account: async user => { calls.push(user.id); return user.accountCreatedAt ?? 'caller-epoch'; },
+    project: async () => f.input.project, connections: async () => [] } };
+  f.service.plugins = { scope: async () => ({ accountCreatedAt: 'epoch', projectCreatedAt: 'project-epoch' }) };
+  f.service.artifacts = new Map([[f.input.entry.id, f.input.artifact]]);
+  f.service.current = async () => ({ payload: { phase: 'effective', runtimeGeneration: 'runtime', effective: f.manifest } });
+  f.service.jobs = { get: async () => ({ kind: 'extension-prepare', status: 'succeeded',
+    payload: { installationId: 'installation', installationRevision: 1, accountCreatedAt: 'installer-epoch' },
+    result: { artifactDigest: f.input.artifact.artifactDigest, integrity: f.input.entry.integrity,
+      installationId: 'installation', installationRevision: 1 } }) };
+  const identity = await f.service.operationIdentity({ id: 'authorized-current-caller' }, 'project', 'cowork', 'runtime');
+  assert.equal(identity.userId, 'authorized-current-caller');
+  assert.equal(identity.accountCreatedAt, 'caller-epoch');
+  assert.ok(calls.includes('installer'));
+  assert.equal((await f.authority.evaluate(f.input)).assessmentAdmissionDigest,
+    f.manifest.projection.plugins[0].assessmentAdmissionDigest);
+});
+
+test('ordinary receipt manifests and the legacy citation projection retain their existing readable format', async t => {
+  const f = await fixture(t);
+  const ordinary = structuredClone(f.manifest); delete ordinary.assessmentAdmission;
+  const pin = ordinary.projection.plugins[0], binding = ordinary.bindings.installations[0];
+  delete pin.assessmentAdmissionDigest; delete binding.assessmentAdmissionDigest;
+  pin.receiptDigest = binding.receiptDigest = digest('synthetic receipt format control');
+  const legacy = { extensionId: 'dsh-cite', coordinate: { kind: 'npm', name: 'dsh-cite', version: '0.1.0' },
+    integrity: digest('legacy'), artifactDigest: digest('legacy'), configRevision: 0,
+    configDigest: digest({ enabled: true, settings: { timeoutMs: 9000 } }), enabled: true,
+    settings: { timeoutMs: 9000 }, connectionRefs: [], compatibility: 'legacy-citation-v1', sourceDocumentId: 'legacy-row' };
+  ordinary.projection.plugins.push(legacy);
+  ordinary.identity.selections.push({ extensionId: legacy.extensionId, artifactDigest: legacy.artifactDigest,
+    configRevision: legacy.configRevision, configDigest: legacy.configDigest, connectionRefs: [] });
+  rehash(ordinary);
+  const service = new ExtensionGenerationService({}, { config: f.config, extensionService: {}, pluginService: {},
+    admittedArtifacts: [], identities: async () => ordinary.identity, proofAuthority: null });
+  await service.publish(f.input.project, ordinary, { query: async () => ({ rows: [] }) });
+  assert.deepEqual(await verifyExtensionGeneration(f.config, f.input.project, ordinary.reference), ordinary);
+  // This asserts immutable format compatibility, not that a synthetic receipt qualifies an extension.
+  const mismatched = structuredClone(ordinary); mismatched.bindings.installations[0].receiptDigest = digest('different receipt');
+  rehash(mismatched);
+  await assert.rejects(service.publish(f.input.project, mismatched, { query: async () => ({ rows: [] }) }));
 });

@@ -196,12 +196,50 @@ export class ResultImpactService {
   }
 
   /** Explicit user continuation or a trusted existing consent resolver; existing agenda budgets still apply. */
+  async assertContinuation(userId, projectId, binding) {
+    try {
+      const project = await this.results.scope(userId, projectId);
+      const impact = await this.get(userId, projectId, binding.impactId);
+      if (project.userId !== userId || binding.requestedBy !== userId || binding.projectId !== projectId
+        || impact.payload.versionId !== binding.versionId || JSON.stringify(sourceReference(impact.payload.source)) !== JSON.stringify(sourceReference(binding.source))
+        || impact.payload.continuation.agendaId !== binding.agendaId
+        || !["preparing", "scheduled"].includes(impact.payload.continuation.status)) throw new HttpError(409, "result_impact_source_unavailable", "Continuation binding is no longer authorized.");
+    } catch (error) {
+      // Permission and deletion refusals are terminal; an infrastructure outage
+      // still propagates for the existing worker retry policy.
+      if (error?.code === "result_impact_source_unavailable") throw error;
+      if (![401, 403, 404].includes(error?.status) && !["result_not_found", "result_impact_not_found"].includes(error?.code)) throw error;
+      throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
+    }
+  }
+
+  async readScheduledContinuation(userId, projectId, id, binding, scheduled) {
+    try {
+      await this.assertContinuation(userId, projectId, binding);
+      const impact = await this.get(userId, projectId, id);
+      if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
+      return impact;
+    } catch (error) {
+      if (error?.code === "result_impact_source_unavailable" || [401, 403, 404].includes(error?.status)) {
+        await this.autopilot.stopContinuation(userId, scheduled.episode.id, binding, { jobId: scheduled.job?.id });
+      }
+      throw error;
+    }
+  }
+
   async continueImpact(userId, projectId, id, { agendaId, expectedRevision = undefined }) {
     const project = await this.results.scope(userId, projectId);
     const ownerId = project.userId;
     let impact = await this.get(userId, projectId, id);
     if (userId !== ownerId) throw new HttpError(403, "result_impact_agenda_unauthorized", "Only the agenda owner can authorize research continuation.");
-    if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
+    if (impact.payload.continuation.status === "unavailable") {
+      const stored = await this.documents.get(ownerId, "result-impact", id);
+      if (stored?.payload?.continuation?.episodeId && this.autopilot) {
+        const episode = await this.autopilot.getEpisode(ownerId, stored.payload.continuation.episodeId);
+        if (episode.payload.continuationBinding?.impactId === id) await this.autopilot.stopContinuation(ownerId, episode.id, episode.payload.continuationBinding);
+      }
+      throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
+    }
     if (impact.payload.continuation.agendaId && impact.payload.continuation.agendaId !== agendaId) throw new HttpError(409, "result_impact_continuation_conflict", "This impact already belongs to another agenda continuation.");
     if (impact.payload.continuation.status === "scheduled") return impact;
     if (impact.payload.effect !== "potentially_affected") throw new HttpError(409, "result_impact_not_changed", "An unavailable source is a gap, not evidence to recompute.");
@@ -224,15 +262,20 @@ export class ResultImpactService {
     impact = await this.get(userId, projectId, id);
     if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
     const note = `Review source updates against immutable result ${impact.payload.versionId}. Source: ${JSON.stringify(impact.payload.source)}. Notices: ${JSON.stringify(impact.payload.sourceStatus.updates)}. Preserve the prior result. Identify affected conclusions; create a successor only for the affected analysis. State what changed, what was recomputed, and what remains uncertain.`;
-    const scheduled = await this.autopilot.schedule(ownerId, agenda.id, { trigger: "follow-up", requestId: id, note, expectedRevision: agenda.revision });
+    const continuationBinding = { impactId: id, versionId: impact.payload.versionId, source: impact.payload.source,
+      projectId, requestedBy: userId, agendaId };
+    const scheduled = await this.autopilot.schedule(ownerId, agenda.id, { trigger: "follow-up", requestId: id, note,
+      continuationBinding, expectedRevision: agenda.revision });
     // schedule's persisted request identity makes retries safe if the process died before this CAS.
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      impact = await this.get(userId, projectId, id);
-      if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
+      impact = await this.readScheduledContinuation(userId, projectId, id, continuationBinding, scheduled);
       if (impact.payload.continuation.status === "scheduled") return impact;
-      try { return await this.documents.put(ownerId, "result-impact", id, { ...impact.payload,
+      try {
+        await this.documents.put(ownerId, "result-impact", id, { ...impact.payload,
         continuation: { status: "scheduled", agendaId: agenda.id, episodeId: scheduled.episode.id, scheduledAt: this.now().toISOString() } },
-      { expectedRevision: impact.revision, projectId }); }
+        { expectedRevision: impact.revision, projectId });
+        return await this.readScheduledContinuation(userId, projectId, id, continuationBinding, scheduled);
+      }
       catch (error) { if (error?.code !== "product_revision_conflict" || attempt === 3) throw error; }
     }
   }

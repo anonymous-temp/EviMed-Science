@@ -382,12 +382,19 @@ export async function cancelAutopilotVerification({ runtimeManager, agentRuns },
   await agentRuns.cancelRun(project, target.runId, { by: "platform" });
 }
 
+/** PostgreSQL JSONB may reorder keys; the recorded binding remains identical. */
+function continuationBindingKey(value) {
+  const sorted = item => Array.isArray(item) ? item.map(sorted) : item && typeof item === "object"
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, sorted(item[key])])) : item;
+  return JSON.stringify(sorted(value ?? null));
+}
+
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,notifications?:any,capsules?:any,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,usage?:any,notifications?:any,capsules?:any,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, usage = null, notifications = null, capsules = null,
-    now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -396,6 +403,49 @@ export class AutopilotService {
     this.capsules = capsules;
     this.now = now;
     this.id = id;
+    this.authorizeContinuation = authorizeContinuation;
+    /** @type {{userId:string,id:string}|null} */
+    this.continuationCursor = null;
+  }
+
+  /** Only recorded continuation bindings acquire source authority; ordinary agendas are unchanged. */
+  async assertEpisodeContinuation(userId, episodeId, dispatched = null) {
+    const episode = await this.getEpisode(userId, episodeId);
+    const binding = episode.payload.continuationBinding;
+    if (!binding) return;
+    try {
+      if (episode.payload.status === "canceled" || episode.payload.continuationRevokedAt || !this.authorizeContinuation) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is no longer authorized.");
+      await this.authorizeContinuation(userId, episode.projectId, binding);
+    } catch (error) {
+      if (error?.code === "result_impact_source_unavailable") await this.stopContinuation(userId, episodeId, binding, { dispatched });
+      throw error;
+    }
+  }
+
+  /** Stop this exact continuation, preserving claims, completion and all partial files. */
+  async stopContinuation(userId, episodeId, binding, { jobId = null, dispatched = null } = {}) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const episode = await this.getEpisode(userId, episodeId);
+      if (continuationBindingKey(episode.payload.continuationBinding) !== continuationBindingKey(binding)) throw new HttpError(409, "autopilot_request_conflict", "This episode belongs to another continuation.");
+      const mainCompleted = ["merged", "succeeded", "verifying"].includes(episode.payload.status) || Boolean(episode.payload.completion);
+      const target = mainCompleted ? null : dispatched ?? (episode.payload.runId && episode.payload.sessionId
+        ? { runId: episode.payload.runId, sessionId: episode.payload.sessionId } : null);
+      let stopped = episode;
+      try {
+        if (!episode.payload.continuationRevokedAt) stopped = await this.documents.put(userId, "episode", episodeId,
+          { ...episode.payload, ...(mainCompleted ? {} : { status: "canceled", error: { code: "result_impact_source_unavailable" } }),
+            continuationRevokedAt: this.now().toISOString(), updatedAt: this.now().toISOString() },
+          { expectedRevision: episode.revision, projectId: episode.projectId });
+      } catch (error) { if (isConflict(error)) continue; throw error; }
+      // Persist cancellation before invalidating the launch lease. A late
+      // accepted dispatch still records its exact target via the worker guard.
+      if (target) stopped = await this.queueDispatchedCancellation(userId, episodeId, target);
+      await this.cancelVerifications(userId, stopped);
+      const launchJobId = jobId ?? episode.payload.continuationJobId;
+      if (launchJobId) await this.jobs.cancel(userId, launchJobId);
+      return stopped;
+    }
+    throw new HttpError(409, "autopilot_episode_state_conflict", "The continuation changed while stopping.");
   }
 
   /** @param {string} userId @param {Record<string,any>} input */
@@ -1238,6 +1288,17 @@ export class AutopilotService {
     const completions = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents
       WHERE kind='episode' AND deleted_at IS NULL AND payload->>'status'='verifying'
       AND payload->'completion' IS NOT NULL ORDER BY updated_at,id LIMIT 100`);
+    const continuations = await database.query(`SELECT user_id,id FROM evimed_product.documents
+      WHERE kind='episode' AND deleted_at IS NULL AND payload->'continuationBinding' IS NOT NULL
+      AND ($1::text IS NULL OR (user_id,id)>($1::text,$2::text))
+      AND (payload->>'status' IN ('queued','running','verifying') OR (payload->>'status'='canceled'
+        AND EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=evimed_product.documents.user_id
+          AND j.payload->>'episodeId'=evimed_product.documents.id AND j.status IN ('queued','running')
+          AND j.payload->>'action' IS DISTINCT FROM 'cancel'))) ORDER BY user_id,id LIMIT 100`,
+    [this.continuationCursor?.userId ?? null, this.continuationCursor?.id ?? null]);
+    const lastContinuation = continuations.rows.at(-1);
+    this.continuationCursor = continuations.rows.length === 100 ? { userId: lastContinuation.user_id, id: lastContinuation.id } : null;
+    for (const row of continuations.rows) await this.assertEpisodeContinuation(row.user_id, row.id).catch(() => null);
     for (const row of completions.rows) {
       await this.finishCompletion(row.user_id, { id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload }).catch(() => null);
     }
@@ -1258,7 +1319,7 @@ export class AutopilotService {
       await this.enqueueCancellation(row.user_id, { id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload });
       enqueued += 1;
     }
-    return { scanned: completions.rows.length + stopped.rows.length + result.rows.length, enqueued };
+    return { scanned: completions.rows.length + continuations.rows.length + stopped.rows.length + result.rows.length, enqueued };
   }
 
   async markCancellationCompleted(userId, episodeId, runId, verificationId = null) {
@@ -1311,7 +1372,7 @@ export class AutopilotService {
     const identity = manual ? `manual:${input.requestId}` : legacy ? date : `schedule:${input.scheduleVersion}:${input.occurrence.key}`;
     const episodeId = `episode-${hash(`${userId}:${agenda.id}:${identity}`).slice(0, 32)}`;
     const existingEpisode = await this.documents.get(userId, "episode", episodeId);
-    if (manual && existingEpisode && (existingEpisode.payload.trigger !== trigger
+    if (manual && existingEpisode && (continuationBindingKey(existingEpisode.payload.continuationBinding) !== continuationBindingKey(input.continuationBinding) || existingEpisode.payload.trigger !== trigger
       || (trigger === "follow-up" && (existingEpisode.payload.followUpNote !== input.note || existingEpisode.payload.replyToEpisodeId !== (input.episodeId ?? null))))) {
       throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
     }
@@ -1342,6 +1403,7 @@ export class AutopilotService {
       scheduleVersion: agenda.payload.scheduleVersion ?? 1, instruction: originalInstruction,
       ...(manual ? { requestId: input.requestId } : {}),
       ...(trigger === "follow-up" ? { followUpNote: input.note, replyToEpisodeId: input.episodeId ?? null } : {}),
+      ...(input.continuationBinding ? { continuationBinding: input.continuationBinding } : {}),
       prompt, progress, followUpKeys: followUps.map(followUpKey), status: "queued",
       runId: null, claims: [], createdAt: at, updatedAt: at,
     };
@@ -1357,7 +1419,7 @@ export class AutopilotService {
           if (!episode) throw error;
         }
       }
-      if (manual && (episode.payload.trigger !== trigger || (trigger === "follow-up"
+      if (manual && (continuationBindingKey(episode.payload.continuationBinding) !== continuationBindingKey(input.continuationBinding) || episode.payload.trigger !== trigger || (trigger === "follow-up"
         && (episode.payload.followUpNote !== input.note || episode.payload.replyToEpisodeId !== (input.episodeId ?? null))))) {
         throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
       }
@@ -1370,10 +1432,17 @@ export class AutopilotService {
         const fields = ["title", "prompt", "topics", "schedule", "scheduleVersion", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"];
         if (fields.some(field => JSON.stringify(current.payload[field]) !== JSON.stringify(agenda.payload[field]))) this.revision(current, agenda.revision);
       }
+      if (input.continuationBinding) {
+        if (!this.authorizeContinuation || episode.payload.status === "canceled") throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is no longer authorized.");
+        await this.authorizeContinuation(userId, agenda.projectId, input.continuationBinding);
+      }
       const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId,
+        ...(episode.payload.continuationBinding ? { continuationBinding: episode.payload.continuationBinding } : {}),
         taskType: episode.payload.taskType, budgetCny: episode.payload.budgetCny, prompt: episode.payload.prompt }, {
         idempotencyKey: legacy ? `episode:${agenda.id}:${identity}` : `episode:${episodeId}`, projectId: agenda.projectId, maxAttempts: 10, transactionClient,
       });
+      if (input.continuationBinding && !episode.payload.continuationJobId) episode = await this.documents.put(userId, "episode", episodeId,
+        { ...episode.payload, continuationJobId: job.id }, { expectedRevision: episode.revision, projectId: episode.projectId, transactionClient });
       const consumed = new Set(episode.payload.followUpKeys ?? []);
       const pending = (current.payload.followUps ?? []).some(item => !item.consumedBy && consumed.has(followUpKey(item)));
       const messages = current.payload.messages ?? [];
@@ -1401,8 +1470,16 @@ export class AutopilotService {
       return { episode, job };
     };
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      try { return this.documents.database ? await this.documents.database.transaction(commit) : await commit(); }
+      try {
+        const scheduled = this.documents.database ? await this.documents.database.transaction(commit) : await commit();
+        if (input.continuationBinding) await this.assertEpisodeContinuation(userId, scheduled.episode.id);
+        return scheduled;
+      }
       catch (error) {
+        if (error?.code === "result_impact_source_unavailable") {
+          const bound = await this.documents.get(userId, "episode", episodeId);
+          if (bound?.payload?.continuationBinding) await this.stopContinuation(userId, episodeId, input.continuationBinding);
+        }
         // A real transaction rolls back on a CAS loss; only the next fresh call
         // may choose a new schedule. Memory stores exercise partial-write replay.
         if (this.documents.database || !isConflict(error) || attempt === 4) throw error;

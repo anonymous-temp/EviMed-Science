@@ -1440,6 +1440,8 @@ jobs:
                  'uniqueUncompressedLayerBytes': report['archive']['uniqueUncompressedLayerBytes'],
                  'conservativeDownloadAndLoadBytes': report['archive']['conservativeDownloadAndLoadBytes']})
           PYTHON
+            # The root operator shell writes private artifacts; the upload action runs as the runner.
+            chown -R --reference="$RUNNER_TEMP" "$EVIMED_SUBSET_ROOT"
           done
 
       - name: Upload exact candidate core image subset

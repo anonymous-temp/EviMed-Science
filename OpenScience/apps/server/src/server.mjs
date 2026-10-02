@@ -1569,6 +1569,10 @@ export function createWebApiApp(overrides = {}) {
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
+    authorizeContinuation: async (userId, projectId, binding) => {
+      if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
+      await resultImpacts.assertContinuation(userId, projectId, binding);
+    },
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
@@ -3385,6 +3389,7 @@ export function createWebApiApp(overrides = {}) {
             // Record the attempt before checking the lease: a refusal now has
             // durable proof of no prompt for the next owner to reclaim.
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
             } catch (error) {
@@ -3429,6 +3434,7 @@ export function createWebApiApp(overrides = {}) {
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             return runtimeManager.dispatchPrompt(project, session.id, {
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
@@ -3443,7 +3449,7 @@ export function createWebApiApp(overrides = {}) {
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
           if (error?.code === "product_job_lease_lost") throw error;
-          if (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+          if (error?.code === "result_impact_source_unavailable" || (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code))) {
             await releaseOwnRuntime();
             throw error;
           }

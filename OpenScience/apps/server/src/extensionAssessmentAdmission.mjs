@@ -30,6 +30,7 @@ export function createExtensionAssessmentAdmission({ dataDir, evaluate }) {
         if (plugin.receiptDigest || !plugin.assessmentAdmissionDigest) throw refused();
         const input = bindings.get(plugin.assessmentAdmissionDigest);
         if (!input || input.entry.id !== plugin.extensionId || input.artifact.artifactDigest !== plugin.artifactDigest
+          || canonicalJson(input.scope) !== canonicalJson(manifest.scope)
           || input.project.id !== manifest.scope.projectId || input.project.userId !== manifest.scope.ownerId
           || input.identity.runtimeImageDigest !== manifest.identity.baseRuntimeImageDigest
           || input.identity.permissionProfileRevision !== manifest.identity.permissionProfileRevision
@@ -44,7 +45,8 @@ export function createExtensionAssessmentAdmission({ dataDir, evaluate }) {
         const installation=manifest.bindings.installations.find(value=>value.extensionId===plugin.extensionId
           &&value.assessmentAdmissionDigest===plugin.assessmentAdmissionDigest);
         if(!installation || installation.receiptDigest || installation.artifactDigest!==plugin.artifactDigest
-          || installation.integrity!==plugin.integrity || installation.coordinate!==canonicalExtensionCoordinate(plugin.coordinate))throw refused();
+          || installation.integrity!==plugin.integrity || installation.coordinate!==canonicalExtensionCoordinate(plugin.coordinate)
+          || installation.actorId!==input.actor.id || installation.configDigest!==plugin.configDigest)throw refused();
       }
       return true;
     },

@@ -413,6 +413,9 @@ export function runMethodObservations(input) {
  * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[]}} input */
 export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [] }) {
   if (!run.id) return;
+  // Attachment is preserved independently; a timestamp alone cannot prove
+  // that this native request or its assigned child actually read the context.
+  const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
   const started = Date.parse(String(run.startedAt ?? ""));
   const finished = Date.parse(String(run.finishedAt ?? ""));
   const inThisRun = (message) => typeof message?.time === "number" && Number.isFinite(message.time)
@@ -422,7 +425,7 @@ export async function recordHandbookRunObservations({ learning, userId, projectI
     const items = (projection?.plan?.items ?? []).filter((item) => item.capability === mounted.capabilityId);
     const sessionIds = new Set([run.sessionId, ...(projection?.subagents ?? [])
       .filter((child) => items.some((item) => item.id === child.deliverableId)).map((child) => child.childSessionId)].filter(Boolean));
-    const used = sessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
+    const used = observedSessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
       (session.transcript?.messages ?? []).filter(inThisRun).some((message) => (message.parts ?? []).some((part) => {
         if (part?.type !== "tool" || part?.status !== "completed") return false;
         if (["read", "grep"].includes(part.tool)) {

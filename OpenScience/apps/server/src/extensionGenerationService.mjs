@@ -49,6 +49,33 @@ export async function verifyExtensionGeneration(config,project,reference,assessm
   else if(manifest.assessmentAdmission)throw invalid();
   if(manifest.schemaVersion!==1||canonicalJson(manifest.reference)!==canonicalJson(checked)||bytes.toString()!==canonicalJson(manifest)+'\n'||generationHash(manifest)!==checked.generationHash)throw invalid();
   extensionRequestObject(manifest.projection,['plugins','personal']);
+  extensionRequestObject(manifest.scope,['ownerId','projectId','actorId','actorAccountCreatedAt','ownerAccountCreatedAt','projectCreatedAt']);
+  extensionRequestObject(manifest.bindings,['desiredRevision','legacyRevision','personalRevision','installations']);
+  if(manifest.scope.ownerId!==project.userId||manifest.scope.projectId!==project.id
+    ||manifest.identity.ownerId!==manifest.scope.ownerId||manifest.identity.projectId!==manifest.scope.projectId
+    ||!Array.isArray(manifest.bindings.installations)||!Array.isArray(manifest.projection.plugins))throw invalid();
+  const boundIds=new Set();
+  for(const binding of manifest.bindings.installations){
+    extensionRequestObject(binding,['extensionId','installationId','actorId','installationRevision','prepareJobId','coordinate','integrity','artifactDigest','configDigest','receiptDigest',...(assessmentAdmission?['assessmentAdmissionDigest']:[])],['extensionId','installationId','actorId','installationRevision','prepareJobId','coordinate','integrity','artifactDigest','configDigest']);
+    const receipt=Object.hasOwn(binding,'receiptDigest'),assessment=Object.hasOwn(binding,'assessmentAdmissionDigest');
+    if(receipt===assessment||boundIds.has(binding.extensionId)||!manifest.projection.plugins.some(plugin=>plugin.extensionId===binding.extensionId&&plugin.compatibility!=='legacy-citation-v1'))throw invalid();
+    boundIds.add(binding.extensionId);
+  }
+  const pluginIds=new Set();
+  for(const plugin of manifest.projection.plugins){
+    if(pluginIds.has(plugin.extensionId))throw invalid();pluginIds.add(plugin.extensionId);
+    if(plugin.compatibility==='legacy-citation-v1'){
+      if(plugin.extensionId!=='dsh-cite'||Object.hasOwn(plugin,'assessmentAdmissionDigest')||Object.hasOwn(plugin,'receiptDigest'))throw invalid();
+      continue;
+    }
+    const receipt=Object.hasOwn(plugin,'receiptDigest'),assessment=Object.hasOwn(plugin,'assessmentAdmissionDigest');
+    const binding=manifest.bindings.installations.find(item=>item.extensionId===plugin.extensionId);
+    if(receipt===assessment||!DIGEST.test(receipt?plugin.receiptDigest:plugin.assessmentAdmissionDigest)||assessment&&!assessmentAdmission
+      ||!binding||Object.hasOwn(binding,'receiptDigest')!==receipt||Object.hasOwn(binding,'assessmentAdmissionDigest')!==assessment
+      ||(receipt?binding.receiptDigest!==plugin.receiptDigest:binding.assessmentAdmissionDigest!==plugin.assessmentAdmissionDigest)
+      ||binding.artifactDigest!==plugin.artifactDigest||binding.integrity!==plugin.integrity
+      ||binding.coordinate!==canonicalExtensionCoordinate(plugin.coordinate)||binding.configDigest!==plugin.configDigest)throw invalid();
+  }
   const selections=manifest.projection.plugins.map(plugin=>{extensionRequestObject(plugin,['extensionId','coordinate','integrity','artifactDigest','adapterRevision','configRevision','configDigest','enabled','settings','connectionRefs','receiptDigest',...(assessmentAdmission?['assessmentAdmissionDigest']:[]),'executionClass','compatibility','sourceDocumentId'],['extensionId','coordinate','integrity','artifactDigest','configRevision','configDigest','enabled','settings','connectionRefs']);canonicalExtensionCoordinate(plugin.coordinate);const expected=plugin.compatibility==='legacy-citation-v1'?digest({enabled:plugin.enabled,settings:plugin.settings}):digest({enabled:plugin.enabled,settings:plugin.settings,connectionRefs:plugin.connectionRefs});if(plugin.configDigest!==expected)throw invalid();return{extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,connectionRefs:plugin.connectionRefs};}).sort((a,b)=>a.extensionId.localeCompare(b.extensionId));
   const expectedSkills=manifest.projection.personal.pins.map(pin=>({skillId:pin.skillId,revision:pin.revision,digest:pin.digest})).sort((a,b)=>a.skillId.localeCompare(b.skillId));
   if(canonicalJson(selections)!==canonicalJson([...manifest.identity.selections].sort((a,b)=>a.extensionId.localeCompare(b.extensionId)))||canonicalJson(expectedSkills)!==canonicalJson([...manifest.identity.skills].sort((a,b)=>a.skillId.localeCompare(b.skillId))))throw invalid();
@@ -101,7 +128,7 @@ export class ExtensionGenerationService{
         const actor={id:selected.actorId,accountCreatedAt:prepared.payload.accountCreatedAt};await this.extensions.access.account(actor,client);await this.extensions.access.project(actor,project.id,{manage:true,client});
         const settings=this.extensions.settings(entry,selected.settings),connectionRefs=await this.extensions.access.connections(actor,selected.connectionRefs,{client,project,entry});
         const proofIdentity={packageIntegrity:entry.integrity,sourceCommit:entry.coordinate.kind==='github'?entry.coordinate.commit:null,adapterRevision:extensionProofAdapterRevision(artifact.adapterRevision,trusted.adapterRevision,sha),runtimeImageDigest:trusted.baseRuntimeImageDigest,dshVersion:'0.1.7-rc.2',executionClass:entry.executionClass,permissionProfileRevision:trusted.permissionProfileRevision,suiteRevision:artifact.suiteRevision};
-        const qualification=await this.admission({project,actor,entry,artifact,identity:proofIdentity});
+        const qualification=await this.admission({project,actor,entry,artifact,identity:proofIdentity,scope});
         const configDigest=digest({enabled:selected.enabled,settings,connectionRefs});
         bindings.push({extensionId:entry.id,installationId:row.id,actorId:selected.actorId,installationRevision:row.revision,prepareJobId:prepared.id,coordinate:canonicalExtensionCoordinate(selected.coordinate),integrity:selected.integrity,artifactDigest:artifact.artifactDigest,configDigest,...qualification});
         plugins.push({extensionId:entry.id,coordinate:selected.coordinate,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,adapterRevision:proofIdentity.adapterRevision,configRevision:desired.revision,configDigest,enabled:selected.enabled,settings,connectionRefs,...qualification,executionClass:entry.executionClass});
@@ -165,7 +192,7 @@ export class ExtensionGenerationService{
     const preparation=await this.jobs.get(binding.actorId,binding.prepareJobId);if(preparation?.kind!=='extension-prepare'||preparation.status!=='succeeded'||preparation.payload.installationId!==binding.installationId||preparation.payload.installationRevision!==binding.installationRevision||preparation.result?.artifactDigest!==selected.artifactDigest||preparation.result.installationId!==binding.installationId||preparation.result.installationRevision!==binding.installationRevision||preparation.result.integrity!==selected.integrity)throw invalid();
     const actor={id:binding.actorId,accountCreatedAt:preparation.payload.accountCreatedAt};await this.extensions.access.account(actor,client);await this.extensions.access.project(actor,project.id,{manage:true,client});await this.extensions.access.connections(actor,selected.connectionRefs,{client,project,entry});
     const proofIdentity={packageIntegrity:selected.integrity,sourceCommit:selected.coordinate.kind==='github'?selected.coordinate.commit:null,adapterRevision:extensionProofAdapterRevision(artifact.adapterRevision,manifest.identity.adapterRevision,sha),runtimeImageDigest:manifest.identity.baseRuntimeImageDigest,dshVersion:'0.1.7-rc.2',executionClass:entry.executionClass,permissionProfileRevision:manifest.identity.permissionProfileRevision,suiteRevision:artifact.suiteRevision};
-    const qualified=await this.admission({project,actor,entry,artifact,identity:proofIdentity});
+    const qualified=await this.admission({project,actor,entry,artifact,identity:proofIdentity,scope:manifest.scope});
     if(this.assessmentAdmission?qualified.assessmentAdmissionDigest!==selected.assessmentAdmissionDigest:qualified.receiptDigest!==selected.receiptDigest)throw new HttpError(400,'extension_proof_stale','The operation proof changed.');
     return extractExtensionGenerationOperationIdentity(manifest,{userId:user.id,ownerId:project.userId,projectId:project.id,accountCreatedAt,projectCreatedAt:owner.projectCreatedAt,runtimeGeneration:actualRuntimeGeneration},descriptorId);
   }));}
