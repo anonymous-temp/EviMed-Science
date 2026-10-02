@@ -152,7 +152,8 @@
       "brace-expansion@5": "5.0.12",
       "exceljs>uuid": "11.1.1",
       "pptx-preview>echarts": "6.1.0",
-      "pptx-preview>uuid": "11.1.1"
+      "pptx-preview>uuid": "11.1.1",
+      "js-yaml": "4.3.2"
     }
   },
   "devDependencies": {
