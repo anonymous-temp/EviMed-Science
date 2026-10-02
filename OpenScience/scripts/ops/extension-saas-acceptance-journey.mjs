@@ -11,7 +11,7 @@ import { createNativeValidationFixture } from '../../apps/server/test/helpers/na
 import { createControllerExtensionComposition } from '../../apps/server/src/extensionControllerComposition.mjs';
 import { ExtensionPreparationWorker } from '../../apps/server/src/extensionPreparationWorker.mjs';
 import { readAcceptanceInputs } from './extension-saas-acceptance-inputs.mjs';
-import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOOTSTRAP } from './extension-saas-acceptance-manifest.mjs';
+import { createAssessmentDescriptor, prepareAssessmentDeployment, ASSESSMENT_BOOTSTRAP, ASSESSMENT_SHORT_PARENT } from './extension-saas-acceptance-manifest.mjs';
 import { assessmentDockerEnvironment, bindAssessmentDockerLauncher } from './extension-saas-acceptance-docker.mjs';
 import http from 'node:http';
 import { execFile } from 'node:child_process';
@@ -179,7 +179,7 @@ export async function resolveCampaignProject(app,actor){
   return app.store.requireProject(user,actor.projectId);
 }
 export async function createShortCampaignRoot(){
-  const parent='/private/tmp/evimed-extension-acceptance';await fs.mkdir(parent,{mode:0o700,recursive:true});
+  const parent=ASSESSMENT_SHORT_PARENT;if(!parent)throw new Error('campaign_transport_platform_unsupported');await fs.mkdir(parent,{mode:0o700,recursive:true});
   const stat=await fs.lstat(parent);if(await fs.realpath(parent)!==parent||!stat.isDirectory()||stat.isSymbolicLink()||stat.uid!==process.getuid()||(stat.mode&0o7777)!==0o700)throw new Error('campaign_transport_parent_not_canonical');
   const rootId=randomUUID().replaceAll('-',''),root=path.join(parent,rootId.slice(0,10));await fs.mkdir(root,{mode:0o700});
   await saveProtected(path.join(root,'root-ownership.json'),{schemaVersion:1,kind:'extension-saas-assessment',rootId,operatorUid:process.getuid()});
@@ -269,12 +269,15 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     await privateFixture.close();privateFixture=null;
     await saveProtected(path.join(root,'campaign-state.json'),state);success=true;
     result={status:state.status,qualified:false,statePath:path.join(root,'campaign-state.json'),physicalSetup:state.physicalSetup};
-  }catch(error){failure=error;error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
+  }catch(error){failure=error;error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
   }finally{
-    let cleanupFailed=false;
-    for(const release of [()=>privateFixture?.close(),()=>composition?.close(),()=>app?.close(),()=>relay?.close(),()=>transport.close()])try{await release();}catch{cleanupFailed=true;}
-    if(!success&&!cleanupFailed){try{if(volumeName)await removeCampaignVolume(root,volumeName);if(network)await removeOwnedCampaignNetwork(network);await isolated.drop();}catch{cleanupFailed=true;}if(!failure&&!cleanupFailed)await fs.rm(root,{recursive:true,force:true});}
-    if(cleanupFailed)failure=Object.assign(new Error('private_campaign_setup_cleanup_unconfirmed'),{code:'private_campaign_setup_cleanup_unconfirmed',reportPath:failure?.reportPath??null});
+    let cleanupFailed=false;const cleanupFailures=[];
+    for(const [resource,release] of [['private-app-controller',()=>privateFixture?.close()],['bootstrap-controller',()=>composition?.close()],['bootstrap-app',()=>app?.close()],['owned-relay',()=>relay?.close()],['controlled-upstream',()=>transport.close()]])try{await release();}catch(error){cleanupFailed=true;cleanupFailures.push({resource,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}
+    if(!success&&!cleanupFailed){try{if(volumeName)await removeCampaignVolume(root,volumeName);if(network)await removeOwnedCampaignNetwork(network);await isolated.drop();}catch(error){cleanupFailed=true;cleanupFailures.push({resource:'owned-volume-network-database-drop',code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}if(!failure&&!cleanupFailed)await fs.rm(root,{recursive:true,force:true});}
+    try{await isolated.close();}catch(error){cleanupFailed=true;cleanupFailures.push({resource:'preserved-database-admin-connection',code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}
+    if(cleanupFailed){const originalCode=failure?safeCampaignDiagnosticCode(failure):null,reportPath=failure?.reportPath??null;
+      await saveProtected(path.join(root,'setup-cleanup-incomplete.json'),{qualified:false,originalCode,cleanupFailures,databaseNamespace:isolated.name,databasePreserved:true});
+      failure=Object.assign(new Error('private_campaign_setup_cleanup_unconfirmed'),{code:'private_campaign_setup_cleanup_unconfirmed',originalCode,reportPath});}
   }
   if(failure)throw failure;return result;
 }
@@ -596,6 +599,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       report = await runOrdinaryAssessmentJourney({ databaseUrl: process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, coworkImage: process.env.COWORK_TEST_IMAGE, validatorImage: process.env.NATIVE_SKILL_VALIDATOR_IMAGE, closureExpectedSHA: process.env.COWORK_TEST_CLOSURE_SHA256, integrity: process.env.COWORK_TEST_INTEGRITY, acceptanceInputsPath: process.env.EVIMED_EXTENSION_ACCEPTANCE_INPUTS ?? null, signal: abort.signal });
     }
     process.stdout.write(JSON.stringify(report) + '\n');
-  } catch (error) { process.stderr.write(JSON.stringify({ status: 'failed', qualified: false, code: safeCampaignDiagnosticCode(error), phase: error?.campaignStage ?? error?.assessmentStage ?? 'input', reportPath:error.reportPath??null, expected: ['string', 'number', 'boolean'].includes(typeof error?.expected) ? error.expected : undefined, actual: ['string', 'number', 'boolean'].includes(typeof error?.actual) ? error.actual : undefined, detail: error?.assessmentStage === 'controller-composition' ? error.message : undefined, preparationDiagnostic: error?.preparationDiagnostic ?? null }) + '\n'); process.exitCode = 1; }
+  } catch (error) { process.stderr.write(JSON.stringify({ status: 'failed', qualified: false, code: safeCampaignDiagnosticCode(error), originalCode:error.originalCode??error.originalFailure?.code??null, phase: error?.campaignStage ?? error?.assessmentStage ?? 'input', reportPath:error.reportPath??null, expected: ['string', 'number', 'boolean'].includes(typeof error?.expected) ? error.expected : undefined, actual: ['string', 'number', 'boolean'].includes(typeof error?.actual) ? error.actual : undefined, detail: error?.assessmentStage === 'controller-composition' ? error.message : undefined, preparationDiagnostic: error?.preparationDiagnostic ?? null }) + '\n'); process.exitCode = 1; }
   finally { process.removeListener('SIGTERM', interrupted); process.removeListener('SIGINT', interrupted); }
 }

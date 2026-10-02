@@ -25,7 +25,7 @@ function constructorFailureDetails(error){
  const trustedRoot=fileURLToPath(new URL('../../../',import.meta.url)),frames=[];
  for(const match of String(error?.stack??'').matchAll(/(?:file:\/\/)?(\/[A-Za-z0-9_./%-]+\.(?:mjs|js|cjs)):(\d+):(\d+)/g)){const file=decodeURIComponent(match[1]);if(file.startsWith(trustedRoot)&&!file.includes('/.evimed-local/'))frames.push({file:path.relative(trustedRoot,file),line:Number(match[2]),column:Number(match[3])});if(frames.length===12)break;}
  const code=typeof error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(error.code)?error.code:
-  ['private_controller_ipc_refused','private_controller_setup_refused','private_controller_parent_disconnected','assessment_controller_unavailable','ordinary_controller_unavailable'].includes(error?.message)?error.message:'private_controller_constructor_failed';
+  ['private_controller_ipc_refused','private_controller_setup_refused','private_controller_parent_disconnected','assessment_controller_unavailable','ordinary_controller_unavailable','campaign_relay_physical_boundary_unconfirmed','campaign_relay_cleanup_identity_unconfirmed','campaign_relay_physical_join_unconfirmed'].includes(error?.message)?error.message:'private_controller_constructor_failed';
  return{code,frames};
 }
 const daemon=async args=>(await execute('docker',args,{env:assessmentDockerEnvironment(),timeout:10000,maxBuffer:256*1024})).stdout.trim();
@@ -48,21 +48,36 @@ export function campaignRelaySource(target){
  const url=new URL(target);if(url.protocol!=='http:'||!['host.lima.internal','host.docker.internal','127.0.0.1'].includes(url.hostname)||!url.port||url.pathname!=='/'||url.username||url.password||url.search||url.hash)throw new Error('campaign_relay_destination_refused');
  return `const http=require('node:http');const target=${JSON.stringify(url.origin)};const allowed=new Set(['/internal/model/v1/messages','/internal/extensions/v1/execute','/internal/extensions/v1/status','/internal/extensions/v1/cancel']);let active=0;const server=http.createServer((req,res)=>{if(req.method!=='POST'||!allowed.has(req.url)||active>=16){res.writeHead(403);res.end();return;}active++;let released=false;const done=()=>{if(!released){released=true;active--;}};const headers={};for(const[key,value]of Object.entries(req.headers)){if(['host','connection','keep-alive','transfer-encoding','proxy-authorization','proxy-authenticate','forwarded','upgrade'].includes(key)||key.startsWith('x-forwarded-'))continue;headers[key]=value;}let sent=0,received=0;const upstream=http.request(new URL(req.url,target),{method:'POST',headers},reply=>{const output={};for(const[key,value]of Object.entries(reply.headers)){if(['connection','keep-alive','transfer-encoding','upgrade','server','x-powered-by'].includes(key))continue;output[key]=value;}res.writeHead(reply.statusCode,output);reply.on('data',chunk=>{received+=chunk.length;if(received>12*1024*1024){reply.destroy();res.destroy();return;}res.write(chunk);});reply.on('end',()=>res.end());reply.on('error',()=>res.destroy());});const timer=setTimeout(()=>{upstream.destroy();res.destroy();},120000);const finish=()=>{clearTimeout(timer);done();};res.on('close',()=>{if(!res.writableEnded)upstream.destroy();finish();});req.on('aborted',()=>upstream.destroy());upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end();});req.on('data',chunk=>{sent+=chunk.length;if(sent>8*1024*1024){upstream.destroy();res.destroy();return;}upstream.write(chunk);});req.on('end',()=>upstream.end());});server.maxConnections=16;server.requestTimeout=120000;server.headersTimeout=10000;server.listen(8787,'0.0.0.0');`;
 }
+/** Removal authority is exact captured creation identity; a failed admission must not strand that owned object. */
+export function assertOwnedRelayIdentity(actual,{id,name,imageId,rootDigest}){
+ if(actual?.Id!==id||actual.Name!=='/'+name||actual.Image!==imageId||actual.Config?.Labels?.['io.evimed.campaign-root']!==rootDigest||actual.Config.Labels['io.evimed.campaign-component']!=='relay')throw new Error('campaign_relay_cleanup_identity_unconfirmed');
+}
+export function assertRelayPhysicalAdmission(actual,expected){
+ assertOwnedRelayIdentity(actual,expected);
+ const tmpfs=actual.HostConfig?.Tmpfs??{};
+ if(actual.Config.User!=='10001:10001'||actual.HostConfig.ReadonlyRootfs!==true||actual.HostConfig.Privileged!==false
+  ||!actual.HostConfig.CapDrop?.includes('ALL')||!actual.HostConfig.SecurityOpt?.some(value=>value==='no-new-privileges'||value==='no-new-privileges:true')
+  ||actual.Mounts.some(mount=>mount.Type!=='tmpfs'||!['/runtime','/workspace'].includes(mount.Destination)||mount.Source||mount.RW!==false)
+  ||Object.keys(tmpfs).sort().join(',')!=='/runtime,/workspace'||Object.values(tmpfs).some(options=>!['ro','noexec','nosuid','nodev','size=1m','mode=0555'].every(option=>options.split(',').includes(option)))
+  ||actual.NetworkSettings.Networks[expected.networkName]?.NetworkID!==expected.networkId||!actual.NetworkSettings.Networks.bridge||Object.keys(actual.NetworkSettings.Networks).length!==2)throw new Error('campaign_relay_physical_boundary_unconfirmed');
+}
 export async function startOwnedCampaignRelay({root,imageId,network,fixtureUrl,gatewayHost}){
  const actual=new URL(fixtureUrl);if(actual.protocol!=='http:'||actual.hostname!=='127.0.0.1'||actual.pathname!=='/'||!actual.port)throw new Error('campaign_actual_fixture_url_required');
  actual.hostname=gatewayHost;const source=campaignRelaySource(actual.href),name='evimed-saas-relay-'+randomUUID(),rootDigest=digest(root);
  await fs.writeFile(path.join(root,name+'-intent.json'),canonicalJson({name,imageId,networkId:network.id,rootDigest,sourceDigest:digest(source),upstreamPinnedUrl:actual.origin})+'\n',{mode:0o400,flag:'wx'});
  const id=await daemon(['create','--pull','never','--name',name,'--label','io.evimed.campaign-root='+rootDigest,'--label','io.evimed.campaign-component=relay',
   '--network',network.name,'--network-alias','assessment-gateway','--read-only','--user','10001:10001','--cap-drop','ALL','--security-opt','no-new-privileges',
+  '--tmpfs','/runtime:ro,noexec,nosuid,nodev,size=1m,mode=0555','--tmpfs','/workspace:ro,noexec,nosuid,nodev,size=1m,mode=0555',
   '--memory','128m','--pids-limit','32','--entrypoint','node',imageId,'-e',source]);
  if(!/^[a-f0-9]{64}$/.test(id))throw new Error('campaign_relay_id_unconfirmed');
- const close=async()=>{const observed=JSON.parse(await daemon(['inspect',id]))[0];if(observed.Id!==id||observed.Name!=='/'+name||observed.Image!==imageId
-   ||observed.Config.Labels?.['io.evimed.campaign-root']!==rootDigest||observed.Config.Labels?.['io.evimed.campaign-component']!=='relay'||observed.Mounts.length)throw new Error('campaign_relay_cleanup_identity_unconfirmed');await daemon(['rm','-f',id]);};
+ const expected={id,name,imageId,rootDigest,networkName:network.name,networkId:network.id};
+ const close=async()=>{const observed=JSON.parse(await daemon(['inspect',id]))[0];assertOwnedRelayIdentity(observed,expected);
+   const rechecked=JSON.parse(await daemon(['inspect',id]))[0];assertOwnedRelayIdentity(rechecked,expected);await daemon(['rm','-f','-v',id]);
+   try{await daemon(['inspect',id]);throw new Error('campaign_relay_physical_join_unconfirmed');}catch(error){if(!/no such (?:object|container)/i.test(error.stderr??''))throw error;}};
  try{await daemon(['network','connect','bridge',id]);await daemon(['start',id]);
-  const observed=JSON.parse(await daemon(['inspect',id]))[0];if(observed.Id!==id||observed.Image!==imageId||observed.Config.User!=='10001:10001'||observed.Mounts.length||observed.HostConfig.ReadonlyRootfs!==true
-   ||!observed.HostConfig.CapDrop.includes('ALL')||!observed.HostConfig.SecurityOpt.some(value=>value==='no-new-privileges'||value==='no-new-privileges:true')||!observed.NetworkSettings.Networks[network.name]||!observed.NetworkSettings.Networks.bridge||Object.keys(observed.NetworkSettings.Networks).length!==2)throw new Error('campaign_relay_physical_boundary_unconfirmed');
+  const observed=JSON.parse(await daemon(['inspect',id]))[0];assertRelayPhysicalAdmission(observed,expected);
   return{close,containerId:id,sourceDigest:digest(source),upstreamPinnedUrl:actual.origin,scope:'Trusted fixed-path dual-network transport; no mounts/provider credentials/host-control socket; end-to-end workload authorization remains in real control plane'};
- }catch(error){try{await close();}catch{throw new Error('campaign_relay_cleanup_unconfirmed');}throw error;}
+ }catch(error){try{await close();}catch(cleanupError){throw Object.assign(new Error('campaign_relay_cleanup_unconfirmed'),{originalFailure:constructorFailureDetails(error),cleanupFailure:constructorFailureDetails(cleanupError)});}throw error;}
 }
 /** Each reader independently reads protected deployment, actual image ID, database namespace and current epochs. */
 export function createAssessmentCurrentFacts({ getConfig, getDatabase, catalogueId = 'cowork-portable' }) {

@@ -5,7 +5,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { extensionRequestObject } from '../../apps/server/src/extensionAccess.mjs';
 import { EXTENSION_ASSESSMENT_DOMAIN } from '../../apps/server/src/extensionAssessmentAuthority.mjs';
-import { assertAssessmentFixtureRoot } from './extension-saas-acceptance-manifest.mjs';
+import { assertAssessmentFixtureRoot, ASSESSMENT_SHORT_PARENT } from './extension-saas-acceptance-manifest.mjs';
 export const ASSESSMENT_FACT_FIELDS = Object.freeze(['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerMembershipEpoch','projectId','projectCreatedAt']);
 const digestFields = ['packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest'];
 const digest = value => 'sha256:' + createHash('sha256').update(canonicalJson(value)).digest('hex');
@@ -25,7 +25,7 @@ export function validateMeasurementAdmission(value, now = Date.now()) {
 }
 /** Caller provisions a new private owned fixture root; writer creates only its fixed admission subtree, once. */
 export async function writeMeasurementAdmission({ root, admissions, now = Date.now() }) {
-  const short=typeof root==='string'&&path.dirname(root)==='/private/tmp/evimed-extension-acceptance'&&/^[a-f0-9]{10}$/.test(path.basename(root));
+  const short=typeof root==='string'&&path.dirname(root)===ASSESSMENT_SHORT_PARENT&&/^[a-f0-9]{10}$/.test(path.basename(root));
   if(short)await assertAssessmentFixtureRoot(root);
   if (typeof root !== 'string' || !path.isAbsolute(root) || !short&&!/^evimed-saas-(?:assessment|root|boundaries)-[A-Za-z0-9-]+$/.test(path.basename(root)) && !/^extension-saas-[a-f0-9-]{36}$/.test(path.basename(root))) throw new Error('unowned_assessment_root');
   const info = await fs.lstat(root);

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { createShortCampaignRoot } from '../extension-saas-acceptance-journey.mjs';
-import { assertAssessmentFixtureRoot, assertShortFixtureParentSnapshots } from '../extension-saas-acceptance-manifest.mjs';
+import { assertAssessmentFixtureRoot, assertShortFixtureParentSnapshots, ASSESSMENT_SHORT_PARENT } from '../extension-saas-acceptance-manifest.mjs';
 test('full runtime default empty USER is only image metadata; launch UID pin and separate physical proof remain mandatory',()=>{
  const image={Id:'sha256:'+'a'.repeat(64),Os:'linux',Architecture:'amd64',Config:{User:''}},expected={imageId:image.Id,platform:'linux/amd64',launchUser:'10001:10001'};
  const observed=validateFullRuntimeImagePreflight(image,expected);assert.equal(observed.defaultImageUser,'');assert.equal(observed.physicalContainerUidProof,'required-before-measurement');
@@ -36,7 +36,7 @@ test('trusted project resolution hydrates store actor and never derives private 
 test('short Unix transport root is exact canonical operator-owned700 with protected400 identity marker',async()=>{
  const root=await createShortCampaignRoot();
  try{
-  assert.match(root,/^\/private\/tmp\/evimed-extension-acceptance\/[a-f0-9]{10}$/);assert.equal(await assertAssessmentFixtureRoot(root),root);
+  assert.equal(path.dirname(root),ASSESSMENT_SHORT_PARENT);assert.match(path.basename(root),/^[a-f0-9]{10}$/);assert.equal(await assertAssessmentFixtureRoot(root),root);
   assert(Buffer.byteLength(path.join(root,'.runtime-sockets','a'.repeat(24),'dsh.sock'))+1<=104);
   const marker=path.join(root,'root-ownership.json');assert.equal((await fs.stat(marker)).mode&0o7777,0o400);
   await fs.chmod(marker,0o600);await assert.rejects(assertAssessmentFixtureRoot(root),/unsafe_assessment_root/);
@@ -45,9 +45,9 @@ test('short Unix transport root is exact canonical operator-owned700 with protec
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 test('shortroot common reader rejects writable/replaced/wrong-owner parent snapshots without mutating the shared live preparation parent',()=>{
- const snapshot={realPath:'/private/tmp/evimed-extension-acceptance',directory:true,symlink:false,uid:process.getuid(),mode:0o700,dev:1,ino:2};
+ const snapshot={realPath:ASSESSMENT_SHORT_PARENT,directory:true,symlink:false,uid:process.getuid(),mode:0o700,dev:1,ino:2};
  assert.doesNotThrow(()=>assertShortFixtureParentSnapshots(snapshot,{...snapshot}));
- for(const changed of [{...snapshot,mode:0o755},{...snapshot,uid:snapshot.uid+1},{...snapshot,ino:3},{...snapshot,symlink:true},{...snapshot,realPath:'/tmp/evimed-extension-acceptance'}])assert.throws(()=>assertShortFixtureParentSnapshots(snapshot,changed),/unsafe_assessment_parent/);
+ for(const changed of [{...snapshot,mode:0o755},{...snapshot,uid:snapshot.uid+1},{...snapshot,ino:3},{...snapshot,symlink:true},{...snapshot,realPath:'/untrusted/evimed-extension-acceptance'}])assert.throws(()=>assertShortFixtureParentSnapshots(snapshot,changed),/unsafe_assessment_parent/);
 });
 test('private staged CLI accepts only closed setup tuple or protected measurement state reference',()=>{
  const setup={schemaVersion:1,phase:'setup',acceptanceInputsPath:'/private/tmp/owned/acceptance-inputs.json',runtimeImageId:'sha256:'+'a'.repeat(64),databaseUrl:'postgresql://fixture@127.0.0.1/evimed_test',gatewayHost:'host.lima.internal',mountMode:'volume-subpath',deadlineMs:30000};

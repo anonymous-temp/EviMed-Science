@@ -14,7 +14,8 @@ const coordinate = Object.freeze({ kind: 'github', repository: 'Jesse-njx/dsh-co
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const root = path.join(repo, '.evimed-local/extensions/build/fixtures');
 export const ASSESSMENT_BOOTSTRAP = 'isolated-fixture-metadata-only; no fabricated qualification receipt';
-const shortParent='/private/tmp/evimed-extension-acceptance';
+export const ASSESSMENT_SHORT_PARENT=process.platform==='darwin'?'/private/tmp/evimed-extension-acceptance':process.platform==='linux'?'/tmp/evimed-extension-acceptance':null;
+const shortParent=ASSESSMENT_SHORT_PARENT;
 /** Pure comparison of observations; the fixture reader below obtains both snapshots itself and never accepts caller permission flags. */
 export function assertShortFixtureParentSnapshots(before,after){
   for(const snapshot of [before,after])if(snapshot.realPath!==shortParent||snapshot.directory!==true||snapshot.symlink!==false||snapshot.uid!==process.getuid()||snapshot.mode!==0o700)throw new Error('unsafe_assessment_parent');

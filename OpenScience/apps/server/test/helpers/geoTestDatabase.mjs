@@ -11,7 +11,7 @@ import pg from "pg";
  * drop it. Refuses anything but a local `evimed_test` database.
  * @param {string} databaseUrl the configured OPEN_SCIENCE_TEST_POSTGRES_URL
  * @param {string} label a short lowercase tag naming the suite
- * @returns {Promise<{ url: string, name: string, drop: () => Promise<void> }>}
+ * @returns {Promise<{ url: string, name: string, close: () => Promise<void>, drop: () => Promise<void> }>}
  */
 export async function createGeoTestDatabase(databaseUrl, label) {
   const source = new URL(databaseUrl);
@@ -21,7 +21,7 @@ export async function createGeoTestDatabase(databaseUrl, label) {
   const name = `${decodeURIComponent(source.pathname.slice(1))}_${label}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
   assert.match(name, /^evimed_test[a-z0-9_]*$/);
   assert.ok(name.length <= 63, "PostgreSQL names are at most 63 bytes");
-  const admin = new pg.Client({ connectionString: databaseUrl });
+  const admin = new pg.Client({ connectionString: databaseUrl, application_name:`evimed-isolated-${name}` });
   try {
     await admin.connect();
     await admin.query(`CREATE DATABASE "${name}"`);
@@ -31,14 +31,23 @@ export async function createGeoTestDatabase(databaseUrl, label) {
     throw error;
   }
   source.pathname = `/${name}`;
+  let closed=false,closing=null;
+  const close=async()=>{
+    if(closed)return;if(closing)return closing;
+    closing=admin.end().then(()=>{closed=true;}).finally(()=>{closing=null;});return closing;
+  };
   return {
     url: source.href,
     name,
+    close,
     async drop() {
+      // A staged fixture may close its retained admin handle while preserving the DB for a later explicit stage.
+      const cleanup=closed?new pg.Client({connectionString:databaseUrl}):admin;
       try {
-        await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+        if(closed)await cleanup.connect();
+        await cleanup.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
       } finally {
-        await admin.end();
+        if(closed)await cleanup.end();else await close();
       }
     },
   };
