@@ -60,7 +60,7 @@ export class ExtensionConnections {
     const wanted = requirements(entry);
     if (!project || !wanted.length) return false;
     // This resolves membership again, including completion/refresh after a grant is revoked.
-    const currentProject = await this.access.project(user, project.id, { manage: true, client });
+    const currentProject = await this.access.project(user, project.id, { manage: !operation, ability: operation === 'doc_write' ? 'write' : operation ? 'read' : 'manage_study', client });
     if (project.userId !== currentProject.userId) return false;
     for (const requirement of wanted) {
       if (operation && !requirement.operations.includes(operation)) continue;

@@ -27,7 +27,7 @@ export class ExtensionResourceResolver {
   }
   /** @param {any} scope @param {any} record */
   owned(scope, record) {
-    if (!record || record.ownerId !== scope.userId || record.projectId !== scope.projectId || !Number.isSafeInteger(record.revision) || record.revision < 1) throw denied();
+    if (!record || record.ownerId !== (scope.ownerId ?? scope.userId) || record.projectId !== scope.projectId || !Number.isSafeInteger(record.revision) || record.revision < 1) throw denied();
   }
   /** @param {string} root @param {any} record */
   target(root, record) {

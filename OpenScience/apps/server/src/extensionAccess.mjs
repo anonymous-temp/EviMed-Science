@@ -1,4 +1,5 @@
 import { HttpError } from './security.mjs';
+import { roleAllows } from '@evimed/domain';
 import { productId } from './productPersistence.mjs';
 
 /** Closed request metadata: no credentials, commands or caller-selected authority. @param {any} value @param {string[]} keys @param {string[]} [required] */
@@ -26,8 +27,8 @@ export function extensionArray(values,max=128) {
 
 /** The injected judges are trusted server adapters, never request fields or cached package declarations. */
 export class ExtensionAccess {
-  /** @param {{store?:any,projectAccess?:any,connectionAccess?:any}} options */
-  constructor({store=null,projectAccess=null,connectionAccess=null}={}) { this.store=store;this.projectAccess=projectAccess;this.connectionAccess=connectionAccess; }
+  /** @param {{store?:any,projectAccess?:any,connectionAccess?:any,studyAccess?:any}} options */
+  constructor({store=null,projectAccess=null,connectionAccess=null,studyAccess=null}={}) { this.store=store;this.projectAccess=projectAccess;this.connectionAccess=connectionAccess;this.studyAccess=studyAccess; }
   /** Hold the current account generation during an atomic write. @param {any} user @param {any} client */
   async account(user,client) {
     if(!user?.id)throw new HttpError(401,'unauthorized','Authentication is required.');
@@ -36,11 +37,23 @@ export class ExtensionAccess {
     if(!result.rows[0])throw new HttpError(401,'unauthorized','This account is unavailable.');
     return result.rows[0].createdAt;
   }
-  /** Resolve membership afresh. Shared judges must retain their permission row lock on the supplied transaction. @param {any} user @param {string} projectId @param {{manage?:boolean,client?:any}} options */
-  async project(user,projectId,{manage=false,client=null}={}) {
+  /** Resolve membership afresh. Shared judges must retain their permission row lock on the supplied transaction. @param {any} user @param {string} projectId @param {{manage?:boolean,ability?:string,client?:any}} options */
+  async project(user,projectId,{manage=false,ability=manage?'manage_study':'read',client=null}={}) {
     const id=extensionIdentifier(projectId);let resolved;
     try {
-      if(this.projectAccess)resolved=await this.projectAccess(user,id,{manage,client});
+      let study = this.studyAccess ? await this.studyAccess(user,id,{client}) : null;
+      if(study && study.ownerId !== user.id && this.store) {
+        const resolveOwn=async()=>{const actor=await this.store.userById(user.id);try{return actor?await this.store.requireProject(actor,id):null;}catch(error){if(error?.status===404)return null;throw error;}};
+        const own=client&&this.store.database?.withTransactionClient?await this.store.database.withTransactionClient(client,resolveOwn):await resolveOwn();
+        if(own?.userId===user.id)study=null;
+      }
+      if(study) {
+        if(!study.roles.some(role=>roleAllows(role,ability)))throw new HttpError(403,'extension_access_denied','This study operation is not authorized.');
+        const resolve=async()=>{const owner=await this.store.userById(study.ownerId);return owner?this.store.requireProject(owner,id):null;};
+        const project=client&&this.store.database?.withTransactionClient?await this.store.database.withTransactionClient(client,resolve):await resolve();
+        resolved={project:project?{...project,extensionMembershipEpoch:study.epoch??null}:null,role:ability==='manage_study'?'editor':'viewer'};
+      }
+      else if(this.projectAccess)resolved=await this.projectAccess(user,id,{manage,client});
       else if(this.store) {
         // Store.requireProject also opens a transaction. Borrow the caller's
         // checked client so scope checks remain atomic and work with pool one.
@@ -65,11 +78,11 @@ export class ExtensionAccess {
     }
     return resolved.project;
   }
-  /** These references resolve only in the invoking actor's connection boundary. @param {any} user @param {any} values @param {{client?:any,project?:any,entry?:any}} options */
-  async connections(user,values,{client=null,project=null,entry=null}={}) {
+  /** These references resolve only in the invoking actor's connection boundary. @param {any} user @param {any} values @param {{client?:any,project?:any,entry?:any,operation?:string}} options */
+  async connections(user,values,{client=null,project=null,entry=null,operation=undefined}={}) {
     const refs=extensionArray(values,64).map(extensionIdentifier);
     if(new Set(refs).size!==refs.length)throw new HttpError(400,'extension_contract_invalid','Duplicate connection references.');
-    for(const ref of refs)if(!this.connectionAccess || !await this.connectionAccess(user,ref,{client,project,entry}))throw new HttpError(403,'extension_access_denied','This connection is not authorized for this operation.');
+    for(const ref of refs)if(!this.connectionAccess || !await this.connectionAccess(user,ref,{client,project,entry,operation}))throw new HttpError(403,'extension_access_denied','This connection is not authorized for this operation.');
     return refs;
   }
 }

@@ -257,7 +257,7 @@ export class VcrDataStore extends VcrStoreBase {
    */
   async studyForAccess(studyId, client = null) {
     const sql = `SELECT id, user_id, project_id, deleted_at, intended_use, data_tier, outcome_seal
-      FROM ${this.schema}.studies WHERE id = $1`;
+      FROM ${this.schema}.studies WHERE id = $1${client ? " FOR SHARE" : ""}`;
     const rows = client ? (await client.query(sql, [studyId])).rows : await this.rows(sql, [studyId]);
     const row = rows[0];
     if (!row || row.deleted_at) return null;
@@ -281,9 +281,16 @@ export class VcrDataStore extends VcrStoreBase {
 
   /** Every role this account holds in this study, sorted. @param {string} studyId @param {string} userId @param {any} [client] */
   async rolesOf(studyId, userId, client = null) {
-    const sql = `SELECT role FROM ${this.schema}.members WHERE study_id = $1 AND user_id = $2 ORDER BY role`;
+    const sql = `SELECT role FROM ${this.schema}.members WHERE study_id = $1 AND user_id = $2 ORDER BY role${client ? " FOR SHARE" : ""}`;
     const rows = client ? (await client.query(sql, [studyId, userId])).rows : await this.rows(sql, [studyId, userId]);
     return rows.map((/** @type {any} */ row) => String(row.role));
+  }
+
+  /** Current member incarnation, locked with the roles used by extension authority. @param {string} studyId @param {string} userId @param {any} [client] */
+  async membershipAuthority(studyId, userId, client = null) {
+    const sql = `SELECT role,created_at::text AS "createdAt" FROM ${this.schema}.members WHERE study_id=$1 AND user_id=$2 ORDER BY role${client ? " FOR SHARE" : ""}`;
+    const rows = client ? (await client.query(sql,[studyId,userId])).rows : await this.rows(sql,[studyId,userId]);
+    return { roles: rows.map(row=>String(row.role)), epoch: JSON.stringify({studyId,members:rows}) };
   }
 
   /**
@@ -295,6 +302,7 @@ export class VcrDataStore extends VcrStoreBase {
     const userId = required(entry.userId, "userId");
     const role = oneOf(VCR_MEMBER_ROLES, entry.role, "A member role");
     return this.transaction(async (client) => {
+      await client.query(`SELECT id FROM ${this.schema}.studies WHERE id=$1 FOR UPDATE`, [studyId]);
       const result = await client.query(
         `INSERT INTO ${this.schema}.members (study_id, user_id, role, invited_by, detail)
          VALUES ($1, $2, $3, $4, $5::jsonb)
@@ -315,6 +323,8 @@ export class VcrDataStore extends VcrStoreBase {
     const userId = required(entry.userId, "userId");
     const role = oneOf(VCR_MEMBER_ROLES, entry.role, "A member role");
     return this.transaction(async (client) => {
+      // Lock study before member, matching extension authorization's lock order.
+      await client.query(`SELECT id FROM ${this.schema}.studies WHERE id=$1 FOR UPDATE`, [studyId]);
       const result = await client.query(
         `DELETE FROM ${this.schema}.members WHERE study_id = $1 AND user_id = $2 AND role = $3`, [studyId, userId, role]);
       const removed = (result.rowCount ?? 0) > 0;

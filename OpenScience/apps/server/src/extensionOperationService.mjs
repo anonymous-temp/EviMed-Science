@@ -81,7 +81,7 @@ export class ExtensionOperationService {
       binding = local?.resourceBinding,
       targetBinding = local?.targetBinding;
     if (!auth) {
-      const rows = await this.database.query("SELECT payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute' AND payload->'scope'=$2::jsonb AND status IN ('queued','running') ORDER BY created_at LIMIT 2", [scope.userId, canonicalJson(scope)]);
+      const rows = await this.database.query("SELECT payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute' AND payload->'scope'=$2::jsonb AND status IN ('queued','running') ORDER BY created_at LIMIT 2", [scope.ownerId, canonicalJson(scope)]);
       const payload = rows.rows.find(row => canonicalJson(row.payload.request) === canonicalJson(request))?.payload;
       auth = payload?.auth;
       binding = payload?.resourceBinding;
@@ -120,8 +120,16 @@ export class ExtensionOperationService {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-extension-operations'))");
     if (!settling && !(await maintenanceAllowsClaims(client))) throw pending();
     const account = await client.query('SELECT id FROM evimed_control.users WHERE id=$1 AND created_at::text=$2 FOR SHARE', [scope.userId, scope.accountCreatedAt]);
-    const project = await client.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 AND created_at::text=$3 FOR SHARE', [scope.userId, scope.projectId, scope.projectCreatedAt]);
-    if (account.rowCount !== 1 || project.rowCount !== 1) throw denied();
+    if (account.rowCount !== 1) throw denied();
+    if (this.generations.extensions?.access) { const current = await this.generations.extensions.access.project(
+      { id: scope.userId, accountCreatedAt: scope.accountCreatedAt }, scope.projectId,
+      { ability: this.admission.getStore()?.request?.operation === 'doc_write' ? 'write' : 'read', client });
+      if(current.userId!==scope.ownerId||(current.extensionMembershipEpoch??null)!==scope.membershipEpoch)throw denied();
+    }
+    const owner=await client.query('SELECT id FROM evimed_control.users WHERE id=$1 AND created_at::text=$2 FOR SHARE',[scope.ownerId,scope.ownerAccountCreatedAt]);
+    if(owner.rowCount!==1)throw denied();
+    const project = await client.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2 AND created_at::text=$3 FOR SHARE', [scope.ownerId ?? scope.userId, scope.projectId, scope.projectCreatedAt]);
+    if (project.rowCount !== 1) throw denied();
   }
   /** @param {any} auth @param {any} input */
   async submit(auth, input) {
@@ -143,21 +151,21 @@ export class ExtensionOperationService {
         invocation: current.invocation
       })),
       key = 'extension-execute:' + sha(canonicalJson({
-        projectId: auth.projectId,
+        actorId:auth.userId,projectId: auth.projectId,
         key: input.idempotencyKey
       }));
     return this.admission.run({
-      ...current
+      ...current, request
     }, () => this.withAdmission(current.scope, async () => {
       const client = this.admission.getStore().client;
-      const existing = (await client.query("SELECT id,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute' AND (idempotency_key=$2 OR (project_id=$3 AND payload->'scope'->>'runtimeGeneration'=$4 AND payload->'invocation'->>'invocationId'=$5)) FOR UPDATE", [auth.userId, key, auth.projectId, auth.runtimeGeneration, current.invocation.invocationId])).rows[0];
+      const existing = (await client.query("SELECT id,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute' AND payload->'scope'->>'userId'=$6 AND (idempotency_key=$2 OR (project_id=$3 AND payload->'scope'->>'runtimeGeneration'=$4 AND payload->'invocation'->>'invocationId'=$5)) FOR UPDATE", [current.scope.ownerId, key, auth.projectId, auth.runtimeGeneration, current.invocation.invocationId,auth.userId])).rows[0];
       if (existing) {
         if (existing.payload.requestDigest !== digest) throw new HttpError(409, 'product_job_idempotency_conflict', 'The request key already names another operation.');
         return {
           jobId: existing.id
         };
       }
-      const count = (await client.query("SELECT count(*)::int AS total,count(*) FILTER (WHERE user_id=$1)::int AS owned FROM evimed_product.jobs WHERE kind='extension-execute' AND (status IN ('queued','running') OR payload->>'recoveryRequired'='true')", [auth.userId])).rows[0];
+      const count = (await client.query("SELECT count(*)::int AS total,count(*) FILTER (WHERE payload->'scope'->>'userId'=$1)::int AS owned FROM evimed_product.jobs WHERE kind='extension-execute' AND (status IN ('queued','running') OR payload->>'recoveryRequired'='true')", [auth.userId])).rows[0];
       if (count.total >= this.maxPending || count.owned >= this.maxUserPending) throw pending();
       const resource = request.operation === 'doc_read' ? await this.resources.snapshot(current.scope, request.resourceId) : null;
       const used = await directorySize(this.grants.root, {
@@ -173,7 +181,7 @@ export class ExtensionOperationService {
       this.admission.getStore().targetBinding = targetBinding;
       const issued = await this.grants.issue(current.scope, request, resource);
       try {
-        const job = await this.jobs.enqueue(auth.userId, 'extension-execute', {
+        const job = await this.jobs.enqueue(current.scope.ownerId, 'extension-execute', {
           schemaVersion: 1,
           ...current,
           request,
@@ -201,9 +209,11 @@ export class ExtensionOperationService {
   }
   /** @param {any} auth @param {string} jobId */
   async owned(auth, jobId) {
-    const job = await this.jobs.get(auth.userId, extensionIdentifier(jobId));
+    const located=(await this.database.query("SELECT user_id FROM evimed_product.jobs WHERE id=$1 AND kind='extension-execute' AND payload->'scope'->>'userId'=$2",[extensionIdentifier(jobId),auth.userId])).rows[0];
+    const job = located?await this.jobs.get(located.user_id,jobId):null;
     if (!job || job.kind !== 'extension-execute' || job.projectId !== auth.projectId || job.payload.scope.runtimeGeneration !== auth.runtimeGeneration) throw new HttpError(404, 'not_found', 'The operation is unavailable.');
-    await this.resolve(auth, job.payload.scope.descriptorId, job.payload.request);
+    const current=await this.resolve(auth, job.payload.scope.descriptorId, job.payload.request);
+    if(canonicalJson(current.scope)!==canonicalJson(job.payload.scope))throw denied();
     return job;
   }
   /** @param {any} auth @param {string} jobId */
@@ -248,6 +258,7 @@ export class ExtensionOperationService {
   }
   /** @param {any} job */
   async markDispatch(job) {
+    return this.admission.run({ request: job.payload.request }, () => this.withAdmission(job.payload.scope, async () => {
     const current = await this.resolve(job.payload.auth, job.payload.scope.descriptorId, job.payload.request);
     if (canonicalJson(current.scope) !== canonicalJson(job.payload.scope)) throw denied();
     await this.grants.verify(job.payload.operationId, job.payload.request, job.payload.scope);
@@ -256,6 +267,7 @@ export class ExtensionOperationService {
     if (result?.rowCount !== 1) throw denied();
     job.payload.dispatch = identity;
     return identity;
+    }));
   }
   /** @param {any} job @param {any} error */
   async retain(job, error) {
@@ -297,19 +309,21 @@ export class ExtensionOperationService {
   /** Trusted controller callbacks never accept a bare boolean. @param {string} operationId @param {any} request @param {any} expected @param {any} identity */
   async resolveOperation(operationId, request, expected, identity) {
     if (!identity || identity.operationId !== operationId) throw denied();
-    const job = await this.jobs.get(identity.userId, identity.jobId);
+    const job = await this.jobs.get(identity.ownerId, identity.jobId);
     if (!job || job.kind !== 'extension-execute' || job.status !== 'running' || job.leaseToken !== identity.leaseToken || job.attempts !== identity.attempts || Date.parse(job.leaseExpiresAt) <= Date.now() || job.payload.cancelRequested || canonicalJson(job.payload.dispatch) !== canonicalJson(identity) || canonicalJson(job.payload.request) !== canonicalJson(request)) throw denied();
     return (await this.grants.verify(operationId, request, expected)).scope;
   }
   /** @param {string} operationId @param {string} resourceId @param {any} identity */
   async resolveInputSnapshot(operationId, resourceId, identity) {
-    const job = await this.jobs.get(identity?.userId, identity?.jobId);
+    const job = await this.jobs.get(identity?.ownerId, identity?.jobId);
     if (!job) throw denied();
+    return this.admission.run({request:job.payload.request},()=>this.withAdmission(job.payload.scope,async()=>{
     await this.resolveOperation(operationId, job.payload.request, {
       descriptorId: identity.descriptorId,
       artifactDigest: identity.artifactDigest
     }, identity);
     return this.grants.inputSnapshot(operationId, job.payload.request, resourceId, job.payload.scope);
+    }));
   }
   /** @param {any} auth @param {string} jobId */
   async cancel(auth, jobId) {
@@ -366,14 +380,14 @@ export class ExtensionOperationService {
   }
   /** Account deletion may purge only after this returns true. @param {string} userId */
   async joinAccount(userId, projectId = null) {
-    await this.database.query("UPDATE evimed_product.jobs SET payload=jsonb_set(payload,'{cancelRequested}','true') WHERE user_id=$1 AND ($2::text IS NULL OR project_id=$2) AND kind='extension-execute' AND status IN ('queued','running')", [userId, projectId]);
-    const rows = (await this.database.query("SELECT id,payload FROM evimed_product.jobs WHERE user_id=$1 AND ($2::text IS NULL OR project_id=$2) AND kind='extension-execute' AND status IN ('queued','running')", [userId, projectId])).rows;
+    await this.database.query("UPDATE evimed_product.jobs SET payload=jsonb_set(payload,'{cancelRequested}','true') WHERE (user_id=$1 OR payload->'scope'->>'userId'=$1) AND ($2::text IS NULL OR project_id=$2) AND kind='extension-execute' AND status IN ('queued','running')", [userId, projectId]);
+    const rows = (await this.database.query("SELECT user_id,id,payload FROM evimed_product.jobs WHERE (user_id=$1 OR payload->'scope'->>'userId'=$1) AND ($2::text IS NULL OR project_id=$2) AND kind='extension-execute' AND status IN ('queued','running')", [userId, projectId])).rows;
     for (const row of rows) {
       if (row.payload.dispatch) {
         const ack = await this.controller.cancelExecution(row.payload.dispatch);
         if (!this.joined(ack, row.payload.dispatch)) return false;
       }
-      await this.jobs.cancel(userId, row.id);
+      await this.jobs.cancel(row.user_id, row.id);
       await this.grants.remove(row.payload.operationId);
     }
     return true;

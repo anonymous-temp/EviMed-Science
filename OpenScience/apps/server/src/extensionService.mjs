@@ -102,7 +102,7 @@ export class ExtensionService {
       let job=null;
       if(entry.executionClass!=='local-only')job=await this.jobs.enqueue(user.id,'extension-prepare',{installationId:id,installationRevision:1,
         catalogueId:entry.id,coordinate:canonicalExtensionCoordinate(entry.coordinate),integrity:entry.integrity,accountCreatedAt,
-        projectTarget:project?{ownerId:project.userId,projectId:project.id,projectCreatedAt:project.projectCreatedAt}:null},{idempotencyKey:`extension-prepare:${id}:1`,transactionClient:client});
+        projectTarget:project?{ownerId:project.userId,projectId:project.id,projectCreatedAt:project.projectCreatedAt,membershipEpoch:project.extensionMembershipEpoch??null}:null},{idempotencyKey:`extension-prepare:${id}:1`,transactionClient:client});
       const row=await this.documents.put(user.id,'extension-installation',id,{schemaVersion:1,catalogueId:entry.id,coordinate:request.coordinate,integrity:entry.integrity,
         requestFingerprint:fingerprint,phase:entry.executionClass==='local-only'?'unsupported':'preparing',prepareJobId:job?.id??null},{expectedRevision:0,transactionClient:client});
       if(project) {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { canonicalJson } from '@evimed/domain';
+import { canonicalJson, roleAllows } from '@evimed/domain';
 import { ControlPlaneDatabase } from './controlPlaneDatabase.mjs';
 import { ProductJobs } from './productStore.mjs';
 import { ExtensionOperationGrants } from './extensionOperationGrants.mjs';
@@ -40,21 +40,30 @@ export function createControllerExtensionComposition({ config, deployment, datab
       await database.migrate();
       const job = (await database.query(`SELECT payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'
         AND status='running' AND lease_expires_at>clock_timestamp() AND payload->'scope'=$2::jsonb
-        AND payload->'request'=$3::jsonb AND payload->>'cancelRequested'='false' LIMIT 2`, [scope.userId, canonicalJson(scope), canonicalJson(request)])).rows;
+        AND payload->'request'=$3::jsonb AND payload->>'cancelRequested'='false' LIMIT 2`, [scope.ownerId, canonicalJson(scope), canonicalJson(request)])).rows;
       if (job.length !== 1 || !job[0].payload.dispatch || job[0].payload.auth?.runtimeGeneration !== scope.runtimeGeneration) return false;
+      const ownerId = scope.ownerId ?? scope.userId;
+      const caller = (await database.query('SELECT created_at::text AS "createdAt" FROM evimed_control.users WHERE id=$1 FOR SHARE',[scope.userId])).rows[0];
+      if (!caller || caller.createdAt !== scope.accountCreatedAt) return false;
+      if (scope.userId !== ownerId) {
+        await database.query('SELECT id FROM evimed_vcr.studies WHERE project_id=$1 AND user_id=$2 AND deleted_at IS NULL FOR SHARE',[scope.projectId,ownerId]);
+        const roles = (await database.query(`SELECT s.id,m.role,m.created_at::text AS "createdAt" FROM evimed_vcr.studies s JOIN evimed_vcr.members m ON m.study_id=s.id
+          WHERE s.project_id=$1 AND s.user_id=$2 AND s.deleted_at IS NULL AND m.user_id=$3 ORDER BY m.role FOR SHARE OF m`,[scope.projectId,ownerId,scope.userId])).rows;
+        if (!roles.some(row=>roleAllows(row.role,request.operation==='doc_write'?'write':'read')) || JSON.stringify({studyId:roles[0]?.id,members:roles.map(({role,createdAt})=>({role,createdAt}))})!==scope.membershipEpoch) return false;
+      }
       const current = (await database.query(`SELECT u.created_at::text AS "accountCreatedAt",p.created_at::text AS "projectCreatedAt",d.payload
         FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id
         JOIN evimed_product.documents d ON d.user_id=u.id AND d.project_id=p.id AND d.kind='extension-generation'
-          AND d.id=$3 AND d.deleted_at IS NULL WHERE u.id=$1 AND p.id=$2`,
-      [scope.userId, scope.projectId, `extensions:generation-state:${scope.projectId}`])).rows[0];
-      if (!current || current.accountCreatedAt !== scope.accountCreatedAt || current.projectCreatedAt !== scope.projectCreatedAt
+          AND d.id=$3 AND d.deleted_at IS NULL WHERE u.id=$1 AND p.id=$2 FOR SHARE OF u,p,d`,
+      [ownerId, scope.projectId, `extensions:generation-state:${scope.projectId}`])).rows[0];
+      if (!current || current.accountCreatedAt !== (scope.ownerAccountCreatedAt ?? scope.accountCreatedAt) || current.projectCreatedAt !== scope.projectCreatedAt
         || !['effective', 'rolled-back'].includes(current.payload.phase) || current.payload.runtimeGeneration !== scope.runtimeGeneration) return false;
       const candidate = current.payload.effective;
-      if (!candidate || candidate.scope.ownerAccountCreatedAt !== scope.accountCreatedAt || candidate.scope.projectCreatedAt !== scope.projectCreatedAt) return false;
+      if (!candidate || candidate.scope.ownerAccountCreatedAt !== (scope.ownerAccountCreatedAt ?? scope.accountCreatedAt) || candidate.scope.projectCreatedAt !== scope.projectCreatedAt) return false;
       const actualImage = await imageId(), identities = deploymentGenerationIdentities(deployment, actualImage);
       if (['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => candidate.identity[key] !== identities[key])) return false;
-      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: scope.userId }, candidate.reference, {assessmentAuthority});
-      const observed = extractExtensionGenerationOperationIdentity(manifest, { userId: scope.userId, ownerId: scope.userId,
+      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: ownerId }, candidate.reference, {assessmentAuthority});
+      const observed = extractExtensionGenerationOperationIdentity(manifest, { userId: scope.userId, ownerId, ownerAccountCreatedAt: current.accountCreatedAt, membershipEpoch: scope.membershipEpoch,
         projectId: scope.projectId, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt,
         runtimeGeneration: scope.runtimeGeneration }, scope.descriptorId);
       if (canonicalJson(observed) !== canonicalJson(scope)) return false;
@@ -63,13 +72,21 @@ export function createControllerExtensionComposition({ config, deployment, datab
       const entry = deployment.catalogue.find(item => item.id === scope.descriptorId), artifact = deployment.admittedArtifacts.find(item => item.id === scope.descriptorId);
       if (!entry || !artifact || artifact.artifactDigest !== scope.artifactDigest) return false;
       const installation = manifest.bindings.installations.find(item => item.installationId === scope.installationId && item.installationRevision === scope.installationRevision);
-      if (!installation || installation.actorId !== scope.userId) return false;
+      if (!installation) return false;
+      const installer = (await database.query('SELECT created_at::text AS "createdAt" FROM evimed_control.users WHERE id=$1 FOR SHARE',[installation.actorId])).rows[0];
+      if (!installer) return false;
+      if (installation.actorId !== ownerId) {
+        await database.query('SELECT id FROM evimed_vcr.studies WHERE project_id=$1 AND user_id=$2 AND deleted_at IS NULL FOR SHARE',[scope.projectId,ownerId]);
+        const rows=(await database.query(`SELECT s.id,m.role,m.created_at::text AS "createdAt" FROM evimed_vcr.studies s JOIN evimed_vcr.members m ON m.study_id=s.id
+          WHERE s.project_id=$1 AND s.user_id=$2 AND s.deleted_at IS NULL AND m.user_id=$3 ORDER BY m.role FOR SHARE OF m`,[scope.projectId,ownerId,installation.actorId])).rows;
+        if(!rows.some(row=>roleAllows(row.role,'manage_study'))||JSON.stringify({studyId:rows[0]?.id,members:rows.map(({role,createdAt})=>({role,createdAt}))})!==installation.actorMembershipEpoch)return false;
+      }
       const prepared = await jobs.get(installation.actorId, installation.prepareJobId);
       if (prepared?.status !== 'succeeded' || prepared.kind !== 'extension-prepare' || prepared.result?.artifactDigest !== scope.artifactDigest
-        || prepared.payload.accountCreatedAt !== scope.accountCreatedAt || prepared.payload.installationId !== scope.installationId
+        || prepared.payload.accountCreatedAt !== installer.createdAt || prepared.payload.installationId !== scope.installationId
         || prepared.payload.installationRevision !== scope.installationRevision || prepared.result.installationId !== scope.installationId
         || prepared.result.installationRevision !== scope.installationRevision || prepared.result.integrity !== pin.integrity) return false;
-      if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:scope.userId}, {operation:request.operation}); return true; }
+      if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:ownerId}, {operation:request.operation}); return true; }
       const proof = await qualification.authority(entry);
       return proof?.receipt.receiptDigest === pin.receiptDigest;
     } catch { return false; }
@@ -78,7 +95,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
     withAdmission: () => { throw refused(); } });
   /** @param {string} operationId @param {any} request @param {any} expected @param {any} attempt */
   const resolveOperation = async (operationId, request, expected, attempt) => {
-    const identity = extensionExecutionIdentity(attempt), job = await jobs.get(identity.userId, identity.jobId);
+    const identity = extensionExecutionIdentity(attempt), job = await jobs.get(identity.ownerId, identity.jobId);
     if (!job || job.kind !== 'extension-execute' || job.status !== 'running' || job.leaseToken !== identity.leaseToken
       || job.attempts !== identity.attempts || Date.parse(job.leaseExpiresAt) <= Date.now() || job.payload.cancelRequested
       || job.payload.operationId !== operationId || canonicalJson(job.payload.dispatch) !== canonicalJson(identity)
@@ -91,7 +108,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
     stateRoot: path.join(config.dataDir, '.openscience', 'extension-controller'),
     dataDir: config.dataDir, runtimeDataVolume: config.runtimeDataVolume,
     adapterRoot: fileURLToPath(new URL('../../../scripts/runtime/extensions/cowork/', import.meta.url)),
-    inputRoot: grants.root, dockerBin: config.runtimeContainerBin, resolveOperation,
+    inputRoot: grants.root, withOperationAdmission: (_identity,work)=>database.transaction(client=>database.withTransactionClient(client,work)), dockerBin: config.runtimeContainerBin, resolveOperation,
     resolvePreparation: async (identity, descriptor) => {
       await database.migrate();
       const located = (await database.query("SELECT user_id FROM evimed_product.jobs WHERE id=$1 AND kind='extension-prepare'", [identity.jobId])).rows[0];
@@ -108,8 +125,13 @@ export function createControllerExtensionComposition({ config, deployment, datab
         || current.payload.prepareJobId !== job.id || current.payload.integrity !== descriptor.integrity
         || canonicalJson(current.payload.coordinate) !== canonicalJson(descriptor.coordinate)) throw refused();
       if (identity.projectTarget) {
-        if (identity.projectTarget.ownerId !== job.userId) throw refused();
-        const project = (await database.query("SELECT created_at::text AS epoch FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [job.userId, identity.projectTarget.projectId])).rows[0];
+        if (identity.projectTarget.ownerId !== job.userId) {
+          const roles = (await database.query(`SELECT s.id,m.role,m.created_at::text AS "createdAt" FROM evimed_vcr.studies s JOIN evimed_vcr.members m ON m.study_id=s.id
+            WHERE s.project_id=$1 AND s.user_id=$2 AND s.deleted_at IS NULL AND m.user_id=$3 ORDER BY m.role`,
+          [identity.projectTarget.projectId,identity.projectTarget.ownerId,job.userId])).rows;
+          if (!roles.some(row=>roleAllows(row.role,'manage_study'))||JSON.stringify({studyId:roles[0]?.id,members:roles.map(({role,createdAt})=>({role,createdAt}))})!==identity.projectTarget.membershipEpoch) throw refused();
+        }
+        const project = (await database.query("SELECT created_at::text AS epoch FROM evimed_control.projects WHERE user_id=$1 AND id=$2", [identity.projectTarget.ownerId, identity.projectTarget.projectId])).rows[0];
         if (!project || project.epoch !== identity.projectTarget.projectCreatedAt) throw refused();
       }
       return { identity, descriptorId: descriptor.id, artifactDigest: descriptor.artifactDigest };
@@ -118,12 +140,12 @@ export function createControllerExtensionComposition({ config, deployment, datab
       const row = (await database.query("SELECT user_id,status,lease_token,attempts,payload FROM evimed_product.jobs WHERE id=$1", [identity.jobId])).rows[0];
       if (!row) return true;
       if (!['succeeded', 'failed', 'canceled'].includes(row.status) || row.lease_token || row.attempts < identity.attempts) return false;
-      if (identity.operationId) return row.user_id === identity.userId && canonicalJson(row.payload.dispatch) === canonicalJson(identity);
+      if (identity.operationId) return row.user_id === identity.ownerId && canonicalJson(row.payload.dispatch) === canonicalJson(identity);
       return row.payload.installationId === identity.installationId && row.payload.installationRevision === identity.installationRevision
         && row.payload.accountCreatedAt === identity.accountCreatedAt;
     },
     resolveInputSnapshot: async (operationId, resourceId, attempt) => {
-      const identity = extensionExecutionIdentity(attempt), job = await jobs.get(identity.userId, identity.jobId);
+      const identity = extensionExecutionIdentity(attempt), job = await jobs.get(identity.ownerId, identity.jobId);
       if (!job) throw refused();
       await resolveOperation(operationId, job.payload.request, identity, identity);
       return grants.inputSnapshot(operationId, job.payload.request, resourceId, job.payload.scope);
