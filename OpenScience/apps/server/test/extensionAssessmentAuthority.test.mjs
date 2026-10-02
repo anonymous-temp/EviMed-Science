@@ -122,10 +122,12 @@ test('protected reader refuses wrong ownership, writable roots and parents, and 
  const linked=createExtensionAssessmentAuthority({...f.options,root:link,recordPath:path.join(link,'record.json')});await assert.rejects(linked.admit(f.context));
 });
 test('record UID is checked independently of a correctly owned private root',async t=>{
- const f=await fixture(t),open=fs.open.bind(fs);
+ const f=await fixture(t),open=fs.open.bind(fs),record=await fs.stat(f.recordPath);let observedRecord=false;
  t.mock.method(fs,'open',async(...args)=>{
-  const handle=await open(...args);if(args[0]!==f.recordPath)return handle;
-  return new Proxy(handle,{get(target,key){if(key==='stat')return async()=>{const stat=await target.stat();Object.defineProperty(stat,'uid',{value:process.getuid()+1});return stat;};const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}});
+  const handle=await open(...args);
+  // Linux opens through pinned /proc/self/fd parents; match the file, not its spelling.
+  return new Proxy(handle,{get(target,key){if(key==='stat')return async()=>{const stat=await target.stat();if(stat.dev===record.dev&&stat.ino===record.ino){observedRecord=true;Object.defineProperty(stat,'uid',{value:process.getuid()+1});}return stat;};const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}});
  });
  await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
+ assert.equal(observedRecord,true,'the actual protected record descriptor was inspected');
 });
