@@ -43,6 +43,7 @@ export {
   validateExtensionInstallRequest,
   validateSkillWriteRequest,
   personalSkillName,
+  canonicalPersonalSkillResourcePath,
   extensionGenerationIdentity,
   validateExtensionProofIdentity,
   extensionProofDigest,

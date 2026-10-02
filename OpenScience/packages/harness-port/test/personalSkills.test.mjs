@@ -67,3 +67,14 @@ test('actual native registry loads only selected roots and unregisters their cat
   unregister()
   assert.deepEqual(await ctx.skills.list(), [])
 })
+
+test('real native bundle wrapper preserves sixteen resource segments but rejects seventeen', async t => {
+  const root=await fixture(t,'---\nname: personal-depth\ndescription: Bound resource depth\n---\nbody')
+  const resource=Array.from({length:15},()=> '资料').join('/')+'/证据.csv'
+  await mkdir(path.dirname(path.join(root,'bundle',resource)),{recursive:true})
+  await writeFile(path.join(root,'bundle',resource),'字段,值\n证据,1\n')
+  assert.equal((await parsePersonalSkill(root)).name,'personal-depth')
+  await mkdir(path.join(root,'bundle',path.dirname(resource),'更深'),{recursive:true})
+  await writeFile(path.join(root,'bundle',path.dirname(resource),'更深','证据.csv'),'reject')
+  await assert.rejects(parsePersonalSkill(root),/personal_skill_resource_limit/u)
+})

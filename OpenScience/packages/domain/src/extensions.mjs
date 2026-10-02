@@ -24,6 +24,38 @@ export class ExtensionContractError extends Error {
 }
 /** @param {string} field @param {string} [code] @returns {never} */
 function reject(field, code = 'extension_contract_invalid') { throw new ExtensionContractError(code, field) }
+/** Canonical portable data paths for personal skill resources only. A caller
+ * may supply its bounded prefix map to reject case/compatibility aliases.
+ * Incoming archive names may normalize; stored manifests must already match path.
+ * @param {unknown} value @param {Map<string,string>} [prefixes]
+ * @returns {{path:string,key:string}} */
+export function canonicalPersonalSkillResourcePath(value, prefixes) {
+  if (typeof value !== 'string') reject('resourcePath')
+  const normalized = value.normalize('NFC')
+  const parts = normalized.split('/')
+  const bytes = input => new TextEncoder().encode(input).length
+  if (!normalized || bytes(normalized) > 240 || parts.length > 16
+    || parts.some(part => bytes(part) > 101 || !/^[\p{L}\p{N}][\p{L}\p{N}\p{M}._-]*$/u.test(part))) reject('resourcePath')
+  const folded = input => input.normalize('NFKC').toUpperCase().toLowerCase().normalize('NFC')
+  for (const part of parts) {
+    const protectedName = folded(part).normalize('NFD').replace(/\p{M}/gu, '')
+    if (/^(?:\.env(?:\..*)?|credentials?(?:\..*)?|secrets?(?:\..*)?|id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?|node_modules|\.git)$/u.test(protectedName)
+      || /\.(?:pem|key|p12|pfx)$/u.test(protectedName)) reject('resourcePath')
+  }
+  const key = folded(normalized)
+  if (prefixes) {
+    for (let depth = 1; depth <= parts.length; depth++) {
+      const prefix = parts.slice(0, depth).join('/'), prefixKey = folded(prefix)
+      if (prefixes.has(prefixKey) && prefixes.get(prefixKey) !== prefix) reject('resourcePathCollision')
+    }
+    for (let depth = 1; depth <= parts.length; depth++) {
+      const prefix = parts.slice(0, depth).join('/')
+      prefixes.set(folded(prefix), prefix)
+    }
+  }
+  return { path: normalized, key }
+}
+
 /** Closed data objects cannot carry authority, getters or prototype-defined settings. @param {unknown} value @param {string[]} allowed @param {string[]} required @returns {Record<string, any>} */
 function record(value, allowed, required = allowed) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) reject('object')

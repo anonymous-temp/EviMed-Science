@@ -165,3 +165,20 @@ test('worker admission bounds concurrent memory and releases capacity only after
   await Promise.all(active)
   assert.equal((await decodeSkillArchive(input, 'zip')).length, 1)
 })
+
+test('actual Unicode ZIP/tar paths normalize once, preserve Chinese bytes and reject aliases or shadow bundles', async () => {
+  const bytes=Buffer.from('字段,值\n证据,1\n')
+  const resource=Array.from({length:15},()=> '资料').join('/')+'/证据.csv'
+  const files={'仓库/SKILL.md':skill,['仓库/'+resource]:bytes,'仓库/引用/cafe\u0301.csv':bytes}
+  for(const [archive,kind] of [[zip(files),'zip'],[await tarGzip(Object.entries(files).map(([name,bytes])=>({name,bytes:Buffer.from(bytes)}))),'tar-gzip']]){
+    const entries=await decodeSkillArchive(archive,kind)
+    assert.equal(entries.find(x=>x.path===resource).bytes.toString(),bytes.toString())
+    assert.ok(entries.some(x=>x.path==='引用/café.csv'))
+  }
+  for(const pair of [
+    ['引用/café.csv','引用/cafe\u0301.csv'],['引用/Straße.csv','引用/STRASSE.csv'],['引用/Σ/a.csv','引用/ς/b.csv'],
+    ['资料','资料/证据.csv'],['资源/ＳＫＩＬＬ.md','资源/SKILL.md'],
+  ])await assert.rejects(decodeSkillArchive(zip({'SKILL.md':skill,[pair[0]]:bytes,[pair[1]]:bytes}),'zip'))
+  await assert.rejects(decodeSkillArchive(zip({'仓库/SKILL.md':skill,['仓库/'+Array.from({length:16},()=> '资料').join('/')+'/证据.csv']:bytes}),'zip'))
+  for(const name of ['资料/.隐藏','资料/密钥.pem','se\u0301crets.json','ＮＯＤＥ_ＭＯＤＵＬＥＳ/资料','资料/\u202e证据.csv'])await assert.rejects(decodeSkillArchive(zip({'SKILL.md':skill,[name]:bytes}),'zip'))
+})

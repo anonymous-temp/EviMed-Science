@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { canonicalJson, extensionGenerationIdentity, personalSkillName } from '@evimed/domain'
+import { canonicalJson, extensionGenerationIdentity, personalSkillName, canonicalPersonalSkillResourcePath } from '@evimed/domain'
 import { ProductDocuments, ProductJobs } from './productStore.mjs'
 import { selectPersonalSkillMounts } from './personalSkillMount.mjs'
 import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, writeFileExclusiveNoFollow, assertProjectCapacity, directorySize } from './security.mjs'
@@ -30,13 +30,20 @@ export function personalGenerationRoot(config, reference) {
   if (!reference || !HEX.test(reference.ownerHash) || !HEX.test(reference.projectHash) || !HEX.test(reference.generationHash)) throw fail()
   return path.join(config.dataDir, '.openscience', 'personal-skill-generations', reference.ownerHash, reference.projectHash, reference.generationHash)
 }
-/** @param {string} value */
-function filePath(value) {
-  if (typeof value !== 'string' || value.length > 240 || value.split('/').length > 16
-    || value.split('/').some(part => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/u.test(part) || part === '.' || part === '..')
-    || /(?:^|\/)(?:credentials?(?:\.[^/]+)?|secrets?(?:\.[^/]+)?|id_(?:rsa|ed25519)|node_modules)(?:\/|$)/iu.test(value)) throw fail()
-  return value
+/** Only an internal selected path strips the fixed namespace prefix.
+ * @param {string} value @param {boolean} [selected] @param {Map<string,string>} [prefixes] */
+function filePath(value, selected = false, prefixes) {
+  if (typeof value !== 'string') throw fail()
+  const parts = value.split('/')
+  const prefix = selected ? parts.slice(0, 2).join('/') + '/' : ''
+  if (selected && (parts[0] !== 'skills' || !/^personal-[a-f0-9]{16}-[a-f0-9]{32}$/u.test(parts[1]))) throw fail()
+  const relative = selected ? parts.slice(2).join('/') : value
+  try { if (canonicalPersonalSkillResourcePath(relative, prefixes).path !== relative) throw fail() }
+  catch { throw fail() }
+  return prefix + relative
 }
+/** @param {string} value */
+const selectedKey = value => value.split('/').slice(0, 2).join('/') + '/' + canonicalPersonalSkillResourcePath(value.split('/').slice(2).join('/')).key
 /** Independent generation verification shared by the controller and trusted runtime planner.
  * Manifest content never grants filesystem or execution authority.
  * @param {any} config @param {any} project @param {any} reference @param {string|null} [expectedImage] */
@@ -63,14 +70,16 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
     || (expectedImage && manifest.identity.baseRuntimeImageDigest !== expectedImage)
     || generationIdentity(manifest.identity, manifest.scope, manifest.selectionRevision) !== checked.generationHash) throw fail()
   const seen = new Set()
-  const contents = new Map()
+  const contents = new Map(), prefixMaps = new Map()
   let total = 0
   for (const item of manifest.files) {
     if (!item || Object.keys(item).sort().join(',') !== 'digest,path,size') throw fail()
-    const relative = filePath(item.path)
-    if (!relative.startsWith('skills/') || seen.has(relative.toLowerCase()) || !DIGEST.test(item.digest)
+    const native = item.path.split('/')[1]
+    if (!prefixMaps.has(native)) prefixMaps.set(native, new Map())
+    const relative = filePath(item.path, true, prefixMaps.get(native))
+    if (!relative.startsWith('skills/') || seen.has(selectedKey(relative)) || !DIGEST.test(item.digest)
       || !Number.isSafeInteger(item.size) || item.size < 0 || item.size > 4 * 1024 * 1024 || (total += item.size) > 64 * 1024 * 1024) throw fail()
-    seen.add(relative.toLowerCase())
+    seen.add(selectedKey(relative))
     const file = await openScopedFileNoFollow(config.dataDir, path.join(root, relative))
     try {
       const content = await readStableFileHandle(file.handle, file.stat)
@@ -78,11 +87,16 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
       contents.set(relative, content)
     } finally { await file.handle.close() }
   }
+  const declared = new Set()
   for (const pin of manifest.pins) {
     if (pin.nativeName !== personalSkillName(project.userId, pin.skillId, sha) || pin.ownerHash !== checked.ownerHash || pin.contentId !== pin.digest?.slice(7)
       || !manifest.identity.skills.some(item => item.skillId === pin.skillId && item.revision === pin.revision && item.digest === pin.digest)
       || !seen.has(`skills/${pin.nativeName}/skill.md`) || !Array.isArray(pin.resources) || pin.resources.length > 128) throw fail()
+    declared.add(`skills/${pin.nativeName}/skill.md`)
     for (const resource of pin.resources) {
+      const resourceKey = `skills/${pin.nativeName}/` + canonicalPersonalSkillResourcePath(resource.path).key
+      if (declared.has(resourceKey) || resourceKey.split('/').at(-1) === 'skill.md') throw fail()
+      declared.add(resourceKey)
       filePath(resource.path)
       const content = contents.get(`skills/${pin.nativeName}/${resource.path}`)
       if (!content || resource.id !== `resource:${sha(content)}` || resource.digest !== `sha256:${sha(content)}` || resource.size !== content.length) throw fail()
@@ -90,6 +104,7 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
     const file = new TextDecoder('utf-8', { fatal: true }).decode(contents.get(`skills/${pin.nativeName}/SKILL.md`))
     if (`sha256:${sha(canonicalJson({ file, resources: pin.resources }))}` !== pin.digest) throw fail()
   }
+  if (declared.size !== seen.size || [...declared].some(key => !seen.has(key))) throw fail()
   if (manifest.identity.skills.length !== manifest.pins.length || new Set(manifest.pins.map(pin => pin.skillId)).size !== manifest.pins.length) throw fail()
   // Detect unmanifested files and any symbolic/special entry, including directories.
   const actual = new Set()
@@ -109,7 +124,11 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
         const target = path.join(directoryPath, entry.name)
         if (entry.isDirectory()) { await walk(target); continue }
         if (!entry.isFile()) throw fail()
-        actual.add(path.relative(root, target).split(path.sep).join('/').toLowerCase())
+        const relativeFile = path.relative(root, target).split(path.sep).join('/')
+        if (relativeFile !== relativeFile.normalize('NFC') || relativeFile !== 'manifest.json' && !contents.has(relativeFile)) throw fail()
+        const key = relativeFile === 'manifest.json' ? relativeFile : selectedKey(filePath(relativeFile, true))
+        if (actual.has(key)) throw fail()
+        actual.add(key)
       }
     } finally { await opened.handle.close() }
   }
@@ -174,7 +193,7 @@ export class PersonalSkillGenerationService {
     await owned.handle.close()
     /** @param {string} relative @param {Buffer} bytes */
     const publishImmutable = async (relative, bytes) => {
-      const target = path.join(root, filePath(relative))
+      const target = path.join(root, filePath(relative, relative.startsWith('skills/')))
       const mode = relative.startsWith('skills/') ? 0o444 : 0o400
       const write = () => this.database.transaction(client => this.database.withTransactionClient(client, async () => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ['evimed-personal-skill-storage'])
@@ -235,7 +254,7 @@ export class PersonalSkillGenerationService {
       try { await publish(`skills/${pin.nativeName}/SKILL.md`, await readStableFileHandle(opened.handle, opened.stat)) }
       finally { await opened.handle.close() }
       for (const resource of row.payload.resources) {
-        if (resource.path.split('/').at(-1).toLowerCase() === 'skill.md') throw fail()
+        if (canonicalPersonalSkillResourcePath(resource.path.split('/').at(-1)).key === 'skill.md') throw fail()
         await publish(`skills/${pin.nativeName}/${filePath(resource.path)}`, await this.skills.artifacts.read(user, { resource }))
       }
     }

@@ -3,6 +3,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createGunzip, crc32 } from 'node:zlib'
+import { canonicalPersonalSkillResourcePath } from '@evimed/domain'
 import { HttpError } from './security.mjs'
 
 export const SKILL_ARCHIVE_LIMITS = Object.freeze({ compressedBytes: 4 * 1024 * 1024, files: 128,
@@ -20,28 +21,30 @@ function refusal(code) {
 /** @param {string} value @param {boolean} directory */
 function archivePath(value, directory) {
   const clean = directory && value.endsWith('/') ? value.slice(0, -1) : value
-  if (!clean || clean.length > 240 || clean.includes('\\') || clean.split('/').length > SKILL_ARCHIVE_LIMITS.depth
-    || clean.split('/').some(part => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/u.test(part) || part === '.' || part === '..')
-    || /(?:^|\/)(?:\.env(?:\..*)?|credentials?(?:\.[^/]+)?|secrets?(?:\.[^/]+)?|id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?|node_modules|\.git)(?:\/|$)/iu.test(clean)
-    || /\.(?:pem|key|p12|pfx)$/iu.test(clean)) throw new Error('skill_archive_invalid')
-  return clean
+  // Decode bookkeeping allows one bounded optional repository wrapper; the
+  // normalized resource itself is checked against the unchanged domain limit.
+  const parts = clean.split('/')
+  if (parts.length > SKILL_ARCHIVE_LIMITS.depth + 1) throw new Error('skill_archive_invalid')
+  try { return parts.map(part => canonicalPersonalSkillResourcePath(part).path).join('/') }
+  catch { throw new Error('skill_archive_invalid') }
 }
+/** Internal raw archive paths may include one wrapper segment. */
+const archiveKey = value => value.split('/').map(part => canonicalPersonalSkillResourcePath(part).key).join('/')
 /** @param {{path:string,bytes:Buffer}[]} entries */
 function normalize(entries) {
-  const skills = entries.filter(entry => entry.path.split('/').at(-1).toLowerCase() === 'skill.md')
+  const skills = entries.filter(entry => canonicalPersonalSkillResourcePath(entry.path.split('/').at(-1)).key === 'skill.md')
   if (skills.length !== 1) throw new Error('skill_archive_invalid')
   const skillPath = skills[0].path.split('/')
   if (skillPath.at(-1) !== 'SKILL.md' || skillPath.length > 2) throw new Error('skill_archive_invalid')
   const prefix = skillPath.length === 2 ? `${skillPath[0]}/` : ''
-  const paths = new Set()
+  const paths = new Set(), prefixes = new Map()
   return entries.map(entry => {
     if (!entry.path.startsWith(prefix)) throw new Error('skill_archive_invalid')
-    const relative = entry.path.slice(prefix.length)
-    const folded = relative.toLowerCase()
+    const { path: relative, key: folded } = canonicalPersonalSkillResourcePath(entry.path.slice(prefix.length), prefixes)
     if (paths.has(folded)) throw new Error('skill_archive_invalid')
     paths.add(folded)
-    if (relative !== 'SKILL.md' && /(?:^|\/)skill\.md$/iu.test(relative)) throw new Error('skill_archive_invalid')
-    if (entries.some(other => other !== entry && other.path.toLowerCase().startsWith(`${entry.path.toLowerCase()}/`))) throw new Error('skill_archive_invalid')
+    if (relative !== 'SKILL.md' && canonicalPersonalSkillResourcePath(relative.split('/').at(-1)).key === 'skill.md') throw new Error('skill_archive_invalid')
+    if (entries.some(other => other !== entry && archiveKey(other.path).startsWith(`${archiveKey(entry.path)}/`))) throw new Error('skill_archive_invalid')
     return { type: 'file', path: relative, bytes: entry.bytes }
   })
 }
@@ -61,8 +64,10 @@ function collector() {
     entry(name, directory, size) {
       if (++count > SKILL_ARCHIVE_LIMITS.entries) limit()
       const relative = archivePath(name, directory)
-      if (paths.has(relative.toLowerCase())) throw new Error('skill_archive_invalid')
-      paths.add(relative.toLowerCase())
+      const folded = archiveKey(relative)
+      // Prefix aliases are independently checked after wrapper normalization.
+      if (paths.has(folded)) throw new Error('skill_archive_invalid')
+      paths.add(folded)
       if (!Number.isSafeInteger(size) || size < 0 || size > SKILL_ARCHIVE_LIMITS.fileBytes
         || (!directory && ++fileCount > SKILL_ARCHIVE_LIMITS.files)) limit()
       if (directory && size !== 0) throw new Error('skill_archive_invalid')

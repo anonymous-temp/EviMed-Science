@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { canonicalJson } from '@evimed/domain'
+import { canonicalJson, canonicalPersonalSkillResourcePath } from '@evimed/domain'
 import { dockerRuntimeMount, assertDockerDataVolumeSupport } from './dockerMounts.mjs'
 import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, writeFileExclusiveNoFollow, writeFileAtomicNoFollow } from './security.mjs'
 
@@ -33,20 +33,27 @@ export function skillValidationRoot(config, reference) {
   const checked = validateSkillReference(reference)
   return path.join(config.dataDir, '.openscience', 'skill-library', checked.ownerHash, checked.kind, checked.contentId)
 }
-/** Resource names are canonical data paths; hidden/credential files are never mounted. @param {string} relative */
-function resourcePath(relative) {
-  if (!relative || relative.length > 240 || relative.split('/').length > 16
-    || relative.split('/').some(part => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/u.test(part) || part === '.' || part === '..')
-    || /(?:^|\/)(?:credentials?(?:\.[^/]+)?|secrets?(?:\.[^/]+)?|id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?|node_modules)(?:\/|$)/iu.test(relative)
-    || /\.(?:pem|key|p12|pfx)$/iu.test(relative)) throw invalid()
+/** Resource names are canonical data paths; hidden/credential files are never mounted. @param {string} relative @param {boolean} [bundlePrefix] @param {Map<string,string>} [prefixes] */
+function resourcePath(relative, bundlePrefix = false, prefixes) {
+  if (typeof relative !== 'string') throw invalid()
+  const parts = relative.split('/')
+  const resource = bundlePrefix && parts.length > 1 ? parts.slice(1).join('/') : relative
+  try {
+    if (bundlePrefix && parts.length > 1 && canonicalPersonalSkillResourcePath(parts[0]).path !== parts[0]) throw invalid()
+    if (canonicalPersonalSkillResourcePath(resource, prefixes).path !== resource) throw invalid()
+  } catch { throw invalid() }
 }
+/** Resource collision key excludes only the fixed native bundle wrapper. */
+const resourceKey = relative => relative.split('/').length > 1
+  ? canonicalPersonalSkillResourcePath(relative.split('/')[0]).key + '/' + canonicalPersonalSkillResourcePath(relative.split('/').slice(1).join('/')).key
+  : canonicalPersonalSkillResourcePath(relative).key
 /** Stable descriptor reads validate the exact set, types, names and hashes; no native code runs here.
  * @param {any} config @param {any} reference */
 async function snapshot(config, reference, projectedRoot = null) {
   const root = projectedRoot ?? skillValidationRoot(config, reference)
   const rootOpened = await openScopedDirectoryNoFollow(config.dataDir, root)
-  const files = new Map()
-  const metadata = []
+  const files = new Map(), physicalEntries = new Set()
+  const metadata = [], prefixMaps = new Map()
   let count = 0
   let total = 0
   /** @param {string} directory @param {string} prefix */
@@ -57,7 +64,13 @@ async function snapshot(config, reference, projectedRoot = null) {
       metadata.push([prefix, 'directory', opened.stat.mode, opened.stat.dev, opened.stat.ino, opened.stat.mtimeMs, opened.stat.ctimeMs])
       for (const name of await fs.readdir(opened.path)) {
         const relative = prefix ? `${prefix}/${name}` : name
-        resourcePath(relative)
+        if (relative !== relative.normalize('NFC')) throw invalid()
+        const physicalKey = resourceKey(relative)
+        if (physicalEntries.has(physicalKey)) throw invalid()
+        physicalEntries.add(physicalKey)
+        const bundle = relative.split('/')[0]
+        if (!prefixMaps.has(bundle)) prefixMaps.set(bundle, new Map())
+        resourcePath(relative, true, prefixMaps.get(bundle))
         if (++count > 512) throw invalid()
         const target = path.join(directory, name)
         const info = await fs.lstat(path.join(opened.path, name))
@@ -75,9 +88,9 @@ async function snapshot(config, reference, projectedRoot = null) {
   }
   try {
     await walk(root, '')
-    const skills = [...files.keys()].filter(key => key.toLowerCase().endsWith('/skill.md'))
+    const skills = [...files.keys()].filter(key => key.includes('/') && resourceKey(key).split('/').at(-1) === 'skill.md')
     if (skills.length !== 1 || skills[0].split('/').length !== 2 || !skills[0].endsWith('/SKILL.md')
-      || files.get(skills[0]).length > 262144 + 4096 || new Set([...files.keys()].map(key => key.toLowerCase())).size !== files.size) throw invalid()
+      || files.get(skills[0]).length > 262144 + 4096 || new Set([...files.keys()].map(resourceKey)).size !== files.size) throw invalid()
     const nativeDir = skills[0].split('/')[0]
     const skillText = new TextDecoder('utf-8', { fatal: true }).decode(files.get(skills[0]))
     if (reference.kind === 'imports') {

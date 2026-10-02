@@ -15,13 +15,26 @@ export async function validatePersonalSkillRoot(root, signal) {
   let entries = 0
   let bytes = 0
   /** @param {string} target @param {number} depth */
-  async function visit(target, depth) {
+  async function visit(target, depth, bundleAllowance = 0) {
     signal?.throwIfAborted()
-    if (++entries > LIMITS.entries || depth > LIMITS.depth) throw new Error('personal_skill_resource_limit')
+    if (++entries > LIMITS.entries || depth - bundleAllowance > LIMITS.depth) throw new Error('personal_skill_resource_limit')
     const info = await lstat(target)
     if (info.isSymbolicLink() || (!info.isDirectory() && !info.isFile()) || (info.isFile() && info.nlink !== 1)) throw new Error('personal_skill_resource_type')
     if (info.isFile()) { bytes += info.size; if (bytes > LIMITS.bytes) throw new Error('personal_skill_resource_limit'); return }
-    for (const entry of await readdir(target)) await visit(path.join(target, entry), depth + 1)
+    for (const entry of await readdir(target)) {
+      const child = path.join(target, entry)
+      // One actual top-level native bundle is a trusted package wrapper,
+      // not an extra resource segment. All entry/byte/link checks still run.
+      let allowance = bundleAllowance
+      if (depth === 0 && (await lstat(child)).isDirectory()) {
+        const skill = await lstat(path.join(child, 'SKILL.md')).catch(error => {
+          if (['ENOENT', 'ENOTDIR'].includes(error.code)) return null
+          throw error
+        })
+        if (skill?.isFile() && skill.nlink === 1) allowance = 1
+      }
+      await visit(child, depth + 1, allowance)
+    }
   }
   await visit(resolved, 0)
   return resolved

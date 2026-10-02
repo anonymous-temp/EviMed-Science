@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { canonicalJson } from "@evimed/domain";
+import { canonicalJson, canonicalPersonalSkillResourcePath } from "@evimed/domain";
 import { HttpError, assertProjectCapacity, directorySize, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, writeFileExclusiveNoFollow } from "./security.mjs";
 
 /** @param {string|Buffer} value */
@@ -15,11 +15,8 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const writes = new Map();
 /** Skill imports are data. Archive extraction supplies regular-file entries only; it never runs a script. @param {string} value */
 function resourcePath(value) {
-  if (typeof value !== "string" || value.length > 240 || value.includes("\\") || value.split("/").some(part => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(part)
-    || part === "." || part === "..") || /(?:^|\/)(?:\.env(?:\..*)?|credentials?|secrets?|id_rsa|id_ed25519|node_modules|\.git)(?:\/|$)/i.test(value)) {
-    throw new HttpError(400, "extension_contract_invalid", "Invalid skill resource path.");
-  }
-  return value;
+  try { return canonicalPersonalSkillResourcePath(value).path }
+  catch { throw new HttpError(400, "extension_contract_invalid", "Invalid skill resource path."); }
 }
 /** @param {string} value */
 function digestHex(value) {
@@ -107,7 +104,7 @@ export class SkillLibraryArtifacts {
   async resourceBytes(user, resource) {
     if (!resource || typeof resource !== "object" || Array.isArray(resource)
       || Object.keys(resource).sort().join(",") !== "digest,id,path,size") throw new HttpError(400, "extension_contract_invalid", "Invalid skill resource.");
-    resourcePath(resource.path);
+    if (resourcePath(resource.path) !== resource.path) throw new HttpError(400, 'extension_contract_invalid', 'Noncanonical skill resource path.');
     const hex = digestHex(resource.digest);
     if (resource.id !== `resource:${hex}` || !Number.isSafeInteger(resource.size) || resource.size < 0 || resource.size > MAX_FILE_BYTES) {
       throw new HttpError(400, "extension_contract_invalid", "Invalid skill resource.");
@@ -125,10 +122,11 @@ export class SkillLibraryArtifacts {
     const prefix = path.join("packages", hex, nativeName);
     const root = path.join(this.ownerRoot(user), "packages", hex);
     let size = Buffer.byteLength(file);
-    const paths = new Set(["SKILL.md"]);
+    const paths = new Set(["skill.md"]), prefixes = new Map();
     for (const resource of resources) {
-      if (paths.has(resource.path)) throw new HttpError(400, "extension_contract_invalid", "Duplicate skill resource.");
-      paths.add(resource.path);
+      const key = canonicalPersonalSkillResourcePath(resource.path, prefixes).key;
+      if (paths.has(key) || key.split('/').at(-1) === 'skill.md') throw new HttpError(400, "extension_contract_invalid", "Duplicate skill resource.");
+      paths.add(key);
       const bytes = await this.resourceBytes(user, resource);
       size += bytes.length;
       if (size > MAX_PACKAGE_BYTES) throw new HttpError(413, "product_batch_too_large", "The skill package is too large.");
@@ -146,13 +144,15 @@ export class SkillLibraryArtifacts {
     const entries = this.resolveImport ? await this.resolveImport(user, resourceId) : await this.uploadEntries(user, resourceId);
     if (!Array.isArray(entries) || entries.length < 1 || entries.length > MAX_FILES + 1) throw new HttpError(400, "extension_contract_invalid", "Invalid skill package.");
     const normalized = [];
-    const seen = new Set();
+    const seen = new Set(), prefixes = new Map();
     let total = 0;
     for (const entry of entries) {
       if (!entry || entry.type !== "file" || !Buffer.isBuffer(entry.bytes)) throw new HttpError(400, "extension_contract_invalid", "Skill packages contain regular files only.");
       const relative = resourcePath(entry.path);
-      if (seen.has(relative) || entry.bytes.length > MAX_FILE_BYTES) throw new HttpError(400, "extension_contract_invalid", "Invalid skill package entry.");
-      seen.add(relative); total += entry.bytes.length;
+      const key = canonicalPersonalSkillResourcePath(relative, prefixes).key;
+      if (seen.has(key) || (relative !== 'SKILL.md' && key.split('/').at(-1) === 'skill.md')
+        || [...seen].some(other => key.startsWith(other + '/') || other.startsWith(key + '/')) || entry.bytes.length > MAX_FILE_BYTES) throw new HttpError(400, "extension_contract_invalid", "Invalid skill package entry.");
+      seen.add(key); total += entry.bytes.length;
       if (total > MAX_PACKAGE_BYTES) throw new HttpError(413, "product_batch_too_large", "The skill package is too large.");
       normalized.push({ path: relative, bytes: entry.bytes });
     }

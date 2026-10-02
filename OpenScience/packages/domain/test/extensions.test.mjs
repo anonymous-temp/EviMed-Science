@@ -27,10 +27,13 @@ const authority = receipt => ({sha256Hex:hash,trustedReceiptDigests:new Set([rec
 const install = () => ({coordinate:{kind:'npm',name:'@example/tool',version:'1.0.0'},scope:'project',projectId:'p1',idempotencyKey:'install-one'})
 
 test('coordinates preserve exact publisher identity and refuse ranges, URLs and path escapes',()=>{
+  const credentialUrl = new URL('https://github.com/a/b')
+  credentialUrl.username = 'fixture-user'
+  credentialUrl.password = 'fixture-password'
   assert.equal(canonicalExtensionCoordinate({kind:'npm',name:'@example/tool',version:'1.0.0-rc.2'}),'npm:@example/tool@1.0.0-rc.2')
   assert.equal(canonicalExtensionCoordinate({kind:'github',repository:'Example/Tool',commit:'a'.repeat(40),subdirectory:'packages/mcp'}),`github:example/tool@${'a'.repeat(40)}#packages/mcp`)
   for(const coordinate of [{kind:'npm',name:'tool',version:'latest'},{kind:'npm',name:'tool',version:'^1.0.0'},
-    {kind:'npm',name:'../tool',version:'1.0.0'},{kind:'github',repository:'https://user:secret@github.com/a/b',commit:'a'.repeat(40)},
+    {kind:'npm',name:'../tool',version:'1.0.0'},{kind:'github',repository:credentialUrl.href,commit:'a'.repeat(40)},
     {kind:'github',repository:'a/b',commit:'main'},{kind:'github',repository:'a/b',commit:'a'.repeat(40),subdirectory:'../secrets'}]) {
     assert.throws(()=>canonicalExtensionCoordinate(coordinate),{code:'extension_contract_invalid'})
   }
@@ -144,3 +147,17 @@ for(const field of /** @type {const} */ (['selections','skills'])) {
     })
   }
 }
+
+test('personal resources share NFC Unicode paths, UTF8/depth bounds and portable collision keys', async () => {
+  const {canonicalPersonalSkillResourcePath:canonical}=await import('../src/extensions.mjs')
+  assert.deepEqual(canonical('资料/证据汇总.csv'),{path:'资料/证据汇总.csv',key:'资料/证据汇总.csv'})
+  assert.equal(canonical('数据/cafe\u0301.csv').path,'数据/café.csv')
+  assert.equal(canonical('Straße.csv').key,canonical('STRASSE.csv').key)
+  assert.equal(canonical('Σ.csv').key,canonical('ς.csv').key)
+  assert.equal(canonical(Array.from({length:16},()=> '资料').join('/')).path.split('/').length,16)
+  assert.throws(()=>canonical(Array.from({length:17},()=> '资料').join('/')))
+  assert.throws(()=>canonical('数'.repeat(34)))
+  for(const value of ['../证据','/证据','资料\\证据','资料/\u0001数据','资料/.密钥','资料/.git/config','node_modules/数据','credentials.json','secrets.json','id_ecdsa.pub','证据.pem','证据.key','ＮＯＤＥ_ＭＯＤＵＬＥＳ/数据','se\u0301crets.json','资料/💉.csv'])assert.throws(()=>canonical(value),value)
+  const prefixes=new Map();canonical('资料/Report.csv',prefixes);assert.throws(()=>canonical('资料/report.csv',prefixes))
+  const aliases=new Map();canonical('引用/Σ/a.csv',aliases);assert.throws(()=>canonical('引用/ς/b.csv',aliases))
+})
