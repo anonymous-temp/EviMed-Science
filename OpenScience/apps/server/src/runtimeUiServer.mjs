@@ -259,13 +259,13 @@ function assertNativeModelSelection(config, payload) {
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
- *   managedBrowser?: any,
+ *   managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, audit = async () => {} }) {
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
    * the run it steers, so the learning loop's correction trigger has an in-run
@@ -524,6 +524,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       const scope = { userId: user.id, projectId: project.id, authSessionHash: claims.authSessionHash, frameId: frame.frameId };
       await handleManagedBrowserRequest({ req, res, pathname, scope, service: managedBrowser,
         authorizeSession: sessionId => authorizePromptSession(project, { args: { request: { sessionId } } }),
+        authorizeOpenSession: authorizeOpenSession ? sessionId => authorizeOpenSession(user, project, sessionId) : null,
         revalidate: async () => {
           const current = await resolveFrame(requestSnapshot, null);
           if (current.user.id !== scope.userId || current.project.id !== scope.projectId || current.claims.authSessionHash !== scope.authSessionHash) throw new HttpError(403,"managed_browser_not_found","The browser session is unavailable.");

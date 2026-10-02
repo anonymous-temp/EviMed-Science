@@ -2186,18 +2186,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   runtimeManager.learningService = learningService;
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
+  /** Actual project-owned native inventory, independent of optional research-session metadata.
+   * @param {any} user @param {any} project @param {string} sessionId */
+  async function authorizeOwnedNativeSession(user, project, sessionId) {
+    const current = await store.requireProject(user, project.id);
+    if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+    await assertPublicSessionPrompt(current, sessionId);
+    const runtime = runtimeManager.runtimes.get(runtimeManager.key(current)), generation = runtimeManager.runtimeGeneration(current);
+    if (!runtime || !generation) throw new HttpError(503, "product_state_unavailable", "The current native session inventory is unavailable.");
+    const listed = await runtimeManager.callKernel(runtime, current, "session/list", { _request: {} }, AbortSignal.timeout(10000)).catch(() => { throw new HttpError(503, "product_state_unavailable", "The native session inventory is unavailable."); });
+    if (runtimeManager.runtimes.get(runtimeManager.key(current)) !== runtime || runtimeManager.runtimeGeneration(current) !== generation) throw new HttpError(503, "product_state_unavailable", "The native session inventory changed.");
+    if (!sessionListItems(listed).some(item => item.sessionId === sessionId)) throw new HttpError(404, "runtime_session_not_found", "The current native session is unavailable.");
+  }
   if (skillLibraryService && config.runtimeMode === "kernel") {
-    skillLibraryService.nativeCatalogue = new NativeSkillCatalogue({ runtimeManager,
-      authorizeSession: async (user, project, sessionId) => {
-        const current = await store.requireProject(user, project.id);
-        if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
-        await assertPublicSessionPrompt(current, sessionId);
-        const runtime = runtimeManager.runtimes.get(runtimeManager.key(current));
-        if (!runtime || !runtimeManager.runtimeGeneration(current)) throw new HttpError(503, "product_state_unavailable", "The native skill catalogue is unavailable.");
-        const listed = await runtimeManager.callKernel(runtime, current, "session/list", { _request: {} }, AbortSignal.timeout(10000));
-        if (!sessionListItems(listed).some(item => item.sessionId === sessionId)) throw new HttpError(404, "runtime_session_not_found", "The current native session is unavailable.");
-      },
-    });
+    skillLibraryService.nativeCatalogue = new NativeSkillCatalogue({ runtimeManager, authorizeSession: authorizeOwnedNativeSession });
     skillLibraryService.learnedMethods = user => learningService ? learningService.listMethods(user.id, { limit: 50 }) : [];
   }
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
@@ -5859,6 +5861,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     agentRegistry,
     usageLedger,
     managedBrowser,
+    authorizeOpenSession: authorizeOwnedNativeSession,
     authorizePrompt: assertPublicSessionPrompt,
     recordPromptActor: recordExtensionPromptActor,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
