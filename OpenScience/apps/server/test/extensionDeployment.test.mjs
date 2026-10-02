@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import syncFs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -190,4 +191,15 @@ test('symlinks, extra fixed-file bytes and mutable parent directories cannot sup
   } finally {
     await f.close();
   }
+});
+
+
+test('native HTML asset routing changes invalidate the permission profile identity',t=>{
+  const before=currentExtensionSourcePolicy(),read=syncFs.readFileSync;
+  t.mock.method(syncFs,'readFileSync',(file,...args)=>{
+    const bytes=read(file,...args);
+    return String(file).endsWith('/apps/server/src/runtimeUiDocument.mjs')?Buffer.concat([bytes,Buffer.from('\n// controlled routing revision\n')]):bytes;
+  });
+  const after=currentExtensionSourcePolicy();
+  assert.notEqual(after.permissionProfileRevision,before.permissionProfileRevision);
 });
