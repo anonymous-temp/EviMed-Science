@@ -111,11 +111,19 @@ export class ExtensionToolController{
     const lines=String(output).trim().split('\n');if(JSON.parse(lines[0])?.allBytesModesAndDirectoriesMatch!==true||lines[1]?.split(/\s+/)[0]!==descriptor.runnerSHA||lines[2]?.split(/\s+/)[0]!==descriptor.policySHA)throw refusal();
     this.admitted.set(descriptor.id,descriptor.artifactDigest);return{artifactDigest:descriptor.artifactDigest,integrity:descriptor.integrity,coordinate:canonicalExtensionCoordinate(descriptor.coordinate),qualified:false,joined:true};
   }
+  /** The trusted resolver returns signed scope, not a boolean that can be
+   * reused for another admitted descriptor. @param {any} descriptor @param {string} operationId @param {any} request */
+  async authorizeOperation(descriptor,operationId,request){
+    if(!this.resolveOperation)throw refusal();
+    const scope=await this.resolveOperation(operationId,request,{descriptorId:descriptor.id,artifactDigest:descriptor.artifactDigest});
+    if(!scope||scope.descriptorId!==descriptor.id||scope.artifactDigest!==descriptor.artifactDigest)throw refusal();
+  }
   /** @param {any} body @param {{signal?:AbortSignal}} options */
   async execute(body,{signal}={}){
     extensionRequestObject(body,['descriptorId','operationId','request']);const descriptor=this.descriptor(body.descriptorId);extensionIdentifier(body.operationId);
     const request=body.request;extensionRequestObject(request,request?.operation==='doc_read'?['operation','resourceId','options']:['operation','targetId','format','spec'],request?.operation==='doc_read'?['operation','resourceId']:['operation','targetId','format','spec']);
-    if(!['doc_read','doc_write'].includes(request.operation)||!this.resolveOperation||!await this.resolveOperation(body.operationId,request))throw refusal();
+    if(!['doc_read','doc_write'].includes(request.operation))throw refusal();
+    await this.authorizeOperation(descriptor,body.operationId,request);
     if(this.admitted.get(descriptor.id)!==descriptor.artifactDigest)throw unavailable();const bytes=jsonBytes(request);let snapshot=null;
     if(request.operation==='doc_read'){
       if(typeof request.resourceId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(request.resourceId)||!this.resolveInputSnapshot)throw refusal();
@@ -125,7 +133,8 @@ export class ExtensionToolController{
       const file=await fs.open(filePath,constants.O_RDONLY|constants.O_NOFOLLOW);let data;try{const stat=await file.stat();if(!stat.isFile()||stat.nlink!==1||stat.size!==selected.bytes)throw refusal();const buffer=Buffer.alloc(selected.bytes+1);const read=await file.read(buffer,0,buffer.length,0);if(read.bytesRead!==selected.bytes)throw refusal();data=buffer.subarray(0,read.bytesRead);}finally{await file.close();}
       if(hash(data)!==selected.sha256)throw refusal();snapshot={...selected,bytes:data,resourceId:request.resourceId};
     }
-    const output=await this.run(descriptor,null,{mounts:[],entrypoint:[],command:[]},bytes,signal,snapshot);const result=JSON.parse(String(output));if(result?.ok!==true||!await this.resolveOperation(body.operationId,request))throw refusal();return result;
+    const output=await this.run(descriptor,null,{mounts:[],entrypoint:[],command:[]},bytes,signal,snapshot);const result=JSON.parse(String(output));if(result?.ok!==true)throw refusal();
+    await this.authorizeOperation(descriptor,body.operationId,request);return result;
   }
   /** Matching private attempt identity only. Unknown, restarted or mismatched scopes never receive a joined acknowledgment. @param {any} identity */
   async cancelPreparation(identity){const captured=extensionPreparationIdentity(identity),active=this.active.get(captured.jobId);

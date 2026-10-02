@@ -12,7 +12,7 @@ test("account cleanup removes only its fixed private namespaces without followin
   try {
     const untouched = path.join(root, "untouched");
     await fs.writeFile(untouched, "outside bytes");
-    for (const namespace of ["skill-library", "personal-skill-generations"]) {
+    for (const namespace of ["skill-library", "personal-skill-generations", "extension-generations", "extension-operations"]) {
       const owned = path.join(root, ".openscience", namespace, hash("alice"));
       const other = path.join(root, ".openscience", namespace, hash("bob"));
       await fs.mkdir(path.join(owned, "nested"), { recursive: true });
@@ -24,7 +24,7 @@ test("account cleanup removes only its fixed private namespaces without followin
     await removePrivateExtensionFiles(root, "alice");
     await removePrivateExtensionFiles(root, "alice");
     assert.equal(await fs.readFile(untouched, "utf8"), "outside bytes");
-    for (const namespace of ["skill-library", "personal-skill-generations"]) {
+    for (const namespace of ["skill-library", "personal-skill-generations", "extension-generations", "extension-operations"]) {
       await assert.rejects(fs.stat(path.join(root, ".openscience", namespace, hash("alice"))), { code: "ENOENT" });
       assert.equal(await fs.readFile(path.join(root, ".openscience", namespace, hash("bob"), "resource"), "utf8"), "other bytes");
     }

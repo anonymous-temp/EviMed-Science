@@ -33,7 +33,7 @@ export async function removePrivateExtensionFiles(dataDir, userId) {
       await fs.rmdir(target);
     } finally { await handle.close(); }
   };
-  for (const namespace of ["skill-library", "personal-skill-generations"]) {
+  for (const namespace of ["skill-library", "personal-skill-generations", "extension-generations", "extension-operations"]) {
     let parent;
     try { parent = await openScopedDirectoryNoFollow(dataDir, path.join(dataDir, ".openscience", namespace)); }
     catch (error) { if (["ENOENT", "file_not_found"].includes(error.code)) continue; throw error; }
