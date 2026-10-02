@@ -43,7 +43,7 @@ function send(peer, data) {
  *
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
  * heartbeat?: { intervalMs: number, timeoutMs: number },
- * admit?: (endpoint:string,operation:()=>Promise<void>) => Promise<void>,
+ * admit?: (endpoint:string,operation:()=>Promise<void>,payload?:any) => Promise<void>,
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
  * `observe` sees an admitted prompt immediately before it goes upstream; it
@@ -191,7 +191,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
           const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
           try { await send(upstream, raw); await accepted; }
           finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
-        });
+        }, frame.payload);
       } catch (error) {
         streams.delete(frame.streamId);
         if (!closed) await rejectStream(frame.streamId, error);

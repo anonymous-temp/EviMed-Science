@@ -657,6 +657,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
+        await runtimeManager.assertPersonalSkillPromptGeneration(project, promptBody?.payload?.args?.request ?? {});
         await prepareNativeContext(project, promptBody?.payload);
         await recordSteer(project, promptBody?.payload);
         return forward();

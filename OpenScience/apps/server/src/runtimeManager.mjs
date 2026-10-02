@@ -27,6 +27,7 @@ import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from ".
 import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 // So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
@@ -1955,6 +1956,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
+    personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
     capsuleGatewayUrl,
     revisionGatewayUrl: gateways ? String(gateways.revision ?? "") : revisionGatewayProviderUrl(config),
     publicSourceGatewayUrl: gateways ? String(gateways.publicSource ?? "") : publicSourceGatewayProviderUrl(config),
@@ -2338,6 +2340,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
   webSearchGatewayUrl = webSearchGatewayProviderUrl(config),
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
+  personalSkillGeneration = null,
+  personalSkillImageId = null,
 } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
@@ -2392,6 +2396,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsDir = capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
+    const personalReference = validatePersonalGenerationReference(project, personalSkillGeneration);
+    if (personalReference && !/^sha256:[a-f0-9]{64}$/.test(String(personalSkillImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable personal-skill runtime image is required.");
     const isolatedControlMount = Boolean(config.runtimeDataVolume);
     const controlDir = isolatedControlMount
       ? path.join(
@@ -2462,6 +2468,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
               `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
             ]
           : []),
+        ...(personalReference ? ["--mount", `${dockerRuntimeMount(config, path.join(personalGenerationRoot(config, personalReference), 'skills'), PERSONAL_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(isolatedControlMount
           ? [
               "--mount",
@@ -2541,6 +2548,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
           capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
+          personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
           capsuleGatewayUrl,
           revisionGatewayUrl,
           publicSourceGatewayUrl,
@@ -2584,7 +2592,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           },
         }))
           .flatMap(([key, value]) => ["--env", `${key}=${value}`]),
-        config.runtimeContainerImage,
+        personalReference ? personalSkillImageId : config.runtimeContainerImage,
         "open-science-dsh-serve",
       ],
       cwd: project.workspaceDir,
@@ -2941,7 +2949,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -2985,15 +2993,24 @@ export class DockerRuntimeProvider {
     }
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null }) {
     const manager = this.manager;
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
     // exists, and a project whose first source arrives while its runtime runs
     // must not find it writable then.
     await manager.ensureKnowledgeBaseDir(project);
-    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
+    const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
+      personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
+    if (personal) {
+      const checked = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest],
+        { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+      if (checked.status !== 0 || checked.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
+    }
+    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, personalSkillGeneration: personal?.reference ?? null,
+      personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null });
+    plan.personalSkillGeneration = personalSkillGeneration;
     plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
     let socketStat = null;
@@ -3062,6 +3079,7 @@ export class DockerRuntimeProvider {
         revisionGatewayProviderUrl(this.config),
         publicSourceGatewayProviderUrl(this.config),
         plan.pluginConfig,
+        plan.personalSkillGeneration?.reference ?? null,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3169,6 +3187,9 @@ export class RuntimeManager {
   } = {}) {
     this.config = config;
     /** @type {any} */ this.pluginService = null;
+    /** @type {any} Immutable personal methods, assigned only by the composition root. */
+    this.personalSkillGenerations = null;
+    this.personalSkillOverrides = new Map();
     /**
      * The account's memory capsules — the seam this manager reads a project's
      * approved work-style methods through.
@@ -3546,6 +3567,13 @@ export class RuntimeManager {
   key(project) {
     return `${project.userId}:${project.id}`;
   }
+  /** Independent resources retain their existing generation/owner rechecks;
+   * they must not inherit a transaction that ends after startup/admission.
+   * @param {()=>any} work */
+  independentWork(work) {
+    const database = this.pluginService?.database;
+    return typeof database?.withoutTransactionClient === 'function' ? database.withoutTransactionClient(work) : work();
+  }
 
   runtimeGeneration(project) {
     const runtime = this.runtimes.get(this.key(project));
@@ -3831,6 +3859,15 @@ export class RuntimeManager {
     // is gone from the next one.
     const mountedMethods = await this.syncCapsuleMethods(project);
     const capsuleMethodsMounted = mountedMethods.count;
+    let personalSkillGeneration = this.personalSkillOverrides.get(key) ?? null;
+    if (!this.personalSkillOverrides.has(key) && this.personalSkillGenerations) {
+      try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
+      catch {
+        // Preparation failed before current identity compatibility could be
+        // established. Ordinary research starts without optional personal bytes.
+        personalSkillGeneration = null;
+      }
+    }
     // What the learned half contributed, kept on the runtime so the run ledger
     // can say which revision of which method was in the room. A digest recorded
     // at mount time is the only record that survives the container.
@@ -3838,7 +3875,7 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted });
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -3954,7 +3991,7 @@ export class RuntimeManager {
     this.noteStartStage(project, "kernel");
     let child;
     try {
-      child = await this.provider.launch(project, plan, { port, password });
+      child = await this.independentWork(() => this.provider.launch(project, plan, { port, password }));
     } catch (error) {
       // A provider that holds something outside this process — a cloud
       // session — lets it go and says why; the Docker provider has nothing to
@@ -3977,6 +4014,7 @@ export class RuntimeManager {
     }
     const runtime = {
       pluginConfig: plan.pluginConfig,
+      personalSkillGeneration,
       // The kernel that is actually running, from one binding. This was once
       // the literal `opencode` written out in twelve places, so every `exited`,
       // `cleaned_orphan` and state record a DSH container produced was labelled
@@ -4026,7 +4064,7 @@ export class RuntimeManager {
       project,
       close: async () => this.provider.close(project, plan, child),
     };
-    /** @type {any} */ (child).once("error", (err) => {
+    /** @type {any} */ (child).once("error", (err) => this.independentWork(() => {
       runtime.spawnError = err;
       runtime.exitedAt = new Date().toISOString();
       const current = this.runtimes.get(key);
@@ -4052,7 +4090,7 @@ export class RuntimeManager {
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
         error: err instanceof Error ? err.message : String(err),
       });
-    });
+    }));
     // `(code, signal)`, not `()`.
     //
     // Node hands the exit status to this callback and it was discarded, so the
@@ -4061,7 +4099,7 @@ export class RuntimeManager {
     // available anywhere: the container was started `--rm` so docker had
     // already deleted it, and this host's `docker events` does not retain
     // history. The status was in the argument list the whole time.
-    /** @type {any} */ (child).once("exit", (/** @type {number|null} */ code, /** @type {string|null} */ signal) => {
+    /** @type {any} */ (child).once("exit", (/** @type {number|null} */ code, /** @type {string|null} */ signal) => this.independentWork(() => {
       runtime.exitedAt = new Date().toISOString();
       runtime.exitCode = typeof code === "number" ? code : null;
       runtime.exitSignal = signal ?? null;
@@ -4116,7 +4154,7 @@ export class RuntimeManager {
         agentsGenerated: runtime.agentsGenerated,
         capsuleMethodsMounted: runtime.capsuleMethodsMounted,
       });
-    });
+    }));
     try {
       await this.waitUntilReady(runtime);
       if (runtime.workloadTokenFile) {
@@ -4696,6 +4734,7 @@ export class RuntimeManager {
       throw error;
     }
     if (!allowBounded) this.assertInteractiveRuntimeAvailable(project);
+    await this.assertPersonalSkillPromptGeneration(project, { sessionId, mode });
     if (typeof system === "string" && system.trim()) {
       await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
@@ -5159,6 +5198,83 @@ export class RuntimeManager {
   }
 
   runtimePluginConfig(project) { return this.runtimes.get(this.key(project))?.pluginConfig ?? null; }
+
+  /** A stale mount may serve only explicit steering into its already running
+   * native session. New queued turns wait for exclusive idle apply; missing
+   * optional methods on a safe baseline never prevent ordinary research.
+   * @param {any} project @param {{sessionId?:any,mode?:any}} request */
+  async assertPersonalSkillPromptGeneration(project, { sessionId, mode } = {}) {
+    const runtime = this.runtimes.get(this.key(project));
+    const pins = runtime?.personalSkillGeneration?.pins ?? [];
+    if (!this.personalSkillGenerations || !pins.length) return;
+    try {
+      const state = await this.personalSkillGenerations.current(project);
+      const wanted = state?.payload.desired?.pins ?? [];
+      if (pins.every(pin => wanted.some(item => item.skillId === pin.skillId && item.revision === pin.revision && item.digest === pin.digest))) return;
+      if (mode === "steer" && typeof sessionId === "string") {
+        const listed = await this.callKernel(runtime, project, "session/list", { _request: {} }, AbortSignal.timeout(10000));
+        if (sessionListItems(listed).some(item => item.sessionId === sessionId && item.running === true)) return;
+      }
+      throw new HttpError(409, "extension_contract_invalid", "Personal skills changed; a new turn must wait for current work to finish.");
+    } catch (error) {
+      // No prompt has reached the kernel; release any newly reserved receipt.
+      error.definitivelyRejected = true;
+      throw error;
+    }
+  }
+
+  runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }
+  runtimePersonalSkillPins(project) {
+    return (this.runtimePersonalSkillGeneration(project)?.pins ?? []).map(pin => ({ skillId: pin.skillId, revision: pin.revision,
+      digest: pin.digest, nativeName: pin.nativeName, source: 'personal' }));
+  }
+  async replacePersonalSkillRuntime(project, candidate) {
+    const key = this.key(project);
+    this.personalSkillOverrides.set(key, candidate);
+    try { await this.stop(project); return await this.startAdmitted(project); }
+    finally { this.personalSkillOverrides.delete(key); }
+  }
+  /** Native cold-readable catalogue; no diagnostic user conversation or model call.
+   * @param {any} project @param {any} expected @param {string|null} [sessionId] */
+  async probePersonalSkillGeneration(project, expected, sessionId = null) {
+    const runtime = this.runtimes.get(this.key(project));
+    const generation = this.runtimeGeneration(project);
+    if (!runtime || !generation || (runtime.personalSkillGeneration?.reference?.generationHash ?? null) !== (expected?.reference?.generationHash ?? null)) {
+      throw new HttpError(409, 'extension_contract_invalid', 'The personal skill runtime changed.');
+    }
+    const wanted = (expected?.pins ?? []).filter(pin => pin.invocation.userInvocable);
+    const listed = await this.callKernel(runtime, project, 'session/list', { _request: {} }, AbortSignal.timeout(10000));
+    const sessions = sessionListItems(listed);
+    const addressed = sessionId ? sessions.find(item => item.sessionId === sessionId) : sessions.find(item => item.origin?.kind !== 'subagent');
+    if (!addressed) return { generation, pendingSession: wanted.length > 0 };
+    const observed = await this.callKernel(runtime, project, 'skills/list', { request: { sessionId: addressed.sessionId } }, AbortSignal.timeout(10000));
+    if (!Array.isArray(observed?.skills)) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not return an inventory.');
+    const personal = observed.skills.filter(item => String(item.name).startsWith('personal-'));
+    if (personal.length !== wanted.length || wanted.some(pin => !personal.some(item => item.name === pin.nativeName
+      && item.modelInvocable === pin.invocation.modelInvocable && item.path === `${PERSONAL_SKILLS_RUNTIME_DIR}/${pin.nativeName}/SKILL.md`))
+      || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'extension_contract_invalid', 'Native skill discovery did not prove this generation.');
+    return { generation, pendingSession: false };
+  }
+  /** The native skill consumer owns slash parsing and logged skill-invocation context.
+   * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string}} request */
+  async invokePersonalSkill({ project, skillId, revision, sessionId, idempotencyKey }) {
+    const invoke = () => this.invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey });
+    return this.pluginService ? this.pluginService.withAdmission(project, invoke, { prompt: true }) : invoke();
+  }
+  /** @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string}} request */
+  async invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey }) {
+    if (!this.personalSkillGenerations) throw new HttpError(503, 'product_state_unavailable', 'Personal skill invocation is unavailable.');
+    const source = await this.personalSkillGenerations.requireInvocation(project, skillId, revision);
+    await this.start(project);
+    const pinned = this.runtimePersonalSkillGeneration(project);
+    if (!pinned?.pins?.some(pin => pin.skillId === skillId && pin.revision === revision && pin.digest === source.digest)) {
+      throw new HttpError(409, 'extension_contract_invalid', 'This skill revision is waiting for current work to finish.');
+    }
+    const proof = await this.probePersonalSkillGeneration(project, pinned, safeId(sessionId, 'session id'));
+    if (proof.pendingSession) throw new HttpError(404, 'runtime_session_not_found', 'The target conversation is unavailable.');
+    await this.dispatchAdmittedPrompt(project, sessionId, { text: `/${source.nativeName}`, requestId: safeId(idempotencyKey, 'invocation id') });
+    return { accepted: true, sessionId, skillId, revision, generation: pinned.reference.generationHash };
+  }
 
   async replacePluginRuntime(project, pluginConfig) {
     const key = this.key(project);
@@ -5950,12 +6066,12 @@ export class RuntimeManager {
         this.evimedWorkloadRefreshTimers.get(key) !== monitor ||
         this.runtimes.get(key) !== runtime
       ) return;
-      monitor.timer = this.setWorkloadTimer(() => {
+      monitor.timer = this.independentWork(() => this.setWorkloadTimer(() => this.independentWork(() => {
         monitor.timer = null;
         void this.refreshEviMedRuntimeToken(project, monitor).then((refreshed) => {
           if (refreshed) schedule();
         });
-      }, intervalMs);
+      }), intervalMs));
       monitor.timer?.unref?.();
     };
     this.evimedWorkloadRefreshTimers.set(key, monitor);
@@ -5997,10 +6113,10 @@ export class RuntimeManager {
     const monitor = { timer: null };
     const schedule = () => {
       if (this.runtimeQuotaMonitors.get(key) !== monitor || !this.runtimes.has(key)) return;
-      monitor.timer = setTimeout(() => {
+      monitor.timer = this.independentWork(() => setTimeout(() => this.independentWork(() => {
         monitor.timer = null;
         void this.checkRuntimeQuota(project, monitor).catch(() => {}).finally(schedule);
-      }, intervalMs);
+      }), intervalMs));
       monitor.timer.unref?.();
     };
     this.runtimeQuotaMonitors.set(key, monitor);
@@ -6143,9 +6259,9 @@ export class RuntimeManager {
     }
     if (activity.activeProxies > 0) return;
     this.clearIdleTimer(key);
-    activity.idleTimer = setTimeout(() => {
+    activity.idleTimer = this.independentWork(() => setTimeout(() => this.independentWork(() => {
       void this.reapIdleRuntime(project).catch(() => {});
-    }, timeoutMs);
+    }), timeoutMs));
     activity.idleTimer.unref?.();
   }
 
@@ -6279,8 +6395,14 @@ export class RuntimeManager {
         req, socket, head, runtime,
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
-        admit: (endpoint, operation) => endpoint === "session/prompt" && this.pluginService
-          ? this.pluginService.withAdmission(project, operation, { prompt: true }) : operation(),
+        admit: (endpoint, operation, payload) => {
+          if (endpoint !== "session/prompt") return operation();
+          const prompt = async () => {
+            await this.assertPersonalSkillPromptGeneration(project, payload?.args?.request ?? {});
+            return operation();
+          };
+          return this.pluginService ? this.pluginService.withAdmission(project, prompt, { prompt: true }) : prompt();
+        },
       });
     } catch (error) {
       release();

@@ -8,6 +8,8 @@ const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
 if (databaseUrl) { const url = new URL(databaseUrl); assert.ok(['localhost','127.0.0.1'].includes(url.hostname)); assert.match(url.pathname,/evimed_test/); }
 const options = { skip: !databaseUrl && 'Dedicated local PostgreSQL required' };
 let db, service, owner, other, project, second;
+// Immediate worker assertions use the database clock, including on a VM with clock skew.
+const duePluginJobs=()=>db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE user_id=$1 AND kind='plugin-apply' AND status='queued'",[owner]);
 before(async () => {
   if (!databaseUrl) return;
   db = new ControlPlaneDatabase({databaseUrl,databasePoolMax:8,databaseConnectionTimeoutMs:2000});
@@ -76,15 +78,15 @@ test('leased worker defers busy work, applies, verifies rollback and recovers la
   const worker=new PluginApplyWorker({service,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false});
   const due=()=>db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND kind='plugin-apply'",[owner]);
   await service.save(owner,p,{expectedRevision:0,enabled:false,settings:{timeoutMs:4000}});
-  await worker.tick();assert.equal(starts,0);assert.equal((await service.get(owner,p)).phase,'pending');
-  busy=false;await due();await worker.tick();
+  await duePluginJobs();await worker.tick();assert.equal(starts,0);assert.equal((await service.get(owner,p)).phase,'pending');
+  busy=false;await due();await duePluginJobs();await worker.tick();
   assert.equal((await service.get(owner,p)).phase,'effective');assert.equal((await service.get(owner,p)).effective.revision,1);
   await service.save(owner,p,{expectedRevision:1,enabled:true,settings:{timeoutMs:5000}});failRevision=2;
   const restarted=new PluginApplyWorker({service:new PluginService(db),runtime,resolveProject:async()=>p,ledgerBusy:async()=>false});
-  await restarted.tick();const failed=await service.get(owner,p);
+  await duePluginJobs();await restarted.tick();const failed=await service.get(owner,p);
   assert.equal(failed.phase,'rolled_back');assert.equal(failed.desired.revision,2);assert.equal(failed.effective.revision,1);assert.equal(current.revision,1);
   assert.deepEqual((await service.history(owner,p)).items.map(x=>x.revision),[2,1]);
-  failRevision=null;await service.retry(owner,p);await restarted.tick();assert.equal((await service.get(owner,p)).effective.revision,2);
+  failRevision=null;await service.retry(owner,p);await duePluginJobs();await restarted.tick();assert.equal((await service.get(owner,p)).effective.revision,2);
   await worker.close();await restarted.close();
 });
 
@@ -105,7 +107,7 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   /** @type {any[]} */ const audits=[];
   const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false,audit:(event,status,details)=>{audits.push({event,status,...details});}});
   const row=async()=>(await db.query(`SELECT phase,error,error_detail,effective,last_good FROM evimed_product.plugin_application_state WHERE user_id=$1 AND id=$2`,[owner,projectPluginId(p.id)])).rows[0];
-  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await worker.tick();
+  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await duePluginJobs();await worker.tick();
   let state=await row();
   assert.deepEqual([state.phase,state.error],['failed','plugin_apply_failed']);
   assert.equal(stops,0,'the runtime is restarted on the defaults, not left stopped');
@@ -127,7 +129,7 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   provable=(config)=>config.revision===0;
   await scoped.retry(owner,p);assert.equal((await row()).error_detail,null,'a new attempt starts without the last one\'s reasons');
   await db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND project_id=$2",[owner,p.id]);
-  await worker.tick();state=await row();
+  await duePluginJobs();await worker.tick();state=await row();
   assert.deepEqual([state.phase,state.error,state.effective?.revision,state.last_good?.revision],['rolled_back','plugin_apply_failed',0,0]);
   assert.deepEqual(Object.keys(state.error_detail),['apply','restored']);
 
@@ -136,7 +138,7 @@ test('the 2026-09-27 incident: a first configuration whose probes fail records w
   provable=()=>false;
   await scoped.retry(owner,p);
   await db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND project_id=$2",[owner,p.id]);
-  await worker.tick();state=await row();
+  await duePluginJobs();await worker.tick();state=await row();
   assert.deepEqual([state.phase,state.error],['unavailable','plugin_rollback_failed']);
   assert.equal(stops,1);
   assert.deepEqual(Object.keys(state.error_detail),['apply','restored','rollback']);
@@ -159,7 +161,7 @@ test('an apply whose source answers 429 is effective, with the warning on the ro
     probePlugin:async()=>({generation,upstream:{ok:false,code:'http_429'}}),stop:async()=>{generation=null;}};
   /** @type {any[]} */ const audits=[];
   const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false,audit:(event,status,details)=>{audits.push({event,status,...details});}});
-  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await worker.tick();
+  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:10000}});await duePluginJobs();await worker.tick();
   const state=(await db.query(`SELECT phase,error,error_detail,effective,last_good FROM evimed_product.plugin_application_state WHERE user_id=$1 AND id=$2`,[owner,projectPluginId(p.id)])).rows[0];
   assert.deepEqual([state.phase,state.error],['effective',null]);
   assert.deepEqual(state.effective,{revision:1,enabled:true,settings:{timeoutMs:10000}});
@@ -200,7 +202,7 @@ test('work an admission started that prompts after the admission ended takes an 
     const later = new Promise(r=>{resume=r;});
     try {
       await scoped.withAdmission(project, async()=>{
-        monitor = (async()=>{
+        monitor = scoped.database.withoutTransactionClient(async()=>{
           await later;
           const read = await scoped.get(owner,project);
           const repair = await scoped.withAdmission(project, async()=>{
@@ -208,7 +210,7 @@ test('work an admission started that prompts after the admission ended takes an 
             return {applyExcluded:!lock.rows[0].acquired};
           },{prompt:true});
           return {read,repair};
-        })();
+        });
       });
       await new Promise(r=>setTimeout(r,200));
       resume();
@@ -247,11 +249,11 @@ test('a project without a runtime stays saved until first launch is really probe
     probePlugin:async()=>{probes++;return{generation};},stop:async()=>{generation=null;}};
   scoped.runtimeGeneration=()=>generation;
   const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false});
-  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});await worker.tick();
+  await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});await duePluginJobs();await worker.tick();
   assert.equal((await scoped.get(owner,p)).phase,'saved');assert.equal(probes,0);assert.equal(starts,0);
   generation='first';current=(await scoped.get(owner,p)).desired;await scoped.runtimeStarted(p);
   await db.query("UPDATE evimed_product.jobs SET run_after=now()-interval '1 second' WHERE user_id=$1 AND project_id=$2",[owner,p.id]);
-  await worker.tick();assert.ok(probes>0);assert.equal((await scoped.get(owner,p)).effective.revision,1);
+  await duePluginJobs();await worker.tick();assert.ok(probes>0);assert.equal((await scoped.get(owner,p)).effective.revision,1);
   generation=null;assert.equal((await scoped.get(owner,p)).effective,null);assert.equal((await scoped.get(owner,p)).phase,'saved');
   generation='another';assert.equal((await scoped.get(owner,p)).effective,null);
   await worker.close();
@@ -273,7 +275,7 @@ test('desired revision or lease loss while probing cannot publish stale effectiv
         return{generation};
       },stop:async()=>{generation=null;}};
     const worker=new PluginApplyWorker({service:scoped,runtime,resolveProject:async()=>p,ledgerBusy:async()=>false});
-    await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});await worker.tick();
+    await scoped.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});await duePluginJobs();await worker.tick();
     const result=await scoped.get(owner,p);assert.equal(result.effective,null);assert.equal(result.desired.revision,failure==='revision'?2:1);
     assert.notEqual(result.phase,'effective');await worker.close();
   }
@@ -284,7 +286,7 @@ test('concurrent plugin retry and lease completion acquire job then document wit
   const p={id:'retry-finish-order',userId:owner};
   await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Retry and finish',1000000)",[owner,p.id]);
   await service.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});
-  const leased=await service.jobs.claim(['plugin-apply'],'retry-finish-worker',{leaseMs:30000});
+  await duePluginJobs();const leased=await service.jobs.claim(['plugin-apply'],'retry-finish-worker',{leaseMs:30000});
   let enteredRetry,releaseRetry,enteredCompletion;
   const retryReachedEnqueue=new Promise(resolve=>{enteredRetry=resolve;});
   const resumeRetry=new Promise(resolve=>{releaseRetry=resolve;});
@@ -315,7 +317,7 @@ test('a save during retry revision discovery rolls back stale job rearming', { .
   const p={id:'retry-save-order',userId:owner};
   await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Retry and save',1000000)",[owner,p.id]);
   await service.save(owner,p,{expectedRevision:0,enabled:true,settings:{timeoutMs:4000}});
-  const leased=await service.jobs.claim(['plugin-apply'],'retry-save-worker',{leaseMs:30000});
+  await duePluginJobs();const leased=await service.jobs.claim(['plugin-apply'],'retry-save-worker',{leaseMs:30000});
   await service.jobs.fail(owner,leased.id,leased.leaseToken,{code:'fixture_failure',message:'Fixture failed apply.'});
   let enteredRetry,releaseRetry;
   const retryReachedEnqueue=new Promise(resolve=>{enteredRetry=resolve;});

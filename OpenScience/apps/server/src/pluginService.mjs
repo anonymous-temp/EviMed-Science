@@ -523,6 +523,12 @@ export class PluginService {
   /** A shared transaction lock surrounds prompt acceptance; apply takes its exclusive counterpart.
    * @param {any} project @param {() => Promise<any>} operation @param {{prompt?:boolean}} options */
   async withAdmission(project, operation, { prompt = false } = {}) {
+    const previous = this.admission.getStore();
+    if (previous && !previous.open && typeof this.database.withoutTransactionClient === "function") {
+      // This is an explicit new admission, not a database-query fallback: all
+      // current owner/project checks and the lock are taken again.
+      return this.admission.run(undefined, () => this.database.withoutTransactionClient(() => this.withAdmission(project, operation, { prompt })));
+    }
     await migrateProductStore(this.database);
     const projectKey = `${project.userId}:${project.id}`;
     const accept = async client => {
@@ -547,7 +553,7 @@ export class PluginService {
       if (!lock.rows[0].acquired) throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
       await this.scope(project.userId, project, client);
       const store = { projectKey, client, open: true, borrowers: new Set() };
-      return this.admission.run(store, async () => {
+      const admitted = () => this.admission.run(store, async () => {
         try { return { value: await accept(client) }; }
         // Commit an unknown acceptance receipt before surfacing its transport
         // error. The shared lock excludes apply until that receipt is durable.
@@ -557,6 +563,8 @@ export class PluginService {
           await Promise.allSettled([...store.borrowers]);
         }
       });
+      return typeof this.database.withTransactionClient === "function"
+        ? this.database.withTransactionClient(client, admitted) : admitted();
     });
     if (outcome.error) throw outcome.error;
     return outcome.value;

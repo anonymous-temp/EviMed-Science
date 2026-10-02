@@ -1,5 +1,6 @@
 import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
+import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -472,7 +473,13 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig });
+    const personal = payload.personalSkillGeneration ? await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration) : null;
+    if (personal) {
+      const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+      if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
+    }
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig,
+      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null });
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -508,6 +515,27 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     });
     try {
       await waitForSpawn(child);
+      if (personal) {
+        let proved = false;
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const inspected = spawnSync(config.runtimeContainerBin, ['inspect', '--format', '{{json .}}', plan.containerName], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+          if (inspected.status === 0) {
+            let state; try { state = JSON.parse(inspected.stdout); } catch { throw controllerFailure(503, 'runtime_start_failed', 'Runtime mount verification failed.'); }
+            const expected = path.join(personal.mountRoot);
+            const mount = state.HostConfig?.Mounts?.find(item => item.Target === '/opt/evimed/personal-skills');
+            const relative = path.relative(config.dataDir, expected).split(path.sep).join('/');
+            proved = state.Image === personal.identity.baseRuntimeImageDigest && mount?.ReadOnly === true
+              && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative
+                : mount.Type === 'bind' && mount.Source === expected)
+              && state.Mounts?.some(item => item.Destination === '/opt/evimed/personal-skills' && item.RW === false);
+            if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime personal skill mount did not match its generation.');
+            await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration, personal.identity.baseRuntimeImageDigest);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime personal skill mount could not be inspected.');
+      }
     } catch (error) {
       await cleanupRuntime(project).catch(() => {});
       throw error;
@@ -651,7 +679,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // extension generations need their own subsequent coordinated adapter.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);

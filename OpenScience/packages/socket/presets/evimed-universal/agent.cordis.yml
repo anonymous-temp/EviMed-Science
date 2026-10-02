@@ -184,6 +184,7 @@
   name: '@deepseek-ai/dsh-skill-filesystem'
   config:
     includeDefaultRoots: false
+    watch: false
     # Absolute, and not by accident. The loader resolves each root with
     # `path.resolve`, so a relative one lands under `process.cwd()` — which in a
     # runtime container is `/workspace`. These four were written `./skills/...`
@@ -209,6 +210,8 @@
       # can displace a skill we wrote. What is in here is recorded in
       # runtime/skills/community/sources.json, one entry per skill.
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
+      # Exact selected personal revisions, mounted read-only outside the workspace.
+      - !!js process.env.EVIMED_PERSONAL_SKILLS_DIR || '/opt/evimed/personal-skills'
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 

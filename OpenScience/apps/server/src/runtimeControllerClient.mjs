@@ -218,7 +218,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -227,6 +227,7 @@ export class RuntimeControllerClient {
       revisionGatewayUrl,
       publicSourceGatewayUrl,
       pluginConfig,
+      ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
     });
   }
 

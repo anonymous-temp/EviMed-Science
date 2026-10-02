@@ -1407,3 +1407,50 @@ test("failed native supplemental context never refuses an otherwise authorized p
   assert.equal(response.status, 200);
   assert.ok(audits.some(item => item.code === "handbook_context_timeout"));
 });
+
+test('HTTP and mux personal-generation barriers refuse stale new turns before context/observation, while running native steer remains usable', { timeout: 10000 }, async t => {
+  let prepared = 0
+  const f = await fixture(t, {}, {}, { authorizePrompt: async () => {}, preparePrompt: async () => { prepared++ } })
+  const project = await f.store.requireProject(f.user, 'default')
+  const pin = { skillId: 'removed-skill', revision: 1, digest: `sha256:${'a'.repeat(64)}` }
+  f.manager.runtimes.set(f.manager.key(project), { personalSkillGeneration: { pins: [pin] } })
+  f.manager.personalSkillGenerations = { current: async () => ({ payload: { desired: { pins: [] } } }) }
+  let running = true
+  let admitted = false
+  f.manager.pluginService = { withAdmission: async (_project, work) => { admitted = true; try { return await work() } finally { admitted = false } } }
+  f.manager.callKernel = async (_runtime, _project, method) => {
+    assert.equal(admitted, true)
+    assert.equal(method, 'session/list')
+    return { items: [{ sessionId: 'existing-turn', running }] }
+  }
+  let httpForwarded = 0
+  f.manager.proxy = async (_req, res) => { httpForwarded++; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}') }
+  const httpPrompt = request => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: {
+    cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
+  }, body: JSON.stringify({ type: 'client-request', rpcId: 'personal-prompt', method: 'session/prompt', payload: { args: { request } } }) })
+  const queue = { sessionId: 'existing-turn', requestId: 'queue-new', mode: 'queue', content: [{ type: 'text', text: '/removed-method' }] }
+  assert.equal((await httpPrompt(queue)).status, 409)
+  assert.equal(prepared, 0)
+  assert.equal(httpForwarded, 0)
+  const steer = { ...queue, requestId: 'steer-old', mode: 'steer' }
+  assert.equal((await httpPrompt(steer)).status, 200)
+  assert.equal(prepared, 1)
+  const connection = f.connect(); await connection.opened
+  connection.send(open('stale-queue', 'session/prompt', { request: queue }))
+  assertNativeError(await connection.next(), 'stale-queue', 'extension_contract_invalid')
+  assert.deepEqual(await connection.next(), { type: 'end', streamId: 'stale-queue' })
+  assert.equal(f.received.length, 0)
+  assert.equal(prepared, 1)
+  connection.send(open('active-steer', 'session/prompt', { request: steer }))
+  assert.equal((await connection.next()).type, 'item')
+  assert.equal(f.received.length, 1)
+  for (const peer of f.peers) peer.send(JSON.stringify({ type: 'end', streamId: 'active-steer' }))
+  assert.equal((await connection.next()).type, 'end')
+  running = false
+  connection.send(open('idle-steer', 'session/prompt', { request: steer }))
+  assertNativeError(await connection.next(), 'idle-steer', 'extension_contract_invalid')
+  await connection.next()
+  assert.equal(f.received.length, 1)
+  f.manager.runtimes.get(f.manager.key(project)).personalSkillGeneration = { pins: [] }
+  assert.equal((await httpPrompt(queue)).status, 200, 'safe baseline preserves ordinary research')
+})

@@ -1,4 +1,5 @@
 import pg from "pg";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { HttpError } from "./security.mjs";
 
 const { Pool } = pg;
@@ -161,6 +162,10 @@ export class ControlPlaneDatabase {
     });
     this.ownsPool = !pool;
     this.ready = null;
+    this.transactionClients = new AsyncLocalStorage();
+    this.atomicTransactions = new AsyncLocalStorage();
+    this.checkedOutClients = new WeakSet();
+    this.savepointSequence = 0;
     // An idle client losing its connection is routine — a TCP timeout, a
     // database restart, a network blip — and pg reports it by emitting "error"
     // on the pool. An EventEmitter with no error listener throws, so this took
@@ -190,7 +195,10 @@ export class ControlPlaneDatabase {
    *  in flight rejects on its own and carries the real failure.
    *  @param {(client: Record<string, any>) => Promise<any>} operation */
   async withClient(operation) {
+    const scoped = this.transactionScope();
+    if (scoped) return this.trackScoped(scoped, Promise.resolve().then(() => operation(scoped.client)));
     const client = await this.pool.connect();
+    this.checkedOutClients.add(client);
     const absorb = (error) => {
       process.stderr.write(
         `control-plane database client error: ${error?.code ?? "unknown"} ${error?.message ?? error}\n`,
@@ -201,6 +209,7 @@ export class ControlPlaneDatabase {
       return await operation(client);
     } finally {
       client.off("error", absorb);
+      this.checkedOutClients.delete(client);
       client.release();
     }
   }
@@ -239,11 +248,38 @@ export class ControlPlaneDatabase {
   }
 
   async query(text, values = []) {
+    const scoped = this.transactionScope();
+    if (scoped) return this.enqueueScoped(scoped, this.atomicTransactions.getStore() ?? scoped, () => scoped.client.query(text, values));
     await this.migrate();
     return this.pool.query(text, values);
   }
 
   async transaction(operation) {
+    const scoped = this.transactionScope();
+    if (scoped) {
+      const enclosing = this.atomicTransactions.getStore();
+      const run = async () => {
+        const name = `evimed_scoped_${++this.savepointSequence}`;
+        const atomic = { scope: scoped, open: true, serial: Promise.resolve() };
+        await scoped.client.query(`SAVEPOINT ${name}`);
+        try {
+          const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
+          atomic.open = false;
+          await atomic.serial;
+          await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
+          return result;
+        } catch (error) {
+          atomic.open = false;
+          await atomic.serial;
+          await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
+          await scoped.client.query(`RELEASE SAVEPOINT ${name}`).catch(() => {});
+          throw error;
+        } finally { atomic.open = false; }
+      };
+      // Peers serialize at each nesting level. Reentrant transactions use
+      // their parent's queue, not the queue currently waiting for that parent.
+      return this.enqueueScoped(scoped, enclosing ?? scoped, run);
+    }
     await this.migrate();
     return this.withClient(async (client) => {
       try {
@@ -257,6 +293,51 @@ export class ControlPlaneDatabase {
       }
     });
   }
+
+  /** @returns {any} Only an open owned scope, including admitted atomic work draining at close. */
+  transactionScope() {
+    const scoped = this.transactionClients.getStore();
+    if (!scoped) return null;
+    const atomic = this.atomicTransactions.getStore();
+    if ((atomic && !atomic.open) || (!scoped.open && !(scoped.draining && atomic?.scope === scoped && atomic.open))) {
+      throw new HttpError(409, "product_revision_conflict", "The database transaction scope has ended; admit the operation again.");
+    }
+    return scoped;
+  }
+  /** @param {any} scoped @param {Promise<any>} pending */
+  trackScoped(scoped, pending) {
+    scoped.borrowers.add(pending);
+    pending.then(() => scoped.borrowers.delete(pending), () => scoped.borrowers.delete(pending));
+    return pending;
+  }
+  /** @param {any} scoped @param {any} holder @param {()=>Promise<any>} operation */
+  enqueueScoped(scoped, holder, operation) {
+    const pending = holder.serial.catch(() => {}).then(operation);
+    holder.serial = pending.then(() => undefined, () => undefined);
+    return this.trackScoped(scoped, pending);
+  }
+  /** Trusted held-client scope; every borrower settles before the owner may release it.
+   * Detached callbacks retain a closed context and fail, rather than bypassing a fence through a fresh checkout.
+   * @param {any} client @param {()=>Promise<any>} work */
+  async withTransactionClient(client, work) {
+    if (!this.checkedOutClients.has(client)) throw new HttpError(409, "product_revision_conflict", "The database client is not owned by this transaction.");
+    const existing = this.transactionClients.getStore();
+    if (existing) {
+      this.transactionScope();
+      if (existing.client !== client) throw new HttpError(409, "product_revision_conflict", "The database transaction client changed.");
+      return this.trackScoped(existing, Promise.resolve().then(work));
+    }
+    const scoped = { client, open: true, draining: false, borrowers: new Set(), serial: Promise.resolve() };
+    try { return await this.transactionClients.run(scoped, work); }
+    finally {
+      scoped.open = false; scoped.draining = true;
+      while (scoped.borrowers.size) await Promise.allSettled([...scoped.borrowers]);
+      scoped.draining = false;
+    }
+  }
+  /** Explicitly independent work must perform its own admission; never a customer-selectable bypass.
+   * @param {()=>any} work */
+  withoutTransactionClient(work) { return this.transactionClients.run(undefined, () => this.atomicTransactions.run(undefined, work)); }
 
   async health() {
     const result = await this.query(
