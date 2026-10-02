@@ -3,7 +3,9 @@ import test from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
+import { createServer } from 'node:http'
+import { promisify } from 'node:util'
 import { canonicalJson } from '@evimed/domain'
 import { createSkillValidationController, skillValidationRoot } from '../src/skillValidationController.mjs'
 import { RuntimeControllerClient } from '../src/runtimeControllerClient.mjs'
@@ -12,6 +14,50 @@ import { createRuntimeController } from '../src/runtimeControllerServer.mjs'
 const sha = value => createHash('sha256').update(value).digest('hex')
 const nativeName = `personal-${'b'.repeat(16)}-${'c'.repeat(32)}`
 const selectedImage = process.env.EVIMED_SKILL_VALIDATION_TEST_IMAGE
+
+test('the fixed fixture transport negotiates Docker 1.48 and preserves the minimum subpath API and sandbox', async t => {
+  const directory = await fs.mkdtemp('/tmp/skill-docker-api-')
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const socket = path.join(directory, 'docker.sock')
+  const helper = await fs.readFile(new URL('./helpers/skillValidationDockerHttp.mjs', import.meta.url), 'utf8')
+  const sourceSocket = "socketPath:'/docker.sock'"
+  assert.equal(helper.split(sourceSocket).length, 2, 'only the fixed socket is replaced in the isolated transport control')
+  const script = path.join(directory, 'proxy.mjs')
+  await fs.writeFile(script, helper.replace(sourceSocket, `socketPath:${JSON.stringify(socket)}`))
+  let apiVersion = '1.48'
+  const requests = []
+  const server = createServer(async (req, res) => {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    requests.push({ url: req.url, body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null })
+    res.setHeader('content-type', 'application/json')
+    if (req.url === '/version') res.end(JSON.stringify({ ApiVersion: apiVersion }))
+    else if (req.url === `/v${apiVersion}/containers/create?name=owned-api-control`) res.end(JSON.stringify({ Id: 'a'.repeat(64) }))
+    else { res.statusCode = 400; res.end(JSON.stringify({ message: 'client API exceeds this daemon' })) }
+  })
+  await new Promise(resolve => server.listen(socket, resolve))
+  t.after(() => new Promise(resolve => server.close(resolve)))
+  const args = ['create', '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=32', '--cpus=0.5', '--memory=256m', '--memory-swap=256m', '--name', 'owned-api-control', '--label', 'fixture=true', '--user', '10001:10001', '--mount', 'type=volume,src=owned,dst=/input,volume-subpath=private/original,readonly', '--entrypoint', 'node', `sha256:${'b'.repeat(64)}`, '/fixed/reader.mjs']
+  const run = () => promisify(execFile)(process.execPath, [script, ...args], { timeout: 5000 })
+  for (const supported of ['1.48', '1.45']) {
+    apiVersion = supported
+    requests.length = 0
+    const result = await run()
+    assert.equal(result.stdout.trim(), 'a'.repeat(64))
+    assert.deepEqual(requests.map(request => request.url), ['/version', `/v${supported}/containers/create?name=owned-api-control`])
+    const body = requests[1].body
+    assert.equal(body.User, '10001:10001')
+    assert.equal(body.HostConfig.NetworkMode, 'none')
+    assert.equal(body.HostConfig.ReadonlyRootfs, true)
+    assert.deepEqual(body.HostConfig.CapDrop, ['ALL'])
+    assert.deepEqual(body.HostConfig.SecurityOpt, ['no-new-privileges'])
+    assert.deepEqual(body.HostConfig.Mounts, [{ Type: 'volume', Source: 'owned', Target: '/input', ReadOnly: true, VolumeOptions: { Subpath: 'private/original' } }])
+  }
+  apiVersion = '1.44'
+  requests.length = 0
+  await assert.rejects(run(), error => error.code === 1 && /docker_subpath_api_unsupported/.test(error.stderr))
+  assert.deepEqual(requests.map(request => request.url), ['/version'])
+})
 
 /** An existing local fixture contains the actual pinned provider and this fixed helper.
  * These are Docker/native-parser tests, not research-kernel or SaaS qualification.
