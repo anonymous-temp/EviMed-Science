@@ -38,7 +38,7 @@ if(args[0]==='create'){
  const mount=args[args.indexOf('--mount')+1];const source=mount.split(',').find(part=>part.startsWith('src=')).slice(4);
  fs.writeFileSync(captured,JSON.stringify(args));
  try{fs.writeFileSync(state,JSON.stringify({Id:'d'.repeat(64),Config:{Labels:labels,User:'10001:10001'},Image:${JSON.stringify(imageId)},State:{Running:false},
- HostConfig:{ReadonlyRootfs:true,NetworkMode:'none',Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Mounts:[{Type:'bind',Source:source,Target:'/input',ReadOnly:true}]},
+ HostConfig:{Tmpfs:{'/workspace':'ro,noexec,nosuid,nodev,size=1m','/runtime':'ro,noexec,nosuid,nodev,size=1m'},ReadonlyRootfs:true,NetworkMode:'none',Memory:268435456,MemorySwap:268435456,NanoCpus:500000000,PidsLimit:32,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],Mounts:[{Type:'bind',Source:source,Target:'/input',ReadOnly:true}]},
  Mounts:[{Destination:'/input',RW:false}]}),{flag:'wx'});}catch{process.exit(1);}
  if(behavior==='uncertain'){setTimeout(()=>{},10000);}else{console.log('d'.repeat(64));process.exit(0);}
 }
@@ -83,6 +83,8 @@ test('only four opaque fields select one fixed private directory and sandbox com
   const config = { dataDir: '/srv/data', runtimeContainerImage: 'ignored', runtimeContainerUser: '1000:1000' }
   const reference = { ownerHash: 'a'.repeat(64), kind: 'imports', contentId: 'b'.repeat(64), expectedName: null }
   const plan = skillValidationPlan(config, reference, imageId, '00000000-0000-0000-0000-000000000001')
+  assert(plan.args.includes('/workspace:ro,noexec,nosuid,nodev,size=1m'))
+  assert(plan.args.includes('/runtime:ro,noexec,nosuid,nodev,size=1m'))
   assert.equal(plan.args.at(-2), '/opt/evimed/socket/scripts/validate-personal-skill.mjs')
   assert.ok(plan.args.includes('--network=none') && plan.args.includes('--read-only'))
   assert.equal(plan.args.filter(value => value === '--mount').length, 1)
@@ -328,4 +330,13 @@ test('restart cancellation cannot claim a matching-name worker without persisted
   // recovery path invents this identity from the current name occupant.
   marker.containerId='d'.repeat(64);await fs.writeFile(markerPath,JSON.stringify(marker))
   await f.controller.cancel(f.reference);await pending;await restarted.close()
+})
+
+test('the isolated validator resolves through the actual runtime image seed, never a stale fixture path',async()=>{
+  const dockerfile=await fs.readFile(new URL('../../../deploy/runtime-dsh/Dockerfile',import.meta.url),'utf8')
+  const script=await fs.readFile(new URL('../../../scripts/runtime/validate-personal-skill.mjs',import.meta.url),'utf8')
+  const seed=dockerfile.match(/^ENV DSH_HOME_SEED=(\S+)$/m)?.[1]
+  assert.ok(seed?.startsWith('/opt/evimed/'))
+  assert.ok(script.includes(`createRequire('${seed}/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json')`))
+  assert.ok(!script.includes('/usr/local/share/evimed/dsh-home-seed'))
 })

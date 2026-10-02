@@ -8,7 +8,7 @@ try {
   // The sealed profile carries the installed pinned SDK closure. The image's
   // source COPY does not; resolving through this fixed image-owned anchor keeps
   // preparation independent of any customer profile or environment selection.
-  const require = createRequire('/usr/local/share/evimed/dsh-home-seed/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json')
+  const require = createRequire('/opt/evimed/dsh-home-seed/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json')
   const { parsePersonalSkill } = await import(pathToFileURL(require.resolve('@evimed/harness-port/personal-skills')).href)
   const skill = await parsePersonalSkill('/input', process.argv[2] ? { expectedName: process.argv[2] } : {})
   const normalized = { name: skill.name, description: skill.description, instructions: skill.instructions,
