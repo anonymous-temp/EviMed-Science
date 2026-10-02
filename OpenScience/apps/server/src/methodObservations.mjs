@@ -42,6 +42,34 @@
 import { toSkillName } from "@evimed/harness-port";
 
 import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
+import { runHistory } from "./agentRuns.mjs";
+
+/** Scope learning reads to the actual native input, without changing preserved history.
+ * The ledger's legacy fallback is useful for reading old conversations, but cannot
+ * establish a current method invocation. Only request/turn identity establishes that.
+ * Child reads belong only to the current projection's assigned deliverable sessions.
+ * @param {{run:any,projection:any,sessions:readonly any[]}} input
+ * @returns {any[]}
+ */
+export function methodObservationSessionsForRun({ run, projection, sessions }) {
+  const requestIds = new Set(Array.isArray(run.kernelRequestIds) ? run.kernelRequestIds : []);
+  const currentItems = new Set((projection?.plan?.items ?? []).map(item => item.id));
+  const children = new Set((projection?.subagents ?? [])
+    .filter(child => currentItems.has(child.deliverableId) && child.childSessionId !== run.sessionId)
+    .map(child => child.childSessionId).filter(Boolean));
+  return sessions.flatMap(session => {
+    if (session.sessionId !== run.sessionId) return children.has(session.sessionId) ? [session] : [];
+    const messages = session.transcript?.messages ?? [];
+    const requestProven = messages.some(message => message.role === "user" && message.source === "user"
+      && requestIds.has(message.sourceRequestId) && Number.isSafeInteger(message.turnStartSeq));
+    const turnProven = requestIds.size === 0 && Number.isSafeInteger(run.nativeTurn?.startSeq);
+    const owned = requestProven || turnProven ? runHistory(run, messages.map(message => ({
+      info: { role: message.role, source: message.source, sourceRequestId: message.sourceRequestId, turnStartSeq: message.turnStartSeq },
+      message,
+    }))).map(entry => entry.message) : [];
+    return [{ ...session, transcript: { ...session.transcript, messages: owned } }];
+  });
+}
 
 /** A mounted learned method's own file, as the `read` tool is handed it:
  *  absolute (`/runtime/capsule-methods/_lm…/SKILL.md`) or relative to the

@@ -74,7 +74,7 @@ import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
+import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
@@ -1248,7 +1248,8 @@ export function createWebApiApp(overrides = {}) {
         ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
       });
     }
-    const derived = runMethodObservations({ run, projection, methods, sessions });
+    const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
+    const derived = runMethodObservations({ run, projection, methods, sessions: observedSessions });
     learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
       // A run that carried an unproven method has to say so on its own row.

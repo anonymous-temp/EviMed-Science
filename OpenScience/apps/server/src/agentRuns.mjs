@@ -1039,7 +1039,7 @@ function storedKernelRequestId(value) {
 }
 
 /** The log, not elapsed time or matching text, assigns messages to a run. */
-function runHistory(run, history) {
+export function runHistory(run, history) {
   const turns = new Set(history.filter((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
     .map((message) => message.info?.turnStartSeq).filter((seq) => Number.isSafeInteger(seq)));
   if (run.nativeTurn && !run.kernelRequestIds?.length) turns.add(run.nativeTurn.startSeq);
