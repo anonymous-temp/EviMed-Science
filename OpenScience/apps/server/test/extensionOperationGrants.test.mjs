@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { ExtensionOperationGrants } from "../src/extensionOperationGrants.mjs";
 
-const scope = { userId: "alice", projectId: "p1", accountCreatedAt: "account-epoch", projectCreatedAt: "project-epoch",
+const scope = { userId: "alice", ownerId:"alice", ownerAccountCreatedAt:"account-epoch", membershipEpoch:null, projectId: "p1", accountCreatedAt: "account-epoch", projectCreatedAt: "project-epoch",
   runtimeGeneration: "runtime-one", extensionGenerationHash: "a".repeat(64), descriptorId: "cowork-portable",
   artifactDigest: `sha256:${"b".repeat(64)}`, installationId: "extension:owned", installationRevision: 1 };
 const request = { operation: "doc_read", resourceId: "resource_one", options: {} };

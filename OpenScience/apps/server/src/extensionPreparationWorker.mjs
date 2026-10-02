@@ -23,7 +23,7 @@ export class ExtensionPreparationWorker{
     const entry=this.service.entries.get(job.payload.catalogueId),artifact=this.artifacts.get(job.payload.catalogueId);
     if(!entry||entry.executionClass!=='isolated-tool'||!artifact||artifact.integrity!==job.payload.integrity||canonicalExtensionCoordinate(artifact.coordinate)!==job.payload.coordinate||canonicalExtensionCoordinate(entry.coordinate)!==job.payload.coordinate||entry.integrity!==job.payload.integrity)throw new HttpError(400,'extension_contract_invalid','This artifact is not supported by the preparation adapter.');
     const target=job.payload.projectTarget??null;
-    if(target){const project=await this.service.access.project(user,target.projectId,{manage:true,client});if(project.userId!==target.ownerId||!target.projectCreatedAt||project.projectCreatedAt!==target.projectCreatedAt)throw new HttpError(404,'project_not_found','The project generation changed.');}
+    if(target){const project=await this.service.access.project(user,target.projectId,{manage:true,client});if((project.extensionMembershipEpoch??null)!==target.membershipEpoch||project.userId!==target.ownerId||!target.projectCreatedAt||project.projectCreatedAt!==target.projectCreatedAt)throw new HttpError(404,'project_not_found','The project generation changed.');}
     return{artifact,identity:extensionPreparationIdentity({jobId:job.id,leaseToken:job.leaseToken,attempts:job.attempts,installationId:job.payload.installationId,installationRevision:job.payload.installationRevision,accountCreatedAt:epoch,projectTarget:target})};
   }
   /** @param {any} job */

@@ -274,13 +274,16 @@ export class VcrStore extends VcrStoreBase {
     return vcrStudyFromRow(row);
   }
 
-  /** The study of a control-plane project, for the runtime gateway. @param {string} userId @param {string} projectId */
-  async studyByControlProject(userId, projectId) {
-    const row = await this.one(`SELECT s.* FROM ${VCR_SCHEMA}.studies s
+  /** The study of a control-plane project, for the runtime gateway. @param {string} userId @param {string} projectId @param {any} [client] */
+  async studyByControlProject(userId, projectId, client = null) {
+    const sql = `SELECT s.* FROM ${VCR_SCHEMA}.studies s
       WHERE s.project_id = $1 AND s.deleted_at IS NULL
-        AND (s.user_id = $2 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id = s.id AND m.user_id = $2))`,
-    [String(projectId), String(userId)]);
-    return vcrStudyFromRow(row);
+        AND (s.user_id = $2 OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.members m WHERE m.study_id = s.id AND m.user_id = $2))
+      ORDER BY (s.user_id = $2) DESC, s.id${client ? " FOR SHARE OF s" : ""}`;
+    const values = [String(projectId), String(userId)];
+    const rows = client ? (await client.query(sql, values)).rows : await this.rows(sql, values);
+    const owned = rows.find(row => row.user_id === String(userId));
+    return vcrStudyFromRow(owned ?? (rows.length === 1 ? rows[0] : null));
   }
 
   /**

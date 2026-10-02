@@ -7,7 +7,7 @@ import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readSta
 
 const purpose = "evimed-extension-operation-v1\0";
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
-const scopeKeys = ["userId", "projectId", "accountCreatedAt", "projectCreatedAt", "runtimeGeneration", "extensionGenerationHash", "descriptorId", "artifactDigest", "installationId", "installationRevision"];
+const scopeKeys = ["userId", "ownerId", "ownerAccountCreatedAt", "membershipEpoch", "projectId", "accountCreatedAt", "projectCreatedAt", "runtimeGeneration", "extensionGenerationHash", "descriptorId", "artifactDigest", "installationId", "installationRevision"];
 const refused = () => new HttpError(403, "extension_access_denied", "The extension operation is unavailable.");
 
 /** Private one-operation authority, issued only after the hosted boundary
@@ -31,9 +31,11 @@ export class ExtensionOperationGrants {
   scope(scope) {
     extensionRequestObject(scope, scopeKeys);
     for (const key of ["userId", "projectId", "descriptorId", "installationId"]) extensionIdentifier(scope[key]);
-    if (!["accountCreatedAt", "projectCreatedAt", "runtimeGeneration"].every(key => typeof scope[key] === "string" && scope[key].length > 0 && scope[key].length <= 256)
+    if (!["accountCreatedAt", "ownerAccountCreatedAt", "projectCreatedAt", "runtimeGeneration"].every(key => typeof scope[key] === "string" && scope[key].length > 0 && scope[key].length <= 256)
       || !/^[a-f0-9]{64}$/.test(scope.extensionGenerationHash) || !/^sha256:[a-f0-9]{64}$/.test(scope.artifactDigest)
       || !Number.isSafeInteger(scope.installationRevision) || scope.installationRevision < 1) throw refused();
+    extensionIdentifier(scope.ownerId);
+    if (scope.membershipEpoch !== null && (typeof scope.membershipEpoch !== "string" || !scope.membershipEpoch || scope.membershipEpoch.length > 4096)) throw refused();
     return structuredClone(scope);
   }
   /** @param {any} value */

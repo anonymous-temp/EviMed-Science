@@ -29,23 +29,24 @@ export function extensionPreparationIdentity(identity){
   extensionRequestObject(identity,['jobId','leaseToken','attempts','installationId','installationRevision','accountCreatedAt','projectTarget']);
   for(const key of ['jobId','leaseToken','installationId'])extensionIdentifier(identity[key]);
   if(!Number.isSafeInteger(identity.attempts)||identity.attempts<1||!Number.isSafeInteger(identity.installationRevision)||identity.installationRevision<1||typeof identity.accountCreatedAt!=='string')throw refusal();
-  if(identity.projectTarget!==null){extensionRequestObject(identity.projectTarget,['ownerId','projectId','projectCreatedAt']);extensionIdentifier(identity.projectTarget.ownerId);extensionIdentifier(identity.projectTarget.projectId);if(typeof identity.projectTarget.projectCreatedAt!=='string')throw refusal();}
+  if(identity.projectTarget!==null){extensionRequestObject(identity.projectTarget,['ownerId','projectId','projectCreatedAt','membershipEpoch']);extensionIdentifier(identity.projectTarget.ownerId);extensionIdentifier(identity.projectTarget.projectId);if(!(identity.projectTarget.membershipEpoch===null||typeof identity.projectTarget.membershipEpoch==='string'&&identity.projectTarget.membershipEpoch.length>0&&identity.projectTarget.membershipEpoch.length<=4096)||typeof identity.projectTarget.projectCreatedAt!=='string')throw refusal();}
   return JSON.parse(jsonBytes(identity).toString());
 }
 /** Durable lease and signed operation scope; no execution authority comes from this DTO. @param {any} identity */
 export function extensionExecutionIdentity(identity){
-  extensionRequestObject(identity,['jobId','leaseToken','attempts','operationId','userId','projectId','accountCreatedAt','projectCreatedAt','runtimeGeneration','extensionGenerationHash','descriptorId','artifactDigest','installationId','installationRevision']);
-  for(const key of ['jobId','leaseToken','operationId','userId','projectId','descriptorId','installationId'])extensionIdentifier(identity[key]);
+  extensionRequestObject(identity,['jobId','leaseToken','attempts','operationId','userId','ownerId','ownerAccountCreatedAt','membershipEpoch','projectId','accountCreatedAt','projectCreatedAt','runtimeGeneration','extensionGenerationHash','descriptorId','artifactDigest','installationId','installationRevision']);
+  for(const key of ['jobId','leaseToken','operationId','userId','ownerId','projectId','descriptorId','installationId'])extensionIdentifier(identity[key]);
   if(!Number.isSafeInteger(identity.attempts)||identity.attempts<1||!Number.isSafeInteger(identity.installationRevision)||identity.installationRevision<1
-    ||!['accountCreatedAt','projectCreatedAt','runtimeGeneration'].every(key=>typeof identity[key]==='string'&&identity[key].length>0&&identity[key].length<=256)
+    ||!(identity.membershipEpoch===null||typeof identity.membershipEpoch==='string'&&identity.membershipEpoch.length>0&&identity.membershipEpoch.length<=4096)
+    ||!['accountCreatedAt','ownerAccountCreatedAt','projectCreatedAt','runtimeGeneration'].every(key=>typeof identity[key]==='string'&&identity[key].length>0&&identity[key].length<=256)
     ||!HEX.test(identity.extensionGenerationHash)||!DIGEST.test(identity.artifactDigest))throw refusal();
   return JSON.parse(jsonBytes(identity).toString());
 }
 /** Fixed controller adapter. The injected resolver authorizes opaque operations and returns only trusted public/aggregate snapshots. */
 export class ExtensionToolController{
-  /** @param {{admittedDescriptors:any[],stateRoot:string,adapterRoot:string,inputRoot:string,dataDir?:string,runtimeDataVolume?:string,resolveOperation?:any,resolveInputSnapshot?:any,resolvePreparation?:any,canRetireAttempt?:any,dockerBin?:string,maxConcurrent?:number,timeoutMs?:number}} options */
-  constructor({admittedDescriptors,stateRoot,adapterRoot,inputRoot,dataDir=stateRoot,runtimeDataVolume='',resolveOperation=null,resolveInputSnapshot=null,resolvePreparation=null,canRetireAttempt=null,dockerBin='docker',maxConcurrent=2,timeoutMs=15000}){
-    this.stateRoot=path.resolve(stateRoot);this.adapterRoot=path.resolve(adapterRoot);this.inputRoot=path.resolve(inputRoot);this.resolveOperation=resolveOperation;this.resolveInputSnapshot=resolveInputSnapshot;
+  /** @param {{admittedDescriptors:any[],stateRoot:string,adapterRoot:string,inputRoot:string,dataDir?:string,runtimeDataVolume?:string,resolveOperation?:any,withOperationAdmission?:any,resolveInputSnapshot?:any,resolvePreparation?:any,canRetireAttempt?:any,dockerBin?:string,maxConcurrent?:number,timeoutMs?:number}} options */
+  constructor({admittedDescriptors,stateRoot,adapterRoot,inputRoot,dataDir=stateRoot,runtimeDataVolume='',resolveOperation=null,withOperationAdmission=async(_identity,work)=>work(),resolveInputSnapshot=null,resolvePreparation=null,canRetireAttempt=null,dockerBin='docker',maxConcurrent=2,timeoutMs=15000}){
+    this.stateRoot=path.resolve(stateRoot);this.adapterRoot=path.resolve(adapterRoot);this.inputRoot=path.resolve(inputRoot);this.resolveOperation=resolveOperation;this.withOperationAdmission=withOperationAdmission;this.resolveInputSnapshot=resolveInputSnapshot;
     this.dockerBin=dockerBin;this.maxConcurrent=maxConcurrent;this.timeoutMs=timeoutMs;this.active=new Map();this.blocked=false;this.admitted=new Map();this.descriptors=new Map();
     this.mountConfig={dataDir:path.resolve(dataDir),runtimeDataVolume:runtimeDataVolume?assertDockerVolumeName(runtimeDataVolume):''};
     if(this.mountConfig.runtimeDataVolume)dockerRuntimeMount(this.mountConfig,this.stateRoot,'/input');
@@ -210,14 +211,14 @@ export class ExtensionToolController{
     if(!['doc_read','doc_write'].includes(request.operation))throw refusal();
     await this.authorizeOperation(descriptor,body.operationId,request,identity);
     if(this.admitted.get(descriptor.id)!==descriptor.artifactDigest){await this.inspectArtifact(descriptor,identity,signal,false);await this.authorizeOperation(descriptor,body.operationId,request,identity);}const bytes=jsonBytes(request);let snapshot=null;
-    if(request.operation==='doc_read'){
+    if(request.operation==='doc_read') await this.withOperationAdmission(identity,async()=>{
       if(typeof request.resourceId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(request.resourceId)||!this.resolveInputSnapshot)throw refusal();
       const selected=await this.resolveInputSnapshot(body.operationId,request.resourceId,identity);
       if(!selected||!['public','aggregate'].includes(selected.dataClass)||!['docx','pdf','xlsx','ipynb'].includes(selected.format)||!HEX.test(selected.sha256)||!Number.isSafeInteger(selected.bytes)||selected.bytes<1||selected.bytes>8*1024*1024)throw refusal();
       const filePath=path.resolve(selected.filePath),parent=await fs.realpath(path.dirname(filePath));if(!parent.startsWith(this.inputRoot+path.sep)&&parent!==this.inputRoot)throw refusal();
       const file=await fs.open(filePath,constants.O_RDONLY|constants.O_NOFOLLOW);let data;try{const stat=await file.stat();if(!stat.isFile()||stat.nlink!==1||stat.size!==selected.bytes)throw refusal();const buffer=Buffer.alloc(selected.bytes+1);const read=await file.read(buffer,0,buffer.length,0);if(read.bytesRead!==selected.bytes)throw refusal();data=buffer.subarray(0,read.bytesRead);}finally{await file.close();}
       if(hash(data)!==selected.sha256)throw refusal();snapshot={...selected,bytes:data,resourceId:request.resourceId};
-    }
+    });
     const output=await this.run(descriptor,identity,{mounts:[],entrypoint:[],command:[]},bytes,signal,snapshot);const result=JSON.parse(String(output));if(result?.ok!==true)throw refusal();
     await this.authorizeOperation(descriptor,body.operationId,request,identity);return{ok:true,data:result.data,identity,joined:true,physicallyAbsent:true};
   }

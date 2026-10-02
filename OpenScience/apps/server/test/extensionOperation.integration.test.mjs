@@ -30,7 +30,7 @@ async function fixture() {
       calls = 0,
       absent = true;
     const scope = {
-      userId: 'alice',
+      userId: 'alice',ownerId:'alice',ownerAccountCreatedAt:epoch,membershipEpoch:null,
       projectId: 'p',
       accountCreatedAt: epoch,
       projectCreatedAt: projectEpoch,
@@ -97,7 +97,7 @@ async function fixture() {
       controller
     });
     const auth = {
-      userId: 'alice',
+      userId: 'alice',ownerId:'alice',ownerAccountCreatedAt:epoch,membershipEpoch:null,
       projectId: 'p',
       runtimeGeneration: 'r1',
       invocation: {

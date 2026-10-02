@@ -37,7 +37,9 @@ export class ExtensionDocumentResources {
   async project(scope) {
     const user = await this.store.userById(scope.userId);
     if (!user) throw denied();
-    return this.access.project(user, scope.projectId);
+    const project=await this.access.project(user, scope.projectId);
+    if(project.userId!==(scope.ownerId??scope.userId))throw denied();
+    return project;
   }
   /** Public sources belong to the project; authored results belong to its active workspace.
    * @param {any} scope @param {any} record */
@@ -62,7 +64,7 @@ export class ExtensionDocumentResources {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,89}_(?:xlsx|ipynb)$/.test(id)) throw denied();
     const project = await this.project(scope);
     const format = id.endsWith('_xlsx') ? 'xlsx' : 'ipynb';
-    return { ownerId: scope.userId, projectId: project.id, revision: 1, format,
+    return { ownerId: scope.ownerId ?? scope.userId, projectId: project.id, revision: 1, format,
       relativePath: `outputs/extensions/${id}.${format}` };
   }
   /** @param {any} scope @param {string} id */
@@ -76,8 +78,8 @@ export class ExtensionDocumentResources {
   /** @param {any} scope @param {any} record */
   async provenance(scope, record) {
     const { revision, signature, ...body } = record;
-    if (!/^[a-f0-9]{64}$/.test(signature ?? '') || body.ownerId !== scope.userId || body.projectId !== scope.projectId
-      || body.accountCreatedAt !== scope.accountCreatedAt || body.projectCreatedAt !== scope.projectCreatedAt
+    if (!/^[a-f0-9]{64}$/.test(signature ?? '') || body.ownerId !== (scope.ownerId ?? scope.userId) || body.projectId !== scope.projectId
+      || body.accountCreatedAt !== (scope.ownerAccountCreatedAt ?? scope.accountCreatedAt) || body.projectCreatedAt !== scope.projectCreatedAt
       || body.dataClass !== 'public' || body.format !== 'pdf' || body.originType !== 'checked-open-access-pdf'
       || !timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(this.sign(body), 'hex'))) throw denied();
     return { revision, dataClass: 'public' };
