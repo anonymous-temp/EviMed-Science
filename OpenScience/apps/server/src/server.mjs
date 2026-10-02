@@ -11,6 +11,9 @@ import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
+import { loadExtensionDeployment } from "./extensionDeployment.mjs";
+import { createHostedExtensionIntegration } from "./extensionHostedIntegration.mjs";
+import { EXTENSION_GATEWAY_PATH } from "./extensionGateway.mjs";
 import { SkillLibraryService } from "./skillLibraryService.mjs";
 import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
 import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
@@ -918,13 +921,28 @@ export function createWebApiApp(overrides = {}) {
   const extensionConnections = new ExtensionConnections({ credentials: connectorCredentials, access: extensionAccess,
     adapters: overrides.extensionConnectionAdapters ?? new Map() });
   if (!overrides.extensionConnectionAccess) extensionAccess.connectionAccess = (user, ref, scope) => extensionConnections.authorize(user, ref, scope);
+  const extensionDeployment = loadExtensionDeployment(config);
+  /** @type {any} */
+  let hostedExtensions = null;
+  const recordExtensionPromptActor = async (user, project, request) => {
+    if (!hostedExtensions) return;
+    try { await hostedExtensions.actors.accept(user, project, request); }
+    catch (error) { await securityAudit(config, "extension.actor.admission", "unavailable", { userId: user.id, projectId: project.id, code: error?.code ?? "product_state_unavailable" }); }
+  };
   const extensionService = productDatabase ? new ExtensionService(productDatabase, {
-    access: extensionAccess, catalogue: overrides.extensionCatalogue ?? [],
+    access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
     proofAuthority: overrides.extensionProofAuthority ?? null,
-    catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? "1970-01-01T00:00:00.000Z",
+    catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
     connectionList: (user, entry, projectId) => extensionConnections.list(user, entry, projectId),
   }) : null;
-  const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes });
+  const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes,
+    onSelectionChanged: async (user, projectId) => {
+      if (!hostedExtensions) return;
+      try { await hostedExtensions.reconcile(user, projectId); }
+      catch (error) { await securityAudit(config, "extension.selection.reconcile", "waiting", { userId: user.id, projectId, code: error?.code ?? "product_state_unavailable" }); }
+    },
+    projectState: (user, projectId, view) => hostedExtensions ? hostedExtensions.projectState(user, projectId, view) : view,
+  });
   const skillRoot = path.join(config.dataDir, ".openscience", "skill-library");
   const skillController = overrides.skillValidationController ?? new RuntimeControllerClient(config);
   let skillStorageReady = false;
@@ -2790,6 +2808,14 @@ export function createWebApiApp(overrides = {}) {
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
   }) : null;
   runtimeManager.personalSkillGenerations = personalSkillGenerations;
+  if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
+    && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {
+    hostedExtensions = createHostedExtensionIntegration({ config, database: productDatabase, store, agentRuns, runtimeManager,
+      controller: skillController, extensions: extensionService, plugins: pluginService, pluginWorker: pluginApplyWorker,
+      deployment: extensionDeployment, resolveProject: sourceProject,
+      audit: (event, status, details) => securityAudit(config, event, status, details),
+    });
+  }
   const personalSkillWorker = personalSkillGenerations ? new PersonalSkillGenerationWorker({
     service: personalSkillGenerations, runtime: runtimeManager, resolveProject: sourceProject,
     ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
@@ -3429,6 +3455,20 @@ export function createWebApiApp(overrides = {}) {
     connectorCredentials,
     webReader,
     documentParser,
+    preparePdfCapture: hostedExtensions ? async principal => {
+      try { return await hostedExtensions.documents.prepareCapture(principal); }
+      catch (error) {
+        await securityAudit(config, "extension.document.prepare", "unavailable", { userId: principal.userId, projectId: principal.projectId, code: error?.code ?? "product_state_unavailable" });
+        return null;
+      }
+    } : null,
+    capturePdf: hostedExtensions ? async (principal, bytes, provenance, captured, validateCurrent) => {
+      try { return await hostedExtensions.documents.capturePdf(principal, bytes, provenance, captured, validateCurrent); }
+      catch (error) {
+        await securityAudit(config, "extension.document.capture", "unavailable", { userId: principal.userId, projectId: principal.projectId, code: error?.code ?? "product_state_unavailable" });
+        return null;
+      }
+    } : null,
   });
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
@@ -3802,6 +3842,8 @@ export function createWebApiApp(overrides = {}) {
           autopilotScheduleRun,
           pluginApplyWorker?.running,
           personalSkillWorker?.running,
+          hostedExtensions?.preparation.running,
+          hostedExtensions?.worker.running,
           memoryIndexWorker?.status?.().running,
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
@@ -3973,6 +4015,8 @@ export function createWebApiApp(overrides = {}) {
           ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
         });
       }
+      await runtimeManager.start(project);
+      await recordExtensionPromptActor(user, project, { sessionId: session.sessionId, requestId: dispatchedRun.kernelRequestIds?.at(-1) });
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
         text: promptText,
         system: prepared.system,
@@ -4100,7 +4144,12 @@ export function createWebApiApp(overrides = {}) {
                     ? geoGatewayHandler
                     : pathname.startsWith(`${VCR_GATEWAY_PATH}/`)
                       ? vcrGatewayHandler
-                      : null;
+                      : pathname.startsWith(`${EXTENSION_GATEWAY_PATH}/`)
+                        ? (request, response) => {
+                          if (!hostedExtensions) { sendError(response, new HttpError(503, "product_state_unavailable", "Extension execution is unavailable.")); return; }
+                          return hostedExtensions.gateway(request, response);
+                        }
+                        : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -4943,6 +4992,8 @@ export function createWebApiApp(overrides = {}) {
               ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
             });
           }
+          await runtimeManager.start(ctx.project);
+          await recordExtensionPromptActor(ctx.user, ctx.project, { sessionId: session.sessionId, requestId: dispatchedRun.kernelRequestIds?.at(-1) });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
             // The capsule a 「试用一次」 conversation is trying reaches it through
@@ -5212,6 +5263,9 @@ export function createWebApiApp(overrides = {}) {
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
+            if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinAccount(id))) {
+              throw new HttpError(409, "account_busy", "Extension execution is still stopping.");
+            }
             if (client) await documentExportService?.cancelProject(id, null, client);
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
@@ -5362,6 +5416,9 @@ export function createWebApiApp(overrides = {}) {
           let vcrArtifacts = null;
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
+              if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
+                throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
+              }
               if (client) await documentExportService?.cancelProject(user.id, project.id, client);
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
@@ -5766,6 +5823,7 @@ export function createWebApiApp(overrides = {}) {
     agentRegistry,
     usageLedger,
     authorizePrompt: assertPublicSessionPrompt,
+    recordPromptActor: recordExtensionPromptActor,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
@@ -5952,7 +6010,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, personalSkillWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -5983,6 +6041,8 @@ export function createWebApiApp(overrides = {}) {
     try {
       pluginApplyWorker?.start();
       if (config.runtimeMode === "kernel") personalSkillWorker?.start();
+      hostedExtensions?.preparation.start();
+      hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
       kbIndex?.start();
@@ -6102,6 +6162,7 @@ export function createWebApiApp(overrides = {}) {
     skillLibraryService,
     personalSkillGenerations,
     personalSkillWorker,
+    hostedExtensions,
     pluginApplyWorker,
     im,
     commands,
@@ -6167,6 +6228,8 @@ export function createWebApiApp(overrides = {}) {
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
+      await hostedExtensions?.preparation.close();
+      await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await kbIndex?.close();

@@ -105,7 +105,7 @@ async function running(key) {
   await database.query("UPDATE evimed_product.jobs SET status='running',attempts=1,worker_id='fixture',lease_token=$2,lease_expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1",[added.job.id,leaseToken]);
   return {...added,leaseToken};
 }
-const acknowledgment=identity=>({...identity,settled:true});
+const acknowledgment=identity=>({...identity,settled:true,joined:true,physicallyAbsent:true});
 test('running cancellation without an executor refuses instead of publishing a false terminal state',options,async()=>{
   const added=await running('cancel-no-adapter');
   await assert.rejects(service.cancelJob(a,added.job.id),{status:503});
@@ -176,7 +176,7 @@ test('trusted cancellation joins the owned process before terminal publication a
     };
     assert.equal((await service.cancelJob(a,added.job.id)).status,'canceled');assert.equal(child.exitCode,0);
     const incomplete=await running('cancel-incomplete');service.cancelPreparation=async()=>({settled:true});
-    await assert.rejects(service.cancelJob(a,incomplete.job.id),{status:409});assert.equal((await service.getJob(a,incomplete.job.id)).status,'running');
+    await assert.rejects(service.cancelJob(a,incomplete.job.id),{status:503});assert.equal((await service.getJob(a,incomplete.job.id)).status,'running');
   } finally {
     service.cancelPreparation=original;
     if(child.exitCode===null&&child.signalCode===null){const exit=once(child,'exit');child.kill('SIGTERM');await exit;}

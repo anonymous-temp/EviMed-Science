@@ -756,7 +756,7 @@ async function readBoundedBody(body, maxBytes) {
  * kept ending with more eligible records than readable ones. Unpaywall knows
  * where the rest are, but on the publisher's own domain, so the resolution has
  * to happen here rather than in the runtime. */
-async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, pdfTransport, signal, documentParser }) {
+async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, pdfTransport, signal, documentParser, capturePdf = null }) {
   const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
     recordCredentialMissing("unpaywall", config);
@@ -854,13 +854,11 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
       continue;
     }
     const buffer = upstream.body;
+    const provenance = { doi: request.doi, origin: target.origin, version: String(candidate.version ?? ""), license: String(candidate.license ?? "") };
+    const resource = capturePdf ? await capturePdf(buffer, provenance) : null;
+    if (resource?.resourceId) res.setHeader("x-evimed-document-resource", resource.resourceId);
     if (request.parse) {
-      await sendParsedPdf(res, buffer, {
-        doi: request.doi,
-        origin: target.origin,
-        version: String(candidate.version ?? ""),
-        license: String(candidate.license ?? ""),
-      }, documentParser);
+      await sendParsedPdf(res, buffer, provenance, documentParser, resource);
       return;
     }
     res.writeHead(200, {
@@ -900,7 +898,7 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl
  * @param {{ doi: string, origin: string, version: string, license: string }} provenance
  * @param {any} documentParser
  */
-async function sendParsedPdf(res, buffer, provenance, documentParser) {
+async function sendParsedPdf(res, buffer, provenance, documentParser, resource = null) {
   const sha256 = createHash("sha256").update(buffer).digest("hex");
   let parsed = null;
   let parseError = null;
@@ -926,7 +924,7 @@ async function sendParsedPdf(res, buffer, provenance, documentParser) {
     parseError = { code: "source_parser_unavailable", message: "This deployment has no document parser configured." };
   }
   const body = Buffer.from(JSON.stringify({
-    pdf: { base64: buffer.toString("base64"), sha256, bytes: buffer.length, ...provenance },
+    pdf: { base64: buffer.toString("base64"), sha256, bytes: buffer.length, ...provenance, ...(resource ?? {}) },
     parsed,
     parseError,
   }));
@@ -947,11 +945,11 @@ async function sendParsedPdf(res, buffer, provenance, documentParser) {
  * again unchecked.
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
- *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null }} [options]
+ *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
-  pdfTransport = null,
+  pdfTransport = null, capturePdf = null, preparePdfCapture = null,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
@@ -987,8 +985,15 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
       if (request.mode === "open-access-pdf") {
+        const captureContext = preparePdfCapture ? await preparePdfCapture(identity) : null;
         await serveOpenAccessPdf(request, {
           config, res, fetchImpl, resolveImpl, pdfTransport: openAccessTransport, signal: controller.signal, documentParser,
+          capturePdf: capturePdf ? (bytes, provenance) => {
+            const current = runtimeManager.assertActiveModelGatewayToken(token);
+            if (current.userId !== identity.userId || current.projectId !== identity.projectId) throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication changed.");
+            return preparePdfCapture && !captureContext ? null : capturePdf(current, bytes, provenance, captureContext,
+              () => runtimeManager.assertActiveModelGatewayToken(token));
+          } : null,
         });
         return;
       }

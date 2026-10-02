@@ -1,5 +1,8 @@
 import net from "node:net";
 import { createRuntimeController } from "./runtimeControllerServer.mjs";
+import { loadConfig } from "./config.mjs";
+import { loadExtensionDeployment } from "./extensionDeployment.mjs";
+import { createControllerExtensionComposition } from "./extensionControllerComposition.mjs";
 
 // Happy Eyeballs gives each address family 250 ms by default, and that is a
 // choice between two working stacks, not a fallback budget. Several official
@@ -14,12 +17,16 @@ net.setDefaultAutoSelectFamilyAttemptTimeout(
   Math.max(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1_000),
 );
 
-const controller = createRuntimeController();
+const config = loadConfig();
+const deployment = loadExtensionDeployment(config);
+const extensions = createControllerExtensionComposition({ config, deployment });
+const controller = createRuntimeController(config, { extensionTools: extensions?.tools ?? null });
 const socketPath = await controller.listen();
 process.stdout.write(`EviMed Runtime Controller listening on ${socketPath}\n`);
 
 const shutdown = async () => {
   await controller.close().catch(() => {});
+  await extensions?.close().catch(() => {});
   process.exit(0);
 };
 

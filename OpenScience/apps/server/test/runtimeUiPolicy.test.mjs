@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, agentRuns = null, audit = undefined } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, agentRuns, audit });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -1454,3 +1454,19 @@ test('HTTP and mux personal-generation barriers refuse stale new turns before co
   f.manager.runtimes.get(f.manager.key(project)).personalSkillGeneration = { pins: [] }
   assert.equal((await httpPrompt(queue)).status, 200, 'safe baseline preserves ordinary research')
 })
+
+
+test('HTTP and mux bind only the authenticated actor after generation admission, and binding failure leaves core forwarding usable',async t=>{
+  const bindings=[],audits=[];let fail=false;
+  const f=await fixture(t,{}, {}, {recordPromptActor:async(user,project,request)=>{assert.equal(user.id,f.user.id);assert.equal(project.id,'default');if(fail)throw new HttpError(503,'product_state_unavailable','Fixture binding failure');bindings.push({actor:user.id,request:structuredClone(request)});},audit:async(event,detail)=>audits.push({event,...detail})});
+  const request={requestId:'actual-actor-http',sessionId:'ordinary',mode:'queue',content:[{type:'text',text:'Question'}]};
+  const post=body=>fetch(`${f.base}/api/session/prompt`,{method:'POST',headers:{cookie:f.cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'transport',method:'session/prompt',payload:{args:{request:body}}})});
+  assert.equal((await post(request)).status,200);assert.deepEqual(bindings[0],{actor:f.user.id,request});
+  f.manager.assertPersonalSkillPromptGeneration=async()=>{throw Object.assign(new HttpError(409,'extension_contract_invalid','Stale'),{definitivelyRejected:true});};
+  assert.equal((await post({...request,requestId:'refused'})).status,409);assert.equal(bindings.length,1);
+  const connection=f.connect();await connection.opened;connection.send(open('actor-stale-mux','session/prompt',{request:{...request,requestId:'refused-mux'}}));
+  assertNativeError(await connection.next(),'actor-stale-mux','extension_contract_invalid');await connection.next();assert.equal(bindings.length,1);
+  f.manager.assertPersonalSkillPromptGeneration=async()=>{};
+  const frame=open('actor-mux','session/prompt',{request:{...request,requestId:'actual-actor-mux'}});connection.send(frame);assert.equal((await connection.next()).type,'item');assert.deepEqual(bindings[1],{actor:f.user.id,request:frame.payload.args.request});
+  fail=true;assert.equal((await post({...request,requestId:'unbound-core'})).status,200);assert(audits.some(item=>item.event==='extension.actor.bind'&&item.userId===f.user.id));assert.equal(bindings.length,2);
+});

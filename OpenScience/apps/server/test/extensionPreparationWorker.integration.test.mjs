@@ -70,7 +70,10 @@ async function actualController(){
   const h=bytes=>createHash('sha256').update(bytes).digest('hex');
   const pinned={id:'cowork-portable',title:'Cowork',executionClass:'isolated-tool',coordinate:{kind:'github',repository:'Jesse-njx/dsh-cowork',commit:'2ae5cf755c4294a1e988eebf3b12dd062425d84c'},integrity:'sha256:f9bae51a0c0c5858aedfa17fb2ba71f7d4db4c84b27ba959061cdaefd77fa95b',imageId:image,closureExpectedSHA:h(await fs.readFile(path.join(root,'.evimed-local/extensions/build/cowork-final-mode-20261002/context/dependency-closure.json'))),runnerSHA:h(await fs.readFile(path.join(adapter,'runner.mjs'))),policySHA:h(await fs.readFile(path.join(adapter,'policy.mjs'))),inventorySHA:h(await fs.readFile(path.join(adapter,'image-inventory.mjs')))};
   pinned.adapterDigest='sha256:'+h(canonicalJson({runnerSHA:pinned.runnerSHA,policySHA:pinned.policySHA,inventorySHA:pinned.inventorySHA}));pinned.artifactDigest=extensionToolArtifactDigest(pinned);
-  const runtime=new ExtensionToolController({admittedDescriptors:[pinned],stateRoot:directory,adapterRoot:adapter,inputRoot:path.join(directory,'public')});
+  const runtime=new ExtensionToolController({admittedDescriptors:[pinned],stateRoot:directory,adapterRoot:adapter,inputRoot:path.join(directory,'public'),
+    resolvePreparation:async(identity,descriptor)=>{const current=await service.jobs.get(user.id,identity.jobId);
+      if(current?.status!=='running'||current.leaseToken!==identity.leaseToken||current.attempts!==identity.attempts)throw Object.assign(new Error('Fixture attempt changed'),{code:'product_state_unavailable'});
+      return{identity,descriptorId:descriptor.id,artifactDigest:descriptor.artifactDigest};}});
   service.entries.set(pinned.id,pinned);return{pinned,runtime,directory};
 }
 test('actual Docker inventory and adapter proof complete a real PG leased preparation, still unqualified',options,async()=>{
@@ -91,4 +94,23 @@ test('service cancellation of real leased Docker preparation waits for physical 
     assert.equal((await job(added)).status,'running');release.resolve();assert.equal((await canceled).status,'canceled');assert.equal(await pending,null);
     assert.throws(()=>execFileSync('docker',['inspect',containerName],{stdio:'ignore'}));assert.equal(await runtime.admissionAvailable(),true);
   }finally{release.resolve();service.cancelPreparation=null;await fs.rm(directory,{recursive:true,force:true});}
+});
+
+test('expired preparation holds host capacity until the exact original attempt is joined, then resumes saved intent',options,async()=>{
+  const added=await install('original-attempt-recovery'),claimed=await service.jobs.claim(['extension-prepare'],'expired-fixture');
+  await db.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[claimed.id]);
+  let joined=false,received;
+  controller.cancelPreparation=async identity=>{received=identity;return{identity,settled:joined,joined,physicallyAbsent:joined};};
+  await worker.recover();assert.equal((await job(added)).status,'running');assert.equal(received.leaseToken,claimed.leaseToken);
+  joined=true;await worker.recover();const recovered=await job(added);assert.equal(recovered.status,'queued');assert.equal(recovered.leaseToken,null);
+  controller.prepare=async()=>prepared();assert.equal((await worker.run()).status,'succeeded');
+});
+
+test('a restarted preparation worker durably retries post-preparation activation scheduling without re-running the artifact',options,async()=>{
+  const added=await install('activation-recovery');controller.prepare=async()=>prepared();let calls=0;
+  const scheduling=new ExtensionPreparationWorker({service,controller,admittedArtifacts:[artifact],onPrepared:async()=>{calls++;throw Object.assign(new Error('fixture unavailable'),{code:'product_state_unavailable'});}});
+  assert.equal((await scheduling.run()).status,'succeeded');assert.equal((await job(added)).result.activationIntentQueued,undefined);
+  const restarted=new ExtensionPreparationWorker({service,controller,admittedArtifacts:[artifact],onPrepared:async()=>{calls++;}});
+  await restarted.reconcilePrepared();assert.equal((await job(added)).result.activationIntentQueued,true);
+  const prior=calls;await restarted.reconcilePrepared();assert.equal(calls,prior);
 });

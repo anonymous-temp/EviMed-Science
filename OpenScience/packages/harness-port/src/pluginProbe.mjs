@@ -38,6 +38,51 @@ export async function installedCitationVersion(manifestUrl) {
  * @type {Set<Readonly<Record<string, any>>>}
  */
 const citationRegistrations = new Set()
+/** Standing preset registrations, removed with their native contexts. */
+const extensionRegistrations = new Set()
+/** @param {any} ctx @param {any} configuration */
+export async function registerExtensionConfiguration(ctx, configuration) {
+  const value = { plugins: globalThis.structuredClone(configuration.plugins), definitions: new Map(configuration.definitions) }
+  ctx.effect(() => { extensionRegistrations.add(value); return () => { extensionRegistrations.delete(value) } })
+}
+/** Exact native definitions and independent citation configuration, not a generic health flag.
+ * @param {any} ctx @param {any} agent */
+export async function verifyExtensionAgent(ctx, agent) {
+  const values = [...extensionRegistrations]
+  const distinct = new Set(values.map(value => JSON.stringify(value.plugins)))
+  if (!values.length || distinct.size !== 1) throw probeFailure('extension_probe_config_invalid')
+  /** @type {any[]} */ const plugins = values[0].plugins
+  const citation = liveCitationConfiguration()
+  const legacy = plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1')
+  if (legacy && (legacy.extensionId !== 'dsh-cite' || legacy.enabled !== citation.enabled || legacy.configRevision !== citation.revision
+    || legacy.settings.timeoutMs !== citation.timeoutMs)) throw probeFailure('extension_probe_config_invalid')
+  const citationTools = CITATION_TOOLS.filter(name => Boolean(ctx.tools.get(name, agent)))
+  if (citationTools.length !== (citation.enabled ? CITATION_TOOLS.length : 0)) throw probeFailure('extension_probe_registrations_invalid')
+  const external = plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1')
+  if (external.length > 1) throw probeFailure('extension_probe_config_invalid')
+  for (const name of ['doc_read', 'doc_write']) {
+    const actual = ctx.tools.get(name, agent)
+    if (external[0]?.enabled ? !actual || !values.some(value => value.definitions.get(name) === actual) : Boolean(actual)) throw probeFailure('extension_probe_registrations_invalid')
+  }
+  return { inventory: plugins.map(plugin => ({ extensionId: plugin.extensionId, artifactDigest: plugin.artifactDigest,
+    configRevision: plugin.configRevision, configDigest: plugin.configDigest, enabled: plugin.enabled })), citation: {
+    enabled: citation.enabled, revision: citation.revision, timeoutMs: citation.timeoutMs, binaryVersion: citation.binaryVersion,
+  }, tools: ['doc_read', 'doc_write'].filter(name => Boolean(ctx.tools.get(name, agent))) }
+}
+/** Target-session facts do not authorize a caller, child, or request. @param {any} ctx @param {string} sessionId */
+export function extensionInvocationFacts(ctx, sessionId) {
+  if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(sessionId)) throw probeFailure('extension_probe_agent_unavailable')
+  const agent = ctx.agents.get(sessionId)
+  if (!agent || agent.id !== sessionId || agent.session?.header?.id !== sessionId) throw probeFailure('extension_probe_agent_unavailable')
+  if (!['idle', 'running'].includes(agent.status) || ![undefined, 'subagent'].includes(agent.session.header.origin)) throw probeFailure('extension_probe_agent_unavailable')
+  const values = [...extensionRegistrations]
+  if (!values.length || new Set(values.map(value => JSON.stringify(value.plugins))).size !== 1) throw probeFailure('extension_probe_config_invalid')
+  const tools = ['doc_read', 'doc_write'].filter(name => {
+    const actual = ctx.tools.get(name, agent)
+    return actual && values.some(value => value.definitions.get(name) === actual)
+  })
+  return { sessionId, agentId: agent.id, tools, running: agent.status === 'running', origin: agent.session.header.origin === 'subagent' ? 'subagent' : 'root' }
+}
 /** @param {any} ctx @param {any} configuration */
 export async function registerCitationConfiguration(ctx, configuration) {
   const value = Object.freeze({ ...configuration })
@@ -202,7 +247,7 @@ export async function verifyCitationAgent(ctx, agent) {
   return { binaryVersion: config.binaryVersion, enabled: config.enabled, revision: config.revision, timeoutMs: config.timeoutMs, tools, upstream }
 }
 
-/** Only two parameterless methods cross the authenticated kernel wire.
+/** Bounded platform probes cross the authenticated kernel wire.
  * @param {any} ctx */
 export async function registerPluginProbe(ctx) {
   const { TypertRemoteService, Remote } = await loadHarnessModule('@deepseek-ai/dsh-typert-protocol')
@@ -214,7 +259,15 @@ export async function registerPluginProbe(ctx) {
       for (const initialize of initializers) initialize.call(this)
     }
     async status() { return { busy: await pluginRuntimeBusy(ctx) } }
-    async verify() {
+    async verify() { return this.probe(false) }
+    async verifyExtensions() { return this.probe(true) }
+    /** @param {{sessionId:string}} request */
+    async extensionInvocationFacts(request) {
+      if (!request || Object.keys(request).join(',') !== 'sessionId') throw probeFailure('extension_probe_agent_unavailable')
+      return extensionInvocationFacts(ctx, request.sessionId)
+    }
+    /** @param {boolean} extensions */
+    async probe(extensions) {
       if (await pluginRuntimeBusy(ctx)) throw probeFailure('citation_probe_runtime_busy', 'an agent is running, has queued input or is in maintenance')
       const { Context } = await loadHarnessModule('@deepseek-ai/cordis')
       const workspace = await mkdtemp(path.join(tmpdir(), 'evimed-plugin-check-'))
@@ -239,12 +292,12 @@ export async function registerPluginProbe(ctx) {
             await ctx.agentPresets.mount(agentCtx, 'evimed-universal')
           },
         })
-        try { return await verifyCitationAgent(ctx, handle.agent) }
+        try { return extensions ? await verifyExtensionAgent(ctx, handle.agent) : await verifyCitationAgent(ctx, handle.agent) }
         finally { await handle.dispose() }
       } finally { await rm(workspace, { recursive: true, force: true }) }
     }
   }
-  for (const name of ['status', 'verify']) Remote(PluginProbe.prototype[name], {
+  for (const name of ['status', 'verify', 'verifyExtensions', 'extensionInvocationFacts']) Remote(PluginProbe.prototype[name], {
     kind: 'method', name, static: false, private: false,
     addInitializer: (/** @type {(this:any)=>void} */ initialize) => initializers.push(initialize),
   })

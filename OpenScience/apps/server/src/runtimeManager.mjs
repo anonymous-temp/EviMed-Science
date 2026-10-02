@@ -27,6 +27,8 @@ import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from ".
 import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import { canonicalJson } from "@evimed/domain";
+import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
@@ -1877,6 +1879,11 @@ export function capsuleGatewayProviderUrl(config) {
   return capsuleGatewayEndpointUrl(config);
 }
 
+/** Only trusted configuration selects the internal origin, never a tool argument. @param {any} config */
+export function extensionGatewayEndpointUrl(config) {
+  const url = new URL(modelGatewayProviderUrl(config)); url.pathname = "/internal/extensions/v1"; url.search = ""; url.hash = ""; return url.href.replace(/\/$/, "");
+}
+
 /** @param {any} config */
 export function revisionGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config));
@@ -1956,6 +1963,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
+    extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
+    extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
     personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
     capsuleGatewayUrl,
     revisionGatewayUrl: gateways ? String(gateways.revision ?? "") : revisionGatewayProviderUrl(config),
@@ -2343,6 +2352,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
   personalSkillGeneration = null,
   personalSkillImageId = null,
+  extensionGeneration = null,
+  extensionImageId = null,
 } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
@@ -2397,6 +2408,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsDir = capsuleMethodsHostDir(project);
     const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
+    const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
+    if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
+    if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
     const personalReference = validatePersonalGenerationReference(project, personalSkillGeneration);
     if (personalReference && !/^sha256:[a-f0-9]{64}$/.test(String(personalSkillImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable personal-skill runtime image is required.");
     const legacyControlDir = path.join(runtimeRoot, "control");
@@ -2471,6 +2485,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
               `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
             ]
           : []),
+        ...(extensionReference ? ["--mount", `${dockerRuntimeMount(config, path.join(extensionGenerationRoot(config, extensionReference), "selected"), "/opt/evimed/extensions")},readonly`] : []),
         ...(personalReference ? ["--mount", `${dockerRuntimeMount(config, path.join(personalGenerationRoot(config, personalReference), 'skills'), PERSONAL_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(isolatedControlMount
           ? [
@@ -2551,6 +2566,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
           capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
+          extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
+          extensionGatewayUrl: extensionReference ? extensionGatewayEndpointUrl(config) : "",
           personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
           capsuleGatewayUrl,
           revisionGatewayUrl,
@@ -2595,7 +2612,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           },
         }))
           .flatMap(([key, value]) => ["--env", `${key}=${value}`]),
-        personalReference ? personalSkillImageId : config.runtimeContainerImage,
+        extensionImageId ?? (personalReference ? personalSkillImageId : config.runtimeContainerImage),
         "open-science-dsh-serve",
       ],
       cwd: project.workspaceDir,
@@ -2950,7 +2967,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any, extensionGeneration?: any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -2994,14 +3011,15 @@ export class DockerRuntimeProvider {
     }
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, extensionGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, extensionGeneration = null }) {
     const manager = this.manager;
     // Before the plan, for the same reason as the capsule methods: the
     // read-only view of the knowledge base is mounted when the directory
     // exists, and a project whose first source arrives while its runtime runs
     // must not find it writable then.
     await manager.ensureKnowledgeBaseDir(project);
+    if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) {
@@ -3010,8 +3028,10 @@ export class DockerRuntimeProvider {
       if (checked.status !== 0 || checked.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
     }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, personalSkillGeneration: personal?.reference ?? null,
-      personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null });
+      personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
     plan.personalSkillGeneration = personalSkillGeneration;
+    plan.extensionGeneration = extensionGeneration;
     plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
     let socketStat = null;
@@ -3081,6 +3101,7 @@ export class DockerRuntimeProvider {
         publicSourceGatewayProviderUrl(this.config),
         plan.pluginConfig,
         plan.personalSkillGeneration?.reference ?? null,
+        plan.extensionGeneration?.reference ?? null,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3191,6 +3212,11 @@ export class RuntimeManager {
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
     this.personalSkillGenerations = null;
     this.personalSkillOverrides = new Map();
+    /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
+    this.extensionGenerationResolver = null;
+    this.extensionGenerationOverrides = new Map();
+    /** Deployment-owned descriptor tuples; no development artifact defaults. */
+    this.extensionArtifacts = new Map();
     /**
      * The account's memory capsules — the seam this manager reads a project's
      * approved work-style methods through.
@@ -3543,8 +3569,11 @@ export class RuntimeManager {
   }
 
   async inspectRuntimeImage() {
-    if (!this.runtimeController) return null;
-    return this.runtimeController.inspectRuntimeImage();
+    if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
+    if (this.config.runtimeSandboxMode !== 'docker') return null;
+    const result = spawnSync(this.config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', this.config.runtimeContainerImage], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+    if (result.status !== 0 || !/^sha256:[a-f0-9]{64}$/.test(result.stdout.trim())) throw new HttpError(503, 'runtime_image_unavailable', 'The runtime image is unavailable.');
+    return { imageId: result.stdout.trim() };
   }
 
   async cleanupDocker(plan, project) {
@@ -3852,7 +3881,7 @@ export class RuntimeManager {
     // What the provider cannot start without, refused before anything is
     // written: Docker's daemon, AgentBay's settings.
     await this.provider.preflight?.();
-    const pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
+    let pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
       : { revision: 0, enabled: true, settings: { timeoutMs: 15000 } });
     // Before the plan, because the plan reads the result: both this side and
     // the privileged controller decide whether to mount the directory by
@@ -3869,6 +3898,24 @@ export class RuntimeManager {
         personalSkillGeneration = null;
       }
     }
+    let extensionGeneration = this.extensionGenerationOverrides.get(key) ?? null;
+    if (!this.extensionGenerationOverrides.has(key) && this.extensionGenerationResolver) {
+      try { extensionGeneration = await this.extensionGenerationResolver(project); if (extensionGeneration) await this.prepareGeneration(project, extensionGeneration); }
+      catch { extensionGeneration = null; }
+    }
+    if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
+      && canonicalJson(extensionGeneration.projection.personal.reference ?? null) !== canonicalJson(personalSkillGeneration?.reference ?? null)) {
+      // A fresh personal apply/removal must never be overwritten by an older composite stamp.
+      extensionGeneration = null;
+    }
+    if (extensionGeneration) {
+      const legacy = extensionGeneration.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
+      if (legacy) pluginConfig = { revision: legacy.configRevision, enabled: legacy.enabled, settings: legacy.settings };
+      const personalRef = extensionGeneration.projection.personal.reference;
+      if (personalRef) { const selected = await verifyPersonalSkillGeneration(this.config, project, personalRef, extensionGeneration.identity.baseRuntimeImageDigest);
+        personalSkillGeneration = selected; }
+      else personalSkillGeneration = null;
+    }
     // What the learned half contributed, kept on the runtime so the run ledger
     // can say which revision of which method was in the room. A digest recorded
     // at mount time is the only record that survives the container.
@@ -3876,7 +3923,7 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration });
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -4018,6 +4065,7 @@ export class RuntimeManager {
     const runtime = {
       pluginConfig: plan.pluginConfig,
       personalSkillGeneration,
+      extensionGeneration,
       // The kernel that is actually running, from one binding. This was once
       // the literal `opencode` written out in twelve places, so every `exited`,
       // `cleaned_orphan` and state record a DSH container produced was labelled
@@ -5212,6 +5260,7 @@ export class RuntimeManager {
    * optional methods on a safe baseline never prevent ordinary research.
    * @param {any} project @param {{sessionId?:any,mode?:any}} request */
   async assertPersonalSkillPromptGeneration(project, { sessionId, mode } = {}) {
+    await this.assertExtensionPromptGeneration(project, { sessionId, mode });
     const runtime = this.runtimes.get(this.key(project));
     const pins = runtime?.personalSkillGeneration?.pins ?? [];
     if (!this.personalSkillGenerations || !pins.length) return;
@@ -5229,6 +5278,81 @@ export class RuntimeManager {
       error.definitivelyRejected = true;
       throw error;
     }
+  }
+
+  /** Shared prompt admission never upgrades its lock: stale composites await the existing exclusive idle worker.
+   * @param {any} project @param {{sessionId?:any,mode?:any}} request */
+  async assertExtensionPromptGeneration(project, { sessionId, mode } = {}) {
+    const runtime = this.runtimes.get(this.key(project)), captured = runtime?.extensionGeneration;
+    if (!captured?.reference) return;
+    try {
+      const wanted = this.extensionGenerationResolver ? await this.extensionGenerationResolver(project) : null;
+      if (wanted?.reference?.generationHash === captured.reference.generationHash) return;
+      if (mode === 'steer' && typeof sessionId === 'string') {
+        const listed = await this.callKernel(runtime, project, 'session/list', { _request: {} }, AbortSignal.timeout(10000));
+        if (sessionListItems(listed).some(item => item.sessionId === sessionId && item.running === true)) return;
+      }
+      throw new HttpError(409, 'extension_contract_invalid', 'Extensions changed; a new turn must wait for idle apply.');
+    } catch (error) { error.definitivelyRejected = true; throw error; }
+  }
+
+  /** Prepare only exact immutable manifest/projection bytes on the current installed image. @param {any} project @param {any} candidate */
+  async prepareGeneration(project, candidate) {
+    if (!candidate?.identity || !candidate.projection || this.config.runtimeProvider === 'agentbay') throw new HttpError(503, 'product_state_unavailable', 'Extension runtime projection is unavailable.');
+    const image = await this.inspectRuntimeImage();
+    if (image?.imageId !== candidate.identity.baseRuntimeImageDigest) throw new HttpError(409, 'extension_contract_invalid', 'The extension runtime image changed.');
+    if (candidate.reference) {
+      const physical = await verifyExtensionGeneration(this.config, project, candidate.reference);
+      if (canonicalJson(physical) !== canonicalJson(candidate)) throw new HttpError(400, 'extension_contract_invalid', 'The extension manifest changed.');
+    } else if (candidate.projection.plugins.some(plugin => plugin.compatibility !== 'legacy-citation-v1')) throw new HttpError(400, 'extension_contract_invalid', 'A baseline cannot select extension tools.');
+    const external = candidate.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
+    if (external.length > 1) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
+    for (const plugin of external) {
+      const artifact = this.extensionArtifacts.get(plugin.extensionId);
+      if (!artifact || artifact.artifactDigest !== plugin.artifactDigest || artifact.integrity !== plugin.integrity || plugin.executionClass !== 'isolated-tool'
+        || plugin.coordinate?.kind !== 'github' || plugin.coordinate.repository !== 'Jesse-njx/dsh-cowork' || !plugin.settings || Object.keys(plugin.settings).length !== 0 || !Array.isArray(plugin.connectionRefs) || plugin.connectionRefs.length !== 0) throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
+    }
+    const personal = candidate.projection.personal;
+    if (personal.reference) { const selected = await verifyPersonalSkillGeneration(this.config, project, personal.reference, candidate.identity.baseRuntimeImageDigest);
+      if (canonicalJson(selected.pins) !== canonicalJson(personal.pins)) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins changed.');
+    } else if (personal.pins.length) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins require selected bytes.');
+    return { joined: true, manifestDigest: 'sha256:' + createHash('sha256').update(canonicalJson(candidate)).digest('hex') };
+  }
+  currentGeneration(project) { return this.runtimes.get(this.key(project))?.extensionGeneration ?? null; }
+  /** Factual target registry lookup, always bound to the same live runtime epoch. @param {any} project @param {string} sessionId */
+  async extensionInvocationFacts(project, sessionId) {
+    const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
+    if (!runtime || !generation) throw new HttpError(503, 'product_state_unavailable', 'Native invocation facts are unavailable.');
+    const facts = await this.callKernel(runtime, project, 'evimedPlugins/extensionInvocationFacts', { request: { sessionId: safeId(sessionId, 'session id') } }, AbortSignal.timeout(10000));
+    if (this.runtimeGeneration(project) !== generation || facts?.sessionId !== sessionId || facts.agentId !== sessionId || typeof facts.running !== 'boolean' || !['root', 'subagent'].includes(facts.origin) || !Array.isArray(facts.tools)
+      || facts.tools.some(name => !['doc_read', 'doc_write'].includes(name))) throw new HttpError(403, 'extension_access_denied', 'Native invocation facts changed.');
+    return { ...facts, runtimeGeneration: generation };
+  }
+  /** Called only by the existing exclusive idle apply fence. @param {any} project @param {any} candidate */
+  async replaceGeneration(project, candidate) {
+    await this.prepareGeneration(project, candidate);
+    if (await this.pluginRuntimeBusy(project)) throw new HttpError(409, 'plugin_runtime_busy', 'The runtime has active or queued native work.');
+    const key = this.key(project);this.extensionGenerationOverrides.set(key, candidate);
+    try { await this.stop(project); await this.startAdmitted(project); return { joined: true }; }
+    finally { this.extensionGenerationOverrides.delete(key); }
+  }
+  restoreGeneration(project, candidate) { return this.replaceGeneration(project, candidate); }
+  /** Actual preset registry/config proof plus native personal inventory, bound to the same runtime epoch.
+   * @param {any} project @param {any} expected */
+  async probeGeneration(project, expected) {
+    const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
+    if (!runtime || !generation || canonicalJson(runtime.extensionGeneration?.reference ?? null) !== canonicalJson(expected.reference ?? null)) throw new HttpError(409, 'extension_contract_invalid', 'The runtime generation changed.');
+    const native = await this.callKernel(runtime, project, 'evimedPlugins/verifyExtensions', {}, AbortSignal.timeout(45000));
+    const legacy = expected.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
+    if (legacy && (native.citation?.binaryVersion !== '0.3.2' || native.citation.enabled !== legacy.enabled || native.citation.revision !== legacy.configRevision || native.citation.timeoutMs !== legacy.settings.timeoutMs)) throw new HttpError(502, 'plugin_apply_failed', 'Native citation configuration did not match.');
+    let inventory = native.inventory;
+    if (!expected.reference && legacy && Array.isArray(inventory) && inventory.length === 0) inventory = [{ extensionId: legacy.extensionId, artifactDigest: legacy.artifactDigest, configRevision: native.citation.revision, configDigest: legacy.configDigest, enabled: native.citation.enabled }];
+    const personal = expected.projection.personal;
+    const checked = await this.probePersonalSkillGeneration(project, { reference: personal.reference, pins: personal.pins });
+    if (checked.pendingSession || this.runtimeGeneration(project) !== generation) throw new HttpError(502, 'plugin_apply_failed', 'Native personal inventory is unavailable.');
+    return { reference: expected.reference, runtimeGeneration: generation, baseRuntimeImageDigest: runtime.extensionGeneration.identity.baseRuntimeImageDigest,
+      adapterRevision: runtime.extensionGeneration.identity.adapterRevision, permissionProfileRevision: runtime.extensionGeneration.identity.permissionProfileRevision,
+      inventory, personal: structuredClone(personal) };
   }
 
   runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }

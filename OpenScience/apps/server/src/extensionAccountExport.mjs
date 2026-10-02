@@ -3,7 +3,7 @@ import { HttpError } from "./security.mjs";
 
 /** Public account archives carry authored data and desired configuration, never qualification or runtime authority. */
 export const EXTENSION_CUSTOMER_KINDS = Object.freeze(["skill", "extension-installation", "extension-defaults"]);
-export const EXTENSION_DERIVED_KINDS = Object.freeze(["extension-generation", "extension-proof"]);
+export const EXTENSION_DERIVED_KINDS = Object.freeze(["extension-generation", "extension-proof", "extension-resource"]);
 
 /** @param {any} row */
 export function exportExtensionAccountRow(row) {

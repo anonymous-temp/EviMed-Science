@@ -111,3 +111,16 @@ test('account epoch changes fence a queued generation and preserve completed res
   const desired=await extensions.project(a,'p1');const state=await service.reconcile(a,'p1',{expectedRevision:desired.revision});const completed=path.join(root,'completed-research.txt');await fs.writeFile(completed,'preserved research fixture');
   await db.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1",[a.id]);const failed=await worker.runClaimed(await claim(state));assert.equal(failed.status,'failed');assert.equal(failed.error.code,'unauthorized');assert.equal(await fs.readFile(completed,'utf8'),'preserved research fixture');
 });
+
+test('a first selected generation on an idle project without a runtime is started and verified rather than deferred forever',options,async()=>{
+  denied=false;proofEnabled=true;kernelBusy=false;ledgerBusy=false;
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'cold-project','Cold generation',1048576)",[a.id]);
+  await add('cold-project','cold-generation-install');
+  const desired=await extensions.project(a,'cold-project'),state=await service.reconcile(a,'cold-project',{expectedRevision:desired.revision});
+  const originalGeneration=runtime.runtimeGeneration,originalReplace=runtime.replaceGeneration;let started=false,replacements=0;
+  runtime.runtimeGeneration=()=>started?'fixture-runtime':null;
+  runtime.replaceGeneration=async(_project,candidate)=>{current=candidate;started=true;replacements++;return{joined:true};};
+  try{const finished=await worker.runClaimed(await claim(state));assert.equal(finished.status,'succeeded');assert.equal(finished.result.phase,'effective');assert.equal(replacements,1);
+    assert.equal((await service.current({id:'cold-project',userId:a.id})).payload.runtimeGeneration,'fixture-runtime');}
+  finally{runtime.runtimeGeneration=originalGeneration;runtime.replaceGeneration=originalReplace;}
+});

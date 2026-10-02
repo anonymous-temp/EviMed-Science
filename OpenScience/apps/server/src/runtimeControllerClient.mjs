@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
+import { canonicalJson } from "@evimed/domain";
 
 // Version 8 adds isolated native skill validation. The version-7 citation
 // runtime-start shape stays explicitly supported during coordinated rollout.
@@ -202,6 +203,38 @@ export class RuntimeControllerClient {
     return this.request("POST", "/v1/skills/cancel", reference, { timeoutMs: 45000 });
   }
 
+  extensionToolAdmission() { return this.request("POST", "/v1/extensions/tool/admission", {}); }
+  async admissionAvailable() { return (await this.extensionToolAdmission())?.available === true; }
+
+  /** The private worker supplies an opaque leased identity; cancellation joins even after the HTTP response is lost.
+   * @param {'prepare'|'execute'} kind @param {any} body @param {{signal?:AbortSignal}} [options] */
+  async extensionToolRequest(kind, body, { signal } = {}) {
+    let dispatched = false;
+    try {
+      return await this.request("POST", `/v1/extensions/tool/${kind}`, body,
+        { signal, timeoutMs: 45000, maxResponseBytes: 12 * 1024 * 1024 + 16384, onDispatch: () => { dispatched = true; } });
+    } catch (error) {
+      if (dispatched) {
+        try {
+          const ack = await this.request("POST", "/v1/extensions/tool/cancel", { kind, identity: body.identity }, { timeoutMs: 45000 });
+          if (ack?.joined !== true || ack?.physicallyAbsent !== true || canonicalJson(ack.identity) !== canonicalJson(body.identity)) throw new Error("cancel_unknown");
+          error.joined = true; error.physicallyAbsent = true;
+        } catch {
+          throw Object.assign(controllerError("product_state_unavailable", "Extension cancellation could not be confirmed."), { joined: false });
+        }
+      }
+      throw error;
+    }
+  }
+
+  prepareExtensionTool(body, options = {}) { return this.extensionToolRequest("prepare", body, options); }
+  executeExtensionTool(body, options = {}) { return this.extensionToolRequest("execute", body, options); }
+  prepare(body, options = {}) { return this.prepareExtensionTool(body, options); }
+  execute(body, options = {}) { return this.executeExtensionTool(body, options); }
+  cancelPreparation(identity) { return this.request("POST", "/v1/extensions/tool/cancel", { kind: "prepare", identity }, { timeoutMs: 45000 }); }
+  cancelExecution(identity) { return this.request("POST", "/v1/extensions/tool/cancel", { kind: "execute", identity }, { timeoutMs: 45000 }); }
+  executionStatus(identity) { return this.request("POST", "/v1/extensions/tool/status", { identity }); }
+
   async health() {
     const result = await this.request("GET", "/v1/health");
     if (result.protocolVersion !== RUNTIME_CONTROLLER_PROTOCOL_VERSION) {
@@ -218,7 +251,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -228,6 +261,7 @@ export class RuntimeControllerClient {
       publicSourceGatewayUrl,
       pluginConfig,
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
+      ...(extensionGeneration ? { extensionGeneration } : {}),
     });
   }
 

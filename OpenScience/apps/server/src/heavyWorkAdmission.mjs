@@ -12,6 +12,9 @@ export async function heavyWorkAdmission(client, kind, resumingComputeId = null)
   if (hasProduct && !(await maintenanceAllowsClaims(client))) return false;
   await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-host-heavy-work'))");
   if (hasProduct) {
+    const extension = await client.query(`SELECT 1 FROM evimed_product.jobs WHERE kind IN ('extension-prepare','extension-execute')
+      AND (status='running' OR payload->>'recoveryRequired'='true') LIMIT 1`);
+    if (extension.rows.length) return false;
     const uncertain = await client.query(`SELECT 1 FROM evimed_product.documents d JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId'
       WHERE d.kind='document-export' AND d.deleted_at IS NULL AND d.payload->'attempt' IS NOT NULL AND d.payload->'attempt' <> 'null'::jsonb
         AND (j.status IN ('failed','canceled') OR ($1::boolean AND j.status='queued')) LIMIT 1`, [kind === 'compute']);
@@ -36,6 +39,10 @@ export async function heavyWorkBlockerCount(database) {
       AND ((j.status='running' AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=clock_timestamp()))
         OR (j.status<>'running' AND d.payload->'attempt' IS NOT NULL AND d.payload->'attempt' <> 'null'::jsonb))`);
   let count = Number(render.rows[0]?.n ?? 0);
+  const extension = await database.query(`SELECT count(*)::integer AS n FROM evimed_product.jobs
+    WHERE kind IN ('extension-prepare','extension-execute') AND ((status='running'
+      AND (lease_expires_at IS NULL OR lease_expires_at<=clock_timestamp())) OR payload->>'recoveryRequired'='true')`);
+  count += Number(extension.rows[0]?.n ?? 0);
   const exists = await database.query("SELECT to_regclass('evimed_vcr.jobs') AS relation");
   if (exists.rows[0]?.relation) {
     const compute = await database.query(`SELECT count(*)::integer AS n FROM evimed_vcr.jobs WHERE state='running'

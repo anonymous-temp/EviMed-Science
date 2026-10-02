@@ -1,8 +1,8 @@
 import { HttpError, readJson, sendJson } from './security.mjs';
 import { extensionIdentifier, extensionRequestObject } from './extensionAccess.mjs';
 
-/** Authenticated metadata API. No arbitrary native manager/controller route is forwarded. @param {{store:any,service:any,maxJsonBytes:number}} dependencies */
-export function createExtensionRoutes({store,service,maxJsonBytes}) {
+/** Authenticated metadata API. No arbitrary native manager/controller route is forwarded. @param {{store:any,service:any,maxJsonBytes:number,onSelectionChanged?:any,projectState?:any}} dependencies */
+export function createExtensionRoutes({store,service,maxJsonBytes,onSelectionChanged=null,projectState=null}) {
   return async(req,res)=>{
     const url=new URL(req.url??'/','http://evimed.local');
     const personal=/^\/api\/extensions\/(catalogue|installations|jobs|connections)(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(url.pathname);
@@ -17,8 +17,8 @@ export function createExtensionRoutes({store,service,maxJsonBytes}) {
       ...(url.searchParams.has('beforeRevision')?{beforeRevision:Number(url.searchParams.get('beforeRevision'))}:{})});
     if(project) {
       const id=decode(project[1]);
-      if(!project[2]&&req.method==='GET')return reply(await service.project(user,id));
-      if(!project[2]&&req.method==='PUT')return reply(await service.saveProject(user,id,await body()));
+      if(!project[2]&&req.method==='GET'){const view=await service.project(user,id);return reply(projectState?await projectState(user,id,view):view);}
+      if(!project[2]&&req.method==='PUT'){const view=await service.saveProject(user,id,await body());if(onSelectionChanged)await onSelectionChanged(user,id);return reply(projectState?await projectState(user,id,view):view);}
       if(project[2]==='revisions'&&req.method==='GET')return reply(await service.projectHistory(user,id,paging()));
     } else {
       const [,area,rawId,action]=personal,id=rawId?decode(rawId):null;
@@ -26,7 +26,7 @@ export function createExtensionRoutes({store,service,maxJsonBytes}) {
       if(area==='connections'&&!id&&!action&&req.method==='GET')return reply(await service.connections(user,extensionRequestObject(Object.fromEntries(url.searchParams),['catalogueId','projectId'])));
       if(area==='installations') {
         if(!id&&req.method==='GET')return reply(await service.list(user,{cursor:url.searchParams.get('cursor')??null}));
-        if(!id&&req.method==='POST')return reply(await service.install(user,await body()),201);
+        if(!id&&req.method==='POST'){const input=await body(),result=await service.install(user,input);if(input.scope==='project'&&onSelectionChanged)await onSelectionChanged(user,input.projectId);return reply(result,201);}
         if(id&&!action&&req.method==='GET')return reply(await service.get(user,id));
         if(id&&!action&&req.method==='DELETE')return reply(await service.remove(user,id,await body()));
         if(id&&action==='revisions'&&req.method==='GET')return reply(await service.history(user,id,paging()));

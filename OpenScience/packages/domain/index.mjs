@@ -47,6 +47,7 @@ export {
   extensionGenerationIdentity,
   validateExtensionProofIdentity,
   extensionProofDigest,
+  extensionProofAdapterRevision,
   qualifyExtensionProof,
 } from './src/extensions.mjs'
 

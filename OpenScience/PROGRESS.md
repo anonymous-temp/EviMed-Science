@@ -1,4 +1,6 @@
 2026-10-02 08:27 · Independently verified private skill account-epoch lifetime, clean-database startup, durable account purge, historical resource export and per-run exact revision provenance; actual readonly generation activation and SaaS qualification remain pending.
+
+2026-10-02 15:06 · Integrated reviewed leased extension execution, actual native registry/call facts, authenticated actor binding, scoped deletion joins, cold activation and maintenance settlement; local PostgreSQL/Docker/SDK controls pass, final SaaS qualification and release remain pending.
 2026-10-02 07:32 · Committed independently verified isolated Cowork dependency closure; personal skill runtime composition and pool-one detached monitor regression pass locally, with package activation and SaaS qualification still pending.
 2026-10-02 06:08 · Ordinary-user Plugins/Skills pages passed independent UI review after nine pin, configuration, revocation and pagination fixes; actual runtime activation and SaaS qualification remain pending.
 2026-10-02 05:21 · Protocol8 skill validation now parses with the pinned SDK in a verified isolated read-only Docker task and joins cancellation; native boundary regression passed, while full serving-image and SaaS qualification remain pending.

@@ -279,7 +279,7 @@ class OpenAccessFullTextTests(unittest.TestCase):
                 answers.append(json.loads(self.rfile.read(int(self.headers["content-length"]))))
                 digest = hashlib.sha256(pdf).hexdigest() if len(answers) == 1 else "0" * 64
                 body = json.dumps({
-                    "pdf": {"base64": base64.b64encode(pdf).decode(), "sha256": digest, "bytes": len(pdf), "origin": "https://repo.example.org", "version": "publishedVersion", "license": "cc-by"},
+                    "pdf": {"base64": base64.b64encode(pdf).decode(), "sha256": digest, "bytes": len(pdf), "origin": "https://repo.example.org", "version": "publishedVersion", "license": "cc-by", "resourceId": "pub_" + "a" * 64},
                     "parsed": {"text": "Parsed text.", "extractor": {"name": "evimed-extract", "version": "1"}},
                     "parseError": None,
                 }).encode()
@@ -307,6 +307,7 @@ class OpenAccessFullTextTests(unittest.TestCase):
             os.environ.pop("EVIMED_MODEL_CONFIG_FILE", None)
             payload, provenance, parsed, parse_error = self.module._open_access_pdf("10.1/oa")
             self.assertEqual((payload, provenance["license"], parsed["text"], parse_error), (pdf, "cc-by", "Parsed text.", None))
+            self.assertEqual(provenance["resourceId"], "pub_" + "a" * 64)
             with self.assertRaises(self.module.FullTextError) as mismatch:
                 self.module._open_access_pdf("10.1/oa")
         self.assertEqual(mismatch.exception.code, "full_text_upstream_invalid")

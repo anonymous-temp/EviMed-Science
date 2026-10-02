@@ -257,12 +257,12 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, authorizeMutation = null,
   agentRuns = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -304,6 +304,16 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     catch (error) {
       await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
         code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+    }
+  }
+  /** The authenticated frame supplies the actor. Failed derived binding keeps core research usable and extension access unbound.
+   * @param {any} user @param {any} project @param {any} payload */
+  async function recordNativeActor(user, project, payload) {
+    if (!recordPromptActor) return;
+    try { await recordPromptActor(user, project, payload?.args?.request); }
+    catch (error) {
+      await audit("extension.actor.bind", { userId: user.id, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "extension_access_denied" }).catch(() => {});
     }
   }
   async function authorizePromptSession(project, payload) {
@@ -557,7 +567,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let workspaceBody = null;
     let promptBody = null;
     let modelBody = null;
-    if (method === "session/prompt" && (authorizePrompt || agentRuns || preparePrompt)) {
+    if (method === "session/prompt" && (authorizePrompt || agentRuns || preparePrompt || recordPromptActor)) {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
@@ -658,6 +668,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // not a message that arrived.
       const admitted = async () => {
         await runtimeManager.assertPersonalSkillPromptGeneration(project, promptBody?.payload?.args?.request ?? {});
+        const current = await resolveFrame(snapshot, null);
+        await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
         await recordSteer(project, promptBody?.payload);
         return forward();
@@ -703,11 +715,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         if (!config.runtimeUiProxyEnabled) return destroyUpgrade(socket, 404, "not_found");
         if (!runtimeUiCookie(req, config.sessionCookieName)) return destroyUpgrade(socket, 401, "unauthorized");
         assertBrowserOrigin(req, config);
-        const { project, frame, claims } = await resolveFrame(req, null);
+        const initial = await resolveFrame(req, null);
+        const { project, frame, claims } = initial;
+        let currentActor = initial;
         // Revalidation keeps the handshake login; only a validated renewal may replace its ticket.
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
         trackFrame(snapshot, claims, socket);
-        const revalidate = async () => { await resolveFrame(snapshot, null); };
+        const revalidate = async () => { currentActor = await resolveFrame(snapshot, null); };
         const authorize = async (endpoint, payload = null) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
@@ -719,6 +733,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             await authorizePromptSession(project, payload);
           }
           if (endpoint === "session/prompt") {
+            await revalidate();
             // The mux's plugin admission owns the full upstream operation. This
             // short maintenance admission serializes its start with an expiring
             // drain request; the run ledger then keeps accepted work visible.
@@ -731,6 +746,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         // the frame goes upstream — the same point the HTTP path counts at.
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
+            await recordNativeActor(currentActor.user, currentActor.project, payload);
             await prepareNativeContext(project, payload);
             await recordSteer(project, payload);
           }

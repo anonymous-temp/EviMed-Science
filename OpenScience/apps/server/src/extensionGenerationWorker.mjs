@@ -31,7 +31,7 @@ export class ExtensionGenerationWorker{
       const guard=async()=>{await lease();return this.service.assertCurrent(job,candidate,client);};
       let renewing=false,pending=Promise.resolve();const timer=setInterval(()=>{if(renewing)return;renewing=true;pending=this.jobs.renew(job.userId,job.id,job.leaseToken,this.leaseMs).then(ok=>{if(!ok)lost=true;}).catch(()=>{lost=true;}).finally(()=>{renewing=false;});},Math.floor(this.leaseMs/3));timer.unref();
       try{
-        await guard();const busy=async()=>{if(!this.runtime.runtimeGeneration(project))return true;const prompts=await this.service.plugins.hasPendingPrompts(project),ledger=await this.ledgerBusy(project),kernel=await this.runtime.pluginRuntimeBusy(project);return [prompts,ledger,kernel].some(value=>typeof value!=='boolean'||value);};
+        await guard();const busy=async()=>{const prompts=await this.service.plugins.hasPendingPrompts(project),ledger=await this.ledgerBusy(project),kernel=await this.runtime.pluginRuntimeBusy(project);return [prompts,ledger,kernel].some(value=>typeof value!=='boolean'||value);};
         if(await busy())return this.defer(job);await verifyExtensionGeneration(this.service.config,project,candidate.reference);
         const current=await this.runtime.currentGeneration(project),previous=state.payload.lastGood;
         const captured=previous&&canonicalJson(current?.reference??null)===canonicalJson(previous.reference)?previous:null;

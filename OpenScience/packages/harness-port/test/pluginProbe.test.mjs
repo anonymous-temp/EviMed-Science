@@ -146,3 +146,15 @@ test('the isolated native pipeline still validates registered input and output s
     assert.deepEqual(executed, invalid === 'input' ? [] : ['cite_health'])
   }
 })
+
+test('extension proof and target facts inspect exact registered definitions and independently registered citation settings',async()=>{
+  const {registerExtensionConfiguration,verifyExtensionAgent,extensionInvocationFacts}=await import('../src/pluginProbe.mjs');
+  const {agent,mount}=kernelAgent({id:'actual-session',status:'idle',session:{header:{id:'actual-session'}}});
+  const definitions=new Map([['doc_read',{}],['doc_write',{}]]),plugins=[{extensionId:'dsh-cite',compatibility:'legacy-citation-v1',enabled:false,configRevision:3,settings:{timeoutMs:4000},artifactDigest:'citation',configDigest:'cite-config'},{extensionId:'cowork-portable',enabled:true,configRevision:7,artifactDigest:'cowork',configDigest:'cowork-config'}];
+  await registerCitationConfiguration(mount(),{binaryVersion:'0.3.2',enabled:false,revision:3,timeoutMs:4000});await registerExtensionConfiguration(mount(),{plugins,definitions});
+  const ctx={agents:{get:(/** @type {string} */ id)=>id===agent.id?agent:null},tools:{get:(/** @type {string} */ name)=>definitions.get(name)}};
+  assert.deepEqual((await verifyExtensionAgent(ctx,agent)).tools,['doc_read','doc_write']);assert.deepEqual(extensionInvocationFacts(ctx,agent.id),{sessionId:agent.id,agentId:agent.id,tools:['doc_read','doc_write'],running:false,origin:'root'});
+  assert.throws(()=>extensionInvocationFacts(ctx,'foreign-session'));
+  await assert.rejects(verifyExtensionAgent({...ctx,tools:{get:()=>({})}},agent),/registrations_invalid/u);
+  assert.deepEqual(extensionInvocationFacts({...ctx,tools:{get:()=>null}},agent.id).tools,[]);
+});

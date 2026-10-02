@@ -185,7 +185,9 @@
       "skills/list",
       "agentPresets/list",
       "evimedPlugins/status",
-      "evimedPlugins/verify"
+      "evimedPlugins/verify",
+      "evimedPlugins/verifyExtensions",
+      "evimedPlugins/extensionInvocationFacts"
     ],
     "denied": [
       "account/ackBonusNotified",
@@ -340,7 +342,11 @@
       ],
       "agentPresets/list": [],
       "evimedPlugins/status": [],
-      "evimedPlugins/verify": []
+      "evimedPlugins/verify": [],
+      "evimedPlugins/verifyExtensions": [],
+      "evimedPlugins/extensionInvocationFacts": [
+        "request"
+      ]
     },
     "mux": "/api/remote.mux",
     "streamEndpoints": {

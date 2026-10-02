@@ -9,8 +9,8 @@ import { canonicalJson } from './capsule.mjs'
 export const EXTENSION_EXECUTION_CLASSES = Object.freeze(['isolated-tool', 'restricted-viewer', 'personal-skill', 'managed-native', 'local-only'])
 export const EXTENSION_EVIDENCE_STATES = Object.freeze(['discovered', 'source-assessed', 'runtime-verified', 'saas-qualified'])
 export const EXTENSION_APPLY_PHASES = Object.freeze(['saved', 'preparing', 'waiting', 'applying', 'effective', 'connection-needed', 'unsupported', 'failed', 'rolled-back'])
-export const EXTENSION_PRODUCT_KINDS = Object.freeze(['extension-installation', 'extension-generation', 'extension-proof', 'skill', 'extension-defaults'])
-export const EXTENSION_JOB_KINDS = Object.freeze(['extension-prepare', 'personal-skill-apply'])
+export const EXTENSION_PRODUCT_KINDS = Object.freeze(['extension-installation', 'extension-generation', 'extension-proof', 'extension-resource', 'skill', 'extension-defaults'])
+export const EXTENSION_JOB_KINDS = Object.freeze(['extension-prepare', 'extension-execute', 'personal-skill-apply'])
 export const EXTENSION_SAAS_CASE_IDS = Object.freeze(Array.from({ length: 22 }, (_, i) => `SAAS-${String(i + 1).padStart(2, '0')}`))
 const DIGEST = /^sha256:[a-f0-9]{64}$/u
 const SHA = /^[a-f0-9]{64}$/u
@@ -33,9 +33,11 @@ export function canonicalPersonalSkillResourcePath(value, prefixes) {
   if (typeof value !== 'string') reject('resourcePath')
   const normalized = value.normalize('NFC')
   const parts = normalized.split('/')
+  /** @param {string} input */
   const bytes = input => new TextEncoder().encode(input).length
   if (!normalized || bytes(normalized) > 240 || parts.length > 16
     || parts.some(part => bytes(part) > 101 || !/^[\p{L}\p{N}][\p{L}\p{N}\p{M}._-]*$/u.test(part))) reject('resourcePath')
+  /** @param {string} input */
   const folded = input => input.normalize('NFKC').toUpperCase().toLowerCase().normalize('NFC')
   for (const part of parts) {
     const protectedName = folded(part).normalize('NFD').replace(/\p{M}/gu, '')
@@ -177,6 +179,13 @@ export function validateExtensionProofIdentity(value) {
   return { packageIntegrity: item.packageIntegrity, sourceCommit: item.sourceCommit, adapterRevision: item.adapterRevision,
     dshVersion: item.dshVersion, runtimeImageDigest: item.runtimeImageDigest, executionClass: item.executionClass,
     permissionProfileRevision: item.permissionProfileRevision, suiteRevision: item.suiteRevision }
+}
+
+/** Qualification binds both the contained package adapter and hosted execution boundary.
+ * @param {unknown} artifactAdapterRevision @param {unknown} hostedAdapterRevision @param {(text:string)=>string} sha256Hex */
+export function extensionProofAdapterRevision(artifactAdapterRevision, hostedAdapterRevision, sha256Hex) {
+  return `sha256:${sha256Hex(canonicalJson({ artifactAdapterRevision: digest(artifactAdapterRevision, 'artifactAdapterRevision'),
+    hostedAdapterRevision: digest(hostedAdapterRevision, 'hostedAdapterRevision') }))}`
 }
 
 /** Binds the full externally observed outcome, not a package's self-health claim. @param {unknown} value @param {(text:string)=>string} sha256Hex */
