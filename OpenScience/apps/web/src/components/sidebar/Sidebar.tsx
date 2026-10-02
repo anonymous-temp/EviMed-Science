@@ -38,7 +38,7 @@ interface NavItem {
 }
 
 /**
- * Five destinations (six with the frontier feed, seven with 虚拟临研, eight with 循证 GEO), plus the account in the footer.
+ * Workbench destinations, optional frontier/VCR/GEO modules, and the account footer.
  *
  * It was ten here and two in the footer, with no grouping and no hierarchy, and
  * three of the ten were the same body of material seen three ways while two
@@ -63,6 +63,7 @@ const NAV: NavItem[] = [
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
+  { to: "/app/extensions/plugins", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -165,14 +166,14 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav className="flex flex-col px-3">
+        <nav aria-label="工作台" className="flex flex-col px-3">
           {rows.map((item) => (
             <NavRow
               key={item.to}
               to={item.to}
               icon={item.icon}
               label={item.label}
-              active={location.pathname.startsWith(item.to)}
+              active={item.to === "/app/extensions/plugins" ? location.pathname.startsWith("/app/extensions") : location.pathname.startsWith(item.to)}
               freshState={item.to === "/app/chat" ? () => ({ runtimeUiIntent: newRuntimeUiIntent() }) : undefined}
             />
           ))}
@@ -183,10 +184,6 @@ export function Sidebar() {
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
         <ProjectBrowser geo={geo} vcr={vcr} />
-
-        <nav aria-label="扩展" className="px-3 pb-1">
-          <NavRow to="/app/extensions/plugins" label="插件与技能" icon={<Plug size={16} aria-hidden="true" />} active={location.pathname.startsWith("/app/extensions")} />
-        </nav>
 
         {/* One footer row: who is signed in, and the gear to 设置 (2026-09-23
           * plan §5.2). The count of data sources without a credential used to

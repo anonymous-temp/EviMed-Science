@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,13 @@ describe("Sidebar navigation", () => {
 
     await userEvent.click(screen.getByRole("link", { name: "设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
+  });
+  it("places one extensions entry immediately after tasks in the primary navigation", () => {
+    renderSidebar();
+    const nav = screen.getByRole("navigation", { name: "工作台" });
+    const links = within(nav).getAllByRole("link");
+    expect(links[links.findIndex(link => link.textContent === "定时任务") + 1]).toHaveAccessibleName("插件与技能");
+    expect(screen.getAllByRole("link", { name: "插件与技能" })).toHaveLength(1);
   });
 
   // 「前沿动态」 is a row only where `/api/me` offers it to this account; a
