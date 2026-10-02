@@ -1345,6 +1345,115 @@ jobs:
           cp "$RUNNER_TEMP/result-replay-image-qualification.json" "$RUNNER_TEMP/evimed-release/result-replay-image-qualification.json"
           cp "$RUNNER_TEMP/vcr-image-qualification.json" "$RUNNER_TEMP/evimed-release/vcr-image-qualification.json"
 
+      - name: Package bounded core and isolated VCR image subsets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        timeout-minutes: 35
+        run: |
+          set -euo pipefail
+          # Reuse qualified images; this never invokes a build or deletes existing images.
+          for subset in core vcr; do
+            export EVIMED_RELEASE_SUBSET="$subset"
+            node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          const subset = process.env.EVIMED_RELEASE_SUBSET;
+          assert.ok(['core', 'vcr'].includes(subset));
+          const root = path.join(process.env.RUNNER_TEMP, `evimed-${subset}-release`);
+          fs.mkdirSync(root, { mode: 0o700 });
+          const selected = subset === 'core' ? {
+            web: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            controller: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            backup: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            runtime: process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE,
+            resultReplay: process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE,
+          } : { vcr: process.env.EVIMED_VCR_ENGINE_IMAGE };
+          const full = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
+          assert.equal(full.sourceRevision, process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          const roles = {}, images = [], files = [];
+          for (const [role, reference] of Object.entries(selected)) {
+            const recorded = full.images.find(image => image.references.includes(reference));
+            assert.ok(recorded, `Missing full-release image for ${role}`);
+            const inspected = JSON.parse(execFileSync('docker', ['image', 'inspect', reference], { encoding: 'utf8' }))[0];
+            assert.equal(inspected.Id, recorded.configDigest);
+            assert.equal(inspected.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+            assert.equal(inspected.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+            assert.deepEqual(inspected.RootFS.Layers, recorded.rootfs.diff_ids);
+            assert.equal(`${inspected.Os}/${inspected.Architecture}`, 'linux/amd64');
+            roles[role] = { imageId: inspected.Id, reference };
+            if (!images.some(image => image.imageId === inspected.Id)) images.push({ reference, imageId: inspected.Id,
+              platform: 'linux/amd64', diffIds: inspected.RootFS.Layers, inspectedBytes: inspected.Size });
+          }
+          for (const [source, name] of [['deploy/web/release-manifest.json', 'release-manifest.json'],
+            [path.join(process.env.RUNNER_TEMP, subset === 'core' ? 'result-replay-image-qualification.json' : 'vcr-image-qualification.json'), 'image-qualification.json']]) {
+            const bytes = fs.readFileSync(source);
+            fs.writeFileSync(path.join(root, name), bytes, { flag: 'wx', mode: 0o400 });
+            files.push({ path: name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+          }
+          fs.writeFileSync(path.join(root, 'images.txt'), images.map(image => image.reference + '\n').join(''), { mode: 0o400 });
+          fs.writeFileSync(path.join(root, 'prepared-export.json'), JSON.stringify({ schemaVersion: 1,
+            scope: subset === 'core' ? 'candidate-core-image-subset' : 'isolated-vcr-image-subset',
+            sourceRevision: process.env.OPEN_SCIENCE_SOURCE_REVISION, releaseId: process.env.OPEN_SCIENCE_RELEASE_ID,
+            workflowRun: process.env.GITHUB_RUN_ID, workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            roles, images, files, ...(subset === 'vcr' ? { moduleEnabled: false } : {}),
+            capacityBoundary: 'Import admission must separately measure missing layers, overlayfs snapshots and temporary peak; streaming does not waive the host free-space floor.'
+          }, null, 2) + '\n', { mode: 0o400 });
+          JS
+            export EVIMED_SUBSET_ROOT="$RUNNER_TEMP/evimed-${subset}-release"
+            test "$(df -B1 --output=avail / | tail -1)" -ge 12884901888
+            setsid bash -euo pipefail -c 'mapfile -t images < "$EVIMED_SUBSET_ROOT/images.txt"; docker save "${images[@]}" | gzip -1 > "$EVIMED_SUBSET_ROOT/images.tar.gz"' &
+            subset_pid=$!
+            subset_started=$SECONDS
+            trap 'kill -- "-$subset_pid" 2>/dev/null || true; wait "$subset_pid" || true' EXIT
+            while kill -0 "$subset_pid" 2>/dev/null; do
+              if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ] || \
+                 [ "$(stat -c %s "$EVIMED_SUBSET_ROOT/images.tar.gz" 2>/dev/null || echo 0)" -gt 3221225472 ] || \
+                 [ "$((SECONDS - subset_started))" -gt 900 ]; then
+                echo "Release subset export exceeded its capacity, byte or time bound" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+            wait "$subset_pid"
+            trap - EXIT
+            chmod 400 "$EVIMED_SUBSET_ROOT/images.tar.gz"
+            python3 - <<'PYTHON'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('subset_inventory', 'scripts/ops/extension-acceptance-archive.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          root = Path(os.environ['EVIMED_SUBSET_ROOT'])
+          report = module.measure_archive(root)
+          print({'subset': os.environ['EVIMED_RELEASE_SUBSET'], 'images': len(report['images']),
+                 'compressedBytes': report['archive']['compressedBytes'],
+                 'uniqueUncompressedLayerBytes': report['archive']['uniqueUncompressedLayerBytes'],
+                 'conservativeDownloadAndLoadBytes': report['archive']['conservativeDownloadAndLoadBytes']})
+          PYTHON
+          done
+
+      - name: Upload exact candidate core image subset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-core-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-core-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload isolated candidate VCR image subset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-vcr-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-vcr-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
       - name: Upload verified full-release images
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
         uses: actions/upload-artifact@v4

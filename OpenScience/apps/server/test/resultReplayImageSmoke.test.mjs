@@ -105,6 +105,16 @@ test("Docker CI enables and qualifies the replay image and exports exactly that 
   assert.match(find("Build hosted Web, agent runtime and deterministic replay images").run, /--profile vcr build/);
   assert.match(archive, /grep -Fx "\$EVIMED_VCR_ENGINE_IMAGE"/);
   assert.match(archive, /vcr\.configDigest/);
+  const subsets = find("Package bounded core and isolated VCR image subsets");
+  assert.match(subsets.if, /\[full-release\]/);
+  assert.match(subsets.run, /for subset in core vcr/);
+  assert.match(subsets.run, /inspected\.Id, recorded\.configDigest/);
+  assert.match(subsets.run, /images\.some\(image => image\.imageId === inspected\.Id\)/);
+  assert.match(subsets.run, /module\.measure_archive/);
+  assert.match(subsets.run, /overlayfs snapshots and temporary peak/);
+  assert.doesNotMatch(subsets.run, /docker (?:build|image rm|system prune)/);
+  assert.match(find("Upload exact candidate core image subset").with.name, /evimed-core-release-/);
+  assert.match(find("Upload isolated candidate VCR image subset").with.name, /evimed-vcr-release-/);
   const vcr = find("Qualify isolated VCR candidate image without enabling the module");
   assert.match(vcr.run, /numerical_source_digest/);
   assert.match(vcr.run, /'--network', 'none'/);

@@ -43,6 +43,23 @@ class ExpandedStream:
 def measure_archive(root):
     root = Path(root)
     expected = json.loads((root / 'prepared-export.json').read_text())
+    expected_images = {item['reference']: item for item in expected['images']}
+    for role in expected.get('roles', {}).values():
+        image = expected_images.get(role.get('reference'))
+        INVENTORY.require(image and image['imageId'] == role.get('imageId'), 'subset_role_identity')
+    for record in expected.get('files', []):
+        parts = Path(record['path']).parts
+        INVENTORY.require(parts and not Path(record['path']).is_absolute() and not any(part in {'.', '..'} for part in parts), 'subset_file_path')
+        target = root
+        for part in parts:
+            target /= part
+            INVENTORY.require(not target.is_symlink(), 'subset_file_link')
+        INVENTORY.require(target.is_file() and target.stat().st_size == record['bytes'] and record['bytes'] <= 32 * 1024**2, 'subset_file_identity')
+        hasher = hashlib.sha256()
+        with target.open('rb') as stream:
+            for data in chunks(stream):
+                hasher.update(data)
+        INVENTORY.require(hasher.hexdigest() == record['sha256'], 'subset_file_identity')
     archive_file = root / 'images.tar.gz'
     INVENTORY.require(0 < archive_file.stat().st_size <= MAX_COMPRESSED, 'compressed_archive_bound')
     archive_digest = hashlib.sha256()
