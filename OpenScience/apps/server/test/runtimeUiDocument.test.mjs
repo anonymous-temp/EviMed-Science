@@ -76,3 +76,16 @@ test("bootstrap always injects the trusted response ceiling over frame input", a
   assert.equal(sandbox.__EVIMED_FRAME__.muxResponseMaxBytes, RUNTIME_UI_MUX_RESPONSE_MAX_BYTES);
   assert.ok(Object.isFrozen(sandbox.__EVIMED_FRAME__));
 });
+
+
+test("rc.2 relative native plugin preloads use the same immutable asset route as absolute URLs", async () => {
+  const { rebaseRuntimeUiDocument } = await import("../src/runtimeUiDocument.mjs");
+  for (const base of ["", "./", "/"]) {
+    const graph = { batches: [{ url: "plugins/??@deepseek-ai/dsh-client-modules/client.js&rev=66cb7eb2888d" }] };
+    const source = `<html><head><link rel="preload" as="script" href="${base}plugins/??app&amp;rev=0123456789ab"><script src="${base}plugins/??@deepseek-ai/dsh-client-modules/client.js&amp;rev=66cb7eb2888d"></script><script>window.__DSH_BOOT__=${JSON.stringify(graph)}</script></head></html>`;
+    const shared = rebaseRuntimeUiDocument(Buffer.from(source), { "content-type": "text/html" }, prefix, "/__evimed/k/").toString();
+    assert(shared.includes('href="/__evimed/k/plugins/??app&amp;rev=0123456789ab"'));
+    assert(shared.includes('src="/__evimed/k/plugins/??@deepseek-ai/dsh-client-modules/client.js&amp;rev=66cb7eb2888d"'));
+    assert(shared.includes(`window.__DSH_BOOT__=${JSON.stringify(graph)}`), "native graph bytes remain unchanged");
+  }
+});

@@ -33,8 +33,8 @@ export function rebaseRuntimeUiDocument(payload, headers, prefix, assetPrefix = 
     if (!/^<(?:script|link)\b/i.test(token)) return token;
     // A script's text may itself contain HTML; only its opening tag is an attribute surface.
     const end = token.indexOf(">");
-    let opening = token.slice(0, end + 1).replace(/\b(src|href)=(['"])(\/plugins\/[^'"]*)\2/gi,
-      (_attribute, name, quote, value) => `${name}=${quote}${stablePlugins && revisioned(value) ? stablePlugins : prefix}${value.slice(1)}${quote}`);
+    let opening = token.slice(0, end + 1).replace(/\b(src|href)=(['"])(?:\.\/|\/)?(plugins\/[^'"]*)\2/gi,
+      (_attribute, name, quote, value) => `${name}=${quote}${stablePlugins && revisioned(value) ? stablePlugins : prefix}${value}${quote}`);
     if (stableAssets) {
       opening = opening.replace(/\b(src|href)=(['"])(?:\.\/|\/)(assets\/[A-Za-z0-9._-]+)\2/gi,
         (_attribute, name, quote, value) => `${name}=${quote}${stableAssets}${value}${quote}`);
