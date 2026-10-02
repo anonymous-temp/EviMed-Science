@@ -1,3 +1,4 @@
+import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { backgroundRuntimeLimit, isInternalProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
@@ -3204,7 +3205,9 @@ export function createRuntimeProvider(manager, { agentbay = null } = {}) {
 }
 
 export class RuntimeManager {
+  /** @type {any} */ #assessmentAuthority;
   constructor(config, {
+    assessmentAuthority = null,
     agentRegistry = null,
     workloadTokenWriter = refreshEviMedWorkloadToken,
     setWorkloadTimer = setTimeout,
@@ -3216,6 +3219,7 @@ export class RuntimeManager {
     hasRunningRuns = async () => false,
     agentbayClient = null,
   } = {}) {
+    assertExtensionAssessmentAuthority(assessmentAuthority);this.#assessmentAuthority=assessmentAuthority;
     this.config = config;
     /** @type {any} */ this.pluginService = null;
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
@@ -5311,7 +5315,7 @@ export class RuntimeManager {
     const image = await this.inspectRuntimeImage();
     if (image?.imageId !== candidate.identity.baseRuntimeImageDigest) throw new HttpError(409, 'extension_contract_invalid', 'The extension runtime image changed.');
     if (candidate.reference) {
-      const physical = await verifyExtensionGeneration(this.config, project, candidate.reference);
+      const physical = await verifyExtensionGeneration(this.config, project, candidate.reference, {assessmentAuthority:this.#assessmentAuthority});
       if (canonicalJson(physical) !== canonicalJson(candidate)) throw new HttpError(400, 'extension_contract_invalid', 'The extension manifest changed.');
     } else if (candidate.projection.plugins.some(plugin => plugin.compatibility !== 'legacy-citation-v1')) throw new HttpError(400, 'extension_contract_invalid', 'A baseline cannot select extension tools.');
     const external = candidate.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');

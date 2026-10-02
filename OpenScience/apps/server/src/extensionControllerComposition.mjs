@@ -1,3 +1,4 @@
+import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
@@ -18,8 +19,9 @@ const refused = () => new HttpError(403, 'extension_access_denied', 'The extensi
 /** Privileged operations read only control-plane-issued signed requests and
  * the same durable job/epoch/generation records the web boundary owns.
  * Native caller facts are established before that boundary issues a grant.
- * @param {{config:any,deployment:any,database?:any}} dependencies */
-export function createControllerExtensionComposition({ config, deployment, database: supplied = null }) {
+ * @param {{config:any,deployment:any,database?:any,assessmentAuthority?:any}} dependencies */
+export function createControllerExtensionComposition({ config, deployment, database: supplied = null, assessmentAuthority = null }) {
+  assertExtensionAssessmentAuthority(assessmentAuthority);
   if (deployment.status !== 'configured' || !config.databaseUrl || typeof config.modelGatewaySigningSecret !== 'string'
     || config.modelGatewaySigningSecret.length < 32) return null;
   const database = supplied ?? new ControlPlaneDatabase({ ...config, databasePoolMax: 2 });
@@ -51,7 +53,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
       if (!candidate || candidate.scope.ownerAccountCreatedAt !== scope.accountCreatedAt || candidate.scope.projectCreatedAt !== scope.projectCreatedAt) return false;
       const actualImage = await imageId(), identities = deploymentGenerationIdentities(deployment, actualImage);
       if (['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => candidate.identity[key] !== identities[key])) return false;
-      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: scope.userId }, candidate.reference);
+      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: scope.userId }, candidate.reference, {assessmentAuthority});
       const observed = extractExtensionGenerationOperationIdentity(manifest, { userId: scope.userId, ownerId: scope.userId,
         projectId: scope.projectId, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt,
         runtimeGeneration: scope.runtimeGeneration }, scope.descriptorId);
@@ -67,6 +69,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
         || prepared.payload.accountCreatedAt !== scope.accountCreatedAt || prepared.payload.installationId !== scope.installationId
         || prepared.payload.installationRevision !== scope.installationRevision || prepared.result.installationId !== scope.installationId
         || prepared.result.installationRevision !== scope.installationRevision || prepared.result.integrity !== pin.integrity) return false;
+      if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:scope.userId}, {operation:request.operation}); return true; }
       const proof = await qualification.authority(entry);
       return proof?.receipt.receiptDigest === pin.receiptDigest;
     } catch { return false; }
@@ -126,5 +129,5 @@ export function createControllerExtensionComposition({ config, deployment, datab
       return grants.inputSnapshot(operationId, job.payload.request, resourceId, job.payload.scope);
     },
   });
-  return { tools, close: async () => { await tools.close(); if (!supplied) await database.close(); } };
+  return { tools, verifyGeneration: (project, reference) => verifyExtensionGeneration(config,project,reference,{assessmentAuthority}), close: async () => { await tools.close(); if (!supplied) await database.close(); } };
 }

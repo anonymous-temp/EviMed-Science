@@ -66,7 +66,7 @@ export class ExtensionOperationService {
     if (!invocation || invocation.userId !== auth.userId || invocation.projectId !== auth.projectId || invocation.runtimeGeneration !== auth.runtimeGeneration || typeof invocation.invocationId !== 'string' || !invocation.allowedOperations?.includes(request.operation)) throw denied();
     const scope = await this.generations.operationIdentity({
       id: auth.userId
-    }, auth.projectId, descriptorId, auth.runtimeGeneration);
+    }, auth.projectId, descriptorId, auth.runtimeGeneration, request.operation);
     if (scope.userId !== auth.userId || scope.projectId !== auth.projectId || scope.runtimeGeneration !== auth.runtimeGeneration) throw denied();
     return {
       scope,

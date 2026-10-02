@@ -1,3 +1,4 @@
+import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { createDocumentRenderController } from "./documentRenderController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
 import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
@@ -336,6 +337,9 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   // Protected construction supplies descriptors and signed/current authority resolvers.
   // An absent composition never falls back to a development image or direct execution.
   const extensionTools = hooks.extensionTools ?? null;
+  const assessmentAuthority = hooks.extensionGenerationAssessmentAuthority ?? null;
+  assertExtensionAssessmentAuthority(assessmentAuthority);
+  const verifyGeneration = (project, reference) => verifyExtensionGeneration(config, project, reference, {assessmentAuthority});
   const runtimeChildren = new Map();
   const runtimeOwners = new Map();
   // The last words of each runtime container, kept past its own death. A
@@ -478,7 +482,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
-    const extension = payload.extensionGeneration ? await verifyExtensionGeneration(config, project, payload.extensionGeneration) : null;
+    const extension = payload.extensionGeneration ? await verifyGeneration(project, payload.extensionGeneration) : null;
     if (extension) {
       if (inspectRuntimeImage(config).imageId !== extension.identity.baseRuntimeImageDigest) throw controllerFailure(409, 'extension_contract_invalid', 'The selected runtime image changed.');
       if (canonicalJson(extension.projection.personal.reference) !== canonicalJson(payload.personalSkillGeneration ?? null)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected personal roots do not match.');
@@ -567,7 +571,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
               && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative : mount.Type === 'bind' && mount.Source === expected)
               && state.Mounts?.some(item => item.Destination === '/opt/evimed/extensions' && item.RW === false);
             if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime selected projection did not match.');
-            await verifyExtensionGeneration(config, project, extension.reference); break;
+            await verifyGeneration(project, extension.reference); break;
           }
           await new Promise(resolve => setTimeout(resolve, 100));
         }
