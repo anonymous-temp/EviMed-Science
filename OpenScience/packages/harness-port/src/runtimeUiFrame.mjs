@@ -55,7 +55,7 @@ import { BODY as MANAGED_BROWSER } from './runtimeUiManagedBrowser.mjs';
 import { BODY as PANELS } from './runtimeUiPanels.mjs';
 import { BODY as REPLY_CHECKS } from './runtimeUiReplyChecks.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
-import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
+import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS, RUNTIME_UI_NATIVE_BROWSER_KEY } from './runtimeUiSlots.mjs';
 import { BODY as SOURCES } from './runtimeUiSources.mjs';
 import { BODY as THEME } from './runtimeUiTheme.mjs';
 import { BODY as TOOLVIEWS } from './runtimeUiToolviews.mjs';
@@ -89,6 +89,7 @@ export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => 
 export const FRAME_VOCABULARY = Object.freeze({
   kernelPin: RUNTIME_UI_KERNEL_PIN,
   slots: RUNTIME_UI_SLOTS,
+  nativeBrowserKey: RUNTIME_UI_NATIVE_BROWSER_KEY,
   // The product's palette and type, from the one token module the shell's own
   // stylesheet and Tailwind theme are generated from. Inlined here at build
   // time because a frame body may import nothing: the frame reaches the browser

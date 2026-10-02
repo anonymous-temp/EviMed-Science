@@ -75,7 +75,7 @@ export function createManagedBrowserController(options) {
   const observe = (/** @type {any} */ reply) => {
     const value = reply?.state;if (value?.viewport) reportedViewport = value.viewport;if (!value || typeof value !== 'object') throw managedBrowserError('managed_browser_unavailable');
     const parsed = value.url && value.url !== 'about:blank' ? managedBrowserTarget(value.url) : null;
-    const target = parsed?.ok ? { ...parsed.target, title: String(value.title || parsed.target.title).slice(0,200) } : state.frame.target;
+    const target = value.url === 'about:blank' ? undefined : parsed?.ok ? { ...parsed.target, title: String(value.title || parsed.target.title).slice(0,200) } : state.frame.target;
     retired = Boolean(value.error);
     emit({ ...state, restoreTarget: undefined, frame: { target, address: target ? 'observed' : 'empty', loading: value.loading === true, canGoBack: value.canGoBack === true, canGoForward: value.canGoForward === true, error: value.error ? { code: -1, description: managedBrowserError(value.error.code).message } : undefined, sandboxEnabled: undefined } });
     if (target) { saved = target;actions?.replace(options.nativeTabId ?? tabId, { entries: [target], index: 0, request: { target, revision: state.addressRevision }, navigation: { status: 'known', revision: state.addressRevision }, failure: undefined }); }
@@ -238,7 +238,7 @@ export function createManagedBrowserScope(options) {
 /** @param {any} ctx @param {any} config @param {any} target @param {any} require @param {any} kit */
 export function apply(ctx, config, target, require, kit) {
   if (!kit.ours || !kit.frame.managedBrowser) return;
-  const frame = kit.frame;
+  const frame = kit.frame, browserKey = kit.vocabulary.nativeBrowserKey;
   /** @type {Map<string,any>} */const scopes = new Map();
   const available = frame.managedBrowser.available && frame.prefix && typeof target.fetch === 'function';
   const request = available ? createManagedBrowserTransport(frame,target.fetch.bind(target)) : async()=>{throw managedBrowserError('managed_browser_unavailable');};
@@ -251,7 +251,7 @@ export function apply(ctx, config, target, require, kit) {
       /** @type {any[]} */ const disposers=[];for (const slot of ['sidebar.right.pane.tab','sidebar.right.pane.tab.title']) {
         /** @type {any} */ let own=null;
         /** @type {any} */ let native=null;
-        const refresh=()=>kit.guarded('managed native browser',()=>{const next=scope.slots.entries(slot).find((/** @type {any} */ entry)=>entry.options.key==='browser'&&(entry.options.priority??0)===0);if(next===native)return;const previous=own;own=null;native=next;previous?.();if(next)own=kit.occupy({slot,key:'browser',priority:-1,inherit:next,...(slot.endsWith('.title')?{}:{inject})},next.component);});
+        const refresh=()=>kit.guarded('managed native browser',()=>{const next=scope.slots.entries(slot).find((/** @type {any} */ entry)=>entry.options.key===browserKey&&(entry.options.priority??0)===0);if(next===native)return;const previous=own;own=null;native=next;previous?.();if(next)own=kit.occupy({slot,key:browserKey,priority:-1,inherit:next,...(slot.endsWith('.title')?{}:{inject})},next.component);});
         disposers.push(scope.slots.subscribe(slot,refresh));refresh();disposers.push(()=>own?.());
       }
       return async()=>{for(const dispose of disposers.reverse())dispose();await Promise.all([...scopes.values()].map(value=>value.dispose()));scopes.clear();};

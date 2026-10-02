@@ -42,6 +42,9 @@
 /** The kernel client version these contracts were read from. */
 export const RUNTIME_UI_KERNEL_PIN = '0.1.7-rc.2';
 
+/** Public keyed body/title cell registered by the pinned sidebar-browser client. */
+export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';
+
 /**
  * The chat node kinds `ui-chat` registers (`registerChatNodeRenderers`). A
  * key in this list is a takeover, not an addition.

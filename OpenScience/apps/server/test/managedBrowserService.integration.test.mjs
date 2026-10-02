@@ -23,7 +23,7 @@ test('actual isolated CDP contexts enforce cookie/tenant boundaries, bounded pix
   const alice={userId:'alice',projectId:'p',authSessionHash:'a'.repeat(43),frameId:'a'.repeat(32)},bob={userId:'bob',projectId:'p',authSessionHash:'b'.repeat(43),frameId:'b'.repeat(32)},input={sessionId:'native',tabId:'tab',viewport:{width:640,height:480}};
   const a=await service.open(alice,input),b=await service.open(bob,input);assert.equal((await observer.send('Target.getBrowserContexts')).browserContextIds.length,initial+2);
   const body=(id,sequence,command)=>({id,sessionId:'native',tabId:'tab',sequence,command});
-  assert.equal((await service.command(alice,body(a.id,1,{type:'navigate',url:'http://public.example.org/'}))).state.error,null);
+  const firstPage=await service.command(alice,body(a.id,1,{type:'navigate',url:'http://public.example.org/'}));assert.equal(firstPage.state.error,null);assert.equal(firstPage.state.canGoBack,false,'initial about:blank is not user navigation history');
   await service.command(alice,body(a.id,2,{type:'click',x:50,y:16,button:'left'}));
   await service.command(alice,body(a.id,3,{type:'text',text:'alice-only'}));await service.command(alice,body(a.id,4,{type:'key',key:'Enter'}));
   let observed=null;const deadline=Date.now()+5000;
@@ -32,6 +32,9 @@ test('actual isolated CDP contexts enforce cookie/tenant boundaries, bounded pix
   await service.command(alice,body(a.id,5,{type:'key',key:'Meta+A'}));await service.command(alice,body(a.id,6,{type:'text',text:'updated-alice'}));await service.command(alice,body(a.id,7,{type:'key',key:'Enter'}));
   assert.equal((await service.snapshot(alice,{id:a.id,sessionId:'native',tabId:'tab'})).state.title,'scope=updated-alice');
   const bobPage=await service.command(bob,body(b.id,1,{type:'navigate',url:'http://public.example.org/'}));assert.equal(bobPage.state.title,'empty');
+  const nextPage=await service.command(bob,body(b.id,2,{type:'navigate',url:'http://public.example.org/second'}));assert.equal(nextPage.state.canGoBack,true);
+  const back=await service.command(bob,body(b.id,3,{type:'back'}));assert.equal(back.state.url,'http://public.example.org/');assert.equal(back.state.canGoBack,false);assert.equal(back.state.canGoForward,true);
+  const forward=await service.command(bob,body(b.id,4,{type:'forward'}));assert.equal(forward.state.url,'http://public.example.org/second');assert.equal(forward.state.canGoForward,false);
   const second=await service.open(alice,{...input,tabId:'second-occurrence'});
   const secondPage=await service.command(alice,{...body(second.id,1,{type:'navigate',url:'http://public.example.org/'}),tabId:'second-occurrence'});assert.equal(secondPage.state.title,'empty');
   assert.equal((await observer.send('Target.getBrowserContexts')).browserContextIds.length,initial+3);
