@@ -7,6 +7,7 @@ import {promisify} from 'node:util';
 import {canonicalJson,canonicalExtensionCoordinate} from '@evimed/domain';
 import {HttpError,assertNoSymlinkPath} from './security.mjs';
 import {extensionRequestObject,extensionIdentifier} from './extensionAccess.mjs';
+import {dockerRuntimeMount,assertDockerVolumeName} from './dockerMounts.mjs';
 const exec=promisify(execFile),hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const refusal=()=>new HttpError(400,'extension_contract_invalid','The isolated extension operation was refused.');
 const unavailable=()=>new HttpError(503,'product_state_unavailable','Isolated execution could not be confirmed.');
@@ -42,10 +43,12 @@ export function extensionExecutionIdentity(identity){
 }
 /** Fixed controller adapter. The injected resolver authorizes opaque operations and returns only trusted public/aggregate snapshots. */
 export class ExtensionToolController{
-  /** @param {{admittedDescriptors:any[],stateRoot:string,adapterRoot:string,inputRoot:string,resolveOperation?:any,resolveInputSnapshot?:any,resolvePreparation?:any,canRetireAttempt?:any,dockerBin?:string,maxConcurrent?:number,timeoutMs?:number}} options */
-  constructor({admittedDescriptors,stateRoot,adapterRoot,inputRoot,resolveOperation=null,resolveInputSnapshot=null,resolvePreparation=null,canRetireAttempt=null,dockerBin='docker',maxConcurrent=2,timeoutMs=15000}){
+  /** @param {{admittedDescriptors:any[],stateRoot:string,adapterRoot:string,inputRoot:string,dataDir?:string,runtimeDataVolume?:string,resolveOperation?:any,resolveInputSnapshot?:any,resolvePreparation?:any,canRetireAttempt?:any,dockerBin?:string,maxConcurrent?:number,timeoutMs?:number}} options */
+  constructor({admittedDescriptors,stateRoot,adapterRoot,inputRoot,dataDir=stateRoot,runtimeDataVolume='',resolveOperation=null,resolveInputSnapshot=null,resolvePreparation=null,canRetireAttempt=null,dockerBin='docker',maxConcurrent=2,timeoutMs=15000}){
     this.stateRoot=path.resolve(stateRoot);this.adapterRoot=path.resolve(adapterRoot);this.inputRoot=path.resolve(inputRoot);this.resolveOperation=resolveOperation;this.resolveInputSnapshot=resolveInputSnapshot;
     this.dockerBin=dockerBin;this.maxConcurrent=maxConcurrent;this.timeoutMs=timeoutMs;this.active=new Map();this.blocked=false;this.admitted=new Map();this.descriptors=new Map();
+    this.mountConfig={dataDir:path.resolve(dataDir),runtimeDataVolume:runtimeDataVolume?assertDockerVolumeName(runtimeDataVolume):''};
+    if(this.mountConfig.runtimeDataVolume)dockerRuntimeMount(this.mountConfig,this.stateRoot,'/input');
     this.closed=false;
     this.resolvePreparation=resolvePreparation;this.canRetireAttempt=canRetireAttempt;this.receiptCursor=0;
     if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>4||!Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>30000)throw refusal();
@@ -145,10 +148,23 @@ export class ExtensionToolController{
     const key=identity?.jobId??scope.name;let settle=(_value)=>{};const settled=new Promise(resolve=>{settle=resolve;});
     this.active.set(key,{identity,abort,settled,scope});const timer=setTimeout(()=>abort.abort('timeout'),this.timeoutMs);timer.unref();
     try{
-      if(snapshot){await fs.chmod(scope.directory,0o755);await fs.writeFile(path.join(scope.directory,'input.'+snapshot.format),snapshot.bytes,{mode:0o444});await fs.writeFile(path.join(scope.directory,'manifest.json'),JSON.stringify({resources:{[snapshot.resourceId]:{file:'input.'+snapshot.format,format:snapshot.format,bytes:snapshot.bytes.length,sha256:snapshot.sha256,dataClass:snapshot.dataClass}}}),{mode:0o444});for(const name of ['input.'+snapshot.format,'manifest.json'])await fs.chmod(path.join(scope.directory,name),0o444);}
+      const projections=[];
+      if(this.mountConfig.runtimeDataVolume){const info=await this.command(['info','--format','{{.ServerVersion}}']);if(Number(info.stdout.trim().match(/^(\d+)/)?.[1])<26||!/^\d+\./.test(info.stdout.trim()))throw unavailable();}
+      if(args.inventory){
+        if(!Buffer.isBuffer(args.inventory)||args.inventory.length>128*1024||hash(args.inventory)!==descriptor.inventorySHA)throw refusal();
+        await fs.chmod(scope.directory,0o755);await fs.writeFile(path.join(scope.directory,'inventory.mjs'),args.inventory,{flag:'wx',mode:0o444});await fs.chmod(path.join(scope.directory,'inventory.mjs'),0o444);
+        projections.push({target:'/proof',directory:scope.directory});
+      }
+      if(snapshot){projections.push({target:'/input',directory:scope.directory});await fs.chmod(scope.directory,0o755);await fs.writeFile(path.join(scope.directory,'input.'+snapshot.format),snapshot.bytes,{mode:0o444});await fs.writeFile(path.join(scope.directory,'manifest.json'),JSON.stringify({resources:{[snapshot.resourceId]:{file:'input.'+snapshot.format,format:snapshot.format,bytes:snapshot.bytes.length,sha256:snapshot.sha256,dataClass:snapshot.dataClass}}}),{mode:0o444});for(const name of ['input.'+snapshot.format,'manifest.json'])await fs.chmod(path.join(scope.directory,name),0o444);}
       if(abort.signal.aborted)throw Object.assign(unavailable(),{canceled:abort.signal.reason!=='timeout'});
-      try{const createdContainer=await this.command(['create','--pull','never','-i','--name',scope.name,'--label','com.evimed.extension-tool=owned','--label',`com.evimed.extension-scope=${scope.name}`,'--label',`com.evimed.extension-artifact=${scope.artifactDigest}`,'--label',`com.evimed.extension-attempt=${hash(canonicalJson(identity))}`,'--network','none','--read-only','--user','10001:10001','--cpus','1','--memory','512m','--pids-limit','64','--cap-drop','ALL','--security-opt','no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',...args.mounts,...(snapshot?['--mount',`type=bind,source=${scope.directory},target=/input,readonly`]:[]),...args.entrypoint,descriptor.imageId,...args.command]);scope.containerId=createdContainer.stdout.trim();if(!/^[a-f0-9]{64}$/.test(scope.containerId))throw unavailable();created=true;await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId,artifactDigest:scope.artifactDigest,identity,state:'reserved'}),{mode:0o600});}catch(error){uncertain=true;throw error;}
+      try{const createdContainer=await this.command(['create','--pull','never','-i','--name',scope.name,'--label','com.evimed.extension-tool=owned','--label',`com.evimed.extension-scope=${scope.name}`,'--label',`com.evimed.extension-artifact=${scope.artifactDigest}`,'--label',`com.evimed.extension-attempt=${hash(canonicalJson(identity))}`,'--network','none','--read-only','--user','10001:10001','--cpus','1','--memory','512m','--pids-limit','64','--cap-drop','ALL','--security-opt','no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',...args.mounts,...projections.flatMap(item=>['--mount',`${dockerRuntimeMount(this.mountConfig,item.directory,item.target)},readonly`]),...args.entrypoint,descriptor.imageId,...args.command]);scope.containerId=createdContainer.stdout.trim();if(!/^[a-f0-9]{64}$/.test(scope.containerId))throw unavailable();created=true;await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId,artifactDigest:scope.artifactDigest,identity,state:'reserved'}),{mode:0o600});}catch(error){uncertain=true;throw error;}
       if(abort.signal.aborted)throw Object.assign(unavailable(),{canceled:abort.signal.reason!=='timeout'});
+      if(this.mountConfig.runtimeDataVolume){
+        const actual=JSON.parse((await this.command(['inspect','--format','{{json .}}',scope.containerId])).stdout),mounts=actual.HostConfig?.Mounts??[];
+        if(actual.Id!==scope.containerId||actual.Image!==descriptor.imageId||mounts.length!==projections.length
+          ||projections.some(item=>!mounts.some(mount=>mount.Type==='volume'&&mount.Source===this.mountConfig.runtimeDataVolume&&mount.Target===item.target&&mount.ReadOnly===true
+            &&mount.VolumeOptions?.Subpath===path.relative(this.mountConfig.dataDir,item.directory).split(path.sep).join('/'))))throw unavailable();
+      }
       result=await this.startContainer(scope,input,abort.signal);
     }catch(error){failure=error;}finally{
       clearTimeout(timer);signal?.removeEventListener('abort',relay);
@@ -173,7 +189,7 @@ export class ExtensionToolController{
     const script=path.join(this.adapterRoot,'image-inventory.mjs'),file=await fs.open(script,constants.O_RDONLY|constants.O_NOFOLLOW);let content;
     try{if(!(await file.stat()).isFile())throw refusal();content=await file.readFile();}finally{await file.close();}
     if(hash(content)!==descriptor.inventorySHA)throw refusal();
-    const output=await this.run(descriptor,identity,{mounts:['--mount',`type=bind,source=${script},target=/proof/inventory.mjs,readonly`,'--env',`COWORK_EXPECTED_CLOSURE_SHA256=${descriptor.closureExpectedSHA}`],entrypoint:['--entrypoint','sh'],command:['-ec','node /proof/inventory.mjs; sha256sum /opt/cowork/runner.mjs /opt/cowork/policy.mjs']},null,signal,null,persist);
+    const output=await this.run(descriptor,identity,{inventory:content,mounts:['--env',`COWORK_EXPECTED_CLOSURE_SHA256=${descriptor.closureExpectedSHA}`],entrypoint:['--entrypoint','sh'],command:['-ec','node /proof/inventory.mjs; sha256sum /opt/cowork/runner.mjs /opt/cowork/policy.mjs']},null,signal,null,persist);
     const lines=String(output).trim().split('\n');if(JSON.parse(lines[0])?.allBytesModesAndDirectoriesMatch!==true||lines[1]?.split(/\s+/)[0]!==descriptor.runnerSHA||lines[2]?.split(/\s+/)[0]!==descriptor.policySHA)throw refusal();
     this.admitted.set(descriptor.id,descriptor.artifactDigest);return{artifactDigest:descriptor.artifactDigest,integrity:descriptor.integrity,coordinate:canonicalExtensionCoordinate(descriptor.coordinate),qualified:false,joined:true};
   }

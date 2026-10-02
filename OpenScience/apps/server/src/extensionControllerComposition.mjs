@@ -86,6 +86,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
   };
   const tools = new ExtensionToolController({ admittedDescriptors: deployment.admittedDescriptors,
     stateRoot: path.join(config.dataDir, '.openscience', 'extension-controller'),
+    dataDir: config.dataDir, runtimeDataVolume: config.runtimeDataVolume,
     adapterRoot: fileURLToPath(new URL('../../../scripts/runtime/extensions/cowork/', import.meta.url)),
     inputRoot: grants.root, dockerBin: config.runtimeContainerBin, resolveOperation,
     resolvePreparation: async (identity, descriptor) => {
