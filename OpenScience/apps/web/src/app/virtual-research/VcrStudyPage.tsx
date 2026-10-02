@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
+import { VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
 import { MessageSquare, MoreHorizontal, UsersRound } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
@@ -183,6 +184,8 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
     ...(can("export") ? [
       { label: "导出研究包", disabled: running, onSelect: () => exportAs("study_package", "研究包暂时无法导出，请稍后重试。") },
       { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
+      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.simulation_report}`, disabled: running, onSelect: () => exportAs("simulation_report", "模拟报告暂时无法导出，请稍后重试。") },
+      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.validation_pack}`, disabled: running, onSelect: () => exportAs("validation_pack", "系统验证文档包暂时无法导出，请稍后重试。") },
     ] : []),
     // The compute budget, the study's status and its deletion are the lead's
     // (`manage_study`): the second human stop is confirmed by the person who
