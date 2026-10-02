@@ -56,3 +56,16 @@ test('native body/title registrations retain exact store/locale/children and def
 test('an observed real about:blank clears the displayed old address while preserving the saved restore target independently',async()=>{
  let blank=false;const c=createManagedBrowserController({sessionId:'s',tabId:'t',available:true,actions:{},request:async(/** @type {string} */ method,/** @type {any} */ body)=>method==='open'?{id:'owned',sequence:0,state:{url:'about:blank'}}:{sequence:body.sequence??1,state:{url:blank?'about:blank':target.url,title:'Observed',viewport:{width:800,height:600}}}});await c.navigate(target.url);assert.equal(c.getSnapshot().frame.target.url,target.url);blank=true;await c.command({type:'back'});assert.equal(c.getSnapshot().frame.target,undefined);assert.equal(c.getSnapshot().frame.address,'empty');
 });
+
+test('unchanged snapshot metadata neither publishes another native checkpoint nor notifies the chrome',async()=>{
+ let sequence=0,replacements=0,notifications=0;const c=createManagedBrowserController({sessionId:'s',tabId:'t',available:true,actions:{replace:()=>{replacements++;}},request:async(/** @type {string} */ method,/** @type {any} */ body)=>method==='open'?{id:'owned',sequence:0,state:{url:'about:blank'}}:{sequence:method==='command'?(sequence=body.sequence):sequence,state:{url:target.url,title:'Observed',canGoBack:true,viewport:{width:800,height:600}}}});
+ await c.navigate(target.url);c.subscribe(()=>{notifications++;});const before=replacements;for(let index=0;index<12;index++)await c.snapshot();assert.equal(replacements,before);assert.equal(notifications,0);
+});
+
+test('concurrent presentation snapshots coalesce so toolbar actions cannot silently disappear behind obsolete polls',async()=>{
+ /** @type {any} */
+ let release;let sequence=0;
+ /** @type {string[]} */
+ const sent=[];const c=createManagedBrowserController({sessionId:'s',tabId:'t',available:true,actions:{},request:async(/** @type {string} */ method,/** @type {any} */ body)=>{sent.push(method==='command'?body.command.type:method);if(method==='open')return{id:'owned',sequence:0,state:{url:'about:blank'}};if(method==='snapshot')await new Promise(resolve=>{release=resolve;});return{sequence:method==='command'?(sequence=body.sequence):sequence,state:{url:target.url,title:'Observed'}};}});
+ await c.navigate(target.url);const polls=Array.from({length:12},()=>c.snapshot());await new Promise(resolve=>setTimeout(resolve,0));const back=c.command({type:'back'});release();assert.equal(await back,true);assert.equal(sent.filter(value=>value==='snapshot').length,1);assert(sent.includes('back'));await Promise.all(polls);
+});

@@ -142,8 +142,9 @@ export function createManagedBrowserService(config,deps={}){
   checkSlot(slot);slot.state.error=null;
   switch(command.type){
    case'navigate':{const url=validatedWebUrl(command.url);await assertPublicWebHost(url.hostname,resolveImpl);checkSlot(slot);slot.state.loading=true;await slot.page.goto(url.href,{waitUntil:'domcontentloaded',timeout:timeoutMs});break;}
-   case'back':slot.state.loading=true;await slot.page.goBack({waitUntil:'domcontentloaded',timeout:timeoutMs});break;
-   case'forward':slot.state.loading=true;await slot.page.goForward({waitUntil:'domcontentloaded',timeout:timeoutMs});break;
+   // BFCache history restores commit without another DOMContentLoaded event.
+   case'back':slot.state.loading=true;await slot.page.goBack({waitUntil:'commit',timeout:timeoutMs});break;
+   case'forward':slot.state.loading=true;await slot.page.goForward({waitUntil:'commit',timeout:timeoutMs});break;
    case'reload':slot.state.loading=true;await slot.page.reload({waitUntil:'domcontentloaded',timeout:timeoutMs});break;
    case'resize':slot.viewport={width:command.width,height:command.height};await slot.page.setViewportSize(slot.viewport);break;
    case'click':if(command.x>=slot.viewport.width||command.y>=slot.viewport.height)throw error('managed_browser_invalid',400);await slot.page.mouse.click(command.x,command.y,{button:command.button});break;

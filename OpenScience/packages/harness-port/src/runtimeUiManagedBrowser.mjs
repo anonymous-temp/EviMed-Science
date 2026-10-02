@@ -64,13 +64,15 @@ export function createManagedBrowserController(options) {
   /** @type {any} */ let disposed = null;
   /** @type {any} */ let uncertain = null;
   let tail = Promise.resolve();
+  /** @type {Promise<any>|null} */ let snapshotPending = null;
+  /** @type {string|null} */ let persisted = null;
   /** @type {any} */ let opening = null;
   let saved = options.initial?.entries?.[options.initial.index];
   /** @type {any} */ let pixel = null;
   /** @type {any} */ let reportedViewport = options.viewport ?? {width:800,height:600};
   /** @type {Set<()=>void>} */ const listeners = new Set();
   /** @type {any} */ let state = { frame: { target: undefined, address: 'empty', loading: false, canGoBack: false, canGoForward: false, error: options.available === true ? undefined : { code: -1, description: managedBrowserError('managed_browser_unavailable').message }, sandboxEnabled: undefined }, restoreTarget: saved, addressFailure: undefined, addressRevision: 0 };
-  const emit = (/** @type {any} */ next) => { state = next;for (const listener of listeners) listener(); };
+  const emit = (/** @type {any} */ next) => { if (JSON.stringify(state) === JSON.stringify(next)) return;state = next;for (const listener of listeners) listener(); };
   const failure = (/** @type {any} */ error) => { const known = managedBrowserError(error?.code);emit({ ...state, frame: { ...state.frame, loading: false, error: { code: -1, description: known.message } } }); };
   const observe = (/** @type {any} */ reply) => {
     const value = reply?.state;if (value?.viewport) reportedViewport = value.viewport;if (!value || typeof value !== 'object') throw managedBrowserError('managed_browser_unavailable');
@@ -78,11 +80,15 @@ export function createManagedBrowserController(options) {
     const target = value.url === 'about:blank' ? undefined : parsed?.ok ? { ...parsed.target, title: String(value.title || parsed.target.title).slice(0,200) } : state.frame.target;
     retired = Boolean(value.error);
     emit({ ...state, restoreTarget: undefined, frame: { target, address: target ? 'observed' : 'empty', loading: value.loading === true, canGoBack: value.canGoBack === true, canGoForward: value.canGoForward === true, error: value.error ? { code: -1, description: managedBrowserError(value.error.code).message } : undefined, sandboxEnabled: undefined } });
-    if (target) { saved = target;actions?.replace(options.nativeTabId ?? tabId, { entries: [target], index: 0, request: { target, revision: state.addressRevision }, navigation: { status: 'known', revision: state.addressRevision }, failure: undefined }); }
+    if (target) {
+      saved = target;const checkpoint = { entries: [target], index: 0, request: { target, revision: state.addressRevision }, navigation: { status: 'known', revision: state.addressRevision }, failure: undefined };
+      const identity = JSON.stringify(checkpoint);if (identity !== persisted) { persisted = identity;actions?.replace(options.nativeTabId ?? tabId, checkpoint); }
+    }
   };
   const scoped = () => ({ ...(id ? { id } : {}), sessionId, tabId });
   const enqueue = (/** @type {()=>Promise<any>} */ work) => {
-    if (closing || pending >= 8) return Promise.resolve(false);
+    if (closing) return Promise.resolve(false);
+    if (pending >= 8) { failure(managedBrowserError('managed_browser_busy'));return Promise.resolve(false); }
     pending++;const result = tail.then(work);tail = result.catch(() => {});return result.catch(error => { failure(uncertain ? managedBrowserError('managed_browser_action_unknown') : error);return false; }).finally(() => { pending--; });
   };
   const ensure = async () => {
@@ -126,13 +132,16 @@ export function createManagedBrowserController(options) {
     command(/** @type {any} */ command,/** @type {any} */ basis) { return enqueue(() => basis && (basis.width !== reportedViewport.width || basis.height !== reportedViewport.height) ? Promise.resolve(false) : dispatch(command)); },
     reload() { return enqueue(async () => { await recover();if (!id && saved) return dispatch({ type: 'navigate', url: saved.url });return dispatch({ type: 'reload' }); }); },
     restore() { return saved ? controller.navigate(saved.url) : Promise.resolve(false); },
-    snapshot() { return enqueue(async () => {
-      if (!id || retired || uncertain) return false;
+    snapshot(/** @type {()=>boolean} */ current = () => true) {
+      // A remounted native body shares the one pending observation, not another queued request.
+      if (snapshotPending) return snapshotPending;
+      snapshotPending = enqueue(async () => {
+      if (!current() || !id || retired || uncertain) return false;
       let result;try { result = await request('snapshot', scoped()); }catch(error){retired=true;pixel=null;throw error;}if (!Number.isSafeInteger(result?.sequence) || result.sequence < sequence) throw managedBrowserError('managed_browser_sequence_conflict');observe(result);
       const image = result.frame;
       if (image && (image.mimeType !== 'image/jpeg' || typeof image.dataBase64 !== 'string' || image.dataBase64.length > 1100000 || !image.dataBase64.startsWith('/9j/') || !/^[A-Za-z0-9+/]*={0,2}$/.test(image.dataBase64) || !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) || image.width < 100 || image.width > 1600 || image.height < 100 || image.height > 1200)) throw managedBrowserError('managed_browser_unavailable');
       pixel = image;return true;
-    }); },
+    }).finally(() => { snapshotPending = null; });return snapshotPending; },
     dispose() {
       if (!disposed) { closing = true;disposed = tail.then(async () => { await opening;if (id || openAttempted) await closeRemote();listeners.clear();pixel = null; }); }
       return disposed;
@@ -174,7 +183,7 @@ export function mountManagedBrowserViewport(controller, target, request) {
   const flushText = () => { if (text) { const batch = text;text = '';invoke({ type: 'text', text: batch }); } };
   const poll = async () => {
     if (!mounted || target.document.hidden) { if (mounted) timer = target.setTimeout(poll, 1000);return; }
-    await controller.snapshot();
+    await controller.snapshot(() => mounted && !target.document.hidden);
     if (!mounted) return;
     const frame = controller.frame();if (frame) { image.src = 'data:image/jpeg;base64,' + frame.dataBase64;const desired = size(),key = desired.width+'x'+desired.height;if (container.clientWidth>0&&container.clientHeight>0&&(desired.width!==frame.width||desired.height!==frame.height)&&requestedSize!==key) {requestedSize=key;invoke({type:'resize',...desired});} }else image.removeAttribute('src');
     timer = target.setTimeout(poll, 500);
