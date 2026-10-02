@@ -116,6 +116,7 @@ async function fixture() {
       db,
       service,
       controller,
+      scope,
       auth,
       request,
       get calls() {
@@ -356,6 +357,100 @@ test('lease expiry before dispatch fails without inventing a physical joined res
 
 test('revocation after dispatch refuses result hydration without releasing an unjoined operation', options, async () => {
  const f=await fixture();try{const a=await f.service.submit(f.auth,f.request),job=await f.service.claim('revoke-late');const identity=await f.service.markDispatch(job);f.revoke();await assert.rejects(f.service.complete(job,{ok:true,data:{read:'must not publish',resourceId:'public_one',inputSha256:createHash('sha256').update('public fixture').digest('hex')},identity,joined:true,physicallyAbsent:true}));assert.equal((await f.service.jobs.get('alice',a.jobId)).status,'running');assert.equal(await f.service.hasUnjoined(),true);}finally{await f.close();}
+});
+
+test('revoked queued cancellation releases only the original owned job without granting reads or new submission', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request);f.revoke();
+    await assert.rejects(f.service.status(f.auth,accepted.jobId));
+    await assert.rejects(f.service.submit(f.auth,{...f.request,idempotencyKey:'revoked-new'}));
+    const canceled=await f.service.cancel(f.auth,accepted.jobId);
+    assert.equal(canceled.status,'canceled');assert.equal(Object.hasOwn(canceled,'result'),false);
+    assert.equal((await f.service.jobs.get('alice',accepted.jobId)).status,'canceled');
+    await new ExtensionOperationWorker({service:f.service}).tick();assert.equal(f.calls,0);
+    await assert.rejects(f.service.status(f.auth,accepted.jobId));
+  } finally {await f.close();}
+});
+
+test('revoked running cancellation commits intent before exact controller join and never hydrates result', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request),job=await f.service.claim('revoked-running'),identity=await f.service.markDispatch(job);f.revoke();
+    let joined=0;f.controller.cancelExecution=async received=>{
+      assert.deepEqual(received,identity);
+      // Pool max=1: this succeeds only after the short intent transaction releases its client.
+      const row=(await f.db.query("SELECT status,payload FROM evimed_product.jobs WHERE id=$1",[job.id])).rows[0];
+      assert.equal(row.status,'running');assert.equal(row.payload.cancelRequested,true);joined++;
+      return{identity:received,joined:true,physicallyAbsent:true};
+    };
+    const response=await f.service.cancel(f.auth,accepted.jobId);
+    assert.equal(response.status,'canceled');assert.equal(joined,1);assert.equal(Object.hasOwn(response,'result'),false);
+    assert.equal(await f.service.hasUnjoined(),false);assert.equal(f.calls,0);
+    await assert.rejects(f.service.status(f.auth,job.id));
+  } finally {await f.close();}
+});
+
+test('revoked cancellation with unconfirmed or mismatched join retains recovery until a matching acknowledgment', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request),job=await f.service.claim('revoked-unknown'),identity=await f.service.markDispatch(job);f.revoke();f.unknown();
+    assert.equal((await f.service.cancel(f.auth,accepted.jobId)).status,'running');assert.equal(await f.service.hasUnjoined(),true);
+    f.controller.cancelExecution=async received=>({identity:{...received,attempts:received.attempts+1},joined:true,physicallyAbsent:true});
+    assert.equal((await f.service.cancel(f.auth,accepted.jobId)).status,'running');
+    f.controller.cancelExecution=async received=>({identity:received,joined:true,physicallyAbsent:true});
+    assert.equal((await f.service.cancel(f.auth,accepted.jobId)).status,'canceled');assert.equal(await f.service.hasUnjoined(),false);
+    assert.deepEqual((await f.service.jobs.get('alice',job.id)).payload.dispatch,identity);
+  } finally {await f.close();}
+});
+
+test('revoked cancellation refuses foreign actor project runtime and changed original invocation', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request),job=await f.service.claim('foreign-cancel');await f.service.markDispatch(job);f.revoke();let calls=0;
+    f.controller.cancelExecution=async identity=>{calls++;return{identity,joined:true,physicallyAbsent:true};};
+    for(const auth of [{...f.auth,userId:'bob'},{...f.auth,projectId:'another'},{...f.auth,runtimeGeneration:'r2'},{...f.auth,invocation:{signed:'different-call'}}])await assert.rejects(f.service.cancel(auth,job.id),{status:404});
+    assert.equal(calls,0);const retained=await f.service.jobs.get('alice',accepted.jobId);assert.equal(retained.status,'running');assert.equal(retained.payload.cancelRequested,false);
+  } finally {await f.close();}
+});
+
+test('revoked cancellation refuses a recreated caller account while the owner job still exists', options, async () => {
+  const f=await fixture();try {
+    const epoch=(await f.db.query("SELECT created_at::text AS epoch FROM evimed_control.users WHERE id='bob'")).rows[0].epoch;
+    f.scope.userId='bob';f.scope.accountCreatedAt=epoch;f.scope.membershipEpoch='test-only-member-incarnation';
+    const auth={...f.auth,userId:'bob'},accepted=await f.service.submit(auth,f.request);f.revoke();
+    await f.db.query("DELETE FROM evimed_control.users WHERE id='bob'");
+    await f.db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('bob','Recreated','development')");
+    const newEpoch=(await f.db.query("SELECT created_at::text AS epoch FROM evimed_control.users WHERE id='bob'")).rows[0].epoch;assert.notEqual(newEpoch,epoch);
+    assert.ok(await f.service.jobs.get('alice',accepted.jobId),'Owner ledger survives deletion of its original invoking member');
+    await assert.rejects(f.service.cancel(auth,accepted.jobId),{status:403});
+    assert.equal((await f.service.jobs.get('alice',accepted.jobId)).payload.cancelRequested,false);
+  } finally {await f.close();}
+});
+
+test('revoked cancellation cannot reach a job deleted with its recreated owner project', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request);f.revoke();
+    await f.db.query("DELETE FROM evimed_control.projects WHERE user_id='alice' AND id='p'");
+    await f.db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES('alice','p','Recreated',1048576)");
+    assert.equal(await f.service.jobs.get('alice',accepted.jobId),null);
+    await assert.rejects(f.service.cancel(f.auth,accepted.jobId),{status:404});
+  } finally {await f.close();}
+});
+
+test('revoked cancellation refuses a changed owner project incarnation in a retained job scope', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request);f.revoke();
+    await f.db.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id='alice' AND id='p'");
+    await assert.rejects(f.service.cancel(f.auth,accepted.jobId),{status:403});
+    assert.equal((await f.service.jobs.get('alice',accepted.jobId)).payload.cancelRequested,false);
+  } finally {await f.close();}
+});
+
+test('revoked cancellation preserves a fast completed historical result without returning its bytes', options, async () => {
+  const f=await fixture();try {
+    const accepted=await f.service.submit(f.auth,f.request);await new ExtensionOperationWorker({service:f.service}).tick();
+    const completed=await f.service.jobs.get('alice',accepted.jobId);assert.equal(completed.status,'succeeded');f.revoke();
+    const response=await f.service.cancel(f.auth,accepted.jobId);assert.equal(response.status,'succeeded');assert.equal(Object.hasOwn(response,'result'),false);
+    const retained=await f.service.jobs.get('alice',accepted.jobId);assert.equal(retained.status,'succeeded');assert.deepEqual(retained.result,completed.result);
+    await assert.rejects(f.service.status(f.auth,accepted.jobId));
+  } finally {await f.close();}
 });
 
 test('project deletion joins only that project and holds unknown physical work instead of canceling other projects', options, async () => {
