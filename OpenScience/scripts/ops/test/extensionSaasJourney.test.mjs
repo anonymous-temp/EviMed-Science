@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -111,4 +111,12 @@ test('private probe observer preserves strict successful proof and original fail
  const originalError=Object.assign(new Error('extension_probe_registrations_invalid private-token-must-not-leak'),{code:'plugin_apply_failed'}),candidate={reference:{generationHash:'c'.repeat(64)}},records=[],proof={actualProof:true},manager={marker:'real',async probeGeneration(project,input,extra){assert.equal(extra,'retained-extra');assert.equal(this.marker,'real');assert.equal(input,candidate);if(project.fail)throw originalError;return proof;}};
  const original=manager.probeGeneration,restore=observeCampaignGenerationProbe(manager,async record=>records.push(record));assert.equal(await manager.probeGeneration({},candidate,'retained-extra'),proof);assert.equal(records.length,0);
  await assert.rejects(manager.probeGeneration({fail:true},candidate,'retained-extra'),error=>error===originalError);assert.equal(records[0].nativeCode,'extension_probe_registrations_invalid');assert.equal(JSON.stringify(records).includes('private-token-must-not-leak'),false);restore();assert.equal(manager.probeGeneration,original);
+});
+
+test('preparation diagnostics distinguish controller timeout vs cancel and preserve exact result/error/this/arguments',async()=>{
+ const result={joined:true,artifactDigest:'exact'},records=[],failure=Object.assign(new Error('private-payload-must-not-leak'),{code:'product_state_unavailable',canceled:false}),body={identity:'private-payload-must-not-leak'},options={signal:'exact-signal'};let time=100;
+ const controller={marker:'actual',admissionAvailable(){return this.marker;},cancelPreparation(value){return value;},async prepare(input,settings,extra){assert.equal(this.marker,'actual');assert.equal(input,body);assert.equal(settings,options);assert.equal(extra,'extra');time+=15003;if(this.fail)throw failure;return result;}};
+ const observed=observeCampaignPreparation(controller,async evidence=>records.push(evidence),()=>time);assert.equal(await observed.prepare(body,options,'extra'),result);assert.equal(records[0].elapsedMs,15003);assert.equal(records[0].joined,true);assert.equal(observed.admissionAvailable(),'actual');
+ controller.fail=true;await assert.rejects(observed.prepare(body,options,'extra'),error=>error===failure);assert.equal(records[1].canceled,false);assert.equal(records[1].elapsedMs,15003);failure.canceled=true;await assert.rejects(observed.prepare(body,options,'extra'),error=>error===failure);assert.equal(records[2].canceled,true);assert.equal(JSON.stringify(records).includes('private-payload-must-not-leak'),false);
+ const failedSink=observeCampaignPreparation(controller,async()=>{throw new Error('sink-failed');});await assert.rejects(failedSink.prepare(body,options,'extra'),error=>error===failure);
 });

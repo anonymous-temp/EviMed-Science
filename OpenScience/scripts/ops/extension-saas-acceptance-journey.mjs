@@ -201,6 +201,14 @@ async function campaignPoll(check, deadline, signal) {
   while (Date.now() < deadline) { signal?.throwIfAborted(); const result = await check(); if (result) return result; await new Promise(resolve=>setTimeout(resolve,200)); }
   throw Object.assign(new Error('private_campaign_deadline'), { code:'private_campaign_deadline' });
 }
+/** Diagnostic-only preparation adapter retains actual receiver/arguments and never changes timeout, error or result. */
+export function observeCampaignPreparation(controller,record,now=Date.now){
+ const original=controller.prepare;if(typeof original!=='function'||typeof record!=='function')throw new Error('assessment_controller_unavailable');
+ const emit=async evidence=>{try{await record(evidence);}catch{ /* Actual preparation outcome always has precedence over its diagnostic sink. */ }};
+ return{admissionAvailable:(...args)=>controller.admissionAvailable(...args),cancelPreparation:(...args)=>controller.cancelPreparation(...args),
+  async prepare(...args){const started=now();try{const result=await original.apply(controller,args);await emit({outcome:'succeeded',elapsedMs:Math.max(0,Math.floor(now()-started)),joined:result?.joined===true});return result;}catch(error){await emit({outcome:'failed',elapsedMs:Math.max(0,Math.floor(now()-started)),code:safeCampaignDiagnosticCode(error),canceled:typeof error?.canceled==='boolean'?error.canceled:null,frames:safeCampaignStackFrames(error).slice(0,8)});throw error;}}
+ };
+}
 /** Private observer preserves the real probe's return/error unchanged; evidence is written before the worker's rollback summarises it. */
 export function observeCampaignGenerationProbe(manager,record){
  const original=manager.probeGeneration;
@@ -289,8 +297,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     }
     const owner=actors[0],installed=await campaignRequest(base,owner,'/api/extensions/installations','POST',{coordinate:descriptor.coordinate,scope:'project',projectId:owner.projectId,idempotencyKey:'campaign-install'},201,signal);
     composition=createControllerExtensionComposition({config:app.config,database:app.store.database,deployment});
-    const observedController={admissionAvailable:()=>composition.tools.admissionAvailable(),cancelPreparation:identity=>composition.tools.cancelPreparation(identity),
-      prepare:async(body,options)=>{try{return await composition.tools.prepare(body,options);}catch(error){await saveProtected(path.join(root,'preparation-debug-'+randomUUID()+'.json'),{code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),bodyKeys:Object.keys(body)});throw error;}}};
+    const observedController=observeCampaignPreparation(composition.tools,evidence=>saveProtected(path.join(root,'preparation-debug-'+randomUUID()+'.json'),evidence));
     const preparation=new ExtensionPreparationWorker({service:app.extensionService,controller:observedController,admittedArtifacts:deployment.admittedArtifacts});
     await preparation.tick();const job=await app.extensionService.jobs.get(owner.user.id,installed.job.id);if(job.status!=='succeeded')throw Object.assign(new Error('private_campaign_preparation_failed'),{code:job.error?.code??'private_campaign_preparation_failed'});assert.equal(job.result.artifactDigest,descriptor.artifactDigest);
     stage='independent-current-tuple-and-epoch-facts';const factsReader=createAssessmentCurrentFacts({getConfig:()=>app.config,getDatabase:()=>app.store.database}),admissions=[];
