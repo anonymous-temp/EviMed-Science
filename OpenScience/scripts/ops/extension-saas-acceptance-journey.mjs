@@ -23,6 +23,7 @@ import { openScopedFileNoFollow, readStableFileHandle } from '../../apps/server/
 import { ASSESSMENT_FACT_FIELDS, writeMeasurementAdmission } from './extension-saas-acceptance-authority.mjs';
 import { createAssessmentCurrentFacts, openPrivateAssessmentFixture, openOrdinaryQualificationFixture, createOwnedCampaignNetwork, removeOwnedCampaignNetwork, startOwnedCampaignRelay } from './extension-saas-acceptance-composition.mjs';
 import { ExtensionQualification } from '../../apps/server/src/extensionQualification.mjs';
+import { COMPLETION_FIXTURE_OVERRIDES, prepareCompletionStudy, runStudyRoleControls, runCanaryScan, runUsageAttribution, runQueuedMembershipRevocation, runRunningMembershipRevocation } from './extension-saas-acceptance-completion.mjs';
 import { loadExtensionDeployment, deploymentProofIdentity } from '../../apps/server/src/extensionDeployment.mjs';
 import { createFixtures } from '../runtime/extensions/cowork/fixtures.mjs';
 import { createCampaignReport } from './extension-saas-acceptance.mjs';
@@ -164,8 +165,7 @@ export function controlledCampaignTurn(body, plans, counts) {
   const count = counts.get(key) ?? 0; counts.set(key, count + 1);
   const step = plan[count];
   if (!step) return { text: 'Controlled document operation complete. This is a synthetic transport exercise.', stage: key };
-  if(step.hold===true)return{...step,stage:key};
-  if (!(body.tools ?? []).some(tool => tool.name === step.name)&&!(step.permissionProbe===true&&['doc_read','run_code'].includes(step.name))) throw new Error('native_campaign_tool_not_registered:' + step.name);
+  if (step.name!==undefined&&!(body.tools ?? []).some(tool => tool.name === step.name)&&!(step.permissionProbe===true&&['doc_read','run_code'].includes(step.name))) throw new Error('native_campaign_tool_not_registered:' + step.name);
   return { ...step, id: 'assessment_' + stage[1].replaceAll('-', '') + '_' + count, stage: key };
 }
 /** Actual OpenAI ancillary and Messages wire shapes, matching the production gateway fixtures. */
@@ -219,6 +219,11 @@ export async function dispatchOrdinaryCampaignTurn(base,actor,{dispatchId,text},
  if(binding?.sessionId!==session.id||binding.mode!=='open-domain')throw new Error('private_campaign_session_binding_unconfirmed');
  const run=await request(base,actor,'/api/agent-runs/dispatch','POST',{sessionId:session.id,dispatchId,automated:true,line:'answer',text},202,signal);
  return{session,run};
+}
+export async function dispatchCampaignFollowupTurn(base,actor,sessionId,{dispatchId,text},signal=null,request=campaignRequest){
+ if(typeof sessionId!=='string'||!sessionId||sessionId.startsWith('web_mock_'))throw new Error('real_generation_campaign_required');
+ const binding=await request(base,actor,'/api/research-sessions/'+encodeURIComponent(sessionId),'PUT',{mode:'open-domain'},200,signal);if(binding?.sessionId!==sessionId||binding.mode!=='open-domain')throw new Error('private_campaign_session_binding_unconfirmed');
+ return request(base,actor,'/api/agent-runs/dispatch','POST',{sessionId,dispatchId,automated:true,line:'answer',text},202,signal);
 }
 /** Bootstrap selects only a real successful prepared installation; the independent reader still rechecks its database history and current epochs. */
 export function campaignPreparedInstallerBinding(descriptor,actor,installation,job){
@@ -342,28 +347,30 @@ export async function openCampaignObserverDatabase(state,clientFactory=options=>
  return{query:(sql,values=[])=>{if(connectionFailure)throw connectionFailure;if(closed||typeof sql!=='string'||!sql.trimStart().startsWith('SELECT ')||sql.includes(';'))throw new Error('private_campaign_observer_query_refused');return client.query(sql,values);},close};
 }
 /** Do not wait for nonexistent tool jobs after an actual native run has already failed. */
-export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt,observerDatabase=app.store.database){
- if(typeof sessionId!=='string'||!sessionId||sessionId.length>200)throw new Error('real_generation_campaign_required');
+export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt,observerDatabase=app.store.database,expectedOperations=['doc_read','doc_write']){
+ if(typeof sessionId!=='string'||!sessionId||sessionId.length>200||!Array.isArray(expectedOperations)||expectedOperations.length<1||expectedOperations.length>2||new Set(expectedOperations).size!==expectedOperations.length||expectedOperations.some(value=>!['doc_read','doc_write'].includes(value)))throw new Error('real_generation_campaign_required');
  const rows=(await observerDatabase.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' AND created_at >= $3::timestamptz AND payload->'invocation'->>'sessionId'=$4 ORDER BY created_at",[project.userId,project.id,startedAt,sessionId])).rows.filter(row=>{
   if(row.payload?.invocation?.sessionId!==sessionId)return false;
   if(!row.payload.auth||!Object.hasOwn(row.payload.auth,'invocation'))return true;
   const raw=row.payload.auth.invocation;if(typeof raw==='string'&&Buffer.byteLength(raw)>16384)return false;
   try{const invocation=typeof raw==='string'?JSON.parse(raw):raw;return invocation?.sessionId===sessionId;}catch{return false;}
  });
- if(rows.length>=2&&rows.every(row=>['succeeded','failed','canceled'].includes(row.status)))return rows;
+ if(rows.length>=expectedOperations.length&&rows.every(row=>['succeeded','failed','canceled'].includes(row.status)))return rows;
  const run=(await app.agentRuns.list(project)).find(item=>item.id===runId);
  if(run&&['failed','canceled','succeeded'].includes(run.status))throw Object.assign(new Error('native_campaign_run_terminal'),{code:run.status==='succeeded'?'native_campaign_doc_jobs_incomplete':safeCampaignDiagnosticCode({code:run.errorCode??'native_campaign_run_terminal'}),terminalRun:{id:run.id,sessionId,status:run.status,errorCode:run.errorCode?safeCampaignDiagnosticCode({code:run.errorCode}):null,documentJobs:rows.length}});
  return null;
 }
 /** Ledger completion precedes native status polling; only the real settled tool events complete this observation. */
-export function campaignDocumentTranscriptReady(transcript) {
- const parts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&['doc_read','doc_write'].includes(part.tool));
- if(parts.some(part=>part.error||['failed','canceled'].includes(part.status))||parts.length>2)throw Object.assign(new Error('native_campaign_document_tool_failed'),{code:'native_campaign_document_tool_failed'});
- if(parts.length!==2||new Set(parts.map(part=>part.tool)).size!==2||!parts.every(part=>part.status==='completed'))return null;
+export function campaignDocumentTranscriptReady(transcript,expectedTools=['doc_read','doc_write'],expectedCallIds=null) {
+ if(!Array.isArray(expectedTools)||expectedTools.length<1||expectedTools.length>2||new Set(expectedTools).size!==expectedTools.length||expectedTools.some(tool=>!['doc_read','doc_write'].includes(tool)))throw new Error('real_generation_campaign_required');
+ if(expectedCallIds!==null&&(!Array.isArray(expectedCallIds)||expectedCallIds.length!==expectedTools.length||new Set(expectedCallIds).size!==expectedCallIds.length||expectedCallIds.some(id=>typeof id!=='string'||!id||id.length>200)))throw new Error('real_generation_campaign_required');
+ const parts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&expectedTools.includes(part.tool)&&(expectedCallIds===null||expectedCallIds.includes(part.callId)));
+ if(parts.some(part=>part.error||['failed','canceled'].includes(part.status))||parts.length>expectedTools.length)throw Object.assign(new Error('native_campaign_document_tool_failed'),{code:'native_campaign_document_tool_failed'});
+ if(parts.length!==expectedTools.length||new Set(parts.map(part=>part.tool)).size!==expectedTools.length||!parts.every(part=>part.status==='completed'))return null;
  return{transcript,toolParts:parts};
 }
-export async function campaignObserveDocumentCompletion(app,project,runId,sessionId,readTranscript) {
- const settled=campaignDocumentTranscriptReady(await readTranscript());if(settled)return settled;
+export async function campaignObserveDocumentCompletion(app,project,runId,sessionId,readTranscript,expectedTools=['doc_read','doc_write'],expectedCallIds=null) {
+ const settled=campaignDocumentTranscriptReady(await readTranscript(),expectedTools,expectedCallIds);if(settled)return settled;
  const run=(await app.agentRuns.list(project)).find(item=>item.id===runId);
  if(run&&['failed','canceled'].includes(run.status))throw Object.assign(new Error('native_campaign_document_tool_failed'),{code:'native_campaign_document_tool_failed',terminalRun:{id:runId,sessionId,status:run.status}});
  // Success may advance between the transcript and run reads. Observe its settled transcript again.
@@ -378,9 +385,9 @@ export function campaignDelegatedChildReady(transcript) {
  const children=parts.flatMap(part=>delegatedChildrenOf(part.tool,part.output));if(children.length>1)throw Object.assign(new Error('native_campaign_delegation_failed'),{code:'native_campaign_delegation_failed'});return children[0]??null;
 }
 /** Only actual failure fields/rendered refusal envelopes witness denial; request or description prose never does. */
-export function campaignToolRefusalFacts(part,expectedTool) {
+export function campaignToolRefusalFacts(part,expectedTool,{negativeContract=false}={}) {
  if(part?.type!=='tool'||part.tool!==expectedTool||part.status==='pending')return null;
- const codes=['UNKNOWN_TOOL','extension_access_denied','extension_contract_invalid'],rendered=socketToolResult(part.output);
+ const codes=['UNKNOWN_TOOL','extension_access_denied','extension_contract_invalid',...(negativeContract===true?['INVALID_ARGS']:[])],rendered=socketToolResult(part.output);
  if(rendered?.ok===true)return null;
  if(rendered?.ok===false&&codes.includes(rendered.code))return{source:'rendered-refusal',code:rendered.code};
  if(part.status!=='error'&&!part.error)return null;
@@ -433,34 +440,38 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const ephemeralSecret=randomBytes(32).toString('hex'),webPort=await new Promise(resolve=>{const probe=http.createServer();probe.listen(0,'127.0.0.1',()=>{const port=probe.address().port;probe.close(()=>resolve(port));});});
     if(nativeLinux)relay=await bindNativeLinuxRelay({root,network,listenPort:inputs.nativeRelayListenPort??0});
     const gateway=relay?.gatewayUrl??'http://assessment-gateway:8787';
-    const overrides={...CAMPAIGN_RUNTIME_LIMITS,dataDir:root,databaseUrl:isolated.url,databasePoolMax:2,databaseConnectionTimeoutMs:1000,stateStore:'postgres',
+    const overrides={...CAMPAIGN_RUNTIME_LIMITS,...COMPLETION_FIXTURE_OVERRIDES,dataDir:root,databaseUrl:isolated.url,databasePoolMax:2,databaseConnectionTimeoutMs:1000,stateStore:'postgres',
       production:false,localAutoConfig:false,devAuth:false,authMode:'local',selfRegistrationEnabled:true,
       bootstrapUser:'assessment-bootstrap',bootstrapPassword:randomBytes(24).toString('hex'),operatorUsers:'assessment-bootstrap',
       modelGatewaySigningSecret:ephemeralSecret,evimedWorkloadSigningSecret:randomBytes(32).toString('hex'),
       deepseekApiKey:'assessment-controlled-transport',deepseekApiKeyFile:'',dashscopeApiKey:'',dashscopeApiKeyFile:'',
       deepseekBaseUrl:transport.url,deepseekProviderEnabled:false,llmRoutingEnabled:false,learningEnabled:false,reviewEnabled:false,
-      geoEnabled:false,vcrEnabled:false,frontierEnabled:false,imEnabled:false,evimedCreditsEnabled:false,runtimeReviewEnabled:false,runtimeProvider:'docker',runtimeSandboxMode:'docker',
+      geoEnabled:false,frontierEnabled:false,imEnabled:false,evimedCreditsEnabled:false,runtimeReviewEnabled:false,runtimeProvider:'docker',runtimeSandboxMode:'docker',
       runtimeContainerBin:path.join(root,'docker-fixture.mjs'),runtimeContainerImage:inputs.runtimeImageId,runtimeContainerUser:'10001:10001',
       runtimeDataVolume:volumeName,runtimeControllerMode:'socket',runtimeControllerSocket:path.join(root,'.openscience/runtime-controller.sock'),
       runtimeTransport:'unix',runtimeNetworkMode:network.name,runtimeInternalNetworkName:network.name,allowRuntimeNetworkEgress:false,allowRuntimeHostNetwork:false,
       host:nativeLinux?'127.0.0.1':'0.0.0.0',port:webPort,modelGatewayInternalUrl:gateway+'/internal/model/v1',extensionGatewayInternalUrl:gateway+'/internal/extensions/v1'};
     stage='ordinary-registration-and-owned-preparation';app=createWebApiApp({...overrides,runtimeMode:'mock'});const address=await app.listen(0,'127.0.0.1'),base=`http://127.0.0.1:${address.port}`;
     const actors=[];
-    for(const username of ['campaign-owner','campaign-other']){
+    for(const username of ['campaign-owner','campaign-other','campaign-lead','campaign-data-manager','campaign-site']){
       const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password:randomBytes(24).toString('hex'),name:username,warm:false}),signal:signal??AbortSignal.timeout(30000)});
       const body=await response.json();assert.equal(response.status,201);const actor={user:body.data.user,headers:{Cookie:response.headers.get('set-cookie').split(';')[0],'X-Open-Science-CSRF':body.data.csrfToken}};
-      const me=await campaignRequest(base,actor,'/api/me');assert.equal(me.operator,false);actor.projectId=me.project.id;actor.headers['X-Open-Science-Project']=actor.projectId;actors.push(actor);
+      const me=await campaignRequest(base,actor,'/api/me');assert.equal(me.operator,false);actor.defaultProjectId=me.project.id;actor.projectId=me.project.id;actor.headers['X-Open-Science-Project']=actor.projectId;actors.push(actor);
     }
-    const owner=actors[0],installed=await campaignRequest(base,owner,'/api/extensions/installations','POST',{coordinate:descriptor.coordinate,scope:'project',projectId:owner.projectId,idempotencyKey:'campaign-install'},201,signal);
+    const owner=actors[0],viewer=actors[1],lead=actors[2],dataManager=actors[3],site=actors[4];
+    const completionFixture=await prepareCompletionStudy({app,state:{root,databaseName:isolated.name,descriptor,overrides},owner,lead,viewer,dataManager,site});
+    for(const actor of actors){actor.projectId=completionFixture.projectId;actor.headers['X-Open-Science-Project']=actor.projectId;}
+    const installed=await campaignRequest(base,lead,'/api/extensions/installations','POST',{coordinate:descriptor.coordinate,scope:'project',projectId:owner.projectId,idempotencyKey:'campaign-install-'+randomUUID()},201,signal);
     composition=createControllerExtensionComposition({config:app.config,database:app.store.database,deployment});
     const observedController=observeCampaignPreparation(composition.tools,evidence=>saveProtected(path.join(root,'preparation-debug-'+randomUUID()+'.json'),evidence));
     const preparation=new ExtensionPreparationWorker({service:app.extensionService,controller:observedController,admittedArtifacts:deployment.admittedArtifacts});
-    await preparation.tick();const job=await app.extensionService.jobs.get(owner.user.id,installed.job.id);if(job.status!=='succeeded')throw Object.assign(new Error('private_campaign_preparation_failed'),{code:job.error?.code??'private_campaign_preparation_failed'});assert.equal(job.result.artifactDigest,descriptor.artifactDigest);
+    await preparation.tick();const job=await app.extensionService.jobs.get(lead.user.id,installed.job.id);if(job.status!=='succeeded')throw Object.assign(new Error('private_campaign_preparation_failed'),{code:job.error?.code??'private_campaign_preparation_failed'});assert.equal(job.result.artifactDigest,descriptor.artifactDigest);
     stage='independent-current-tuple-and-epoch-facts';const factsReader=createAssessmentCurrentFacts({getConfig:()=>app.config,getDatabase:()=>app.store.database}),admissions=[];
-    const installerBinding=campaignPreparedInstallerBinding(descriptor,owner,installed.installation,job);
-    // The other ordinary account is a negative scope control, not a prepared addon installer.
-    const bootstrapProject=await resolveCampaignProject(app,owner),facts=await factsReader({project:bootstrapProject,actor:owner.user,installerBinding});
-    admissions.push({...Object.fromEntries(ASSESSMENT_FACT_FIELDS.map(field=>[field,facts[field]])),assessmentId:'campaign-'+randomUUID(),issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),allowedOperations:['doc_read','doc_write']});
+    const installerBinding=campaignPreparedInstallerBinding(descriptor,lead,installed.installation,job);
+    const bootstrapProject=await resolveCampaignProject(app,owner);
+    for(const manager of [owner,lead]){const facts=await factsReader({project:bootstrapProject,actor:manager.user,installerBinding});
+      admissions.push({...Object.fromEntries(ASSESSMENT_FACT_FIELDS.map(field=>[field,facts[field]])),assessmentId:'campaign-'+randomUUID(),issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),allowedOperations:['doc_read','doc_write']});}
+    // Viewer/data/site never receive native document admissions; their actual role consumer is measured separately.
     stage='protected-measurement-admission';const admission=await writeMeasurementAdmission({root,admissions});
     await composition.close();composition=null;await app.close();app=null;
     stage='independent-controller-real-candidate-application';privateFixture=await openPrivateAssessmentFixture({overrides:{...overrides,runtimeMode:'kernel'},admission});
@@ -468,7 +479,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const privateApp=privateFixture.app,project=await resolveCampaignProject(privateApp,owner),view=await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     candidateProject=project;
     observeCampaignGenerationLifecycle(privateApp.runtimeManager,evidence=>saveProtected(path.join(root,'generation-lifecycle-'+evidence.sequence+'.json'),evidence));
-    await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
+    await campaignRequest(privateFixture.baseUrl,lead,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     await campaignPoll(()=>campaignGenerationReady(privateApp,project),Date.now()+inputs.deadlineMs,signal);
     stage='physical-runtime-image-uid-mount-verification';const runtime=privateApp.runtimeManager.runtimes.get(privateApp.runtimeManager.key(project));assert(runtime?.containerName);
     const actual=JSON.parse((await execute(path.join(root,'docker-fixture.mjs'),['inspect','--format','{{json .}}',runtime.containerName],{timeout:10000,maxBuffer:256*1024,env:assessmentDockerEnvironment()})).stdout);
@@ -479,7 +490,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     assert.equal(transport.requests.length,0);
     const current=await privateApp.hostedExtensions.generations.current(project);
     state={nativeRelayListenPort:inputs.nativeRelayListenPort??0,operatorPlatform:inputs.operatorPlatform??'darwin-colima',schemaVersion:1,status:'setup-physical-observed-not-measured',root,databaseName:isolated.name,databaseUrl:isolated.url,overrides,actors,network,gatewayHost:inputs.gatewayHost,
-      admission,descriptor,sourcePolicy:deployment.policy,preparerInputSHA:prepared.recordSHA256,installedId:installed.installation.id,
+      admission,descriptor,completionFixture,sourcePolicy:deployment.policy,preparerInputSHA:prepared.recordSHA256,installedId:installed.installation.id,
       qualificationRoot:deployment.qualificationRoot,physicalSetup:{...physical,imagePreflight,relay:{bridge:relay.bridge??null,containerId:relay.containerId??null,sourceDigest:relay.sourceDigest,upstreamPinnedUrl:relay.upstreamPinnedUrl,scope:relay.scope},generationHash:current.payload.effective.reference.generationHash,manifestDigest:digest(canonicalJson(current.payload.effective)),observedAt:new Date().toISOString(),operatorUid:process.getuid(),controllerProcessId:privateFixture.controllerProcess.processId,scope:privateFixture.controllerProcess.scope},qualified:false};
     await privateFixture.close();privateFixture=null;
     await saveProtected(path.join(root,'campaign-state.json'),state);success=true;
@@ -513,9 +524,9 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,...CAMPAIGN_RUNTIME_LIMITS,...gatewayOverrides,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});
     if(nativeLinux)relay.bindTarget(fixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:fixture.baseUrl+'/',gatewayHost:state.gatewayHost});
     observerDatabase=await openCampaignObserverDatabase(state);
-    const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);measurementProject=project;observeCampaignInvocationRefusal(app,project,evidence=>saveProtected(path.join(state.root,'invocation-refusal-'+randomUUID()+'.json'),evidence));stage='ordinary-selection-and-current-candidate-apply';
+    let {app,baseUrl}=fixture;const owner=state.actors[0],other=state.actors[1],selector=state.completionFixture?state.actors[2]:owner,project=await resolveCampaignProject(app,owner);measurementProject=project;observeCampaignInvocationRefusal(app,project,evidence=>saveProtected(path.join(state.root,'invocation-refusal-'+randomUUID()+'.json'),evidence));stage='ordinary-selection-and-current-candidate-apply';
     const view=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
-    await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
+    await campaignRequest(baseUrl,selector,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     const effective=await campaignPoll(async()=>{const current=await app.hostedExtensions.generations.current(project);return current?.payload.phase==='effective'&&current.payload.effective?.bindings.desiredRevision===view.revision+1?current:null;},deadline,signal);
     stage='current-physical-runtime-verification';const runtime=app.runtimeManager.runtimes.get(app.runtimeManager.key(project)),actual=JSON.parse((await execute(app.config.runtimeContainerBin,['inspect','--format','{{json .}}',runtime.containerName],{timeout:10000,maxBuffer:256*1024,env:assessmentDockerEnvironment()})).stdout);
     const volume=state.overrides.runtimeDataVolume?JSON.parse((await execute('docker',['volume','inspect',state.overrides.runtimeDataVolume],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0]:null;
@@ -524,6 +535,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const physical=validatePrivateRuntimeMounts(actual,{imageId:state.overrides.runtimeContainerImage,ownerId:owner.user.id,projectId:owner.projectId,authorityRoot:state.admission.root,qualificationRoot:state.qualificationRoot,dataDir:state.root,dataVolume:state.overrides.runtimeDataVolume,volume,network:inspectedNetwork});
     await campaignRequest(baseUrl,other,'/api/extensions/installations/'+encodeURIComponent(state.installedId),'GET',undefined,404,signal);
     const catalogue=await campaignRequest(baseUrl,owner,'/api/extensions/catalogue');assert.equal(JSON.stringify(catalogue).includes('saas-qualified'),false);
+    if(state.completionFixture){stage='actual-shared-study-role-consumers';observations.push(await runStudyRoleControls({app,state,baseUrl,fixture:state.completionFixture,owner,viewer:state.actors[1],lead:state.actors[2],dataManager:state.actors[3],site:state.actors[4],signal}));}
     const credentialCanary='assessment-key-'+randomUUID()+'@example.invalid';
     await campaignRequest(baseUrl,owner,'/api/connectors/unpaywall','PUT',{value:credentialCanary},200,signal);
     const ownedCredentials=new ConnectorCredentialStore({database:app.store.database,secret:app.config.modelGatewaySigningSecret,config:app.config});
@@ -546,20 +558,36 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     observations.push({caseId:'SAAS-04',scope:'actual-private-native-prompt-gateway-ledger-controller-workspace',setup:'Ordinary registered account and actual kernel/mux/actor/job/controller; signed private measurement admission; synthetic loopback model and explicitly trusted public fixture capture, not real scholarly retrieval/model quality',expected:'Real pending native doc_read/doc_write preserve owner scope and reach contained tools and active workspace',actual:{sessionId:session.id,runId:run.id,runtimeGeneration:principal.jti,jobIds:jobs.map(job=>job.id),operations:jobs.map(job=>job.payload.request.operation),outputDigest:digest(output),nativeToolCalls:toolParts.length,admissionDigest:state.admission.assessmentAdmissionDigest,metadataQualified:false,physicalRuntime:physical}});
     observations.push({caseId:'SAAS-01',scope:'actual-ordinary-http-private-execution-owner-isolation',setup:'Two real local-auth accounts; real concealed installation metadata; no operator account executes native tools',expected:'Foreign installation hidden and own optional extension remains unqualified while controlled native operations succeed',actual:{foreignInstallationStatus:404,ordinaryActors:state.actors.map(actor=>actor.user.id),ownExecutionJobs:2}});
     observations.push({caseId:'SAAS-18',scope:'actual-idle-private-generation-application',setup:'Normal selection/reconcile/preparation/apply workers; real RuntimeManager and independently verifying controller',expected:'Exact private generation applies and is observed physically without fabricated qualified receipt',actual:{generationHash:effective.payload.effective.reference.generationHash,manifestDigest:digest(canonicalJson(effective.payload.effective)),uncovered:'Busy deferral and failed candidate rollback still require additional controlled stages'}});
+    stage='actual-same-session-changed-source-and-error-history';
+    await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
+    const errorStage=randomUUID(),errorKey=errorStage+':history-error';transport.plans.set(errorKey,[{name:'doc_read',input:{resourceId:'pub_'+'0'.repeat(64)}}]);
+    const failedTurn=await dispatchCampaignFollowupTurn(baseUrl,owner,session.id,{dispatchId:'assessment-'+errorStage,text:'EVIMED_ASSESSMENT_STAGE:'+errorKey+'\nThe explicitly missing opaque fixture must fail; retain that failure, do not invent a source.'},signal);
+    const errorPart=await campaignPoll(async()=>{const transcript=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript');return(transcript.messages??[]).flatMap(message=>message.parts??[]).find(part=>part.type==='tool'&&part.tool==='doc_read'&&campaignToolRefusalFacts(part,'doc_read')?.code==='extension_access_denied')??null;},deadline,signal);
+    await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
+    const changedPdf=Buffer.from(pdf.toString('latin1').replace('Public PDF fixture 42','Public PDF fixture 43'),'latin1');assert.equal(changedPdf.length,pdf.length);assert.notEqual(digest(changedPdf),digest(pdf));
+    const changedPrincipal={...principal,jti:app.runtimeManager.runtimeGeneration(project)},changedCapture=await app.hostedExtensions.documents.prepareCapture(changedPrincipal),changedResource=await app.hostedExtensions.documents.capturePdf(changedPrincipal,changedPdf,{doi:'synthetic-changed-fixture',origin:'https://example.invalid/synthetic-changed-fixture'},changedCapture,async()=>{assert.equal(app.runtimeManager.runtimeGeneration(project),changedPrincipal.jti);return changedPrincipal;});
+    const changedStage=randomUUID(),changedKey=changedStage+':changed-source',changedTarget='changed_assumption_ipynb';transport.plans.set(changedKey,[{name:'doc_read',input:{resourceId:changedResource.resourceId}},{name:'doc_write',input:{targetId:changedTarget,format:'ipynb',spec:{kind:'create',cells:[{type:'markdown',source:'Current synthetic source 43 replaces prior assumption 42. Prior tool failure remains observed; no clinical inference.'},{type:'code',source:'raise SystemExit("must remain inert")'}]}}}]);
+    const changedStartedAt=new Date().toISOString(),changedRun=await dispatchCampaignFollowupTurn(baseUrl,owner,session.id,{dispatchId:'assessment-'+changedStage,text:'EVIMED_ASSESSMENT_STAGE:'+changedKey+'\nUse current public fixture 43; record the changed numeric assumption and preserve the earlier source/failure history.'},signal),changedJobs=await campaignPoll(()=>campaignDocumentJobs(app,project,changedRun.id,session.id,changedStartedAt,observerDatabase),deadline,signal);
+    assert.equal(changedJobs.length,2);assert(changedJobs.every(job=>job.status==='succeeded'));const changedWritten=changedJobs.find(job=>job.payload.request.operation==='doc_write'),changedOutput=await readCampaignDocumentOutput(app,project,changedWritten,session.id,'outputs/extensions/'+changedTarget+'.ipynb');assert(changedOutput.bytes.includes(Buffer.from('43 replaces prior assumption 42')));assert.equal(digest(await fs.readFile(outputPath)),digest(output));
+    await campaignPoll(()=>campaignObserveDocumentCompletion(app,project,changedRun.id,session.id,()=>campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript'),['doc_read','doc_write'],changedJobs.map(job=>job.payload.invocation.callId)),deadline,signal);
+    observations.push({caseId:'SAAS-19',scope:'actual-native-same-session-source-number-change-and-real-tool-failure',setup:'Same authenticated native session, actual second public PDF bytes change42→43, real missing-resource denial then actual current read/write; controlled transport measures history/protocol not model reasoning',expected:'New accepted turn/source/assumption and real failure coexist with prior permitted output without overwriting history or fabricating success',actual:{sessionId:session.id,initialRunId:run.id,failedRunId:failedTurn.id,changedRunId:changedRun.id,oldResourceId:resource.resourceId,currentResourceId:changedResource.resourceId,failure:campaignToolRefusalFacts(errorPart,'doc_read'),outputDigest:digest(changedOutput.bytes),priorOutputDigest:digest(output),compactionObserved:false,uncovered:'Actual compaction must still be observed if supported/reached; no compaction pass inferred from multiple turns'}});
     const append = value => { const { qualified: _qualified, ...observation }=value; observations.push(observation); };
     const completedArtifact='outputs/extensions/'+targetId+'.ipynb';
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
     await app.pluginApplyWorker.close();
     const claimGeneration=()=>campaignPoll(async()=>{const claimed=await app.hostedExtensions.generations.jobs.claim(['plugin-apply'],'private-campaign-'+randomUUID(),{leaseMs:300000});if(!claimed)return null;
       if(claimed.userId!==owner.user.id||claimed.projectId!==project.id||!app.pluginApplyWorker.generationWorker.canHandle(claimed))throw new Error('foreign_generation_claim_refused');return claimed;},deadline,signal);
-    const reselection=async()=>{const selected=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);return campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:selected.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);};
+    const reselection=async()=>{const selected=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);return campaignRequest(baseUrl,selector,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:selected.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);};
     const dispatchStage=async(kind,plan)=>{const id=randomUUID(),key=id+':'+kind;transport.plans.set(key,plan);
       const {session:stageSession,run:dispatched}=await dispatchOrdinaryCampaignTurn(baseUrl,owner,{dispatchId:'assessment-'+id,text:'EVIMED_ASSESSMENT_STAGE:'+key+'\nControlled extension boundary exercise using only the supplied public fixture.'},signal);return{key,sessionId:stageSession.id,runId:dispatched.id};};
     stage='real-native-busy-generation-deferral';
-    const held=await dispatchStage('hold',[{hold:true,text:'Controlled held turn released.'}]);
+    const heldStartedAt=new Date().toISOString(),held=await dispatchStage('hold',[{hold:true,name:'doc_read',input:{resourceId:resource.resourceId}}]);
     await campaignPoll(()=>transport.holds.has(held.key)?app.runtimeManager.pluginRuntimeBusy(project):false,deadline,signal);
     await reselection();const busyJob=await claimGeneration();append(await observeRuntimeBusyDeferral({app,project,job:busyJob,completedArtifact}));
     transport.release(held.key);
+    const heldJobs=await campaignPoll(()=>campaignDocumentJobs(app,project,held.runId,held.sessionId,heldStartedAt,observerDatabase,['doc_read']),deadline,signal);assert.equal(heldJobs.length,1);assert.equal(heldJobs[0].status,'succeeded');assert.equal(heldJobs[0].payload.request.operation,'doc_read');
+    await campaignPoll(()=>campaignObserveDocumentCompletion(app,project,held.runId,held.sessionId,()=>campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(held.sessionId)+'/transcript'),['doc_read']),deadline,signal);
+    observations.push({caseId:'SAAS-18',scope:'actual-same-admitted-native-turn-document-read-while-generation-waiting',setup:'Actual model response held before its tool call; unchanged selection update queued during that SAME accepted turn; real response releases doc_read before deferred idle apply',expected:'Existing current source/role/proof admits real doc_read while desired generation waits; no new turn or changed settings bypass',actual:{sessionId:held.sessionId,runId:held.runId,jobId:heldJobs[0].id,runtimeGeneration:heldJobs[0].payload.scope.runtimeGeneration,operation:'doc_read',status:heldJobs[0].status}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
     stage='idle-apply-after-real-busy-turn';const idleJob=await claimGeneration();assert.equal(idleJob.id,busyJob.id);
     await app.pluginApplyWorker.generationWorker.runClaimed(idleJob);const idleState=await app.hostedExtensions.generations.current(project);assert.equal(idleState.payload.phase,'effective');
@@ -572,7 +600,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
       {name:'evimed_delegate',input:{deliverableId:'permission-probe',brief:'EVIMED_ASSESSMENT_STAGE:'+childKey+'\nAttempt doc_read on the supplied opaque public resource to measure child permission. No research package or clinical conclusion is requested.',inputs:{}}}]);
     const child=await campaignPoll(async()=>{const parentTranscript=await app.runtimeManager.sessionTranscript(project,delegation.sessionId,{wake:false});const child=campaignDelegatedChildReady(parentTranscript);if(child)return child;const parentRun=(await app.agentRuns.list(project)).find(item=>item.id===delegation.runId);if(parentRun&&['failed','canceled'].includes(parentRun.status))throw Object.assign(new Error('native_campaign_delegation_failed'),{code:'native_campaign_delegation_failed',terminalRun:{id:parentRun.id,sessionId:delegation.sessionId,status:parentRun.status}});return null;},deadline,signal);
     const childTranscript=await campaignPoll(async()=>{const value=await app.runtimeManager.sessionTranscript(project,child.childSessionId,{wake:false,parentSessionId:delegation.sessionId});const part=(value.messages??[]).flatMap(message=>message.parts??[]).find(item=>item.type==='tool'&&item.tool==='doc_read'&&item.status!=='pending');return part?{value,part}:null;},deadline,signal);
-    const childRefusal=campaignToolRefusalFacts(childTranscript.part,'doc_read');assert(childRefusal);
+    const childRefusal=campaignToolRefusalFacts(childTranscript.part,'doc_read');assert(childRefusal&&['UNKNOWN_TOOL','extension_access_denied'].includes(childRefusal.code));
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,childCountBefore);
     observations.push({caseId:'SAAS-13',scope:'actual-native-delegated-child-document-tool-refusal',setup:'Real evimed_plan/evimed_delegate create an actual catalogue-bound child through the deployed subagent provider; controlled child attempts doc_read; no forged invocation header or copied caller context',expected:'The actual child cannot borrow parent document permission or enqueue an operation',actual:{parentSessionId:delegation.sessionId,childSessionId:child.childSessionId,transcriptDigest:digest(canonicalJson(childTranscript.value)),refusal:childRefusal,newOperationJobs:0}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
@@ -580,7 +608,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const ptcCountBefore=(await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count;
     const ptc=await dispatchStage('ptc-refusal',[{name:'run_code',input:{code:'return await tools.doc_read({ resourceId: '+JSON.stringify(resource.resourceId)+' });',description:'Inspect permitted fixture through nested tool transport',timeoutMs:1000},permissionProbe:true}]);
     const ptcTranscript=await campaignPoll(async()=>{const value=await app.runtimeManager.sessionTranscript(project,ptc.sessionId,{wake:false});const part=(value.messages??[]).flatMap(message=>message.parts??[]).find(item=>item.type==='tool'&&item.tool==='run_code'&&item.status!=='pending');return part?{value,part}:null;},deadline,signal);
-    const ptcRefusal=campaignToolRefusalFacts(ptcTranscript.part,'run_code');assert(ptcRefusal);
+    const ptcRefusal=campaignToolRefusalFacts(ptcTranscript.part,'run_code');assert(ptcRefusal&&['UNKNOWN_TOOL','extension_access_denied'].includes(ptcRefusal.code));
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,ptcCountBefore);
     observations.push({caseId:'SAAS-13',scope:'actual-native-ptc-transport-permission-refusal',setup:'Actual native run_code attempt uses the pinned SDK code/description protocol; normal preset remains unchanged and may refuse the outer transport before nested dispatch',expected:'Blocked code/nested document transport cannot borrow root document authority',actual:{sessionId:ptc.sessionId,transcriptDigest:digest(canonicalJson(ptcTranscript.value)),refusal:ptcRefusal,newOperationJobs:0,outerTransportRefusalMayPrecedeNested:true}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
@@ -589,12 +617,13 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const countBefore=(await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count;
     const forged=await dispatchStage('forged-actor',[{name:'doc_read',input:{resourceId:resource.resourceId,actorId:other.user.id}}]);
     const refusedTranscript=await campaignPoll(async()=>{const value=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(forged.sessionId)+'/transcript');const parts=(value.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&part.tool==='doc_read');return parts.some(part=>['completed','error'].includes(part.status))?{value,parts}:null;},deadline,signal);
-    assert(refusedTranscript.parts.some(part=>campaignToolRefusalFacts(part,'doc_read')));
+    assert(refusedTranscript.parts.some(part=>{const refusal=campaignToolRefusalFacts(part,'doc_read',{negativeContract:true});return refusal&&['INVALID_ARGS','extension_contract_invalid','extension_access_denied'].includes(refusal.code);}));
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,countBefore);
     observations.push({caseId:'SAAS-04',scope:'actual-native-forged-actor-refused-before-gateway',setup:'Actual root native registry invokes fixed bridge with foreign actor argument; boundedRequest rejects it before gateway/ledger',expected:'Forged actor cannot borrow authority or enqueue operation',actual:{sessionId:forged.sessionId,refusalTranscriptDigest:digest(canonicalJson(refusedTranscript.value)),newOperationJobs:0,uncovered:'Actual child/PTC producer must still be exercised; root-only policy is not an observed nested call'}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
     stage='actual-credential-canary-public-export-cache-log-environment-scan';
-    const statuses=[await campaignRequest(baseUrl,owner,'/api/connectors'),await campaignRequest(baseUrl,other,'/api/connectors'),await campaignRequest(baseUrl,owner,'/api/extensions/installations/'+encodeURIComponent(state.installedId))];
+    const installerActor=state.completionFixture?state.actors[2]:owner;
+    const statuses=[await campaignRequest(baseUrl,owner,'/api/connectors'),await campaignRequest(baseUrl,other,'/api/connectors'),await campaignRequest(baseUrl,installerActor,'/api/extensions/installations/'+encodeURIComponent(state.installedId))];
     assert(statuses.every(value=>!canonicalJson(value).includes(credentialCanary)));
     const archiveResponse=await fetch(baseUrl+'/api/account/export',{headers:owner.headers,signal:signal??AbortSignal.timeout(30000)});assert.equal(archiveResponse.status,200);
     const archiveBytes=Buffer.from(await archiveResponse.arrayBuffer());if(archiveBytes.length>32*1024*1024)throw new Error('campaign_export_unbounded');
@@ -604,6 +633,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     assert.equal(canonicalJson(currentInspect.Config.Env??[]).includes(credentialCanary),false);assert((currentInspect.Config.Env??[]).includes('DSH_TELEMETRY_DISABLED=1'));
     const logs=await execute(app.config.runtimeContainerBin,['logs','--tail','1000',currentInspect.Id],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:1024*1024});assert.equal((logs.stdout+logs.stderr).includes(credentialCanary),false);
     observations.push({caseId:'SAAS-06',scope:'actual-ordinary-secret-canary-export-controller-cache-runtime-scan',setup:'Synthetic canary entered via ordinary connector PUT; real intended decrypt and foreign refusal; account gzip export decompressed, bounded owned controller cache and actual runtime logs/env scanned',expected:'Synthetic connector plaintext stays out of public metadata, user export, codec cache and runtime diagnostics',actual:{canaryDigest:digest(credentialCanary),intendedResolveMatched:true,foreignResolve:null,metadataSurfaces:statuses.length,archiveDigest:digest(archiveBytes),archiveDecompressedBytes:archive.length,controllerCache:cache,runtimeLogsDigest:digest(logs.stdout+logs.stderr),plaintextMatches:0,uncovered:'Other package/library caches and full operator/web log inventory not yet scanned'}});
+    observations.push(await runCanaryScan({app,state,canary:credentialCanary,roots:[path.join(state.root,'users'),path.join(state.root,'.openscience/extension-controller'),publicFixtures]}));
     observations.push({caseId:'SAAS-21',scope:'actual-runtime-telemetry-env-and-bounded-diagnostic-scan',setup:'Actual serving candidate environment and logs; controlled loopback upstream request ledger retained with scope, no external provider request',expected:'Telemetry-disabled environment and credential-canary-free actual diagnostics; intended controlled requests remain attributed',actual:{telemetryDisabled:true,canaryMatches:0,controlledRequests:transport.requests.length,logDigest:digest(logs.stdout+logs.stderr),uncovered:'Actual full outbound packet/DNS/telemetry collector capture is not established by an environment flag'}});
     stage='ordinary-connector-credential-revocation';await campaignRequest(baseUrl,owner,'/api/connectors/unpaywall','DELETE',undefined,200,signal);
     assert.equal(await ownedCredentials.resolveOwn(owner.user.id,'unpaywall'),null);assert.equal(await ownedCredentials.resolveOwn(other.user.id,'unpaywall'),null);assert.equal(digest(await fs.readFile(outputPath)),digest(output));
@@ -615,6 +645,47 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const revoked=await observeQueuedOperationRevocation({app,project,jobId:queued.id,completedArtifact,revoke:()=>fs.rename(state.admission.recordPath,revokedPath)});
     revoked.scope='actual-private-admission-queued-operation-revocation';revoked.setup+='; revoked measurement admission only, ordinary membership/credential revocation remains unmeasured';append(revoked);
     assert.equal(digest(await fs.readFile(outputPath)),digest(output));
+    await fs.rename(revokedPath,state.admission.recordPath);
+    await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
+    if(state.completionFixture){
+      const lead=state.actors[2],study=state.completionFixture;stage='actual-queued-study-generation-membership-revocation';
+      const selected=await campaignRequest(baseUrl,lead,`/api/projects/${encodeURIComponent(project.id)}/extensions`);
+      await campaignRequest(baseUrl,lead,`/api/projects/${encodeURIComponent(project.id)}/extensions`,'PUT',{expectedRevision:selected.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
+      const queuedGeneration=await campaignPoll(async()=>{const rows=(await observerDatabase.query("SELECT id,payload FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='plugin-apply' AND status='queued' ORDER BY created_at DESC",[owner.user.id,project.id])).rows;return rows.find(row=>row.payload.actorId===lead.user.id)??null;},deadline,signal);
+      observations.push(await runQueuedMembershipRevocation({app,state,fixture:study,owner,lead,jobId:queuedGeneration.id,completedJobId:written.id}));
+      // Regrant creates a new membership incarnation. Prepare a NEW real installation and reopen BOTH independent authority readers with fresh actual facts.
+      stage='fresh-preparation-after-real-study-member-regrant';await app.hostedExtensions.preparation.close();
+      const installed=await campaignRequest(baseUrl,lead,'/api/extensions/installations','POST',{coordinate:state.descriptor.coordinate,scope:'project',projectId:project.id,idempotencyKey:'membership-regrant-'+randomUUID()},201,signal);
+      const preparation=new ExtensionPreparationWorker({service:app.extensionService,controller:app.hostedExtensions.preparation.controller,admittedArtifacts:[...app.hostedExtensions.generations.artifacts.values()]});await preparation.tick();await preparation.close();
+      const prepared=await app.extensionService.jobs.get(lead.user.id,installed.job.id);if(prepared?.status!=='succeeded')throw Object.assign(new Error('private_campaign_preparation_failed'),{code:prepared?.error?.code??'private_campaign_preparation_failed'});
+      const binding=campaignPreparedInstallerBinding(state.descriptor,lead,installed.installation,prepared),factsReader=createAssessmentCurrentFacts({getConfig:()=>app.config,getDatabase:()=>app.store.database}),admissions=[];
+      for(const manager of [owner,lead]){const facts=await factsReader({project,actor:manager.user,installerBinding:binding});admissions.push({...Object.fromEntries(ASSESSMENT_FACT_FIELDS.map(key=>[key,facts[key]])),assessmentId:'campaign-'+randomUUID(),issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),allowedOperations:['doc_read','doc_write']});}
+      await fixture.close();fixture=null;await relay.close();relay=null;await fs.rename(state.admission.root,path.join(state.root,'assessment-admission-before-regrant-'+randomUUID()));
+      state.admission=await writeMeasurementAdmission({root:state.root,admissions});state.installedId=installed.installation.id;
+      await saveProtected(path.join(state.root,'campaign-state-before-regrant-'+randomUUID()+'.json'),JSON.parse(await fs.readFile(inputs.statePath,'utf8')));const stateTemp=inputs.statePath+'.regrant-'+randomUUID();await saveProtected(stateTemp,state);await fs.rename(stateTemp,inputs.statePath);
+      const nativeLinux=state.operatorPlatform==='linux-native';if(nativeLinux)relay=await bindNativeLinuxRelay({root:state.root,network:state.network,listenPort:state.nativeRelayListenPort??0});
+      const gateways=nativeLinux?{host:'127.0.0.1',modelGatewayInternalUrl:relay.gatewayUrl+'/internal/model/v1',extensionGatewayInternalUrl:relay.gatewayUrl+'/internal/extensions/v1'}:{};
+      fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,...CAMPAIGN_RUNTIME_LIMITS,...gateways,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});({app,baseUrl}=fixture);
+      if(nativeLinux)relay.bindTarget(baseUrl+'/');else relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:baseUrl+'/',gatewayHost:state.gatewayHost});
+      const next=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(project.id)}/extensions`);await campaignRequest(baseUrl,lead,`/api/projects/${encodeURIComponent(project.id)}/extensions`,'PUT',{expectedRevision:next.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
+      await campaignPoll(()=>campaignGenerationReady(app,project),deadline,signal);await app.pluginApplyWorker.close();
+      const live=app.runtimeManager.runtimes.get(app.runtimeManager.key(project)),inspected=JSON.parse((await execute(app.config.runtimeContainerBin,['inspect','--format','{{json .}}',live.containerName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:256*1024})).stdout);
+      const physicalRegrant=validatePrivateRuntimeMounts(inspected,{imageId:state.overrides.runtimeContainerImage,ownerId:owner.user.id,projectId:project.id,authorityRoot:state.admission.root,qualificationRoot:state.qualificationRoot,dataDir:state.root,dataVolume:state.overrides.runtimeDataVolume,volume,network:inspectedNetwork});await saveProtected(path.join(state.root,'physical-membership-regrant-'+randomUUID()+'.json'),physicalRegrant);
+      stage='current-public-resource-capture-before-running-membership-control';const runningPrincipal={userId:owner.user.id,projectId:project.id,jti:app.runtimeManager.runtimeGeneration(project)},runningCapture=await app.hostedExtensions.documents.prepareCapture(runningPrincipal),runningResource=await app.hostedExtensions.documents.capturePdf(runningPrincipal,pdf,{doi:'synthetic-public-fixture',origin:'https://example.invalid/synthetic-public-fixture'},runningCapture,async()=>{assert.equal(app.runtimeManager.runtimeGeneration(project),runningPrincipal.jti);return runningPrincipal;});assert(runningResource?.resourceId);
+      stage='actual-running-native-installer-membership-revocation';const running=await dispatchStage('running-member-read',[{name:'doc_read',input:{resourceId:runningResource.resourceId}}]);
+      const active=await campaignPoll(async()=>{const rows=(await observerDatabase.query("SELECT id,payload FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' AND status='running' AND payload->'invocation'->>'sessionId'=$3",[owner.user.id,project.id,running.sessionId])).rows;for(const row of rows){if(!row.payload.dispatch)continue;const status=await app.hostedExtensions.operations.controller.executionStatus(row.payload.dispatch);if(status.state==='active'&&status.joined===false&&status.physicallyAbsent===false)return row;}return null;},deadline,signal);
+      observations.push(await runRunningMembershipRevocation({app,state,fixture:study,owner,installer:lead,jobId:active.id,completedJobId:written.id,signal}));
+    }
+    if(state.completionFixture){
+      stage='actual-two-account-controlled-native-usage-attribution';await app.runtimeManager.stop(project);
+      const peer={...other,projectId:other.defaultProjectId,headers:{...other.headers,'X-Open-Science-Project':other.defaultProjectId}},peerStage=randomUUID(),peerKey=peerStage+':peer-usage';transport.plans.set(peerKey,[{text:'Controlled peer usage observation; no extension or scientific quality claim.'}]);
+      const peerProject=await resolveCampaignProject(app,peer);await app.runtimeManager.start(peerProject);
+      const peerRuntime=app.runtimeManager.runtimes.get(app.runtimeManager.key(peerProject)),peerInspect=JSON.parse((await execute(app.config.runtimeContainerBin,['inspect','--format','{{json .}}',peerRuntime.containerName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:256*1024})).stdout);
+      const peerPhysical=validatePrivateRuntimeMounts(peerInspect,{imageId:state.overrides.runtimeContainerImage,ownerId:peer.user.id,projectId:peerProject.id,authorityRoot:state.admission.root,qualificationRoot:state.qualificationRoot,dataDir:state.root,dataVolume:state.overrides.runtimeDataVolume,volume,network:inspectedNetwork});await saveProtected(path.join(state.root,'physical-peer-usage-'+randomUUID()+'.json'),peerPhysical);
+      const peerTurn=await dispatchOrdinaryCampaignTurn(baseUrl,peer,{dispatchId:'assessment-'+peerStage,text:'EVIMED_ASSESSMENT_STAGE:'+peerKey+'\nRespond only with the controlled fixture acknowledgement.'},signal);
+      await campaignPoll(async()=>{const current=(await app.agentRuns.list(peerProject)).find(item=>item.id===peerTurn.run.id);if(current&&['failed','canceled'].includes(current.status))throw Object.assign(new Error('native_campaign_run_terminal'),{code:'native_campaign_run_terminal'});return current?.status==='succeeded'?current:null;},deadline,signal);
+      observations.push(await runUsageAttribution({app,state,baseUrl,runs:[{actor:owner,projectId:project.id,runId:run.id},{actor:peer,projectId:peerProject.id,runId:peerTurn.run.id}],signal}));await app.runtimeManager.stop(peerProject);
+    }
     report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);
     report.privateJourney={status:'observed-main-path-partial',qualified:false,providerQualityMeasured:false,controlledTransport:{requests:transport.requests,errors:transport.errors},physicalSetupDigest:digest(canonicalJson(state.physicalSetup)),remaining:['Queued ordinary membership/credential revocation (private measurement admission revocation is measured separately)','Full outbound capture and other package/web-log canary scans','All22 complete current-identity outcomes and separate qualified ordinary smoke']};
   }catch(error){failure=error;error.campaignStage=stage;report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);report.privateJourney={status:'incomplete',stage,...safeCampaignFailureDetails(error),route:error.campaignRoute??null,terminalRun:error.terminalRun??null,controlledTransport:{requests:transport.requests,errors:transport.errors},qualified:false};}

@@ -317,3 +317,33 @@ test('permission proof uses actual error or failed result and never denied-looki
  assert.equal(campaignToolRefusalFacts({...base,status:'error',error:{code:'UNKNOWN_TOOL'},output:''},'run_code'),null);
  assert.equal(campaignToolRefusalFacts({...base,status:'error',error:{code:'UNKNOWN_TOOL'}},'doc_read'),null);
 });
+
+test('busy same accepted turn waits for one real document read, never a new turn or a synthetic empty acknowledgement',async()=>{
+ const transcript={messages:[{parts:[{type:'tool',tool:'doc_read',status:'completed',error:null}]}]},row={id:'read',status:'succeeded',payload:{request:{operation:'doc_read'},invocation:{sessionId:'held'},auth:{invocation:JSON.stringify({sessionId:'held'})}}},app={store:{database:{query:async()=>({rows:[row]})}},agentRuns:{list:async()=>[{id:'held-run',status:'running'}]}};
+ assert.deepEqual(await campaignDocumentJobs(app,{userId:'owner',id:'project'},'held-run','held',new Date().toISOString(),app.store.database,['doc_read']),[row]);
+ assert.equal((await campaignObserveDocumentCompletion(app,{},'held-run','held',async()=>transcript,['doc_read'])).transcript,transcript);
+ assert.equal(campaignDocumentTranscriptReady({messages:[]},['doc_read']),null);
+ const plans=new Map([['aaaaaaaa:hold',[{hold:true,name:'doc_read',input:{resourceId:'public-fixture'}}]]]),turn=controlledCampaignTurn({messages:[{role:'user',content:'EVIMED_ASSESSMENT_STAGE:aaaaaaaa:hold'}],tools:[{name:'doc_read'}]},plans,new Map());assert.equal(turn.hold,true);assert.equal(turn.name,'doc_read');assert.throws(()=>controlledCampaignTurn({messages:[{role:'user',content:'EVIMED_ASSESSMENT_STAGE:aaaaaaaa:hold'}],tools:[{name:'other'}]},plans,new Map()),/not_registered/);
+ assert.deepEqual(campaignToolRefusalFacts({type:'tool',tool:'doc_read',status:'error',error:{code:'INVALID_ARGS'},output:''},'doc_read',{negativeContract:true}),{source:'native-tool-error-code',code:'INVALID_ARGS'});
+});
+
+test('malformed child or PTC args are never a default permission refusal witness',()=>{
+ const part={type:'tool',tool:'doc_read',status:'error',error:{code:'INVALID_ARGS'},output:''};assert.equal(campaignToolRefusalFacts(part,'doc_read'),null);assert.equal(campaignToolRefusalFacts({...part,tool:'run_code'},'run_code'),null);assert.equal(campaignToolRefusalFacts(part,'doc_read',{negativeContract:true}).code,'INVALID_ARGS');
+});
+
+test('real PostgreSQL and authenticated metadata API keep lead installation selection caller-owned', {skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL}, async()=>{
+ const fs=await import('node:fs/promises'),path=await import('node:path'),os=await import('node:os'),{randomBytes,createHash}=await import('node:crypto'),{createGeoTestDatabase}=await import('../../../apps/server/test/helpers/geoTestDatabase.mjs'),{createWebApiApp}=await import('../../../apps/server/src/server.mjs');
+ const isolated=await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL,'selectors'),root=await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'extension-selector-api-'));
+ const app=createWebApiApp({dataDir:root,databaseUrl:isolated.url,stateStore:'postgres',databasePoolMax:4,databaseConnectionTimeoutMs:2000,runtimeMode:'mock',production:false,localAutoConfig:false,devAuth:false,authMode:'local',selfRegistrationEnabled:true,bootstrapUser:'selector-bootstrap',bootstrapPassword:randomBytes(24).toString('hex'),operatorUsers:'selector-bootstrap',modelGatewaySigningSecret:randomBytes(32).toString('hex'),deepseekApiKey:'',deepseekProviderEnabled:false,llmRoutingEnabled:false,learningEnabled:false,reviewEnabled:false,geoEnabled:false,vcrEnabled:true,vcrAudience:'all',frontierEnabled:false,imEnabled:false,evimedCreditsEnabled:false});
+ try{const address=await app.listen(0,'127.0.0.1'),base='http://127.0.0.1:'+address.port,actors=[];
+  const request=async(actor,route,method='GET',body)=>{const response=await fetch(base+route,{method,headers:{...actor?.headers,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return{status:response.status,body:await response.json()};};
+  for(const username of ['selector-owner','selector-lead','selector-viewer']){const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password:randomBytes(24).toString('hex'),name:username,warm:false})}),body=await response.json();assert.equal(response.status,201);actors.push({user:body.data.user,headers:{Cookie:response.headers.get('set-cookie').split(';')[0],'X-Open-Science-CSRF':body.data.csrfToken}});}
+  const [owner,lead,viewer]=actors,user=await app.store.userById(owner.user.id),project=await app.store.createProject(user,'selector-shared','Synthetic metadata ownership'),study=await app.vcr.store.createStudy({userId:user.id,projectId:project.id,name:'Synthetic metadata ownership'});await app.vcr.members.add({actor:user.id,studyId:study.id,userId:lead.user.id,role:'lead'});await app.vcr.members.add({actor:user.id,studyId:study.id,userId:viewer.user.id,role:'viewer'});
+  // Controlled metadata catalogue only: no actual package, prepared artifact, native proof or qualification is claimed by this service-ownership regression.
+  const descriptor={id:'selector-fixture',title:'Metadata ownership fixture',coordinate:{kind:'npm',name:'selector-fixture',version:'1.0.0'},executionClass:'isolated-tool',integrity:'sha256:'+createHash('sha256').update('metadata-only-selector-fixture').digest('hex'),settingsSchema:{}};app.extensionService.entries.set(descriptor.id,descriptor);
+  const installed=await request(lead,'/api/extensions/installations','POST',{coordinate:descriptor.coordinate,scope:'project',projectId:project.id,idempotencyKey:'lead-owned-selector'});assert.equal(installed.status,201);
+  const read=await request(owner,'/api/projects/'+project.id+'/extensions'),input={expectedRevision:read.body.data.revision,selections:[{installationId:installed.body.data.installation.id,enabled:true,settings:{},connectionRefs:[]}]};
+  assert.equal((await request(owner,'/api/projects/'+project.id+'/extensions','PUT',input)).status,404);assert.equal((await request(viewer,'/api/projects/'+project.id+'/extensions','PUT',input)).status,403);
+  const selected=await request(lead,'/api/projects/'+project.id+'/extensions','PUT',input);assert.equal(selected.status,200);assert.equal(selected.body.data.selections[0].actorId,lead.user.id);assert.equal(selected.body.data.selections[0].qualification,null);
+ }finally{await app.close();await isolated.drop();await fs.rm(root,{recursive:true,force:true});}
+});

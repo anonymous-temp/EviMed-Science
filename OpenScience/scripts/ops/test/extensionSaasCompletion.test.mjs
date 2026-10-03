@@ -4,7 +4,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { assertCompletionFixture, scanBoundedCanaryFiles, summarizeAttributedUsage, COMPLETION_REMAINING, COMPLETION_FIXTURE_OVERRIDES } from '../extension-saas-acceptance-completion.mjs';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { createWebApiApp } from '../../../apps/server/src/server.mjs';
+import { createGeoTestDatabase } from '../../../apps/server/test/helpers/geoTestDatabase.mjs';
+import { ProductJobs } from '../../../apps/server/src/productJobs.mjs';
+import { assertCompletionFixture, assertQueuedRevocationRetention, assertCompletionPreparationFixture, countStudyRoleJobs, prepareCompletionStudy, scanBoundedCanaryFiles, summarizeAttributedUsage, COMPLETION_REMAINING, COMPLETION_FIXTURE_OVERRIDES } from '../extension-saas-acceptance-completion.mjs';
 
 test('supplemental controls refuse substitute app/state before any mutation and retain explicit unmeasured controls', async () => {
   await assert.rejects(assertCompletionFixture({ app: { config: { runtimeMode: 'kernel', dataDir: '/tmp/fake' } }, state: { root: '/tmp/fake' } }), /completion_real_app_required/);
@@ -90,4 +95,72 @@ test('usage refuses wrong caller, unsettled requests, duplicate request IDs and 
     [{ ...valid[0], request_fingerprint: 'fake' }, valid[1]],
   ]) assert.throws(() => summarizeAttributedUsage(bad, scopes), /completion_/);
   assert.throws(() => summarizeAttributedUsage(valid, [scopes[0], scopes[0]]), /completion_two_usage_actors_required/);
+});
+
+
+test('real mock pre-sign preparation seeds actual study roles while measurements refuse mock and counters include null-project viewer jobs',
+  { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, timeout: 30000 }, async () => {
+    const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'completionprep');
+    const repository = fileURLToPath(new URL('../../../../', import.meta.url));
+    const parent = path.join(repository, '.evimed-local/extensions/build/fixtures'); await fs.mkdir(parent, { recursive: true, mode: 0o700 });
+    const root = path.join(parent, 'extension-saas-' + randomUUID()); await fs.mkdir(root, { mode: 0o700 });
+    const descriptor = { id: 'completion-fixture', title: 'Synthetic fixture', coordinate: { kind: 'npm', name: 'completion-fixture', version: '1.0.0' },
+      executionClass: 'isolated-tool', integrity: 'sha256:' + 'a'.repeat(64), artifactDigest: 'sha256:' + 'b'.repeat(64) };
+    const image = 'sha256:' + 'c'.repeat(64); let app;
+    try {
+      app = createWebApiApp({ dataDir: root, stateStore: 'postgres', databaseUrl: isolated.url, databasePoolMax: 2, databaseConnectionTimeoutMs: 1000,
+        runtimeMode: 'mock', runtimeContainerImage: image, port: 0, devAuth: false, localAutoConfig: false, selfRegistrationEnabled: true,
+        bootstrapUser: 'completion-bootstrap', bootstrapPassword: 'synthetic fixture password only', deepseekProviderEnabled: false,
+        learningEnabled: false, reviewEnabled: false, frontierEnabled: false, geoEnabled: false, vcrEnabled: true, vcrAudience: 'all', extensionCatalogue: [descriptor] });
+      const address = await app.listen(0, '127.0.0.1'), base = `http://127.0.0.1:${address.port}`;
+      const actors = [];
+      for (const name of ['owner', 'lead', 'viewer', 'data', 'site']) {
+        const response = await fetch(base + '/api/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username: 'completion-' + name, name, password: 'synthetic fixture password only', warm: false }) });
+        assert.equal(response.status, 201); actors.push({ user: (await response.json()).data.user });
+      }
+      const state = { root, databaseName: isolated.name, descriptor, overrides: { runtimeContainerImage: image } }, context = { app, state };
+      assert.equal(app.hostedExtensions, null);
+      assert.equal(await assertCompletionPreparationFixture(context), isolated.name);
+      await assert.rejects(assertCompletionFixture(context), /completion_real_app_required/);
+      await assert.rejects(assertCompletionPreparationFixture({ app, state: { ...state, databaseName: 'evimed_test_foreign' } }), /completion_database_refused/);
+      await assert.rejects(assertCompletionPreparationFixture({ app, state: { ...state, root: root + '-foreign' } }), /completion_real_preparation_app_required/);
+      await assert.rejects(assertCompletionPreparationFixture({ app, state: { ...state, descriptor: { ...descriptor, integrity: 'sha256:' + 'd'.repeat(64) } } }), /completion_artifact_refused/);
+      const [owner, lead, viewer, dataManager, site] = actors;
+      const fixture = await prepareCompletionStudy({ app, state, owner, lead, viewer, dataManager, site });
+      const project = await app.store.requireProject(await app.store.userById(owner.user.id), fixture.projectId);
+      const users = await Promise.all(actors.map(actor => app.store.userById(actor.user.id)));
+      assert.equal((await app.vcr.store.getStudy(owner.user.id, fixture.studyId)).projectId, project.id);
+      assert.deepEqual((await app.vcr.dataStore.membershipAuthority(fixture.studyId, lead.user.id)).roles, ['lead']);
+      assert.deepEqual((await app.vcr.dataStore.membershipAuthority(fixture.studyId, viewer.user.id)).roles, ['viewer']);
+      assert.equal(await countStudyRoleJobs(app.store.database, project, users), 0);
+      const jobs = new ProductJobs(app.store.database);
+      await jobs.enqueue(viewer.user.id, 'extension-prepare', { projectTarget: { ownerId: owner.user.id, projectId: project.id } }, { idempotencyKey: 'counter-viewer-null-project' });
+      const oldCount = (await app.store.database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE project_id=$1 AND user_id=$2 AND kind IN ('extension-prepare','plugin-apply')", [project.id, project.userId])).rows[0].n;
+      assert.equal(oldCount, 0, 'The old owner/project counter misses the actual actor-owned preparation job');
+      assert.equal(await countStudyRoleJobs(app.store.database, project, users), 1);
+      await jobs.enqueue(owner.user.id, 'plugin-apply', {}, { idempotencyKey: 'counter-owner-apply', projectId: project.id });
+      assert.equal(await countStudyRoleJobs(app.store.database, project, users), 2);
+      await app.store.createProject(users[2], 'another-project', 'Synthetic separate project');
+      await jobs.enqueue(viewer.user.id, 'plugin-apply', {}, { idempotencyKey: 'counter-foreign-project', projectId: 'another-project' });
+      assert.equal(await countStudyRoleJobs(app.store.database, project, users), 2);
+      await assert.rejects(countStudyRoleJobs(app.store.database, project, [users[0], users[0], ...users.slice(2)]), /completion_distinct_actors_required/);
+    } finally { await app?.close(); await isolated.drop(); await fs.rm(root, { recursive: true, force: true }); }
+  });
+
+
+test('queued revocation accepts only the same verified effective or an exact stale-epoch private-admission discard witness', () => {
+  const previous = { reference: { generationHash: 'old' } }, queued = { id: 'queued', payload: { reference: { generationHash: 'rejected' } } };
+  const payload = { phase: 'failed', effective: null, terminalApplyFailure: { jobId: queued.id, reference: queued.payload.reference, preservedRuntime: false } };
+  const stale = { code: 'extension_access_denied', beforeEpoch: 'old-member', afterEpoch: 'new-member', previousEpoch: 'old-member' };
+  assert.equal(assertQueuedRevocationRetention(previous, { payload: { effective: previous } }, queued, null), 'retained-currently-verifiable');
+  assert.equal(assertQueuedRevocationRetention(previous, { payload }, queued, stale), 'discarded-stale-private-admission');
+  for (const changed of [
+    { ...payload, terminalApplyFailure: null }, { ...payload, phase: 'waiting' },
+    { ...payload, terminalApplyFailure: { ...payload.terminalApplyFailure, jobId: 'foreign' } },
+    { ...payload, effective: { reference: queued.payload.reference } },
+  ]) assert.throws(() => assertQueuedRevocationRetention(previous, { payload: changed }, queued, stale), /completion_/);
+  for (const changed of [null, { ...stale, code: 'unrelated' }, { ...stale, previousEpoch: 'foreign' }, { ...stale, afterEpoch: 'old-member' }]) {
+    assert.throws(() => assertQueuedRevocationRetention(previous, { payload }, queued, changed), /completion_/);
+  }
 });

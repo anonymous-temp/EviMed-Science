@@ -7,6 +7,11 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { ControlPlaneDatabase } from '../../apps/server/src/controlPlaneDatabase.mjs';
+import { ExtensionService } from '../../apps/server/src/extensionService.mjs';
+import { RuntimeControllerClient } from '../../apps/server/src/runtimeControllerClient.mjs';
+import { VcrStore } from '../../apps/server/src/vcrStore.mjs';
+import { VcrDataStore } from '../../apps/server/src/vcrDataStore.mjs';
+import { VcrMembers } from '../../apps/server/src/vcrMembers.mjs';
 import { ExtensionGenerationService } from '../../apps/server/src/extensionGenerationService.mjs';
 import { ExtensionOperationService } from '../../apps/server/src/extensionOperationService.mjs';
 import { runUsageKeys } from '../../apps/server/src/runUsage.mjs';
@@ -33,15 +38,8 @@ export const COMPLETION_REMAINING = Object.freeze([
   'SAAS-14: this module verifies actual request attribution; the journey must additionally exercise retries, rolling caps and cancellation.',
 ]);
 
-/** Bootstrap may seed real SQL records before the kernel admission is signed;
- * only the seed function permits that mode and returns no measured observation.
- */
-async function fixtureBinding({ app, state }, preparation = false) {
-  requireControl(app?.store?.database instanceof ControlPlaneDatabase
-    && app?.hostedExtensions?.generations instanceof ExtensionGenerationService
-    && app?.hostedExtensions?.operations instanceof ExtensionOperationService
-    && (app.config?.runtimeMode === 'kernel' || preparation && app.config?.runtimeMode === 'mock')
-    && app.config.dataDir === state?.root, 'completion_real_app_required');
+/** Both phases require the same owned filesystem and actual isolated SQL namespace. */
+async function fixtureNamespace({ app, state }) {
   await assertAssessmentFixtureRoot(state.root);
   const configured = new URL(app.config.databaseUrl);
   requireControl(['postgres:', 'postgresql:'].includes(configured.protocol)
@@ -50,16 +48,63 @@ async function fixtureBinding({ app, state }, preparation = false) {
   const actual = (await app.store.database.query('SELECT current_database() AS name')).rows[0]?.name;
   requireControl(/^evimed_test[a-z0-9_]*$/.test(actual ?? '') && actual === state.databaseName
     && configured.pathname === '/' + actual, 'completion_database_refused');
-  requireControl(/^sha256:[a-f0-9]{64}$/.test(state.descriptor?.artifactDigest ?? ''), 'completion_artifact_refused');
-  const artifact = app.hostedExtensions.generations.artifacts.get(state.descriptor.id);
-  requireControl(artifact?.artifactDigest === state.descriptor.artifactDigest
-    && artifact.integrity === state.descriptor.integrity
+  requireControl(/^sha256:[a-f0-9]{64}$/.test(state.descriptor?.artifactDigest ?? '')
     && app.config.runtimeContainerImage === state.overrides?.runtimeContainerImage, 'completion_artifact_refused');
   return actual;
 }
 
-/** Closed live provenance gate before a measured control mutates a study. */
+/** Pre-sign setup creates real study/member records, never a measured observation
+ * or native authority. A normal mock-mode app has no hosted execution services. */
+export async function assertCompletionPreparationFixture({ app, state }) {
+  const database = app?.store?.database;
+  requireControl(database instanceof ControlPlaneDatabase
+    && app?.extensionService instanceof ExtensionService && app.extensionService.database === database
+    && app.vcr?.store instanceof VcrStore && app.vcr.store.database === database
+    && app.vcr?.dataStore instanceof VcrDataStore && app.vcr.dataStore.database === database
+    && app.vcr?.members instanceof VcrMembers && app.vcr.members.store === app.vcr.dataStore
+    && ['mock', 'kernel'].includes(app.config?.runtimeMode)
+    && app.config.dataDir === state?.root, 'completion_real_preparation_app_required');
+  const actual = await fixtureNamespace({ app, state });
+  const entry = app.extensionService.entries.get(state.descriptor.id);
+  requireControl(entry?.integrity === state.descriptor.integrity
+    && canonicalJson(entry.coordinate) === canonicalJson(state.descriptor.coordinate)
+    && entry.executionClass === 'isolated-tool', 'completion_artifact_refused');
+  return actual;
+}
+
+/** Measured controls always require actual kernel execution and its controller. */
+async function fixtureBinding({ app, state }) {
+  requireControl(app?.store?.database instanceof ControlPlaneDatabase
+    && app?.hostedExtensions?.generations instanceof ExtensionGenerationService
+    && app?.hostedExtensions?.operations instanceof ExtensionOperationService
+    && app.hostedExtensions.generations.database === app.store.database
+    && app.hostedExtensions.operations.database === app.store.database
+    && app.hostedExtensions.operations.controller instanceof RuntimeControllerClient
+    && app.hostedExtensions.operations.controller.socketPath === app.config?.runtimeControllerSocket
+    && app.config?.runtimeMode === 'kernel'
+    && app.config.dataDir === state?.root, 'completion_real_app_required');
+  const actual = await fixtureNamespace({ app, state });
+  const artifact = app.hostedExtensions.generations.artifacts.get(state.descriptor.id);
+  requireControl(artifact?.artifactDigest === state.descriptor.artifactDigest
+    && artifact.integrity === state.descriptor.integrity, 'completion_artifact_refused');
+  return actual;
+}
+
 export async function assertCompletionFixture(context) { return fixtureBinding(context); }
+
+/** A forbidden actor's preparation jobs are actor-owned with nullable project_id;
+ * generation applies carry project_id. Count all five real fixture principals. */
+export async function countStudyRoleJobs(database, project, actors) {
+  const actorIds = actors.map(actor => id(actor.id));
+  requireControl(actorIds.length === 5 && new Set(actorIds).size === 5
+    && actorIds.includes(id(project.userId)), 'completion_distinct_actors_required');
+  const rows = await database.query(`SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=ANY($1::text[]) AND (
+    (kind='extension-prepare' AND (project_id IS NULL OR project_id=$2
+      OR (payload->'projectTarget'->>'ownerId'=$3 AND payload->'projectTarget'->>'projectId'=$2)))
+    OR (kind='plugin-apply' AND project_id=$2))`, [actorIds, id(project.id), project.userId]);
+  requireControl(Number.isSafeInteger(rows.rows[0]?.n) && rows.rows[0].n >= 0, 'completion_job_count_refused');
+  return rows.rows[0].n;
+}
 
 function loopbackBase(value) {
   const url = new URL(value);
@@ -112,7 +157,7 @@ async function studyContext(app, studyId, projectId, owner) {
  * The unique control project avoids owner-local "default" ID ambiguity.
  */
 export async function prepareCompletionStudy({ app, state, owner, lead, viewer, dataManager, site }) {
-  await fixtureBinding({ app, state }, true);
+  await assertCompletionPreparationFixture({ app, state });
   requireControl(app.vcr?.members && app.vcr?.store, 'completion_real_study_consumer_required');
   const actors = await Promise.all([owner, lead, viewer, dataManager, site].map(actor => actualActor(app, actor)));
   requireControl(new Set(actors.map(actor => actor.id)).size === 5, 'completion_distinct_actors_required');
@@ -150,7 +195,7 @@ export async function runStudyRoleControls({ app, state, baseUrl, fixture, owner
     receipts.push(me.receipt);
   }
   receipts.push((await request(baseUrl, viewer, `/api/projects/${project.id}/extensions`, { signal })).receipt);
-  const countJobs = async () => (await app.store.database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE project_id=$1 AND user_id=$2 AND kind IN ('extension-prepare','plugin-apply')", [project.id, project.userId])).rows[0].n;
+  const countJobs = () => countStudyRoleJobs(app.store.database, project, users);
   const before = await countJobs();
   for (const [route, method, body] of [
     ['/api/extensions/installations', 'POST', { coordinate: state.descriptor.coordinate, scope: 'project', projectId: project.id, idempotencyKey: 'completion-' + randomUUID() }],
@@ -216,11 +261,29 @@ async function currentPin(app, state, project, scope) {
   return { manifest, binding };
 }
 
+/** Pure outcome guard: a discarded old admission requires actual epoch/error
+ * evidence and this exact failed job witness. It is not a measured control. */
+export function assertQueuedRevocationRetention(previous, current, queued, staleAdmission) {
+  requireControl(typeof previous?.reference?.generationHash === 'string' && previous.reference.generationHash, 'completion_previous_effective_required');
+  const effective = current?.payload.effective ?? null;
+  requireControl(effective?.reference?.generationHash !== queued.payload.reference.generationHash, 'completion_rejected_generation_became_effective');
+  if (evidenceDigest(effective) === evidenceDigest(previous)) return 'retained-currently-verifiable';
+  const witness = current?.payload.terminalApplyFailure;
+  requireControl(effective === null && current?.payload.phase === 'failed'
+    && witness?.jobId === queued.id && witness.preservedRuntime === false
+    && canonicalJson(witness.reference) === canonicalJson(queued.payload.reference)
+    && staleAdmission?.code === 'extension_access_denied'
+    && typeof staleAdmission.beforeEpoch === 'string' && typeof staleAdmission.afterEpoch === 'string'
+    && staleAdmission.beforeEpoch !== staleAdmission.afterEpoch && staleAdmission.previousEpoch === staleAdmission.beforeEpoch,
+  'completion_revoked_effective_state_changed');
+  return 'discarded-stale-private-admission';
+}
+
 /** SAAS-05 queued: requires one actual queued generation containing the admitted
  * descriptor and its REAL collaborating actor epoch. No job/lease is fabricated.
  * The caller pauses its own apply consumer; other due/running work is refused.
  */
-export async function runQueuedMembershipRevocation({ app, state, fixture, owner, lead, jobId }) {
+export async function runQueuedMembershipRevocation({ app, state, fixture, owner, lead, jobId, completedJobId }) {
   await assertCompletionFixture({ app, state });
   const user = await actualActor(app, owner), collaborator = await actualActor(app, lead);
   const { study, project } = await studyContext(app, fixture.studyId, fixture.projectId, user);
@@ -236,14 +299,27 @@ export async function runQueuedMembershipRevocation({ app, state, fixture, owner
   requireControl(before.epoch === queued.payload.actorMembershipEpoch && before.roles.includes('lead'), 'completion_queued_epoch_mismatch');
   const other = (await app.store.database.query("SELECT id FROM evimed_product.jobs WHERE kind='plugin-apply' AND (status='running' OR status='queued')", [])).rows;
   requireControl(other.length === 1 && other[0].id === queued.id, 'completion_other_apply_work_present');
-  const effectiveBefore = evidenceDigest((await generations.current(project))?.payload.effective ?? null);
+  const effectiveBefore = (await generations.current(project))?.payload.effective;
+  requireControl(effectiveBefore?.reference && effectiveBefore.reference.generationHash !== queued.payload.reference.generationHash, 'completion_previous_effective_required');
+  await generations.verifyManifest(project, effectiveBefore.reference);
+  const completedBefore = await captureCompletedOutput({ app, state, owner, projectId: project.id, jobId: completedJobId });
   await app.vcr.members.remove({ actor: user.id, studyId: study.id, userId: collaborator.id, role: 'lead' });
   const removedCode = await refused(() => generations.extensions.access.project(collaborator, project.id, { manage: true }));
   await app.vcr.members.add({ actor: user.id, studyId: study.id, userId: collaborator.id, role: 'lead' });
   const fresh = await app.vcr.dataStore.membershipAuthority(study.id, collaborator.id);
   requireControl(fresh.epoch !== before.epoch, 'completion_member_incarnation_unchanged');
+  let staleAdmission = null;
+  try { await generations.verifyManifest(project, effectiveBefore.reference); }
+  catch (error) {
+    const oldInstaller = effectiveBefore.bindings.installations.find(binding => binding.extensionId === state.descriptor.id && binding.actorId === collaborator.id);
+    const previousEpoch = oldInstaller?.actorMembershipEpoch
+      ?? (effectiveBefore.scope.actorId === collaborator.id ? effectiveBefore.scope.actorMembershipEpoch : null);
+    requireControl(error?.code === 'extension_access_denied' && previousEpoch === before.epoch, 'completion_unrelated_admission_failure');
+    staleAdmission = { code: error.code, beforeEpoch: before.epoch, afterEpoch: fresh.epoch, previousEpoch };
+  }
   const epochCode = await app.store.database.transaction(client => app.store.database.withTransactionClient(client,
     () => refused(() => generations.assertAuthority(queued, client))));
+  requireControl(epochCode === 'plugin_generation_changed', 'completion_queued_epoch_refusal_mismatch');
   const claimed = await jobs.claim(['plugin-apply'], 'completion-' + randomUUID(), { leaseMs: 60000,
     admission: async client => {
       const rows = (await client.query("SELECT id FROM evimed_product.jobs WHERE kind='plugin-apply' AND status IN ('queued','running') ORDER BY id FOR UPDATE", [])).rows;
@@ -252,14 +328,19 @@ export async function runQueuedMembershipRevocation({ app, state, fixture, owner
   requireControl(claimed?.id === queued.id, 'completion_queued_job_not_claimed');
   await app.pluginApplyWorker.generationWorker.runClaimed(claimed);
   const finished = await jobs.get(project.userId, queued.id);
-  requireControl(finished.status === 'failed' || ['failed', 'rolled-back'].includes(finished.result?.phase), 'completion_revoked_job_not_refused');
-  requireControl(evidenceDigest((await generations.current(project))?.payload.effective ?? null) === effectiveBefore, 'completion_revoked_effective_state_changed');
+  requireControl(finished.status === 'failed' && ['extension_access_denied', 'plugin_generation_changed', 'product_revision_conflict'].includes(finished.error?.code), 'completion_revoked_job_not_refused');
+  const current = await generations.current(project);
+  const effectiveOutcome = assertQueuedRevocationRetention(effectiveBefore, current, queued, staleAdmission);
+  if (effectiveOutcome === 'retained-currently-verifiable') await generations.verifyManifest(project, current.payload.effective.reference);
+  const completedAfter = await captureCompletedOutput({ app, state, owner, projectId: project.id, jobId: completedJobId });
+  requireControl(canonicalJson(completedBefore) === canonicalJson(completedAfter), 'completion_prior_output_not_retained');
   const newAuthority = await generations.extensions.access.project(collaborator, project.id, { manage: true });
   return { caseId: 'SAAS-05', scope: 'actual-queued-generation-member-removal-regrant', actual: { jobId: queued.id, studyId: study.id,
     memberEpochBeforeDigest: digest(before.epoch), memberEpochAfterDigest: digest(fresh.epoch), removedCode, epochCode,
-    jobStatus: finished.status, resultPhase: finished.result?.phase ?? null, effectiveUnchanged: true, freshManageAllowed: newAuthority.userId === project.userId,
+    jobStatus: finished.status, jobRefusalCode: finished.error.code, resultPhase: finished.result?.phase ?? null, effectiveOutcome, previousAdmissionRefusal: staleAdmission?.code ?? null,
+    rejectedDesiredNeverEffective: true, completedOutputDigest: completedAfter.contentDigest, freshManageAllowed: newAuthority.userId === project.userId,
     artifactDigest: state.descriptor.artifactDigest },
-    expected: 'The actual queued descriptor job cannot reuse an old membership incarnation after removal/regrant; effective state remains unchanged.' };
+    expected: 'The actual queued descriptor job cannot reuse an old membership incarnation after removal/regrant; previous verified output remains unchanged; stale private admission may be explicitly discarded.' };
 }
 
 /** SAAS-05 running: the journey supplies an actual native job currently running
