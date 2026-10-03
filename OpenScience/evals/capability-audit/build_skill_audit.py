@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile reviewed source skills with the packages actually installed in EviMed.
+"""Reconcile historical skill mappings with the current source-planned composition.
 
 Capability mapping is intentionally not called publication. A source skill is
 "mapped" when an installed EviMed package covers the same use case; this does
@@ -14,31 +14,13 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from audit_inventory import skill_composition, skill_execution_coverage, skill_evidence_metadata
+
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 RUNTIME_ROOT = REPO / "runtime" / "skills"
-WEB_GLOBAL_PACKAGE_ROOTS = (
-    RUNTIME_ROOT / "core",
-    RUNTIME_ROOT / "external" / "ai4s-skills",
-    RUNTIME_ROOT / "curated-scientific",
-    RUNTIME_ROOT / "office",
-)
-WEB_AGENT_PACKAGE_ROOT = RUNTIME_ROOT / "evimed"
-SKILL_EXECUTION_RESULT = HERE / "results" / "skill-execution-v1.json"
-PLATFORM_SKILL_EXECUTION_RESULT = HERE / "results" / "platform-skill-execution-v1.json"
-TOOL_EXECUTION_RESULT = HERE / "results" / "tool-probe-v3.json"
-SPECIALIST_SKILL_TOOL_MAPPING = {
-    "evimed/adr-analysis": "drug_safety_analysis",
-    "evimed/bibliometric-analysis": "bibliometric_analysis",
-    "evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
-    "evimed/drug-selection": "drug_selection_evaluation",
-    "evimed/mendelian-randomization": "mendelian_randomization",
-    "evimed/meta-analysis": "meta_analysis",
-    "evimed/off-label-analysis": "offlabel_evidence_packet",
-    "evimed/peer-review": "peer_review",
-    "evimed/research-topic-selection": "research_topic_selection",
-}
+RESULTS = HERE / "results"
 
 
 def add(mapping: dict[str, list[str]], packages: list[str], names: str) -> None:
@@ -118,7 +100,6 @@ BUNDLED = {
     "xlsx": ["office/xlsx"],
     "markitdown": ["platform/document-viewers"],
     "liteparse": ["platform/document-viewers"],
-    "open-notebook": ["platform/notebooks"],
     "generate-image": ["core/publication-figures", "external/ai4s-skills/mindmap-render"],
     "infographics": ["core/publication-figures", "office/pptx"],
     "latex-posters": ["core/publication-figures"],
@@ -127,6 +108,8 @@ BUNDLED = {
     "exa-search": ["builtin/websearch"],
     "get-available-resources": ["platform/runtime-capabilities"],
 }
+
+RETIRED_MAPPINGS = {"open-notebook": ["platform/notebooks"]}
 
 CREDENTIALED_OPTIONAL = {
     "adaptyv", "benchling-integration", "dnanexus-integration", "ginkgo-cloud-lab",
@@ -138,113 +121,12 @@ PHYSICAL_HARDWARE = {"opentrons-integration", "pylabrobot"}
 CLINICAL_SAFETY = {"clinical-decision-support", "treatment-plans"}
 
 
-def runtime_package_exists(identifier: str) -> bool:
-    if identifier.startswith(("builtin/", "platform/")):
-        return True
-    return (RUNTIME_ROOT / identifier / "SKILL.md").is_file()
-
-
-def enabled_root_packages(root: Path) -> list[str]:
-    inventory_file = root / "inventory.json"
-    enabled = None
-    if inventory_file.is_file():
-        inventory = json.loads(inventory_file.read_text(encoding="utf-8"))
-        delivery = inventory.get("policy", {}).get("delivery", {})
-        if delivery.get("contractVersion") != 1 or delivery.get("defaultEnabledTier") != "executable":
-            raise SystemExit("unsupported runtime skill delivery inventory: %s" % inventory_file)
-        executable = delivery.get("executable")
-        if not isinstance(executable, dict):
-            raise SystemExit("invalid runtime executable inventory: %s" % inventory_file)
-        enabled = set(executable)
-    packages = []
-    if not root.is_dir():
-        return packages
-    for manifest in sorted(root.glob("*/SKILL.md")):
-        if enabled is None or manifest.parent.name in enabled:
-            packages.append(manifest.parent.relative_to(RUNTIME_ROOT).as_posix())
-    return packages
-
-
 def fresh_web_packages() -> list[str]:
-    packages = [
-        package
-        for root in WEB_GLOBAL_PACKAGE_ROOTS
-        for package in enabled_root_packages(root)
-    ]
-    packages.extend(enabled_root_packages(WEB_AGENT_PACKAGE_ROOT))
-    return sorted(packages)
+    return [item["id"] for item in skill_composition(REPO)["packages"]]
 
 
 def execution_certified_packages() -> set[str]:
-    certified: set[str] = set()
-    if SKILL_EXECUTION_RESULT.is_file():
-        document = json.loads(SKILL_EXECUTION_RESULT.read_text(encoding="utf-8"))
-        rows = document.get("skills", [])
-        if (
-            document.get("schemaVersion") != 1
-            or document.get("executionCertified") != sum(bool(row.get("passed")) for row in rows)
-            or document.get("environment", {}).get("matchesInventory") is not True
-        ):
-            raise SystemExit("curated Skill execution evidence is invalid")
-        certified.update(
-            "curated-scientific/%s" % row["skill"]
-            for row in rows
-            if row.get("passed") is True and isinstance(row.get("skill"), str)
-        )
-    if not PLATFORM_SKILL_EXECUTION_RESULT.is_file():
-        return certified
-    document = json.loads(PLATFORM_SKILL_EXECUTION_RESULT.read_text(encoding="utf-8"))
-    rows = document.get("packages", [])
-    if (
-        document.get("schemaVersion") != 1
-        or document.get("executionCertified") != sum(bool(row.get("passed")) for row in rows)
-        or document.get("environment", {}).get("dependencyContract") != "selected audit runtime plus package-declared dependencies"
-    ):
-        raise SystemExit("platform Skill execution evidence is invalid")
-    certified.update(
-        row["package"]
-        for row in rows
-        if row.get("passed") is True and isinstance(row.get("package"), str)
-    )
-    if not TOOL_EXECUTION_RESULT.is_file():
-        return certified
-    document = json.loads(TOOL_EXECUTION_RESULT.read_text(encoding="utf-8"))
-    results = {row.get("tool"): row for row in document.get("results", [])}
-    if (
-        document.get("schemaVersion") != 3
-        or document.get("registered") != len(results)
-        or document.get("executionCertified") != sum(bool(row.get("operational")) for row in results.values())
-    ):
-        raise SystemExit("specialist tool execution evidence is invalid")
-    for package, tool in SPECIALIST_SKILL_TOOL_MAPPING.items():
-        evidence = results.get(tool, {})
-        if evidence.get("operational") is not True or evidence.get("operation") not in {"task", "start_then_poll_to_terminal"}:
-            raise SystemExit("specialist Skill lacks task execution evidence: %s" % package)
-        certified.add(package)
-    return certified
-
-
-def observed_runtime_skill_root_counts() -> list[dict]:
-    """How many packages a runtime is actually handed, per delivery unit.
-
-    Delivery used to be per project: the control plane copied a skill tree into
-    `<project>/runtime/xdg-config/<kernel>/skills`, so this globbed those copies
-    and reported one row per project. Nothing is copied per project any more
-    (`skillsCopied` is a constant zero in the control plane) — the runtime image
-    carries these roots read-only, shared by every project. One row per baked
-    root is the same observation at the unit delivery now happens in, and unlike
-    the enabled-package counts beside it this counts every package present in
-    the root, so a package delivered but not enabled is still visible here.
-    """
-    rows = []
-    for root in (*WEB_GLOBAL_PACKAGE_ROOTS, WEB_AGENT_PACKAGE_ROOT):
-        if not root.is_dir():
-            continue
-        rows.append({
-            "root": root.relative_to(REPO).as_posix(),
-            "skillPackages": len(list(root.glob("*/SKILL.md"))),
-        })
-    return rows
+    return {row["packageId"] for row in skill_execution_coverage(REPO, RESULTS, skill_composition(REPO)) if row["state"] == "bounded-historical-task-matched"}
 
 
 def source_value(source: dict, current: str, legacy: str, fallback=None):
@@ -262,17 +144,22 @@ def main() -> None:
     if not isinstance(incoming, list):
         raise SystemExit("skill audit input must be a list or an object with items")
     mapping = capability_mapping()
-    web_packages = set(fresh_web_packages())
-    certified_packages = execution_certified_packages()
-    if certified_packages - web_packages:
-        raise SystemExit("execution evidence contains a Skill outside the clean Web runtime")
+    composition = skill_composition(REPO)
+    web_packages = {item["id"] for item in composition["packages"]}
+    coverage = skill_execution_coverage(REPO, RESULTS, composition)
+    certified_packages = {row["packageId"] for row in coverage if row["state"] == "bounded-historical-task-matched"}
     rows = []
     for source in incoming:
         name = source_value(source, "name", "sourceName")
         if not isinstance(name, str) or not name:
             raise SystemExit("skill audit input contains an invalid source name")
         packages = mapping.get(name)
-        if packages:
+        if name in RETIRED_MAPPINGS:
+            packages = RETIRED_MAPPINGS[name]
+            disposition = "retired_product_mapping"
+            release = "historical_mapping_unverified"
+            decision = "Historical Notebook mapping is retired; it is not a current platform capability."
+        elif packages:
             disposition = "covered_by_rehabilitated_runtime"
             release = "capability_mapped"
             decision = "Capability is mapped to a smaller audited EviMed package; this does not publish or install the incoming package."
@@ -301,9 +188,11 @@ def main() -> None:
             disposition = "excluded_no_unique_research_gap"
             release = "excluded"
             decision = "No unique safe EviMed research gap remains after the unified runtime packages; the incoming package is omitted from the action space."
-        missing = [package for package in packages if not runtime_package_exists(package)]
-        if missing:
-            raise SystemExit(f"{name} maps to missing runtime packages: {missing}")
+        target_states = [{"target": package, "state": "source-planned" if package in web_packages else "unverified-non-skill-target" if package.startswith(("builtin/", "platform/")) else "historical-target-not-shipped"} for package in packages]
+        if release == "capability_mapped" and any(item["state"] != "source-planned" for item in target_states):
+            release = "historical_mapping_unverified"
+            disposition = "historical_targets_not_verified"
+            decision = "Historical semantic mapping retained for review; one or more targets are not shipped or not verified by the current composition/registry. Source path existence is not current availability."
         rows.append({
             "sourceName": name,
             "sourceSeverity": source_value(source, "severity", "sourceSeverity", ""),
@@ -313,66 +202,62 @@ def main() -> None:
             "releaseStatus": release,
             "disposition": disposition,
             "runtimePackages": packages,
-            "runtimePackagesInstalledInWeb": [
+            "mappingBasis": "historical-reviewed-semantic-targets",
+            "targetStates": target_states,
+            "runtimePackagesSourcePlanned": [
                 package for package in packages
                 if package in web_packages
             ],
-            "runtimePackagesExecutionCertified": [
+            "runtimePackagesBoundedHistoricalTaskMatched": [
                 package for package in packages
                 if package in certified_packages
             ],
-            "platformCapabilities": [
+            "historicalNonSkillTargets": [
                 package for package in packages if package.startswith(("builtin/", "platform/"))
             ],
-            "incomingSourceLoaded": source_value(source, "finalStatus", "previousStatus", "") == "integrated_audited",
+            "historicalIncomingSourceLoaded": source_value(source, "finalStatus", "previousStatus", "") == "integrated_audited",
+            "currentImageExecution": "unknown",
+            "boundedHistoricalTaskState": "bounded-historical-task-matched" if packages and all(package in certified_packages for package in packages) else "unknown",
             "decision": decision,
             "sourceSnapshotAction": "Preserve for audit evidence; do not copy excluded instructions into the runtime.",
         })
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if any((args.output_dir / name).exists() for name in ("skill-audit-v5.json", "skill-audit-v5.csv")):
+        raise SystemExit("audit output already exists; use a new --output-dir to preserve evidence")
     summary = {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "incomingSkillsReviewed": len(rows),
-        "freshWebRuntimeSkillPackages": len(web_packages),
-        "freshWebGlobalSkillPackages": sum(
-            len(enabled_root_packages(root)) for root in WEB_GLOBAL_PACKAGE_ROOTS
-        ),
-        "freshWebSpecialistSkillPackages": len(enabled_root_packages(WEB_AGENT_PACKAGE_ROOT)),
-        "freshWebInstalledPackageIds": sorted(web_packages),
-        "observedRuntimeSkillRootPackageCounts": observed_runtime_skill_root_counts(),
-        "desktopRepositorySkillPackages": len(list(RUNTIME_ROOT.rglob("SKILL.md"))),
-        "webExecutionCertifiedSkillPackages": len(certified_packages),
-        "webExecutionCertifiedPackageIds": sorted(certified_packages),
+        "sourcePlannedComposition": composition,
+        "sourcePlannedSkillPackages": len(web_packages),
+        "imageObservation": "unknown",
+        "executionCoverage": coverage,
+        "historicalExecutionEvidence": skill_evidence_metadata(RESULTS),
+        "boundedHistoricalTaskPackageCount": len(certified_packages),
+        "boundedHistoricalTaskPackageIds": sorted(certified_packages),
+        "unknownExecutionPackageIds": [row["packageId"] for row in coverage if row["state"] == "unknown"],
         "releaseStatus": dict(Counter(row["releaseStatus"] for row in rows)),
         "dispositions": dict(Counter(row["disposition"] for row in rows)),
-        "incomingSourceInstructionsLoaded": sum(row["incomingSourceLoaded"] for row in rows),
+        "historicalIncomingSourceInstructionsLoaded": sum(row["historicalIncomingSourceLoaded"] for row in rows),
+        "historicalCapabilitiesMapped": sum(bool(row["runtimePackages"]) for row in rows),
         "sourceCapabilitiesMapped": sum(row["releaseStatus"] == "capability_mapped" for row in rows),
-        "sourceCapabilitiesMappedToFreshRuntime": sum(
-            row["releaseStatus"] == "capability_mapped" and bool(row["runtimePackagesInstalledInWeb"])
+        "sourceCapabilitiesMappedToSourcePlan": sum(
+            row["releaseStatus"] == "capability_mapped" and bool(row["runtimePackagesSourcePlanned"])
             for row in rows
         ),
-        "sourceCapabilitiesBackedByExecutedRuntime": sum(
-            row["releaseStatus"] == "capability_mapped" and bool(row["runtimePackagesExecutionCertified"])
+        "sourceCapabilitiesBackedByBoundedHistoricalTask": sum(
+            row["releaseStatus"] == "capability_mapped" and bool(row["runtimePackagesBoundedHistoricalTaskMatched"])
             for row in rows
         ),
         "sourcePackagesPublished": 0,
-        "note": (
-            "A clean Web runtime currently receives %d global executable-tier Skills plus %d EviMed specialist packages. "
-            "`observedRuntimeSkillRootPackageCounts` counts every package present in each read-only root the runtime image "
-            "bakes in, including any the delivery inventory does not enable, so it can exceed these two numbers; that "
-            "observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not "
-            "install or publish that source package. Execution certification applies only to packages with retained task artifacts "
-            "and matching dependency evidence."
-        ) % (
-            sum(len(enabled_root_packages(root)) for root in WEB_GLOBAL_PACKAGE_ROOTS),
-            len(enabled_root_packages(WEB_AGENT_PACKAGE_ROOT)),
-        ),
+        "note": "Dockerfile COPY and preset assembly describe the source plan, not an observed image or offered tools. Optional/private roots, personal generations and kernel-provided plugins need separate current deployment evidence. Historical receipts certify only unchanged packages with matching artifacts/dependencies; all other execution is unknown.",
     }
     document = json.dumps({"summary": summary, "items": rows}, ensure_ascii=False, indent=2) + "\n"
-    for filename in ("skill-audit-v2.json", "skill-audit-v3.json", "skill-audit-v4.json"):
-        (args.output_dir / filename).write_text(document, encoding="utf-8")
-    for filename in ("skill-audit-v2.csv", "skill-audit-v3.csv", "skill-audit-v4.csv"):
-        handle = (args.output_dir / filename).open("w", newline="", encoding="utf-8-sig")
+    for filename in ("skill-audit-v5.json",):
+        with (args.output_dir / filename).open("x", encoding="utf-8") as handle:
+            handle.write(document)
+    for filename in ("skill-audit-v5.csv",):
+        handle = (args.output_dir / filename).open("x", newline="", encoding="utf-8-sig")
         with handle:
             writer = csv.writer(handle)
             writer.writerow([
@@ -383,7 +268,7 @@ def main() -> None:
                 writer.writerow([
                     row["sourceName"], row["sourceSeverity"], row["sourceFindings"],
                     row["releaseStatus"], row["disposition"], "; ".join(row["runtimePackages"]),
-                    "yes" if row["incomingSourceLoaded"] else "no", row["decision"],
+                    "yes" if row["historicalIncomingSourceLoaded"] else "no", row["decision"],
                 ])
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
