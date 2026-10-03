@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { BellRing, BookOpen, Folder, Gauge, Palette, Plug, UserRound, Wrench, type LucideIcon } from "lucide-react";
 import { fetchWebMe } from "@/lib/apiClient";
 import { fetchImStatus } from "@/lib/imClient";
+import { useResearchBilling } from "@/lib/useResearchBilling";
 import { PageShell } from "@/components/layout/PageShell";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { AccountSection } from "@/components/settings/AccountSection";
@@ -19,6 +20,8 @@ interface Section {
   /** The `?tab=` value. Stable: it is in links people keep and in the server's own copy. */
   key: SectionKey;
   label: string;
+  /** What the section is called on a deployment that bills research, where its label names billing. */
+  billingLabel?: string;
   icon: LucideIcon;
 }
 
@@ -26,7 +29,7 @@ const SECTIONS: readonly Section[] = [
   { key: "account", label: "账户", icon: UserRound },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "notifications", label: "通知", icon: BellRing },
-  { key: "usage", label: "科研额度", icon: Gauge },
+  { key: "usage", label: "用量", billingLabel: "科研额度", icon: Gauge },
   { key: "connectors", label: "数据源", icon: Plug },
   { key: "projects", label: "项目", icon: Folder },
 ];
@@ -45,10 +48,15 @@ const OPS: Section = { key: "ops", label: "运维", icon: Wrench };
  * so the sidebar's gear, 「查看用量」 (`?tab=usage`), the server's own copy
  * (「设置 → 数据源」) and bookmarks all land where they did; no value opens
  * 账户, which is what the gear promises.
+ *
+ * 用量 is named by the deployment: it reads 科研额度 only where research billing
+ * is on, and only once the deployment has said so (`useResearchBilling`), so a
+ * deployment without billing never shows the word, not even while it loads.
  */
 export function AccountPage() {
   const [params] = useSearchParams();
   const [operator, setOperator] = useState(false);
+  const { enabled: billing } = useResearchBilling();
   // Feishu exists only where the deployment runs the IM module: a row for a
   // switched-off subsystem would offer a scan that cannot work.
   const [imEnabled, setImEnabled] = useState(false);
@@ -82,7 +90,7 @@ export function AccountPage() {
                     className={navItemClasses({ current: selected, className: "whitespace-nowrap" })}
                   >
                     <Icon size={16} aria-hidden="true" className="text-text-3" />
-                    {section.label}
+                    {billing && section.billingLabel ? section.billingLabel : section.label}
                   </Link>
                 </li>
               );
