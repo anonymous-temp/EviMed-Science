@@ -23,6 +23,7 @@ import {
 // the price lists an archive has to carry, or the customer's copy of their
 // spending points at versions only this repository can resolve; the plugin
 // documents it may carry; and which tables it reads at all.
+// `accountExportKinds.test.mjs` holds which document kinds it carries, and
 // `accountExport.integration.test.mjs` covers the PostgreSQL half.
 
 const current = REFERENCE_PRICE_LIST.version;
