@@ -1,7 +1,9 @@
 #!/usr/local/bin/node
 // Fixed local-test Docker CLI transport; no production gateway or input execution.
 import http from 'node:http';
-const args=process.argv.slice(2), prefix='/v1.51';
+// Docker26 introduced volume subpaths. Keep the transport at that API floor;
+// the hosted CI Docker28 daemon supports1.48, not the local daemon's1.51.
+const args=process.argv.slice(2), prefix='/v1.45';
 async function api(method,url,body){return new Promise((resolve,reject)=>{const bytes=body==null?null:Buffer.from(JSON.stringify(body));const req=http.request({socketPath:'/docker.sock',path:prefix+url,method,headers:bytes?{'content-type':'application/json','content-length':bytes.length}:{}},res=>{const chunks=[];let count=0;res.on('data',x=>{if((count+=x.length)>600000){req.destroy();reject(Error('response_limit'));}else chunks.push(x);});res.on('end',()=>{const out=Buffer.concat(chunks);if(res.statusCode>=400)reject(Error(out.toString()));else resolve(out);});});req.on('error',reject);if(bytes)req.end(bytes);else req.end();});}
 const json=async(method,url,body)=>JSON.parse((await api(method,url,body)).toString()||'null');
 try{
