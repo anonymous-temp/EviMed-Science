@@ -48,8 +48,7 @@ export async function runProductIntegrationTests({ databaseUrl, tests = productI
     await admin.connect();
     for (const file of tests) {
       const filename = path.basename(file);
-      const prefix = filename === "extensionGenerationService.integration.test.mjs" ? "evimed_test_extension_generation"
-        : filename === "extensionPreparationWorker.integration.test.mjs" ? "evimed_test_extension_worker" : "evimed_test_product";
+      const prefix = filename === "extensionPreparationWorker.integration.test.mjs" ? "evimed_test_extension_worker" : "evimed_test_product";
       const name = `${prefix}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
       await admin.query(`CREATE DATABASE "${name}"`);
       try {

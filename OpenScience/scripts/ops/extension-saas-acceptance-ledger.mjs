@@ -45,7 +45,7 @@ export async function runLedgerBoundaryControls({ databaseUrl }) {
   const canary='w8-'+randomUUID()+'@example.invalid';await credentials.set('owner','unpaywall',canary);assert.equal(await credentials.resolveOwn('owner','unpaywall'),canary);assert.equal(await credentials.resolveOwn('other','unpaywall'),null);
   const connections=new ExtensionConnections({credentials,access:projectAccess}), connectionEntry={id:'fixture-source',connectionRequirements:[{kind:'unpaywall',operations:['doi.resolve']}]};
   const reference=(await connections.list({id:'owner'},connectionEntry,'shared')).items[0];assert(reference);
-  await assert.rejects(connections.authorize({id:'viewer'},reference.id,{project:{id:'shared',userId:'owner'},entry:connectionEntry,operation:'doi.resolve',revision:reference.revision}),{code:'project_not_found'});
+  const viewerOwnerConnection=await connections.authorize({id:'viewer'},reference.id,{project:{id:'shared',userId:'owner'},entry:connectionEntry,operation:'doi.resolve',revision:reference.revision});assert.equal(viewerOwnerConnection,false);
   assert.equal(await connections.authorize({id:'owner'},reference.id,{project:{id:'shared',userId:'owner'},entry:connectionEntry,operation:'doi.resolve',revision:reference.revision}),true);
   const jobs=new ProductJobs(database), documents=new ProductDocuments(database);
   const queued=await jobs.enqueue('owner','extension-execute',{fixture:true,studyId:'std_w8',actorId:'editor'},{idempotencyKey:'before-revocation',projectId:'shared'});
@@ -61,7 +61,7 @@ export async function runLedgerBoundaryControls({ databaseUrl }) {
   const rows=(await database.query('SELECT ciphertext,nonce,tag FROM evimed_control.user_connector_credentials')).rows;
   const surfaces=[JSON.stringify(status),JSON.stringify(discovered),...rows.map(row=>row.ciphertext.toString('utf8'))];assert.equal(surfaces.some(value=>value.includes(canary)),false);
   await fs.writeFile(path.join(root,'public-observation.json'),JSON.stringify({status,discovered}));assert.equal((await fs.readFile(path.join(root,'public-observation.json'),'utf8')).includes(canary),false);
-  observe('SAAS-06','Real credential encryption/AAD and public metadata cannot expose the synthetic canary',{plaintextScanMatches:0,foreignResolve:null,managedOwnerResolutionMatched:true,surfacesScanned:surfaces.length+1},'Synthetic credential canary in existing store; actual account-export/full serving logs/package cache scan still separate');
+  observe('SAAS-06','Shared read permission cannot borrow the owner connection; real credential encryption/AAD and public metadata cannot expose the synthetic canary',{plaintextScanMatches:0,foreignResolve:null,viewerOwnerConnection,managedOwnerResolutionMatched:true,surfacesScanned:surfaces.length+1},'Synthetic credential canary in existing store; actual account-export/full serving logs/package cache scan still separate');
   const duplicates=await Promise.all(Array.from({length:4},()=>jobs.enqueue('owner','extension-execute',{fixture:true},{idempotencyKey:'same-operation'})));assert.equal(new Set(duplicates.map(job=>job.id)).size,1);
   const otherJob=await jobs.enqueue('other','extension-execute',{fixture:true},{idempotencyKey:'same-operation',projectId:'own'});assert.notEqual(otherJob.id,duplicates[0].id);
   assert.equal(await jobs.get('other',duplicates[0].id),null);

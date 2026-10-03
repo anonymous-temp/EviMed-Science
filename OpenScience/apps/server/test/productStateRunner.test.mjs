@@ -24,7 +24,8 @@ test('product suites receive separate databases and failed files still release o
   assert.deepEqual(results.map(row => row.exitCode), [0, 1, 0]);
   const names = f.invocations.map(row => new URL(row.options.env.OPEN_SCIENCE_TEST_POSTGRES_URL).pathname.slice(1));
   assert.equal(new Set(names).size, 3);
-  assert.match(names[0], /^evimed_test_extension_generation_[a-f0-9]{12}$/);
+  assert.match(names[0], /^evimed_test_product_[a-f0-9]{12}$/);
+  assert.ok((names[0] + "_extgenroles_" + "a".repeat(8)).length <= 63, "nested generation fixture stays within the PostgreSQL identifier limit");
   assert.match(names[1], /^evimed_test_extension_worker_[a-f0-9]{12}$/);
   assert.match(names[2], /^evimed_test_product_[a-f0-9]{12}$/);
   assert.deepEqual(f.queries, names.flatMap(name => [`CREATE DATABASE "${name}"`, `DROP DATABASE "${name}" WITH (FORCE)`]));

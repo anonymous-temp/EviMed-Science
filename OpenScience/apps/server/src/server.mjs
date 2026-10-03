@@ -944,7 +944,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
   const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
-  const extensionAccess = new ExtensionAccess({ store, connectionAccess: overrides.extensionConnectionAccess ?? null });
+  const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
+    if (!vcr) return null;
+    const study = await vcr.store.studyByControlProject(user.id, projectId, client);
+    if (!study) return null;
+    const membership = await vcr.dataStore.membershipAuthority(study.id, user.id, client);
+    return { ownerId: study.userId, roles: study.userId === user.id ? ["lead"] : membership.roles, epoch: study.userId === user.id ? null : membership.epoch };
+  }, connectionAccess: overrides.extensionConnectionAccess ?? null });
   const extensionConnections = new ExtensionConnections({ credentials: connectorCredentials, access: extensionAccess,
     adapters: overrides.extensionConnectionAdapters ?? new Map() });
   if (!overrides.extensionConnectionAccess) extensionAccess.connectionAccess = (user, ref, scope) => extensionConnections.authorize(user, ref, scope);

@@ -9,12 +9,12 @@ import { createExtensionAssessmentAdmission, assertExtensionAssessmentAdmission 
 import { ExtensionGenerationService, verifyExtensionGeneration } from '../src/extensionGenerationService.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const digest = value => 'sha256:' + sha(canonicalJson(value));
-async function fixture(t, { installerId = 'owner', installerEpoch = 'epoch' } = {}) {
+async function fixture(t, { installerId = 'owner', installerEpoch = 'epoch', installerMembershipEpoch = null, reconcileMembershipEpoch = null } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'evimed-assessment-admission-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   let allowed = true;
-  const scope = { ownerId: 'owner', projectId: 'project', actorId: 'owner', actorAccountCreatedAt: 'epoch', ownerAccountCreatedAt: 'epoch', projectCreatedAt: 'project-epoch' };
-  const input = { project: { id: 'project', userId: 'owner', projectCreatedAt: 'project-epoch' }, actor: { id: installerId, accountCreatedAt: installerEpoch }, scope,
+  const scope = { ownerId: 'owner', projectId: 'project', actorId: 'owner', actorAccountCreatedAt: 'epoch', actorMembershipEpoch: reconcileMembershipEpoch, ownerAccountCreatedAt: 'epoch', projectCreatedAt: 'project-epoch' };
+  const input = { project: { id: 'project', userId: 'owner', projectCreatedAt: 'project-epoch' }, actor: { id: installerId, accountCreatedAt: installerEpoch, membershipEpoch: installerMembershipEpoch }, scope,
     entry: { id: 'cowork', integrity: digest('pinned package'), coordinate: {kind:'github',repository:'Jesse-njx/dsh-cowork',commit:'a'.repeat(40)}, executionClass:'isolated-tool' },
     artifact: { artifactDigest: digest('owned exact artifact'), adapterRevision:digest('contained adapter'), suiteRevision:digest('fixture suite') },
     identity: { runtimeImageDigest: digest('actual fixture image'), permissionProfileRevision:digest('permissions'),
@@ -31,7 +31,7 @@ async function fixture(t, { installerId = 'owner', installerEpoch = 'epoch' } = 
     adapterRevision: digest('adapter'), permissionProfileRevision: digest('permissions'),
     selections: [{ extensionId: plugin.extensionId, artifactDigest: plugin.artifactDigest, configRevision: 1, configDigest: plugin.configDigest, connectionRefs: [] }], skills: [] };
   const content = { schemaVersion: 1, identity, scope, assessmentAdmission: authority.marker,
-    bindings: { desiredRevision: 1, legacyRevision: 0, personalRevision: 0, installations: [{extensionId:plugin.extensionId,installationId:'installation',actorId:installerId,installationRevision:1,prepareJobId:'prepare-job',configDigest:plugin.configDigest,assessmentAdmissionDigest:admission.assessmentAdmissionDigest,artifactDigest:plugin.artifactDigest,integrity:plugin.integrity,coordinate:canonicalExtensionCoordinate(plugin.coordinate)}] },
+    bindings: { desiredRevision: 1, legacyRevision: 0, personalRevision: 0, installations: [{extensionId:plugin.extensionId,installationId:'installation',actorId:installerId,actorMembershipEpoch:installerMembershipEpoch,installationRevision:1,prepareJobId:'prepare-job',configDigest:plugin.configDigest,assessmentAdmissionDigest:admission.assessmentAdmissionDigest,artifactDigest:plugin.artifactDigest,integrity:plugin.integrity,coordinate:canonicalExtensionCoordinate(plugin.coordinate)}] },
     projection: { plugins: [plugin], personal: { reference: null, pins: [] } }, findings: [] };
   const manifest = { ...content, reference: { ownerHash: sha('owner'), projectHash: sha('project'),
     generationHash: sha(canonicalJson({ ...content, domainIdentity: extensionGenerationIdentity(identity, { ownerId: 'owner', projectId: 'project' }, sha) })) } };
@@ -149,7 +149,7 @@ test('real immutable files reject rehashed duplicate, dangling and ambiguous adm
 });
 
 test('frozen reconcile scope and separately bound installer survive while scope or installer drift refuses', async t => {
-  const f = await fixture(t, { installerId: 'installer', installerEpoch: 'installer-epoch' });
+  const f = await fixture(t, { installerId: 'installer', installerEpoch: 'installer-epoch', installerMembershipEpoch: 'installer-membership', reconcileMembershipEpoch: 'reconciler-membership' });
   assert.notEqual(f.manifest.scope.actorId, f.manifest.bindings.installations[0].actorId);
   assert.deepEqual(await verifyExtensionGeneration(f.config, f.input.project, f.manifest.reference, f.authority), f.manifest);
   const changes = [
@@ -158,6 +158,8 @@ test('frozen reconcile scope and separately bound installer survive while scope 
     value => { value.scope.ownerAccountCreatedAt = 'other-owner-epoch'; },
     value => { value.scope.projectCreatedAt = 'other-project-epoch'; },
     value => { value.bindings.installations[0].actorId = 'unrelated-installer'; },
+    value => { value.bindings.installations[0].actorMembershipEpoch = 'reconciler-membership'; },
+    value => { value.scope.actorMembershipEpoch = 'installer-membership'; },
   ];
   for (const change of changes) {
     const altered = structuredClone(f.manifest); change(altered); rehash(altered);
