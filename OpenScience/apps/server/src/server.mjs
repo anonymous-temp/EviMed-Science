@@ -3447,6 +3447,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             return runtimeManager.dispatchPrompt(project, session.id, {
+              recordPromptActor: async request => {
+                if (typeof episode.assertDispatchAllowed !== "function") throw new HttpError(409, "product_job_lease_lost", "Autopilot dispatch authority is unavailable.");
+                await assertAutopilotDispatchAllowed(episode, user);
+                await store.requireProject(user, project.id);
+                await recordExtensionPromptActor(user, project, request);
+              },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
               system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
@@ -3510,7 +3516,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
     frontierDeliveryPolicy: (item) => frontier?.notifications.deliveryAllowed(item) ?? Promise.resolve(false),
-    steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
+    steerRun: ({ user, project, runId, text }) => steerChannelRun(user, project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext,
@@ -3873,15 +3879,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * idle. Any run already running in the project refuses with `runtime_busy`
    * (one GEO run per project; the orchestrator retries next tick), as does a
    * full runtime quota.
-   * @param {{ userId: string, projectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   * @param {{ userId: string, projectId: string, geoProjectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
    */
-  async function dispatchGeoRun({ userId, projectId, capabilityId, dispatchId, reason, brief }) {
+  async function dispatchGeoRun({ userId, projectId, geoProjectId, capabilityId, dispatchId, reason, brief }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "geo_project_not_found", "The GEO project's account is unavailable.");
     const project = await store.requireProject(user, projectId);
+    const assertGeoProgramAuthority = async () => {
+      const current = await geo.service.requireProject(user, geoProjectId);
+      if (current.userId !== user.id || current.projectId !== project.id) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+      if (current.status !== "active") throw new HttpError(409, "geo_project_paused", "This GEO project is paused.");
+      await store.requireProject(user, project.id);
+    };
     const ledger = await agentRuns.list(project);
     const replay = ledger.find((run) => run.dispatchId === dispatchId);
     if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status };
+    await assertGeoProgramAuthority();
     if (ledger.some((run) => run.status === "running")) throw new HttpError(409, "runtime_busy", "The project has a run in progress; the GEO step waits.");
     if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
@@ -3916,6 +3929,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id, runId: dispatchId, ...budget.scope,
         });
         return runtimeManager.dispatchPrompt(project, session.id, {
+          recordPromptActor: async request => {
+            await assertGeoProgramAuthority();
+            await recordExtensionPromptActor(user, project, request);
+          },
           // The brief first: the kernel names a session after its first message.
           // The GEO mark always, open runtime or not: a brief is never the
           // researcher's words (the same text `geoRunPrompt` writes).
@@ -4157,8 +4174,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         });
       }
       await runtimeManager.start(project);
-      await recordExtensionPromptActor(user, project, { sessionId: session.sessionId, requestId: dispatchedRun.kernelRequestIds?.at(-1) });
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
+        recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
         system: prepared.system,
         memoryContext: prepared.memoryContext,
@@ -4176,14 +4193,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /**
    * A chat message the model judged to add to the task already running: the
    * page's 「补充」 route, same run, same contract (`/api/agent-runs/:id/steer`).
-   * @param {any} project @param {string} runId @param {string} text
+   * @param {any} user @param {any} project @param {string} runId @param {string} text
    */
-  async function steerChannelRun(project, runId, text) {
+  async function steerChannelRun(user, project, runId, text) {
     const run = (await agentRuns.list(project)).find((item) => item.id === runId);
     if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
     const correctionRequestId = randomId("req_");
     const updated = await agentRuns.recordCorrection(project, runId, correctionRequestId);
     await runtimeManager.dispatchPrompt(project, run.sessionId, {
+      recordPromptActor: request => recordExtensionPromptActor(user, project, request),
       text: `<evimed-correction>${String(text).slice(0, 4000)}</evimed-correction>`,
       runId,
       requestId: correctionRequestId,
@@ -5144,8 +5162,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             });
           }
           await runtimeManager.start(ctx.project);
-          await recordExtensionPromptActor(ctx.user, ctx.project, { sessionId: session.sessionId, requestId: dispatchedRun.kernelRequestIds?.at(-1) });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
+            recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
             // The capsule a 「试用一次」 conversation is trying reaches it through
             // the capsule plugin at its first step (memorySessions.mjs), for a
@@ -5200,6 +5218,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // id the ledger has not seen cannot be matched to the run it belongs to.
         const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId);
         await runtimeManager.dispatchPrompt(ctx.project, run.sessionId, {
+          recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
           // Marked, so a compaction can carry it as a handle rather than
           // summarising away one half of a modified instruction — the failure
           // the published implementations of this feature all name.

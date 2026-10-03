@@ -81,4 +81,16 @@ test('trusted skill actor callback observes the exact native request after unsen
   rejectCreate = true; recorded = null; sent = null
   await assert.rejects(manager.dispatchAdmittedPrompt(project, 'conversation', { text: '/personal-fixture', requestId: 'unsent-request', recordPromptActor }), /unsent/u)
   assert.equal(recorded, null); assert.equal(sent, null)
+  rejectCreate = false
+  const callbackFailure = new Error('actor admission failed')
+  await assert.rejects(manager.dispatchAdmittedPrompt(project, 'conversation', { text: '/personal-fixture', requestId: 'binding-fail',
+    recordPromptActor: async () => { throw callbackFailure } }), error => error === callbackFailure)
+  assert.equal(sent, null)
+  manager.callKernel = async (_runtime, _project, method) => {
+    if (method === 'session/prompt') throw new Error('acceptance unknown')
+    return {}
+  }
+  await assert.rejects(manager.dispatchAdmittedPrompt(project, 'conversation', { text: '/personal-fixture', requestId: 'sent-unknown', recordPromptActor }), /acceptance unknown/u)
+  assert.equal(recorded.requestId, 'sent-unknown', 'Unknown acceptance cannot erase a potentially executed binding')
+  assert.equal(manager.activeProxyCount(project), 0)
 })

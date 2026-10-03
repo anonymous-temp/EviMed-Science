@@ -4789,7 +4789,7 @@ export class RuntimeManager {
    * the pinned kernel rather than read from its documentation.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, memoryContext?: string | null, residentProfile?: boolean, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
+   * @param {{ text: string, system?: string | null, memoryContext?: string | null, residentProfile?: boolean, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer', recordPromptActor?:(request:any)=>Promise<void> }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {

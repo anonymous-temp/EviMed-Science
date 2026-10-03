@@ -33,6 +33,7 @@ test('authenticated skill REST invocation binds the exact native input to the re
       const skill = await request('/api/skills', 'POST', { expectedRevision: 0, title: 'Actor fixture', description: 'Check synthetic rows', instructions: 'Preserve unknown values.' }, 201);
       await request('/api/projects/default/skills', 'PUT', { expectedRevision: 0, skills: [{ skillId: skill.id, revision: 1 }] });
       const user = await app.store.userById(session.data.user.id), project = await app.store.requireProject(user, 'default');
+      assert.equal(typeof user.accountCreatedAt, 'string', 'Background and IM current-user lookups preserve the real account epoch');
       const candidate = { reference: { generationHash: 'a'.repeat(64) }, pins: [{ skillId: skill.id, revision: 1, digest: skill.payload.digest }] };
       manager.runtimes.set(manager.key(project), { personalSkillGeneration: candidate, modelGatewayTokenJti: 'skill-actor-generation' });
       // Only native transport and generation discovery are controlled; REST,
@@ -55,5 +56,22 @@ test('authenticated skill REST invocation binds the exact native input to the re
       assert.equal(await app.hostedExtensions.actors.resolve({ ...auth, userId: 'foreign' }, invocation, message, transcript), null);
       assert.equal(await app.hostedExtensions.actors.resolve(auth, invocation, message, { messages: [...transcript.messages, { role: 'user', seq: 3, turnStartSeq: 1, source: 'user', sourceRequestId: 'later-unbound' }] }), null);
       await request(`/api/projects/default/skills/${skill.id}/invoke`, 'POST', { revision: 1, sessionId: 'skill-session', idempotencyKey: 'forged-input', actorId: 'foreign' }, 400);
+      const run = await app.agentRuns.createRun(project, { sessionId: 'skill-session', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null }, { baselineCursor: null });
+      await request(`/api/agent-runs/${run.id}/steer`, 'POST', { text: 'Preserve unknown values in the correction.' }, 202);
+      assert.equal(nativeRequest.mode, 'steer');
+      const steerTranscript = () => ({ messages: [{ role: 'user', seq: 2, turnStartSeq: 1, source: 'user', sourceRequestId: nativeRequest.requestId }] });
+      assert.equal((await app.hostedExtensions.actors.resolve(auth, invocation, message, steerTranscript())).userId, user.id);
+      await request(`/api/agent-runs/${run.id}/steer`, 'POST', { text: 'Forged correction', actorId: 'foreign' }, 400);
+      // Exercise the actual composition callback; ImService independently
+      // rechecks the authenticated channel user before calling this seam.
+      await app.im.service.steerRun({ user, project, runId: run.id, text: 'Channel correction.' });
+      assert.equal(nativeRequest.mode, 'steer');
+      assert.equal((await app.hostedExtensions.actors.resolve(auth, invocation, message, steerTranscript())).userId, user.id);
+      await app.store.database.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1", [user.id]);
+      const recreated = await app.store.userById(user.id);
+      assert.notEqual(recreated.accountCreatedAt, user.accountCreatedAt);
+      assert.equal(await app.hostedExtensions.actors.resolve(auth, invocation, message, steerTranscript()), null);
+      await assert.rejects(app.hostedExtensions.actors.accept(user, project, { sessionId: 'skill-session', requestId: 'stale-account' }), { status: 401 });
+
     } finally { manager?.runtimes.clear(); await app?.close(); await isolated.drop(); await fs.rm(directory, { recursive: true, force: true }); }
   });

@@ -1269,7 +1269,7 @@ export class PostgresStore extends InMemoryStore {
 
   async userById(id) {
     const result = await this.database.query(
-      `SELECT id, name, password_hash, auth_type FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1`,
+      `SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1`,
       [id],
     );
     const user = databaseUser(this.config, result.rows[0]);
