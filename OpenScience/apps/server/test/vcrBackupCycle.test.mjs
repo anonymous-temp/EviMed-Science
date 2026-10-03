@@ -36,10 +36,10 @@ async function fixture(t, { busy = false, leaseLost = false, drillFails = false 
   const config = { enabled: true, dataPlaneDir: path.join(root, 'plane'), backupDir: path.join(root, 'backups'),
     statusDir: path.join(root, 'status'), jobsVolume: 'web_evimed-vcr-jobs', tokenFile: path.join(root, 'token'),
     passphraseFile: path.join(root, 'phrase'), operatorUrl: 'http://127.0.0.1:8787', drainSeconds: 0 };
-  await mkdir(config.dataPlaneDir);
+  await mkdir(config.dataPlaneDir, { mode: 0o700 });
   await writeFile(config.tokenFile, 'fixture-token-for-scoped-operator-api', { mode: 0o600 });
   await writeFile(config.passphraseFile, 'fixture-passphrase-for-encrypted-backups', { mode: 0o400 });
-  const jobs = path.join(root, 'jobs'); await mkdir(jobs);
+  const jobs = path.join(root, 'jobs'); await mkdir(jobs, { mode: 0o700 });
   const calls = []; let requestId; let captures = 0;
   const run = async (command, args, options) => {
     calls.push({ command, args, env: options?.env });
@@ -47,7 +47,7 @@ async function fixture(t, { busy = false, leaseLost = false, drillFails = false 
     if (args.includes('fence-capture')) return { stdout: JSON.stringify({ status: 'stopped',
       container: args[args.indexOf('--container') + 1], operation: args[args.indexOf('--operation') + 1], admissionFenced: true }) };
     if (args.includes('capture-member')) {
-      const directory = args.at(-1); await mkdir(directory, { recursive: true });
+      const directory = args.at(-1); await mkdir(directory, { recursive: true, mode: 0o700 });
       const archive = path.join(directory, 'postgres.dump.enc'); await writeFile(archive, 'encrypted-fixture', { mode: 0o600 });
       const receipt = path.join(directory, 'postgres.dump.enc.capture.json');
       await writeFile(receipt, JSON.stringify({ schemaVersion: 1, status: 'captured', archive: 'postgres.dump.enc',
@@ -57,7 +57,7 @@ async function fixture(t, { busy = false, leaseLost = false, drillFails = false 
     }
     if (args[0].endsWith('backup-data.sh')) {
       captures += 1;
-      const directory = args.at(-1); await mkdir(directory, { recursive: true });
+      const directory = args.at(-1); await mkdir(directory, { recursive: true, mode: 0o700 });
       const archive = path.join(directory, 'open-science-data-20261001T080000Z.tar.gz.enc');
       await writeFile(archive, 'encrypted-member', { mode: 0o600 }); await writeFile(`${archive}.sha256`,
         `${createHash('sha256').update('encrypted-member').digest('hex')}  ${path.basename(archive)}\n`, { mode: 0o600 });
@@ -114,7 +114,7 @@ for (const setting of ['busy', 'leaseLost', 'drillFails']) test(`failed ${settin
 
 test('retention preserves the latest two complete recovery sets and incomplete usable captures', async t => {
   const { config, dependencies } = await fixture(t);
-  await mkdir(path.join(config.backupDir, 'vcr-backup-00000000-0000-0000-0000-000000000000'), { recursive: true });
+  await mkdir(path.join(config.backupDir, 'vcr-backup-00000000-0000-0000-0000-000000000000'), { recursive: true, mode: 0o700 });
   const results = [];
   for (let i = 0; i < 3; i += 1) {
     results.push(await runVcrBackupCycle({ ...config, maxSets: 2 }, dependencies));
