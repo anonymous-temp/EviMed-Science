@@ -8,12 +8,38 @@ import {
   buildComposeArgs,
   parseDockerEngineInfo,
   parseEnvFile,
+  readEviMedApiKeyFile,
   runHostPreflight,
   validateDeploymentConfig,
   validateDockerSocketStat,
   validateSandboxPrerequisites,
 } from "../../../scripts/ops/host-preflight.mjs";
 import { signDeepSeekReleaseReceipt } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
+
+test("only the exact root-owned knowledge-plugin shared key permission is accepted", async (t) => {
+  const dir = await mkdtemp(path.join(process.cwd(), ".key-policy-test-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "key");
+  await writeFile(file, "synthetic-key", { mode: 0o440 });
+  const original = fs.fstatSync;
+  let metadata = { uid: 0, gid: 10002, mode: 0o100440 };
+  t.mock.method(fs, "fstatSync", (...args) => Object.assign(original(...args), metadata));
+  assert.equal(readEviMedApiKeyFile(file), "synthetic-key");
+  for (const invalid of [
+    { gid: 10001 }, { uid: 10002 }, { mode: 0o100444 },
+    { mode: 0o100460 }, { mode: 0o100640 }, { mode: 0o104440 },
+  ]) {
+    metadata = { uid: 0, gid: 10002, mode: 0o100440, ...invalid };
+    assert.throws(() => readEviMedApiKeyFile(file), { code: "preflight_file_permissions" });
+  }
+  for (const mode of [0o100400, 0o100600]) {
+    metadata = { uid: 0, gid: 0, mode };
+    assert.equal(readEviMedApiKeyFile(file), "synthetic-key");
+  }
+  const link = path.join(dir, "link");
+  await symlink(file, link);
+  assert.throws(() => readEviMedApiKeyFile(link), { code: "preflight_path_symlink" });
+});
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 // The kernel pin every deployment artefact derives from. A deployment whose
@@ -568,7 +594,7 @@ test("host preflight selects aggregate replay only with exact isolated URL, imag
   assert.match(args, /docker-compose.result-replay.yml/);
   assert.equal(config.resultReplay.image, values.OPEN_SCIENCE_RESULT_REPLAY_IMAGE);
   assert.doesNotMatch(buildComposeArgs(validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_ENGINE_URL: "" }, fixture.envFile), fixture.envFile).join(" "), /result-replay.yml/);
-  assert.throws(() => validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_ENGINE_URL: "http:\/\/external:8031" }, fixture.envFile));
+  assert.throws(() => validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_ENGINE_URL: "http://external:8031" }, fixture.envFile));
   assert.throws(() => validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "replay:latest" }, fixture.envFile));
   await chmod(key, 0o644);
   assert.throws(() => validateDeploymentConfig(values, fixture.envFile));

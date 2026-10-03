@@ -72,7 +72,7 @@ function assertNoSymlinkPath(target) {
   }
 }
 
-function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV_BYTES } = {}) {
+function readRegularFileNoFollow(file, { privateFile = false, knowledgePluginSharedKey = false, maxBytes = MAX_ENV_BYTES } = {}) {
   const target = path.resolve(file);
   assertNoSymlinkPath(target);
   let handle;
@@ -83,7 +83,9 @@ function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV
     if (stat.size <= 0 || stat.size > maxBytes) {
       throw failure("preflight_file_size", `${target} has an invalid size.`);
     }
-    if (privateFile && process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
+    const supportedKnowledgeShare = knowledgePluginSharedKey && stat.uid === 0 && stat.gid === 10002
+      && (stat.mode & 0o7777) === 0o440;
+    if (privateFile && process.platform !== "win32" && (stat.mode & 0o077) !== 0 && !supportedKnowledgeShare) {
       throw failure(
         "preflight_file_permissions",
         `${target} must not be accessible by group or other users. Use chmod 600.`,
@@ -93,6 +95,12 @@ function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV
   } finally {
     if (handle != null) fs.closeSync(handle);
   }
+}
+
+// Only this shared credential is mounted by the knowledge plugin's pinned
+// UID/GID 10002. All other private files keep the owner-only policy.
+export function readEviMedApiKeyFile(file) {
+  return readRegularFileNoFollow(file, { privateFile: true, knowledgePluginSharedKey: true, maxBytes: 8 * 1024 });
 }
 
 function validateDeepSeekCompatibilityTool() {
@@ -620,9 +628,8 @@ export function validateDeploymentConfig(values, envFile) {
       },
     );
   }
-  const evimedApiKey = readRegularFileNoFollow(
+  const evimedApiKey = readEviMedApiKeyFile(
     resolveDeploymentPath(required(values, "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE"), envFile),
-    { privateFile: true, maxBytes: 8 * 1024 },
   ).replace(/\r?\n$/, "");
   if (!evimedApiKey || /[\r\n\0]/.test(evimedApiKey)) {
     throw failure("preflight_evimed_api_key", "The EviMed API key file must contain one non-empty credential.");
