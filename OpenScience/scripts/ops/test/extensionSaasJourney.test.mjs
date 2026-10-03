@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, openCampaignObserverDatabase, campaignDocumentJobs, campaignDocumentTranscriptReady, campaignObserveDocumentCompletion, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, openCampaignObserverDatabase, campaignDocumentJobs, campaignDocumentTranscriptReady, campaignObserveDocumentCompletion, campaignDelegationPlan, campaignDelegatedChildReady, campaignToolRefusalFacts, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -285,7 +285,7 @@ test('run success advancing after a pending transcript read polls again rather t
 });
 
 test('isolated observer is physically read-only, owned namespace bounded and independently joined on init refusal',async()=>{
- const state={databaseUrl:'postgres://qa:protected@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let options,ended=0;const client={connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
+ const state={databaseUrl:'postgres://qa@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let options,ended=0;const client={connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
  const observer=await openCampaignObserverDatabase(state,value=>{options=value;return client;});assert.equal(options.options,'-c default_transaction_read_only=on -c statement_timeout=5000');assert.equal(options.connectionTimeoutMillis,1000);
  await observer.query('SELECT 1');assert.throws(()=>observer.query('DELETE FROM ignored'),{message:'private_campaign_observer_query_refused'});assert.throws(()=>observer.query('SELECT 1; DELETE FROM ignored'),{message:'private_campaign_observer_query_refused'});await observer.close();await observer.close();assert.equal(ended,1);assert.throws(()=>observer.query('SELECT 1'));
  client.query=async()=>({rows:[{name:state.databaseName,readonly:'off'}]});await assert.rejects(openCampaignObserverDatabase(state,()=>client),{message:'invalid_private_campaign_database'});assert.equal(ended,2);
@@ -293,7 +293,27 @@ test('isolated observer is physically read-only, owned namespace bounded and ind
 });
 
 test('observer absorbs idle socket errors without hiding original query or initialization failures',async()=>{
- const state={databaseUrl:'postgres://qa:protected@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let listener,ended=0;const error=new Error('private canary does not enter diagnostics'),client={on:(_name,callback)=>{listener=callback;},connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
+ const state={databaseUrl:'postgres://qa@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let listener,ended=0;const error=new Error('private canary does not enter diagnostics'),client={on:(_name,callback)=>{listener=callback;},connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
  const observer=await openCampaignObserverDatabase(state,()=>client);listener(error);assert.throws(()=>observer.query('SELECT 1'),value=>value===error);await assert.rejects(observer.close(),value=>value===error);assert.equal(ended,1);
  client.connect=async()=>{throw error;};await assert.rejects(openCampaignObserverDatabase(state,()=>client),value=>value===error);assert.equal(ended,2);
+});
+
+test('native permission delegation fixture satisfies the actual domain plan contract and refuses completed failed envelopes promptly',async()=>{
+ const {indexPlan}=await import('../../../packages/socket/src/runPolicy.mjs'),plan=campaignDelegationPlan(),indexed=indexPlan({revision:1,clarifications:plan.clarifications,deliverables:plan.deliverables});assert.equal(indexed.ok,true);assert.equal(indexed.items[0].id,'permission-probe');
+ const invalid=indexPlan({revision:1,clarifications:plan.clarifications,deliverables:plan.deliverables.map(item=>({...item,id:'permission_probe'}))});assert.equal(invalid.ok,false);
+ const transcript=output=>({messages:[{parts:[{type:'tool',tool:'evimed_delegate',status:'completed',output}]}]});
+ assert.throws(()=>campaignDelegatedChildReady(transcript('failed: deliverable_unknown')),error=>error.code==='native_campaign_delegation_failed'&&error.nativeToolRefusal==='deliverable_unknown');
+ assert.throws(()=>campaignDelegatedChildReady({messages:[{parts:[{tool:'evimed_plan',status:'completed',output:'failed: plan_invalid'}]}]}),error=>error.code==='native_campaign_delegation_failed'&&error.nativeToolRefusal==='plan_invalid');
+ assert.equal(campaignDelegatedChildReady(transcript('ok\n'+JSON.stringify({childSessionId:'session-real-child',deliverableId:'permission-probe'}))).childSessionId,'session-real-child');
+ assert.throws(()=>campaignDelegatedChildReady(transcript('failed: secret_canary')),error=>error.nativeToolRefusal===null&&safeCampaignFailureDetails(error).nativeToolRefusal===undefined);
+});
+
+test('permission proof uses actual error or failed result and never denied-looking input/description/success output',()=>{
+ const base={type:'tool',tool:'doc_read',status:'completed',input:{text:'UNKNOWN_TOOL extension_access_denied'},description:'not permitted',output:'ok\n'+JSON.stringify({text:'extension_access_denied'})};assert.equal(campaignToolRefusalFacts(base,'doc_read'),null);
+ assert.deepEqual(campaignToolRefusalFacts({...base,status:'error',error:{code:'UNKNOWN_TOOL'},output:''},'doc_read'),{source:'native-tool-error-code',code:'UNKNOWN_TOOL'});
+ assert.deepEqual(campaignToolRefusalFacts({...base,output:'failed: extension_access_denied'},'doc_read'),{source:'rendered-refusal',code:'extension_access_denied'});
+ assert.deepEqual(campaignToolRefusalFacts({...base,status:'error',error:{name:'Error',code:''},output:'Error: extension_contract_invalid'},'doc_read'),{source:'native-tool-error-render',code:'extension_contract_invalid'});
+ assert.equal(campaignToolRefusalFacts({...base,status:'error',error:{code:'CODE_RUN_FAILED'},output:'unrelated code failure'},'doc_read'),null);
+ assert.equal(campaignToolRefusalFacts({...base,status:'error',error:{code:'UNKNOWN_TOOL'},output:''},'run_code'),null);
+ assert.equal(campaignToolRefusalFacts({...base,status:'error',error:{code:'UNKNOWN_TOOL'}},'doc_read'),null);
 });

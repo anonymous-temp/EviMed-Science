@@ -30,7 +30,7 @@ import { extensionRequestObject } from '../../apps/server/src/extensionAccess.mj
 import { readCampaignDocumentOutput, observeRuntimeBusyDeferral, runRuntimeCandidateFailureControl, observeQueuedOperationRevocation } from './extension-saas-acceptance-native.mjs';
 import { ConnectorCredentialStore } from '../../apps/server/src/connectorCredentials.mjs';
 import { gunzipSync } from 'node:zlib';
-import { delegatedChildrenOf } from '../../apps/server/src/dshRuntimeAdapter.mjs';
+import { delegatedChildrenOf, socketToolResult } from '../../apps/server/src/dshRuntimeAdapter.mjs';
 const execute = promisify(execFile);
 const repo = path.resolve(new URL('../../../', import.meta.url).pathname);
 const digest = value => 'sha256:' + createHash('sha256').update(value).digest('hex');
@@ -101,7 +101,7 @@ export function safeCampaignStackFrames(error){
 export function safeCampaignFailureDetails(error){
  const names=['Error','TypeError','ReferenceError','RangeError','SyntaxError','AssertionError','AbortError','TimeoutError','HttpError'];
  const protocolNumbers={};for(const key of ['status','statusCode','actual','expected'])if(Number.isSafeInteger(error?.[key])&&error[key]>=0&&error[key]<=999)protocolNumbers[key]=error[key];
- return{code:safeCampaignDiagnosticCode(error),errorName:names.includes(error?.name)?error.name:'UnknownError',frames:safeCampaignStackFrames(error).slice(0,8),...(Object.keys(protocolNumbers).length?{protocolNumbers}:{})};
+ return{code:safeCampaignDiagnosticCode(error),errorName:names.includes(error?.name)?error.name:'UnknownError',frames:safeCampaignStackFrames(error).slice(0,8),...(Object.keys(protocolNumbers).length?{protocolNumbers}:{}),...(['plan_invalid','deliverable_unknown','capability_unknown','contract_kind_unknown'].includes(error?.nativeToolRefusal)?{nativeToolRefusal:error.nativeToolRefusal}:{})};
 }
 async function removeCampaignVolume(root,name){
   const volume=JSON.parse((await execute('docker',['volume','inspect',name],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0];
@@ -369,6 +369,25 @@ export async function campaignObserveDocumentCompletion(app,project,runId,sessio
  // Success may advance between the transcript and run reads. Observe its settled transcript again.
  return null;
 }
+export function campaignDelegationPlan() {
+ return{action:'write',clarifications:['Only a synthetic public fixture is supplied; this exercise measures permission, not research quality.'],deliverables:[{id:'permission-probe',contractKind:'dataset-scoping-package',capability:'dataset-research-scoping',title:'Public fixture permission probe',dependsOn:[],acceptance:['Identify the supplied public source.','Keep patient records outside the request.','Preserve unknown and measured values distinctly.','Keep notebook code inert.','State the bounded source limitations.']}]};
+}
+export function campaignDelegatedChildReady(transcript) {
+ const parts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>['evimed_plan','evimed_delegate'].includes(part.tool));
+ for(const part of parts){const result=socketToolResult(part.output);if(part.error||['failed','canceled'].includes(part.status)||result?.ok===false)throw Object.assign(new Error('native_campaign_delegation_failed'),{code:'native_campaign_delegation_failed',nativeToolRefusal:['plan_invalid','deliverable_unknown','capability_unknown','contract_kind_unknown'].includes(result?.code)?result.code:null});}
+ const children=parts.flatMap(part=>delegatedChildrenOf(part.tool,part.output));if(children.length>1)throw Object.assign(new Error('native_campaign_delegation_failed'),{code:'native_campaign_delegation_failed'});return children[0]??null;
+}
+/** Only actual failure fields/rendered refusal envelopes witness denial; request or description prose never does. */
+export function campaignToolRefusalFacts(part,expectedTool) {
+ if(part?.type!=='tool'||part.tool!==expectedTool||part.status==='pending')return null;
+ const codes=['UNKNOWN_TOOL','extension_access_denied','extension_contract_invalid'],rendered=socketToolResult(part.output);
+ if(rendered?.ok===true)return null;
+ if(rendered?.ok===false&&codes.includes(rendered.code))return{source:'rendered-refusal',code:rendered.code};
+ if(part.status!=='error'&&!part.error)return null;
+ if(codes.includes(part.error?.code))return{source:'native-tool-error-code',code:part.error.code};
+ if(typeof part.output==='string'&&Buffer.byteLength(part.output)<=16384){const code=['extension_access_denied','extension_contract_invalid'].find(code=>new RegExp('(?:^|[^A-Za-z0-9_])'+code+'(?:$|[^A-Za-z0-9_])').test(part.output));if(code)return{source:'native-tool-error-render',code};}
+ return null;
+}
 /** Native error DTO only; no prompt, provider message, profile or token text enters diagnostics. */
 export function campaignNativeFailureFacts(transcript){
  const errors=(transcript?.messages??[]).flatMap(message=>[message?.info?.error,...(message.parts??[]).filter(part=>part.type==='error'||part.type==='tool'&&part.status!=='completed'&&part.status!=='pending').map(part=>part.error??part.state?.error??part)]).filter(Boolean).slice(0,8);
@@ -549,28 +568,28 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     stage='actual-parent-child-native-document-permission-refusal';
     const childStageId=randomUUID(),childKey=childStageId+':child-refusal';transport.plans.set(childKey,[{name:'doc_read',input:{resourceId:resource.resourceId},permissionProbe:true}]);
     const childCountBefore=(await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count;
-    const delegation=await dispatchStage('delegate',[{name:'evimed_plan',input:{action:'write',clarifications:['Only a synthetic public fixture is supplied; this exercise measures permission, not research quality.'],deliverables:[{id:'permission_probe',contractKind:'dataset-scoping-package',capability:'dataset-research-scoping',title:'Public fixture permission probe',dependsOn:[],acceptance:['Identify the supplied public source.','Keep patient records outside the request.','Preserve unknown and measured values distinctly.','Keep notebook code inert.','State the bounded source limitations.']}]}},
-      {name:'evimed_delegate',input:{deliverableId:'permission_probe',brief:'EVIMED_ASSESSMENT_STAGE:'+childKey+'\nAttempt doc_read on the supplied opaque public resource to measure child permission. No research package or clinical conclusion is requested.',inputs:{}}}]);
-    const child=await campaignPoll(async()=>{const parentTranscript=await app.runtimeManager.sessionTranscript(project,delegation.sessionId,{wake:false});const parts=(parentTranscript.messages??[]).flatMap(message=>message.parts??[]);const children=parts.flatMap(part=>delegatedChildrenOf(part.tool,part.output));return children[0]??null;},deadline,signal);
+    const delegation=await dispatchStage('delegate',[{name:'evimed_plan',input:campaignDelegationPlan()},
+      {name:'evimed_delegate',input:{deliverableId:'permission-probe',brief:'EVIMED_ASSESSMENT_STAGE:'+childKey+'\nAttempt doc_read on the supplied opaque public resource to measure child permission. No research package or clinical conclusion is requested.',inputs:{}}}]);
+    const child=await campaignPoll(async()=>{const parentTranscript=await app.runtimeManager.sessionTranscript(project,delegation.sessionId,{wake:false});const child=campaignDelegatedChildReady(parentTranscript);if(child)return child;const parentRun=(await app.agentRuns.list(project)).find(item=>item.id===delegation.runId);if(parentRun&&['failed','canceled'].includes(parentRun.status))throw Object.assign(new Error('native_campaign_delegation_failed'),{code:'native_campaign_delegation_failed',terminalRun:{id:parentRun.id,sessionId:delegation.sessionId,status:parentRun.status}});return null;},deadline,signal);
     const childTranscript=await campaignPoll(async()=>{const value=await app.runtimeManager.sessionTranscript(project,child.childSessionId,{wake:false,parentSessionId:delegation.sessionId});const part=(value.messages??[]).flatMap(message=>message.parts??[]).find(item=>item.type==='tool'&&item.tool==='doc_read'&&item.status!=='pending');return part?{value,part}:null;},deadline,signal);
-    assert(/UNKNOWN_TOOL|unknown tool|extension_access_denied|not permitted|not available/i.test(canonicalJson(childTranscript.part)));
+    const childRefusal=campaignToolRefusalFacts(childTranscript.part,'doc_read');assert(childRefusal);
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,childCountBefore);
-    observations.push({caseId:'SAAS-13',scope:'actual-native-delegated-child-document-tool-refusal',setup:'Real evimed_plan/evimed_delegate create an actual catalogue-bound child through the deployed subagent provider; controlled child attempts doc_read; no forged invocation header or copied caller context',expected:'The actual child cannot borrow parent document permission or enqueue an operation',actual:{parentSessionId:delegation.sessionId,childSessionId:child.childSessionId,transcriptDigest:digest(canonicalJson(childTranscript.value)),newOperationJobs:0}});
+    observations.push({caseId:'SAAS-13',scope:'actual-native-delegated-child-document-tool-refusal',setup:'Real evimed_plan/evimed_delegate create an actual catalogue-bound child through the deployed subagent provider; controlled child attempts doc_read; no forged invocation header or copied caller context',expected:'The actual child cannot borrow parent document permission or enqueue an operation',actual:{parentSessionId:delegation.sessionId,childSessionId:child.childSessionId,transcriptDigest:digest(canonicalJson(childTranscript.value)),refusal:childRefusal,newOperationJobs:0}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
     stage='actual-native-blocked-ptc-transport-refusal';
     const ptcCountBefore=(await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count;
     const ptc=await dispatchStage('ptc-refusal',[{name:'run_code',input:{code:'return await tools.doc_read({ resourceId: '+JSON.stringify(resource.resourceId)+' });',description:'Inspect permitted fixture through nested tool transport',timeoutMs:1000},permissionProbe:true}]);
     const ptcTranscript=await campaignPoll(async()=>{const value=await app.runtimeManager.sessionTranscript(project,ptc.sessionId,{wake:false});const part=(value.messages??[]).flatMap(message=>message.parts??[]).find(item=>item.type==='tool'&&item.tool==='run_code'&&item.status!=='pending');return part?{value,part}:null;},deadline,signal);
-    assert(/UNKNOWN_TOOL|unknown tool|extension_access_denied|not permitted|not available|CODE_RUN_FAILED/i.test(canonicalJson(ptcTranscript.part)));
+    const ptcRefusal=campaignToolRefusalFacts(ptcTranscript.part,'run_code');assert(ptcRefusal);
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,ptcCountBefore);
-    observations.push({caseId:'SAAS-13',scope:'actual-native-ptc-transport-permission-refusal',setup:'Actual native run_code attempt uses the pinned SDK code/description protocol; normal preset remains unchanged and may refuse the outer transport before nested dispatch',expected:'Blocked code/nested document transport cannot borrow root document authority',actual:{sessionId:ptc.sessionId,transcriptDigest:digest(canonicalJson(ptcTranscript.value)),newOperationJobs:0,outerTransportRefusalMayPrecedeNested:true}});
+    observations.push({caseId:'SAAS-13',scope:'actual-native-ptc-transport-permission-refusal',setup:'Actual native run_code attempt uses the pinned SDK code/description protocol; normal preset remains unchanged and may refuse the outer transport before nested dispatch',expected:'Blocked code/nested document transport cannot borrow root document authority',actual:{sessionId:ptc.sessionId,transcriptDigest:digest(canonicalJson(ptcTranscript.value)),refusal:ptcRefusal,newOperationJobs:0,outerTransportRefusalMayPrecedeNested:true}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
     stage='real-candidate-startup-fault-and-rollback';await reselection();const faultJob=await claimGeneration();append(await runRuntimeCandidateFailureControl({app,project,job:faultJob,completedArtifact,signal}));
     stage='actual-native-forged-actor-before-gateway-refusal';
     const countBefore=(await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count;
     const forged=await dispatchStage('forged-actor',[{name:'doc_read',input:{resourceId:resource.resourceId,actorId:other.user.id}}]);
-    const refusedTranscript=await campaignPoll(async()=>{const value=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(forged.sessionId)+'/transcript');const parts=(value.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&part.tool==='doc_read');return parts.some(part=>part.status==='completed')?{value,parts}:null;},deadline,signal);
-    assert(refusedTranscript.parts.some(part=>/extension_contract_invalid|extension_access_denied/.test(canonicalJson(part))));
+    const refusedTranscript=await campaignPoll(async()=>{const value=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(forged.sessionId)+'/transcript');const parts=(value.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&part.tool==='doc_read');return parts.some(part=>['completed','error'].includes(part.status))?{value,parts}:null;},deadline,signal);
+    assert(refusedTranscript.parts.some(part=>campaignToolRefusalFacts(part,'doc_read')));
     assert.equal((await app.store.database.query("SELECT count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'",[owner.user.id])).rows[0].count,countBefore);
     observations.push({caseId:'SAAS-04',scope:'actual-native-forged-actor-refused-before-gateway',setup:'Actual root native registry invokes fixed bridge with foreign actor argument; boundedRequest rejects it before gateway/ledger',expected:'Forged actor cannot borrow authority or enqueue operation',actual:{sessionId:forged.sessionId,refusalTranscriptDigest:digest(canonicalJson(refusedTranscript.value)),newOperationJobs:0,uncovered:'Actual child/PTC producer must still be exercised; root-only policy is not an observed nested call'}});
     await campaignPoll(async()=>!(await app.runtimeManager.pluginRuntimeBusy(project))&&!(await app.agentRuns.activeRuns(project)).length,deadline,signal);
