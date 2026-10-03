@@ -913,3 +913,79 @@ signed aggregate jobs. A successful Compose render or numerical component test
 is not serving qualification: exercise an authorized replay through the deployed
 control plane and record its exact input, recipe, image, output, and cancellation
 receipt before claiming the provider available.
+
+## Research allowance billing
+
+The account page uses CNY research allowance. The existing EviMed wallet remains
+authoritative; this deployment does not create a second wallet or process payment
+provider callbacks. `/api/account/allowance` and its `/statements` endpoint require
+the signed-in account. `/estimate` returns a non-binding estimate, not a reservation.
+An unavailable wallet is unknown, never zero. Confirmed task charges remain separate
+from supplier costs and background operating expenses.
+
+The default keeps revised charging off. To evaluate the public configuration:
+
+```sh
+pnpm check:research-billing
+pnpm check:research-billing --require-billing
+pnpm check:research-billing --require-handoffs=recharge,membership,orders,refunds
+```
+
+These are configuration checks only. They do not read credentials, contact a
+payment service, verify an external account or prove an actual payment. The
+report states `endToEndVerified: false`. Validate the actual EviMed wallet contract
+and target-environment account mapping before enabling deductions.
+
+For versioned task charging, retain `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED=true`
+with verified balance/deduction endpoints and `OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY=1`,
+then set `OPEN_SCIENCE_RESEARCH_BILLING_ENABLED=true`. Startup persists the policy
+activation time before accepting research. First deploy the new code with this
+flag off to every HTTP and runtime-controller process, and drain earlier runs.
+New runs persist the exact account creation identity at startup; pre-upgrade runs
+without that identity cannot be charged by the new policy. Historical receipts keep their original
+conversion and are never recomputed. Requests predating activation cannot be newly
+charged through an alias or retry. Once activated, the new policy remains active
+if only the research-policy flag is rolled back; disable the wallet module to stop
+deductions. Do not delete the policy row or financial tables during rollback.
+After activation, do not downgrade to code that predates this policy: an older
+binary cannot honor its cutoff or retained account identities.
+
+The current external deduction contract accepts whole credits only. The new policy
+records exact resource costs at eight decimal places, excludes platform overhead,
+then rounds the billable task amount down to whole credits and records the remainder
+as waived. For example, CNY 1.90000001 eligible usage results in one credit requested
+and CNY 0.90000001 waived. Failed or canceled work without an earned-stage contract
+is waived. Unconfirmed provider use and late usage outside the terminal snapshot
+are not retrospectively charged. These are explicit compatibility limits, not
+fractional settlement or a promise of free unlimited research.
+
+The financial outbox is written before deduction and retries with the same upstream
+idempotency key. An unknown result remains unconfirmed; do not manually replay it
+with a different key. The retry limit and backoff remain bounded. Reconcile an
+abandoned deduction against the upstream receipt before making an adjustment.
+Retained financial rows are isolated by account creation identity, not a reusable
+username. Preserve their schema, payer snapshot and receipt references in backups.
+
+Hosted commerce is separately enabled with `OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED`
+and an explicit comma-separated HTTPS origin allowlist. Configure only existing
+recharge, membership, order and refund page URLs; no tokens, user identifiers,
+query strings or fragments are added to links. A missing page stays unavailable.
+Do not advertise subscription grants, automatic renewals, payment confirmation,
+refund processing, balance-source breakdowns or wallet holds from these links.
+
+```sh
+pnpm check:research-billing --require-precision
+pnpm check:research-billing --require-automatic-commerce
+```
+
+Both commands intentionally fail until the corresponding upstream contracts and
+integration have been implemented and verified. Required upstream details include
+amount precision, idempotency and lookup semantics, reservation/capture/release,
+refund receipts, membership periods and entitlements, and paid/promotional balance
+sources. The current branch must not be certified as a complete payment or
+subscription system based only on passing local tests.
+
+Run focused integration tests only against a disposable localhost PostgreSQL whose
+database name contains `evimed_test`. Use separate databases for suites that test
+policy activation. No production provider call or real payment is needed for the
+unit, HTTP, migration, concurrency and account-isolation tests.

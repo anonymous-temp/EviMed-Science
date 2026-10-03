@@ -288,6 +288,23 @@ jobs:
             .evimed-local/extensions/acceptance-preparation/run-*/recovery-required.json
             .evimed-local/extensions/acceptance-preparation/run-*/logs/*.log
 
+      # Financial policy activation and retries intentionally touch a whole
+      # ledger. Keep each billing suite in its own disposable database.
+      - name: Test research billing with isolated account and wallet state
+        shell: bash
+        run: |
+          for suite in settlement http store composition; do
+            psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE evimed_test_billing_${suite}"
+          done
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_settlement \
+            node --test --test-concurrency=1 apps/server/test/evimedCredits.integration.test.mjs apps/server/test/researchBillingReview.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_http \
+            node --test apps/server/test/researchAllowance.integration.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_store \
+            node --test apps/server/test/projectAccountGeneration.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_composition \
+            node --test apps/server/test/researchBillingComposition.test.mjs
+
       - name: Test DeepSeek compatibility and release gates
         run: >-
           CI=true pnpm --filter @ai4s/server exec node --test

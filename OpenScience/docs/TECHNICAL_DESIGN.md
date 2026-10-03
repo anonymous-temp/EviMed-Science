@@ -257,6 +257,23 @@ its switch is on; the rest are changes inside existing layers.
     a run; a start is refused (402 `credits_exhausted`) only on a balance read as short. The
     deduction and balance calls name the EviMed user id, and an account without one is never
     charged under our hash;
+  - *research allowance* (`researchAllowanceRoutes.mjs`, `/api/account/allowance`): the
+    account page presents CNY allowance and confirmed task charges, independently of
+    supplier costs. `OPEN_SCIENCE_RESEARCH_BILLING_ENABLED` activates the versioned
+    `research-allowance-v1-20261003` charging policy in PostgreSQL before work begins.
+    The activation is durable; a flag rollback cannot reopen legacy charging rules or
+    retrospectively charge old requests. Exact resource costs use eight decimal places;
+    the existing integer wallet receives only whole credits, with fractional remainders
+    explicitly waived. No fractional-wallet contract is assumed. Request attribution and
+    trusted autonomous-task identities prevent duplicate charging. Pending deductions are
+    never represented as confirmed spending. Financial evidence and its retry outbox survive
+    account deletion, while account-generation checks prevent a reused username reading an
+    earlier owner's statement. Token counts remain resource measurements, not currency;
+  - *hosted commerce* (`researchCommerce.mjs`): optional recharge, membership, order and
+    refund links come from explicit trusted HTTPS deployment configuration. A configured
+    link is not a checkout API, a payment receipt, a membership entitlement or a reservation.
+    Unsupported automatic commerce and fractional settlement are reported by
+    `pnpm check:research-billing --require-automatic-commerce --require-precision`;
   - *handoff* (`researchHandoff.mjs`, `OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED`): 「转为深度研究」
     binds a new research session with the quick answer's question, sources and premises as
     its first-message draft; the person's send starts the run through the one prompt path;

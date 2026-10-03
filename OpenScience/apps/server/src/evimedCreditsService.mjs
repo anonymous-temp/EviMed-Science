@@ -34,8 +34,8 @@
  * 5. **EviMed is told whom to charge in its own words.** Our account id is a
  *    one-way hash of the EviMed user (`evimedAuthService.mjs`), which EviMed
  *    cannot resolve, so a deduction and a balance read name the EviMed user id
- *    the account row keeps (`store.evimedUserIdOf`), looked up at the moment of
- *    the call and never copied into the settlement row. An account with none —
+ *    the account row keeps (`store.evimedUserIdOf`), pinned in the financial
+ *    outbox before sending so account erasure cannot change a pending payer. An account with none —
  *    a password or OIDC account, or an EviMed one that has not signed in since
  *    the id was first kept — is never sent under our hash: its settlement is
  *    refused as `evimed_credits_account_unlinked` without a call, and its
@@ -44,12 +44,13 @@
  * @module evimedCreditsService
  */
 
-import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission } from "@evimed/domain";
+import { createHash } from "node:crypto";
+import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
-import { runUsageKeys } from "./runUsage.mjs";
-import { migrateEvimedCredits } from "./evimedCreditsPersistence.mjs";
+import { runUsageKeys, autopilotUsageScope } from "./runUsage.mjs";
+import { migrateEvimedCredits, researchBillingPolicy } from "./evimedCreditsPersistence.mjs";
 
 /**
  * The waits between attempts, in milliseconds. Bounded on purpose: after the
@@ -82,7 +83,7 @@ const finite = (value) => {
  * therefore scrubbed rather than trusted: control characters and runs of
  * whitespace collapse, and a subject that is only an identifier is dropped in
  * favour of the line alone.
- * @param {{ capabilityId?: string | null, subject?: string | null }} run
+ * @param {{ capabilityId?: string | null, subject?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
  * @returns {string}
  */
 export function settlementMemo({ capabilityId = null, subject = null } = {}) {
@@ -125,6 +126,7 @@ function settlement(row) {
     attempts: Number(row.attempts),
     nextAttemptAt: row.next_attempt_at == null ? null : new Date(row.next_attempt_at).toISOString(),
     receiptId: row.receipt_id ?? null,
+    upstreamUserId: row.upstream_user_id ?? null,
     errorCode: row.error_code ?? null,
     createdAt: new Date(row.created_at).toISOString(),
     settledAt: row.settled_at == null ? null : new Date(row.settled_at).toISOString(),
@@ -185,6 +187,12 @@ export class EvimedCreditsService {
   /** Readiness: the schema exists and can be written. @returns {Promise<{ok: true}>} */
   async ready() {
     await migrateEvimedCredits(this.database);
+    if (this.config?.evimedCreditsEnabled) {
+      const policy = await researchBillingPolicy(this.database, { activate: this.config?.researchBillingEnabled === true, now: this.now() });
+      if (policy && (this.rate !== 1 || policy.pricing_version !== RESEARCH_BILLING_VERSION)) {
+        throw new HttpError(503, 'evimed_credits_request_invalid', 'The active research billing policy requires its original one-credit-per-CNY contract.');
+      }
+    }
     return { ok: true };
   }
 
@@ -192,7 +200,7 @@ export class EvimedCreditsService {
   async settlementOf(userId, runId) {
     await migrateEvimedCredits(this.database);
     const result = await this.database.query(
-      "SELECT * FROM evimed_credits.settlements WHERE run_id=$1 AND user_id=$2",
+      "SELECT s.* FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.run_id=$1 AND s.user_id=$2",
       [productId(runId, "run"), productId(userId, "user")],
     );
     return settlement(result.rows[0] ?? null);
@@ -222,10 +230,21 @@ export class EvimedCreditsService {
    *
    * @param {{ userId: string, projectId?: string | null, runId: string, dispatchId?: string | null,
    *   status?: string, dispatchStatus?: string | null, errorCode?: string | null, effectiveRouteReason?: string | null,
-   *   capabilityId?: string | null, subject?: string | null }} run
+   *   capabilityId?: string | null, subject?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
    * @returns {Promise<{ status: string, credits?: number, reason?: string, duplicate?: boolean, errorCode?: string | null }>}
    */
   async settleRun(run) {
+    if (this.enabled) {
+      try {
+        const policy = await researchBillingPolicy(this.database, { activate: this.config?.researchBillingEnabled === true, now: this.now() });
+        if (policy) return this.settleTask(run, policy);
+        if (this.config?.researchBillingEnabled) throw new HttpError(503, 'evimed_credits_request_invalid', 'Research billing activation is unavailable.');
+      } catch (error) {
+        const code = /** @type {any} */ (error)?.code ?? 'evimed_credits_http_error';
+        this.report(code);
+        return { status: 'error', errorCode: code };
+      }
+    }
     if (!this.enabled) {
       this.counters.skipped += 1;
       const reason = !this.config?.evimedCreditsEnabled ? "not_enabled" : this.rate <= 0 ? "rate_unset" : "not_configured";
@@ -238,10 +257,12 @@ export class EvimedCreditsService {
       const costCny = await this.#costOf(userId, ids);
       const credits = creditsForCost(costCny, this.rate);
       const memo = settlementMemo({ capabilityId: run.capabilityId ?? null, subject: run.subject ?? null });
+      const upstreamUserId = await this.#evimedUserId(userId);
       const opened = await this.#open({
         userId, runId, projectId: run.projectId ?? null, capabilityId: run.capabilityId ?? "",
-        memo, costCny, credits,
+        memo, costCny, credits, upstreamUserId, startedAt: run.startedAt ?? null, accountCreatedAt: run.accountCreatedAt ?? null,
       });
+      if (opened.stale) return { status: 'skipped', reason: 'account_changed' };
       if (!opened.inserted) {
         this.counters.duplicates += 1;
         // A pending row of an earlier attempt is the retry sweep's, not this
@@ -260,36 +281,192 @@ export class EvimedCreditsService {
     }
   }
 
+  /** Versioned accounting never guesses provider usage and never sends fractional credits.
+   * @param {any} run @param {any} policy */
+  async settleTask(run, policy) {
+    if (!this.enabled) return { status: 'skipped', reason: 'not_configured' };
+    try {
+      if (this.rate !== 1) return { status: 'error', errorCode: 'evimed_credits_request_invalid' };
+      const userId = productId(run.userId, 'user');
+      if (typeof run.accountCreatedAt !== 'string' || !run.accountCreatedAt.trim()) return { status: 'skipped', reason: 'account_generation_missing' };
+      if (policy?.pricing_version !== RESEARCH_BILLING_VERSION) throw new HttpError(409, 'evimed_credits_request_invalid', 'Unsupported research billing policy.');
+      const physicalId = productId(run.runId, 'run');
+      const successful = ['completed', 'succeeded'].includes(run.status);
+      const logical = successful ? autopilotUsageScope(run) : null;
+      const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
+      await migrateEvimedCredits(this.database);
+      const ids = successful ? runUsageKeys({ ...run, id: physicalId }).map(id => productId(id, 'run')) : [physicalId];
+
+      // Failed platform work retains its costs as evidence but is waived. A
+      // cancellation is not evidence of an earned stage, so it is waived too.
+      const researcherOwned = isResearcherOwnedWork(run);
+      const owned = researcherOwned && successful;
+      const title = settlementMemo(run);
+      const opened = await this.database.transaction(async (/** @type {any} */ client) => {
+        // Serialize request attribution across tasks for this account.
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-user:${userId}`]);
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`research-billing-user:${userId}`]);
+        const account = await this.#currentAccount(client,userId,run.startedAt ?? null,run.accountCreatedAt ?? null);
+        if (!account) return { inserted: false, row: null, stale: true };
+        const upstreamUserId = account.auth_type === 'evimed' ? account.evimed_user_id : null;
+        const prior = await client.query('SELECT * FROM evimed_credits.settlements WHERE run_id=$1', [runId]);
+        if (prior.rows[0]?.user_id !== undefined && prior.rows[0].user_id !== userId) throw new HttpError(409, 'usage_settlement_conflict', 'Settlement owner differs.');
+        if (prior.rows[0]) return { inserted: false, row: settlement(prior.rows[0]) };
+        const requests = await client.query(
+          `SELECT id,status,priced,currency,purpose,actual_cost,price_version,created_at,run_id
+           FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=ANY($2::text[])
+           AND NOT EXISTS (SELECT 1 FROM evimed_credits.research_task_requests a
+             WHERE a.request_id=evimed_usage.model_requests.id) ORDER BY id`, [userId, ids]);
+        const pricedRows = requests.rows.map((/** @type {any} */ request) => ({ ...request,
+          billing_eligible: researcherOwned && Date.parse(request.created_at) >= Date.parse(policy.activated_at),
+          not_billable_reason: !researcherOwned ? 'platform_task' : Date.parse(request.created_at) >= Date.parse(policy.activated_at) ? undefined : 'before_policy_activation' }));
+        const evidence = { ...researchTaskCharge(pricedRows, { owned }), physicalRunId: physicalId,
+          logicalTaskId: logical, policyActivatedAt: new Date(policy.activated_at).toISOString() };
+        const credits = Number(researchMoneyUnits(evidence.creditsAmount) / 100_000_000n);
+        if (!Number.isSafeInteger(credits) || credits > 10_000_000) throw new RangeError('Invalid task credit amount.');
+        const at = this.now();
+        const free = credits === 0;
+        const result = await client.query(
+          `INSERT INTO evimed_credits.settlements
+           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,(SELECT created_at FROM evimed_control.users WHERE id=$2)) ON CONFLICT(run_id) DO NOTHING RETURNING *`,
+          [runId,userId,run.projectId ?? null,run.capabilityId ?? '',title,evidence.actualCny,credits,
+            free ? 'settled' : 'pending',free ? 0 : 1,free ? null : new Date(at.getTime()+EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),free ? at.toISOString() : null,upstreamUserId]);
+        if (!result.rows[0]) return { inserted: false, row: null };
+        await client.query(`INSERT INTO evimed_credits.research_tasks(run_id,user_id,title,evidence,created_at,status,settled_at,owner_created_at)
+          VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,(SELECT created_at FROM evimed_control.users WHERE id=$2))`, [runId,userId,title,JSON.stringify(evidence),at.toISOString(),free ? 'settled' : 'pending',free ? at.toISOString() : null]);
+        for (const request of pricedRows.filter((/** @type {any} */ row) => row.status === 'settled' && row.billing_eligible === true)) await client.query(
+          'INSERT INTO evimed_credits.research_task_requests(request_id,run_id) VALUES($1,$2)', [request.id,runId]);
+        return { inserted: true, row: settlement(result.rows[0]) };
+      });
+      if (opened.stale) return { status: 'skipped', reason: 'account_changed' };
+      if (!opened.inserted) {
+        this.counters.duplicates += 1;
+        return { status: opened.row?.status ?? 'unknown', duplicate: true, credits: opened.row?.credits };
+      }
+      if (opened.row?.status === 'settled') {
+        this.counters.settled += 1;
+        return { status: 'settled', credits: 0, reason: 'waived' };
+      }
+      return await this.#charge(/** @type {any} */ (opened.row));
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code ?? 'evimed_credits_http_error';
+      this.report(code);
+      return { status: 'error', errorCode: code };
+    }
+  }
+
+  /** User-scoped stable keyset pagination. Cursor is a position, never authorization.
+   * @param {string} userId @param {{limit?:number,cursor?:string|null}} [options] */
+  async statements(userId, { limit = 20, cursor = null } = {}) {
+    await migrateEvimedCredits(this.database);
+    let position = null;
+    if (cursor) {
+      try {
+        if (cursor.length > 1024) throw new Error();
+        position = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+        if (!Array.isArray(position) || position.length !== 2 || !Number.isFinite(Date.parse(position[0])) || typeof position[1] !== 'string') throw new Error();
+      } catch { throw new HttpError(400, 'evimed_credits_request_invalid', 'Invalid statement cursor.'); }
+    }
+    const bound = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    const result = await this.database.query(`SELECT t.*
+      FROM (
+        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1
+        UNION ALL
+        SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
+          'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::text,
+          'chargedCny',(s.credits/s.credits_per_cny)::text,'waivedCny','0.00000000',
+          'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1
+          AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)
+      ) t
+      WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.run_id)<($2::timestamptz,$3::text))
+      ORDER BY t.created_at DESC,t.run_id DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1]);
+    const rows = result.rows.slice(0,bound);
+    const items = rows.map((/** @type {any} */ row) => {
+      const evidence = row.evidence;
+      const status = Number(evidence.chargedCny) === 0 ? 'waived'
+        : row.status === 'pending' ? 'pending' : row.status === 'settled' ? 'settled' : 'failed';
+      return { id: row.run_id, runId: evidence.physicalRunId ?? row.run_id, title: row.title, at: new Date(row.created_at).toISOString(), status,
+        amount: ['failed','pending'].includes(status) ? null : Number(evidence.chargedCny), requestedAmount: Number(evidence.chargedCny), actualCny: evidence.actualCny, billableCny: evidence.billableCny,
+        waivedCny: evidence.waivedCny, platformCostCny: evidence.platformCostCny ?? null, pricingVersion: evidence.pricingVersion, settlementPrecision: evidence.walletContract };
+    });
+    const last = rows.at(-1);
+    const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.run_id])).toString('base64url') : null;
+    return { items, nextCursor };
+  }
+
+  /** The allowance is hydrated from the upstream wallet; this ledger never owns it.
+   * @param {string} userId @param {{since?:Date}} [options] */
+  async allowanceSummary(userId, { since = new Date(0) } = {}) {
+    await migrateEvimedCredits(this.database);
+    const balance = await this.balanceFor(userId);
+    const result = await this.database.query(`SELECT
+      coalesce(sum(charged) FILTER(WHERE status='settled' AND settled_at >= $2::timestamptz),0)::text AS spent,
+      coalesce(sum(charged) FILTER(WHERE status='pending' AND created_at >= $2::timestamptz),0)::text AS pending,
+      coalesce(sum(waived) FILTER(WHERE created_at >= $2::timestamptz),0)::text AS waived
+      FROM (
+        SELECT t.status,t.created_at,t.settled_at,(t.evidence->>'chargedCny')::numeric AS charged,
+          (t.evidence->>'waivedCny')::numeric AS waived FROM evimed_credits.research_tasks t
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1
+        UNION ALL
+        SELECT s.status,s.created_at,s.settled_at,s.credits/s.credits_per_cny AS charged,0::numeric AS waived
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1
+          AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)
+      ) history`, [productId(userId,'user'),since.toISOString()]);
+    return { balanceCny: balance.balance == null || this.rate <= 0 ? null : balance.balance / this.rate, status: balance.status, currency: 'CNY', creditsPerCny: this.rate,
+      spentCny: Number(result.rows[0]?.spent ?? 0), pendingCny: Number(result.rows[0]?.pending ?? 0),
+      waivedCny: Number(result.rows[0]?.waived ?? 0), settlementPrecision: 'legacy-integer-floor' };
+  }
+
+  /** Match the exact database incarnation, never a JavaScript-rounded timestamp.
+   * Missing run provenance is not permission to attach old work to a reused name.
+   * @param {any} client @param {string} userId @param {string|null} startedAt @param {string|null} accountCreatedAt @param {boolean} [allowMissing] */
+  async #currentAccount(client,userId,startedAt,accountCreatedAt,allowMissing = false) {
+    if (!startedAt && !accountCreatedAt && !allowMissing) return null;
+    const result = await client.query(`SELECT u.auth_type,u.evimed_user_id,u.created_at::text AS owner_created_at
+      FROM evimed_control.users u WHERE u.id=$1
+      AND ($3::timestamptz IS NULL OR u.created_at=$3::timestamptz)
+      AND ($3::timestamptz IS NOT NULL OR $2::timestamptz IS NULL OR date_trunc('milliseconds',u.created_at) <= $2::timestamptz)`, [userId,startedAt,accountCreatedAt]);
+    return result.rows[0] ?? null;
+  }
+
   /**
    * Open the run's settlement row, or report that it already exists. A run that
    * cost nothing is opened `settled` with no charge and no upstream call — the
    * record that it was free is the point, not the zero.
    * @param {{ userId: string, runId: string, projectId: string | null, capabilityId: string,
-   *   memo: string, costCny: number, credits: number }} input
+   *   memo: string, costCny: number, credits: number, upstreamUserId?:string|null, startedAt?:string|null, accountCreatedAt?:string|null }} input
    */
   async #open(input) {
     await migrateEvimedCredits(this.database);
-    const at = this.now();
-    const free = input.credits <= 0;
-    const result = await this.database.query(
-      `INSERT INTO evimed_credits.settlements
-         (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (run_id) DO NOTHING RETURNING *`,
-      [input.runId, input.userId, input.projectId, String(input.capabilityId ?? ""), input.memo,
-        input.costCny, input.credits, this.rate,
-        free ? "settled" : "pending", free ? 0 : 1,
-        free ? null : new Date(at.getTime() + EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),
-        free ? at.toISOString() : null],
-    );
-    if (result.rows[0]) return { inserted: true, row: settlement(result.rows[0]) };
-    const existing = await this.database.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1", [input.runId]);
-    return { inserted: false, row: settlement(existing.rows[0] ?? null) };
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-user:${input.userId}`]);
+      const account = await this.#currentAccount(client,input.userId,input.startedAt ?? null,input.accountCreatedAt ?? null,true);
+      if (!account) return { inserted: false, row: null, stale: true };
+      const at = this.now();
+      const free = input.credits <= 0;
+      const result = await client.query(
+        `INSERT INTO evimed_credits.settlements
+           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,(SELECT created_at FROM evimed_control.users WHERE id=$2))
+         ON CONFLICT (run_id) DO NOTHING RETURNING *`,
+        [input.runId, input.userId, input.projectId, String(input.capabilityId ?? ""), input.memo,
+          input.costCny, input.credits, this.rate,
+          free ? "settled" : "pending", free ? 0 : 1,
+          free ? null : new Date(at.getTime() + EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),
+          free ? at.toISOString() : null,account.auth_type === 'evimed' ? account.evimed_user_id : null],
+      );
+      if (result.rows[0]) return { inserted: true, row: settlement(result.rows[0]) };
+      const existing = await client.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1", [input.runId]);
+      return { inserted: false, row: settlement(existing.rows[0] ?? null) };
+    });
   }
 
   /**
    * Send one claimed settlement and write down what happened.
-   * @param {{ runId: string, userId: string, credits: number, memo: string, attempts: number, createdAt: string }} row
+   * @param {{ runId: string, userId: string, credits: number, memo: string, attempts: number, createdAt: string, upstreamUserId?:string|null }} row
    */
   async #charge(row) {
     if (row.attempts > EVIMED_CREDITS_MAX_ATTEMPTS) {
@@ -298,13 +475,20 @@ export class EvimedCreditsService {
       return { status: "abandoned", credits: row.credits, errorCode: "evimed_credits_attempts_exhausted" };
     }
     try {
-      const evimedUserId = await this.#evimedUserId(row.userId);
+      let evimedUserId = row.upstreamUserId ?? null;
+      if (!evimedUserId) {
+        const payer = await this.database.query(`SELECT u.evimed_user_id FROM evimed_control.users u
+          JOIN evimed_credits.settlements s ON s.user_id=u.id AND s.owner_created_at=u.created_at
+          WHERE s.run_id=$1 AND u.auth_type='evimed'`, [row.runId]);
+        evimedUserId = payer.rows[0]?.evimed_user_id ?? null;
+      }
       if (!evimedUserId) {
         // Final: no retry gives an account an EviMed id it does not have, and
         // our own hash is the one thing that must not be sent in its place.
         this.counters.unlinked += 1;
         throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no EviMed user to charge.", { final: true });
       }
+      await this.database.query('UPDATE evimed_credits.settlements SET upstream_user_id=COALESCE(upstream_user_id,$2) WHERE run_id=$1', [row.runId,evimedUserId]);
       const receipt = await this.client.deduct({
         requestId: row.runId, userId: evimedUserId, credits: row.credits, memo: row.memo, occurredAt: row.createdAt,
       });
@@ -340,13 +524,19 @@ export class EvimedCreditsService {
   /** @param {string} runId @param {"settled"|"refused"|"abandoned"} status
    *  @param {{ receiptId?: string | null, errorCode?: string | null }} outcome */
   async #finish(runId, status, { receiptId = null, errorCode = null } = {}) {
-    await this.database.query(
-      `UPDATE evimed_credits.settlements
-         SET status=$2, next_attempt_at=NULL, receipt_id=COALESCE($3,receipt_id), error_code=$4,
-             settled_at=CASE WHEN $2='settled' THEN $5::timestamptz ELSE settled_at END
-       WHERE run_id=$1 AND status='pending'`,
-      [runId, status, receiptId, errorCode, this.now().toISOString()],
-    );
+    await this.database.transaction(async (/** @type {any} */ client) => {
+      await client.query(
+        `UPDATE evimed_credits.settlements
+           SET status=$2, next_attempt_at=NULL, receipt_id=COALESCE($3,receipt_id), error_code=$4,
+               settled_at=CASE WHEN $2='settled' THEN $5::timestamptz ELSE settled_at END
+         WHERE run_id=$1 AND status='pending'`,
+        [runId, status, receiptId, errorCode, this.now().toISOString()],
+      );
+      await client.query(`UPDATE evimed_credits.research_tasks SET status=$2,
+        receipt_id=COALESCE($3,receipt_id),error_code=$4,
+        settled_at=CASE WHEN $2='settled' THEN $5::timestamptz ELSE settled_at END WHERE run_id=$1 AND status='pending'`,
+        [runId,status,receiptId,errorCode,this.now().toISOString()]);
+    });
   }
 
   /**
@@ -382,7 +572,7 @@ export class EvimedCreditsService {
    */
   async retryDue(limit = 20) {
     if (!this.enabled) return 0;
-    await migrateEvimedCredits(this.database);
+    await this.ready();
     const bound = Math.max(1, Math.min(200, Math.floor(Number(limit) || 20)));
     let attempted = 0;
     for (; attempted < bound;) {
@@ -483,6 +673,7 @@ export class EvimedCreditsService {
    */
   async assertBalanceForStart(userId, capabilityId) {
     if (!this.enabled) return { allowed: true, reason: "not_enabled" };
+    if (this.config?.researchBillingEnabled) await this.ready();
     const balance = await this.balanceFor(userId);
     if (balance.balance == null) return { allowed: true, reason: balance.status };
     const estimate = await this.estimate(capabilityId);

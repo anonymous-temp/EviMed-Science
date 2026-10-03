@@ -96,6 +96,7 @@ const RECURRING_SWEEPS = [
 
 const USER_ID = "composition-user";
 const PROJECT_ID = "composition-project";
+const ACCOUNT_CREATED_AT = "2026-01-01 00:00:00.123456+00";
 
 /** A row as `evimed_product.documents` stores one. */
 function documentRow(kind, id, payload) {
@@ -329,7 +330,7 @@ class FakePool extends EventEmitter {
       const now = Date.now();
       return { rows: [{
         user_id: USER_ID, csrf_token: "composition-csrf", created_at: new Date(now), expires_at: new Date(now + 3_600_000),
-        id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00",
+        id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: ACCOUNT_CREATED_AT,
       }], rowCount: 1 };
     }
     if (/^SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
@@ -344,11 +345,12 @@ class FakePool extends EventEmitter {
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
+    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
+      || /^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {

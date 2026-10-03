@@ -16,7 +16,7 @@
  *   purpose: deleting a project used to delete every model request charged
  *   under it (`usagePersistence.mjs`, 2026-09-20), and a settlement is the
  *   record of a charge, not a detail of a workspace. It follows the account,
- *   because an account's erasure must take its financial records with it, and
+ *   because an account's erasure must not destroy its financial evidence, and
  *   `RETENTION_DAYS.creditLedger` is `null` — nothing else expires them.
  * - The table lives in its own schema so the module is switchable: with
  *   `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED` off nothing here is created, and the
@@ -24,6 +24,8 @@
  *
  * @module evimedCreditsPersistence
  */
+
+import { RESEARCH_BILLING_VERSION } from "@evimed/domain";
 
 const migrations = new WeakMap();
 
@@ -34,7 +36,7 @@ const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_credits;
 CREATE TABLE IF NOT EXISTS evimed_credits.settlements (
   run_id text PRIMARY KEY,
-  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
   project_id text,
   capability_id text NOT NULL DEFAULT '',
   memo text NOT NULL DEFAULT '',
@@ -50,6 +52,60 @@ CREATE TABLE IF NOT EXISTS evimed_credits.settlements (
   settled_at timestamptz(3),
   CHECK ((status = 'pending') = (next_attempt_at IS NOT NULL))
 );
+-- The outbox and its receipts are financial evidence, not account children.
+-- Snapshot the upstream payer before a later account erasure removes its link.
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS upstream_user_id text;
+DO $retention$
+DECLARE stale record;
+BEGIN
+  FOR stale IN SELECT conname FROM pg_constraint
+    WHERE conrelid='evimed_credits.settlements'::regclass AND contype='f'
+      AND confrelid='evimed_control.users'::regclass
+  LOOP
+    EXECUTE format('ALTER TABLE evimed_credits.settlements DROP CONSTRAINT %I', stale.conname);
+  END LOOP;
+END $retention$;
+CREATE TABLE IF NOT EXISTS evimed_credits.research_policy (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+  pricing_version text NOT NULL,
+  activated_at timestamptz(3) NOT NULL
+);
+-- Task evidence is append-only and survives project/account erasure. It is
+-- settlement evidence, not an authoritative wallet balance.
+CREATE TABLE IF NOT EXISTS evimed_credits.research_tasks (
+  run_id text PRIMARY KEY,
+  user_id text NOT NULL,
+  title text NOT NULL,
+  status text NOT NULL CHECK(status IN ('pending','settled','refused','abandoned')),
+  receipt_id text,
+  error_code text,
+  settled_at timestamptz(3),
+  evidence jsonb NOT NULL,
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS owner_created_at timestamptz NOT NULL DEFAULT '-infinity';
+ALTER TABLE evimed_credits.research_tasks ADD COLUMN IF NOT EXISTS owner_created_at timestamptz NOT NULL DEFAULT '-infinity';
+CREATE TABLE IF NOT EXISTS evimed_credits.schema_migrations (
+  version text PRIMARY KEY
+);
+DO $incarnation$
+BEGIN
+  IF NOT EXISTS(SELECT 1 FROM evimed_credits.schema_migrations WHERE version='owner-incarnation-v1') THEN
+    UPDATE evimed_credits.settlements s SET owner_created_at=u.created_at FROM evimed_control.users u WHERE s.user_id=u.id AND s.created_at>=u.created_at;
+    UPDATE evimed_credits.research_tasks t SET owner_created_at=s.owner_created_at FROM evimed_credits.settlements s WHERE t.run_id=s.run_id;
+    INSERT INTO evimed_credits.schema_migrations(version) VALUES('owner-incarnation-v1');
+  END IF;
+END $incarnation$;
+UPDATE evimed_credits.settlements s SET upstream_user_id=u.evimed_user_id
+  FROM evimed_control.users u WHERE s.user_id=u.id AND s.upstream_user_id IS NULL
+  AND s.owner_created_at=u.created_at AND u.auth_type='evimed' AND u.evimed_user_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS evimed_credits.research_task_requests (
+  request_id text PRIMARY KEY,
+  run_id text NOT NULL REFERENCES evimed_credits.research_tasks(run_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS evimed_research_tasks_user_time_idx
+  ON evimed_credits.research_tasks(user_id,created_at DESC,run_id DESC);
 -- The retry sweep asks for the due pending rows across every account, so it
 -- leads with the due time and stops after its batch.
 CREATE INDEX IF NOT EXISTS evimed_credits_due_idx
@@ -82,4 +138,34 @@ export async function migrateEvimedCredits(database) {
     migrations.delete(database);
     throw error;
   }
+}
+
+/** An activation is sticky; a later flag rollback cannot reopen old charging rules.
+ * @param {any} database @param {{activate?:boolean,now?:Date}} [options] */
+export async function researchBillingPolicy(database, { activate = false, now = new Date() } = {}) {
+  await migrateEvimedCredits(database);
+  if (activate) await database.query(`INSERT INTO evimed_credits.research_policy(singleton,pricing_version,activated_at)
+    VALUES(true,$1,$2) ON CONFLICT(singleton) DO NOTHING`, [RESEARCH_BILLING_VERSION,now.toISOString()]);
+  const result = await database.query('SELECT pricing_version,activated_at FROM evimed_credits.research_policy WHERE singleton=true');
+  return result.rows[0] ?? null;
+}
+
+/** Redact research subject prose while keeping the financial receipt and retry payer.
+ * The caller holds the account identity lock and runs this before account deletion.
+ * @param {any} client @param {string} userId */
+export async function prepareResearchBillingAccountDeletion(client, userId) {
+  const exists = await client.query(`SELECT to_regclass('evimed_credits.settlements') AS table_name,
+    EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('evimed_credits.settlements')
+      AND attname='owner_created_at' AND NOT attisdropped) AS incarnation_ready`);
+  if (!exists.rows[0]?.table_name) return;
+  // An installation with billing currently off may still have the old schema.
+  // Bring its retention up to date before the account FK can erase its outbox.
+  if (!exists.rows[0].incarnation_ready) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-credits-v1'))");
+    await client.query(sql);
+  }
+  await client.query(`UPDATE evimed_credits.settlements s SET memo='Research task'
+    FROM evimed_control.users u WHERE s.user_id=$1 AND u.id=s.user_id AND s.owner_created_at=u.created_at`, [userId]);
+  await client.query(`UPDATE evimed_credits.research_tasks t SET title='Research task'
+    FROM evimed_control.users u WHERE t.user_id=$1 AND u.id=t.user_id AND t.owner_created_at=u.created_at`, [userId]);
 }

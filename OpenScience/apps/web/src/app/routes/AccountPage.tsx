@@ -26,7 +26,7 @@ const SECTIONS: readonly Section[] = [
   { key: "account", label: "账户", icon: UserRound },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "notifications", label: "通知", icon: BellRing },
-  { key: "usage", label: "用量", icon: Gauge },
+  { key: "usage", label: "科研额度", icon: Gauge },
   { key: "connectors", label: "数据源", icon: Plug },
   { key: "projects", label: "项目", icon: Folder },
 ];

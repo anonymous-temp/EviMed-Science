@@ -164,8 +164,11 @@ import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
 import { EvimedCreditsService } from "./evimedCreditsService.mjs";
+import { prepareResearchBillingAccountDeletion } from "./evimedCreditsPersistence.mjs";
 import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
 import { createEvimedCreditsRoutes, evimedCreditsRoutePattern } from "./evimedCreditsRoutes.mjs";
+import { createResearchAllowanceRoutes, researchAllowanceRoutePattern } from "./researchAllowanceRoutes.mjs";
+import { createResearchCommerce } from "./researchCommerce.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -578,6 +581,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/inbox/")) return "/api/inbox/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage" || pathname === "/api/account/usage/runs") return pathname;
+  if (pathname === "/api/account/allowance" || pathname.startsWith("/api/account/allowance/")) return researchAllowanceRoutePattern(pathname);
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
@@ -2360,6 +2364,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     credits = { service, worker };
   }
   const creditsRoutes = createEvimedCreditsRoutes({ store, service: credits?.service ?? null, config });
+  const allowanceRoutes = createResearchAllowanceRoutes({
+    store, service: credits?.service ?? null, config, commerce: createResearchCommerce(config),
+  });
   // What one question would do, answered before it is sent (fusion plan §9.5).
   // Advice, not a gate: it runs the same router the dispatch runs and decides
   // nothing. Composed after the credits service because the price half of the
@@ -2620,6 +2627,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           dispatchId: run.dispatchId ?? null,
           status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
           effectiveRouteReason: run.effectiveRouteReason,
+          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
+          automated: run.automated === true,
+          accountCreatedAt: run.accountCreatedAt ?? null,
+          startedAt: run.startedAt ?? run.createdAt ?? null,
+          finishedAt: run.finishedAt ?? null,
           capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
           subject: run.title ?? run.question ?? null,
         });
@@ -4404,6 +4416,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
+      if (await allowanceRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
       if (await resultRoutes(req, res)) return;
@@ -5438,6 +5451,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               throw new HttpError(409, "account_busy", "Extension execution is still stopping.");
             }
             if (client) { await documentExportService?.cancelProject(id, null, client); await resultReplays?.cancelProject(id, null, client); }
+            if (client) await prepareResearchBillingAccountDeletion(client, id);
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
@@ -6358,6 +6372,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      // Activate the immutable charging policy before any research can start.
+      // A first completion must never establish its own retrospective cutoff.
+      if (credits) await credits.service.ready();
       if (skillArtifacts) {
         try {
           const directory = await openScopedDirectoryNoFollow(config.dataDir, skillRoot, { create: true });

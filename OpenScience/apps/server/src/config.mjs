@@ -6,6 +6,7 @@ import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePa
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
 import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
+import { researchBillingSettings } from "./researchBillingConfig.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -2154,6 +2155,7 @@ export function loadConfig(overrides = {}) {
     ...mediaMarketSettings(overrides),
     // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---
     ...evimedCreditsSettings(overrides),
+    ...researchBillingSettings(overrides, evimedCreditsSettings(overrides)),
     ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.
     //

@@ -34,6 +34,43 @@ import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 import { learningTriggersFor } from "../src/learningTriggers.mjs";
 
+test("run start persists exact trusted account incarnation and restores it after restart", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-account-incarnation-"));
+  const incarnation = "2026-10-03 04:01:02.123456+00";
+  const project = { id: "billing-provenance", userId: "researcher", rootDir: root,
+    accountCreatedAt: incarnation, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_billing", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const createStore = () => new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000,
+  });
+  const store = createStore();
+  const restarted = createStore();
+  try {
+    await assert.rejects(store.start(project, { sessionId: binding.sessionId, accountCreatedAt: "2099-01-01T00:00:00Z" }),
+      (error) => error instanceof HttpError && error.status === 400);
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    assert.equal(started.accountCreatedAt, incarnation);
+    const ledger = path.join(project.metaDir, "runs.jsonl");
+    const events = (await readFile(ledger, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(events.find((event) => event.event === "started").accountCreatedAt, incarnation);
+    await store.closeProject(project);
+    const replacementProject = { ...project, accountCreatedAt: "2099-01-01 00:00:00.654321+00" };
+    const restored = (await restarted.list(replacementProject)).find((run) => run.id === started.id);
+    assert.equal(restored.accountCreatedAt, incarnation, "restart must not adopt the current account generation");
+    // Older ledgers lack this provenance. The current project is not evidence
+    // of who owned work recorded before this field was introduced.
+    for (const event of events) delete event.accountCreatedAt;
+    await writeFile(ledger, events.map((event) => JSON.stringify(event)).join("\n") + "\n");
+    assert.equal((await restarted.list(replacementProject)).find((run) => run.id === started.id).accountCreatedAt, null);
+  } finally {
+    await store.closeProject(project);
+    await restarted.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("specialist dispatch preserves managed GEO provenance for learning and relevance", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-managed-geo-provenance-"));
   const project = { id: "brand-research", userId: "researcher", rootDir: root,

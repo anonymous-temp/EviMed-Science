@@ -818,7 +818,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
           {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
           {/* The usage section of settings, where a spend ceiling is stated. */}
-          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>查看用量</Button>}
+          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>查看科研额度</Button>}
         </div>
       ) : (
         <>

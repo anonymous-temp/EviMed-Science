@@ -1243,3 +1243,4 @@ export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FOR
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
+export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge } from './src/researchBilling.mjs';

@@ -1323,6 +1323,7 @@ export class PostgresStore extends InMemoryStore {
     const project = {
       id,
       name: row.name,
+      ...(typeof row.account_created_at === "string" ? { accountCreatedAt: row.account_created_at } : {}),
       tenantId: user.tenantId ?? user.id,
       userId: user.id,
       userRoot: user.rootDir,
@@ -1398,7 +1399,8 @@ export class PostgresStore extends InMemoryStore {
     return this.database.transaction(async (client) => {
       const result = await client.query(
         `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
-                u.id AS user_id, u.name AS user_name, u.password_hash, u.auth_type
+                u.id AS user_id, u.name AS user_name, u.password_hash, u.auth_type,
+                u.created_at::text AS account_created_at
            FROM ${CONTROL_PLANE_SCHEMA}.projects p
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id = p.user_id
           ORDER BY p.user_id, p.id
@@ -1411,6 +1413,7 @@ export class PostgresStore extends InMemoryStore {
           name: row.user_name,
           password_hash: row.password_hash,
           auth_type: row.auth_type,
+          account_created_at: row.account_created_at,
         });
         await ensureUserRoot(this.config, user.rootDir);
         projects.push(await this.projectFromRow(user, row));
@@ -1427,7 +1430,8 @@ export class PostgresStore extends InMemoryStore {
         const result = await client.query(
           `INSERT INTO ${CONTROL_PLANE_SCHEMA}.projects(user_id, id, name, quota_bytes)
            VALUES ($1, $2, $3, $4)
-           RETURNING id, name, active_workspace, quota_bytes, archived_at`,
+           RETURNING id, name, active_workspace, quota_bytes, archived_at,
+             (SELECT created_at::text FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id=$1) AS account_created_at`,
           [user.id, id, displayName, this.config.maxProjectBytes],
         );
         await this.projectFromRow(user, result.rows[0]);
@@ -1448,9 +1452,11 @@ export class PostgresStore extends InMemoryStore {
     if (id === "default") await this.ensureDefaultProject(user);
     return this.database.transaction(async (client) => {
       const result = await client.query(
-        `SELECT id, name, active_workspace, quota_bytes, archived_at
-           FROM ${CONTROL_PLANE_SCHEMA}.projects
-          WHERE user_id = $1 AND id = $2 FOR SHARE`,
+        `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
+                u.created_at::text AS account_created_at
+           FROM ${CONTROL_PLANE_SCHEMA}.projects p
+           JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id=p.user_id
+          WHERE p.user_id = $1 AND p.id = $2 FOR SHARE OF p`,
         [user.id, id],
       );
       if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -1469,9 +1475,11 @@ export class PostgresStore extends InMemoryStore {
         [user.id, id, displayName, this.config.maxProjectBytes],
       );
       const result = await client.query(
-        `SELECT id, name, active_workspace, quota_bytes, archived_at
-           FROM ${CONTROL_PLANE_SCHEMA}.projects
-          WHERE user_id = $1 AND id = $2 FOR SHARE`,
+        `SELECT p.id, p.name, p.active_workspace, p.quota_bytes, p.archived_at,
+                u.created_at::text AS account_created_at
+           FROM ${CONTROL_PLANE_SCHEMA}.projects p
+           JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id=p.user_id
+          WHERE p.user_id = $1 AND p.id = $2 FOR SHARE OF p`,
         [user.id, id],
       );
       if (result.rowCount !== 1) throw new HttpError(404, "project_not_found", "Project not found.");
