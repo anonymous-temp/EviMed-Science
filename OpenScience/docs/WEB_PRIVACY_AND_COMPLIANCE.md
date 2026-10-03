@@ -36,6 +36,13 @@ modes can still contain:
   request ids, HTTP method, sanitized route pattern, status, error code, and
   optional project id.
 - Runtime workspace mounts used by the project's agent runtime.
+- Optional research-billing financial records in `evimed_credits`: amounts,
+  pricing and policy evidence, original upstream payer references, retry state
+  and receipts. These records survive account and project deletion for financial
+  reconciliation; account-generation checks prevent a reused username accessing
+  the previous account's statements. Account deletion removes research titles
+  from retained statement descriptions. The deployment's privacy notice and
+  financial-record retention schedule must describe this distinct retention.
 
 Operators must treat this directory as sensitive research data. The MVP includes
 project-level and current-account self-service export and deletion, but does

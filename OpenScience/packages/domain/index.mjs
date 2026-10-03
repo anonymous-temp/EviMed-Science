@@ -1213,3 +1213,4 @@ export {
 } from './src/vcrContracts.mjs'
 
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge } from './src/researchBilling.mjs';

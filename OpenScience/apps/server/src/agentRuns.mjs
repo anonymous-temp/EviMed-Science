@@ -428,6 +428,7 @@ function foldEvents(events) {
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
+        accountCreatedAt: event.accountCreatedAt == null ? null : storedTimestamp(event.accountCreatedAt, "accountCreatedAt"),
         finishedAt: null,
         durationMs: null,
         errorCode: null,
@@ -4159,6 +4160,8 @@ export class AgentRunStore {
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
         createdAt: now,
+        // Exact financial ownership comes from the trusted project, never prompt input.
+        accountCreatedAt: project.accountCreatedAt == null ? null : storedTimestamp(project.accountCreatedAt, "accountCreatedAt"),
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
       };

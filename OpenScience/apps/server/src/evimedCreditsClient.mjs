@@ -152,9 +152,9 @@ async function boundedText(response, limit) {
 export function upstreamAmount(value) {
   if (value == null || value === "") return null;
   const number = typeof value === "number" ? value
-    : typeof value === "string" && /^\s*-?\d{1,15}(?:\.\d{1,6})?\s*$/.test(value) ? Number(value) : NaN;
+    : typeof value === "string" && /^\s*-?\d{1,15}(?:\.\d{1,8})?\s*$/.test(value) ? Number(value) : NaN;
   if (!Number.isFinite(number) || number < 0) return null;
-  return Math.round(number * 100) / 100;
+  return number;
 }
 
 /**

@@ -71,16 +71,16 @@ describe("设置", () => {
     open();
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
     const links = within(nav()).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
+    expect(links.map((link) => link.textContent)).toEqual(["账户", "外观", "通知", "科研额度", "数据源", "项目"]);
     expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
-    expect(within(nav()).getByRole("link", { name: "用量" })).toHaveAttribute("href", "/app/account?tab=usage");
+    expect(within(nav()).getByRole("link", { name: "科研额度" })).toHaveAttribute("href", "/app/account?tab=usage");
     // The sidebar's navigation item (spec §20.6), not a 32 px look of its own.
     expect(within(nav()).getByRole("link", { name: "账户" })).toHaveClass("h-control", "bg-accent-soft", "font-medium");
-    expect(within(nav()).getByRole("link", { name: "用量" })).toHaveClass("h-control", "hover:bg-surface-2");
+    expect(within(nav()).getByRole("link", { name: "科研额度" })).toHaveClass("h-control", "hover:bg-surface-2");
   });
 
   it.each([
-    ["usage", "用量", "用量分区"],
+    ["usage", "科研额度", "用量分区"],
     ["connectors", "数据源", "数据源分区"],
     ["notifications", "通知", "通知分区"],
     ["projects", "项目", "项目分区"],
@@ -140,7 +140,7 @@ describe("设置", () => {
     open();
     await within(nav()).findByRole("link", { name: "运维" });
     const labels = within(nav()).getAllByRole("link").map((link) => link.textContent);
-    expect(labels).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "运维"]);
+    expect(labels).toEqual(["账户", "外观", "通知", "科研额度", "数据源", "项目", "运维"]);
     for (const label of labels) {
       await user.click(within(nav()).getByRole("link", { name: label ?? "" }));
       for (const gone of [/API Key/i, /审批模式/, /选择模型/, /添加 MCP/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();

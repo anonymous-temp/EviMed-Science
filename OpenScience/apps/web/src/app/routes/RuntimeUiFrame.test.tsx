@@ -331,7 +331,7 @@ describe("native frame identity and readiness", () => {
     expect(alert).toHaveTextContent("约 3 小时 12 分后额度开始释放");
     expect(alert).toHaveTextContent("不是整点清零");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "查看用量" }));
+    await userEvent.click(screen.getByRole("button", { name: "查看科研额度" }));
     expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
     expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
     expect(mocks.create).toHaveBeenCalledTimes(1);
@@ -362,7 +362,7 @@ describe("native frame identity and readiness", () => {
     mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("登录已失效，请重新登录。");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
   });
 
   it("keeps a capability intent pending until a matching success acknowledgement", async () => {
