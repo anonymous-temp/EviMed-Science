@@ -13,6 +13,17 @@ exposure and outcome, and distinguish forward from bidirectional analysis.
 
 ## Execute the managed analysis
 
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
 1. Call `mcp__evimed__mendelian_randomization` with `action=capabilities`. Report missing R, model or Python runtime explicitly. Missing OpenGWAS credentials blocks remote data and online LD clumping; it does not block two supplied local files with declared preclumped instruments.
 2. Start the job with the normalized exposure, outcome, language, direction and the explicit source objects below when using uploaded files.
    Record the job id and poll it with `waitSeconds=45` until terminal.
