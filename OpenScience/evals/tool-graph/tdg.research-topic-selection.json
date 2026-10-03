@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-topic-selection",
-  "version": "sha256:38cceba660f601d04e1df7d5ed9333a2cc5852c098e81fb1067a07635a694e10",
+  "version": "sha256:482eed930e4ea6130d4614cb6483e647fa5c6fe2cf690cd30bf206ba87908856",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -441,12 +441,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^bibliometric-[a-z0-9-]{8,80}$"
+            "pattern": "^bibliometric-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "dateFrom": {
             "type": "string",
@@ -1239,12 +1241,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^topic-[a-z0-9-]{8,80}$"
+            "pattern": "^topic-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "outputLanguage": {
             "type": "string",

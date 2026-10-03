@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "bibliometric-analysis",
-  "version": "sha256:7e1c71ad1e799faf7139a2bb2aabd678ed97bcb836e177ec29d9e07533054934",
+  "version": "sha256:f39a15b2e4a73bfcfff7bc571ac7df6df112386616294197f961b419cb0247fe",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 21,
@@ -441,12 +441,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^bibliometric-[a-z0-9-]{8,80}$"
+            "pattern": "^bibliometric-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "dateFrom": {
             "type": "string",

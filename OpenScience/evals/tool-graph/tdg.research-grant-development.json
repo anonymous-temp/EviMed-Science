@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-grant-development",
-  "version": "sha256:3dea1a4b0e312eae5e43e9f78c21817511fe3c141f1d80298e7d059066af2ae3",
+  "version": "sha256:5b94aaba3c259155a803f1df5748eb58feba19e719c686a41052101ece7f9c9f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 28,
@@ -1187,12 +1187,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^topic-[a-z0-9-]{8,80}$"
+            "pattern": "^topic-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "outputLanguage": {
             "type": "string",

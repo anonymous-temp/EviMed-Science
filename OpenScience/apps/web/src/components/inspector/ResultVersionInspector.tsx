@@ -45,6 +45,12 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
   const [loadingRelated, setLoadingRelated] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const viewGeneration = useRef(0);
+  useEffect(() => {
+    viewGeneration.current += 1;
+    setAction(null); setLoadingRelated(false);
+    return () => { viewGeneration.current += 1; };
+  }, [path, runId, initialVersionId, selectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,15 +134,17 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
     setSelectedId(id); setAnchor(null);
   };
   const openSuccessor = async (id: string) => {
+    const generation = viewGeneration.current;
     setActionError(null);
     try {
       const successor = await getResultVersion(id);
+      if (generation !== viewGeneration.current) return;
       if (successor.versionId !== id) throw new Error("返回的结果与新版本不一致，请重试");
       if (successor.path === path) {
         setItems((current) => current?.some((item) => item.versionId === id) ? current : [successor, ...(current ?? [])]);
         choose(id);
       } else navigate(resultHref(successor));
-    } catch (caught) { setActionError(parseFailureMessage(caught, "新结果")); }
+    } catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, "新结果")); }
   };
   useEffect(() => {
     const captureSelection = () => {
@@ -149,6 +157,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
     return () => document.removeEventListener("selectionchange", captureSelection);
   }, [version, reading]);
   const continueRevision = async () => {
+    const generation = viewGeneration.current;
     if (!version || !anchor || anchor.versionId !== version.versionId || anchor.digest !== version.digest) return;
     const selected = { ...anchor.selection };
     setAction("revision"); setActionError(null);
@@ -156,41 +165,63 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       const sessionId = version.producer.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(version.producer.sessionId)
         ? version.producer.sessionId : crypto.randomUUID();
       const prepared = await requestResultRevision(version, selected, sessionId);
+      if (generation !== viewGeneration.current) return;
       const targetSession = prepared.sessionId ?? sessionId;
       const intent: RuntimeUiIntent = {
         kind: version.producer.sessionId ? "open" : "create", projectId: getWebProjectId(), requestId: crypto.randomUUID(),
         sessionId: targetSession, draft: prepared.draft, resultRevision: { referenceId: prepared.referenceId },
       };
       navigate(version.producer.sessionId ? `/app/chat/${targetSession}` : "/app/chat", { state: { runtimeUiIntent: intent } });
-    } catch (caught) { setActionError(parseFailureMessage(caught, "修改请求")); }
-    finally { setAction(null); }
+    } catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, "修改请求")); }
+    finally { if (generation === viewGeneration.current) setAction(null); }
   };
   const act = async (name: "export" | "replay") => {
+    const generation = viewGeneration.current;
     if (!version) return;
     setAction(name); setActionError(null);
     try {
-      if (name === "export") saveResultBlob(await exportResult(version), `${path.split("/").pop()}.evimed.zip`);
-      else setReplay(await replayResult(version));
-    } catch (caught) { setActionError(parseFailureMessage(caught, name === "export" ? "导出" : "重算")); }
-    finally { setAction(null); }
+      if (name === "export") {
+        const exported = await exportResult(version);
+        if (generation === viewGeneration.current) saveResultBlob(exported, `${path.split("/").pop()}.evimed.zip`);
+      } else {
+        const result = await replayResult(version);
+        if (generation === viewGeneration.current) setReplay(result);
+      }
+    } catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, name === "export" ? "导出" : "重算")); }
+    finally { if (generation === viewGeneration.current) setAction(null); }
   };
   const loadMore = async () => {
+    const generation = viewGeneration.current;
     if (!cursor) return;
     setAction("more"); setActionError(null);
-    try { const next = await listResultVersions(path, runId, cursor); setItems((current) => [...(current ?? []), ...next.items]); setCursor(next.nextCursor); }
-    catch (caught) { setActionError(parseFailureMessage(caught, "版本记录")); }
-    finally { setAction(null); }
+    try { const next = await listResultVersions(path, runId, cursor); if (generation !== viewGeneration.current) return; setItems((current) => [...(current ?? []), ...next.items]); setCursor(next.nextCursor); }
+    catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, "版本记录")); }
+    finally { if (generation === viewGeneration.current) setAction(null); }
   };
   const loadMoreRelated = async () => {
+    const generation = viewGeneration.current;
     if (!version || !relatedCursor) return;
     setLoadingRelated(true); setRelatedError(null);
     try {
       const page = await listRelatedResultVersions(version.versionId, relatedCursor);
+      if (generation !== viewGeneration.current) return;
       if (page.items.some(item => item.versionId !== version.versionId && !directlyRelatedResults(version, item))) throw new Error("关联版本关系无法确认，请重试");
       setItems(current => [...new Map([...(current ?? []), ...page.items].map(item => [item.versionId, item])).values()]);
       setRelatedCursor(page.nextCursor);
-    } catch (caught) { setRelatedError(parseFailureMessage(caught, "关联版本")); }
-    finally { setLoadingRelated(false); }
+    } catch (caught) { if (generation === viewGeneration.current) setRelatedError(parseFailureMessage(caught, "关联版本")); }
+    finally { if (generation === viewGeneration.current) setLoadingRelated(false); }
+  };
+
+  const refreshReplay = async (cancel = false) => {
+    if (!replay) return;
+    const generation = viewGeneration.current;
+    if (cancel) setAction("cancel");
+    try {
+      const result = await (cancel ? cancelResultReplay(replay.id) : getResultReplay(replay.id));
+      if (generation === viewGeneration.current) setReplay(result);
+    } catch (caught) {
+      if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, cancel ? "取消重算" : "重算进度"));
+    } finally { if (cancel && generation === viewGeneration.current) setAction(null); }
   };
 
   if (error) return <div role="alert" className="space-y-3 p-4 text-ui text-error"><p>{error}</p><Button variant="secondary" onClick={() => setReload((n) => n + 1)}>重试</Button></div>;
@@ -221,7 +252,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {(!version.reuseEligibility || version.reuseEligibility.replay.status !== "available") && <p className="text-caption text-muted">暂不能重算：{version.reuseEligibility?.replay.reasons.map(resultGapLabel).join("；") || "缺少可用的计算配方"}</p>}
       {version.reuseEligibility?.export.status !== "available" && <p className="text-caption text-muted">{version.reuseEligibility?.export.reasons.map(resultGapLabel).join("；") || "研究包可用性尚未确认"}</p>}
       {actionError && <p role="alert" className="text-error">{actionError}</p>}
-      {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{typeof replay.error === "string" ? replay.error : "计算未完成，请查看进度后重试"}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => { setAction("cancel"); void cancelResultReplay(replay.id).then(setReplay).catch((caught) => setActionError(parseFailureMessage(caught, "取消重算"))).finally(() => setAction(null)); }}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void getResultReplay(replay.id).then(setReplay).catch((caught) => setActionError(parseFailureMessage(caught, "重算进度")))}>刷新进度</Button>}</div>}
+      {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{typeof replay.error === "string" ? replay.error : "计算未完成，请查看进度后重试"}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => void refreshReplay(true)}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void refreshReplay()}>刷新进度</Button>}</div>}
       <Disclosure summary="依据与核对意见" defaultOpen>
         {!version.findings.length && <p className="py-2 text-muted">此版本没有可读取的核对意见，尚未核实。</p>}
         <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{finding.message}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>

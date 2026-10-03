@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -171,6 +171,53 @@ describe("immutable result inspection", () => {
     await screen.findByRole("button", { name: "在对话中修改所选内容" });
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
     await screen.findByText("新结论"); expect(screen.queryByRole("button", { name: "在对话中修改所选内容" })).toBeNull();
+  });
+  it.each(["history", "related"])("discards delayed %s pagination after changing the file", async kind => {
+    let resolve!: (page: { items: ResultVersion[]; nextCursor: null }) => void;
+    const delayed = new Promise<{ items: ResultVersion[]; nextCursor: null }>(done => { resolve = done; });
+    if (kind === "history") api.list.mockResolvedValueOnce({ items: [latest, old], nextCursor: "older" });
+    else api.related.mockResolvedValueOnce({ items: [], nextCursor: "related" });
+    const view = mount(); await screen.findByText("新结论");
+    if (kind === "history") api.list.mockReturnValueOnce(delayed);
+    else api.related.mockReturnValueOnce(delayed);
+    await userEvent.click(await screen.findByRole("button", { name: kind === "history" ? "更多版本" : "更多关联版本" }));
+    const other = { ...latest, versionId: "rv_other", path: "other.md" };
+    api.list.mockResolvedValue({ items: [other], nextCursor: null }); api.get.mockResolvedValue(other);
+    view.rerender(<MemoryRouter><ResultVersionInspector path="other.md" /><Probe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "结果版本" })).toHaveValue(other.versionId));
+    await act(async () => resolve({ items: [old], nextCursor: null }));
+    expect(screen.getByRole("combobox", { name: "结果版本" }).querySelectorAll("option")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("discards a delayed rerun reply after changing the file without retaining busy state", async () => {
+    let resolve!: (reply: { id: string; state: string; resultVersionId: string }) => void;
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "available", reasons: [] } } };
+    api.get.mockResolvedValue(admitted);
+    api.replay.mockReturnValue(new Promise(done => { resolve = done; }));
+    const view = mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    const other = { ...admitted, versionId: "rv_other", path: "other.md" };
+    api.list.mockResolvedValue({ items: [other], nextCursor: null }); api.get.mockResolvedValue(other);
+    view.rerender(<MemoryRouter><ResultVersionInspector path="other.md" /><Probe /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "结果版本" })).toHaveValue(other.versionId));
+    await act(async () => resolve({ id: "old_job", state: "succeeded", resultVersionId: "rv_successor" }));
+    expect(screen.queryByRole("button", { name: "打开新结果" })).toBeNull();
+    expect(screen.getByRole("button", { name: "重算此结果" })).toBeEnabled();
+  });
+  it("does not navigate from a delayed successor response after selecting another version", async () => {
+    let resolve!: (version: ResultVersion) => void;
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "available", reasons: [] } } };
+    api.get.mockImplementation(async (id: string) => id === old.versionId ? old : admitted);
+    api.replay.mockResolvedValue({ id: "job_1", state: "succeeded", resultVersionId: "rv_successor" });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    api.get.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    await userEvent.click(await screen.findByRole("button", { name: "打开新结果" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), old.versionId);
+    await screen.findByText("旧结论");
+    await act(async () => resolve({ ...latest, versionId: "rv_successor", path: "output/new.md", supersedesVersionId: latest.versionId }));
+    expect(JSON.parse(screen.getByTestId("state").textContent!).pathname).toBe("/");
+    expect(screen.getByRole("combobox", { name: "结果版本" })).toHaveValue(old.versionId);
   });
   it("does not compare different numerical units as identical", () => {
     render(<ResultComparison current={{ ...latest, machineValues: [{ name: "dose", value: 1, unit: "g" }] }} prior={{ ...old, machineValues: [{ name: "dose", value: 1, unit: "mg" }] }} before={null} after={null} />);
