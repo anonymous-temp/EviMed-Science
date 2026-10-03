@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, campaignDocumentJobs, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, campaignDocumentJobs, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -228,4 +228,16 @@ test('foreign session document jobs created after the attempt cannot satisfy own
  const started='2026-10-03T00:00:00.000Z',foreign=['read','write'].map(id=>({id,status:'succeeded',created_at:'2026-10-03T00:00:01.000Z',payload:{invocation:{sessionId:'foreign-session'},auth:{invocation:{sessionId:'foreign-session'}}}})),mismatched={id:'smuggled-auth',status:'succeeded',payload:{invocation:{sessionId:'owned-session'},auth:{invocation:{sessionId:'foreign-session'}}}},app={store:{database:{query:async()=>({rows:[...foreign,mismatched]})}},agentRuns:{list:async()=>[{id:'own-run',status:'running'}]}};
  assert.equal(await campaignDocumentJobs(app,{userId:'owner',id:'project'},'own-run','owned-session',started),null);
  app.agentRuns.list=async()=>[{id:'own-run',status:'succeeded'}];await assert.rejects(campaignDocumentJobs(app,{userId:'owner',id:'project'},'own-run','owned-session',started),error=>error.code==='native_campaign_doc_jobs_incomplete'&&error.terminalRun.documentJobs===0);
+});
+
+test('native fixed relay port is protected setup configuration; measure cannot override the recorded transport or inject a firewall verdict',()=>{
+ const setup={schemaVersion:1,phase:'setup',operatorPlatform:'linux-native',nativeRelayListenPort:62087,acceptanceInputsPath:'/owned/acceptance-inputs.json',runtimeImageId:'sha256:'+'a'.repeat(64),databaseUrl:'postgresql://fixture@127.0.0.1/evimed_test',gatewayHost:'127.0.0.1',mountMode:'volume-subpath',deadlineMs:30000};
+ assert.equal(validatePrivateCampaignInputs(setup).nativeRelayListenPort,62087);for(const value of [{...setup,nativeRelayListenPort:'62087'},{...setup,nativeRelayListenPort:null},{...setup,operatorPlatform:undefined},{...setup,firewallPassed:true}])assert.throws(()=>validatePrivateCampaignInputs(value));
+ assert.throws(()=>validatePrivateCampaignInputs({schemaVersion:1,phase:'measure',statePath:'/owned/campaign-state.json',deadlineMs:30000,operatorPlatform:'linux-native',nativeRelayListenPort:62087}));
+});
+
+test('native pre-teardown failure facts extract error kinds/codes without token, prompt or provider text',()=>{
+ const secret='provider-secret-must-not-leak',facts=campaignNativeFailureFacts({messages:[{info:{error:{code:'network_error',subCode:'connection_timeout',type:'LlmError',status:403,message:secret,cause:{headers:{authorization:secret}}}},parts:[{type:'text',text:secret}]}]});
+ assert.deepEqual({...facts[0],frames:[]},{code:'network_error',subCode:'connection_timeout',type:'LlmError',status:403,frames:[]});assert.equal(JSON.stringify(facts).includes(secret),false);
+ assert.equal(campaignNativeFailureFacts({messages:Array.from({length:20},()=>({info:{error:{code:'network_error'}}}))}).length,8);
 });

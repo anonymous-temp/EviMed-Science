@@ -51,36 +51,43 @@ export function validateOwnedLinuxBridgeKernel(network,expected,links,addresses)
  return{...bridge,interfaceIndex:link.ifindex,interfaceKind:'bridge',addressProof:'iproute2-kernel-json',operstate:link.operstate};
 }
 /** Shared fixed handler: no filesystem, Docker, credential resolver or arbitrary destination is available in its closure. */
-export function createFixedCampaignRelayHandler(httpModule,getTarget,clock={setTimeout,clearTimeout}){
+export function createFixedCampaignRelayHandler(httpModule,getTarget,clock={setTimeout,clearTimeout},observe=()=>{}){
  const allowed=new Set(['/internal/model/v1/messages','/internal/extensions/v1/execute','/internal/extensions/v1/status','/internal/extensions/v1/cancel']);let active=0;
  return(req,res)=>{
-  const target=getTarget();if(req.method!=='POST'||!allowed.has(req.url)||active>=16){res.writeHead(403);res.end();return;}if(!target){res.writeHead(503);res.end();return;}
+  const target=getTarget(),fact={method:req.method==='POST'?'POST':'other',path:allowed.has(req.url)||req.url==='/internal/model/v1/chat/completions'?req.url:'unknown',status:null,targetBound:Boolean(target),requestBytes:0,responseBytes:0,responseChunks:0,finished:false};try{observe(fact);}catch{ /* Diagnostic sinks cannot change forwarding authorization. */ }res.once('finish',()=>{fact.status=res.statusCode;fact.finished=true;});
+  if(req.method!=='POST'||!allowed.has(req.url)||active>=16){res.writeHead(403);res.end();return;}if(!target){res.writeHead(503);res.end();return;}
   active++;let released=false;const done=()=>{if(!released){released=true;active--;}};const headers={};
   for(const[key,value]of Object.entries(req.headers)){if(['host','connection','keep-alive','transfer-encoding','proxy-authorization','proxy-authenticate','forwarded','upgrade'].includes(key)||key.startsWith('x-forwarded-'))continue;headers[key]=value;}
   let sent=0,received=0;const upstream=httpModule.request(new URL(req.url,target),{method:'POST',headers},reply=>{
    const output={};for(const[key,value]of Object.entries(reply.headers)){if(['connection','keep-alive','transfer-encoding','upgrade','server','x-powered-by'].includes(key))continue;output[key]=value;}res.writeHead(reply.statusCode,output);
-   reply.on('data',chunk=>{received+=chunk.length;if(received>12*1024*1024){reply.destroy();res.destroy();return;}res.write(chunk);});reply.on('end',()=>res.end());reply.on('error',()=>res.destroy());
+   reply.on('data',chunk=>{received+=chunk.length;fact.responseBytes=received;fact.responseChunks++;if(received>12*1024*1024){reply.destroy();res.destroy();return;}res.write(chunk);});reply.on('end',()=>res.end());reply.on('error',()=>res.destroy());
   });const timer=clock.setTimeout(()=>{upstream.destroy();res.destroy();},120000);res.on('close',()=>{if(!res.writableEnded)upstream.destroy();clock.clearTimeout(timer);done();});req.on('aborted',()=>upstream.destroy());
-  upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end();});req.on('data',chunk=>{sent+=chunk.length;if(sent>8*1024*1024){upstream.destroy();res.destroy();return;}upstream.write(chunk);});req.on('end',()=>upstream.end());
+  upstream.on('error',()=>{if(!res.headersSent)res.writeHead(502);res.end();});req.on('data',chunk=>{sent+=chunk.length;fact.requestBytes=sent;if(sent>8*1024*1024){upstream.destroy();res.destroy();return;}upstream.write(chunk);});req.on('end',()=>upstream.end());
  };
 }
-export async function bindNativeLinuxRelay({network,root}){
+/** Protected operator fixture selection only; default ephemeral binding remains unchanged. */
+export function validateNativeRelayListenPort(value=0){
+ if(value===0||Number.isSafeInteger(value)&&value>=1024&&value<=65535)return value;
+ throw new Error('native_linux_relay_listen_port_refused');
+}
+export async function bindNativeLinuxRelay({network,root,listenPort=0}){
  const env=nativeLinuxDockerEnvironment(),observed=JSON.parse((await exec('docker',['--context','default','network','inspect',network.id],{env,timeout:5000,maxBuffer:65536})).stdout)[0];
  const device=observed.Options?.['com.docker.network.bridge.name']||'br-'+network.id.slice(0,12);
  if(!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,14}$/.test(device))throw new Error('native_linux_bridge_interface_refused');
  const options={env,timeout:5000,maxBuffer:65536},links=JSON.parse((await exec('ip',['-j','-d','link','show','dev',device],options)).stdout),addresses=JSON.parse((await exec('ip',['-j','addr','show','dev',device],options)).stdout);
  const bridge=validateOwnedLinuxBridgeKernel(observed,network,links,addresses);if(bridge.rootDigest!==digest(root))throw new Error('native_linux_bridge_identity_refused');
- return bindInspectedNativeLinuxRelay(bridge);
+ return bindInspectedNativeLinuxRelay(bridge,http,validateNativeRelayListenPort(listenPort));
 }
 /** Trusted constructor seam; only bindNativeLinuxRelay supplies independently inspected bridge facts in production. */
-export async function bindInspectedNativeLinuxRelay(bridge,httpModule=http){
- let target=null,closed=false,stopping=false;const server=httpModule.createServer(createFixedCampaignRelayHandler(httpModule,()=>target));server.maxConnections=16;server.requestTimeout=120000;server.headersTimeout=10000;
+export async function bindInspectedNativeLinuxRelay(bridge,httpModule=http,listenPort=0){
+ listenPort=validateNativeRelayListenPort(listenPort);
+ let target=null,closed=false,stopping=false;const observations=[];const server=httpModule.createServer(createFixedCampaignRelayHandler(httpModule,()=>target,undefined,fact=>{if(observations.length<128)observations.push(fact);}));server.maxConnections=16;server.requestTimeout=120000;server.headersTimeout=10000;
  const closeServer=async()=>{server.closeAllConnections();await new Promise((resolve,reject)=>server.close(error=>error&&error.code!=='ERR_SERVER_NOT_RUNNING'?reject(error):resolve()));closed=true;};
  let address;try{
-  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,bridge.gateway,()=>{server.removeListener('error',reject);resolve();});});
-  address=server.address();if(!address||typeof address==='string'||address.address!==bridge.gateway)throw new Error('native_linux_relay_binding_refused');
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(listenPort,bridge.gateway,()=>{server.removeListener('error',reject);resolve();});});
+  address=server.address();if(!address||typeof address==='string'||address.address!==bridge.gateway||listenPort!==0&&address.port!==listenPort)throw new Error('native_linux_relay_binding_refused');
  }catch(error){try{await closeServer();}catch(cleanupError){throw new AggregateError([error,cleanupError],'native_linux_relay_cleanup_unconfirmed',{cause:error});}throw error;}
- return{gatewayUrl:`http://${bridge.gateway}:${address.port}`,bridge,sourceDigest:digest(createFixedCampaignRelayHandler.toString()),scope:'TrustedhostNode fixedpath relay bound only to independently inspected owned internal bridge; no runtime hostnetwork/publicport or handler Docker/fs/credential capability',
+ return{gatewayUrl:`http://${bridge.gateway}:${address.port}`,bridge,observations,sourceDigest:digest(createFixedCampaignRelayHandler.toString()),scope:'TrustedhostNode fixedpath relay bound only to independently inspected owned internal bridge; no runtime hostnetwork/publicport or handler Docker/fs/credential capability',
   bindTarget(fixtureUrl){if(target||closed||stopping)throw new Error('native_linux_relay_target_rebind_refused');const url=new URL(fixtureUrl);if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||!url.port||url.username||url.password||url.pathname!=='/'||url.search||url.hash)throw new Error('native_linux_relay_target_refused');target=url.origin;},
   close:async()=>{if(closed)return;stopping=true;await closeServer();}};
 }

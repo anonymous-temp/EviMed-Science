@@ -17,7 +17,7 @@ test('owned bridge requires actual immutable identity and matching host interfac
  assert.throws(()=>validateOwnedLinuxBridge(network,expected,{}));
 });
 test('fixed relay refuses unbound target and arbitrary routes without opening upstream',()=>{
- const calls=[],handler=createFixedCampaignRelayHandler({request(){throw new Error('unexpected upstream');}},()=>null),response={writeHead(code){calls.push(code);},end(){}};
+ const calls=[],handler=createFixedCampaignRelayHandler({request(){throw new Error('unexpected upstream');}},()=>null),response={once(){return this;},writeHead(code){calls.push(code);},end(){}};
  handler({method:'POST',url:'/internal/model/v1/messages'},response);
  handler({method:'POST',url:'/internal/model/v1/messages?url=http://other'},response);
  handler({method:'CONNECT',url:'host:443'},response);
@@ -72,4 +72,22 @@ test('kernel bridge proof accepts assigned no-carrier DOWN bridge omitted by Nod
  for(const patch of [{ifindex:124},{ifname:'other'},{linkinfo:{info_kind:'dummy'}},{flags:['LOOPBACK','UP']},{flags:[]}])assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[{...link,...patch}],[address]));
  for(const patch of [{ifindex:124},{addr_info:[{family:'inet',local:'192.168.224.2',prefixlen:20,scope:'global'}]},{addr_info:[{family:'inet',local:'192.168.224.1',prefixlen:16,scope:'global'}]}])assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[link],[{...address,...patch}]));
  assert.throws(()=>validateOwnedLinuxBridgeKernel({...network,Internal:false},expected,[link],[address]));assert.throws(()=>validateOwnedLinuxBridgeKernel(network,expected,[],[address]));
+});
+
+import {validateNativeRelayListenPort} from '../extension-saas-acceptance-linux.mjs';
+test('fixed native operator relay port is bounded and independently bound to exact inspected bridge address',async()=>{
+ assert.equal(validateNativeRelayListenPort(),0);assert.equal(validateNativeRelayListenPort(62087),62087);
+ for(const port of [null,true,'62087',-1,1023,65536,NaN])assert.throws(()=>validateNativeRelayListenPort(port),/listen_port/);
+ const server=fakeServer({address:'172.28.0.1',port:62087}),relay=await bindInspectedNativeLinuxRelay({gateway:'172.28.0.1'},{createServer:()=>server},62087);assert.deepEqual(server.binding,{port:62087,host:'172.28.0.1'});assert.equal(relay.gatewayUrl,'http://172.28.0.1:62087');await relay.close();
+ const wrong=fakeServer({address:'172.28.0.1',port:62088});await assert.rejects(bindInspectedNativeLinuxRelay({gateway:'172.28.0.1'},{createServer:()=>wrong},62087),/binding_refused/);assert.equal(wrong.allClosed,true);
+});
+
+import http from 'node:http';
+test('actual relay ingress records closed path/status/byte counts and excludes all headers and body secrets',async()=>{
+ const upstream=http.createServer((_req,res)=>{res.writeHead(200);res.end('ok');});let relay;
+ try{await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));relay=await bindInspectedNativeLinuxRelay({gateway:'127.0.0.1'});relay.bindTarget('http://127.0.0.1:'+upstream.address().port+'/');
+  const secret='secret-must-not-leak',response=await fetch(relay.gatewayUrl+'/internal/model/v1/messages',{method:'POST',headers:{authorization:secret},body:secret});assert.equal(response.status,200);assert.equal(await response.text(),'ok');await new Promise(resolve=>setTimeout(resolve,10));
+  const fact=relay.observations[0];assert.equal(fact.path,'/internal/model/v1/messages');assert.equal(fact.status,200);assert.equal(fact.requestBytes,Buffer.byteLength(secret));assert.equal(fact.responseBytes,2);assert.ok(fact.responseChunks>=1);assert.equal(fact.finished,true);assert.equal(JSON.stringify(relay.observations).includes(secret),false);
+  const unknown=await fetch(relay.gatewayUrl+'/not-allowed?token='+secret);assert.equal(unknown.status,403);assert.equal(relay.observations[1].path,'unknown');assert.equal(JSON.stringify(relay.observations).includes(secret),false);
+ }finally{await relay?.close();upstream.closeAllConnections();await new Promise(resolve=>upstream.close(resolve));}
 });
