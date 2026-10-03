@@ -325,3 +325,85 @@ def test_resume_never_attaches_new_optimizer_provenance_to_retained_primary(monk
     else:
         assert "REML optimization failed" in text
         assert "DerSimonian-Laird" in text
+
+
+@pytest.mark.parametrize('lang', ['en', 'zh'])
+@pytest.mark.parametrize('narrative', [False, True])
+@pytest.mark.parametrize('mode', ['reml', 'sparse', 'optimizer_failure', 'legacy_unknown'])
+def test_abstract_prompt_uses_recorded_execution_and_uncertainty(monkeypatch, lang, narrative, mode):
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.schemas.meta_result import MetaAnalysisResults
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    if mode == 'optimizer_failure':
+        monkeypatch.setattr(meta_engine.optimize, 'minimize_scalar', lambda *a, **k: SimpleNamespace(success=False))
+    result = meta_engine.random_effects_reml(effects(2 if mode == 'sparse' else 3), 'MD', 'Outcome')
+    if mode == 'legacy_unknown':
+        result.tau_estimator = 'unknown'
+        result.ci_method = 'unknown'
+    primary = result.model_dump(mode='json')
+    primary['executed_method'] = result.execution_metadata().model_dump(mode='json')
+    writer = WritingAgent(lang=lang, narrative_mode=narrative)
+    writer._manuscript_facts = {'primary_effect': primary,
+                              'evidence_readiness': {'blockers': [{'code': 'source_uncertain'}]}}
+    captured = []
+    monkeypatch.setattr(writer, 'call_llm', lambda prompt, **kwargs: captured.append(prompt) or 'retained partial abstract')
+    protocol = ResearchProtocol(research_question='Outcome', model_preference='random', tau_estimator='DL', effect_measure='MD',
+                                pico=PICO(population='Adults', intervention='X', comparator='Y', outcome_primary='Outcome'))
+    writer._write_abstract(protocol, MetaAnalysisResults(primary_outcome=result))
+    prompt = captured[0]
+    assert 'Protocol choices describe planned methods, not proof of execution' in prompt
+    assert 'source_uncertain' in prompt
+    assert 'pooling was NOT performed' not in prompt
+    assert ('REML' in prompt) if mode == 'reml' else True
+    if mode == 'sparse':
+        assert 'fewer than three' in prompt if lang == 'en' else '少于3项' in prompt
+    if mode == 'optimizer_failure':
+        assert 'REML optimization failed' in prompt if lang == 'en' else 'REML优化失败' in prompt
+    if mode == 'legacy_unknown':
+        assert 'unrecorded interval method' in prompt if lang == 'en' else '未记录的区间方法' in prompt
+
+
+@pytest.mark.parametrize('lang', ['en', 'zh'])
+@pytest.mark.parametrize('heterogeneity', [0.0, 32.6, None])
+def test_narrative_review_status_preserves_computed_primary_and_zero_heterogeneity(lang, heterogeneity):
+    from new_meta.agents.writing_agent import WritingAgent
+    writer = WritingAgent(lang=lang, narrative_mode=True)
+    writer._report_state = SimpleNamespace(report_type='narrative', n_direct_eligible=4, outcome_tiers={})
+    writer._manuscript_facts = {'primary_effect': {'n_studies': 4, 'pooled_effect': .65, 'q_statistic': 4.45,
+                              'i_squared': heterogeneity, 'executed_method': {'model': 'random', 'tau_estimator': 'REML',
+                                                                          'ci_method': 'normal_wald'}}}
+    displayed_i2 = heterogeneity if heterogeneity is not None else 42.0
+    manuscript = f'合并效应量0.65；I²={displayed_i2:.1f}%；Q=4.45；实际REML。' if lang == 'zh' else f'pooled effect estimate0.65; I²={displayed_i2:.1f}%; Q=4.45; actualREML.'
+    text = writer._check_report_state_consistency(manuscript)
+    assert '合并效应量' in text if lang == 'zh' else 'pooled effect estimate' in text
+    assert 'Q=4.45' in text and 'REML' in text
+    assert '未进行定量评估' not in text
+    if heterogeneity is not None:
+        assert f'I²={heterogeneity:.1f}%' in text
+    else:
+        assert '未记录' in text if lang == 'zh' else 'not recorded' in text
+
+
+@pytest.mark.parametrize('lang', ['en', 'zh'])
+def test_missing_quantitative_facts_are_unknown_not_a_claim_the_engine_never_ran(lang):
+    from new_meta.agents.writing_agent import WritingAgent
+    writer = WritingAgent(lang=lang, narrative_mode=True)
+    writer._report_state = SimpleNamespace(report_type='narrative', n_direct_eligible=0, outcome_tiers={})
+    writer._manuscript_facts = {}
+    text = writer._check_report_state_consistency('I²=42.0%')
+    assert '未进行定量评估' not in text
+    assert '未记录' in text if lang == 'zh' else 'not recorded' in text
+
+
+def test_uncomputed_narrative_abstract_has_no_result_and_does_not_invent_execution(monkeypatch):
+    from new_meta.agents.writing_agent import WritingAgent
+    from new_meta.schemas.protocol import PICO, ResearchProtocol
+    writer = WritingAgent(lang='en', narrative_mode=True)
+    writer._manuscript_facts = {'primary_effect': None}
+    captured = []
+    monkeypatch.setattr(writer, 'call_llm', lambda prompt, **kwargs: captured.append(prompt) or 'supported narrative')
+    protocol = ResearchProtocol(research_question='Outcome', effect_measure='MD',
+                                pico=PICO(population='Adults', intervention='X', comparator='Y', outcome_primary='Outcome'))
+    writer._write_abstract(protocol, None)
+    assert 'pooling was NOT performed' in captured[0]
+    assert 'executed pooling and interval methods were not recorded' in captured[0]
