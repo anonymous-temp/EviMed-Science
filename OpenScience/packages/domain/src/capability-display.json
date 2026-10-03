@@ -191,9 +191,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-10",
-        "runs": 3,
-        "delivered": 2,
-        "typicalMinutes": 14
+        "runs": 4,
+        "delivered": 3,
+        "typicalMinutes": 15
       }
     },
     "geo-content": {
