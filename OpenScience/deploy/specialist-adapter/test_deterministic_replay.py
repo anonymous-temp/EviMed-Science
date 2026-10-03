@@ -6,9 +6,11 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
+from contextlib import contextmanager
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -17,6 +19,11 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evimed_specialist_adapter import deterministic_replay as replay
 from evimed_specialist_adapter.replay_service import ReplayJobs, install_replay_routes
+
+linux_process_join = pytest.mark.skipif(
+    sys.platform != "linux" or not hasattr(os, "waitid"),
+    reason="Real worker ownership requires Linux waitid(WNOWAIT); run in the replay image or Linux CI.",
+)
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 
@@ -94,6 +101,41 @@ def test_changed_missing_or_incompatible_recipe_inputs_are_named(engines):
         replay.validate_recipe({**frozen, "input": {"path": "../patient.csv", "sha256": "a" * 64}})
 
 
+@pytest.mark.parametrize("measure, original, analysis", [
+    ("MD", "mean_difference_unspecified_unit", "mean_difference_unspecified_unit"),
+    ("RR", "risk_ratio", "log_risk_ratio"),
+    ("SMD", "standardized_mean_difference", "standardized_mean_difference"),
+])
+def test_meta_numeric_units_distinguish_counts_percentages_and_effect_scales(engines, measure, original, analysis):
+    frozen, blob = recipe("meta.dl", {"studies": [
+        {"id": str(i), "label": str(i), "yi": y, "vi": .1} for i, y in enumerate([0, 1, 3])],
+        "effectMeasure": measure, "outcome": "Unspecified outcome unit"})
+    output = replay.execute(frozen, blob)
+    units = {item["key"]: item["unit"] for item in output["machineValues"]}
+    assert units["values.n_studies"] == "count"
+    assert units["values.i_squared"] == units["values.studies[0].weight"] == "percent"
+    assert units["values.p_value"] == units["values.q_statistic"] == "dimensionless"
+    assert units["values.pooled_effect"] == units["values.prediction_interval[0]"] == original
+    assert units["values.pooled_log"] == units["values.studies[0].se"] == analysis
+    assert units["values.tau_squared"] == units["values.studies[0].vi"] == analysis + "_squared"
+    with pytest.raises(replay.ReplayError, match="replay_output_unit_unknown"):
+        replay.numeric_unit("meta.dl", output["result"], ("new_unsupported_statistic",))
+
+
+def test_signal_and_network_numeric_units_do_not_label_counts_as_ratios(engines):
+    frozen, blob = recipe("faers.signals", {"tables": [{"id": "T1", "a": 10, "b": 90, "c": 20, "d": 1880}]})
+    units = {item["key"]: item["unit"] for item in replay.execute(frozen, blob)["machineValues"]}
+    assert units["values[0].table.a"] == "count"
+    assert units["values[0].ror.value"] == units["values[0].chi2.value"] == "dimensionless"
+    assert units["values[0].ic.value"] == "log2_reporting_ratio"
+    frozen, blob = recipe("bibliometric.network", {"edges": [
+        {"source": "A", "target": "B", "weight": 2, "source_freq": 8, "target_freq": 7}]}, {"maxNodes": 2})
+    units = {item["key"]: item["unit"] for item in replay.execute(frozen, blob)["machineValues"]}
+    assert units["values.nodeCount"] == units["values.edgeCount"] == "count"
+    assert units["values.centrality.A.degree"] == "dimensionless"
+    assert units["values.centrality.A.closeness"] == units["values.centrality.A.weighted_degree"] == "cooccurrence_weight"
+
+
 @pytest.fixture
 def jobs(tmp_path, monkeypatch, engines):
     data = tmp_path / "data"
@@ -128,6 +170,7 @@ def wait_job(manager, scope):
     raise AssertionError("owned replay job did not finish")
 
 
+@linux_process_join
 def test_real_isolated_execution_is_idempotent_publishes_original_recipe_and_preserves_input(jobs):
     manager, client, workspace, secret = jobs
     frozen, blob = recipe("meta.dl", {"studies": [{"id": str(i), "label": str(i), "yi": y, "vi": .1} for i, y in enumerate([0, 1, 3])],
@@ -167,6 +210,7 @@ def test_runtime_or_expired_tokens_cannot_admit_recipes_and_source_changes_do_no
 
 
 @pytest.mark.parametrize("cancel", [False, True])
+@linux_process_join
 def test_timeout_and_cancel_join_actual_process_and_retain_original(jobs, cancel):
     manager, _, workspace, _ = jobs
     frozen, blob = recipe("meta.dl", {"studies": [{"id": str(i), "label": str(i), "yi": y, "vi": .1} for i, y in enumerate([0, 1, 3])],
@@ -196,6 +240,36 @@ def test_lost_owner_is_not_a_duplicate_execution_and_cross_tenant_state_unavaila
     assert not manager.running
     with pytest.raises((HTTPException, FileNotFoundError)):
         manager.status({**scope, "userId": "user2"})
+
+
+@pytest.mark.parametrize("leave_stage", [True, False])
+def test_failure_does_not_claim_cleanup_when_private_stage_remains(jobs, tmp_path, monkeypatch, leave_stage):
+    from evimed_specialist_adapter import isolated_job
+    manager, _, workspace, _ = jobs
+    frozen, blob = recipe("faers.signals", {"tables": [{"id": "T1", "a": 10, "b": 90, "c": 20, "d": 1880}]})
+    (workspace / "input.json").write_bytes(blob)
+    owned_stage = tmp_path / "owned-stage"
+
+    @contextmanager
+    def failing_stage(_credentials):
+        owned_stage.mkdir()
+        try:
+            yield owned_stage
+        finally:
+            if not leave_stage:
+                owned_stage.rmdir()
+
+    def fail_handover(*_args):
+        raise OSError("Test-only input staging failure")
+
+    monkeypatch.setattr(isolated_job, "stage", failing_stage)
+    monkeypatch.setattr(isolated_job, "hand_over", fail_handover)
+    scope = claims(frozen)
+    manager.start(scope, frozen)
+    result = wait_job(manager, scope)
+    assert result["state"] == "failed"
+    assert result["cleanup"] == ("unknown" if leave_stage else "confirmed")
+    assert (workspace / "input.json").read_bytes() == blob
 
 
 def test_cancel_before_http_start_reserves_identity_and_never_launches_late_work(jobs):

@@ -26,20 +26,20 @@ METHODS = {
         "files": ("new_meta/__init__.py", "new_meta/engines/__init__.py", "new_meta/engines/meta_engine.py",
                   "new_meta/schemas/__init__.py", "new_meta/schemas/meta_result.py"),
         "packages": ("numpy", "scipy", "pydantic"),
-        "comparison": {"absoluteTolerance": 1e-10, "relativeTolerance": 1e-9, "units": "declared_effect_measure"},
+        "comparison": {"absoluteTolerance": 1e-10, "relativeTolerance": 1e-9},
     },
     "faers.signals": {
         "environment": "EVIMED_REPLAY_SAFETY_ROOT", "defaultRoot": "/engines/safety",
         "files": ("safety_agent/__init__.py", "safety_agent/signals/__init__.py", "safety_agent/signals/disproportionality.py",
                   "safety_agent/signals/tables.py", "safety_agent/signals/_gamma.py", "safety_agent/signals/rules.py", "safety_agent/signals/mgps_fit.py"),
         "packages": ("numpy", "scipy", "pandas"),
-        "comparison": {"absoluteTolerance": 1e-10, "relativeTolerance": 1e-9, "units": "dimensionless"},
+        "comparison": {"absoluteTolerance": 1e-10, "relativeTolerance": 1e-9},
     },
     "bibliometric.network": {
         "environment": "EVIMED_REPLAY_BIBLIOMETRIC_ROOT", "defaultRoot": "/engines/bibliometric",
         "files": ("src/bibliometric/__init__.py", "src/bibliometric/analysis/__init__.py", "src/bibliometric/analysis/network_analyzer.py"),
         "packages": ("numpy", "pandas", "networkx"),
-        "comparison": {"absoluteTolerance": 1e-8, "relativeTolerance": 1e-8, "units": "centrality_and_edge_counts"},
+        "comparison": {"absoluteTolerance": 1e-8, "relativeTolerance": 1e-8},
     },
 }
 MAX_INPUT_BYTES = 8 * 1024 * 1024
@@ -199,6 +199,44 @@ def validate_recipe(value: Any) -> dict[str, Any]:
     return value
 
 
+def numeric_unit(method: str, result: dict, fields: tuple) -> str:
+    """Name the actual numeric scale, without inventing an unrecorded outcome unit."""
+    field = fields[-1]
+    if method == "meta.dl":
+        measure = result["values"]["effect_measure"]
+        original = {"OR": "odds_ratio", "RR": "risk_ratio", "HR": "hazard_ratio", "IRR": "incidence_rate_ratio",
+                    "RD": "risk_difference", "MD": "mean_difference_unspecified_unit", "SMD": "standardized_mean_difference"}[measure]
+        analysis = "log_" + original if measure in {"OR", "RR", "HR", "IRR"} else original
+        if field == "n_studies":
+            return "count"
+        if field in {"i_squared", "weight"}:
+            return "percent"
+        if field in {"p_value", "q_p_value", "q_statistic", "h_squared", "subgroup_q_between", "subgroup_q_between_p"}:
+            return "dimensionless"
+        if field in {"tau_squared", "vi"}:
+            return analysis + "_squared"
+        if field in {"pooled_log", "ci_lower_log", "ci_upper_log", "yi", "se"}:
+            return analysis
+        if field in {"pooled_effect", "ci_lower", "ci_upper"} or fields[0] == "prediction_interval":
+            return original
+    elif method == "faers.signals" and len(fields) >= 2:
+        if fields[1] == "table":
+            return "count"
+        if fields[1] == "ic":
+            return "log2_reporting_ratio"
+        if fields[1] in {"ror", "prr", "chi2"}:
+            return "dimensionless"
+    elif method == "bibliometric.network":
+        if field in {"nodeCount", "edgeCount"}:
+            return "count"
+        if fields[0] == "centrality":
+            if field in {"weighted_degree", "closeness"}:
+                return "cooccurrence_weight"
+            if field in {"degree", "betweenness"}:
+                return "dimensionless"
+    raise ReplayError("replay_output_unit_unknown")
+
+
 def execute(recipe: dict[str, Any], input_bytes: bytes) -> dict[str, Any]:
     recipe = validate_recipe(recipe)
     if len(input_bytes) > MAX_INPUT_BYTES:
@@ -219,17 +257,17 @@ def execute(recipe: dict[str, Any], input_bytes: bytes) -> dict[str, Any]:
     except (ValueError, TypeError, KeyError, OverflowError):
         raise ReplayError("replay_input_invalid") from None
     machine_values = []
-    def collect(value, key):
+    def collect(value, key, fields=()):
         if type(value) in (int, float):
             comparison = observed["comparison"]
-            machine_values.append({"key": key, "value": value, "unit": comparison["units"],
+            machine_values.append({"key": key, "value": value, "unit": numeric_unit(recipe["method"], result, fields),
                                    "absoluteTolerance": comparison["absoluteTolerance"], "relativeTolerance": comparison["relativeTolerance"]})
         elif isinstance(value, dict):
             for field in sorted(value):
-                collect(value[field], f"{key}.{field}" if key else field)
+                collect(value[field], f"{key}.{field}" if key else field, (*fields, field))
         elif isinstance(value, list):
             for index, item in enumerate(value):
-                collect(item, f"{key}[{index}]")
+                collect(item, f"{key}[{index}]", (*fields, index))
     collect(result["values"], "values")
     return {"schemaVersion": 1, "result": result, "machineValues": machine_values, "recipe": recipe,
             "receipt": {"method": recipe["method"], "version": "1",

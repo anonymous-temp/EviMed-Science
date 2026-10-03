@@ -164,6 +164,7 @@ class ReplayJobs:
 
     def _execute(self, key, owned, workspace, project, state, recipe, blob):
         process = None
+        stage = None
         try:
             with isolated_job.stage({}) as stage:
                 input_file = isolated_job.hand_over(blob, "frozen-input.json", stage / "input")
@@ -220,7 +221,7 @@ class ReplayJobs:
                                  resultPath=f"result-replays/{state['jobId']}/output/result.json")
             state.update(cleanup="unknown" if stage.exists() else "confirmed", finishedAt=time.time(), updatedAt=time.time()); self._write(project, state)
         except Exception:
-            cleanup = "confirmed"
+            cleanup = "unknown" if stage is not None and stage.exists() else "confirmed"
             if process is not None and process.returncode is None:
                 try:
                     os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=5)
