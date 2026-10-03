@@ -83,6 +83,8 @@ for(const code of ['invalid_measurement_admission','invalid_measurement_window',
 export function safeCampaignDiagnosticCode(error){
   if(typeof error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(error.code))return error.code;
   if(INTERNAL_CAMPAIGN_CODES.has(error?.message))return error.message;
+  if(error?.message==='timeout exceeded when trying to connect')return 'private_campaign_database_pool_timeout';
+  if(error?.message==='Connection terminated due to connection timeout')return 'private_campaign_database_connect_timeout';
   if(/^native_campaign_tool_not_registered:(?:doc_read|doc_write|evimed_plan|evimed_delegate|run_code)$/.test(error?.message??''))return 'native_campaign_tool_not_registered';
   return ['AssertionError','TypeError','AbortError','TimeoutError'].includes(error?.name)?error.name:'assessment_failed';
 }
@@ -330,7 +332,12 @@ export function observeCampaignInvocationRefusal(app,project,record){
 /** Do not wait for nonexistent tool jobs after an actual native run has already failed. */
 export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt){
  if(typeof sessionId!=='string'||!sessionId||sessionId.length>200)throw new Error('real_generation_campaign_required');
- const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' AND created_at >= $3::timestamptz AND payload->'invocation'->>'sessionId'=$4 AND (NOT COALESCE(payload->'auth' ? 'invocation',false) OR payload->'auth'->'invocation'->>'sessionId'=$4) ORDER BY created_at",[project.userId,project.id,startedAt,sessionId])).rows.filter(row=>row.payload?.invocation?.sessionId===sessionId&&(!row.payload.auth||!Object.hasOwn(row.payload.auth,'invocation')||row.payload.auth.invocation?.sessionId===sessionId));
+ const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' AND created_at >= $3::timestamptz AND payload->'invocation'->>'sessionId'=$4 ORDER BY created_at",[project.userId,project.id,startedAt,sessionId])).rows.filter(row=>{
+  if(row.payload?.invocation?.sessionId!==sessionId)return false;
+  if(!row.payload.auth||!Object.hasOwn(row.payload.auth,'invocation'))return true;
+  const raw=row.payload.auth.invocation;if(typeof raw==='string'&&Buffer.byteLength(raw)>16384)return false;
+  try{const invocation=typeof raw==='string'?JSON.parse(raw):raw;return invocation?.sessionId===sessionId;}catch{return false;}
+ });
  if(rows.length>=2&&rows.every(row=>['succeeded','failed','canceled'].includes(row.status)))return rows;
  const run=(await app.agentRuns.list(project)).find(item=>item.id===runId);
  if(run&&['failed','canceled','succeeded'].includes(run.status))throw Object.assign(new Error('native_campaign_run_terminal'),{code:run.status==='succeeded'?'native_campaign_doc_jobs_incomplete':safeCampaignDiagnosticCode({code:run.errorCode??'native_campaign_run_terminal'}),terminalRun:{id:run.id,sessionId,status:run.status,errorCode:run.errorCode?safeCampaignDiagnosticCode({code:run.errorCode}):null,documentJobs:rows.length}});

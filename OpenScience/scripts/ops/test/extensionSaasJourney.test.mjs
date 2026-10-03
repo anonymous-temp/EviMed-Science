@@ -206,7 +206,7 @@ test('actual production model gateway settles complete synthetic Messages and Op
  }finally{gateway.closeAllConnections();await new Promise(resolve=>gateway.close(resolve));await transport.close();}
 });
 test('document waiting stops on an exact actual terminal run and cannot count jobs from earlier attempts',async()=>{
- const project={userId:'owner',id:'project'},started='2026-10-03T00:00:00.000Z',app={store:{database:{query:async(sql,args)=>{assert.ok(sql.includes('created_at >= $3'));assert.ok(sql.includes("payload->'invocation'->>'sessionId'=$4"));assert.ok(sql.includes("payload->'auth'->'invocation'->>'sessionId'=$4"));assert.deepEqual(args,['owner','project',started,'owned-session']);return{rows:[]};}}},agentRuns:{list:async()=>[{id:'other',status:'failed'},{id:'owned',status:'failed',errorCode:'runtime_session_error'}]}};
+ const project={userId:'owner',id:'project'},started='2026-10-03T00:00:00.000Z',app={store:{database:{query:async(sql,args)=>{assert.ok(sql.includes('created_at >= $3'));assert.ok(sql.includes("payload->'invocation'->>'sessionId'=$4"));assert.deepEqual(args,['owner','project',started,'owned-session']);return{rows:[]};}}},agentRuns:{list:async()=>[{id:'other',status:'failed'},{id:'owned',status:'failed',errorCode:'runtime_session_error'}]}};
  await assert.rejects(campaignDocumentJobs(app,project,'owned','owned-session',started),error=>error.code==='runtime_session_error'&&error.terminalRun.id==='owned');assert.equal(await campaignDocumentJobs(app,project,'running','owned-session',started),null);
  app.agentRuns.list=async()=>[{id:'owned',status:'succeeded'}];await assert.rejects(campaignDocumentJobs(app,project,'owned','owned-session',started),{code:'native_campaign_doc_jobs_incomplete'});
  const rows=[{id:'read',status:'succeeded',payload:{invocation:{sessionId:'owned-session'},auth:{invocation:{sessionId:'owned-session'}}}},{id:'write',status:'succeeded',payload:{invocation:{sessionId:'owned-session'}}}];app.store.database.query=async()=>({rows});assert.deepEqual(await campaignDocumentJobs(app,project,'owned','owned-session',started),rows);
@@ -252,4 +252,18 @@ test('refusal input diagnostics expose fixed schema keys and counts only, includ
  const input={resourceId:'private-value',operation:'doc_read','unknown-key-secret-canary':'secret',...Object.fromEntries(Array.from({length:2048},(_,i)=>['unknown-sensitive-'+i,'secret']))},failure=Object.assign(new Error('refused'),{code:'extension_access_denied'}),records=[],project={userId:'owner',id:'project'},invocation={sessionId:'native',callId:'call',rootCallId:'call',agentId:'native',toolName:'doc_read',runtimeGeneration:'epoch'},app={hostedExtensions:{operations:{resolveInvocation:async()=>{throw failure;}},actors:{resolve:async()=>null}},runtimeManager:{extensionInvocationFacts:async()=>({running:true,origin:'root',tools:['doc_read'],runtimeGeneration:'epoch'}),sessionTranscript:async()=>({turns:[{startSeq:1,end:null}],messages:[{role:'assistant',seq:2,turnStartSeq:1,parts:[{type:'tool',callId:'call',status:'pending',tool:'doc_read',input}]}]})}};
  observeCampaignInvocationRefusal(app,project,async evidence=>records.push(evidence));await assert.rejects(app.hostedExtensions.operations.resolveInvocation({userId:'owner',projectId:'project',runtimeGeneration:'epoch'},invocation,{operation:'doc_read',resourceId:'private-value'}),error=>error===failure);
  assert.deepEqual(records[0].nativeInputFields,['operation','resourceId']);assert.equal(records[0].nativeInputTotalCount,2051);assert.equal(records[0].nativeInputUnknownCount,2049);assert.equal(JSON.stringify(records).includes('unknown-key-secret-canary'),false);assert.equal(JSON.stringify(records).includes('unknown-sensitive-'),false);assert.ok(JSON.stringify(records).length<2000);
+});
+
+test('database diagnostics classify only pinned pool timeout literals without message content',()=>{
+ assert.equal(safeCampaignDiagnosticCode(new Error('timeout exceeded when trying to connect')),'private_campaign_database_pool_timeout');
+ assert.equal(safeCampaignDiagnosticCode(new Error('Connection terminated due to connection timeout')),'private_campaign_database_connect_timeout');
+ assert.equal(safeCampaignDiagnosticCode(new Error('timeout exceeded when trying to connect secret-canary')),'assessment_failed');
+});
+
+test('real ledger auth invocation JSON header is parsed strictly without allowing foreign or malformed bindings',async()=>{
+ const row=invocation=>({id:'owned',status:'succeeded',payload:{invocation:{sessionId:'owned-session'},auth:{invocation}}});
+ const accepted=[row(JSON.stringify({sessionId:'owned-session'})),row({sessionId:'owned-session'})];
+ const rejected=[row(JSON.stringify({sessionId:'foreign-session'})),row('{invalid'),row(null),row('x'.repeat(16385))];
+ const app={store:{database:{query:async()=>({rows:[...accepted,...rejected]})}},agentRuns:{list:async()=>[]}};
+ assert.deepEqual(await campaignDocumentJobs(app,{userId:'owner',id:'project'},'run','owned-session',new Date().toISOString()),accepted);
 });
