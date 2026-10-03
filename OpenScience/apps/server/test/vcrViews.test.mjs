@@ -12,8 +12,8 @@ import test from "node:test";
 import { VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  attentionOf, budgetView, conclusionOf, designsSentence, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
-  presentPrecedent, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
+  attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
+  presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
@@ -230,6 +230,46 @@ test("what needs attention is deterministic over the rows: AI-set cards, a route
   assert.match(lines[2].text, /入排条件已变更/);
   assert.deepEqual(attentionOf({ assumptions: [], scenarios: [], comparators: [], results: [], stale: [], jobs: [], steps: {} }), [], "a study with nothing wrong says nothing");
   assert.equal(notEstimableDesign([{ route: "literature_control", conclusion: "limited" }], []), null);
+});
+
+test("an export that ended with no document is said under 「需要关注」 the way a failed step is, on the home list and the study page alike", () => {
+  const quiet = { assumptions: [], scenarios: [], comparators: [], results: [], stale: [], jobs: [], steps: {} };
+  const document = { results: { study: { id: "std_1" } }, reports: [{ section: "main", template: "正文", rendered: "正文" }] };
+  const line = (/** @type {string} */ label) => ({ kind: "export_failed", tone: "attention", tab: null, text: `「${label}」没有生成，已算出的结果保留` });
+  // Newest first, as the store returns them: the pilot's study after its 模拟报告 and its CDE pack ended 「未完成」.
+  const pilot = [
+    { id: "exp_5", kind: "cde_communication_pack", state: "failed", cover: {}, createdAt: "2026-10-03T14:10:00.000Z" },
+    { id: "exp_3", kind: "simulation_report", state: "failed", cover: {}, createdAt: "2026-10-03T13:30:00.000Z" },
+    { id: "exp_2", kind: "study_package", state: "ready", cover: { ...document, revisionOf: "exp_1" }, createdAt: "2026-10-03T13:00:00.000Z" },
+    { id: "exp_1", kind: "study_package", state: "ready", cover: document, createdAt: "2026-10-03T12:00:00.000Z" },
+  ];
+  assert.deepEqual(attentionOf({ ...quiet, exports: pilot }), [line("CDE 沟通交流资料包"), line("模拟报告")]);
+  assert.deepEqual(failedExportsOf(pilot).map((row) => row.id), ["exp_5", "exp_3"]);
+
+  // Asked for again: while the new one is on its way the older failure is no longer the newest word, and when it arrives the line is gone.
+  const again = (/** @type {string} */ state, /** @type {Record<string, any>} */ cover) =>
+    [{ id: "exp_6", kind: "simulation_report", state, cover, createdAt: "2026-10-03T15:00:00.000Z" }, ...pilot];
+  assert.deepEqual(attentionOf({ ...quiet, exports: again("queued", {}) }), [line("CDE 沟通交流资料包")]);
+  assert.deepEqual(attentionOf({ ...quiet, exports: again("ready", document) }), [line("CDE 沟通交流资料包")]);
+  assert.deepEqual(attentionOf({ ...quiet, exports: again("failed", {}) }).map((entry) => entry.text), [line("模拟报告").text, line("CDE 沟通交流资料包").text],
+    "a second failure is one line, not two");
+
+  // A revision that did not finish leaves the document it was revising: nothing the reader asked for is missing.
+  const revised = [{ id: "exp_2", kind: "study_package", state: "failed", cover: { revisionOf: "exp_1" } }, pilot[3]];
+  assert.deepEqual(attentionOf({ ...quiet, exports: revised }), []);
+  // The same holds for a document the researcher's own conversation wrote and nobody has converted yet.
+  assert.deepEqual(attentionOf({ ...quiet, exports: [{ id: "exp_8", kind: "validation_pack", state: "failed", cover: {} },
+    { id: "exp_7", kind: "validation_pack", state: "queued", cover: document }] }), []);
+  // No exports, no line; an export still running is not a failure.
+  assert.deepEqual(attentionOf({ ...quiet, exports: [{ id: "exp_9", kind: "study_package", state: "running", cover: {} }] }), []);
+
+  // One rule, two pages: the home list's row and the study page's overview say the same lines after a failed step's.
+  const steps = { trial: { status: "failed" } };
+  const expected = [{ kind: "step_failed", tone: "attention", tab: null, text: "「试验」这一步没有做完，已算出的部分保留" }, line("CDE 沟通交流资料包"), line("模拟报告")];
+  const home = presentSummary({ study: { ...study, steps, updatedAt: "2026-09-28T01:00:00.000Z", createdAt: "x" }, results: [], stale: [], jobs: [],
+    assumptions: [], scenarios: [], comparators: [], grid: null, exports: pilot, now: NOW });
+  assert.deepEqual(home.attention, expected);
+  assert.deepEqual(presentStudy({ ...emptyBundle(), study: { ...study, steps }, exports: pilot }).overview.attention, expected);
 });
 
 // --- the ceiling -----------------------------------------------------------------------------------------

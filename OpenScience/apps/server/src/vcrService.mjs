@@ -37,8 +37,8 @@
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
-  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_STEPS,
-  VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel,
+  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_SCENARIO_SCHEMAS,
+  VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -158,6 +158,65 @@ export function vcrAudienceAllows(config, user) {
 }
 
 /**
+ * What a reference simulator's scenario takes, in the reader's words, each
+ * beside the scenario keys it stands for. A card's 「输入」 is this table read
+ * through the domain's schema for the simulator's own method
+ * ({@link vcrReferenceModelInputs}), so a card cannot offer an input its
+ * endpoint's schema refuses. The three lists were typed by hand, and two of
+ * them said 「脱落率」 and 「入组节奏」 for simulators that have no follow-up:
+ * a run that followed the binary card wrote `accrual`, was refused for a field
+ * the engine does not read, and spent a whole retry (pilot acceptance,
+ * 2026-10-03). The same lists offered a risk ratio and an acceleration factor
+ * no schema has.
+ */
+export const VCR_REFERENCE_INPUTS = Object.freeze([
+  Object.freeze({ label: "两组人数", keys: Object.freeze(["design.nTreat", "design.nControl"]) }),
+  Object.freeze({ label: "处理效应（均值差）", keys: Object.freeze(["truth.effect"]) }),
+  Object.freeze({ label: "结局的标准差", keys: Object.freeze(["truth.sd"]) }),
+  Object.freeze({ label: "与基线测量的相关", keys: Object.freeze(["truth.baselineCorrelation"]) }),
+  Object.freeze({ label: "对照组事件率", keys: Object.freeze(["truth.controlRate"]) }),
+  Object.freeze({ label: "处理效应（试验组事件率、风险差或比值比，三选一）",
+    keys: Object.freeze(["truth.treatmentRate", "truth.riskDifference", "truth.oddsRatio"]) }),
+  Object.freeze({ label: "风险比", keys: Object.freeze(["truth.hazardRatio"]) }),
+  Object.freeze({ label: "对照组生存分布（中位时间，或指数、Weibull、分段指数）",
+    keys: Object.freeze(["truth.controlMedian", "truth.controlDistribution"]) }),
+  Object.freeze({ label: "协变量效应", keys: Object.freeze(["truth.covariateEffects", "truth.covariateLogit"]) }),
+  Object.freeze({ label: "入组节奏", keys: Object.freeze(["accrual.kind", "accrual.duration", "accrual.breaks", "accrual.rates", "accrual.tail"]) }),
+  Object.freeze({ label: "随访时长", keys: Object.freeze(["accrual.followup", "accrual.maxFollowup"]) }),
+  Object.freeze({ label: "脱落率（每 12 个时间单位）", keys: Object.freeze(["accrual.dropoutAnnual"]) }),
+]);
+
+/**
+ * The scenario keys, two levels deep (`truth.controlRate`, `accrual.followup`),
+ * the engine's schema reads for one endpoint family's patient generator — the
+ * `when` gates applied as the validators apply them. The endpoint's own type is
+ * the simulator's identity, not something a reader supplies.
+ * @param {string} endpointType one of the domain's endpoint types
+ * @returns {readonly string[]}
+ */
+export function vcrPatientScenarioKeys(endpointType) {
+  const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[`patients.${endpointType}`];
+  const root = { endpoint: { type: endpointType } };
+  /** @type {string[]} */
+  const keys = [];
+  for (const [top, field] of Object.entries(/** @type {Record<string, any>} */ (schema?.fields ?? {}))) {
+    if (top === "endpoint" || !whenHolds(field.when, root)) continue;
+    // A variant's keys are its discriminator and every key any of its variants takes.
+    const inner = field.t === "variant" ? { [field.on]: {}, ...Object.assign({}, ...Object.values(field.variants)) } : field.fields ?? {};
+    for (const [key, entry] of Object.entries(/** @type {Record<string, any>} */ (inner))) {
+      if (whenHolds(entry.when, root)) keys.push(`${top}.${key}`);
+    }
+  }
+  return Object.freeze(keys);
+}
+
+/** A reference simulator's 「输入」: the rows of the table its endpoint's schema reads at least one key of. @param {string} endpointType */
+export function vcrReferenceModelInputs(endpointType) {
+  const read = new Set(vcrPatientScenarioKeys(endpointType));
+  return Object.freeze(VCR_REFERENCE_INPUTS.filter((input) => input.keys.some((key) => read.has(key))).map((input) => input.label));
+}
+
+/**
  * The three mathematical reference simulators the first catalogue ships
  * (plan §8.2). Scenario-tier by construction: they answer 「在这些假设下会
  * 怎样」 and carry no claim about any real population, which is why their
@@ -171,7 +230,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       type: "mathematical_simulation",
       provider: "EviMed 虚拟临研",
       interface: "vcr-engine patients.continuous",
-      inputs: Object.freeze(["均值", "标准差", "处理效应", "脱落率", "入组节奏"]),
+      inputs: vcrReferenceModelInputs("continuous"),
       outputs: "按给定分布生成的连续终点观测值；输出的是情景推演，不是对任何真实人群的预测。",
       missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
       knownLimits: Object.freeze(["不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
@@ -188,7 +247,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       type: "mathematical_simulation",
       provider: "EviMed 虚拟临研",
       interface: "vcr-engine patients.binary",
-      inputs: Object.freeze(["事件率", "处理效应（OR / RR / RD）", "脱落率", "入组节奏"]),
+      inputs: vcrReferenceModelInputs("binary"),
       outputs: "按给定事件率生成的二分类观测值；输出的是情景推演，不是对任何真实人群的预测。",
       missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
       knownLimits: Object.freeze(["不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
@@ -205,7 +264,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       type: "mathematical_simulation",
       provider: "EviMed 虚拟临研",
       interface: "vcr-engine patients.time_to_event",
-      inputs: Object.freeze(["基线风险函数", "风险比或加速因子", "随访时长", "删失机制", "入组节奏"]),
+      inputs: vcrReferenceModelInputs("time_to_event"),
       outputs: "按给定风险函数生成的事件时间与删失指示；生成的曲线不得画成观察到的 KM 曲线。",
       missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。",
       knownLimits: Object.freeze(["默认比例风险，非比例情景须显式设定", "不含任何真实人群的协变量结构", "不承载疗效或安全性证据"]),
@@ -377,7 +436,7 @@ export class VcrService {
     const now = this.now();
     const studies = await this.store.listStudies(String(user.id));
     const groups = await Promise.all(studies.map(async (study) => {
-      const [results, allResults, stale, jobs, assumptions, scenarios, comparators, reviews, roles, grid, decisions] = await Promise.all([
+      const [results, allResults, stale, jobs, assumptions, scenarios, comparators, reviews, roles, grid, decisions, exports] = await Promise.all([
         this.store.results(study.id),
         this.store.allResults(study.id),
         this.store.staleMarks(study.id),
@@ -389,8 +448,10 @@ export class VcrService {
         this.#rolesOf(study, user),
         this.store.latestDesignGrid(study.id),
         this.store.decisions(study.id),
+        // The home list says what the study page says under 「需要关注」, an export that did not arrive included.
+        this.store.exports(study.id),
       ]);
-      const summary = presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions, now });
+      const summary = presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions, exports, now });
       return { study, summary, reviews, roles };
     }));
     const recruiting = groups.filter((group) => group.roles.some((/** @type {string} */ role) => roleAllows(role, "contact_patients")));

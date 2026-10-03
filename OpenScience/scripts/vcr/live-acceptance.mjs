@@ -11,6 +11,18 @@ import { VCR_EXPORT_KINDS, VCR_STEPS } from '../../packages/domain/src/vcrVocabu
 const COMMANDS = ['intake', 'observe', 'run-step', 'engine-job', 'vcr-exports', 'artifact-export'];
 const id = value => { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) throw new Error('invalid_id'); return value; };
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+// The route's ceiling on a study name (`vcrStudyName` in apps/server/src/vcrRoutes.mjs); the test holds the two equal.
+export const STUDY_NAME_MAX = 40;
+/** The study name an intake creates: the owner's words, cut to leave room, then a tag cut from the receipt's
+ * correlation so the study can be found again by exact suffix. The whole 47-character correlation used to be
+ * appended, which no name of 40 characters can hold: every intake ended at 400 vcr_name_invalid.
+ * @param {unknown} name @param {string} correlation @returns {{ name: string, tag: string }} */
+export function acceptanceStudyName(name, correlation) {
+  const tag = `acc-${String(correlation).replace(/^acceptance-/, '').replace(/-/g, '').slice(0, 12)}`;
+  if (!/^acc-[a-f0-9]{12}$/.test(tag)) throw new Error('correlation_required');
+  const words = [...String(name ?? '').replace(/\s+/g, ' ').trim() || 'Acceptance'];
+  return { name: `${words.slice(0, STUDY_NAME_MAX - tag.length - 1).join('').trim()} ${tag}`, tag };
+}
 export function validateConfig(c) {
   if (!COMMANDS.includes(c.command) || !['S2', 'S3', 'S4', 'staging'].includes(c.stage)) throw new Error('explicit_command_and_stage_required');
   const url = new URL(c.baseUrl);
@@ -75,9 +87,11 @@ export async function safeRead(file, max, privateFile = false) {
     return buffer.subarray(0, offset);
   } finally { await handle.close(); }
 }
+// A shape the field map has nothing for is answered `skipped`, and is no defect: a baseline-only source derives
+// the subject table and skips the other two. Only a shape the owner expected has to be registered.
 export function validateTables(tables, expected) {
   const nonzero = value => typeof value === 'number' ? value > 0 : Array.isArray(value) ? value.length > 0 : value && typeof value === 'object' ? Object.values(value).some(nonzero) : Boolean(value);
-  if (!Array.isArray(expected) || !expected.length || expected.some(shape => typeof shape !== 'string') || !tables?.registered?.length || expected.some(shape => !tables.registered.some(row => row.shape === shape)) || tables.refused?.length || tables.skipped?.length || nonzero(tables.dropped)) throw new Error('tables_not_admitted');
+  if (!Array.isArray(expected) || !expected.length || expected.some(shape => typeof shape !== 'string') || !tables?.registered?.length || expected.some(shape => !tables.registered.some(row => row.shape === shape)) || tables.refused?.length || nonzero(tables.dropped)) throw new Error('tables_not_admitted');
 }
 export function reviewAcceptance(reviews) {
   const roles = ['clinical', 'statistical'];
@@ -160,8 +174,12 @@ export async function runAcceptance(config) {
         if (!Array.isArray(input.expectedTableShapes) || !input.expectedTableShapes.length) throw new Error('expected_table_shapes_required');
         receipt.input = { datasetClass: input.datasetClass, sha256: sha(bytes), bytes: bytes.length };
         receipt.correlation = `acceptance-${randomUUID()}`;
-        receipt.reconciliation = `Read GET /api/vcr/studies and locate exact name suffix ${receipt.correlation}; never repeat an unknown creation automatically.`;
-        const study = await request('POST', '/api/vcr/studies', { ...input.study, name: `${String(input.study.name ?? 'Acceptance').slice(0, 30)} ${receipt.correlation}` });
+        const named = acceptanceStudyName(input.study.name, receipt.correlation);
+        // The label has to survive the cut: a synthetic study is said to be one by the name it is created under.
+        if (input.datasetClass === 'synthetic' && !/synthetic/i.test(named.name)) throw new Error('synthetic_fixture_requires_source_and_study_labels');
+        receipt.studyName = named.name;
+        receipt.reconciliation = `Read GET /api/vcr/studies and locate exact name suffix ${named.tag}; never repeat an unknown creation automatically.`;
+        const study = await request('POST', '/api/vcr/studies', { ...input.study, name: named.name });
         studyId = id(study.id); receipt.createdStudyId = studyId;
         receipt.studySessionId = study.sessionId ?? null;
         const root = `/api/vcr/studies/${studyId}`;
@@ -215,25 +233,33 @@ export async function runAcceptance(config) {
       }
       if (c.command === 'vcr-exports') {
         const delivered = [];
+        receipt.reviewAcceptance = {};
         for (const kind of VCR_EXPORT_KINDS) {
-          const exported = await request('POST', `${root}/export`, { kind });
-          let conversionRow = exported.conversion;
-          if (!conversionRow?.id) {
-            const vcrExportId = id(exported.export?.id);
-            await deny(`${root}/export/${vcrExportId}`);
-            const ready = await pollReady(async () => {
-              const view = await request('GET', `${root}/export/${vcrExportId}`);
-              receipt.currentExport = { id: vcrExportId, state: view.state, reviews: view.document?.reviews ?? [] };
-              if (view.documentExportId) return { state: 'ready', id: view.documentExportId };
-              return { state: view.state === 'failed' ? 'failed' : 'queued' };
-            }, { timeoutMs: Math.max(1, until - Date.now()) });
-            conversionRow = { id: ready.id };
+          let vcrExportId = null;
+          // One kind that fails is that kind's finding. The kinds after it are still asked for, and what
+          // was delivered before it is still inspected below: the driver used to end at the first failure,
+          // so a failed second kind left the first unreviewed and the last two untried.
+          try {
+            const exported = await request('POST', `${root}/export`, { kind });
+            vcrExportId = id(exported.export?.id);
+            if (exported.export?.kind && exported.export.kind !== kind) throw new Error('export_kind_mismatch');
+            let conversionRow = exported.conversion;
+            if (!conversionRow?.id) {
+              await deny(`${root}/export/${vcrExportId}`);
+              const ready = await pollReady(async () => {
+                const view = await request('GET', `${root}/export/${vcrExportId}`);
+                receipt.currentExport = { id: vcrExportId, state: view.state, reviews: view.document?.reviews ?? [] };
+                if (view.documentExportId) return { state: 'ready', id: view.documentExportId };
+                return { state: view.state === 'failed' ? 'failed' : 'queued' };
+              }, { timeoutMs: Math.max(1, until - Date.now()) });
+              conversionRow = { id: ready.id };
+            }
+            await conversion(conversionRow, kind);
+            delivered.push({ kind, vcrExportId, documentExportId: conversionRow.id });
+            receipt.reviewAcceptance[kind] = { verified: false, state: 'not_yet_inspected', conversion: 'completed', vcrExportId, documentExportId: conversionRow.id };
+          } catch (error) {
+            receipt.reviewAcceptance[kind] = { verified: false, state: 'export_failed', conversion: 'failed', vcrExportId, error: redact(String(error.message), secrets) };
           }
-          await conversion(conversionRow, kind);
-          const vcrExportId = id(exported.export?.id);
-          delivered.push({ kind, vcrExportId, documentExportId: conversionRow.id });
-          receipt.reviewAcceptance ??= {};
-          receipt.reviewAcceptance[kind] = { verified: false, state: 'not_yet_inspected', conversion: 'completed', documentExportId: conversionRow.id };
         }
         // All usable conversions are preserved before review waiting begins.
         for (const { kind, vcrExportId, documentExportId } of delivered) {
@@ -249,7 +275,8 @@ export async function runAcceptance(config) {
               }, { timeoutMs: Math.max(1, until - Date.now()) });
             } catch (error) { review.error = String(error.message); }
           }
-          receipt.reviewAcceptance[kind] = { ...review, conversion: 'completed', documentExportId };
+          // The export's own state is kept beside its documents: one delivered from a row that still reads queued is a finding.
+          receipt.reviewAcceptance[kind] = { ...review, conversion: 'completed', vcrExportId, documentExportId, exportState: view.state ?? null };
           // Capture raw platform review receipts when the export exposes its run.
           if (view.runId) {
             const studyView = await request('GET', root);
@@ -275,6 +302,6 @@ function cli(argv) {
   return out;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  if (process.argv.includes('--help')) console.log('node scripts/vcr/live-acceptance.mjs <intake|observe|run-step|engine-job|vcr-exports|artifact-export> --stage <staging|S2|S3|S4> --base-url <https-origin> --credentials <absolute-private-json> --stranger-credentials <absolute-private-json> --output <absolute-new-dir> [--study-id ID | --input absolute-json] [--step definition|evidence|population|patients|comparator|trial|matching] [--allow-research yes] [--timeout-ms 300000]\nIntake requires {datasetClass,authorizationNote,file,study,source,fieldMap,expectedTableShapes}; artifact-export requires {projectId,source:{artifactId,root,revision}}. All paths must be absolute with no symlink components. Intake and VCR exports can schedule AI work, requiring --allow-research yes. Run-step authorizes one explicit study action, subject to existing server usage caps. Engine-job requires a real API body including seed, replicates and cpuSecondsLimit <=600. Unknown POST outcomes must be reconciled via read-only observe/study-list lookup; never blindly repeat. VCR documents remain downloaded when AI review is unavailable, but review acceptance stays incomplete. No invented data or automatic retries/cleanup.');
+  if (process.argv.includes('--help')) console.log('node scripts/vcr/live-acceptance.mjs <intake|observe|run-step|engine-job|vcr-exports|artifact-export> --stage <staging|S2|S3|S4> --base-url <https-origin> --credentials <absolute-private-json> --stranger-credentials <absolute-private-json> --output <absolute-new-dir> [--study-id ID | --input absolute-json] [--step definition|evidence|population|patients|comparator|trial|matching] [--allow-research yes] [--timeout-ms 300000]\nIntake requires {datasetClass,authorizationNote,file,study,source,fieldMap,expectedTableShapes}; artifact-export requires {projectId,source:{artifactId,root,revision}}. All paths must be absolute with no symlink components. Intake and VCR exports can schedule AI work, requiring --allow-research yes. Run-step authorizes one explicit study action, subject to existing server usage caps. Engine-job requires a real API body including seed, replicates and cpuSecondsLimit <=600. Unknown POST outcomes must be reconciled via read-only observe/study-list lookup; never blindly repeat. VCR documents remain downloaded when AI review is unavailable, but review acceptance stays incomplete. An export kind that fails is recorded under its own name; the remaining kinds are still requested and the delivered ones still inspected. No invented data or automatic retries/cleanup.');
   else runAcceptance(cli(process.argv.slice(2))).then(result => { console.log(JSON.stringify({ status: result.status, receipt: 'receipt.json' })); process.exitCode = result.status === 'incomplete' ? 1 : 0; }).catch(() => { console.error('Acceptance setup failed; check explicit arguments and private credential files.'); process.exitCode = 1; });
 }

@@ -42,7 +42,7 @@ import {
   intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
 } from "@evimed/domain";
 
-import { vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
+import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -253,13 +253,33 @@ export function notEstimableDesign(comparators, results) {
 }
 
 /**
+ * The documents someone asked for that the study still does not have: of each
+ * kind, the newest export, when it ended with nothing to read and no other
+ * export of its kind holds a document. A revision that failed is therefore not
+ * one of them — the document it was revising is still there — and the line goes
+ * when the same document is exported again and arrives.
+ * @param {readonly Record<string, any>[]} exports newest first, as the store returns them
+ */
+export function failedExportsOf(exports) {
+  /** @type {Set<string>} */
+  const seen = new Set();
+  return exports.filter((row) => {
+    const kind = String(row.kind);
+    if (seen.has(kind)) return false;
+    seen.add(kind);
+    return row.state === "failed" && !exports.some((other) => String(other.kind) === kind && vcrExportHoldsDocument(other.cover));
+  });
+}
+
+/**
  * The lines under 「需要关注」: what the reader has to look at. Deterministic
  * over the rows, so the home list and the overview say the same thing.
  * @param {{ assumptions: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
  *   comparators: readonly Record<string, any>[], results: readonly Record<string, any>[], allResults?: readonly Record<string, any>[],
- *   stale: readonly Record<string, any>[], jobs: readonly Record<string, any>[], steps: Record<string, any> }} input
+ *   stale: readonly Record<string, any>[], jobs: readonly Record<string, any>[], steps: Record<string, any>,
+ *   exports?: readonly Record<string, any>[] }} input
  */
-export function attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps }) {
+export function attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps, exports = [] }) {
   /** @type {Array<Record<string, any>>} */
   const lines = [];
   const used = new Set(scenarios.flatMap((scenario) => list(scenario.assumptionIds).map(String)));
@@ -300,6 +320,12 @@ export function attentionOf({ assumptions, scenarios, comparators, results, allR
       lines.push({ kind: "step_failed", tone: "attention", tab: null,
         text: `「${(/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step]}」这一步没有做完，已算出的部分保留` });
     }
+  }
+  // An export that ended with no document is said the way a step that did not finish is: its row alone read
+  // 「未完成」 in a list nothing pointed at, after a run the study had paid for.
+  for (const row of failedExportsOf(exports)) {
+    lines.push({ kind: "export_failed", tone: "attention", tab: null,
+      text: `「${(/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH))[String(row.kind)] ?? "研究包"}」没有生成，已算出的结果保留` });
   }
   return lines;
 }
@@ -385,9 +411,9 @@ export function numberString(value, precision, mcse = null) {
  * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], stale: readonly Record<string, any>[],
  *   jobs: readonly Record<string, any>[], assumptions: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
  *   comparators: readonly Record<string, any>[], grid: Record<string, any> | null, decisions?: readonly Record<string, any>[], now: Date,
- *   allResults?: readonly Record<string, any>[] }} input
+ *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[] }} input
  */
-export function presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions = [], now }) {
+export function presentSummary({ study, results, allResults, stale, jobs, assumptions, scenarios, comparators, grid, decisions = [], exports = [], now }) {
   const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, forecastResults: [], now });
   return {
     id: study.id,
@@ -399,7 +425,7 @@ export function presentSummary({ study, results, allResults, stale, jobs, assump
     status: study.status,
     steps: study.steps,
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
-    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps: study.steps }),
+    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
     updatedAt: zhTime(study.updatedAt, now) ?? "",
     createdAt: study.createdAt,
   };
@@ -512,7 +538,7 @@ export function presentStudy(bundle) {
     metrics: overviewMetrics(bundle, designs),
     counts: headline ? countsView(headline.counts, { tier: study.dataTier, scope: headlineScope(headline, rows) }) : null,
     designs,
-    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps }),
+    attention: attentionOf({ assumptions, scenarios, comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
     changes: presentChanges(bundle),
     deliverables: exports.map((/** @type {any} */ row, /** @type {number} */ index) => presentDeliverable(row, index, exports, now)),
   };

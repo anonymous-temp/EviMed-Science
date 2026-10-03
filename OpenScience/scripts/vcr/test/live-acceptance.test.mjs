@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateConfig, boundedBytes, pollReady, redact, runAcceptance, validateTables, reviewAcceptance, safeRead } from '../live-acceptance.mjs';
+import { STUDY_NAME_MAX, acceptanceStudyName, validateConfig, boundedBytes, pollReady, redact, runAcceptance, validateTables, reviewAcceptance, safeRead } from '../live-acceptance.mjs';
+import { VCR_EXPORT_KINDS } from '../../../packages/domain/src/vcrVocabulary.mjs';
+import { VCR_STUDY_NAME_MAX, vcrStudyName } from '../../../apps/server/src/vcrRoutes.mjs';
 import { mkdtemp, writeFile, readFile, rm, stat, symlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -70,6 +72,27 @@ test('snapshot admission distinguishes refused, absent and expected tables', () 
   assert.throws(() => validateTables({ registered: [{ shape: 'subject' }], refused: [] }, ['subject', 'events']), /tables_not_admitted/);
   assert.throws(() => validateTables({ registered: [{ shape: 'subject' }], refused: [], dropped: { rows: 1 } }, ['subject']), /tables_not_admitted/);
   assert.doesNotThrow(() => validateTables({ registered: [{ shape: 'subject' }], refused: [], skipped: [], dropped: {} }, ['subject']));
+  // What a baseline-only source answers (live, 2026-10-03): the two shapes its field map has nothing for are skipped.
+  const baselineOnly = { registered: [{ shape: 'subject', rowCount: 60 }], refused: [], skipped: ['longitudinal', 'events'], subjects: 60, dropped: {} };
+  assert.doesNotThrow(() => validateTables(baselineOnly, ['subject']));
+  // A skipped shape the owner expected is still not admitted: it was not registered.
+  assert.throws(() => validateTables(baselineOnly, ['subject', 'events']), /tables_not_admitted/);
+  assert.throws(() => validateTables({ ...baselineOnly, refused: [{ shape: 'events' }] }, ['subject']), /tables_not_admitted/);
+});
+test('an intake study name passes the route\'s own rule whatever the owner called the study, and still ends in a tag it can be found by', () => {
+  assert.equal(STUDY_NAME_MAX, VCR_STUDY_NAME_MAX, 'the driver cuts to the ceiling the route enforces');
+  const correlation = 'acceptance-d04b914d-d8fe-4518-9987-77f811f689ce';
+  for (const given of ['SYNTHETIC intake', 'SYNTHETIC 验收 ZZ000 T0 20261003 基线数据接入检查（合成数据）', 'S'.repeat(200),
+    '  spaced \t out   name ', '合成验收'.repeat(20), '', undefined]) {
+    const { name, tag } = acceptanceStudyName(given, correlation);
+    assert.equal(tag, 'acc-d04b914dd8fe');
+    assert.equal(vcrStudyName(name), name, `the route takes ${JSON.stringify(name)} as it stands`);
+    assert.ok(name.endsWith(` ${tag}`) && [...name].length <= VCR_STUDY_NAME_MAX, name);
+  }
+  assert.equal(acceptanceStudyName('SYNTHETIC intake', correlation).name, 'SYNTHETIC intake acc-d04b914dd8fe');
+  // What it used to send: thirty characters of the name and the whole correlation.
+  assert.throws(() => vcrStudyName(`${'SYNTHETIC intake'.slice(0, 30)} ${correlation}`), { code: 'vcr_name_invalid' });
+  assert.throws(() => acceptanceStudyName('SYNTHETIC intake', 'no hex here'), /correlation_required/);
 });
 test('VCR review acceptance requires current completed clinical and statistical AI review with provenance', () => {
   const reviews = ['clinical', 'statistical'].map(role => ({ role, reviewerKind: 'ai', status: 'done', current: true, by: 'model', inputDigest: 'digest' }));
@@ -96,7 +119,9 @@ async function fixture(handler, run) {
     const credentials = path.join(dir, 'owner.json'), strangerCredentials = path.join(dir, 'stranger.json');
     await writeFile(credentials, JSON.stringify({ cookie: 'session=owner', csrf: 'csrf-owner' }), { mode: 0o600 });
     await writeFile(strangerCredentials, JSON.stringify({ cookie: 'session=stranger', csrf: 'csrf-stranger' }), { mode: 0o600 });
-    await run({ dir, command: 'observe', stage: 'staging', baseUrl: `http://127.0.0.1:${server.address().port}`, credentials, strangerCredentials, timeoutMs: 5000, output: path.join(dir, 'out') });
+    // Every request leaves fsynced receipts, which is most of what these runs take on a busy disk: the deadline is a
+    // ceiling no run here is meant to reach (the short-deadline controls above are where a timeout is the subject).
+    await run({ dir, command: 'observe', stage: 'staging', baseUrl: `http://127.0.0.1:${server.address().port}`, credentials, strangerCredentials, timeoutMs: 30000, output: path.join(dir, 'out') });
   } finally { await new Promise(resolve => server.close(resolve)); await rm(dir, { recursive: true }); }
 }
 const json = (res, data, status = 200) => { res.writeHead(status); res.end(JSON.stringify({ data })); };
@@ -115,23 +140,98 @@ test('POST accepted then disconnected retains private durable unknown intent and
     assert.equal(receipt.attempts[0].outcome, 'unknown');
   });
 });
-test('HTTP 201 snapshot with refused tables records snapshot and leaves intake incomplete', async () => {
-  await fixture((req, res) => {
-    req.resume();
+/** The intake routes, with study creation held to the real route's own name rule: a double that took any
+ * name is how a driver that could never create a study passed its tests.
+ * @param {any} tables what the snapshot freeze answers @param {string[]} names every study name posted */
+const intakeServer = (tables, names = []) => (req, res) => {
+  const chunks = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => {
     if (req.headers.cookie === 'session=stranger') return json(res, null, 404);
-    if (req.url === '/api/vcr/studies') return json(res, { id: 'std_1', projectId: 'prj_1' }, 201);
+    if (req.url === '/api/vcr/studies' && req.method === 'POST') {
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      names.push(body.name);
+      try { vcrStudyName(body.name); } catch (error) { res.writeHead(error.status); return res.end(JSON.stringify({ error: error.message, code: error.code })); }
+      return json(res, { id: 'std_1', projectId: 'prj_1' }, 201);
+    }
     if (req.url.endsWith('/data/sources')) return json(res, { source: { id: 'src_1' } }, 201);
     if (req.url.includes('/files?')) return json(res, { file: { id: 'fil_1' } }, 201);
     if (req.url.endsWith('/fieldmap')) return json(res, { hash: 'a'.repeat(64), entryIssues: [], mapIssues: [] }, 201);
-    if (req.url.endsWith('/snapshots')) return json(res, { snapshot: { id: 'snp_1' }, tables: { registered: [], refused: [{ code: 'invalid' }], dropped: {} } }, 201);
+    if (req.url.endsWith('/snapshots')) return json(res, { snapshot: { id: 'snp_1' }, tables }, 201);
     json(res, {});
-  }, async c => {
-    const file = path.join(c.dir, 'synthetic.csv'); await writeFile(file, 'id,age\n1,40\n');
-    const input = path.join(c.dir, 'input.json'); await writeFile(input, JSON.stringify({ datasetClass: 'synthetic', authorizationNote: 'Acceptance fixture only', file, study: { name: 'Synthetic test', question: 'Synthetic testing only' }, source: { name: 'Synthetic fixture', valueSource: 'synthetic' }, fieldMap: { columns: [] }, expectedTableShapes: ['subject'] }));
-    const result = await runAcceptance({ ...c, command: 'intake', input, allowResearch: 'yes' });
+  });
+};
+/** @param {string} dir @param {Record<string, any>} [study] */
+async function intakeInput(dir, study = { name: 'Synthetic test', question: 'Synthetic testing only' }) {
+  const file = path.join(dir, 'synthetic.csv'); await writeFile(file, 'id,age\n1,40\n');
+  const input = path.join(dir, 'input.json');
+  await writeFile(input, JSON.stringify({ datasetClass: 'synthetic', authorizationNote: 'Acceptance fixture only', file, study, source: { name: 'Synthetic fixture', valueSource: 'synthetic' }, fieldMap: { columns: [] }, expectedTableShapes: ['subject'] }));
+  return input;
+}
+test('HTTP 201 snapshot with refused tables records snapshot and leaves intake incomplete', async () => {
+  await fixture(intakeServer({ registered: [], refused: [{ code: 'invalid' }], dropped: {} }), async c => {
+    const result = await runAcceptance({ ...c, command: 'intake', input: await intakeInput(c.dir), allowResearch: 'yes' });
     assert.equal(result.status, 'incomplete'); assert.equal(result.error, 'tables_not_admitted');
     assert.equal(result.snapshotId, 'snp_1'); assert.equal(result.tableAdmission.refused.length, 1);
     assert.match(result.correlation, /^acceptance-/);
+  });
+});
+test('intake creates its study under the route\'s own name rule and admits a baseline-only snapshot', async () => {
+  const names = [];
+  // The answer the pilot gave: one table registered, the two the field map has nothing for skipped.
+  const tables = { registered: [{ shape: 'subject', rowCount: 60 }], refused: [], skipped: ['longitudinal', 'events'], subjects: 60, dropped: {} };
+  await fixture(intakeServer(tables, names), async c => {
+    const study = { name: 'SYNTHETIC 验收 ZZ000 基线数据接入检查（合成数据，非真实研究）', question: 'Synthetic acceptance fixture (not a real study).' };
+    const result = await runAcceptance({ ...c, command: 'intake', input: await intakeInput(c.dir, study), allowResearch: 'yes' });
+    assert.equal(result.error, undefined, 'the study was created and its tables admitted');
+    assert.equal(result.status, 'completed_scoped_checks');
+    assert.equal(result.createdStudyId, 'std_1');
+    assert.deepEqual(result.tableAdmission.skipped, ['longitudinal', 'events']);
+    assert.equal(names.length, 1, 'one creation, never repeated');
+    assert.equal(vcrStudyName(names[0]), names[0], 'the name posted is one the route takes');
+    assert.match(names[0], /^SYNTHETIC 验收 ZZ000 .* acc-[a-f0-9]{12}$/);
+    assert.equal(result.studyName, names[0]);
+    assert.ok(result.reconciliation.includes(names[0].slice(-16)), 'the receipt says which suffix finds the study again');
+  });
+});
+test('a synthetic intake whose label would be cut out of the study name is refused before anything is created', async () => {
+  const names = [];
+  await fixture(intakeServer({ registered: [{ shape: 'subject' }], refused: [], dropped: {} }, names), async c => {
+    const study = { name: 'A long study name that only says synthetic at its very end', question: 'Synthetic testing only' };
+    const result = await runAcceptance({ ...c, command: 'intake', input: await intakeInput(c.dir, study), allowResearch: 'yes' });
+    assert.equal(result.error, 'synthetic_fixture_requires_source_and_study_labels');
+    assert.deepEqual(names, [], 'no study was created under a name that had lost its label');
+  });
+});
+test('a VCR export kind that fails is recorded under its own name; the kinds after it are still asked for and the delivered ones still inspected', async () => {
+  let exports = 0;
+  const inspected = [];
+  const reviews = ['clinical', 'statistical'].map(role => ({ role, reviewerKind: 'ai', status: 'done', current: true, by: 'model', inputDigest: 'digest' }));
+  await fixture((req, res) => {
+    req.resume();
+    if (req.headers.cookie === 'session=stranger') return json(res, null, 404);
+    // The second kind's run leaves no document: its export ends failed, as the pilot's did.
+    if (req.method === 'POST') { exports++; return json(res, exports === 2 ? { export: { id: 'vex_2' } } : { export: { id: `vex_${exports}` }, conversion: { id: `exp_${exports}` } }, 201); }
+    if (req.url.endsWith('/download/pdf')) return res.end('%PDF- fixture');
+    if (req.url.endsWith('/download/docx')) return res.end('PK fixture');
+    if (req.url.startsWith('/api/document-exports')) return json(res, { state: 'ready' });
+    if (req.url.endsWith('/export/vex_2')) return json(res, { state: 'failed', document: { reviews: [] } });
+    if (req.url.includes('/export/')) { inspected.push(req.url.split('/').pop()); return json(res, { state: 'ready', document: { reviews } }); }
+    json(res, { projectId: 'prj_1' });
+  }, async c => {
+    const result = await runAcceptance({ ...c, command: 'vcr-exports', studyId: 'std_1', allowResearch: 'yes' });
+    assert.equal(exports, VCR_EXPORT_KINDS.length, 'every kind was asked for, the two after the failure included');
+    assert.deepEqual(Object.keys(result.reviewAcceptance), [...VCR_EXPORT_KINDS]);
+    const failed = VCR_EXPORT_KINDS[1];
+    assert.deepEqual(result.reviewAcceptance[failed], { verified: false, state: 'export_failed', conversion: 'failed', vcrExportId: 'vex_2', error: 'conversion_failed' });
+    assert.equal(result.outputs.length, 6, 'Word and PDF of the three kinds that were delivered');
+    for (const kind of VCR_EXPORT_KINDS.filter(kind => kind !== failed)) {
+      assert.equal(result.reviewAcceptance[kind].verified, true, `${kind} was inspected after the failure`);
+      assert.equal(result.reviewAcceptance[kind].exportState, 'ready');
+    }
+    assert.deepEqual([...new Set(inspected)].sort(), ['vex_1', 'vex_3', 'vex_4']);
+    assert.equal(result.status, 'incomplete', 'one failed kind keeps the receipt incomplete');
+    assert.equal(result.error, undefined, 'and the failure is that kind\'s, not the whole run\'s');
   });
 });
 test('all four VCR Word/PDF conversions survive unavailable or stale AI review without false acceptance', async () => {

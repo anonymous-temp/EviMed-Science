@@ -5,11 +5,13 @@
 // results; a reference that has nothing behind it renders 「未计算」 and says
 // so. A number a run typed anyway is reported, not silently kept.
 import assert from "node:assert/strict";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import {
-  VCR_NUMBER_FORMATS, VCR_UNCOMPUTED, renderVcrNumbers, vcrFormatValue, vcrReadPath, vcrReportModel, vcrTypedNumbers,
+  VCR_NUMBER_FORMATS, VCR_UNCOMPUTED, VCR_UNIT_FORMATS, renderVcrNumbers, vcrFormatValue, vcrReadPath, vcrReportModel, vcrResolvePath,
+  vcrTypedNumbers,
 } from "../src/vcrRender.mjs";
-import { proseNumbers, resultNumbers, vcrStudyPackageFindings } from "@evimed/domain";
+import { VCR_SCENARIO_SCHEMAS, proseNumbers, resultNumbers, vcrStudyPackageFindings } from "@evimed/domain";
 
 const results = {
   conclusion: "estimable",
@@ -144,6 +146,132 @@ test("an unknown format is reported and the raw value still prints", () => {
   const { text, issues } = renderVcrNumbers("功效 {{n:measure(power).value|percent}}。", results);
   assert.equal(issues[0].code, "vcr_number_format_unknown");
   assert.match(text, /功效 0\.812。/);
+});
+
+// What the pilot's study held on 2026-10-03, in the engine's own shapes: a
+// generated binary set's two arms as `vcr_patient_summary` writes them (a
+// percentage that says it is one), a simulated probability (a fraction with no
+// unit), a restricted mean with its time unit, a pooled value with its scale.
+const recorded = {
+  results: { patient_set: { diagnostics: { panels: [{ key: "arms", rows: [
+    { label: "试验组事件率", value: { value: 46.08, unit: "%" } },
+    { label: "对照组事件率", value: { value: 28.57, unit: "%" } },
+    { label: "试验组事件数", value: { value: 100, unit: "例" } },
+  ] }] } } },
+  measures: [
+    { name: "power", value: 0.9012, simulated: true, mcse: 0.0015 },
+    { name: "rmst_difference", value: 2.9, simulated: false, unit: "months", interval: { kind: "confidence", low: 1.2, high: 4.6, level: 0.95 } },
+    { name: "pooled_estimate", value: 0.31, simulated: false, unit: "identity" },
+    { name: "pooled_on_logit", value: -0.8, simulated: false, unit: "logit" },
+    { name: "rmst_in_weeks", value: 12, simulated: false, unit: "weeks" },
+  ],
+  assumptions: [
+    { key: "control_event_rate", value: 0.3, unit: null },
+    { key: "screen_failure_rate", value: 25, unit: "%", distribution: { family: "point", range: { low: 20, high: 30 } } },
+    { key: "control_median_pfs", value: 4.1, unit: "月" },
+  ],
+};
+const eventRate = (/** @type {number} */ row) => `results.patient_set.diagnostics.panels[0].rows[${row}].value.value`;
+
+test("a percentage the result recorded as one is printed as it stands by every percent format; a fraction is still scaled", () => {
+  assert.deepEqual(vcrResolvePath(recorded, eventRate(0)), { value: 46.08, unit: "%" }, "the unit travels with the number");
+  // The sentence that shipped 「4608.0%、2857.0%」 in Word, PDF and HTML.
+  const shipped = renderVcrNumbers(`抽样实现中试验组事件率 {{n:${eventRate(0)}|pct1}}、对照组事件率 {{n:${eventRate(1)}|pct1}}。`, recorded);
+  assert.equal(shipped.text, "抽样实现中试验组事件率 46.1%、对照组事件率 28.6%。");
+  assert.deepEqual(shipped.issues, []);
+  assert.deepEqual(shipped.bindings.map((binding) => [binding.value, binding.unit, binding.rendered]), [[46.08, "%", "46.1%"], [28.57, "%", "28.6%"]],
+    "the binding keeps the unit that explains why the value was not scaled");
+  for (const [format, expected] of [["pct0", "46%"], ["pct1", "46.1%"], ["pct2", "46.08%"]]) {
+    assert.equal(renderVcrNumbers(`{{n:${eventRate(0)}|${format}}}`, recorded).text, expected, format);
+  }
+  // A fraction — with no unit, as the engine writes a probability, or on the natural scale — is scaled as before.
+  assert.equal(renderVcrNumbers("{{n:measure(power).value|pct1}}", recorded).text, "90.1%");
+  assert.equal(renderVcrNumbers("{{n:assumptions[0].value|pct1}}", recorded).text, "30.0%");
+  assert.equal(renderVcrNumbers("{{n:measure(pooled_estimate).value|pct1}}", recorded).text, "31.0%");
+  assert.equal(vcrFormatValue(0.3, "pct1", "proportion").text, "30.0%");
+  // A card kept in percent, and the ends of its range, are the card's unit too.
+  assert.equal(renderVcrNumbers("{{n:assumptions[1].value|pct0}}（{{n:assumptions[1].distribution.range.low|pct0}}～{{n:assumptions[1].distribution.range.high|pct0}}）", recorded).text,
+    "25%（20%～30%）");
+  // A percentage per something is a percentage: 「脱落率 10 %/年」 is how the data tab keeps that card.
+  assert.equal(vcrFormatValue(10, "pct1", "%/年").text, "10.0%");
+  assert.equal(vcrFormatValue(10, "pct0", " ％ ").text, "10%");
+  // And the rendered percentage is one the contract's own traceability check finds in the results.
+  assert.ok(resultNumbers(recorded).has("46.1") && resultNumbers(recorded).has("28.6"));
+});
+
+test("a unit the requested format cannot be true of is a named rendering error and 「未计算」, never a number", () => {
+  const cases = [
+    ["measure(rmst_difference).value", "pct1", "months"],
+    ["measure(rmst_difference).interval.low", "pct1", "months"],
+    ["measure(pooled_on_logit).value", "pct2", "logit"],
+    ["results.patient_set.diagnostics.panels[0].rows[2].value.value", "pct0", "例"],
+    ["assumptions[2].value", "pct1", "月"],
+    [eventRate(0), "months", "%"],
+    ["measure(rmst_in_weeks).value", "months", "weeks"],
+    ["measure(pooled_on_logit).value", "months", "logit"],
+  ];
+  for (const [path, format, unit] of cases) {
+    const { text, issues, bindings } = renderVcrNumbers(`读数 {{n:${path}|${format}}}。`, recorded);
+    assert.equal(text, `读数 ${VCR_UNCOMPUTED}。`, `${path}|${format}: a number reached the report`);
+    assert.equal(bindings[0].ok, false);
+    assert.equal(issues.length, 1, `${path}|${format}`);
+    assert.deepEqual({ code: issues[0].code, path: issues[0].path, reason: issues[0].reason, unit: issues[0].unit, format: issues[0].format, severity: issues[0].severity },
+      { code: "vcr_number_unbound", path, reason: "unit_mismatch", unit, format, severity: "advisory" });
+    assert.ok(issues[0].message.includes(`「${unit}」`) && issues[0].message.includes(format), "the sentence names the unit and the format");
+    assert.doesNotMatch(issues[0].message, /结果里没有/, "the field is not missing, and the run is not sent to look for it");
+  }
+  assert.deepEqual(vcrFormatValue(4.1, "pct1", "月"), { ok: false, text: VCR_UNCOMPUTED, reason: "unit_mismatch" });
+  // The same values in a format that states no unit print as they are.
+  assert.equal(renderVcrNumbers("{{n:measure(rmst_difference).value|f1}}", recorded).text, "2.9");
+  assert.equal(renderVcrNumbers(`{{n:${eventRate(0)}|f2}}`, recorded).text, "46.08");
+});
+
+test("the months format answers to the unit too, and a unit speaks only for the value, its error and its bounds", () => {
+  assert.deepEqual([...VCR_UNIT_FORMATS], ["pct0", "pct1", "pct2", "months"]);
+  assert.ok(VCR_UNIT_FORMATS.every((format) => VCR_NUMBER_FORMATS.includes(format)));
+  assert.equal(renderVcrNumbers("{{n:measure(rmst_difference).value|months}}", recorded).text, "2.9 个月");
+  assert.equal(renderVcrNumbers("{{n:assumptions[2].value|months}}", recorded).text, "4.1 个月");
+  assert.equal(vcrFormatValue(4.1, "months").text, "4.1 个月", "a bare duration with nothing recorded beside it");
+  // An interval's level is a number about the interval, not a quantity in the measure's unit.
+  assert.deepEqual(vcrResolvePath(recorded, "measure(rmst_difference).interval.level"), { value: 0.95, unit: null });
+  assert.equal(renderVcrNumbers("{{n:measure(rmst_difference).interval.level|pct0}}", recorded).text, "95%");
+  assert.deepEqual(vcrResolvePath(recorded, "measure(rmst_difference).interval.high"), { value: 4.6, unit: "months" });
+  assert.deepEqual(vcrResolvePath(recorded, "measure(power).mcse"), { value: 0.0015, unit: null });
+  assert.deepEqual(vcrResolvePath(recorded, "measure(absent).value"), { value: undefined, unit: null });
+});
+
+test("every unit the engine writes has a reading: its one percentage says so, and no unit it names is ever scaled as a fraction", async () => {
+  const directory = new URL("../../../../项目代码/vcr-engine/R/", import.meta.url);
+  const sources = (await readdir(directory)).filter((name) => name.endsWith(".R"));
+  assert.ok(sources.includes("summaries.R") && sources.includes("engine.R"), "the engine's sources were read");
+  /** @type {Set<string>} */
+  const literals = new Set();
+  /** @type {string[]} */
+  const scaledToPercent = [];
+  for (const name of sources) {
+    const text = await readFile(new URL(name, directory), "utf8");
+    for (const match of text.matchAll(/\bunit\s*=\s*"([^"]*)"/g)) literals.add(match[1]);
+    for (const line of text.split("\n")) {
+      if (/\bvalue\s*=/.test(line) && /\b100\s*\*|\*\s*100\b/.test(line)) scaledToPercent.push(`${name}: ${line.trim()}`);
+    }
+  }
+  // The walk proves it walked: the three units `vcr_patient_summary` writes are found.
+  assert.deepEqual([...literals].sort(), ["%", "例", "月"].sort(), "a unit the engine now writes that the renderer has never been told about");
+  assert.ok(scaledToPercent.length >= 1, "the scan found the summary that stores a percentage");
+  for (const line of scaledToPercent) assert.match(line, /unit\s*=\s*"%"/, `a value stored as a percentage must say so: ${line}`);
+  // Every literal unit: a percentage is printed as it stands, anything else is refused by a percent format.
+  for (const unit of literals) {
+    const shown = vcrFormatValue(46.08, "pct1", unit);
+    assert.deepEqual(shown, unit === "%" ? { ok: true, text: "46.1%" } : { ok: false, text: VCR_UNCOMPUTED, reason: "unit_mismatch" }, unit);
+  }
+  // The pooling engine writes its scale where a unit goes (`unit = scale`): the natural scale is a plain value, a transformed one is not the quantity.
+  const scales = /** @type {any} */ (VCR_SCENARIO_SCHEMAS)["evidence.pool"].fields.scale.values;
+  assert.deepEqual([...scales].sort(), ["identity", "log", "logit"]);
+  for (const scale of scales) {
+    const shown = vcrFormatValue(0.31, "pct1", scale);
+    assert.equal(shown.ok, scale === "identity", scale);
+    assert.equal(shown.text, scale === "identity" ? "31.0%" : VCR_UNCOMPUTED, scale);
+  }
 });
 
 test("the report model carries the four counts apart, with null for what was never counted", () => {

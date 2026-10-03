@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,127 @@ def domain_job_kinds():
         cwd=OPEN_SCIENCE / "apps" / "server", capture_output=True, text=True, timeout=60, check=True,
     )
     return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def domain_scenario_keys():
+    """What each job kind's scenario may carry, read off the domain's own schemas
+    (`VCR_SCENARIO_SCHEMAS`, the list the queue and the engine both validate
+    against): per kind its method, the endpoint types that method implements, and
+    per top-level key the endpoint types it is read for (``None`` for a method
+    with no endpoint) and the names under it. A gate on anything but
+    ``endpoint.type`` is a choice the scenario makes, so it does not narrow."""
+    node = shutil.which("node")
+    assert node, "node must be installed: the tool's scenario shapes are held to the domain's schemas"
+    script = """
+import('@evimed/domain').then((m) => {
+  const gates = (when) => (Array.isArray(when) ? when : when ? [when] : []);
+  const readFor = (when, endpoints) => endpoints.filter((type) => gates(when)
+    .every((gate) => gate.path !== 'endpoint.type' || m.whenHolds(gate, { endpoint: { type } })));
+  const under = (fields) => Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, names(field)]));
+  const names = (node) => node.t === 'object' ? under(node.fields)
+    : node.t === 'variant' ? Object.assign({ [node.on]: null }, ...Object.values(node.variants).map(under))
+      : node.t === 'array' ? names(node.items) : null;
+  const out = {};
+  for (const [kind, method] of Object.entries(m.VCR_JOB_METHODS)) {
+    const endpoints = [...m.VCR_ENGINE_METHODS[method].endpoints];
+    out[kind] = { method, endpoints, keys: Object.fromEntries(Object.entries(m.VCR_SCENARIO_SCHEMAS[method].fields)
+      .map(([key, field]) => [key, { endpoints: endpoints.length ? readFor(field.when, endpoints) : null, children: names(field) }])) };
+  }
+  console.log(JSON.stringify(out));
+})
+"""
+    out = subprocess.run([node, "--input-type=module", "-e", script], cwd=OPEN_SCIENCE / "apps" / "server",
+                         capture_output=True, text=True, timeout=60, check=True)
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+def _shape_items(text, at):
+    """One brace level of a shape: ``key``, ``key?``, ``key[]``, ``key[e|f]``,
+    ``key{...}``, ``key[{...}]``, ``a|b|c`` and the elision ``...``. Returns
+    ``({name: {"only": set | None, "children": dict | None}}, position)``."""
+    items = {}
+    while at < len(text):
+        while at < len(text) and text[at] in " ,":
+            at += 1
+        if at >= len(text):
+            break
+        if text[at] == "}":
+            return items, at + 1
+        if text.startswith("...", at):
+            at += 3
+            continue
+        match = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\|[A-Za-z][A-Za-z0-9_]*)*").match(text, at)
+        assert match, "the shape cannot be read at: %r" % text[at:at + 40]
+        at = match.end()
+        only = None
+        children = None
+        if text.startswith("?", at):
+            at += 1
+        if text.startswith("[]", at):
+            at += 2
+        elif text.startswith("[{", at):
+            children, at = _shape_items(text, at + 2)
+            assert text.startswith("]", at), "an array of objects closes with }]: %r" % text[at:at + 20]
+            at += 1
+        elif text.startswith("[", at):
+            close = text.index("]", at)
+            only = set(text[at + 1:close].split("|"))
+            at = close + 1
+        if text.startswith("{", at):
+            children, at = _shape_items(text, at + 1)
+        for name in match.group(0).split("|"):
+            items[name] = {"only": only, "children": children}
+    return items, at
+
+
+def scenario_shapes(description):
+    """The scenario shapes a description offers, by job kind."""
+    body = description.split("Shapes", 1)[1].split("):", 1)[1].split(". Truth spells", 1)[0]
+    shapes = {}
+    previous = None
+    for entry in body.split("; "):
+        entry = entry.strip()
+        same = re.fullmatch(r"(\w+) the same plus (\w+)\[\] and (\w+)\[\]", entry)
+        if same:
+            shapes[same.group(1)] = {**shapes[previous], **{name: {"only": None, "children": None} for name in same.group(2, 3)}}
+            continue
+        names, _, rest = entry.partition(" {")
+        items, _ = _shape_items(rest, 0)
+        for name in re.split(r", | and ", names):
+            shapes[name] = items
+            previous = name
+    return shapes
+
+
+def shape_problems(shapes, schema):
+    """Every place a shape offers what the domain's schema refuses, in words."""
+    problems = []
+
+    def under(where, offered, declared):
+        for name, entry in (offered or {}).items():
+            if declared is None or name not in declared:
+                problems.append("%s offers %s, which the schema does not read" % (where, name))
+            else:
+                under("%s.%s" % (where, name), entry["children"], declared[name])
+
+    for kind, shape in shapes.items():
+        if kind not in schema:
+            problems.append("%s is not a job kind" % kind)
+            continue
+        declared = schema[kind]
+        for key, offered in shape.items():
+            if key not in declared["keys"]:
+                problems.append("%s offers %s, which %s does not read" % (kind, key, declared["method"]))
+                continue
+            read_for = declared["keys"][key]["endpoints"]
+            narrowed = read_for is not None and set(read_for) != set(declared["endpoints"])
+            if read_for is not None and not read_for:
+                problems.append("%s offers %s, which %s refuses for every endpoint it implements" % (kind, key, declared["method"]))
+            elif (offered["only"] or None) != (set(read_for) if narrowed else None):
+                problems.append("%s.%s is read for %s and the shape says %s" % (
+                    kind, key, sorted(read_for) if narrowed else "every endpoint", sorted(offered["only"]) if offered["only"] else "nothing"))
+            under("%s.%s" % (kind, key), offered["children"], declared["keys"][key]["children"])
+    return problems
 
 
 class _Gateway(BaseHTTPRequestHandler):
@@ -115,6 +237,46 @@ class VcrToolDefinitionTests(unittest.TestCase):
             self.assertIn(fragment, description)
         self.assertNotIn("isNull", description)
         self.assertNotIn("dropoutRate", description)
+
+    def test_every_key_a_shape_offers_is_one_the_schema_reads_and_an_endpoint_only_key_says_which(self):
+        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
+        schema = domain_scenario_keys()
+        shapes = scenario_shapes(description)
+        # The walk proves it walked: the shapes were read, and so were the schemas behind them.
+        self.assertGreaterEqual(len(shapes), 14, sorted(shapes))
+        self.assertTrue(set(shapes) <= set(vcr_platform.JOB_KINDS), sorted(set(shapes) - set(vcr_platform.JOB_KINDS)))
+        self.assertEqual(schema["generate_patients_binary"]["endpoints"], ["binary"])
+        self.assertEqual(schema["generate_patients_binary"]["keys"]["accrual"]["endpoints"], [], "the domain refuses accrual for a binary set")
+        self.assertEqual(schema["design_simulation"]["keys"]["accrual"]["endpoints"], ["time_to_event"])
+        self.assertEqual(shape_problems(shapes, schema), [])
+        # What the pilot's run was refused for (2026-10-03): `accrual` offered on every patient generator.
+        self.assertIn("accrual", shapes["generate_patients"])
+        self.assertNotIn("accrual", shapes["generate_patients_binary"])
+        self.assertNotIn("accrual", shapes["generate_patients_continuous"])
+        for kind in ("design_analytic", "design_simulation", "design_grid"):
+            self.assertEqual(shapes[kind]["accrual"]["only"], {"time_to_event"}, kind)
+        self.assertEqual(shapes["assurance"]["truth"]["only"], {"continuous", "binary"})
+        self.assertIn("accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) exists only for a time_to_event endpoint", description)
+
+    def test_the_shape_check_fails_on_a_key_the_schema_refuses(self):
+        # The same check, on the sentences the description used to carry and on ones nobody wrote: it has to be able to fail.
+        schema = domain_scenario_keys()
+        stale = ("Shapes (legend): generate_patients_binary {design{nTreat,nControl?}, endpoint, truth, accrual?}; "
+                 "design_simulation {design{kind,nTreat}, endpoint{type}, truth{null?,...}, accrual?}; "
+                 "assurance {design, endpoint, designPrior{mean,sd}, truth?, analysis}; "
+                 "weight_comparator {covariates[], tau[binary]}; rmst {tau, dropoutRate?}; "
+                 "procova {endpoint, truth{effect,riskRatio}}. Truth spells")
+        problems = shape_problems(scenario_shapes(stale), schema)
+        self.assertEqual(len(problems), 6, problems)
+        for fragment in (
+            "generate_patients_binary offers accrual, which patients.binary refuses for every endpoint it implements",
+            "design_simulation.accrual is read for ['time_to_event'] and the shape says nothing",
+            "assurance.truth is read for ['binary', 'continuous'] and the shape says nothing",
+            "weight_comparator.tau is read for ['time_to_event'] and the shape says ['binary']",
+            "rmst offers dropoutRate, which comparator.rmst does not read",
+            "procova.truth offers riskRatio, which the schema does not read",
+        ):
+            self.assertIn(fragment, problems)
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]

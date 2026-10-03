@@ -34,7 +34,7 @@ import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrAccess } from "../src/vcrAccess.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { VCR_ACCRUAL_MEASURES } from "../src/vcrRecruit.mjs";
-import { VCR_ENGINE_METHODS, VCR_STEPS, lineageNode } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -396,6 +396,77 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
   const ready = module.notices.filter((notice) => notice.title.includes("研究包完成"));
   assert.equal(ready.length, 1, "one notice, once");
   assert.equal(ready[0].userId, study.userId);
+});
+
+test("an export run fills the export it was sent for, whichever of the four documents it is: a report typed as another one is refused and nothing is made", options, async () => {
+  const module = compose();
+  const study = await makeStudy("exportbind");
+  /** @param {Record<string, any>} data */
+  const report = (data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null, data });
+  for (const kind of VCR_EXPORT_KINDS) {
+    const asked = await module.orchestrator.requestExport({ id: study.userId }, study, kind);
+    assert.deepEqual([asked.export.kind, asked.export.state], [kind, "queued"]);
+    const dispatch = module.dispatched[module.dispatched.length - 1];
+    assert.equal(dispatch.capabilityId, "vcr-package");
+    assert.ok(dispatch.brief.includes(`（kind: ${kind}）`), `the brief names the document (${kind})`);
+    const rows = (await store.exports(study.id)).length;
+    // What the pilot's run did: it typed the kind its skill's example shows, whatever it had been sent for.
+    const typed = kind === "study_package" ? "simulation_report" : "study_package";
+    const refused = await report({ kind: typed, template: "方法与局限。" });
+    assert.deepEqual([refused.ok, refused.issues.map((/** @type {any} */ entry) => [entry.field, entry.code])], [false, [["kind", "vcr_write_value_invalid"]]]);
+    assert.equal((await store.exports(study.id)).length, rows, `no ${typed} was made beside the ${kind} asked for`);
+    // With no kind typed the report is the dispatch's: the run slot says which export, the run does not have to.
+    const written = await report({ template: "方法与局限。" });
+    assert.deepEqual([written.ids, written.issues], [[asked.export.id], []]);
+    await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
+      { id: `run_${module.dispatched.length}`, dispatchId: dispatch.dispatchId, status: "succeeded" });
+    const row = await store.exportRow(study.id, asked.export.id);
+    assert.deepEqual([row.kind, row.state], [kind, "ready"]);
+    assert.equal(row.cover.report.rendered, "方法与局限。");
+  }
+  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_EXPORT_KINDS].sort(), "four documents asked for, four exports, no orphan");
+
+  // With no export run out the write is the researcher's own conversation: it opens a row of the kind it names, as before.
+  const own = await report({ kind: "simulation_report", section: "appendix", template: "补充说明。" });
+  assert.equal(own.ok, true);
+  assert.equal((await store.exports(study.id)).length, VCR_EXPORT_KINDS.length + 1);
+});
+
+test("an export whose run leaves no document ends failed and is said on the study page and the home list, until the same document arrives", options, async () => {
+  const module = compose();
+  const study = await makeStudy("exportfail");
+  const said = async () => {
+    const lines = (/** @type {any[]} */ attention) => attention.filter((line) => line.kind === "export_failed").map((line) => line.text);
+    const page = await module.service.studyView({ id: study.userId }, study.id);
+    const home = await module.service.listStudies({ id: study.userId });
+    return { page: lines(page.overview.attention), home: lines(home.studies.find((/** @type {any} */ row) => row.id === study.id).attention) };
+  };
+  const finish = (/** @type {string} */ id) => module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
+    { id, dispatchId: module.dispatched[module.dispatched.length - 1].dispatchId, status: "succeeded" });
+
+  // The run ends having submitted nothing to its export: the pilot's 模拟报告, a paid run and a row reading 「未完成」.
+  const lost = await module.orchestrator.requestExport({ id: study.userId }, study, "simulation_report");
+  await finish("run_lost");
+  assert.equal((await store.exportRow(study.id, lost.export.id)).state, "failed");
+  const line = ["「模拟报告」没有生成，已算出的结果保留"];
+  assert.deepEqual(await said(), { page: line, home: line });
+
+  // Asked for again and written this time: a failed export is not what 导出 answers with, and the line goes.
+  const again = await module.orchestrator.requestExport({ id: study.userId }, study, "simulation_report");
+  assert.notEqual(again.export.id, lost.export.id);
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null,
+    data: { kind: "simulation_report", template: "方法与局限。" } });
+  await finish("run_found");
+  assert.equal((await store.exportRow(study.id, again.export.id)).state, "ready");
+  assert.deepEqual(await said(), { page: [], home: [] });
+
+  // A dispatch refused for good — the package capability is not installed — fails the export as well: with no step to
+  // fail, its row was left reading 「排队中」 for a run that would never come.
+  module.orchestrator.dispatchRun = async () => { throw Object.assign(new Error("not installed"), { code: "vcr_unavailable" }); };
+  const never = await module.orchestrator.requestExport({ id: study.userId }, study, "validation_pack");
+  assert.equal((await store.exportRow(study.id, never.export.id)).state, "failed");
+  const unsent = ["「系统验证文档包」没有生成，已算出的结果保留"];
+  assert.deepEqual(await said(), { page: unsent, home: unsent });
 });
 
 test("PB-21 a study created without saying what it is about waits for its question; a run on an empty brief is never dispatched", options, async () => {
@@ -916,6 +987,48 @@ test("a single step brings its upstream as a minimal version, and asking for it 
   await module.orchestrator.runStep({ id: study.userId }, study, "definition");
   current = await store.studyById(study.id);
   assert.equal(current.steps.definition.requested, true);
+});
+
+test("above T0 the matching step is sent a run once the criteria exist, and a run that left nothing does not leave it reading 「进行中」", options, async () => {
+  const module = compose();
+  const study = await makeStudy("matchflight", { dataTier: "T1" });
+  const finish = (/** @type {number} */ index, /** @type {string} */ status) => module.orchestrator.onRunFinished(
+    { userId: study.userId, id: study.projectId }, { id: `run_${index + 1}`, dispatchId: module.dispatched[index].dispatchId, status });
+  const matching = async () => (await store.studyById(study.id)).steps.matching.status;
+  const capabilities = () => module.dispatched.map((/** @type {any} */ input) => input.capabilityId);
+
+  // 「这些患者里谁可能符合这个方案？」 — the matching step, and a definition under it.
+  await module.orchestrator.runStep({ id: study.userId }, study, "matching");
+  assert.deepEqual(capabilities(), ["vcr-protocol"]);
+  // The definition run writes the definition and structures the protocol's criteria, as the pilot's did.
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  const protocol = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "protocol", items: null,
+    data: { title: "EV-201 v1.0", criteria: [{ kind: "inclusion", criterionType: "diagnosis", requirement: { op: "present", variable: "nsclc" },
+      sourceText: "经组织学确诊的非小细胞肺癌", sourceLocator: { page: 12 } }] } });
+  assert.deepEqual(protocol.issues, []);
+  assert.notEqual(await matching(), "running", "criteria existing is not a run being out: nobody has been judged and nothing is judging");
+  await finish(0, "succeeded");
+
+  // Above T0 the step is done when patients have been judged, and the matching run is what judges: it is sent, not waited on.
+  assert.deepEqual(capabilities(), ["vcr-protocol", "vcr-matching"]);
+  assert.equal(await matching(), "running");
+
+  // It ends having judged nobody. The step is tried once more within the key's two attempts, and running means that run.
+  await finish(1, "succeeded");
+  assert.deepEqual(capabilities(), ["vcr-protocol", "vcr-matching", "vcr-matching"]);
+  assert.equal(await matching(), "running");
+
+  // The second one fails and leaves nothing: the step says so instead of reading 进行中 for good, and no third run goes out by itself.
+  await finish(2, "failed");
+  assert.equal(await matching(), "failed");
+  await module.orchestrator.advance(study.id);
+  assert.equal(module.dispatched.length, 3);
+
+  // 「让 AI 做」 is a request again, not a no-op.
+  const asked = await module.orchestrator.runStep({ id: study.userId }, study, "matching");
+  assert.equal(module.dispatched.length, 4);
+  assert.equal(module.dispatched[3].capabilityId, "vcr-matching");
+  assert.ok(asked.runId, "the answer names the run it started");
 });
 
 test("a study that is paused dispatches nothing and queues nothing", options, async () => {

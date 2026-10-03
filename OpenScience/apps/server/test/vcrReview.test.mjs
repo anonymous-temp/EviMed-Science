@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { vcrResultOutputPayload } from '@evimed/domain';
 import { vcrRecordedResultHash } from '../src/vcrJobs.mjs';
-import { buildVcrReviewInput } from '../src/vcrReview.mjs';
+import { buildVcrReviewInput, vcrIsNumberlessVerdict } from '../src/vcrReview.mjs';
 import { vcrReportReviewRevision } from '../src/vcrRender.mjs';
 import { vcrReviewIsCurrent, useCeilingOf } from '../src/vcrViews.mjs';
 const result = { id: 'trial', version: 1, executionId: 'execution', measures: [{ key: 'power', value: 0.8 }], counts: { observedPatients: 3 }, conclusion: 'limited', tables: [] };
@@ -67,6 +67,61 @@ test('multistage tracing binds a verified engine stage and the exact recorded ag
   for (const proof of [{}, { ...receipt, stageVerified: false }, { ...receipt, stageOutput: { ...receipt.stageOutput, counts: { realPatients: 99 } } }]) {
     assert.ok(trace(aggregate, [{ ...executions[0], receipt: proof }]).deterministic.findings.some(row => row.kind === 'number_untraced'));
   }
+});
+
+test('a verdict the control plane derived has no number to trace; any result that carries one without a receipt is still untraced', () => {
+  // The row `VcrOrchestrator.#unavailable` records for a route the data tier cannot reach: no job, so no execution.
+  const verdict = { id: 'cmp', version: 1, executionId: null, kind: 'comparator', conclusion: 'not_estimable', notEstimableRule: 'data_tier_insufficient',
+    counts: { realPatients: null, events: null, effectiveSampleSize: null, generatedRecords: null }, measures: [], tables: [],
+    diagnostics: { gaps: [{ title: '外部患者的治疗与结局个体数据', detail: '这个研究的数据档位是 T0，这条路线最低要 T2。', answers: '补上之后可以做加权的外部对照。' }],
+      derivedBy: 'control_plane', reason: 'data_tier_insufficient' } };
+  const receipt = { stageVerified: true, stageOutput: JSON.parse(vcrResultOutputPayload(result)),
+    recordedResultHash: vcrRecordedResultHash(result), recordedResultId: result.id, recordedResultVersion: result.version };
+  const executions = [{ id: 'execution', output_hash: outputHash, receipt }];
+  const trace = rows => buildVcrReviewInput({ model, results: rows, executions, evidence: [], reports: [], forModel: value => value });
+  assert.equal(vcrIsNumberlessVerdict(verdict), true);
+  const reviewed = trace([result, verdict]);
+  assert.deepEqual(reviewed.deterministic.findings, [], 'nothing with a fix: the package is not sent to a paid revision for a verdict');
+  assert.deepEqual(reviewed.deterministic.numbers, { checked: 1, verdicts: 1, bindings: 0 }, 'the verdict is said, not counted as checked');
+  assert.ok(reviewed.nodes.includes('result:cmp@1'), 'the review still names the verdict as one of the versions it read');
+  // The same row with any number in it, or with an execution it cannot show, has something to trace.
+  const carrying = [
+    { ...verdict, measures: [{ name: 'weighted_difference', value: 0.12 }] },
+    { ...verdict, counts: { ...verdict.counts, realPatients: 240 } },
+    { ...verdict, counts: { ...verdict.counts, events: 0 } },
+    { ...verdict, tables: [{ name: 'weights', sha256: 'a'.repeat(64) }] },
+    { ...verdict, diagnostics: { ...verdict.diagnostics, support: { outsideShare: 0.41 } } },
+    { ...verdict, executionId: 'execution-nobody-recorded' },
+    { ...verdict, conclusion: 'estimable' },
+    { ...verdict, conclusion: 'limited' },
+  ];
+  for (const row of carrying) {
+    assert.equal(vcrIsNumberlessVerdict(row), false, JSON.stringify(row));
+    const flagged = trace([result, row]).deterministic;
+    assert.deepEqual(flagged.findings.map(finding => [finding.kind, finding.location]), [['number_untraced', 'result:cmp@1']]);
+    assert.equal(flagged.numbers.checked, 2);
+  }
+  // And an engine result whose receipt does not bind it is flagged beside an exempt verdict, as before.
+  assert.deepEqual(buildVcrReviewInput({ model, results: [result, verdict], executions: [], evidence: [], reports: [], forModel: value => value })
+    .deterministic.findings.map(finding => finding.location), ['result:trial@1']);
+});
+
+test('a reference is judged on the report a reader gets: a cell hidden from the reviewer is not an untraced number', () => {
+  const hidden = buildVcrReviewInput({ model, results: [], executions: [], evidence: [],
+    reports: [{ template: 'Count {{n:counts.observedPatients}}; diagnostics {{n:diagnostics.sensitivity.base.value|f2}}; absent {{n:counts.nobodyCounted}}.' }],
+    forModel: value => JSON.parse(JSON.stringify(value).replace('"observedPatients":3', '"observedPatients":null')) });
+  // The reviewer's copy still hides the small cell.
+  assert.match(hidden.frozenInput.report, /Count 未计算/);
+  assert.ok(!hidden.frozenInput.report.includes('Count 3'));
+  // The finding is only about what the exact report cannot bind either.
+  assert.deepEqual(hidden.deterministic.findings.map(finding => [finding.kind, finding.location]),
+    [['number_untraced', 'diagnostics.sensitivity.base.value'], ['number_untraced', 'counts.nobodyCounted']]);
+  assert.equal(hidden.deterministic.numbers.bindings, 3);
+  assert.doesNotMatch(JSON.stringify(hidden.deterministic.findings), /\b3\b/, 'a finding names a path, never the hidden value');
+  // A part of the model the reviewer is not sent binds in the report all the same.
+  const whole = buildVcrReviewInput({ model: { ...model, diagnostics: { sensitivity: { base: { value: 0.15 } } } }, results: [], executions: [], evidence: [],
+    reports: [{ template: 'Difference {{n:diagnostics.sensitivity.base.value|f2}}.' }], forModel: value => value });
+  assert.deepEqual(whole.deterministic.findings, []);
 });
 
 test('export-bound historical reviews without report proof are not attested current', () => {
