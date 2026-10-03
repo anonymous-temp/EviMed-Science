@@ -148,11 +148,11 @@ M2_RESEARCH_ECOSYSTEM_PROMPT = """你是一位科学计量学与科研生态分�
 {query_context}
 
 ## 数据信息
-- 总文献数: {evidence_count}
+- 本次检索选入记录数: {evidence_count}
 - 研究热点分布: {hotspot_distribution}
 - 核心作者分布: {top_authors}
 - 主要发文期刊: {top_journals}
-- 合作网络密度: {network_density}
+- 选入关键词共现网络密度: {network_density}
 - 知识社区数量: {community_count}
 
 ---
@@ -779,6 +779,26 @@ closest prior work, what it answers and the remaining question; low search count
 cannot prove a gap. Do not invent scores, data access, sample sizes or approvals.
 """
 
+
+# These rules apply to every analytical module, not only its summary.
+SELECTED_EVIDENCE_SCOPE = """
+## Selected-evidence interpretation contract
+Counts, author/design distributions and recorded-year counts describe selected
+retrieved records after retrieval caps, deduplication and relevance screening.
+They are not a census or field-wide publication totals. Network statistics refer
+to the named selected graph, not an unmeasured field-wide collaboration network.
+Recorded bibliographic years do not establish complete year coverage. Claims of
+field-wide growth require independent evidence of consistent, complete year
+coverage and retrieval completeness; these supplied sample counts alone do not
+provide that evidence. Preserve observed counts, state missing coverage, and
+describe interpretive explanations as hypotheses rather than measured growth.
+"""
+M1_PROBLEM_LANDSCAPE_PROMPT += SELECTED_EVIDENCE_SCOPE
+M2_RESEARCH_ECOSYSTEM_PROMPT += SELECTED_EVIDENCE_SCOPE
+M3_EVIDENCE_SYSTEM_PROMPT += SELECTED_EVIDENCE_SCOPE
+M4_SCIENTIFIC_CONTRADICTION_PROMPT += SELECTED_EVIDENCE_SCOPE
+M5_BREAKTHROUGH_OPPORTUNITY_PROMPT += SELECTED_EVIDENCE_SCOPE
+M6_RESEARCH_AGENDA_PROMPT += SELECTED_EVIDENCE_SCOPE
 
 # ==================== 字段说明汇总 ====================
 FIELD_MAPPINGS = {
