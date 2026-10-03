@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
+import argparse
 import fcntl
 import hashlib
 import importlib.metadata
 import json
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -102,14 +102,17 @@ def execute_power(output: Path) -> tuple[subprocess.CompletedProcess[str], list[
 
 
 def run_audit() -> int:
+    if RESULT_FILE.exists() or ARTIFACT_ROOT.exists() or ARTIFACT_ROOT.is_symlink():
+        raise SystemExit("Skill evidence already exists; use a NEW --output-dir; historical artifacts are never removed")
     inventory = json.loads((SKILL_ROOT / "inventory.json").read_text(encoding="utf-8"))
     executable = inventory["policy"]["delivery"]["executable"]
     started = now()
     environment = dependency_environment(executable)
     rows = []
-    shutil.rmtree(ARTIFACT_ROOT, ignore_errors=True)
-    ARTIFACT_ROOT.mkdir(parents=True)
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=False)
     for skill in sorted(executable):
+        manifest_sha256 = sha256(SKILL_ROOT / skill / "SKILL.md")
+        entrypoint_receipts = [verified_artifact((SKILL_ROOT / skill / entrypoint).resolve()) for entrypoint in executable[skill].get("entrypoints", [])]
         output = ARTIFACT_ROOT / skill
         output.mkdir()
         if skill == "matplotlib":
@@ -120,6 +123,8 @@ def run_audit() -> int:
             process, artifacts = execute_shared(skill, output)
         row = {
             "skill": skill,
+            "manifestSha256": manifest_sha256,
+            "entrypointReceipts": entrypoint_receipts,
             "operation": "smoke-task",
             "entrypoints": executable[skill].get("entrypoints", []),
             "returnCode": process.returncode,
@@ -131,6 +136,8 @@ def run_audit() -> int:
         try:
             if process.returncode != 0:
                 raise RuntimeError(f"Skill process exited {process.returncode}")
+            if sha256(SKILL_ROOT / skill / "SKILL.md") != manifest_sha256 or any(sha256(ROOT / item["path"]) != item["sha256"] for item in entrypoint_receipts):
+                raise RuntimeError("Skill source changed during the bounded audit task")
             row["artifacts"] = [verified_artifact(path) for path in artifacts]
             row["passed"] = True
         except (OSError, RuntimeError) as error:
@@ -152,12 +159,29 @@ def run_audit() -> int:
         "skills": rows,
     }
     RESULT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    RESULT_FILE.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with RESULT_FILE.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(json.dumps({key: report[key] for key in ("inventoryExecutable", "executionCertified", "failed")}, sort_keys=True))
     return 0 if report["failed"] == 0 and environment["matchesInventory"] else 1
 
 
+def configure_output(output: Path) -> None:
+    global RESULT_FILE, ARTIFACT_ROOT, LOCK_FILE
+    output = output.resolve()
+    if not output.is_relative_to(ROOT.resolve()):
+        raise SystemExit("Skill artifact receipts must remain under the exact audit repository root")
+    RESULT_FILE = output / "skill-execution-v1.json"
+    ARTIFACT_ROOT = output / "skill-execution-v1-artifacts"
+    LOCK_FILE = output / ".skill-execution.lock"
+    if RESULT_FILE.exists() or ARTIFACT_ROOT.exists() or ARTIFACT_ROOT.is_symlink():
+        raise SystemExit("Skill evidence already exists; use a NEW --output-dir; historical artifacts are never removed")
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, default=RESULT_FILE.parent)
+    args = parser.parse_args()
+    configure_output(args.output_dir)
     RESULT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOCK_FILE.open("a+", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

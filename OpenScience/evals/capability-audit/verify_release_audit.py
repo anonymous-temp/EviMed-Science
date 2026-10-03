@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import sys
 import importlib.util
 import json
 from collections import Counter
@@ -13,11 +15,13 @@ from pathlib import Path
 from hosted_receipts import read_owned, file_receipt, validate_receipt, artifact_paths
 import public_mr_fixture as public_mr
 import verify_acceptance_ledger as acceptance_ledger
+from audit_inventory import skill_composition, skill_execution_coverage, skill_evidence_metadata
 
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 RESULTS = HERE / "results"
+REPORTS = RESULTS
 # Probe receipts point at files the audit run produced inside a live server
 # workspace, which .gitignore keeps out of the repository. The generator mirrors
 # them here, workspace-relative, so a clean clone can verify the same evidence.
@@ -27,7 +31,10 @@ SPECIALIST_SOURCES = REPO.parent / "项目代码"
 
 
 def read(name):
-    return json.loads((RESULTS / name).read_text(encoding="utf-8"))
+    file = REPORTS / name
+    if name != "skill-audit-v5.json" and not file.is_file():
+        file = RESULTS / name
+    return json.loads(file.read_text(encoding="utf-8"))
 
 
 def require(condition, message):
@@ -182,11 +189,12 @@ def verify_tools():
     # `list_tools()` is not used here: it reads the same environment variable,
     # so on a machine that happens to set it the expected count would move with
     # the recording instead of pinning it.
-    not_offered = document.get("notOffered") or []
+    not_offered = document.get("notOffered", [])
     require(
         isinstance(not_offered, list) and all(isinstance(name, str) for name in not_offered),
         "tool audit notOffered is not a list of tool names",
     )
+    require(len(not_offered) == len(set(not_offered)), "tool audit notOffered contains duplicate tool names")
     not_offered = set(not_offered)
     unknown = sorted(not_offered - registry)
     require(not unknown, "tool audit reports tools the registry does not declare as not offered: %s" % ", ".join(unknown))
@@ -195,6 +203,10 @@ def verify_tools():
         not unapproved,
         "tools this product does not declare optional were switched off: %s" % ", ".join(unapproved),
     )
+    if "sourceRegistry" in document:
+        require(document["sourceRegistry"] == sorted(registry), "recorded source tool names do not match the registry")
+        expected_availability = [{"tool": name, "state": "notOffered" if name in not_offered else "offered", "basis": "explicit-deployment-disable" if name in not_offered else "runtime-list-tools"} for name in sorted(registry)]
+        require(document.get("toolAvailability") == expected_availability, "tool availability is not registry minus explicit optional notOffered")
     expected = len(registry - not_offered)
     # Currency is judged here rather than at the top of the function, because
     # the useful message needs the registry this line has just finished reading.
@@ -404,166 +416,43 @@ def verify_connectors():
 
 
 def verify_skills():
-    document = read("skill-audit-v4.json")
+    # v4 describes the retired tree. Never reinterpret its historical counts.
+    require((REPORTS / "skill-audit-v5.json").is_file(), "skill audit uses a retired runtime tree; record skill-audit-v5.json in a NEW output directory with build_skill_audit.py; missing current execution remains unknown")
+    document = read("skill-audit-v5.json")
     summary = document.get("summary", {})
-    require(summary.get("schemaVersion") == 4, "skill audit schema is stale")
+    require(summary.get("schemaVersion") == 5, "skill audit schema is stale")
+    composition = skill_composition(REPO)
+    require(summary.get("sourcePlannedComposition") == composition, "skill source plan differs in name/path/digest/dispatch scope; regenerate inventory, not execution receipts")
+    require(summary.get("imageObservation") == "unknown", "a source-only skill inventory cannot assert a live image observation")
+    coverage = skill_execution_coverage(REPO, RESULTS, composition)
+    require(summary.get("historicalExecutionEvidence") == skill_evidence_metadata(RESULTS), "historical skill totals/time/environment/evidence identity drifted")
+    require(summary.get("executionCoverage") == coverage, "skill execution coverage does not match current source and retained receipts")
+    certified = [row["packageId"] for row in coverage if row["state"] == "bounded-historical-task-matched"]
+    unknown = [row["packageId"] for row in coverage if row["state"] == "unknown"]
+    require(summary.get("sourcePlannedSkillPackages") == len(coverage), "skill source count does not match its concrete inventory")
+    require(summary.get("boundedHistoricalTaskPackageIds") == certified and summary.get("boundedHistoricalTaskPackageCount") == len(certified), "skill execution certification is inflated")
+    require(summary.get("unknownExecutionPackageIds") == unknown, "unknown skill execution was omitted")
     require(summary.get("incomingSkillsReviewed") == 149, "skill review count is not 149")
-    skill_root = REPO / "runtime" / "skills"
-
-    def enabled(root):
-        inventory_file = root / "inventory.json"
-        allowed = None
-        if inventory_file.is_file():
-            inventory = json.loads(inventory_file.read_text(encoding="utf-8"))
-            delivery = inventory.get("policy", {}).get("delivery", {})
-            require(delivery.get("contractVersion") == 1 and delivery.get("defaultEnabledTier") == "executable", "runtime skill inventory contract is invalid")
-            allowed = set(delivery.get("executable", {}))
-        return [
-            manifest.parent.relative_to(skill_root).as_posix()
-            for manifest in root.glob("*/SKILL.md")
-            if allowed is None or manifest.parent.name in allowed
-        ]
-
-    global_roots = (
-        skill_root / "core",
-        skill_root / "external" / "ai4s-skills",
-        skill_root / "curated-scientific",
-        skill_root / "office",
-    )
-    global_installed = sorted(package for root in global_roots for package in enabled(root))
-    specialist_installed = sorted(enabled(skill_root / "evimed"))
-    installed = sorted(global_installed + specialist_installed)
-    # Derived from the installed tree, not written down. Four packages were
-    # added after this audit was last recorded and three pinned literals here
-    # each failed in turn with a number rather than a name; the recording is
-    # what has to match the tree, and pinning the tree's own size only means an
-    # extra edit every time a Skill ships. The floors are the walk assertion:
-    # a glob that stopped matching would otherwise agree with a recording that
-    # had also stopped counting.
-    require(len(global_installed) >= 50, "the global Skill scan found %d packages; it is not reading the tree" % len(global_installed))
-    require(len(specialist_installed) >= 8, "the specialist Skill scan found %d packages; it is not reading the tree" % len(specialist_installed))
-    require(
-        summary.get("freshWebGlobalSkillPackages") == len(global_installed),
-        "clean Web global Skill count is not %d" % len(global_installed),
-    )
-    require(
-        summary.get("freshWebSpecialistSkillPackages") == len(specialist_installed),
-        "clean Web specialist Skill count is not %d" % len(specialist_installed),
-    )
-    # `freshWebOpenCodeSkillPackages` is the same count under the name the
-    # generator wrote while the retired kernel was the one being counted. The
-    # recorded results in `results/` were measured then and are not rewritten —
-    # editing a recording to look current is falsified evidence — so this reads
-    # the current name and falls back to the recorded one. Drop the fallback
-    # once the audit has been re-recorded under the DSH runtime.
-    installed_count = summary.get("freshWebRuntimeSkillPackages")
-    if installed_count is None:
-        installed_count = summary.get("freshWebOpenCodeSkillPackages")
-        # Said out loud rather than absorbed: a reader of a passing gate would
-        # otherwise take a count measured under the retired kernel for a count
-        # measured under the one that ships.
-        print(
-            "notice: skill-audit-v4.json carries freshWebOpenCodeSkillPackages, "
-            "so this count was recorded under the retired kernel; re-record the "
-            "skill audit under the DSH runtime",
-        )
-    require(installed_count == len(installed), "clean Web runtime Skill count is not %d" % len(installed))
-    require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
-
-    execution = read("skill-execution-v1.json")
-    parsed_fresh(execution.get("finishedAt"), "Skill execution audit")
-    require(execution.get("schemaVersion") == 1, "Skill execution audit schema is stale")
-    curated_inventory_file = skill_root / "curated-scientific" / "inventory.json"
-    curated_engine_file = skill_root / "curated-scientific" / "_runtime" / "execute_skill.py"
-    curated_inventory = json.loads(curated_inventory_file.read_text(encoding="utf-8"))
-    curated_ids = set(curated_inventory["policy"]["delivery"]["executable"])
-    execution_rows = execution.get("skills", [])
-    certified_ids = {row.get("skill") for row in execution_rows if row.get("passed") is True}
-    certified_packages = sorted("curated-scientific/%s" % name for name in certified_ids)
-    require(execution.get("inventorySha256") == file_sha256(curated_inventory_file), "Skill execution evidence does not match the current inventory")
-    require(execution.get("runtimeEngineSha256") == file_sha256(curated_engine_file), "Skill execution evidence does not match the current runtime engine")
-    require(execution.get("environment", {}).get("matchesInventory") is True, "Skill execution environment does not match pinned dependencies")
-    require(execution.get("inventoryExecutable") == 38 and execution.get("executionCertified") == 38 and execution.get("failed") == 0, "all 38 curated Skills are not execution-certified")
-    require(len(execution_rows) == 38 and certified_ids == curated_ids, "Skill execution evidence does not exactly cover the curated inventory")
-    for row in execution_rows:
-        require(row.get("operation") == "smoke-task" and row.get("returnCode") == 0 and row.get("passed") is True, "%s lacks a completed task receipt" % row.get("skill"))
-        receipts = row.get("artifacts", [])
-        require(len(receipts) >= 2, "%s lacks retained artifacts" % row.get("skill"))
-        for receipt in receipts:
-            artifact = (REPO / str(receipt.get("path", ""))).resolve()
-            require(artifact.is_relative_to(REPO) and artifact.is_file() and not artifact.is_symlink(), "%s retained artifact is unavailable" % row.get("skill"))
-            require(artifact.stat().st_size == receipt.get("bytes") and file_sha256(artifact) == receipt.get("sha256"), "%s retained artifact receipt does not match disk" % row.get("skill"))
-
-    platform_execution = read("platform-skill-execution-v1.json")
-    parsed_fresh(platform_execution.get("finishedAt"), "platform Skill execution audit")
-    require(platform_execution.get("schemaVersion") == 1, "platform Skill execution audit schema is stale")
-    require(platform_execution.get("environment", {}).get("dependencyContract") == "selected audit runtime plus package-declared dependencies", "platform Skill execution dependency contract drifted")
-    expected_platform_packages = {
-        "core/domain-check", "core/hpc-slurm", "core/large-file", "core/modal-run",
-        "core/publication-figures", "core/remote-compute", "core/stats-integrity",
-        "core/traceability-review", "external/ai4s-skills/integrity-auditor",
-        "external/ai4s-skills/mindmap-render", "office/docx", "office/pdf", "office/pptx", "office/xlsx",
-    }
-    platform_rows = platform_execution.get("packages", [])
-    platform_certified = {row.get("package") for row in platform_rows if row.get("passed") is True}
-    require(
-        platform_execution.get("installedPackagesExamined") == 14
-        and platform_execution.get("executionCertified") == 14
-        and platform_execution.get("failed") == 0
-        and len(platform_rows) == 14
-        and platform_certified == expected_platform_packages,
-        "all 14 bounded platform Skills are not execution-certified",
-    )
-    for row in platform_rows:
-        package = row.get("package")
-        require(row.get("operation") == "task" and row.get("returnCode") == 0 and row.get("passed") is True, "%s lacks a completed platform task receipt" % package)
-        require(row.get("checks") and all(row["checks"].values()), "%s failed a platform task validation" % package)
-        manifest = skill_root / str(package) / "SKILL.md"
-        entrypoint = (REPO / str(row.get("entrypoint", ""))).resolve()
-        require(manifest.is_file() and file_sha256(manifest) == row.get("manifestSha256"), "%s manifest execution evidence drifted" % package)
-        require(entrypoint.is_relative_to(REPO) and entrypoint.is_file() and file_sha256(entrypoint) == row.get("entrypointSha256"), "%s entrypoint execution evidence drifted" % package)
-        receipts = row.get("artifacts", [])
-        require(len(receipts) >= 1, "%s lacks a retained task artifact" % package)
-        for receipt in receipts:
-            artifact = (REPO / str(receipt.get("path", ""))).resolve()
-            require(artifact.is_relative_to(REPO) and artifact.is_file() and not artifact.is_symlink(), "%s retained platform artifact is unavailable" % package)
-            require(artifact.stat().st_size == receipt.get("bytes") and file_sha256(artifact) == receipt.get("sha256"), "%s retained platform artifact receipt does not match disk" % package)
-
-    specialist_skill_tools = {
-        "evimed/adr-analysis": "drug_safety_analysis",
-        "evimed/bibliometric-analysis": "bibliometric_analysis",
-        "evimed/comprehensive-drug-evaluation": "comprehensive_drug_evaluation",
-        "evimed/drug-selection": "drug_selection_evaluation",
-        "evimed/mendelian-randomization": "mendelian_randomization",
-        "evimed/meta-analysis": "meta_analysis",
-        "evimed/off-label-analysis": "offlabel_evidence_packet",
-        "evimed/peer-review": "peer_review",
-        "evimed/research-topic-selection": "research_topic_selection",
-    }
-    tool_results = {row.get("tool"): row for row in read("tool-probe-v3.json").get("results", [])}
-    for package, tool in specialist_skill_tools.items():
-        evidence = tool_results.get(tool, {})
-        require(evidence.get("operational") is True and evidence.get("operation") in {"task", "start_then_poll_to_terminal"}, "%s lacks linked tool-task evidence" % package)
-    all_certified_packages = sorted(set(certified_packages) | expected_platform_packages | set(specialist_skill_tools))
-    require(
-        summary.get("webExecutionCertifiedSkillPackages") == len(all_certified_packages),
-        "clean Web execution-certified Skill count is not %d" % len(all_certified_packages),
-    )
-    require(summary.get("webExecutionCertifiedPackageIds") == all_certified_packages, "Skill audit does not match retained execution receipts")
-    require(summary.get("sourceCapabilitiesMapped") == 127, "source capability mapping count is not 127")
     require(summary.get("sourcePackagesPublished") == 0, "mapped source capabilities were misreported as published packages")
     items = document.get("items", [])
     require(len(items) == 149, "skill audit does not contain 149 reviewed inputs")
-    require(sum(item.get("releaseStatus") == "capability_mapped" for item in items) == 127, "mapped skill row count is not 127")
-    require(summary.get("sourceCapabilitiesMappedToFreshRuntime") == sum(
-        item.get("releaseStatus") == "capability_mapped" and bool(item.get("runtimePackagesInstalledInWeb"))
-        for item in items
-    ), "fresh-runtime capability mapping count is inflated")
-    require(summary.get("sourceCapabilitiesBackedByExecutedRuntime") == sum(
-        item.get("releaseStatus") == "capability_mapped" and bool(item.get("runtimePackagesExecutionCertified"))
-        for item in items
-    ), "executed-runtime capability mapping count is inflated")
+    planned = {row["id"] for row in composition["packages"]}
+    from build_skill_audit import capability_mapping, BUNDLED, RETIRED_MAPPINGS
+    historical_mapping = {**capability_mapping(), **BUNDLED, **RETIRED_MAPPINGS}
+    for item in items:
+        mapped = item.get("runtimePackages", [])
+        require(mapped == historical_mapping.get(item.get("sourceName"), []), "historical semantic targets differ from the reviewed mapping")
+        expected_states = [{"target": name, "state": "source-planned" if name in planned else "unverified-non-skill-target" if name.startswith(("builtin/", "platform/")) else "historical-target-not-shipped"} for name in mapped]
+        require(item.get("targetStates") == expected_states, "retired/unverified target was claimed currently available")
+        require(not mapped or all(name in planned for name in mapped) or item.get("releaseStatus") == "historical_mapping_unverified", "unshipped historical targets were labeled current capability mappings")
+        require(item.get("runtimePackagesSourcePlanned") == [name for name in mapped if name in planned], "mapped skill source inclusion is inflated")
+        require(item.get("runtimePackagesBoundedHistoricalTaskMatched") == [name for name in mapped if name in certified], "mapped skill execution is inflated")
     require(all(item.get("releaseStatus") != "published" for item in items), "a mapped source skill is still labeled published")
+    require(summary.get("historicalCapabilitiesMapped") == sum(bool(row.get("runtimePackages")) for row in items), "historical mapping count is inflated")
+    require(summary.get("sourceCapabilitiesMapped") == sum(row.get("releaseStatus") == "capability_mapped" for row in items), "source capability mapping count is inflated")
+    require(summary.get("sourceCapabilitiesMappedToSourcePlan") == sum(row.get("releaseStatus") == "capability_mapped" and bool(row.get("runtimePackagesSourcePlanned")) for row in items), "source-plan capability mapping count is inflated")
+    require(summary.get("sourceCapabilitiesBackedByBoundedHistoricalTask") == sum(row.get("releaseStatus") == "capability_mapped" and bool(row.get("runtimePackagesBoundedHistoricalTaskMatched")) for row in items), "bounded historical capability task count is inflated")
+    require(not unknown, "current skill task evidence is unknown for: " + ", ".join(unknown) + "; source inclusion is not an executed task or native dispatch; native/delegated entries may use hosted receipts, not mandatory Python smoke")
 
 
 def verify_acceptance():
@@ -586,7 +475,22 @@ def verify_acceptance():
     print(acceptance_ledger.coverage_notice())
 
 
-def main():
+def main(argv=None):
+    global REPORTS, RESULTS, EVIDENCE, JOB_STATE
+    skills_only = False
+    if argv is not None:
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--report-dir", type=Path, default=REPORTS, help="new audit summaries; historical files are not rewritten")
+        parser.add_argument("--evidence-dir", type=Path, default=RESULTS, help="retained task documents and their evidence/ subtree")
+        parser.add_argument("--skills-only", action="store_true", help="validate only skill inventory/evidence; this does not certify the release")
+        args = parser.parse_args(argv)
+        REPORTS, RESULTS = args.report_dir.resolve(), args.evidence_dir.resolve()
+        EVIDENCE, JOB_STATE = RESULTS / "evidence", RESULTS / "evidence/job-state"
+        skills_only = args.skills_only
+    if skills_only:
+        verify_skills()
+        print("skill audit section passed; release and current image were not certified")
+        return
     # Appended, never inserted. This audit is a fail-fast wall of refusals, so
     # where a new check goes decides which refusal an operator is shown first —
     # and the freshness refusals in verify_tools/verify_sources are the ones
@@ -604,4 +508,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

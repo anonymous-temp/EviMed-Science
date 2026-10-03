@@ -225,6 +225,8 @@ class IncompleteProbeRecording(unittest.TestCase):
         repo = Path(temporary.name).resolve()
         server = SimpleNamespace(
             list_tools=lambda: [{"name": "health"}, {"name": "peer_review"}],
+            TOOL_DEFINITIONS=[{"name": "health"}, {"name": "peer_review"}],
+            OPTIONAL_TOOLS=set(),
             disabled_tools=lambda: set(),
             call_tool=lambda name, arguments: {"status": "success", "summary": "answered"},
         )
@@ -257,6 +259,217 @@ class IncompleteProbeRecording(unittest.TestCase):
         self.assertTrue((output / "evidence" / ".evimed-audit" / "tool-responses" / "health.json").is_file())
         self.assertIn("recorded incomplete", stderr)
         self.assertIn("peer_review", stderr)
+
+
+class CurrentSkillInventory(unittest.TestCase):
+    def test_source_scan_uses_native_composition_and_dispatch_scopes(self):
+        from audit_inventory import skill_composition
+        composition = skill_composition(audit.REPO)
+        packages = {row["id"]: row for row in composition["packages"]}
+        self.assertEqual(composition["basis"], "source-planned-image-composition")
+        self.assertEqual(composition["imageObservation"], "unknown")
+        self.assertEqual(packages["evimed/open-domain-answer"]["scope"], "agent")
+        self.assertEqual(packages["capability-skills/meta-analysis"]["scope"], "delegated")
+        self.assertTrue(any(name.startswith("community/") for name in packages))
+        self.assertNotIn("evimed/meta-analysis", packages)
+        self.assertFalse(any(name.startswith("external/") for name in packages))
+        self.assertTrue(all(row["manifestSha256"] == audit.file_sha256(audit.REPO / row["manifest"]) for row in packages.values()))
+
+    def test_equal_counts_with_changed_body_or_scope_are_refused(self):
+        from audit_inventory import skill_composition, skill_execution_coverage
+        composition = skill_composition(audit.REPO)
+        coverage = skill_execution_coverage(audit.REPO, audit.RESULTS, composition)
+        summary = {"schemaVersion": 5, "sourcePlannedComposition": composition, "imageObservation": "unknown", "executionCoverage": coverage}
+        for field, value in [("manifestSha256", "0" * 64), ("scope", "agent")]:
+            with self.subTest(field=field):
+                changed = json.loads(json.dumps(summary))
+                changed["sourcePlannedComposition"]["packages"][0][field] = value
+                with tempfile.TemporaryDirectory() as temporary, patch.object(audit, "REPORTS", Path(temporary)), patch.object(audit, "read", return_value={"summary": changed}):
+                    (Path(temporary) / "skill-audit-v5.json").touch()
+                    with self.assertRaisesRegex(SystemExit, "name/path/digest/dispatch scope"):
+                        audit.verify_skills()
+
+    def test_source_only_never_certifies_a_new_skill(self):
+        from audit_inventory import skill_composition, skill_execution_coverage
+        composition = skill_composition(audit.REPO)
+        with tempfile.TemporaryDirectory() as temporary:
+            coverage = skill_execution_coverage(audit.REPO, Path(temporary), composition)
+        self.assertTrue(coverage)
+        self.assertTrue(all(row["state"] == "unknown" and row["evidence"] is None for row in coverage))
+
+    def test_old_skill_schema_is_not_reinterpreted_as_current(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(audit, "REPORTS", Path(temporary)):
+            (Path(temporary) / "skill-audit-v4.json").write_text('{"summary":{"freshWebGlobalSkillPackages":58}}')
+            with self.assertRaisesRegex(SystemExit, "retired runtime tree"):
+                audit.verify_skills()
+
+    def test_matching_task_artifacts_are_required_and_body_changes_invalidate(self):
+        from audit_inventory import sha256, skill_execution_coverage
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            manifest = repo / "runtime/skills/office/docx/SKILL.md"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text("public instructions")
+            entrypoint = manifest.parent / "convert.py"
+            entrypoint.write_text("bounded program")
+            artifact = repo / "artifact.docx"
+            artifact.write_bytes(b"retained public output")
+            results = repo / "results"
+            results.mkdir()
+            row = {"package": "office/docx", "operation": "task", "passed": True, "returnCode": 0,
+                   "manifestSha256": sha256(manifest), "entrypoint": entrypoint.relative_to(repo).as_posix(),
+                   "entrypointSha256": sha256(entrypoint), "checks": {"readable": True},
+                   "artifacts": [{"path": "artifact.docx", "bytes": artifact.stat().st_size, "sha256": sha256(artifact)}]}
+            report = {"schemaVersion": 1, "finishedAt": datetime.now(timezone.utc).isoformat(),
+                      "environment": {"dependencyContract": "selected audit runtime plus package-declared dependencies"}, "installedPackagesExamined": 1, "executionCertified": 1, "failed": 0, "packages": [row]}
+            (results / "platform-skill-execution-v1.json").write_text(json.dumps(report))
+            def state():
+                composition = {"packages": [{"id": "office/docx", "manifestSha256": sha256(manifest)}]}
+                return skill_execution_coverage(repo, results, composition)[0]["state"]
+            self.assertEqual(state(), "bounded-historical-task-matched")
+            artifact.write_bytes(b"altered output")
+            self.assertEqual(state(), "unknown")
+            artifact.write_bytes(b"retained public output")
+            manifest.write_text("different scientific instructions")
+            self.assertEqual(state(), "unknown")
+            manifest.write_text("public instructions")
+            entrypoint.write_text("different calculation")
+            self.assertEqual(state(), "unknown")
+
+    def test_stale_or_incompatible_dependencies_do_not_certify(self):
+        from audit_inventory import skill_composition, skill_execution_coverage
+        composition = skill_composition(audit.REPO)
+        document = json.loads((audit.RESULTS / "platform-skill-execution-v1.json").read_text())
+        with tempfile.TemporaryDirectory() as temporary:
+            results = Path(temporary)
+            for mutation in [{"finishedAt": "2000-01-01T00:00:00Z"}, {"environment": {"dependencyContract": "unmatched dependencies"}}]:
+                with self.subTest(mutation=mutation):
+                    changed = {**document, **mutation}
+                    (results / "platform-skill-execution-v1.json").write_text(json.dumps(changed))
+                    self.assertTrue(all(row["state"] == "unknown" for row in skill_execution_coverage(audit.REPO, results, composition)))
+
+    def test_missing_preset_path_and_unexplained_copy_are_refused(self):
+        from audit_inventory import skill_composition
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            for name in ["deploy/runtime-dsh", "packages/domain/src", "runtime/skills/core/one"]:
+                (repo / name).mkdir(parents=True)
+            (repo / "runtime/skills/core/one/SKILL.md").write_text("instructions")
+            (repo / "packages/domain/src/skillRoots.mjs").write_text("source: 'runtime/skills/core'")
+            dockerfile = repo / "deploy/runtime-dsh/Dockerfile"
+            installer = repo / "deploy/runtime-dsh/install-runtime.sh"
+            dockerfile.write_text("COPY runtime/skills/core /opt/evimed/skills/core\n")
+            installer.write_text("")
+            with self.assertRaisesRegex(SystemExit, "never reaches the native preset"):
+                skill_composition(repo)
+            installer.write_text("cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core\n")
+            self.assertEqual(skill_composition(repo)["packages"][0]["id"], "core/one")
+            dockerfile.write_text("COPY runtime/skills/core /some/unexplained/location\n")
+            with self.assertRaisesRegex(SystemExit, "unexplained destination"):
+                skill_composition(repo)
+
+    def test_generator_preserves_historical_outputs_and_unknown_is_fail_closed(self):
+        import build_skill_audit as builder
+        original_is_file = Path.is_file
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input.json"
+            source.write_text(json.dumps({"items": json.loads((audit.RESULTS / 'skill-audit-v4.json').read_text())["items"]}))
+            output = root / "out"
+            output.mkdir()
+            historical = output / "skill-audit-v4.json"
+            historical.write_text("historical bytes")
+            with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(output)]), contextlib.redirect_stdout(io.StringIO()):
+                builder.main()
+            self.assertEqual(historical.read_text(), "historical bytes")
+            current = json.loads((output / "skill-audit-v5.json").read_text())
+            self.assertEqual(current["summary"]["imageObservation"], "unknown")
+            self.assertTrue(current["summary"]["unknownExecutionPackageIds"])
+            # Read retained evidence from its real root; only the new summary is injected.
+            with patch.object(audit, "read", return_value=current), patch.object(audit.Path, "is_file", autospec=True) as exists:
+                exists.side_effect = lambda item: True if item == audit.REPORTS / "skill-audit-v5.json" else original_is_file(item)
+                with self.assertRaisesRegex(SystemExit, "current skill task evidence is unknown"):
+                    audit.verify_skills()
+            with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(output)]), self.assertRaisesRegex(SystemExit, "already exists"):
+                builder.main()
+
+    def test_generator_and_verifier_read_the_selected_evidence_directory(self):
+        import build_skill_audit as builder
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "new-evidence"
+            evidence.mkdir()
+            output = root / "new-report"
+            source = audit.RESULTS / "skill-audit-v4.json"
+            with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(output),
+                                           "--evidence-dir", str(evidence)]), contextlib.redirect_stdout(io.StringIO()):
+                builder.main()
+            summary = json.loads((output / "skill-audit-v5.json").read_text())["summary"]
+            self.assertTrue(all(item["state"] == "missing" for item in summary["historicalExecutionEvidence"]))
+            with patch.object(audit, "REPORTS", output), patch.object(audit, "RESULTS", evidence):
+                with self.assertRaisesRegex(SystemExit, "current skill task evidence is unknown"):
+                    audit.verify_skills()
+            self.assertEqual(list(evidence.iterdir()), [])
+
+    def test_retired_notebook_and_legacy_target_are_not_claimed_current(self):
+        import build_skill_audit as builder
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input.json"
+            source.write_text(json.dumps({"items": [{"name": "open-notebook"}, {"name": "literature-review"}, {"name": "markitdown"}]}))
+            with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(root / "out")]), contextlib.redirect_stdout(io.StringIO()):
+                builder.main()
+            rows = {row["sourceName"]: row for row in json.loads((root / "out/skill-audit-v5.json").read_text())["items"]}
+            self.assertNotIn("open-notebook", builder.BUNDLED)
+            self.assertEqual(rows["open-notebook"]["disposition"], "retired_product_mapping")
+            self.assertEqual(rows["literature-review"]["targetStates"], [{"target": "external/ai4s-skills/literature-survey", "state": "historical-target-not-shipped"}])
+            for row in rows.values():
+                self.assertEqual(row["releaseStatus"], "historical_mapping_unverified")
+                self.assertEqual(row["runtimePackagesSourcePlanned"], [])
+                self.assertEqual(row["runtimePackagesBoundedHistoricalTaskMatched"], [])
+                self.assertEqual(row["currentImageExecution"], "unknown")
+
+    def test_curated_producer_refuses_existing_report_and_artifacts_before_execution(self):
+        import run_skill_execution_audit as producer
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            output = repo / "new-results"
+            with patch.object(producer, "ROOT", repo), patch.object(producer, "RESULT_FILE", output / "skill-execution-v1.json"), patch.object(producer, "ARTIFACT_ROOT", output / "skill-execution-v1-artifacts"), patch.object(producer, "LOCK_FILE", output / ".lock"):
+                producer.configure_output(output)
+                artifact = output / "skill-execution-v1-artifacts/retained.json"
+                artifact.parent.mkdir(parents=True)
+                artifact.write_bytes(b"actual prior evidence")
+                with patch.object(producer, "dependency_environment") as execute, self.assertRaisesRegex(SystemExit, "never removed"):
+                    producer.run_audit()
+                execute.assert_not_called()
+                self.assertEqual(artifact.read_bytes(), b"actual prior evidence")
+                with self.assertRaisesRegex(SystemExit, "NEW --output-dir"):
+                    producer.configure_output(output)
+                with self.assertRaisesRegex(SystemExit, "exact audit repository root"):
+                    producer.configure_output(repo.parent / "outside-receipt-root")
+
+    def test_disabled_names_cannot_hide_required_unknown_or_duplicate_tools(self):
+        from audit_inventory import validate_disabled
+        for disabled in [["typo"], ["health"], ["vcr_read", "vcr_read"]]:
+            with self.subTest(disabled=disabled), self.assertRaises(SystemExit):
+                validate_disabled({"health", "vcr_read"}, {"vcr_read"}, disabled)
+        self.assertEqual(validate_disabled({"health", "vcr_read"}, {"vcr_read"}, ["vcr_read"]), {"vcr_read"})
+
+    def test_optional_config_is_recorded_without_inventing_execution(self):
+        import run_tool_audit as runner
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            server = SimpleNamespace(TOOL_DEFINITIONS=[{"name": "health"}, {"name": "vcr_read"}], OPTIONAL_TOOLS={"vcr_read"},
+                                     list_tools=lambda: [{"name": "health"}], disabled_tools=lambda: {"vcr_read"},
+                                     call_tool=lambda name, args: {"status": "success"})
+            with patch.object(runner, "REPO", root), patch.object(runner, "load_server", return_value=server), patch.dict(runner.TASK_FIXTURES, {"health": {}, "vcr_read": {}}, clear=True), patch.dict(runner.SPECIALISTS, {}, clear=True), patch.object(sys, "argv", ["probe", "--probe-workspace", str(root / "ws"), "--output-dir", str(root / "out")]), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    runner.main()
+                self.assertEqual(raised.exception.code, 0)
+            result = json.loads((root / "out/tool-probe-v3.json").read_text())
+            self.assertEqual(result["notOffered"], ["vcr_read"])
+            self.assertEqual([row["tool"] for row in result["results"]], ["health"])
+            self.assertEqual(result["toolAvailability"], [{"tool": "health", "state": "offered", "basis": "runtime-list-tools"}, {"tool": "vcr_read", "state": "notOffered", "basis": "explicit-deployment-disable"}])
 
 
 class SourceCountsAreDerived(unittest.TestCase):
