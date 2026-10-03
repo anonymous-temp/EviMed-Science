@@ -688,8 +688,8 @@ def _discussion(ctx):
             "本研究存在若干局限性，在解读结果时需加以考量。"
             "首先，分析仅限于PubMed收录文献，可能遗漏Scopus、Web of Science、Embase等数据库中的相关研究，"
             "多数据库联合检索有助于进一步提升文献覆盖度。"
-            "其次，PubMed本身不提供引用计数，本报告中的引用估算基于期刊影响因子层级、发表年份和文献类型进行模拟，"
-            "应视为近似参考指标而非精确计数，解读时需保持审慎。"
+            "其次，PubMed本身不提供引用计数；外部引用观测的来源、覆盖度和观测时间约束其解释，"
+            "缺失观测不能当作零计数或补造的估算值。"
             "第三，检索虽未设语言限制，但PubMed以英文文献为主，"
             "其他语言发表的研究可能未能充分纳入，存在一定的语言偏倚。"
             "第四，作者和机构名称通过启发式方法规范化，对于常见姓名或复杂隶属关系可能引入误差，"
@@ -705,9 +705,8 @@ def _discussion(ctx):
             "First, the analysis is restricted to PubMed-indexed publications, which may exclude relevant literature "
             "from other databases such as Scopus, Web of Science, and Embase; "
             "multi-database searches would improve overall coverage, particularly for non-biomedical dimensions of the topic. "
-            "Second, PubMed does not provide citation counts, and the citation estimates reported here are modeled "
-            "using journal impact factor tiers, publication year, and article type; "
-            "they should be interpreted as approximate indicators rather than exact counts. "
+            "Second, PubMed itself does not provide citation counts; external observation sources, coverage and observation dates constrain their interpretation. "
+            "Missing observations must not be treated as zero counts or invented estimates. "
             "Third, while no language restrictions were applied, PubMed predominantly indexes English-language publications, "
             "which may underrepresent research published in other languages. "
             "Fourth, author and institutional names were normalized using heuristic methods, "
@@ -765,8 +764,8 @@ def _conclusion(ctx):
         )
         if frontier_terms_zh:
             para += (
-                f"特别是{frontier_terms_zh}等前沿主题的快速发展，"
-                f"预示着该领域未来的重要研究方向。"
+                f"本次样本的评分排序列出{frontier_terms_zh}等主题；"
+                "该排序不能单独证明全领域增长或预测未来研究重要性。"
             )
         para += (
             f"未来研究可在本分析基础上，结合多数据库文献、引文网络分析及质性研究方法，"
@@ -783,8 +782,8 @@ def _conclusion(ctx):
         )
         if frontier_terms_en:
             para += (
-                f"Notably, the rapid development of frontier topics such as {frontier_terms_en} "
-                f"signals important future research directions in this field. "
+                f"The selected sample's score ranking lists {frontier_terms_en}; "
+                "this ranking alone establishes neither field-wide growth nor future research importance. "
             )
         para += (
             f"Future research may build upon this analysis by integrating multi-database literature, "
