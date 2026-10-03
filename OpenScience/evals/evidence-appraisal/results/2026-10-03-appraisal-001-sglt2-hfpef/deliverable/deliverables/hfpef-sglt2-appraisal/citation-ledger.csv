@@ -1,0 +1,6 @@
+id,identifier_type,identifier_value,citation
+S1,doi,10.1056/NEJMoa2107038,"Anker Stefan D., Butler Javed, Filippatos Gerasimos, 等. Empagliflozin in Heart Failure with a Preserved Ejection Fraction[J]. New England Journal of Medicine, 2021, 385(16): 1451-1461. doi:10.1056/NEJMoa2107038. PMID 34449189."
+S2,doi,10.1056/NEJMoa2206286,"Solomon Scott D., McMurray John J.V., Claggett Brian, 等. Dapagliflozin in Heart Failure with Mildly Reduced or Preserved Ejection Fraction[J]. New England Journal of Medicine, 2022, 387(12): 1089-1098. doi:10.1056/NEJMoa2206286. PMID 36027570."
+S3,doi,10.1016/S0140-6736(22)01429-5,"Vaduganathan Muthiah, Docherty Kieran F, Claggett Brian L, 等. SGLT2 inhibitors in patients with heart failure: a comprehensive meta-analysis of five randomised controlled trials[J]. The Lancet, 2022, 400(10354): 757-767. doi:10.1016/S0140-6736(22)01429-5. PMID 36041474."
+S4,,,瑞典心衰登记队列（2023 年，回顾性，倾向评分匹配）——题面描述，未提供可解析标识符。
+S5,,,美国医保理赔数据库队列（2022 年，回顾性）——题面描述，未提供可解析标识符。
