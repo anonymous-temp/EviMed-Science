@@ -22,6 +22,7 @@ test('render plan exposes only input and output with bounded offline isolation',
   assert.ok(plan.args.includes('--network=none'));
   assert.ok(plan.args.includes('--cap-drop=ALL'));
   assert.ok(plan.args.includes('--security-opt=no-new-privileges'));
+  assert.ok(plan.args.includes('--pids-limit=256'));
   assert.equal(plan.args.filter(x => x === '--mount').length, 2);
   assert.ok(plan.args.some(x => x.includes('/input,readonly')));
   const env=Object.fromEntries(plan.args.filter((value,index)=>plan.args[index-1]==='--env').map(value=>value.split('=')));

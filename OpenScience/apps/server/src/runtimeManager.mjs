@@ -3910,7 +3910,9 @@ export class RuntimeManager {
     const mountedMethods = await this.syncCapsuleMethods(project);
     const capsuleMethodsMounted = mountedMethods.count;
     let personalSkillGeneration = this.personalSkillOverrides.get(key) ?? null;
-    if (!this.personalSkillOverrides.has(key) && this.personalSkillGenerations) {
+    // An exclusive composite apply already froze its personal reference/pins.
+    // First-boot reconciliation would change that revision after the freeze.
+    if (!this.personalSkillOverrides.has(key) && !this.extensionGenerationOverrides.has(key) && this.personalSkillGenerations) {
       try { personalSkillGeneration = await this.personalSkillGenerations.prepareForRuntime(project); }
       catch {
         // Preparation failed before current identity compatibility could be
