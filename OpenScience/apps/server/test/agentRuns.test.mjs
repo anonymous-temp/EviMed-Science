@@ -2882,29 +2882,44 @@ test("concurrent identical dispatch ids elect exactly one prompt sender", async 
         return [];
       },
     });
+    const senderEntered = Promise.withResolvers();
     let senderCalls = 0;
     let releaseSender;
     const senderBarrier = new Promise((resolve) => { releaseSender = resolve; });
     const sender = async () => {
       senderCalls += 1;
+      senderEntered.resolve();
       await senderBarrier;
       return { accepted: true };
     };
 
-    const concurrent = Promise.all([
+    const dispatches = [
       store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_same" }, sender),
       store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_same" }, sender),
-    ]);
-    for (let attempt = 0; attempt < 50 && senderCalls === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    ];
+    const concurrent = Promise.all(dispatches);
+    let senderDeadline;
+    try {
+      await Promise.race([
+        senderEntered.promise,
+        new Promise((_, reject) => {
+          senderDeadline = setTimeout(() => reject(new Error("Prompt sender did not start")), 5_000);
+        }),
+        concurrent.then(() => { throw new Error("Dispatches settled without a blocked prompt sender"); }),
+      ]);
+      assert.equal(senderCalls, 1);
+      releaseSender();
+      const [first, second] = await concurrent;
+      assert.equal(first.id, second.id);
+      assert.equal(senderCalls, 1);
+      assert.equal((await store.list(project)).length, 1);
+    } finally {
+      clearTimeout(senderDeadline);
+      releaseBaselines();
+      releaseSender();
+      await Promise.allSettled(dispatches);
+      await store.closeProject(project, "canceled");
     }
-    assert.equal(senderCalls, 1);
-    releaseSender();
-    const [first, second] = await concurrent;
-    assert.equal(first.id, second.id);
-    assert.equal(senderCalls, 1);
-    assert.equal((await store.list(project)).length, 1);
-    await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
