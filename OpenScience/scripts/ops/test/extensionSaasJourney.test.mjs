@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -156,4 +156,28 @@ test('shared private-phase exception diagnostic identifies reference errors and 
  assert.equal(diagnostic.errorName,'ReferenceError');assert.deepEqual(diagnostic.protocolNumbers,{status:403,expected:200});assert.equal(JSON.stringify(diagnostic).includes(secret),false);
  assert.equal(safeCampaignFailureDetails({name:secret,message:secret,code:secret}).errorName,'UnknownError');
  assert.equal(Object.hasOwn(safeCampaignFailureDetails({status:-1,statusCode:99999,expected:'200'}),'protocolNumbers'),false);
+});
+
+test('ordinary driver creates native session then binds open-domain before dispatch; rejected binding never dispatches',async()=>{
+ const actor={headers:{Cookie:'fixture-only'}},calls=[],input={dispatchId:'owned-dispatch',text:'controlled fixture'},request=async(base,current,route,method,body,expected)=>{assert.equal(base,'http://127.0.0.1:1');assert.equal(current,actor);calls.push({route,method,body,expected});if(route==='/api/runtime/sessions')return{id:'native-owned'};if(route.startsWith('/api/research-sessions/'))return{sessionId:'native-owned',mode:'open-domain'};return{id:'owned-run'};};
+ const result=await dispatchOrdinaryCampaignTurn('http://127.0.0.1:1',actor,input,null,request);assert.equal(result.run.id,'owned-run');assert.deepEqual(calls.map(call=>call.route),['/api/runtime/sessions','/api/research-sessions/native-owned','/api/agent-runs/dispatch']);assert.deepEqual(calls[1].body,{mode:'open-domain'});assert.equal(calls[2].body.line,'answer');assert.equal(calls[2].body.automated,true);
+ const failure=Object.assign(new Error('owned binding denied'),{code:'extension_access_denied'}),blocked=[];await assert.rejects(dispatchOrdinaryCampaignTurn('http://127.0.0.1:1',actor,input,null,async(_base,_actor,route)=>{blocked.push(route);if(route==='/api/runtime/sessions')return{id:'native-owned'};throw failure;}),error=>error===failure);assert.deepEqual(blocked,['/api/runtime/sessions','/api/research-sessions/native-owned']);
+ const wrongBinding=[];await assert.rejects(dispatchOrdinaryCampaignTurn('http://127.0.0.1:1',actor,input,null,async(_base,_actor,route)=>{wrongBinding.push(route);return route==='/api/runtime/sessions'?{id:'native-owned'}:{sessionId:'foreign-session',mode:'open-domain'};}),/session_binding/);assert.equal(wrongBinding.length,2);
+ const mockCalls=[];await assert.rejects(dispatchOrdinaryCampaignTurn('http://127.0.0.1:1',actor,input,null,async(_base,_actor,route)=>{mockCalls.push(route);return{id:'web_mock_fixture'};}),/real_generation/);assert.equal(mockCalls.length,1);
+});
+
+import {createWebApiApp} from '../../../apps/server/src/server.mjs';
+import os from 'node:os';
+test('ordinary owned HTTP binding enables answer dispatch while another account cannot inherit the binding',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'campaign-session-contract-')),app=createWebApiApp({dataDir:root,port:0,runtimeMode:'mock',stateStore:'file',databaseUrl:'',localAutoConfig:false,devAuth:false,authMode:'local',selfRegistrationEnabled:true,operatorUsers:'test-bootstrap-only',bootstrapUser:'test-bootstrap-only',bootstrapPassword:'synthetic-contract-test-only',deepseekProviderEnabled:false,deepseekApiKey:'',dashscopeApiKey:'',learningEnabled:false,reviewEnabled:false,llmRoutingEnabled:false});
+ try{const address=await app.listen(0,'127.0.0.1'),base='http://127.0.0.1:'+address.port,actors=[];
+  for(const username of ['fixture-owner','fixture-other']){const response=await fetch(base+'/api/auth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username,password:'synthetic-contract-password',name:username,warm:false})}),data=(await response.json()).data;assert.equal(response.status,201);actors.push({headers:{Cookie:response.headers.get('set-cookie').split(';')[0],'X-Open-Science-CSRF':data.csrfToken,'X-Open-Science-Project':'default'}});const me=await fetch(base+'/api/me',{headers:actors.at(-1).headers});assert.equal((await me.json()).data.operator,false);}
+  // Transport stub names a session only; public auth, binding and ledger routes
+  // are real. This contract test makes no native/model/qualification claim.
+  app.runtimeManager.createRuntimeSession=async()=>({id:'native-contract-session'});
+  const raw=await fetch(base+'/api/agent-runs/dispatch',{method:'POST',headers:{...actors[0].headers,'content-type':'application/json'},body:JSON.stringify({sessionId:'native-contract-session',dispatchId:'before-binding',text:'fixture',line:'answer',automated:true})});assert.equal(raw.status,400);assert.equal((await raw.json()).code,'invalid_agent_run');
+  const result=await dispatchOrdinaryCampaignTurn(base,actors[0],{dispatchId:'after-binding',text:'fixture'});assert.ok(result.run.id);
+  const otherList=await fetch(base+'/api/research-sessions',{headers:actors[1].headers});assert.deepEqual((await otherList.json()).data,[]);
+  const otherDispatch=await fetch(base+'/api/agent-runs/dispatch',{method:'POST',headers:{...actors[1].headers,'content-type':'application/json'},body:JSON.stringify({sessionId:result.session.id,dispatchId:'foreign-binding',text:'fixture',line:'answer',automated:true})});assert.equal(otherDispatch.status,400);assert.equal((await otherDispatch.json()).code,'invalid_agent_run');
+ }finally{await app.close();await fs.rm(root,{recursive:true,force:true});}
 });
