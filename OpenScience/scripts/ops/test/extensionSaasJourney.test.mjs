@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, campaignDocumentJobs, campaignDocumentTranscriptReady, campaignObserveDocumentCompletion, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, openCampaignObserverDatabase, campaignDocumentJobs, campaignDocumentTranscriptReady, campaignObserveDocumentCompletion, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -282,4 +282,18 @@ test('run success advancing after a pending transcript read polls again rather t
  assert.equal(await campaignObserveDocumentCompletion(app,{},'owned','session',readTranscript),null);
  assert.equal((await campaignObserveDocumentCompletion(app,{},'owned','session',readTranscript)).transcript,ready);assert.equal(runReads,1);
  for(const status of ['failed','canceled']){app.agentRuns.list=async()=>[{id:'owned',status}];await assert.rejects(campaignObserveDocumentCompletion(app,{},'owned','session',async()=>pending),error=>error.code==='native_campaign_document_tool_failed'&&error.terminalRun.status===status);}
+});
+
+test('isolated observer is physically read-only, owned namespace bounded and independently joined on init refusal',async()=>{
+ const state={databaseUrl:'postgres://qa:protected@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let options,ended=0;const client={connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
+ const observer=await openCampaignObserverDatabase(state,value=>{options=value;return client;});assert.equal(options.options,'-c default_transaction_read_only=on -c statement_timeout=5000');assert.equal(options.connectionTimeoutMillis,1000);
+ await observer.query('SELECT 1');assert.throws(()=>observer.query('DELETE FROM ignored'),{message:'private_campaign_observer_query_refused'});assert.throws(()=>observer.query('SELECT 1; DELETE FROM ignored'),{message:'private_campaign_observer_query_refused'});await observer.close();await observer.close();assert.equal(ended,1);assert.throws(()=>observer.query('SELECT 1'));
+ client.query=async()=>({rows:[{name:state.databaseName,readonly:'off'}]});await assert.rejects(openCampaignObserverDatabase(state,()=>client),{message:'invalid_private_campaign_database'});assert.equal(ended,2);
+ await assert.rejects(openCampaignObserverDatabase({...state,databaseName:'production'},()=>client),{message:'invalid_private_campaign_database'});
+});
+
+test('observer absorbs idle socket errors without hiding original query or initialization failures',async()=>{
+ const state={databaseUrl:'postgres://qa:protected@127.0.0.1/evimed_test_observer',databaseName:'evimed_test_observer'};let listener,ended=0;const error=new Error('private canary does not enter diagnostics'),client={on:(_name,callback)=>{listener=callback;},connect:async()=>{},end:async()=>{ended++;},query:async()=>({rows:[{name:state.databaseName,readonly:'on'}]})};
+ const observer=await openCampaignObserverDatabase(state,()=>client);listener(error);assert.throws(()=>observer.query('SELECT 1'),value=>value===error);await assert.rejects(observer.close(),value=>value===error);assert.equal(ended,1);
+ client.connect=async()=>{throw error;};await assert.rejects(openCampaignObserverDatabase(state,()=>client),value=>value===error);assert.equal(ended,2);
 });
