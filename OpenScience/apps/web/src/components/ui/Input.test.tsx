@@ -91,3 +91,12 @@ describe("class helpers", () => {
     expect(inputClasses({ className: "pl-9" })).toContain("pl-9");
   });
 });
+
+it('native select shares the field label, error association and control height with text input', async () => {
+  const {Select} = await import('./Input');
+  render(<><Input label="时间" value="07:00" readOnly/><Select label="重复" error="请选择频率" defaultValue="daily"><option value="daily">每天</option></Select></>);
+  const select = screen.getByRole('combobox',{name:'重复'}), input=screen.getByLabelText('时间');
+  expect(select).toHaveClass('h-control');expect(input).toHaveClass('h-control');expect(select).toHaveAttribute('aria-invalid','true');
+  expect(document.getElementById(select.getAttribute('aria-errormessage')!)).toHaveTextContent('请选择频率');
+  expect(select.parentElement?.querySelector('label')).toHaveAttribute('for',select.id);
+});

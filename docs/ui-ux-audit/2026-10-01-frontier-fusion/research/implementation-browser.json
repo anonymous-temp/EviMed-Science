@@ -1,0 +1,96 @@
+{
+  "mode": "actual compiled app + actual HTTP + isolated PostgreSQL",
+  "complete": true,
+  "checks": [
+    {
+      "check": "four primary destinations and native login",
+      "passed": true
+    },
+    {
+      "check": "cancel preserves dirty zone after declining confirmation",
+      "passed": true
+    },
+    {
+      "check": "created zone is persisted and private by default",
+      "passed": true
+    },
+    {
+      "check": "draft evidence survives reload and remains private",
+      "passed": true
+    },
+    {
+      "check": "published card remains hidden while parent zone is draft",
+      "passed": true
+    },
+    {
+      "check": "public reading preserves attribution and no preselected peer score",
+      "passed": true
+    },
+    {
+      "check": "peer review and real discussion create/delete work",
+      "passed": true
+    },
+    {
+      "check": "author cannot self-review and old review is revision-labeled",
+      "passed": true
+    },
+    {
+      "check": "zone follow updates and owner-only suggestions are connected",
+      "passed": true
+    },
+    {
+      "check": "research passes authorized content as a draft to the existing chat-frame contract without submitting",
+      "passed": true
+    },
+    {
+      "check": "withdrawing and republishing parent controls public visibility",
+      "passed": true
+    },
+    {
+      "check": "news converts into an owned draft and retains an original-item backlink",
+      "passed": true
+    },
+    {
+      "check": "directory counts and pagination search the complete corpus",
+      "passed": true
+    },
+    {
+      "check": "directory failure exposes a working retry",
+      "passed": true
+    },
+    {
+      "check": "responsive real pages",
+      "passed": true,
+      "width": 320,
+      "surfaces": 3
+    },
+    {
+      "check": "responsive real pages",
+      "passed": true,
+      "width": 390,
+      "surfaces": 3
+    },
+    {
+      "check": "responsive real pages",
+      "passed": true,
+      "width": 768,
+      "surfaces": 3
+    },
+    {
+      "check": "responsive real pages",
+      "passed": true,
+      "width": 1440,
+      "surfaces": 3
+    },
+    {
+      "check": "native evidence pages follow the system dark theme",
+      "passed": true
+    },
+    {
+      "check": "no browser JavaScript exceptions",
+      "passed": true
+    }
+  ],
+  "exceptions": [],
+  "capturedAt": "2026-10-01T05:53:19Z"
+}

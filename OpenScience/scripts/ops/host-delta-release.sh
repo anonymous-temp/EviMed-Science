@@ -117,6 +117,21 @@ docker build -f deploy/web/Dockerfile \
   --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
   -t "open-science-web:${NEW}" . > "/tmp/build-web-${NEW}.log" 2>&1
 echo "web built"
+# Optional aggregate replay is its own image; it does not replace the VCR engine.
+RESULT_REPLAY=$(node --env-file="$ENVF" --input-type=module -e '
+  const { resultReplayDeployment } = await import(process.argv[1]);
+  process.stdout.write(resultReplayDeployment(process.env) ? "enabled" : "disabled");
+' "$DST/OpenScience/scripts/ops/result-replay-deployment.mjs")
+if [ "$RESULT_REPLAY" = enabled ]; then
+  docker build -f deploy/specialist-adapter/Dockerfile.result-replay \
+    --build-arg PYTHON_BASE_IMAGE="${EVIMED_PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.11-slim-bookworm}" \
+    --build-arg PIP_INDEX_URL="${EVIMED_PIP_INDEX_URL:-https://mirrors.cloud.tencent.com/pypi/simple}" \
+    --build-arg RELEASE_ID="evimed-${NEW}-1" --build-arg SOURCE_REVISION="${REV}" --build-arg BUILD_CREATED="${CREATED}" \
+    -t "evimed-result-replay:${NEW}" .. > "/tmp/build-result-replay-${NEW}.log" 2>&1
+  sed -i -e "s|^OPEN_SCIENCE_RESULT_REPLAY_IMAGE=.*|OPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:${NEW}|" \
+    -e '/^OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID=/d' "$ENVF"
+  echo "result replay built; manifest generation must inspect the new image ID"
+fi
 if [ "${EVIMED_RUNTIME_BUILD:-delta}" = "full" ]; then
   # A release that changes what the kernel profile is made of — a community
   # bundle added (dsh-annotation and dsh-mermaid, 2026-09-20), a dependency, the

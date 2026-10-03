@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { createWebApiApp } from '../src/server.mjs';
+import { RuntimeManager } from '../src/runtimeManager.mjs';
+import { ExtensionGenerationService } from '../src/extensionGenerationService.mjs';
+import { createControllerExtensionComposition } from '../src/extensionControllerComposition.mjs';
+test('private JS factories are synchronous constructor dependencies, never config switches',async t=>{
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'assessment-composition-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ assert.throws(()=>createWebApiApp({}, {runtimeManagerFactory:true}),TypeError);
+ assert.throws(()=>createWebApiApp({}, {extensionIntegrationFactory:{}}),TypeError);
+ let received;
+ const app=createWebApiApp({dataDir,port:0,runtimeMode:'mock',devAuth:true},{runtimeManagerFactory:(config,hooks)=>{received={config,hooks};return new RuntimeManager(config,hooks);}});
+ await app.listen(0,"127.0.0.1");t.after(()=>app.close());assert.ok(received);assert.equal(received.config.runtimeMode,'mock');assert.equal(typeof received.hooks.onRuntimeStop,'function');assert.equal(typeof received.hooks.onSessionAbort,'function');assert.equal(received.config.runtimeManagerFactory,undefined);
+ const ordinary=createWebApiApp({dataDir:path.join(dataDir,'ordinary'),port:0,runtimeMode:'mock',devAuth:true,runtimeManagerFactory:()=>{throw new Error('serialized switch');},extensionIntegrationFactory:()=>{throw new Error('serialized switch');}});await ordinary.listen(0,"127.0.0.1");t.after(()=>ordinary.close());
+});
+test('ordinary configuration cannot select assessment verification and serialized markers cannot mint authority',async t=>{
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'assessment-default-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const untrustedVerifier=()=>{throw new Error('configuration-selected verifier');};
+ const serialized={root:dataDir,marker:{qualified:false,evidenceState:'source-assessed'},verifyManifest:()=>true,evaluate:()=>({assessmentAdmissionDigest:'sha256:'+'a'.repeat(64)})};
+ const manager=new RuntimeManager({extensionGenerationVerifier:untrustedVerifier,assessmentAdmission:serialized});
+ assert.equal(manager.extensionGenerationVerifier,undefined);
+ const app=createWebApiApp({dataDir,port:0,runtimeMode:'mock',devAuth:true,extensionGenerationVerifier:untrustedVerifier,assessmentAdmission:serialized});
+ await app.listen(0,'127.0.0.1');
+ t.after(()=>app.close());assert.equal(app.runtimeManager.extensionGenerationVerifier,undefined);
+ assert.throws(()=>new ExtensionGenerationService({}, {config:{dataDir},extensionService:{},pluginService:{},admittedArtifacts:[],identities:null,proofAuthority:null,assessmentAuthority:serialized}),{code:'extension_access_denied'});
+ assert.throws(()=>createControllerExtensionComposition({config:{dataDir,databaseUrl:'postgres://localhost/isolated-constructor-control',modelGatewaySigningSecret:'a'.repeat(32)},deployment:{status:'configured'},assessmentAuthority:serialized}),{code:'extension_access_denied'});
+});

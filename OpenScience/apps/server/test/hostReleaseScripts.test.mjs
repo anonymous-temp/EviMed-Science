@@ -176,3 +176,17 @@ test("a release's configured profiles are honored while an explicit operator ove
     assert.equal(await probe(), "backup,monitoring,receipt,web-search");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+
+test("configured replay delta uses repository context and release labels without credentials in build arguments", async () => {
+  const text = await code("host-delta-release.sh");
+  const start = text.indexOf('if [ "$RESULT_REPLAY" = enabled ]; then');
+  const replay = text.slice(start, text.indexOf('if [ "${EVIMED_RUNTIME_BUILD', start));
+  assert.match(replay, /-f deploy\/specialist-adapter\/Dockerfile.result-replay/);
+  assert.match(replay, /-t "evimed-result-replay:\$\{NEW\}" \.\./);
+  for (const arg of ["RELEASE_ID", "SOURCE_REVISION", "BUILD_CREATED"]) assert.match(replay, new RegExp(`--build-arg ${arg}=`));
+  assert.match(replay, /OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID=.*d'/);
+  assert.doesNotMatch(replay, /--build-arg[^\n]*(?:SECRET|TOKEN|KEY)/);
+  const file = await readFile(path.join(repoRoot, "deploy/specialist-adapter/Dockerfile.result-replay"), "utf8");
+  for (const label of ["version", "revision", "created"]) assert.match(file, new RegExp(`org.opencontainers.image.${label}=`));
+});

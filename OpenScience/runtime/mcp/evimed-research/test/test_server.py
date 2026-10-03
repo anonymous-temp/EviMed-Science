@@ -89,6 +89,7 @@ class ToolContractTests(unittest.TestCase):
             "comprehensive_drug_evaluation",
             "drug_selection_evaluation",
             "meta_analysis",
+            "research_calculate",
             "mendelian_randomization",
             "bibliometric_analysis",
             "research_topic_selection",
@@ -152,7 +153,12 @@ class ToolContractTests(unittest.TestCase):
             "drug_safety_analysis",
         }:
             wait_schema = by_name[name]["inputSchema"]["properties"]["waitSeconds"]
-            self.assertEqual(wait_schema, {"type": "integer", "minimum": 0, "maximum": 45})
+            wait_bounds = dict(wait_schema)
+            description = wait_bounds.pop("description")
+            self.assertEqual(wait_bounds, {"type": "integer", "minimum": 0, "maximum": 45})
+            self.assertIn("action=status", description)
+            self.assertIn("Omit on start", description)
+            self.assertIn("actual jobId", by_name[name]["inputSchema"]["properties"]["jobId"]["description"])
         self.assertEqual(
             set(by_name["biomedical_source_search"]["inputSchema"]["properties"]["source"]["enum"]),
             set(self.server.public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS),

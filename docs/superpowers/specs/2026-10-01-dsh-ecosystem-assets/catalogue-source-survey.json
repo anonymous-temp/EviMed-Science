@@ -1,0 +1,1791 @@
+{
+  "schemaVersion": 1,
+  "surveyDate": "2026-10-01",
+  "repositoryHead": "04e8b3509297b81973f076a275f67535500aef05",
+  "dshVersion": "0.1.7-rc.2",
+  "catalogue": {
+    "url": "https://awesome-dsh-plugin.com/plugins.json",
+    "updated": "2026-09-30",
+    "count": 4400,
+    "categories": 23,
+    "sha256": "d3e04f94adaecb87f762d58bc0c29229fb532dc10e6149aac7dd65cfdf3fe343",
+    "bytes": 5289981,
+    "categoryCounts": {
+      "agi": 16,
+      "ui": 761,
+      "usage": 235,
+      "theme": 153,
+      "model": 213,
+      "identity": 24,
+      "session": 286,
+      "memory": 206,
+      "tools": 576,
+      "wsl": 66,
+      "browser": 99,
+      "vision": 110,
+      "voice": 63,
+      "docs": 64,
+      "skill": 174,
+      "workflow": 264,
+      "git": 107,
+      "notify": 168,
+      "dev": 316,
+      "security": 149,
+      "remote": 135,
+      "market": 80,
+      "fun": 135
+    }
+  },
+  "method": {
+    "catalogueScreen": "Metadata-level category and task-keyword screening across all entries; not a security audit of all 4400 projects.",
+    "candidateSnapshots": 32,
+    "implementationFilesInspected": 10,
+    "implementationRepositoriesInspected": 8,
+    "liveTestsExecuted": false,
+    "packageCodeExecuted": false,
+    "productionChanged": false,
+    "limitation": "No new candidate is certified SaaS-compatible by this source survey. Admission requires the scoped test matrix in the design.",
+    "selection": "Category/task-keyword screening plus supplementary primary-repository discovery; source versions are resolved independently from catalogue versions."
+  },
+  "candidates": [
+    {
+      "id": "bowenliang123/dsh-context",
+      "repository": "https://github.com/bowenliang123/dsh-context",
+      "commit": "42f84915617705ccd4f1f9a0112bd5113b6089fd",
+      "catalogueVersion": "0.60.0",
+      "package": {
+        "name": "dsh-context",
+        "version": "0.62.2",
+        "license": "Apache-2.0",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.2",
+          "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.5-rc.1",
+          "@deepseek-ai/dsh-session": ">=0.1.5-rc.1",
+          "@deepseek-ai/dsh-settings": ">=0.1.5-rc.1",
+          "@deepseek-ai/schemastery": "^3.18.2",
+          "react": "^18.3.1",
+          "react-dom": "^18.3.1"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "context-diagnostics",
+      "disposition": "platform-adapter-pilot",
+      "reason": "Project-scoped context composition and latency diagnostics; suppress raw prompt browser and alternate billing totals for ordinary users.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/bowenliang123/dsh-context/42f84915617705ccd4f1f9a0112bd5113b6089fd/README.md",
+          "sha256": "388630674d128495bfb97398fbf65e16a7d2f69cb320482f1f46a4e5aeb7972c",
+          "bytes": 14851
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/bowenliang123/dsh-context/42f84915617705ccd4f1f9a0112bd5113b6089fd/package.json",
+          "sha256": "e1d6c848bacc62232c6c9085a1cc4d19721168d622089fb60a2ced6a989e2d32",
+          "bytes": 4534
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/bowenliang123/dsh-context/42f84915617705ccd4f1f9a0112bd5113b6089fd/cordis.patch.yml",
+          "sha256": "f0861d79b2b1e5d3189be811f4d530d17fb3012883cf6791fb7713dbda664c29",
+          "bytes": 256
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "overact/dsh-context-management",
+      "repository": "https://github.com/overact/dsh-context-management",
+      "commit": "144242f82abb5c9c975071f248f320c60f66a05b",
+      "catalogueVersion": null,
+      "package": {
+        "name": "@local/dsh-context-management",
+        "version": "0.3.0",
+        "license": "MIT",
+        "engines": {
+          "node": ">=22.15"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/dsh-compaction-basic": ">=0.1.7-alpha.1",
+          "@deepseek-ai/dsh-llm": ">=0.1.7-alpha.1",
+          "@deepseek-ai/dsh-atomic-write": ">=0.1.7-alpha.1",
+          "@deepseek-ai/dsh-home-paths": ">=0.1.7-alpha.1"
+        },
+        "testScriptNames": [
+          "test",
+          "check"
+        ]
+      },
+      "area": "context-management",
+      "disposition": "platform-benchmark",
+      "reason": "Compare its window/recall method with the existing compaction provider; its instance-wide toggle is not per-user authority.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/overact/dsh-context-management/144242f82abb5c9c975071f248f320c60f66a05b/README.md",
+          "sha256": "63cc72db428f1dc0452ae12dce2185935762611d11eedf1876823828d1bede4c",
+          "bytes": 17214
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/overact/dsh-context-management/144242f82abb5c9c975071f248f320c60f66a05b/package.json",
+          "sha256": "cf3e8c2238d9964bf0dea2863ce711f8ce7364f67f49527893fab65b574c940b",
+          "bytes": 2009
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/overact/dsh-context-management/144242f82abb5c9c975071f248f320c60f66a05b/cordis.patch.yml",
+          "sha256": "d3b359d28cb6901331ea77f8e5380bf4eee79a0e60e85c2ba665059c0bbcfc61",
+          "bytes": 128
+        }
+      ],
+      "catalogueListed": false
+    },
+    {
+      "id": "PKUfudawei/dsh-capability-menu",
+      "repository": "https://github.com/PKUfudawei/dsh-capability-menu",
+      "commit": "ab8daee9b42b14cd247211c97422e26f40e00d61",
+      "catalogueVersion": "0.1.5",
+      "package": {
+        "name": "@daweifu/capability-menu",
+        "version": "0.1.5",
+        "license": "Apache-2.0",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.2",
+          "@deepseek-ai/dsh-agent": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-api-remotes": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-connection": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-locale": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-ui-primitives": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-ui-settings": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-ui-slots": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-client-ui-renderer": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-llm": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-scope": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-session": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-skill": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-tools": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-typert-protocol": "^0.1.5-rc.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/schemastery": "^3.18.2",
+          "react": "^18.2.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "tool-discovery",
+      "disposition": "alternative-pilot",
+      "reason": "Candidate for unified tool/skill discovery; retain EviMed root/child restrictions and exact native execution pipeline.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/PKUfudawei/dsh-capability-menu/ab8daee9b42b14cd247211c97422e26f40e00d61/README.md",
+          "sha256": "0facf838c444eaeabb6a303af476a28dc1d02a9b82d204a6a4721308e6dd43db",
+          "bytes": 12931
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/PKUfudawei/dsh-capability-menu/ab8daee9b42b14cd247211c97422e26f40e00d61/package.json",
+          "sha256": "3552ae82c3d6cef9298b9df48de427f0377d0fb1b6d311e1bb0c9972921ebaed",
+          "bytes": 4552
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/PKUfudawei/dsh-capability-menu/ab8daee9b42b14cd247211c97422e26f40e00d61/cordis.patch.yml",
+          "sha256": "60c5f7ac2670336a427d0e05bc93014e0f3940399b196659adbb995e4b12ce72",
+          "bytes": 5260
+        },
+        {
+          "path": "src/registry.ts",
+          "url": "https://raw.githubusercontent.com/PKUfudawei/dsh-capability-menu/ab8daee9b42b14cd247211c97422e26f40e00d61/src/registry.ts",
+          "sha256": "f79c990e64bd16ed1725e7dc259062c84b30f0e47530cb720d53b3ace69a2367",
+          "lines": 1096
+        },
+        {
+          "path": "src/server/remote.ts",
+          "url": "https://raw.githubusercontent.com/PKUfudawei/dsh-capability-menu/ab8daee9b42b14cd247211c97422e26f40e00d61/src/server/remote.ts",
+          "sha256": "75fe7b57347133694f99fedb1642ce9186ea43ba8ca16ac3bca1b008db314571",
+          "lines": 333
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "leaforbook/dsh-mcp-lazy",
+      "repository": "https://github.com/leaforbook/dsh-mcp-lazy",
+      "commit": "91b68dcf3e0291bea6acc336720e9b6d305a79a5",
+      "catalogueVersion": "0.5.1",
+      "package": {
+        "name": "@yilinxiao/dsh-mcp-lazy",
+        "version": "0.5.1",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/dsh-subprocess": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
+        },
+        "testScriptNames": [
+          "test"
+        ]
+      },
+      "area": "tool-discovery",
+      "disposition": "alternative-pilot",
+      "reason": "Candidate session-local MCP activation; older declared peer line and subprocess/egress scoping need proof.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/leaforbook/dsh-mcp-lazy/91b68dcf3e0291bea6acc336720e9b6d305a79a5/README.md",
+          "sha256": "f592cc88525c31adf14bd6a8c1f12397ea542a25e97e9b02e19d7be95550386b",
+          "bytes": 11001
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/leaforbook/dsh-mcp-lazy/91b68dcf3e0291bea6acc336720e9b6d305a79a5/package.json",
+          "sha256": "8874b58529586e4bf3a5cb27edcd229d75f4bc434458baf19e91e2f0ef001d69",
+          "bytes": 1872
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/leaforbook/dsh-mcp-lazy/91b68dcf3e0291bea6acc336720e9b6d305a79a5/cordis.patch.yml",
+          "sha256": "b73342b4d3b8aa3c460277740f9440d88fd82a90db91c00bf87253c1fc4db4d2",
+          "bytes": 111
+        },
+        {
+          "path": "lib/tool-router.js",
+          "url": "https://raw.githubusercontent.com/leaforbook/dsh-mcp-lazy/91b68dcf3e0291bea6acc336720e9b6d305a79a5/lib/tool-router.js",
+          "sha256": "430593b548af9f9cf271005f73a60deb479bc48e1a6bf98cbcb5f2854c77dfd3",
+          "lines": 528
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "Letter2025/dsh-tool-search",
+      "repository": "https://github.com/Letter2025/dsh-tool-search",
+      "commit": "dc0c851f41276c5061ff472fae94701b24efe036",
+      "catalogueVersion": "0.1.5",
+      "package": {
+        "name": "dsh-tool-search",
+        "version": "0.1.5",
+        "license": "MIT",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "~4.0.4",
+          "@deepseek-ai/dsh-agent": "^0.1.7-rc.2",
+          "@deepseek-ai/dsh-llm": "^0.1.7-rc.2",
+          "@deepseek-ai/dsh-session": "^0.1.7-rc.2",
+          "@deepseek-ai/dsh-skill": "^0.1.7-rc.2",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.7-rc.2",
+          "@deepseek-ai/dsh-tools": "^0.1.7-rc.2",
+          "@deepseek-ai/schemastery": "^3.18.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "tool-discovery",
+      "disposition": "priority-adapter-pilot",
+      "reason": "Prefer first long-tail discovery experiment; delegate reranking to the control plane and preserve native guarded dispatch.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/Letter2025/dsh-tool-search/dc0c851f41276c5061ff472fae94701b24efe036/README.md",
+          "sha256": "cdaa99b6387b245a69aca23b58711dfa7a147257a0c6560ec4d8ef99caf8887c",
+          "bytes": 6525
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/Letter2025/dsh-tool-search/dc0c851f41276c5061ff472fae94701b24efe036/package.json",
+          "sha256": "8dbec81fad1957e08b1400f046494c2204592fad2a4e6dadd3c5be657654941b",
+          "bytes": 2207
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/Letter2025/dsh-tool-search/dc0c851f41276c5061ff472fae94701b24efe036/cordis.patch.yml",
+          "sha256": "873ab5ad2807604f87985b9720a198008e6fd7e67d14ac2f1dbc649c345763f4",
+          "bytes": 794
+        },
+        {
+          "path": "src/bridge.ts",
+          "url": "https://raw.githubusercontent.com/Letter2025/dsh-tool-search/dc0c851f41276c5061ff472fae94701b24efe036/src/bridge.ts",
+          "sha256": "3fb9a2b07e02f7d5e62236e5a348663e098b1fa776e65d01a0947ffea65e150e",
+          "lines": 113
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "zebbkira/dsh-skills-mcp-manager",
+      "repository": "https://github.com/zebbkira/dsh-skills-mcp-manager",
+      "commit": "ab57b1c4265e13008b108de460a71680f3366223",
+      "catalogueVersion": "0.2.0",
+      "package": {
+        "name": "@zebbkira/dsh-skills-mcp-manager",
+        "version": "0.2.0",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/dsh-client-connection": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-client-ui-settings": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-client-ui-settings-plugins": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-host-webserver": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-mcp-client": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.1-rc.2",
+          "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
+          "react": "^18.2.0",
+          "react-dom": "^18.2.0"
+        },
+        "testScriptNames": [
+          "typecheck"
+        ]
+      },
+      "area": "skills-mcp-management",
+      "disposition": "ui-import-reuse-only",
+      "reason": "Its route trust boundary is loopback/local files, not SaaS login/tenancy; reuse UI/import components through scoped APIs.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/zebbkira/dsh-skills-mcp-manager/ab57b1c4265e13008b108de460a71680f3366223/README.md",
+          "sha256": "188943d788832802688a24e898d67d4e7238bd5f0274660956cded7e3957c8da",
+          "bytes": 5052
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/zebbkira/dsh-skills-mcp-manager/ab57b1c4265e13008b108de460a71680f3366223/package.json",
+          "sha256": "d0702f2b821f312b9998c3db0f045224bda0df0cb5bca19787ae3e3f0a573626",
+          "bytes": 3527
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/zebbkira/dsh-skills-mcp-manager/ab57b1c4265e13008b108de460a71680f3366223/cordis.patch.yml",
+          "sha256": "e6b391d7202eacdfc5c55360c0d8345741291110fc169d9962a8e8176cbac756",
+          "bytes": 803
+        },
+        {
+          "path": "src/routes.ts",
+          "url": "https://raw.githubusercontent.com/zebbkira/dsh-skills-mcp-manager/ab57b1c4265e13008b108de460a71680f3366223/src/routes.ts",
+          "sha256": "7892ee56a3992c180254583925c775bc872d82624c92acc0aa342e681703d869",
+          "lines": 206
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "alone-tree/dsh-skill-mcp-manager",
+      "repository": "https://github.com/alone-tree/dsh-skill-mcp-manager",
+      "commit": "7b0ebdeb733d29e184c9566c6aa17c3fa5007567",
+      "catalogueVersion": "1.2.0",
+      "package": {
+        "name": "dsh-skill-mcp-manager",
+        "version": "1.2.0",
+        "license": "MIT",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+          "@deepseek-ai/schemastery": "^3.18.1",
+          "react": "^18.2.0"
+        },
+        "testScriptNames": []
+      },
+      "area": "skills-mcp-management",
+      "disposition": "pattern-reuse",
+      "reason": "Per-session MCP lifecycle is useful; do not import all current MCP configuration or create a second authoritative registry.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/alone-tree/dsh-skill-mcp-manager/7b0ebdeb733d29e184c9566c6aa17c3fa5007567/README.md",
+          "sha256": "f5df34b32fec36d052e4a5ee001423bbc9b3e81b05eafd1e22a042ce352141a2",
+          "bytes": 10958
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/alone-tree/dsh-skill-mcp-manager/7b0ebdeb733d29e184c9566c6aa17c3fa5007567/package.json",
+          "sha256": "78428cb9d50ac0da591c750a474bda62861a1f78d599a0136075d8fe898f6491",
+          "bytes": 1825
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/alone-tree/dsh-skill-mcp-manager/7b0ebdeb733d29e184c9566c6aa17c3fa5007567/cordis.patch.yml",
+          "sha256": "394266bde4e15983c83f3f2f03e34c9a147615f136e6234dc2737a9da797627d",
+          "bytes": 410
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "wingsky-1/dsh-plugin-hub#packages/dsh-mcp-manager",
+      "repository": "https://github.com/wingsky-1/dsh-plugin-hub",
+      "commit": "77bff6d759708b6e96c01b3d67c1f6e638faf68f",
+      "catalogueVersion": "0.2.7",
+      "package": {
+        "name": "@wingsky-1/dsh-mcp-manager",
+        "version": "0.2.8",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20.0.0"
+        },
+        "peerDependencies": {
+          "react": "^18.2.0",
+          "@deepseek-ai/cordis": "4.0.4",
+          "@deepseek-ai/dsh-host-webserver": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-ui-session": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-store": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-locale": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-ui-renderer": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.2",
+          "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.0-rc.2"
+        },
+        "testScriptNames": [
+          "test",
+          "typecheck"
+        ]
+      },
+      "area": "skills-mcp-management",
+      "disposition": "adapter-reference",
+      "reason": "Reuse connection scoping and environment-reference patterns; cwd/global state must become authenticated owner/project state.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "packages/dsh-mcp-manager/README.md",
+          "url": "https://raw.githubusercontent.com/wingsky-1/dsh-plugin-hub/77bff6d759708b6e96c01b3d67c1f6e638faf68f/packages/dsh-mcp-manager/README.md",
+          "sha256": "45c28939998897ad9f4f239d9a8600f8a819ba47bd0ddf44e85a6fa0cdecc290",
+          "bytes": 26788
+        },
+        {
+          "path": "packages/dsh-mcp-manager/package.json",
+          "url": "https://raw.githubusercontent.com/wingsky-1/dsh-plugin-hub/77bff6d759708b6e96c01b3d67c1f6e638faf68f/packages/dsh-mcp-manager/package.json",
+          "sha256": "f97475bd8911a46ed09fd771fd582dbeff8585a8295cd61e231b6848b778f9e1",
+          "bytes": 5426
+        },
+        {
+          "path": "packages/dsh-mcp-manager/cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/wingsky-1/dsh-plugin-hub/77bff6d759708b6e96c01b3d67c1f6e638faf68f/packages/dsh-mcp-manager/cordis.patch.yml",
+          "sha256": "e89378f08e6178defa2205b6a0ee65a518bf8563c567d31da7ecd2d44deddb77",
+          "bytes": 687
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "PerryLink/dsh-observe",
+      "repository": "https://github.com/PerryLink/dsh-observe",
+      "commit": "888e27b4b60a096328e66ea15bca164387bcd93f",
+      "catalogueVersion": "0.2.18",
+      "package": {
+        "name": "dsh-observe",
+        "version": "0.2.18",
+        "license": "Apache-2.0",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0",
+          "dsh": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.3",
+          "@deepseek-ai/dsh-llm": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/dsh-session": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/dsh-storage": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/dsh-storage-domain": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/dsh-storage-json": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/dsh-typert-protocol": ">=0.1.2-rc.1 <0.2.0 || >=0.1.5-alpha.1 <0.2.0 || >=0.1.6-0 <0.2.0 || >=0.1.7-0 <0.2.0",
+          "@deepseek-ai/schemastery": "^3.18.3"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "test:coverage"
+        ]
+      },
+      "area": "observability",
+      "disposition": "operator-pattern-only",
+      "reason": "Off-by-default internal metrics tracing only; no automatic patient/prompt export and no second cost ledger.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-observe/888e27b4b60a096328e66ea15bca164387bcd93f/README.md",
+          "sha256": "8e4d65aab3a558cf2036d1afc6ee60fa79db293088b614051623c1f8977108be",
+          "bytes": 22372
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-observe/888e27b4b60a096328e66ea15bca164387bcd93f/package.json",
+          "sha256": "8bd08baa91508d71b9526bdf6ed249e98a9134ca04c143d6d9e95978e4aeae72",
+          "bytes": 5333
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-observe/888e27b4b60a096328e66ea15bca164387bcd93f/cordis.patch.yml",
+          "sha256": "032743178d5cd0c5783bcfd084d9510ed82dd3c0b92bd365644c7ee9909587d7",
+          "bytes": 3649
+        },
+        {
+          "path": "src/index.ts",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-observe/888e27b4b60a096328e66ea15bca164387bcd93f/src/index.ts",
+          "sha256": "43744a11a26efb4887ed3a769a4e05d348a87d9e1c78b468795c182dc290f911",
+          "lines": 242
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "PerryLink/dsh-plugin-doctor",
+      "repository": "https://github.com/PerryLink/dsh-plugin-doctor",
+      "commit": "0250794d2720d76aed572442577b5a9af16c3da1",
+      "catalogueVersion": "0.4.5",
+      "package": {
+        "name": "@perrylink/dsh-plugin-doctor",
+        "version": "0.4.5",
+        "license": "Apache-2.0",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": null,
+        "testScriptNames": [
+          "test"
+        ]
+      },
+      "area": "installation-validation",
+      "disposition": "priority-preparer-tool",
+      "reason": "Use the scoped package in isolated preparation with the pinned DSH; supplement structural/smoke checks with EviMed tenancy tests.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-plugin-doctor/0250794d2720d76aed572442577b5a9af16c3da1/README.md",
+          "sha256": "45e5edea49455381672348f599fd37ca6fa2def0972663b039137c54b06f986c",
+          "bytes": 32698
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-plugin-doctor/0250794d2720d76aed572442577b5a9af16c3da1/package.json",
+          "sha256": "6b1d1ed9d4fd58f1ea44fe5d3e7df06536f7d2b43c5414e3baebd676f6ab3e9c",
+          "bytes": 2686
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/PerryLink/dsh-plugin-doctor/0250794d2720d76aed572442577b5a9af16c3da1/cordis.patch.yml",
+          "sha256": "fa9bf2db4d2fe5642226fc145b547afbd6bb38b35de9dbd11df981b7b4e18fa6",
+          "bytes": 384
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "omdsh-dev/dsh-session-health",
+      "repository": "https://github.com/omdsh-dev/dsh-session-health",
+      "commit": "aedcb3db1279554ff3e6d11d2597553b9f131175",
+      "catalogueVersion": null,
+      "package": {
+        "name": "@deepseek-ai/dsh-session-health",
+        "version": "0.0.1",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-invariants": ">=0.0.1-rc.1 <0.2.0",
+          "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1 <0.2.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "check"
+        ]
+      },
+      "area": "session-diagnostics",
+      "disposition": "offline-operator-only",
+      "reason": "Read-only health diagnostics on authorized copies; do not expose the profile-wide session root to tenant tools.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-session-health/aedcb3db1279554ff3e6d11d2597553b9f131175/README.md",
+          "sha256": "826de662e7da923a160efffc75aaee1941ed6eb20b105aea900b40043505b32f",
+          "bytes": 7038
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-session-health/aedcb3db1279554ff3e6d11d2597553b9f131175/package.json",
+          "sha256": "e42d8aab5ee8f87c4761cdfbe9bcb12589dc15549db2077de286f8a6f7c4e354",
+          "bytes": 1441
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-session-health/aedcb3db1279554ff3e6d11d2597553b9f131175/cordis.patch.yml",
+          "sha256": "a0ebed2db588180a1366cc0d384f46d6df9926c4422b60bbccf0f440416e84dd",
+          "bytes": 164
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "baosfeng/my-dsh-plugins#dsh-my-guardian",
+      "repository": "https://github.com/baosfeng/my-dsh-plugins",
+      "commit": "fd69069a4e5947517944bd0e139f8a37051ee49b",
+      "catalogueVersion": "0.4.4",
+      "package": {
+        "name": "dsh-my-guardian",
+        "version": "0.4.4",
+        "license": "MIT",
+        "engines": {
+          "node": ">=22"
+        },
+        "peerDependencies": {
+          "cordis": "^4.0.0-rc.10",
+          "react": "^18.2.0 || ^19.3.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "installation-recovery",
+      "disposition": "pattern-only",
+      "reason": "Reuse candidate/rollback ideas; its hot-mount mechanism conflicts with immutable active runtime generations.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/baosfeng/my-dsh-plugins/fd69069a4e5947517944bd0e139f8a37051ee49b/README.md",
+          "sha256": "0e26a877334ef37117cf2c30fcf85d36d7f6cbce4b8cce935e8a872357b3b609",
+          "bytes": 8355
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/baosfeng/my-dsh-plugins/fd69069a4e5947517944bd0e139f8a37051ee49b/package.json",
+          "sha256": "9591b4dfca366785c7fb9177d69f816726227d7c7395754ecf16d611bc8704de",
+          "bytes": 3419
+        },
+        {
+          "path": "plugins/dsh-my-guardian/README.md",
+          "url": "https://raw.githubusercontent.com/baosfeng/my-dsh-plugins/fd69069a4e5947517944bd0e139f8a37051ee49b/plugins/dsh-my-guardian/README.md",
+          "sha256": "324c68100d7eecc212047705e7f8e2179264fffa6245d425917737b380763d05",
+          "lines": 65
+        },
+        {
+          "path": "plugins/dsh-my-guardian/package.json",
+          "url": "https://raw.githubusercontent.com/baosfeng/my-dsh-plugins/fd69069a4e5947517944bd0e139f8a37051ee49b/plugins/dsh-my-guardian/package.json",
+          "sha256": "4cdce612c4e62d406b32e38a1ae00074ffd2005b1d1e13d6f67750e69ca92e71",
+          "lines": 57
+        },
+        {
+          "path": "plugins/dsh-my-guardian/cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/baosfeng/my-dsh-plugins/fd69069a4e5947517944bd0e139f8a37051ee49b/plugins/dsh-my-guardian/cordis.patch.yml",
+          "sha256": "b897c84155b5385872a6cadaa0c82fd01c5d001f562522ad12d4790a2ab0ce7a",
+          "lines": 24
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "LuminariSoftwares/context-guardian",
+      "repository": "https://github.com/LuminariSoftwares/context-guardian",
+      "commit": "ed2eaa306cd5df7c24900ac570c36a6470d9aa82",
+      "catalogueVersion": "0.1.0-alpha.6",
+      "package": {
+        "name": "dsh-context-guardian",
+        "version": "0.1.0-alpha.6",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.2",
+          "@deepseek-ai/dsh-compaction": ">=0.1.2-alpha.2",
+          "@deepseek-ai/dsh-llm": ">=0.1.2-alpha.2",
+          "@deepseek-ai/dsh-tools": ">=0.1.2-alpha.2"
+        },
+        "testScriptNames": [
+          "check",
+          "selftest",
+          "test:node"
+        ]
+      },
+      "area": "context-management",
+      "disposition": "platform-benchmark",
+      "reason": "Fallback compression idea only; no extra model proxy or parallel compaction owner on the production default.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/LuminariSoftwares/context-guardian/ed2eaa306cd5df7c24900ac570c36a6470d9aa82/README.md",
+          "sha256": "0ef64f5a9e0dd45f4068c9e10ef627e83d2e10c8356a6cf5e084157d2ea12a7c",
+          "bytes": 25975
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/LuminariSoftwares/context-guardian/ed2eaa306cd5df7c24900ac570c36a6470d9aa82/package.json",
+          "sha256": "171b8d5900c69d84b9b761b101c04a3e4251a40e9898ce9eb4749a0b491bb200",
+          "bytes": 2620
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/LuminariSoftwares/context-guardian/ed2eaa306cd5df7c24900ac570c36a6470d9aa82/cordis.patch.yml",
+          "sha256": "248f1aa19df31fdd1fb0123885ddcac8b2285cad02c34df9051c6d8305f46b59",
+          "bytes": 1894
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "ranxianglei/billion-context",
+      "repository": "https://github.com/ranxianglei/billion-context",
+      "commit": "be637485404d93e1a561bac849079b6d9c3440c3",
+      "catalogueVersion": "0.1.174",
+      "package": {
+        "name": "billion-context",
+        "version": "0.1.176",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20"
+        },
+        "peerDependencies": null,
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "test:e2e",
+          "test:e2e:fake"
+        ]
+      },
+      "area": "context-management",
+      "disposition": "not-in-default-hosted-profile",
+      "reason": "Proxy/launcher and alternative context ownership overlap existing gateways and replay semantics; no claimed token saving accepted without measurement.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/ranxianglei/billion-context/be637485404d93e1a561bac849079b6d9c3440c3/README.md",
+          "sha256": "aa9fda7776b8cbbbf3ae0afa1d83de891eb0e13716b9a64bc3207928a1ba7f64",
+          "bytes": 42033
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/ranxianglei/billion-context/be637485404d93e1a561bac849079b6d9c3440c3/package.json",
+          "sha256": "5f03c3c2da595437445e53bd75e8399aa0448754fd772cecb3ca6fbcb2dde4cc",
+          "bytes": 2836
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "TsFreddie/dsh-compaction-instant",
+      "repository": "https://github.com/TsFreddie/dsh-compaction-instant",
+      "commit": "f688029b39aa64e3faa116948105ff51b4be829a",
+      "catalogueVersion": null,
+      "package": {
+        "name": "dsh-compaction-instant",
+        "version": "0.1.4",
+        "license": "MIT",
+        "engines": {
+          "node": ">=18"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-commands": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-compaction": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-compaction-tool-result-pruner": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-token-meter": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
+        },
+        "testScriptNames": [
+          "test",
+          "check"
+        ]
+      },
+      "area": "context-management",
+      "disposition": "platform-benchmark",
+      "reason": "Compare deterministic excerpts offline; do not alias-replace a core package or claim lossless semantic preservation.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/TsFreddie/dsh-compaction-instant/f688029b39aa64e3faa116948105ff51b4be829a/README.md",
+          "sha256": "c43a9693c2f31d3e8c9f9dc1bd9fbc70242227e22315eaed764f3855a967ff0e",
+          "bytes": 20507
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/TsFreddie/dsh-compaction-instant/f688029b39aa64e3faa116948105ff51b4be829a/package.json",
+          "sha256": "2942cf59d78d7d0500934c867d069a3dc29905f790871744064546b3dd016952",
+          "bytes": 3176
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/TsFreddie/dsh-compaction-instant/f688029b39aa64e3faa116948105ff51b4be829a/cordis.patch.yml",
+          "sha256": "78091a3817f4a9364e2c58bbffb7f87ce44b18fe928cea9b6fcd2d222e7f6b09",
+          "bytes": 1188
+        }
+      ],
+      "catalogueListed": false
+    },
+    {
+      "id": "FSMargoo/dsh-at-file",
+      "repository": "https://github.com/FSMargoo/dsh-at-file",
+      "commit": "da602d1a8f1b417b8a1d8d4059e0f4cb1c353524",
+      "catalogueVersion": null,
+      "package": {
+        "name": "dsh-at-file",
+        "version": "0.7.0",
+        "license": "MIT",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1-rc.1",
+          "@deepseek-ai/dsh-agent": "*",
+          "@deepseek-ai/dsh-typert-protocol": "*",
+          "@deepseek-ai/dsh-client-runtime": "*",
+          "@deepseek-ai/dsh-client-store": "*",
+          "@deepseek-ai/dsh-api-remotes": "*",
+          "@deepseek-ai/dsh-client-ui-input-trigger": "*",
+          "@deepseek-ai/dsh-client-ui-slots": "*",
+          "@deepseek-ai/dsh-client-ui-conversation": "*",
+          "@deepseek-ai/dsh-client-locale": "*",
+          "@deepseek-ai/dsh-client-connection": "*",
+          "react": "^18.2.0",
+          "@deepseek-ai/dsh-typert-registry": "*",
+          "@deepseek-ai/dsh-settings": "*",
+          "@deepseek-ai/dsh-client-ui-settings": "*",
+          "@deepseek-ai/dsh-llm": "*"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "check"
+        ]
+      },
+      "area": "file-reference-ux",
+      "disposition": "priority-adapter-pilot",
+      "reason": "Workspace reference UX with current frame/project scope; cannot expose data-plane or arbitrary host paths.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/FSMargoo/dsh-at-file/da602d1a8f1b417b8a1d8d4059e0f4cb1c353524/README.md",
+          "sha256": "5bf0ae06c814a9585864f81e9de92cbba3589d37e97e632b11e8969c4ed74dd2",
+          "bytes": 7678
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/FSMargoo/dsh-at-file/da602d1a8f1b417b8a1d8d4059e0f4cb1c353524/package.json",
+          "sha256": "8507e8c0f1d7e0d3a813b21d8e3e5cb394030f14adadba862b6481ccbe813dca",
+          "bytes": 4845
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/FSMargoo/dsh-at-file/da602d1a8f1b417b8a1d8d4059e0f4cb1c353524/cordis.patch.yml",
+          "sha256": "2ba66827fb5825230bbe9aad2e62150a4b6f78446330ffafdada53d4632fe484",
+          "bytes": 56
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "omdsh-dev/dsh-genui",
+      "repository": "https://github.com/omdsh-dev/dsh-genui",
+      "commit": "9d912066bc69c62b89b4772e6764b70e950c9166",
+      "catalogueVersion": "0.11.3",
+      "package": {
+        "name": "@changfenhuang/dsh-genui",
+        "version": "0.11.3",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0",
+          "pnpm": ">=11.7.0 <12"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-agent": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-api-session-controller": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-store": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-chat": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-conversation": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-input-trigger": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-primitives": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-renderer": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-session": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-slots": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-client-ui-tool": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-invariants": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-llm": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-session": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-skill": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-tools": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "@deepseek-ai/dsh-util-values": "^0.1.2-rc.1 || ^0.1.5-alpha.1 || ^0.1.6-alpha.1 || ^0.1.7-alpha.1 || >=0.2.0-rc.1 <0.3.0-0",
+          "react": "^18.0.0 || ^19.0.0"
+        },
+        "testScriptNames": [
+          "test",
+          "check"
+        ]
+      },
+      "area": "interactive-visuals",
+      "disposition": "alternative-adapter-pilot",
+      "reason": "Structured interactive components; bind every action to exact user/project/run/frame and official result snapshots.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-genui/9d912066bc69c62b89b4772e6764b70e950c9166/README.md",
+          "sha256": "be0c3845b9d0280f9e2a621694a9921cf4e6b73f0a3daa35d5d5ed65d3fc59a9",
+          "bytes": 25276
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-genui/9d912066bc69c62b89b4772e6764b70e950c9166/package.json",
+          "sha256": "f0fbe9763fa3628cd3a3991b854620cdba124052efeabd9e162c397e44db7cc2",
+          "bytes": 10031
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-genui/9d912066bc69c62b89b4772e6764b70e950c9166/cordis.patch.yml",
+          "sha256": "7b67bb16ecea7cb5ef4b122702ea168321b2d3ec4ad699bc7dafcc393c69dd0a",
+          "bytes": 473
+        },
+        {
+          "path": "src/client/submission-registry.ts",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-genui/9d912066bc69c62b89b4772e6764b70e950c9166/src/client/submission-registry.ts",
+          "sha256": "adb9f958ae4f81da2175f3bd3d745d7e2fdd9a90226811a493aeb60d915de0da",
+          "lines": 150
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "Nagi-ovo/dsh-visualize",
+      "repository": "https://github.com/Nagi-ovo/dsh-visualize",
+      "commit": "db54992331d98af68390796d0de4b57bc76453ca",
+      "catalogueVersion": "0.1.4",
+      "package": {
+        "name": "@nagi-ovo/dsh-visualize",
+        "version": "0.1.4",
+        "license": "BSD-3-Clause",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-fs": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-llm": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-session": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-skill": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.2.0-rc.1",
+          "@deepseek-ai/schemastery": "^3.18.1",
+          "react": "^18.2.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "check"
+        ]
+      },
+      "area": "interactive-visuals",
+      "disposition": "priority-adapter-pilot",
+      "reason": "Opaque-origin iframe design is promising; use self-hosted assets and verify network/message/download boundaries.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/Nagi-ovo/dsh-visualize/db54992331d98af68390796d0de4b57bc76453ca/README.md",
+          "sha256": "fb4e2d27d8ffef44dd481951da4b109c7bf8c611c1cabbb3b5e14160af7ccaad",
+          "bytes": 2759
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/Nagi-ovo/dsh-visualize/db54992331d98af68390796d0de4b57bc76453ca/package.json",
+          "sha256": "389f664a08680e8589afe9e8689b85d2b9de8c78e543f1ea62535020cc0af1dc",
+          "bytes": 2796
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/Nagi-ovo/dsh-visualize/db54992331d98af68390796d0de4b57bc76453ca/cordis.patch.yml",
+          "sha256": "7dc6a89a06c2dac315b7e2fabafb65b3aeda0ddbf94bd5e06000afc351ab5237",
+          "bytes": 142
+        },
+        {
+          "path": "src/client/index.tsx",
+          "url": "https://raw.githubusercontent.com/Nagi-ovo/dsh-visualize/db54992331d98af68390796d0de4b57bc76453ca/src/client/index.tsx",
+          "sha256": "dede35ae04446ee543f8dea6b22b4a69e3ce2f559242279b249c7157b2c22a1d",
+          "lines": 90
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "hccccc01333/dsh-excel-chat#bundle",
+      "repository": "https://github.com/hccccc01333/dsh-excel-chat",
+      "commit": "3676f6b4901de31ec4ea39ef377c1ffa44c41efe",
+      "catalogueVersion": "0.38.1",
+      "package": {
+        "name": "dsh-excel-chat",
+        "version": "0.38.1",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19 || >=24"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-attachment": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6"
+        },
+        "testScriptNames": []
+      },
+      "area": "spreadsheets",
+      "disposition": "adapter-pilot",
+      "reason": "Formula diagnostics and bounded workbook work; pin data scope and prefer the shared export/artifact contract.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "bundle/README.md",
+          "url": "https://raw.githubusercontent.com/hccccc01333/dsh-excel-chat/3676f6b4901de31ec4ea39ef377c1ffa44c41efe/bundle/README.md",
+          "sha256": "9697add6eea069d96b18e895fa1bbca233e900fc276f07a7c82cd844ec4154b8",
+          "bytes": 2265
+        },
+        {
+          "path": "bundle/package.json",
+          "url": "https://raw.githubusercontent.com/hccccc01333/dsh-excel-chat/3676f6b4901de31ec4ea39ef377c1ffa44c41efe/bundle/package.json",
+          "sha256": "94f3e8b8405624646d3e8581d39d80c940e456e8d53ec6fd65a7eb28e6369cb4",
+          "bytes": 2169
+        },
+        {
+          "path": "bundle/cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/hccccc01333/dsh-excel-chat/3676f6b4901de31ec4ea39ef377c1ffa44c41efe/bundle/cordis.patch.yml",
+          "sha256": "93bf11b645709f5f58712e43ed7520ad0ed2fe942c30d3b8487f78283b9e07b0",
+          "bytes": 52
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "omdsh-dev/dsh-tool-csv",
+      "repository": "https://github.com/omdsh-dev/dsh-tool-csv",
+      "commit": "b41022b81e944cc0429ac013757a1deedd4a780f",
+      "catalogueVersion": null,
+      "package": {
+        "name": "@deepseek-ai/dsh-tool-csv",
+        "version": "0.0.1",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-invariants": ">=0.0.1-rc.1 <0.2.0",
+          "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1 <0.2.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "check"
+        ]
+      },
+      "area": "table-tools",
+      "disposition": "isolated-tool-pilot",
+      "reason": "Useful for public or approved aggregate tables; literal patient rows must not enter logged tool arguments.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-tool-csv/b41022b81e944cc0429ac013757a1deedd4a780f/README.md",
+          "sha256": "228b200ea09a63bc55a9cc29f2ec124523b3fd90fef88ae2bf2cedb4e7120d63",
+          "bytes": 7013
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-tool-csv/b41022b81e944cc0429ac013757a1deedd4a780f/package.json",
+          "sha256": "10c93a7b8705f1aafd5d15d660808ef4cb52db6e3051365fcfa342ace04bad9d",
+          "bytes": 1380
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/omdsh-dev/dsh-tool-csv/b41022b81e944cc0429ac013757a1deedd4a780f/cordis.patch.yml",
+          "sha256": "ff7b67634c070fc9df6e8707d6b02536e119ed135171732b72e0707259d0acc1",
+          "bytes": 147
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "AngelosZou/dsh-pdf-reader",
+      "repository": "https://github.com/AngelosZou/dsh-pdf-reader",
+      "commit": "ffecd361b7f2803fdccd1cf92149aad3e11a3271",
+      "catalogueVersion": null,
+      "package": {
+        "name": "dsh-pdf-reader",
+        "version": "0.2.0",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1"
+        },
+        "testScriptNames": []
+      },
+      "area": "paper-reading",
+      "disposition": "adapter-pilot",
+      "reason": "Page structure and figure-aware reading; provision Python dependencies during preparation and account for rendering resources.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/AngelosZou/dsh-pdf-reader/ffecd361b7f2803fdccd1cf92149aad3e11a3271/README.md",
+          "sha256": "9d62411609e35a473f5abe3efce500767f557859ff415e8e5c0c0d0537f4c7cc",
+          "bytes": 5579
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/AngelosZou/dsh-pdf-reader/ffecd361b7f2803fdccd1cf92149aad3e11a3271/package.json",
+          "sha256": "31d3628b8e63e3a576e97c28869743dfde48430199a18be530f471f8a0e064d2",
+          "bytes": 1421
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/AngelosZou/dsh-pdf-reader/ffecd361b7f2803fdccd1cf92149aad3e11a3271/cordis.patch.yml",
+          "sha256": "15791051a0dca102712a2ab25c164184294ee49bbccf880d947b467fe781e80c",
+          "bytes": 307
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "chendefine/dsh-web-fetch-playwright",
+      "repository": "https://github.com/chendefine/dsh-web-fetch-playwright",
+      "commit": "d1880f39aff4fc4465d0ec124073a9a138efe9db",
+      "catalogueVersion": "0.2.9",
+      "package": {
+        "name": "dsh-web-fetch-playwright",
+        "version": "0.2.9",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": ">=4.0.1-rc.1 <5",
+          "@deepseek-ai/dsh-web": ">=0.1.0-rc.6 <0.2.0 || >=0.1.1-rc.1 <1"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "browser-retrieval",
+      "disposition": "gateway-adapter-only",
+      "reason": "Reuse render/extraction implementation behind the public-source gateway; no direct CDP/shared-cookie bypass.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/chendefine/dsh-web-fetch-playwright/d1880f39aff4fc4465d0ec124073a9a138efe9db/README.md",
+          "sha256": "c7e8739cba3ad68506feee3f9c8dfe9536d1fcb422df5a16848bc5fefb126c47",
+          "bytes": 16058
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/chendefine/dsh-web-fetch-playwright/d1880f39aff4fc4465d0ec124073a9a138efe9db/package.json",
+          "sha256": "e6885d873f85d839580f6fdd2a3d825dc9dede56facf2866a935aadf5eb4a297",
+          "bytes": 3832
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/chendefine/dsh-web-fetch-playwright/d1880f39aff4fc4465d0ec124073a9a138efe9db/cordis.patch.yml",
+          "sha256": "40469b68392abfa0bda64afa54ceacdb841a722ebbe35afe7cee269471d852fe",
+          "bytes": 1676
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "mingzeng21/dsh-notion",
+      "repository": "https://github.com/mingzeng21/dsh-notion",
+      "commit": "eac024696e7036d3b7d9eeec3130d3eeddbe3fe3",
+      "catalogueVersion": null,
+      "package": {
+        "name": "dsh-notion-mcp",
+        "version": "0.1.0",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "*",
+          "@deepseek-ai/dsh-cmdline": "*",
+          "@deepseek-ai/dsh-credentials": "*",
+          "@deepseek-ai/dsh-mcp-client": "*",
+          "@deepseek-ai/schemastery": "*"
+        },
+        "testScriptNames": [
+          "test",
+          "typecheck"
+        ]
+      },
+      "area": "external-connections",
+      "disposition": "connector-adapter-pilot",
+      "reason": "OAuth/PKCE and Notion MCP ideas; tokens and callback principal binding belong to EviMed connection service.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/mingzeng21/dsh-notion/eac024696e7036d3b7d9eeec3130d3eeddbe3fe3/README.md",
+          "sha256": "7ed26895c06d3b67de290cdb4c725dbe8809d98b17b1c32c814f35fd7da97e75",
+          "bytes": 4814
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/mingzeng21/dsh-notion/eac024696e7036d3b7d9eeec3130d3eeddbe3fe3/package.json",
+          "sha256": "b9adc73ac886df7628d22c5145ac02663458ffc3cf39894a1d02df5cff32bd3d",
+          "bytes": 1184
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/mingzeng21/dsh-notion/eac024696e7036d3b7d9eeec3130d3eeddbe3fe3/cordis.patch.yml",
+          "sha256": "26ae0c2a3070ce154d823d5f8ccc4e329a08344f9ef9750aef179f4e45bae094",
+          "bytes": 54
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "STARDUSTLC666/dsh-calendar",
+      "repository": "https://github.com/STARDUSTLC666/dsh-calendar",
+      "commit": "a3b085a2ece92b0077c488159311a8d965c7dbf0",
+      "catalogueVersion": "0.9.2",
+      "package": {
+        "name": "dsh-calendar",
+        "version": "0.9.2",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0"
+        },
+        "peerDependencies": null,
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "external-connections",
+      "disposition": "connector-adapter-pilot",
+      "reason": "CalDAV useful for user-requested research deadlines; external mutation authorization and account-isolated credentials are required.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/a3b085a2ece92b0077c488159311a8d965c7dbf0/README.md",
+          "sha256": "498fd24aaa4068e39733435cbb202c169140f33ab13e963b0d8fc374554dba46",
+          "bytes": 20070
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/a3b085a2ece92b0077c488159311a8d965c7dbf0/package.json",
+          "sha256": "d8743f0cf70afeffc39d5b6b4fa1fcd0e51a04294bb85ec63adf08a6f0342868",
+          "bytes": 1911
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/STARDUSTLC666/dsh-calendar/a3b085a2ece92b0077c488159311a8d965c7dbf0/cordis.patch.yml",
+          "sha256": "4ff9c19e48e827720623534a9336088b86b1380a4ec5e5e15b613dc1f7e0c3e0",
+          "bytes": 1261
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "xmanrui/dsh-im",
+      "repository": "https://github.com/xmanrui/dsh-im",
+      "commit": "a81f6f3a935f7fa57d4660529708298bb2391113",
+      "catalogueVersion": "4.32.0",
+      "package": {
+        "name": "@xmanrui/dsh-im",
+        "version": "4.32.0",
+        "license": "MIT",
+        "engines": {
+          "node": ">=22.19"
+        },
+        "peerDependencies": null,
+        "testScriptNames": [
+          "test",
+          "check"
+        ]
+      },
+      "area": "notifications",
+      "disposition": "control-plane-channel-reuse",
+      "reason": "Reuse channel transports selectively behind the existing inbox/outbox; do not deploy independent bots in every research runtime.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/xmanrui/dsh-im/a81f6f3a935f7fa57d4660529708298bb2391113/README.md",
+          "sha256": "c1c182cfc32daba81468a9ca06a3642f7299535f59bd6e838f8daaadb3b2d5bd",
+          "bytes": 70929
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/xmanrui/dsh-im/a81f6f3a935f7fa57d4660529708298bb2391113/package.json",
+          "sha256": "980d6c47dcfa632465acc98583afb5f32fcca4acb5379b438665fd7c671a9198",
+          "bytes": 5270
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/xmanrui/dsh-im/a81f6f3a935f7fa57d4660529708298bb2391113/cordis.patch.yml",
+          "sha256": "1491d44ea8568e43be3b193d4050c59779ab545e6cdc1fbd304e527ec234c8f5",
+          "bytes": 65
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "dengpeihua/dsh-browser-use",
+      "repository": "https://github.com/dengpeihua/dsh-browser-use",
+      "commit": "debffa04690c94032d2a4dfc8bd8bdc8f2f25f3b",
+      "catalogueVersion": null,
+      "package": {
+        "name": "dsh-browser-plugin",
+        "version": "0.1.0",
+        "license": "MIT",
+        "engines": {
+          "node": ">=22.19"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": ">=4.0.1 <5",
+          "@deepseek-ai/dsh-agent": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-attachment": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-compaction": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-llm": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-session": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-system-prompt": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-token-meter": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-tools": "0.1.2-alpha.2",
+          "@deepseek-ai/dsh-user-approval": "0.1.2-alpha.2",
+          "@deepseek-ai/schemastery": ">=3.18.1 <4"
+        },
+        "testScriptNames": [
+          "eval:test",
+          "test",
+          "test:smoke",
+          "check",
+          "test:host"
+        ]
+      },
+      "area": "browser-automation",
+      "disposition": "deferred-host-compatibility",
+      "reason": "Per-session browser design is useful but old exact peers and interactive local-browser assumptions prevent direct hosted admission.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/dengpeihua/dsh-browser-use/debffa04690c94032d2a4dfc8bd8bdc8f2f25f3b/README.md",
+          "sha256": "5c1a74bead5044e893e0e8cbb96dd988c7de72e38a2bea3048ef20619b04c311",
+          "bytes": 42210
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/dengpeihua/dsh-browser-use/debffa04690c94032d2a4dfc8bd8bdc8f2f25f3b/package.json",
+          "sha256": "a195a2e2746d8de43421c750dbdeeb74d9eadf6abbf14c2af5ba90dfed8d3780",
+          "bytes": 4471
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/dengpeihua/dsh-browser-use/debffa04690c94032d2a4dfc8bd8bdc8f2f25f3b/cordis.patch.yml",
+          "sha256": "0f55bd7c6cae835add6552c9c99f4b36cf117b5e0a05b4dc9abd4f13261cc6e2",
+          "bytes": 506
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "dream-num/dsh-univer-office",
+      "repository": "https://github.com/dream-num/dsh-univer-office",
+      "commit": "60cbf5a398f8ba8a6d69396a73eead383a652b6b",
+      "catalogueVersion": "0.3.5",
+      "package": {
+        "name": "dsh-univer-office",
+        "version": "0.3.6",
+        "license": "Apache-2.0",
+        "engines": {
+          "node": ">=22.19.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.2",
+          "@deepseek-ai/dsh-attachment": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-host-webserver": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-llm": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-session": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-settings": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-skill": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/dsh-tools": "^0.1.5-rc.3 || ^0.1.7-rc.1 || ^0.2.0-rc.1",
+          "@deepseek-ai/schemastery": "^3.18.1"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test:migration",
+          "test:integration",
+          "test:viewer:transport",
+          "test:preview-formula",
+          "test:host",
+          "test:client",
+          "test:client:layout",
+          "test:comparison",
+          "test:skills",
+          "test:telemetry",
+          "test"
+        ]
+      },
+      "area": "office-authoring",
+      "disposition": "priority-adapter-pilot",
+      "reason": "Scoped document/WS routes and resource downloads need proof; disable default telemetry; keep numerical authority and shared exporter.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/dream-num/dsh-univer-office/60cbf5a398f8ba8a6d69396a73eead383a652b6b/README.md",
+          "sha256": "fbe4fd00996149fb5f59a1b58369f4d304dcfdf00a01a96273cbfdef873266d9",
+          "bytes": 18503
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/dream-num/dsh-univer-office/60cbf5a398f8ba8a6d69396a73eead383a652b6b/package.json",
+          "sha256": "fd9c0fd463f8f49a382ef1411eb4f5568bd52ba4532b3c96465179df8e5ae370",
+          "bytes": 13166
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/dream-num/dsh-univer-office/60cbf5a398f8ba8a6d69396a73eead383a652b6b/cordis.patch.yml",
+          "sha256": "28ecab1fa4c7bcc62e434cd28e608aba1d5c7effc90f5fe45a090359af90df28",
+          "bytes": 149
+        },
+        {
+          "path": "src/gateway-app/server.ts",
+          "url": "https://raw.githubusercontent.com/dream-num/dsh-univer-office/60cbf5a398f8ba8a6d69396a73eead383a652b6b/src/gateway-app/server.ts",
+          "sha256": "ea1672ccd5d60462f77e6a24945e7c65016a312786a76529f2da5079b50fc752",
+          "lines": 146
+        },
+        {
+          "path": "src/host/service/workspace.ts",
+          "url": "https://raw.githubusercontent.com/dream-num/dsh-univer-office/60cbf5a398f8ba8a6d69396a73eead383a652b6b/src/host/service/workspace.ts",
+          "sha256": "4cd2bb5a30ae5882d8e013d2b5559cdb54ac112d506e9d09aec20e345ec89d7b",
+          "lines": 138
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "literaf/dsh-ai4scholar",
+      "repository": "https://github.com/literaf/dsh-ai4scholar",
+      "commit": "27a026f25d1bfd7c3e766e4c136916586cd2f7a5",
+      "catalogueVersion": "0.3.7",
+      "package": {
+        "name": "dsh-ai4scholar",
+        "version": "0.3.7",
+        "license": "MIT",
+        "engines": {
+          "node": ">=22.19.0"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": ">=4.0.1",
+          "@deepseek-ai/dsh-commands": ">=0.1.0-rc.6",
+          "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.6",
+          "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.6",
+          "@deepseek-ai/dsh-llm": ">=0.1.0-rc.6",
+          "@deepseek-ai/dsh-system-prompt": ">=0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6",
+          "@deepseek-ai/schemastery": ">=3.18.1",
+          "react": "^18.2.0"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "pretest",
+          "test"
+        ]
+      },
+      "area": "literature",
+      "disposition": "gateway-adapter-pilot",
+      "reason": "Select missing citation-graph endpoints; move keys/credits to managed connections and preserve source provenance.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/literaf/dsh-ai4scholar/27a026f25d1bfd7c3e766e4c136916586cd2f7a5/README.md",
+          "sha256": "f8002ee3f16346d9633b3c6aabbc28207041b212b8efb286941c5189d5b62f61",
+          "bytes": 11492
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/literaf/dsh-ai4scholar/27a026f25d1bfd7c3e766e4c136916586cd2f7a5/package.json",
+          "sha256": "ee7482732091564171c28ae0fc5a81bc39d201138bb333cc83884d41e08a1d0e",
+          "bytes": 4380
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/literaf/dsh-ai4scholar/27a026f25d1bfd7c3e766e4c136916586cd2f7a5/cordis.patch.yml",
+          "sha256": "78fc12615dd297218d25d38b0acf5ac0dea1cb3c528615bb53b15376fcaf1f45",
+          "bytes": 746
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "Vncntvx/dsh-zotero",
+      "repository": "https://github.com/Vncntvx/dsh-zotero",
+      "commit": "e76de4218c7021864da50e650f7e0a410016ca91",
+      "catalogueVersion": "0.11.0",
+      "package": {
+        "name": "dsh-zotero",
+        "version": "0.11.0",
+        "license": "MIT",
+        "engines": {
+          "node": "^22.19.0 || >=24.0.0",
+          "dsh": "0.1.7-rc.2"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.4",
+          "@deepseek-ai/dsh-api-remotes": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-store": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-chat": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-conversation": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-session": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-commands": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-credentials": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-jobs": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-timeout": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-typert-protocol": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-typert-registry": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-user-approval": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-user-questions": "0.1.7-rc.2",
+          "@deepseek-ai/dsh-util-values": "0.1.7-rc.2"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test",
+          "test:watch",
+          "test:coverage",
+          "lint:test",
+          "test:integration"
+        ]
+      },
+      "area": "literature-library",
+      "disposition": "local-bridge-required",
+      "reason": "Exact DSH peer match does not solve its loopback Zotero dependency; use an authenticated bridge or Web API adapter.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/Vncntvx/dsh-zotero/e76de4218c7021864da50e650f7e0a410016ca91/README.md",
+          "sha256": "962349eb620d55c6e10d52189de3495752ad1b66f70ce2f37a245c77c9e6aac9",
+          "bytes": 8762
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/Vncntvx/dsh-zotero/e76de4218c7021864da50e650f7e0a410016ca91/package.json",
+          "sha256": "0303ef8a8dd4ecab7d2ce1e818a814d88a4351f0690a4990fb93e0f5d3177df6",
+          "bytes": 9949
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/Vncntvx/dsh-zotero/e76de4218c7021864da50e650f7e0a410016ca91/cordis.patch.yml",
+          "sha256": "d1764ff2c7d99669bc77052d54bcbd58bb688871252c1d1dd471011a6903ac08",
+          "bytes": 214
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "dsh-market/dsh-market",
+      "repository": "https://github.com/dsh-market/dsh-market",
+      "commit": "d4f7a7962d1160e8d5d09fd9ab7f8669bad3ccd9",
+      "catalogueVersion": "1.66.6",
+      "package": {
+        "name": "dshmarket",
+        "version": "1.66.7",
+        "license": "MIT",
+        "engines": null,
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-settings": "^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1",
+          "@deepseek-ai/schemastery": "^3.18.1"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "check",
+          "test",
+          "test:compat",
+          "test:web"
+        ]
+      },
+      "area": "market-discovery",
+      "disposition": "catalogue-ui-reuse",
+      "reason": "Use catalogue/update metadata and native installer; personal profile state, backup and HMR do not become shared-host authority.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/dsh-market/dsh-market/d4f7a7962d1160e8d5d09fd9ab7f8669bad3ccd9/README.md",
+          "sha256": "9bd52037ac51eb20736195e62f925c1bebc467f7a73da2cfd3eba703d0f4d942",
+          "bytes": 19168
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/dsh-market/dsh-market/d4f7a7962d1160e8d5d09fd9ab7f8669bad3ccd9/package.json",
+          "sha256": "753bd72e66e12cb798aab6ea8b90ad6d0f96e7f42c10c35313a7a4ba09e939b4",
+          "bytes": 3786
+        },
+        {
+          "path": "cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/dsh-market/dsh-market/d4f7a7962d1160e8d5d09fd9ab7f8669bad3ccd9/cordis.patch.yml",
+          "sha256": "8e2367e0370ca5c122f8b5c865159fedf0422f834cf10a6fa3d3be165a60640b",
+          "bytes": 125
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "volcengine/OpenViking#examples/dsh-memory-plugin",
+      "repository": "https://github.com/volcengine/OpenViking",
+      "commit": "1394d4769a34058dcd64bd9afcf917d3cae7ab54",
+      "catalogueVersion": "0.5.9",
+      "package": {
+        "name": "@openviking/dsh-memory-plugin",
+        "version": "0.5.11",
+        "license": "Apache-2.0",
+        "engines": {
+          "node": "^22.19.0 || >=24"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/dsh-llm": ">=0.1.0-rc.6 <0.2.0 || ^0.1.5-rc.1 || ^0.1.7-rc.2",
+          "@deepseek-ai/dsh-mcp-client": ">=0.1.0-rc.6 <0.2.0 || ^0.1.5-rc.1 || ^0.1.7-rc.2",
+          "@deepseek-ai/dsh-skill-filesystem": ">=0.1.0-rc.6 <0.2.0 || ^0.1.5-rc.1 || ^0.1.7-rc.2"
+        },
+        "testScriptNames": [
+          "check",
+          "test"
+        ]
+      },
+      "area": "memory",
+      "disposition": "pattern-only-existing-service",
+      "reason": "Keep existing PostgreSQL-owned memory and managed OpenViking recall; avoid direct second recall/write path.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "examples/dsh-memory-plugin/README.md",
+          "url": "https://raw.githubusercontent.com/volcengine/OpenViking/1394d4769a34058dcd64bd9afcf917d3cae7ab54/examples/dsh-memory-plugin/README.md",
+          "sha256": "9017bc409544f765febed858f922b7f459ae6f836d7c2f8e6b0c673c086d1b88",
+          "bytes": 18273
+        },
+        {
+          "path": "examples/dsh-memory-plugin/package.json",
+          "url": "https://raw.githubusercontent.com/volcengine/OpenViking/1394d4769a34058dcd64bd9afcf917d3cae7ab54/examples/dsh-memory-plugin/package.json",
+          "sha256": "7043a82fc208f452cb2f29e608e4571575dd01bd80f1b7bdbc928492748eaf8b",
+          "bytes": 3107
+        },
+        {
+          "path": "examples/dsh-memory-plugin/cordis.patch.yml",
+          "url": "https://raw.githubusercontent.com/volcengine/OpenViking/1394d4769a34058dcd64bd9afcf917d3cae7ab54/examples/dsh-memory-plugin/cordis.patch.yml",
+          "sha256": "2b06aa3733fdd160ea2a57f30d86ad1c58cf04fc83ae6b1e90078bfd771dabf7",
+          "bytes": 90
+        }
+      ],
+      "catalogueListed": true
+    },
+    {
+      "id": "Jesse-njx/dsh-cowork",
+      "repository": "https://github.com/Jesse-njx/dsh-cowork",
+      "commit": "2ae5cf755c4294a1e988eebf3b12dd062425d84c",
+      "catalogueVersion": null,
+      "package": {
+        "name": "@dsh-cowork/plugin",
+        "version": "0.1.0",
+        "license": "MIT",
+        "engines": {
+          "node": ">=20"
+        },
+        "peerDependencies": {
+          "@deepseek-ai/cordis": "^4.0.1",
+          "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+          "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+          "@deepseek-ai/schemastery": "^3.18.1"
+        },
+        "testScriptNames": [
+          "typecheck",
+          "test"
+        ]
+      },
+      "area": "document-tools",
+      "disposition": "isolated-mcp-pilot",
+      "reason": "Prefer portable core/MCP path; the DSH subpackage declares old exact peers, and DOCX/PDF generation is not its current write scope.",
+      "saasStatus": "unverified-source-review-only",
+      "evidence": [
+        {
+          "path": "README.md",
+          "url": "https://raw.githubusercontent.com/Jesse-njx/dsh-cowork/2ae5cf755c4294a1e988eebf3b12dd062425d84c/README.md",
+          "sha256": "8182c667e98c8ab30844ed0faf34a9a1749f4303ef779b98f3ede0f348c790c5",
+          "bytes": 6607
+        },
+        {
+          "path": "package.json",
+          "url": "https://raw.githubusercontent.com/Jesse-njx/dsh-cowork/2ae5cf755c4294a1e988eebf3b12dd062425d84c/package.json",
+          "sha256": "de9def7ef5b88d13493373416fdd1e1f30321e5092ab5d25013dceeb87f6ff9f",
+          "bytes": 815
+        },
+        {
+          "path": "packages/dsh/package.json",
+          "url": "https://raw.githubusercontent.com/Jesse-njx/dsh-cowork/2ae5cf755c4294a1e988eebf3b12dd062425d84c/packages/dsh/package.json",
+          "sha256": "469dff73df2af96152e06a69b9c09eeb0ab3096f1cd8d7d7584e42ca781b2b6a",
+          "lines": 65
+        },
+        {
+          "path": "packages/mcp/package.json",
+          "url": "https://raw.githubusercontent.com/Jesse-njx/dsh-cowork/2ae5cf755c4294a1e988eebf3b12dd062425d84c/packages/mcp/package.json",
+          "sha256": "5f4c15d02597316197ac005a49307bbff6edd6e48428c0a2a3d6a038d52d158c",
+          "lines": 42
+        }
+      ],
+      "catalogueListed": false
+    }
+  ]
+}

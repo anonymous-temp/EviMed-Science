@@ -3,9 +3,11 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
+import { canonicalJson } from "@evimed/domain";
 
-// Version 7 adds the fixed offline document renderer and scoped cancellation.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 7;
+// Version 8 adds isolated native skill validation. The version-7 citation
+// runtime-start shape stays explicitly supported during coordinated rollout.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 8;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -160,6 +162,7 @@ export class RuntimeControllerClient {
       }
       if (body) request.end(body);
       else request.end();
+      options.onDispatch?.();
     });
   }
 
@@ -171,6 +174,66 @@ export class RuntimeControllerClient {
   cancelDocumentRender(reference) {
     return this.request("POST", "/v1/document/cancel", reference);
   }
+
+  /** Fixed owned content reference; the controller resolves every filesystem path.
+   * @param {{ownerHash:string,kind:'imports'|'packages',contentId:string,expectedName:string|null}} reference
+   * @param {{signal?:AbortSignal}} [options] */
+  async validatePersonalSkill(reference, { signal } = {}) {
+    let dispatched = false;
+    try {
+      return await this.request("POST", "/v1/skills/validate", reference,
+        // Native stdout retains its 512 KiB cap; this bounded headroom covers
+        // the controller's JSON data envelope around a valid near-limit result.
+        { signal, timeoutMs: 60000, maxResponseBytes: 512 * 1024 + 1024, onDispatch: () => { dispatched = true; } });
+    } catch (error) {
+      if (dispatched && (signal?.aborted || error?.name === "AbortError"
+        || ["runtime_controller_timeout", "runtime_controller_unavailable", "runtime_controller_response_too_large"].includes(error?.code))) {
+        try {
+          const joined = await this.cancelPersonalSkill(reference);
+          if (joined?.cancelled !== true) throw new Error("cancel_unknown");
+        } catch {
+          throw controllerError("product_state_unavailable", "Skill validation cancellation could not be confirmed.");
+        }
+      }
+      throw error;
+    }
+  }
+
+  cancelPersonalSkill(reference) {
+    return this.request("POST", "/v1/skills/cancel", reference, { timeoutMs: 45000 });
+  }
+
+  extensionToolAdmission() { return this.request("POST", "/v1/extensions/tool/admission", {}); }
+  async admissionAvailable() { return (await this.extensionToolAdmission())?.available === true; }
+
+  /** The private worker supplies an opaque leased identity; cancellation joins even after the HTTP response is lost.
+   * @param {'prepare'|'execute'} kind @param {any} body @param {{signal?:AbortSignal}} [options] */
+  async extensionToolRequest(kind, body, { signal } = {}) {
+    let dispatched = false;
+    try {
+      return await this.request("POST", `/v1/extensions/tool/${kind}`, body,
+        { signal, timeoutMs: 45000, maxResponseBytes: 12 * 1024 * 1024 + 16384, onDispatch: () => { dispatched = true; } });
+    } catch (error) {
+      if (dispatched) {
+        try {
+          const ack = await this.request("POST", "/v1/extensions/tool/cancel", { kind, identity: body.identity }, { timeoutMs: 45000 });
+          if (ack?.joined !== true || ack?.physicallyAbsent !== true || canonicalJson(ack.identity) !== canonicalJson(body.identity)) throw new Error("cancel_unknown");
+          error.joined = true; error.physicallyAbsent = true;
+        } catch {
+          throw Object.assign(controllerError("product_state_unavailable", "Extension cancellation could not be confirmed."), { joined: false });
+        }
+      }
+      throw error;
+    }
+  }
+
+  prepareExtensionTool(body, options = {}) { return this.extensionToolRequest("prepare", body, options); }
+  executeExtensionTool(body, options = {}) { return this.extensionToolRequest("execute", body, options); }
+  prepare(body, options = {}) { return this.prepareExtensionTool(body, options); }
+  execute(body, options = {}) { return this.executeExtensionTool(body, options); }
+  cancelPreparation(identity) { return this.request("POST", "/v1/extensions/tool/cancel", { kind: "prepare", identity }, { timeoutMs: 45000 }); }
+  cancelExecution(identity) { return this.request("POST", "/v1/extensions/tool/cancel", { kind: "execute", identity }, { timeoutMs: 45000 }); }
+  executionStatus(identity) { return this.request("POST", "/v1/extensions/tool/status", { identity }); }
 
   async health() {
     const result = await this.request("GET", "/v1/health");
@@ -188,7 +251,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -197,6 +260,8 @@ export class RuntimeControllerClient {
       revisionGatewayUrl,
       publicSourceGatewayUrl,
       pluginConfig,
+      ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
+      ...(extensionGeneration ? { extensionGeneration } : {}),
     });
   }
 

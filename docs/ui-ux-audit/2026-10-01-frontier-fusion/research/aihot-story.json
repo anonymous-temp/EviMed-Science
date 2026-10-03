@@ -1,0 +1,291 @@
+{
+  "url": "https://aihot.news/story/daf111a0-908f-4f9c-8639-fc469d9ec53b",
+  "status": 200,
+  "title": "谷歌发布 Gemini 4 Argon 前沿模型 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:35.842156+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\n热点榜\n事件详情\n热点事件\n持续更新\n谷歌发布 Gemini 4 Argon 前沿模型\n35\n篇报道\n23\n个报道来源\n30 分钟前更新\n事件概览\n报道时间线\n35\n热度走势\n先了解这件事\nAI 综述\n\n2026 年 9 月 18 日，IT之家报道谷歌以“gemini-3.8-flash”名称在 Arena 等平台测试最强模型 Gemini 4 Pro，内部代号 Argon，其“鹈鹕骑自行车”SVG 生图表现优秀，被拿来与 OpenAI 的 GPT-6 Astra Pro 对比。9 月 30 日至 10 月 1 日，Google DeepMind 发布新前沿模型 Gemini 4 Argon，先通过 Fairwind Program 向可信网络防御者开放，后续将逐步面向开发者、企业和消费者推出；博客称介绍价为每百万输入 token 2 美元、每百万输出 token 10 美元，缓存输入 token 享输入价 95% 折扣，将从付费 API 客户和 Google AI Ultra 订阅者开始。CEO Sundar Pichai 同日发推称其在复杂工作流、网络防御和软件工程展现前沿性能，模型已交付美国政府，并称对可信防御者和谷歌内部团队不设网络防护栏发布。DeepMind 称 Argon 输出上限 1M token，可一次性处理长篇多步骤问题。Testing Catalog 称其在 DeepSWE v1.1 得 77.9% 为新 SOTA；Artificial Analysis 称其智能指数 53 分，追平 GPT-6 Astra (max)，并称 50% 折扣为初始促销、结束日期未确认，缓存输入 95% 折扣折后每 1M 0.10 美元。Arena 称其以 1525 分登顶 Text Arena、列 Code Arena: WebDev 第八，后又称其在 Agent Arena 排第 8、净提升 +7.92%、每任务成本 0.62 美元。Ars Technica 则称 Argon 仍处有限测试、尚未开放使用且 API 定价未公布，与博客公布的介绍价不一致；Rohan Paul 称目前仅三组人可用，输出上限从 64K 提升至 1M。The Verge 称谷歌将在更广泛推出前强化关键前沿防护。Karina Nguyen 称 Gemini 4 在 PostTrainBench 达 45.3%。The Decoder 称 Argon 是七个多月来首款前沿模型，缩小了与 OpenAI、Anthropic 的差距但未明显领先。10 月 1 日 IT之家跟进报道称，谷歌于 9 月 30 日发布该模型，目前并未面向公众全面开放，第一阶段通过 Fairwind Program 提供给受信任的网络安全防御者，并参与美国政府的自愿预发布模型访问流程，计划先向付费 API 客户和 Google AI Ultra 用户开放，之后再扩大到企业和普通消费者。10 月 1 日 TechCrunch 报道称，Alphabet 发布 Gemini 4 Argon，主打网络安全能力，可自主发现、验证并修复关键软件漏洞，目前仅通过 Fairwind 安全计划向部分网络安全合作伙伴开放。10 月 1 日 Arena 另称 Gemini 4 Argon 在生成任务中与顶级前沿模型对比，每任务成本比 GPT-6.1 Sol 低 33%、比 Claude Opus 5.5 低 70%。10 月 1 日 IT之家援引彭博社报道称，谷歌已开始向小批网络安全合作伙伴逐步推出 Argon，后续将优先面向付费订阅用户扩大开放；谷歌称该模型在多项基准测试中取得靠前成绩，安全测试成绩超过 OpenAI 的 Astra，但知情人士称其部分代码任务表现不佳、不擅前端设计，谷歌否认这一说法，DeepMind 负责人卡武库奥卢表示对性能感到鼓舞。\n\nAI 根据报道生成 · 13 分钟前更新\n\n最新进展\n10月1日 09:14\n谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑\n事件进展\n6 个进展\n10月1日 08:09 · 1 篇报道\nGemini 4 Argon与前沿模型对比评测\nArena：Gemini 4 Argon 与前沿模型对比\n10月1日 05:35 · 1 篇报道\nGemini 4 Argon (High)在Arena榜单表现\nArena：Gemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%\n10月1日 05:07 · 1 篇报道\nGemini 4 新模型为何命名 Argon？\n马东锡 NLP：Gemini 4 新模型为何命名 Argon？\n10月1日 04:01 · 25 篇报道\nGemini 4 Argon 负责任推出\nGoogle DeepMind：Blog：Google DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放\n9月30日 00:00 · 3 篇报道\nGoogle发布Gemini 4 Argon模型\nArtificial Analysis 完整文章：Artificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队\n9月18日 08:03 · 1 篇报道\n谷歌最强模型 Gemini 4 Pro 正在测试中，以 gemini-3.8-flash 名称现身 Arena 基准平台\nIT之家：谷歌 Gemini 4 Pro 开测：代号 Argon，SVG 生图表现惊艳\n报道时间线\n\n沿着报道，了解事件的不同侧面。\n\n最新在前\n最早在前\n全部报道\n35\n官方一手\n2\n精选报道\n8\n10月1日\n09:14\nIT之家\n谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑\n\n据彭博社报道，谷歌开始向小批网络安全合作伙伴逐步推出旗舰模型 Gemini 4 Argon，后续将优先面向付费订阅用户扩大开放。谷歌称该模型在多项基准测试中取得靠前成绩，安全测试成绩超过 OpenAI 的 Astra；但知情人士称其部分代码任务表现不佳、不擅前端设计，谷歌否认这一说法，DeepMind 负责人卡武库奥卢表示对性能感到鼓舞。\n\n展开摘要\n08:26\nX：洪明 (@hongming731)\nBestBlogs 早报：Gemini 4 Argon 与 Eleven v4 等发布\n\nBestBlogs 10-01 早报汇总多条 AI 动态：Gemini 4 Argon 将长程推理用于代码迁移、内存优化与安全防御，并通过 Fairwind 向受信任的网络防御者逐步开放；ElevenLabs 推出表达型 Eleven v4 与低延迟 Turbo 文本转语音模型。\n\n08:26\nX：洪明 (@hongming731)\nGemini 4 Argon 发布，输出 token 上限提至 1M\n\nGoogle DeepMind 发布 Gemini 4 Argon，输出 token 上限从 64K 提升至 1M，当前通过 Fairwind Program 向受信任网络防御者逐步开放，广泛访问预计从付费 API 客户和 Google AI Ultra 用户开始。\n\n08:09\nX：Arena (@arena)\nGemini 4 Argon 与前沿模型对比\n\n来自 @GoogleDeepMind 的 Gemini 4 Argon 刚刚在一系列生成任务中与顶级前沿模型正面交锋。 每任务成本比 GPT-6.1 Sol 低 33%，比 Claude Opus 5.5 低 70%，来看 @petergostev 对 Gemini 4 Argon 对比表现的第一印象。 https://www.youtube.com/watch?v=h5EL5zThKaI\n\n展开摘要\n07:43\nTechCrunch：AI\nGoogle 发布 Gemini 4 Argon，称其为迄今最强模型\n\nGoogle 母公司 Alphabet 发布新模型 Gemini 4 Argon，主打网络安全能力，可自主发现、验证并修复关键软件漏洞，目前仅通过 Fairwind 安全计划向部分网络安全合作伙伴开放。\n\n06:57\nIT之家\n谷歌发布 Gemini 4 Argon，DeepSWE 测试 77.9% 超 Claude Opus 5.5\n\n谷歌于 9 月 30 日发布 Gemini 4 Argon，称其为迄今最先进的 AI 模型，主打长流程软件工程、企业知识工作和网络安全防御，单次输出上限约 100 万 tokens。\n\n06:46\nX：马东锡 NLP (@dongxi_nlp)\nGemini 4 Argon 等前沿模型密集发布\n\n干净的圈子，规律的生活。几天就更新一次的 frontier，不是炫耀，是他们为数不多的爱好。 今天发布的 Gemini 氩，棒的氩口无言 9/21 — Grok 4.7 9/22 — GPT-6 Sol / Luna 9/22 — Claude Opus 5.5 9/28 — Claude Sonnet 5.5 9/29 — GPT-6.1 Sol 9/30 — Gemini 4 Argon\n\n展开摘要\n06:06\nThe Decoder：AI News\n精选\nGoogle 发布 Gemini 4 Argon：缩小与 OpenAI 和 Anthropic 的差距但未明显领先\n\nGoogle 发布新旗舰模型 Gemini 4 Argon，是继 Gemini 3.1 Pro 之后七个多月来的首款前沿模型。\n\n05:59\nX：Demis Hassabis (@demishassabis)\nGemini 4 Argon 前沿模型发布\n\n非常激动地宣布 Gemini 4 Argon，我们的全新前沿 AI 模型，在多项关键能力上迈出了一大步。我们专注于负责任地推出它，今天起通过我们的 Fairwind Program 率先面向政府和可信网络防御者开放，随后不久将更广泛地提供。\n\n05:35\nX：Arena (@arena)\n精选\nGemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%\n\nArena 公布 Gemini 4 Argon (High) 在 Agent Arena 排名第 8，净提升分 +7.92%，每任务成本 $0.62。\n\n05:35\nX：Karina Nguyen（@karinanguyen）\nGemini 4 在 PostTrainBench 达 45.3%\n\nGemini 4 在 PostTrainBench 上达到 45.3%，是 Gemini 3.1 Pro 的 21.99% 的两倍多，并击败了 GPT-6 Astra 🔥\n\n05:30\nMarkTechPost\nGoogle DeepMind 发布 Gemini 4 Argon：单次输出可达 1M tokens\n\nGoogle DeepMind 发布 Gemini 4 系列首个前沿模型 Gemini 4 Argon，单次响应输出上限从 64K 提升到 1M tokens，面向长周期软件工程、法律金融企业知识工作和网络防御。\n\n05:07\nX：马东锡 NLP (@dongxi_nlp)\nGemini 4 新模型为何命名 Argon？\n\n马东锡 NLP 发推讨论 Gemini 4 新模型命名为 Argon（氩），并列出 Gemini 硫、氯、氩、钾、钙等按元素周期表命名的模型序列，认为按元素周期表给模型起名挺简单。\n\n04:58\nX：Rohan Paul (@rohanpaul_ai)\nGoogle Gemini 4 Argon 单次输出上限提升至 1M tokens\n\nRohan Paul 转引 Google 发布信息称，Gemini 4 Argon 单次响应可输出最多 1M tokens，约为 GPT-6 Astra、Opus 5.5 和 Fable 5.1 的 128K 上限的近 8 倍，此前上限为 64K。作者评价这意义重大，并指出长输出空间让模型能在单次轨迹中深度推理解决复杂问题。\n\n展开摘要\n04:50\nHacker News：AI 热帖\nGemini 4 Argon (High) 智能、性能与价格分析\n\nArtificial Analysis 发布 Gemini 4 Argon (High) 的智能、性能与价格分析，其 Intelligence Index 采用 v4.3.2 版本，涵盖 AA-Briefcase v1.1、GDPval-AA v2.1、Terminal-Bench 4.0、Humanity's Last Exam 等 10 项评测。\n\n04:49\nX：Rohan Paul (@rohanpaul_ai)\nGoogle 发布 Gemini 4 Argon，多数基准领先 GPT-6 Astra 与 Claude Opus 5.5\n\nGoogle 推出旗舰模型 Gemini 4 Argon，在多数基准上超过 GPT-6 Astra 和 Claude Opus 5.5，其中 Harvey's Legal Agent Benchmark 得分 19.6%，明显高于对比模型的 6.7% 等成绩。\n\n04:41\nThe Verge：AI\nGoogle 发布 Gemini 4 Argon，目前仅限受信任的网络防御者使用\n\nGoogle 发布新一代前沿模型 Gemini 4 Argon，称其在软件工程、法律和金融等企业知识工作以及网络防御方面具有前沿性能。模型初期仅向一批受信任的网络防御者开放，Google 正参与美国政府的发布前模型访问自愿流程并逐步扩大访问范围；该模型已用于 Google 内部工作流，如大规模代码库迁移。\n\n展开摘要\n04:36\nX：Josh Woodward (@joshwoodward, Google Labs VP)\nGemini 4 Argon 预告\n\nGemini 4 Argon！\n\n04:30\nX：Arena (@arena)\n精选\nGemini 4 Argon (High) 登顶 Arena 文本榜第一并进入 WebDev 榜前八\n\nGoogle DeepMind 发布前沿模型 Gemini 4 Argon，经 Fairwind Program 面向部分受信任测试者推出。\n\n04:21\nX：Artificial Analysis (@ArtificialAnlys)\n精选\nArtificial Analysis 评测 Gemini 4 Argon，智能指数追平 GPT-6 Astra 且成本仅 60%\n\nArtificial Analysis 评测 Google DeepMind 新模型 Gemini 4 Argon，在 Artificial Analysis Intelligence Index 得 53 分，追平 GPT-6 Astra (max)，高于 GPT-6.1 Sol (max) 1 分。\n\n04:11\nArs Technica：AI\nGoogle 发布 Gemini 4 Argon 模型，尚未开放使用\n\nGoogle 宣布新模型 Gemini 4 Argon，称其在编码、知识工作和网络安全等领域达到业界领先水平，但仍处于有限测试阶段，尚未开放使用，API 定价也未公布。\n\n04:10\nX：Testing Catalog (@testingcatalog)\nGoogle 发布 Gemini 4 Argon 前沿模型\n\nGoogle 发布 Gemini 4 Argon 前沿模型，面向真实软件工程、法律与金融等企业知识工作和网络防御的复杂工作流，DeepSWE v1.1 得分 77.9% 为新 SOTA。作者称其在多项基准上优于 GPT-6 Astra、Claude Opus 5.5 和 Claude Fable 5.1，即将首先向付费 API 客户和 Google AI Ultra 订阅用户推出。Sundar Pichai 称该模型在复杂工作流、网络防御和软件工程方面表现出前沿性能，团队已在 Google 内部从编码到量子计算广泛使用。\n\n展开摘要\n04:05\nX：Ammaar Reshi (@ammaar)\nGemini 4 Argon 基准测试预览\n\n以下是 Gemini 4 Argon 的基准测试预览。 今天开始向网络防御者推出，并尽快向所有人开放。 很高兴看到所有进展，迫不及待想让大家都用上！\n\n04:05\nX：Google AI (@GoogleAI)\nGoogle 发布 Gemini 4 Argon 模型\n\n了解更多 ↓ https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/\n\n04:05\nX：Google AI (@GoogleAI)\nGoogle 发布 Gemini 4 Argon 前沿模型，输出 token 上限扩至 1M\n\nGoogle AI 发布新前沿模型 Gemini 4 Argon，面向长程复杂工作流的深度推理，覆盖软件工程、法务与金融等企业知识工作及网络安全防御。模型输出 token 上限扩展至 1M，目前在 Fairwind Program 中向部分可信网络防御者推送，后续将尽快开放更广泛使用。\n\n展开摘要\n04:04\nHacker News：AI 热帖\n精选\nGoogle 发布 Gemini 4 Argon 前沿模型，输出上限扩至 1M tokens\n\nGoogle 发布新前沿模型 Gemini 4 Argon，先通过 Fairwind Program 向部分可信网络防御者开放，后续再向开发者、企业和消费者推出，起售价为每百万输入 tokens $2、每百万输出 tokens $10，缓存输入价格低至输入价的 95% 折扣。\n\n04:03\nX：Google (@Google)\nGemini 4 Argon 向网络安全防御者开放\n\nGemini 4 Argon 正通过我们的 Fairwind Program 向首批网络安全防御者推出，让他们能够利用其完整的前沿级网络安全防御能力。 我们将继续收集早期测试者的反馈，同时迭代护栏机制，以便尽快将 Argon 提供给开发者、企业和消费者。 了解更多 ↓ http://goo.gle/4AFGGh1\n\n展开摘要\n04:03\nX：Google (@Google)\n精选\nGoogle 发布 Gemini 4 Argon，支持 1M token 输出上限\n\nGoogle 发布 Gemini 4 Argon 模型，主打真实世界软件工程、知识工作和网络安全防御等复杂工作流的前沿性能。该模型提供业界领先的 1M token 输出上限。\n\n04:03\nX：Google DeepMind (@GoogleDeepMind)\nGemini 4 Argon 前沿模型发布\n\n推出 Gemini 4 Argon——我们的全新前沿模型。 它专为编码、企业知识工作和网络安全防御等复杂工作流打造——今天起通过我们的 Fairwind Program 向一批受信任的测试者开放。\n\n04:03\nX：Google DeepMind (@GoogleDeepMind)\nGoogle DeepMind 推出 Argon 模型\n\nArgon 拥有 1M token 输出上限，增加了更深层次的推理能力，可一次性处理长篇多步骤问题。 早期测试者的反馈将帮助我们在不久后更广泛地向开发者、企业和消费者推出之前强化我们的系统。 了解更多 → https://goo.gle/4rZBiSd\n\n04:02\nX：Sundar Pichai (@sundarpichai)\nSundar Pichai 介绍 Gemini 4 Argon 的前沿安全防护与分阶段开放计划\n\nSundar Pichai 表示 Argon 具备前沿安全防护并采取负责任的 rollout，模型已交付美国政府，并通过 Fairwind Program 提供给一组受信任的网络防御者。他称会尽快且尽可能安全地开放可用，之后将快速迭代。\n\n04:02\nX：Sundar Pichai (@sundarpichai)\nGoogle 预告 Gemini 4 Argon\n\n外面有很多关于我们下一个模型的讨论（！），所以我想尽快给大家一个提前预览。介绍 Gemini 4 Argon！ 它在复杂工作流、网络防御和软件工程方面展现出前沿性能。Google 内部团队正在广泛使用它，从编程到量子计算，反馈很好。 以下是基准测试一览：\n\n展开摘要\n04:01\nGoogle DeepMind：Blog\n精选\nGoogle DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放\n\nGoogle DeepMind 发布新前沿模型 Gemini 4 Argon，先通过 Fairwind Program 向可信网络防御者开放，后续将逐步面向开发者、企业和消费者推出。\n\n9月30日\n00:00\nArtificial Analysis 完整文章\n精选\nArtificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队\n\nArtificial Analysis 评测 Google DeepMind 的 Gemini 4 Argon，其高推理档在 Artificial Analysis Intelligence Index 得分 53，追平 GPT-6 Astra (max)、领先 GPT-6.1 Sol (max) 1 分。\n\n9月18日\n08:03\nIT之家\n谷歌 Gemini 4 Pro 开测：代号 Argon，SVG 生图表现惊艳\n\n谷歌正以“gemini-3.8-flash”名称在 Arena 等基准平台测试其最强模型 Gemini 4 Pro，内部开发代号为 Argon。网友晒出的测试显示，该模型生成“鹈鹕骑自行车”SVG 图片表现优秀，并被拿来与 OpenAI 最强模型 GPT-6 Astra Pro 对比，网友认为谷歌官方发布后其能力还会进一步提升。\n\n展开摘要\n本事件热度走势\n\n可比范围当前 610·可比范围峰值 610（10月1日 09:00）·近 24 小时可比范围变化 –\n\n0\n200\n400\n600\n800\n10月1日05:00\n10月1日06:00\n10月1日08:00\n10月1日09:00\n\n趋势仅比较持续完整观测到的相同主体，范围可能小于当前热度统计。移动指针或点击图表查看每小时热度；键盘可用左右方向键切换。\n\n为什么热\n\n过去 48 小时，已观察到 74 个独立主体参与讨论或报道，最近 6 小时新增 69 个。\n\n30 篇近期报道·热点榜第 1 名\n\n官方一手\n2 篇\n\n直接了解当事方的说法\n\nGoogle DeepMind：Blog（RSS）\nGoogle DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放\nArtificial Analysis 完整文章（网页）\nArtificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队\n在时间线筛选全部官方报道\n事件记录\n最早报道\n9月18日 08:03\n最近更新\n10月1日 09:14\n\n同一事件的报道集中在这里，新的进展会继续补充。",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑",
+      "href": "/items/ns055r3g4avngzgtuhqkipbf5"
+    },
+    {
+      "text": "Gemini 4 Argon与前沿模型对比评测",
+      "href": "/items/fivtp2kgf8jv2mx9lujepq7re"
+    },
+    {
+      "text": "Gemini 4 Argon (High)在Arena榜单表现",
+      "href": "/items/m49i2ro59f3lqy8ocoghr9f2j"
+    },
+    {
+      "text": "Gemini 4 新模型为何命名 Argon？",
+      "href": "/items/v8qpenys969lax4t9johwi0v6"
+    },
+    {
+      "text": "Gemini 4 Argon 负责任推出",
+      "href": "/items/uob3jvsb97uh5achwaggjrhqh"
+    },
+    {
+      "text": "Google发布Gemini 4 Argon模型",
+      "href": "/items/thdata2aa7ex9kgzv72mk4kn3"
+    },
+    {
+      "text": "谷歌最强模型 Gemini 4 Pro 正在测试中，以 gemini-3.8-flash 名称现身 Arena 基准平台",
+      "href": "/items/cmu67v0kc0e78rofjmdu55on3"
+    },
+    {
+      "text": "谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑",
+      "href": "/items/ns055r3g4avngzgtuhqkipbf5"
+    },
+    {
+      "text": "BestBlogs 早报：Gemini 4 Argon 与 Eleven v4 等发布",
+      "href": "/items/fv07hfwbdb8wsxthal3fvfqx1"
+    },
+    {
+      "text": "Gemini 4 Argon 发布，输出 token 上限提至 1M",
+      "href": "/items/oepd80efkckrp5105uaj46cbp"
+    },
+    {
+      "text": "Gemini 4 Argon 与前沿模型对比",
+      "href": "/items/fivtp2kgf8jv2mx9lujepq7re"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon，称其为迄今最强模型",
+      "href": "/items/nphcmtyw8yyfsx8ypkg3ivnwn"
+    },
+    {
+      "text": "谷歌发布 Gemini 4 Argon，DeepSWE 测试 77.9% 超 Claude Opus 5.5",
+      "href": "/items/x7lody1qwcc3fm7uit5p84osn"
+    },
+    {
+      "text": "Gemini 4 Argon 等前沿模型密集发布",
+      "href": "/items/h3so4mtjggk0cbu4888vqd4ib"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon：缩小与 OpenAI 和 Anthropic 的差距但未明显领先",
+      "href": "/items/oyqytutjzet3wan8qz7ovr37m"
+    },
+    {
+      "text": "Gemini 4 Argon 前沿模型发布",
+      "href": "/items/pueszzzugaldvri5nq1bjtrhz"
+    },
+    {
+      "text": "Gemini 4 Argon (High) 登 Arena Agent Arena 第 8 名，净提升 +7.92%",
+      "href": "/items/m49i2ro59f3lqy8ocoghr9f2j"
+    },
+    {
+      "text": "Gemini 4 在 PostTrainBench 达 45.3%",
+      "href": "/items/kp5dxldxgea7yadm4hj9qqkhp"
+    },
+    {
+      "text": "Google DeepMind 发布 Gemini 4 Argon：单次输出可达 1M tokens",
+      "href": "/items/ylmzhp0e938xzvucd4zdv1xt4"
+    },
+    {
+      "text": "Gemini 4 新模型为何命名 Argon？",
+      "href": "/items/v8qpenys969lax4t9johwi0v6"
+    },
+    {
+      "text": "Google Gemini 4 Argon 单次输出上限提升至 1M tokens",
+      "href": "/items/phc3hq15997w3ykk4y8cn6clf"
+    },
+    {
+      "text": "Gemini 4 Argon (High) 智能、性能与价格分析",
+      "href": "/items/eojsxjj6ifzmw5j17rteml9ck"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon，多数基准领先 GPT-6 Astra 与 Claude Opus 5.5",
+      "href": "/items/kfepix5rjw2b1todb2hk93un9"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon，目前仅限受信任的网络防御者使用",
+      "href": "/items/ufnpivdhtywidzzvlm8j80sjb"
+    },
+    {
+      "text": "Gemini 4 Argon 预告",
+      "href": "/items/oj2cokcnh20bfd1s2qe29yq3u"
+    },
+    {
+      "text": "Gemini 4 Argon (High) 登顶 Arena 文本榜第一并进入 WebDev 榜前八",
+      "href": "/items/vu6eu0y5ctms185ppdx2bmpmq"
+    },
+    {
+      "text": "Artificial Analysis 评测 Gemini 4 Argon，智能指数追平 GPT-6 Astra 且成本仅 60%",
+      "href": "/items/v4apga9k7wdoz05ktc8xgk6va"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon 模型，尚未开放使用",
+      "href": "/items/ejolvgpnnnptqhgnv9q3ktg0g"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon 前沿模型",
+      "href": "/items/esisxkweybijdxuzgezx30i2z"
+    },
+    {
+      "text": "Gemini 4 Argon 基准测试预览",
+      "href": "/items/ejryczn1zbqkr1xrrayce41xn"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon 模型",
+      "href": "/items/eog3hnp76bo6hwugpkopiftd5"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon 前沿模型，输出 token 上限扩至 1M",
+      "href": "/items/llffqhw4oltc8wt9308juo3iv"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon 前沿模型，输出上限扩至 1M tokens",
+      "href": "/items/tb8ca8suq0ch5h7ls50c4ezfo"
+    },
+    {
+      "text": "Gemini 4 Argon 向网络安全防御者开放",
+      "href": "/items/yb33m8zuuap4vazv0551km716"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon，支持 1M token 输出上限",
+      "href": "/items/hvg7z3mza2bb2sqzcld6u7tq9"
+    },
+    {
+      "text": "Gemini 4 Argon 前沿模型发布",
+      "href": "/items/j19f6izjomqedy0ieqf04bfmy"
+    },
+    {
+      "text": "Google DeepMind 推出 Argon 模型",
+      "href": "/items/zkf9f6hkwfk5vjgk1zzg5f101"
+    },
+    {
+      "text": "Sundar Pichai 介绍 Gemini 4 Argon 的前沿安全防护与分阶段开放计划",
+      "href": "/items/ohixq22vaiuij1dbb1q7ybhgk"
+    },
+    {
+      "text": "Google 预告 Gemini 4 Argon",
+      "href": "/items/xah5gt5q165fe5g029biybrmv"
+    },
+    {
+      "text": "Google DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放",
+      "href": "/items/uob3jvsb97uh5achwaggjrhqh"
+    },
+    {
+      "text": "Artificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队",
+      "href": "/items/thdata2aa7ex9kgzv72mk4kn3"
+    },
+    {
+      "text": "谷歌 Gemini 4 Pro 开测：代号 Argon，SVG 生图表现惊艳",
+      "href": "/items/cmu67v0kc0e78rofjmdu55on3"
+    },
+    {
+      "text": "热点榜第 1 名",
+      "href": "/hot"
+    },
+    {
+      "text": "Google DeepMind 发布 Gemini 4 Argon，面向可信网络防御者先行开放",
+      "href": "/items/uob3jvsb97uh5achwaggjrhqh"
+    },
+    {
+      "text": "Artificial Analysis 评测 Gemini 4 Argon：Google 重回智能前三梯队",
+      "href": "/items/thdata2aa7ex9kgzv72mk4kn3"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 7357.390625,
+      "top": 0,
+      "right": 1440,
+      "bottom": 7357.390625,
+      "left": 180
+    },
+    "firstArticle": null
+  }
+}

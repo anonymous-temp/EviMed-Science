@@ -105,12 +105,14 @@ test("switching web reading off also stops offering the tool to the runtime", as
     // 「未接入」, which is not an answer worth offering.
     const geo = "geo_read,geo_write,social_posts_search";
     const vcr = "vcr_read,vcr_write,vcr_simulate,trial_registry_record,evidence_pool";
-    assert.equal(disabledTools({ ...base, webReadEnabled: true }), `patent_search,frontier_search,${geo},${vcr}`);
-    assert.equal(disabledTools({ ...base, webReadEnabled: false }), `patent_search,web_read,frontier_search,${geo},${vcr}`);
+    assert.equal(disabledTools({ ...base, webReadEnabled: true }), `patent_search,research_calculate,frontier_search,${geo},${vcr}`);
+    assert.equal(disabledTools({ ...base, webReadEnabled: false }), `patent_search,research_calculate,web_read,frontier_search,${geo},${vcr}`);
     // Patent search is offered only where a patent adapter is configured
     // (2026-09-03 ruling), so an empty deployment list still leaves it out.
-    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), `web_read,frontier_search,${geo},${vcr},patent_search`);
-    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false, evimedAdapterUrls: { patentSearch: "https://patents.internal/search" } }), `web_read,frontier_search,${geo},${vcr}`);
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false }), `research_calculate,web_read,frontier_search,${geo},${vcr},patent_search`);
+    assert.equal(disabledTools({ ...base, evimedDisabledTools: "", webReadEnabled: false, evimedAdapterUrls: { patentSearch: "https://patents.internal/search" } }), `research_calculate,web_read,frontier_search,${geo},${vcr}`);
+    assert.equal(disabledTools({ ...base, webReadEnabled: true, stateStore: "postgres", resultsEnabled: true,
+      resultEngineUrl: "http://result-replay:8031", publicSourceGatewayInternalUrl: "http://127.0.0.1:8787/internal/sources/v1/fetch" }).split(",").includes("research_calculate"), false);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

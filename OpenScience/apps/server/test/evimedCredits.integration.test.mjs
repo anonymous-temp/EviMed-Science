@@ -10,6 +10,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { PostgresStore } from "../src/store.mjs";
 import { EVIMED_CREDITS_BACKOFF_MS, EVIMED_CREDITS_MAX_ATTEMPTS, EvimedCreditsService } from "../src/evimedCreditsService.mjs";
+import { migrateEvimedCredits, prepareResearchBillingAccountDeletion } from "../src/evimedCreditsPersistence.mjs";
 import { EvimedCreditsError } from "../src/evimedCreditsClient.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -34,6 +35,8 @@ before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
   await database.migrate();
+  await migrateEvimedCredits(database);
+  await database.query('DELETE FROM evimed_credits.research_policy');
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type,evimed_user_id) VALUES($1,'Credits test','evimed',$2)",
     [userId, evimedUserId]);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Local test','development')", [localUserId]);
@@ -43,6 +46,7 @@ before(async () => {
 
 after(async () => {
   if (!databaseUrl) return;
+  await database.query('DELETE FROM evimed_credits.settlements WHERE user_id=ANY($1::text[])', [[userId,localUserId]]).catch(() => {});
   await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[userId, localUserId]]).catch(() => {});
   await database.close?.();
 });
@@ -251,10 +255,10 @@ test("an account EviMed does not know is never charged under our own id", option
   // And the linked account's balance read names EviMed's id, not ours.
   assert.equal((await service.balanceFor(userId)).status, "ok");
   assert.deepEqual(client.calls, [{ balanceOf: evimedUserId }]);
-  // The settlement row keeps our account id and nothing of EviMed's.
+  // Financial evidence pins its upstream payer for retries after account erasure.
   const stored = await database.query("SELECT * FROM evimed_credits.settlements WHERE user_id=$1", [userId]);
   assert.ok(stored.rowCount > 0);
-  assert.equal(JSON.stringify(stored.rows).includes(`"${evimedUserId}"`), false);
+  assert.ok(stored.rows.some(row => row.upstream_user_id === evimedUserId));
 });
 
 test("the account row holds EviMed's id for an EviMed account only", options, async () => {
@@ -362,4 +366,180 @@ test("autopilot retry settlement charges the real owner once and never charges i
     const saved = await service.settlementOf(userId, runId);
     assert.equal(saved.credits, 200);
   }
+});
+
+test('research task billing preserves fractional evidence and deduplicates child spend', options, async () => {
+  const since = new Date();
+  const { UsageLedger } = await import('../src/usageLedger.mjs');
+  const usage = new UsageLedger(database);
+  const runId = `run_${randomUUID()}`;
+  const childId = `run_${randomUUID()}`;
+  const client = upstream();
+  const service = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1, researchBillingEnabled: true },
+    database, client, usageLedger: usage, evimedUserIdOf });
+  await service.ready();
+  await usage.recordSettled({ id: `usage_${randomUUID()}`, userId, projectId, runId: childId,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: 'a'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
+    actualCost: 1.90000001, priced: true });
+  const accountCreatedAt = (await database.query('SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1', [userId])).rows[0].epoch;
+  const run = { userId, projectId, runId, dispatchId: childId, status: 'succeeded', subject: 'Research task', startedAt: new Date().toISOString(), accountCreatedAt };
+  const missingEpoch = await service.settleRun({ ...run, runId: `run_${randomUUID()}`, accountCreatedAt: null });
+  assert.equal(missingEpoch.reason, 'account_generation_missing');
+  const concurrent = await Promise.all(Array.from({ length: 5 }, () => service.settleRun(run)));
+  assert.equal(concurrent.filter(result => result.duplicate).length, 4);
+  assert.equal(concurrent.filter(result => result.credits === 1).length, 5);
+  assert.equal((await service.settleRun(run)).duplicate, true);
+  assert.equal((await service.settleRun({ ...run, runId: childId, dispatchId: null })).credits, 0);
+  assert.equal(client.calls.filter(call => call.requestId).length, 1);
+  const history = await service.statements(userId, { limit: 1 });
+  assert.equal(history.items.length, 1);
+  assert.ok(history.nextCursor);
+  const second = await service.statements(userId, { cursor: history.nextCursor });
+  assert.equal(second.items.find(item => item.id === runId)?.waivedCny, '0.90000001');
+  assert.equal((await service.statements(localUserId, { cursor: history.nextCursor })).items.some(item => item.id === runId || item.id === childId), false);
+  const summary = await service.allowanceSummary(userId, { since });
+  assert.equal(summary.spentCny, 1);
+  const failedRunId = `run_${randomUUID()}`;
+  await usage.recordSettled({ id: `usage_${randomUUID()}`, userId, projectId, runId: failedRunId,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: 'b'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
+    actualCost: 2.75, priced: true });
+  assert.equal((await service.settleRun({ ...run, runId: failedRunId, dispatchId: null, status: 'failed' })).credits, 0);
+  const failedTask = (await service.statements(userId)).items.find(item => item.id === failedRunId);
+  assert.equal(failedTask?.status, 'waived');
+  assert.equal(failedTask?.actualCny, '2.75000000');
+  assert.equal(failedTask?.waivedCny, '2.75000000');
+  assert.equal(client.calls.filter(call => call.requestId).length, 1);
+  // A failed physical attempt cannot consume the successful sibling's logical calls.
+  const logical = `episode-${randomUUID().replaceAll('-', '')}`;
+  const logicalRequestId = `usage_${randomUUID()}`;
+  await usage.recordSettled({ id: logicalRequestId, userId, projectId, runId: logical,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: 'c'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
+    actualCost: 4, priced: true });
+  const failedPhysicalId = `run_${randomUUID()}`;
+  assert.equal((await service.settleRun({ ...run, runId: failedPhysicalId, dispatchId: logical,
+    effectiveRouteReason: 'autopilot:research', status: 'failed' })).credits, 0);
+  const successful = { ...run, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a2`, effectiveRouteReason: 'autopilot:research' };
+  assert.equal((await service.settleRun(successful)).credits, 4);
+  assert.equal((await service.settleRun({ ...successful, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a3` })).duplicate, true);
+  const attributed = await database.query('SELECT * FROM evimed_credits.research_task_requests WHERE request_id=$1', [logicalRequestId]);
+  assert.notEqual(attributed.rows[0].run_id, failedPhysicalId);
+
+  // Policy activation excludes old legacy aliases, and remains active if its flag rolls back.
+  const oldAlias = `alias_${randomUUID()}`;
+  const oldRunId = `run_${randomUUID()}`;
+  await usage.recordSettled({ id: `usage_${randomUUID()}`, userId, projectId, runId: oldAlias,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: 'd'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
+    actualCost: 3, priced: true, now: new Date('2000-01-01') });
+  await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,settled_at)
+    VALUES($1,$2,'Old paid alias',3,3,1,'settled',clock_timestamp())`, [oldRunId,userId]);
+  const callsBeforeAlias = client.calls.filter(call => call.requestId).length;
+  const aliasRetry = { ...run, runId: `run_${randomUUID()}`, dispatchId: oldAlias };
+  assert.equal((await service.settleRun(aliasRetry)).credits, 0);
+  const oldAliasStatement = (await service.statements(userId, { limit: 100 })).items.find(item => item.runId === aliasRetry.runId);
+  assert.equal(oldAliasStatement.actualCny, '3.00000000');
+  assert.equal(oldAliasStatement.billableCny, '0.00000000');
+  assert.equal(client.calls.filter(call => call.requestId).length, callsBeforeAlias);
+  const rollback = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1, researchBillingEnabled: false },
+    database, client, usageLedger: usage, evimedUserIdOf });
+  const rolledRunId = `run_${randomUUID()}`;
+  await usage.recordSettled({ id: `usage_${randomUUID()}`, userId, projectId, runId: rolledRunId,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: 'e'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 },
+    actualCost: 1.9, priced: true });
+  assert.equal((await rollback.settleRun({ ...run, runId: rolledRunId, dispatchId: null })).credits, 1,
+    'sticky policy keeps floor semantics rather than reopening legacy rounding');
+  const wrongRateRollback = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100, researchBillingEnabled: false },
+    database, client, usageLedger: usage, evimedUserIdOf });
+  assert.equal((await wrongRateRollback.settleRun({ ...run, runId: `run_${randomUUID()}` })).errorCode, 'evimed_credits_request_invalid');
+  await assert.rejects(wrongRateRollback.ready(), error => error.code === 'evimed_credits_request_invalid' && error.status === 503);
+  assert.equal((await service.settleRun({ ...run, runId: `run_${randomUUID()}`, dispatchId: `${logical}-a4`,
+    effectiveRouteReason: 'autopilot:research', status: 'failed' })).credits, 0,
+    'a later failed callback still cannot revisit the successful logical charge');
+
+  const disabled = new EvimedCreditsService({ config: { evimedCreditsEnabled: false, evimedCreditsPerCny: 1, researchBillingEnabled: true },
+    database, client, usageLedger: usage, evimedUserIdOf });
+  assert.equal((await disabled.settleRun({ ...run, runId: `run_${randomUUID()}` })).status, 'skipped');
+
+  // Background overhead stays visible, never described as a customer waiver.
+  const overheadFailedId = `run_${randomUUID()}`;
+  for (const [purpose, actualCost] of [['kernel',2.75],['title',3]]) await usage.recordSettled({
+    id: `usage_${randomUUID()}`, userId, projectId, runId: overheadFailedId, purpose, actualCost,
+    model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY', requestFingerprint: 'f'.repeat(64),
+    usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 }, priced: true });
+  await service.settleRun({ ...run, runId: overheadFailedId, dispatchId: null, status: 'failed' });
+  const overhead = (await service.statements(userId, { limit: 100 })).items.find(item => item.runId === overheadFailedId);
+  assert.equal(overhead.actualCny, '5.75000000');
+  assert.equal(overhead.platformCostCny, '3.00000000');
+  assert.equal(overhead.waivedCny, '2.75000000');
+
+  // A pending outbox retains its upstream payer and can finish after account erasure.
+  await database.query("UPDATE evimed_credits.settlements SET next_attempt_at='2100-01-01' WHERE status='pending'");
+  let walletOffline = true;
+  let settlementNow = new Date();
+  const pendingClient = upstream({ answer: () => {
+    if (walletOffline) throw new EvimedCreditsError('evimed_credits_unreachable','Test-only outage');
+    return { receiptId: 'retained-outbox-receipt' };
+  } });
+  const pendingService = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1, researchBillingEnabled: true },
+    database, client: pendingClient, usageLedger: usage, evimedUserIdOf, now: () => settlementNow });
+  const pendingId = `run_${randomUUID()}`;
+  await usage.recordSettled({ id: `usage_${randomUUID()}`, userId, projectId, runId: pendingId,
+    purpose: 'kernel', model: 'test-model', priceVersion: 'test-price-v1', currency: 'CNY',
+    requestFingerprint: '9'.repeat(64), usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 }, actualCost: 2, priced: true });
+  assert.equal((await pendingService.settleRun({ ...run, runId: pendingId, dispatchId: null })).status, 'pending');
+  const pendingStatement = (await service.statements(userId, { limit: 100 })).items.find(item => item.runId === pendingId);
+  assert.equal(pendingStatement.amount, null);
+  assert.equal(pendingStatement.requestedAmount, 2);
+  const missingPayerId = `run_${randomUUID()}`;
+  await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,owner_created_at)
+    SELECT $1,id,'Unresolved old payer',2,2,1,'pending',1,$3::timestamptz,created_at FROM evimed_control.users WHERE id=$2`,
+    [missingPayerId,userId,new Date(settlementNow.getTime()+EVIMED_CREDITS_BACKOFF_MS[0]).toISOString()]);
+  // Financial evidence survives both workspace and account erasure.
+  await database.transaction(async client => {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-user:${userId}`]);
+    await prepareResearchBillingAccountDeletion(client,userId);
+    await client.query('DELETE FROM evimed_control.users WHERE id=$1', [userId]);
+  });
+  assert.deepEqual((await service.statements(userId)).items, []);
+  const kept = await database.query('SELECT * FROM evimed_credits.research_tasks WHERE run_id=$1', [runId]);
+  assert.equal(kept.rows[0].status, 'settled');
+  assert.equal(kept.rows[0].title, 'Research task');
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type,evimed_user_id) VALUES($1,'Reused account','evimed','replacement-wallet')", [userId]);
+  const restarted = new ControlPlaneDatabase({ databaseUrl,databasePoolMax:2,databaseConnectionTimeoutMs:3000 });
+  try { await migrateEvimedCredits(restarted); } finally { await restarted.close(); }
+  assert.deepEqual((await service.statements(userId)).items, []);
+  assert.equal((await service.allowanceSummary(userId)).spentCny, 0);
+  // Two exact incarnations can share one JavaScript millisecond. The old
+  // snapshot must fail even when its startedAt looks equal after truncation.
+  await database.query(`UPDATE evimed_control.users SET created_at=date_trunc('milliseconds',$2::timestamptz)+
+    CASE WHEN $2::timestamptz=date_trunc('milliseconds',$2::timestamptz)+interval '0.0009 second'
+      THEN interval '0.0008 second' ELSE interval '0.0009 second' END WHERE id=$1`, [userId,accountCreatedAt]);
+  const replacementEpoch = (await database.query('SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1', [userId])).rows[0].epoch;
+  assert.equal(new Date(replacementEpoch).getTime(), new Date(accountCreatedAt).getTime());
+  const beforeStale = client.calls.filter(call => call.requestId).length;
+  const late = await service.settleRun({ ...run, runId: `run_${randomUUID()}` });
+  assert.equal(late.reason, 'account_changed');
+  assert.equal(client.calls.filter(call => call.requestId).length, beforeStale);
+  const current = await service.settleRun({ ...run, runId: `run_${randomUUID()}`, dispatchId: null, accountCreatedAt: replacementEpoch, startedAt: '2000-01-01T00:00:00Z' });
+  assert.equal(current.status, 'settled', 'exact same incarnation accepts a harmless start-clock skew');
+  walletOffline = false;
+  settlementNow = new Date(settlementNow.getTime()+EVIMED_CREDITS_BACKOFF_MS[0]+1);
+  assert.equal(await pendingService.retryDue(), 2);
+  const retained = (await database.query('SELECT * FROM evimed_credits.settlements WHERE run_id=$1', [pendingId])).rows[0];
+  assert.equal(retained.status, 'settled');
+  assert.equal(retained.receipt_id, 'retained-outbox-receipt');
+  assert.equal(await service.settlementOf(userId,pendingId), null);
+  assert.equal(pendingClient.calls.at(-1).userId, evimedUserId);
+  const unbound = (await database.query('SELECT status,upstream_user_id FROM evimed_credits.settlements WHERE run_id=$1', [missingPayerId])).rows[0];
+  assert.equal(unbound.status, 'refused');
+  assert.equal(unbound.upstream_user_id, null, 'restart cannot bind an orphan to a replacement wallet');
+  assert.equal(pendingClient.calls.some(call => call.userId === 'replacement-wallet'), false);
+
+
+  await database.query('DELETE FROM evimed_credits.research_task_requests WHERE run_id IN (SELECT run_id FROM evimed_credits.research_tasks WHERE user_id=$1)', [userId]);
+  await database.query('DELETE FROM evimed_credits.research_tasks WHERE user_id=$1', [userId]);
 });

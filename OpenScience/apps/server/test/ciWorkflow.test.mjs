@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -176,4 +176,47 @@ test("Compose variables without a default are reported against the CI environmen
   assert.ok(required.size > 0 && supplied.size > 0, "the scan read no variables");
   const missing = [...required].filter((name) => !supplied.has(name)).sort();
   if (missing.length > 0) t.diagnostic(`Compose variables the CI environment does not set: ${missing.join(", ")}`);
+});
+
+
+test("private subset ownership transfers to the actual uploader UID after hashing without changing neighbors", async (t) => {
+  if (process.platform !== "linux") { t.skip("A real Linux UID boundary is required"); return; }
+  const rootUser = process.getuid() === 0;
+  const uploaderUid = rootUser ? Number(process.env.SUDO_UID ?? "1001") : process.getuid();
+  const uploaderGid = rootUser ? Number(process.env.SUDO_GID ?? "1001") : process.getgid();
+  assert.ok(uploaderUid > 0 && uploaderGid > 0);
+  const asRoot = (command, args, options = {}) => execFileSync(rootUser ? command : "sudo", rootUser ? args : ["-n", command, ...args], { timeout: 10_000, ...options });
+  try { asRoot("/usr/bin/true", []); } catch { t.skip("An existing passwordless root test boundary is required; no permission changes attempted"); return; }
+  const job = (await workflow("web.yml")).jobs["docker-hosted"];
+  const packageStep = job.steps.find((step) => step.name === "Package bounded core and isolated VCR image subsets");
+  const command = packageStep.run.split("\n").map((line) => line.trim()).find((line) => line.startsWith("chown -R "));
+  assert.equal(command, 'chown -R --reference="$RUNNER_TEMP" "$EVIMED_SUBSET_ROOT"');
+  assert.ok(packageStep.run.indexOf("report = module.measure_archive(root)") < packageStep.run.indexOf(command));
+  assert.ok(job.steps.indexOf(packageStep) < job.steps.findIndex((step) => step.name === "Upload exact candidate core image subset"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "evimed-private-ci-artifact-"));
+  t.after(() => asRoot("/bin/rm", ["-rf", "--", directory]));
+  const runner = path.join(directory, "runner-temp");
+  const subset = path.join(runner, "evimed-core-release");
+  const neighbor = path.join(runner, "unrelated-private-file");
+  asRoot("python3", ["-c", `import os,pathlib,sys
+r=pathlib.Path(sys.argv[1]);r.mkdir(mode=0o700);os.chown(r.parent,int(sys.argv[2]),int(sys.argv[3]));os.chown(r,int(sys.argv[2]),int(sys.argv[3]))
+s=r/'evimed-core-release';s.mkdir(mode=0o700)
+(s/'manifest.json').write_text('owned-image-manifest');(s/'manifest.json').chmod(0o400)
+f=r/'unrelated-private-file';f.write_text('unrelated-private-content');f.chmod(0o400)
+`, runner, String(uploaderUid), String(uploaderGid)]);
+  const beforeNeighbor = await stat(neighbor);
+  const beforeSubset = await stat(subset);
+  assert.equal(beforeSubset.uid, 0);
+  const readable = () => {
+    try { asRoot("/usr/bin/setpriv", ["--reuid", String(uploaderUid), "--regid", String(uploaderGid), "--clear-groups", "/bin/cat", path.join(subset, "manifest.json")], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); return true; } catch { return false; }
+  };
+  assert.equal(readable(), false, "the real non-root uploader must fail before ownership transfer");
+  asRoot("/usr/bin/env", ["-i", "PATH=/usr/bin:/bin", `RUNNER_TEMP=${runner}`, `EVIMED_SUBSET_ROOT=${subset}`, "/bin/bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", command]);
+  assert.equal(readable(), true, "the actual workflow command must make private bytes readable by the uploader UID");
+  const owned = await stat(subset);
+  const file = await stat(path.join(subset, "manifest.json"));
+  assert.deepEqual([owned.uid, owned.gid, owned.mode & 0o777], [uploaderUid, uploaderGid, 0o700]);
+  assert.deepEqual([file.uid, file.gid, file.mode & 0o777], [uploaderUid, uploaderGid, 0o400]);
+  const afterNeighbor = await stat(neighbor);
+  assert.deepEqual([afterNeighbor.uid, afterNeighbor.gid, afterNeighbor.mode, afterNeighbor.size, afterNeighbor.mtimeMs], [beforeNeighbor.uid, beforeNeighbor.gid, beforeNeighbor.mode, beforeNeighbor.size, beforeNeighbor.mtimeMs]);
 });

@@ -21,9 +21,16 @@ export function documentRenderPlan(config, reference) {
   const dir = path.join(root, 'attempts', attempt);
   const label = createHash('sha256').update(documentExportDigest(reference)).digest('hex');
   const args = ['create', '--name', NAME, '--label', 'open-science.document-render=true', '--label', `open-science.render-attempt=${label}`,
-    '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=96', '--cpus=1', '--memory=768m', '--memory-swap=768m',
+    // Chromium threads count against the PID cgroup. The 96-task ceiling
+    // exhausted during native PDF printing; retain a finite browser-sized cap.
+    '--read-only', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--pids-limit=256', '--cpus=1', '--memory=768m', '--memory-swap=768m',
     '--user', String(config.runtimeContainerUser || `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`),
-    '--tmpfs', '/tmp:rw,nosuid,nodev,size=128m', '--env', 'HOME=/tmp', '--env', 'PYTHONDONTWRITEBYTECODE=1',
+    '--tmpfs', '/tmp:rw,nosuid,nodev,size=128m',
+    // The shared runtime image declares persistent workspace/runtime volumes
+    // and XDG paths. A renderer owns only disposable scratch and its output.
+    '--tmpfs', '/workspace:ro,noexec,nosuid,nodev,size=1m', '--tmpfs', '/runtime:ro,noexec,nosuid,nodev,size=1m',
+    '--env', 'HOME=/tmp', '--env', 'XDG_CONFIG_HOME=/tmp/xdg-config', '--env', 'XDG_DATA_HOME=/tmp/xdg-data',
+    '--env', 'XDG_CACHE_HOME=/tmp/xdg-cache', '--env', 'XDG_STATE_HOME=/tmp/xdg-state', '--env', 'PYTHONDONTWRITEBYTECODE=1',
     '--mount', `${dockerRuntimeMount(config, path.join(dir, 'input'), '/input')},readonly`,
     '--mount', dockerRuntimeMount(config, path.join(dir, 'output'), '/output'),
     '--entrypoint', 'python3', config.runtimeContainerImage, '/opt/evimed/export/render_document.py', '--input', '/input/document.json', '--output-dir', '/output'];

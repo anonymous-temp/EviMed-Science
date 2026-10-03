@@ -167,7 +167,8 @@ test("a profile is one metered call, asked once more when the answer is not the 
 test("the Chinese abstract keeps its paragraphs, and every number in it must be in the original", () => {
   const input = buildAbstractInput({ titleRaw: "Semaglutide in HFpEF", abstract: "Background: ...\n\nResults: The KCCQ score improved by 16.6 points vs 8.7 (P<0.001).",
     glossary: [{ termEn: "semaglutide", termZh: "司美格鲁肽", keepOriginal: false }, { termEn: "STEP-HFpEF", termZh: "STEP-HFpEF", keepOriginal: true }] });
-  assert.match(input, /^标题：Semaglutide in HFpEF\n术语表（本篇原文里出现的词，译名必须照用）：\n- semaglutide → 司美格鲁肽\n- STEP-HFpEF：保留原文\n摘要：Background/);
+  assert.ok(input.startsWith("标题：Semaglutide in HFpEF\n自动生成术语候选"));
+  assert.match(input, /\n- semaglutide → 司美格鲁肽\n- STEP-HFpEF：保留原文\n摘要：Background/);
   const good = verifyAbstract({ abstract_zh: "背景：……\n\n结果：KCCQ 评分改善 16.6 分，对照组为 8.7 分（P<0.001）。" }, input);
   assert.deepEqual(good.issues, []);
   assert.equal(good.output.abstract_zh, "背景：……\n结果：KCCQ 评分改善 16.6 分，对照组为 8.7 分（P<0.001）。", "paragraphs kept, blank lines folded");
@@ -176,6 +177,32 @@ test("the Chinese abstract keeps its paragraphs, and every number in it must be 
   assert.match(wrong.issues[0], /「17」在原文里找不到/);
   assert.match(verifyAbstract({ abstract_zh: "The KCCQ improved." }, input).issues.join(), /要用中文写/);
   assert.match(verifyAbstract(null, input).issues.join(), /没有读到 JSON 对象/);
+});
+
+test("the abstract input preserves hand-kept provenance without promoting product-list salts", () => {
+  const glossary = [
+    { termEn: "dexamethasone", termZh: "地塞米松磷酸钠", keepOriginal: false, origin: "nmpa-drug-list" },
+    { termEn: "Testosterone gel", termZh: "睾酮凝胶", keepOriginal: false, origin: "hand" },
+    { termEn: "unverified drug", termZh: "未核实药名", keepOriginal: false },
+    { termEn: "SELECT", termZh: "SELECT", keepOriginal: true, origin: "hand" },
+  ];
+  const original = structuredClone(glossary);
+  const abstract = "Dexamethasone was registered.\n\nTestosterone gel was the intervention.";
+  const input = buildAbstractInput({ titleRaw: "Registered interventions", abstract, glossary });
+  const handStart = input.indexOf("手工术语表");
+  const candidateStart = input.indexOf("自动生成术语候选");
+  const sourceStart = input.indexOf("摘要：");
+  assert.ok(handStart > 0 && candidateStart > handStart && sourceStart > candidateStart);
+  assert.deepEqual(input.slice(handStart, candidateStart).split("\n").filter((line) => line.startsWith("- ")), [
+    "- Testosterone gel → 睾酮凝胶", "- SELECT：保留原文",
+  ]);
+  assert.deepEqual(input.slice(candidateStart, sourceStart).split("\n").filter((line) => line.startsWith("- ")), [
+    "- dexamethasone → 地塞米松磷酸钠", "- unverified drug → 未核实药名",
+  ]);
+  assert.equal(input.slice(sourceStart + "摘要：".length), abstract, "the original paragraphs are unchanged");
+  const long = buildAbstractInput({ titleRaw: "Registered interventions", abstract: abstract.repeat(1_000), glossary });
+  assert.ok(long.length <= 6_005, "glossary provenance shares the existing input bound and source label overhead");
+  assert.deepEqual(glossary, original);
 });
 
 test("the Chinese abstract: a failed check is rewritten once with the issue named, a second failure is dropped", async () => {

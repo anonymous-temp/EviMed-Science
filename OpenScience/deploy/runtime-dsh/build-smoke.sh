@@ -14,19 +14,29 @@
 # scratch DSH_HOME, and fails the build on any entry that did not apply.
 set -euo pipefail
 
+# Prove the image works as an unprivileged runtime user. Root can read a
+# private manifest that the deployed container cannot (the plugin manager
+# writes package.json with mode 0600).
+if [ "$(id -u)" -eq 0 ]; then
+  exec runuser -u nobody -- "$0" "$@"
+fi
+
 profile=evimed-runtime
 # The agent preset the control plane asks for by name. Kept beside the profile
 # so a rename shows up here rather than in a failed session in production.
 profile_preset=evimed-universal
-home="$(mktemp -d)"
+smoke_home="$(mktemp -d)"
 log="$(mktemp)"
-trap 'rm -rf "${home}" "${log}" "${unusable_cache:-}" "${workspace:-}"' EXIT
+trap 'rm -rf "${smoke_home}" "${log}" "${unusable_cache:-}" "${workspace:-}"' EXIT
+export HOME="${smoke_home}/home" XDG_CONFIG_HOME="${smoke_home}/xdg-config" XDG_DATA_HOME="${smoke_home}/xdg-data"
+export XDG_CACHE_HOME="${smoke_home}/xdg-cache" XDG_STATE_HOME="${smoke_home}/xdg-state"
+mkdir -p "${HOME}" "${XDG_CONFIG_HOME}" "${XDG_DATA_HOME}" "${XDG_CACHE_HOME}" "${XDG_STATE_HOME}"
 
-node /usr/local/bin/evimed-profile-seed.mjs sync "${DSH_HOME_SEED}" "${home}" "${profile}"
+node /usr/local/bin/evimed-profile-seed.mjs sync "${DSH_HOME_SEED}" "${smoke_home}" "${profile}"
 
 # Not a credential: the boot must reach the plugin tree, and the credentials
 # provider refuses to load a file it cannot parse. Nothing here is ever used to
-# reach a network — the smoke boot is killed before a session exists.
+# reach a model — the smoke creates a session but never submits a prompt.
 #
 # The browser-session grant is a real one, minted here for this boot only. Since
 # 0.1.2-alpha.5 the web surface refuses an unauthenticated call — the probe
@@ -58,7 +68,7 @@ smoke_cookie="$(SMOKE_SECRET="${smoke_secret}" SMOKE_AUTHORITY=dsh.runtime node 
   process.stdout.write(name + "=v1." + body + "." + sig);
 ')"
 
-cat > "${home}/.credentials.yaml" <<CRED
+cat > "${smoke_home}/.credentials.yaml" <<CRED
 version: 1
 records:
   client-connection/browser-session:
@@ -69,7 +79,7 @@ records:
 refs:
   EVIMED_WORKLOAD_TOKEN: 'build-smoke-not-a-credential'
 CRED
-chmod 600 "${home}/.credentials.yaml"
+chmod 600 "${smoke_home}/.credentials.yaml"
 
 # The deployment-owned settings the preset rows read. Values are the shipped
 # defaults; this proves the rows bind, not that a particular deployment is
@@ -126,7 +136,9 @@ export EVIMED_ANSWER_PERSONA_DIR=/opt/evimed/skills/evimed/open-domain-answer
 }
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL="" EVIMED_DISABLED_TOOLS_FILE=""
 export EVIMED_PUBLIC_SOURCE_GATEWAY_URL="" EVIMED_WEB_SEARCH_GATEWAY_URL="" EVIMED_MODEL_GATEWAY_TOKEN_FILE=""
-export EVIMED_WORKLOAD_TOKEN_FILE="${home}/evimed-workload.token"
+export EVIMED_PERSONAL_SKILLS_DIR=/opt/evimed/personal-skills
+export EVIMED_EXTENSION_PROJECTION_FILE="" EVIMED_EXTENSION_GATEWAY_URL=""
+export EVIMED_WORKLOAD_TOKEN_FILE="${smoke_home}/evimed-workload.token"
 export EVIMED_BUNDLE_VERSION="${SOCKET_VERSION:-0.1.0}"
 export EVIMED_ASK_USER=0 EVIMED_CAPSULE_ACTIVE=0 EVIMED_REVIEW_ENABLED=1
 export EVIMED_CITE_ENABLED=1 EVIMED_CITE_TIMEOUT_MS=15000 EVIMED_CITE_CONFIG_REVISION=0
@@ -164,12 +176,17 @@ export NARB_NATIVE_CACHE_DIR="${unusable_cache}"
 # shipped default is `full`, and relaxing it for the smoke keeps the assertion
 # about "every entry applied" rather than about the kernel of whatever machine
 # built the image. A builder that happens to have full Landlock still passes.
-patch=/usr/local/share/evimed/build-smoke-patch.yml
+# The fixture's session store names a deployed volume. Keep the smoke's
+# session data in its own scratch home so it is writable by this user and
+# removed after the check instead of being baked into the image.
+patch="${smoke_home}/build-smoke-patch.yml"
+sed "s|'/runtime/dsh-home/sessions'|'${smoke_home}/sessions'|" \
+  /usr/local/share/evimed/build-smoke-patch.yml > "${patch}"
 
 port="${SMOKE_PORT:-45999}"
 workspace="$(mktemp -d)"
 
-DSH_HOME="${home}" dsh --profile "${profile}" --patch "${patch}" \
+DSH_HOME="${smoke_home}" dsh --profile "${profile}" --patch "${patch}" \
   --no-open --port "${port}" --trusted-host dsh.runtime > "${log}" 2>&1 &
 kernel=$!
 
@@ -247,9 +264,7 @@ print("session " + str((result.get("value") or {}).get("sessionId", "?")))
 PROBE
 )
 if ! session_output=$(python3 -c "${session_probe}" 2>&1); then
-  echo "build smoke: the preset would not mount a session — ${session_output}" >&2
-  kill "${kernel}" 2>/dev/null || true
-  exit 1
+  fail "the preset would not mount a session — ${session_output}"
 fi
 
 kill "${kernel}" 2>/dev/null || true

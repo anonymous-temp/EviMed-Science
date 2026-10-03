@@ -75,7 +75,7 @@ import {
   studyTypeLabel,
   workspaceLayout,
 } from "@evimed/domain";
-import { callReviewModel, ReviewModelError } from "./reviewModel.mjs";
+import { callReviewModel, reviewModelApiKey, ReviewModelError } from "./reviewModel.mjs";
 import { JEV_RETRY_DELAY_MS, callJev } from "./jevModel.mjs";
 import { judgeCitedSentences } from "./replyCheckJev.mjs";
 import { StudyReviews, assertStudyReviewConfiguration, studyReviewConfiguration, studyReviewDigest } from "./studyReview.mjs";
@@ -350,7 +350,7 @@ export class ReviewService {
 
   /** Whether the reviewer has a key to call its model with. */
   get configured() {
-    return Boolean(String(this.config.dashscopeApiKey ?? ""));
+    return Boolean(reviewModelApiKey(this.config));
   }
 
   /** Whether the reply check asks Jev first: its lever on and its key present. */

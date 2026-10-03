@@ -55,6 +55,7 @@ function renderRoute(path = "/app/chat") {
         children: [
           { path: "chat", element: <main>Chat workspace</main> },
           { path: "settings", element: <main>账户</main> },
+          { path: "autopilot", element: <aside aria-label="定时任务列表">Task context</aside> },
         ],
       },
     ],
@@ -90,6 +91,16 @@ describe("AppShell hosted authentication gate", () => {
     renderRoute();
 
     expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
+  });
+  it.each(["/app/autopilot", "/app/autopilot/"])("uses %s task context as its only sidebar without a second workbench toggle", async (path) => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    const router = renderRoute(path);
+    expect(await screen.findByLabelText("定时任务列表")).toBeInTheDocument();
+    expect(screen.queryByText("Sidebar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "展开侧边栏" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "关闭侧边栏" })).not.toBeInTheDocument();
+    await router.navigate("/app/chat");
+    expect(await screen.findByText("Sidebar")).toBeInTheDocument();
   });
 
   // Spec §10.3, appendix E #3: the first thing Tab reaches is a way past the

@@ -20,7 +20,7 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     services:
       postgres:
         # The production image (deps-version.json `pgvector`), so the
@@ -175,10 +175,45 @@ jobs:
           CI=true pnpm test:mcp
           CI=true pnpm --filter @ai4s/server test
 
+      - name: Test actual managed browser frame isolation
+        env:
+          OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME: /usr/bin/chromium
+          EVIMED_MANAGED_BROWSER_DOM: "1"
+        run: |
+          test -x "$OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME"
+          node --test --test-concurrency=1 apps/server/test/managedBrowserService.integration.test.mjs apps/server/test/managedBrowserHttp.integration.test.mjs packages/harness-port/test/runtimeUiManagedBrowser.chromium.test.mjs
+
       - name: Test shared authentication state
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_auth
         run: node --test apps/server/test/postgresStore.integration.test.mjs
+
+      - name: Prepare immutable extension acceptance inputs
+        timeout-minutes: 35
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { prepareExtensionAcceptance } from './scripts/ops/prepare-extension-acceptance.mjs';
+          import { readAcceptanceInputs, readPreparedCatalogueSnapshot } from './scripts/ops/extension-saas-acceptance-inputs.mjs';
+          const prepared = await prepareExtensionAcceptance({ platform: 'linux/amd64' });
+          const inputs = await readAcceptanceInputs(prepared.inputsFile);
+          await readPreparedCatalogueSnapshot(inputs);
+          const values = {
+            EVIMED_EXTENSION_ACCEPTANCE_INPUTS: prepared.inputsFile,
+            COWORK_TEST_IMAGE: inputs.images.coworkImageId,
+            COWORK_TEST_INTEGRITY: inputs.artifact.integrity,
+            COWORK_TEST_CLOSURE_SHA256: inputs.artifact.closureExpectedSHA,
+            NATIVE_SKILL_VALIDATOR_IMAGE: inputs.images.nativeSdkImageId,
+            NATIVE_EXTENSION_TEST_IMAGE: inputs.images.nativeKernelImageId,
+            NATIVE_SKILL_CATALOGUE_SNAPSHOT: path.join(inputs.preparedRoot, inputs.fixtures.catalogueSnapshotPath),
+            OPEN_SCIENCE_TEST_PERSONAL_SKILL_IMAGE: inputs.images.nativeSdkImageId,
+            EVIMED_SKILL_VALIDATION_TEST_IMAGE: inputs.images.nativeSdkImageId,
+            EVIMED_SKILL_VALIDATION_TEST_DATA: path.resolve('../.evimed-local/extensions/build/fixtures'),
+          };
+          if (Object.values(values).some(value => typeof value !== 'string' || /[\r\n]/.test(value))) throw new Error('Invalid prepared CI inputs');
+          await fs.appendFile(process.env.GITHUB_ENV, Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''));
+          NODE
 
       - name: Test durable product state
         env:
@@ -186,6 +221,92 @@ jobs:
         run: |
           psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE evimed_test_product'
           node scripts/ops/test-product-state.mjs
+
+      # Placed before the extension steps: it depends on none of them, and a
+      # red extension step would otherwise skip the only database run two of
+      # these suites get.
+      # Financial policy activation and retries intentionally touch a whole
+      # ledger. Keep each billing suite in its own disposable database.
+      - name: Test research billing with isolated account and wallet state
+        shell: bash
+        run: |
+          for suite in settlement http store composition; do
+            psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE evimed_test_billing_${suite}"
+          done
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_settlement \
+            node --test --test-concurrency=1 apps/server/test/evimedCredits.integration.test.mjs apps/server/test/researchBillingReview.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_http \
+            node --test apps/server/test/researchAllowance.integration.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_store \
+            node --test apps/server/test/projectAccountGeneration.test.mjs
+          OPEN_SCIENCE_TEST_POSTGRES_URL=postgresql://postgres@127.0.0.1:5432/evimed_test_billing_composition \
+            node --test apps/server/test/researchBillingComposition.test.mjs
+
+      - name: Test actual contained and native extension boundaries
+        timeout-minutes: 10
+        env:
+          OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_product
+        run: |
+          node --test --test-concurrency=1 --test-timeout=180000 \
+            apps/server/test/extensionOperation.docker.test.mjs \
+            apps/server/test/extensionToolController.docker.test.mjs \
+            apps/server/test/extensionNativeRuntime.docker.test.mjs
+          node --test --test-concurrency=1 --test-timeout=180000 \
+            scripts/ops/test/prepareExtensionAcceptance.test.mjs \
+            scripts/ops/test/extensionSaas*.test.mjs
+          node scripts/ops/extension-saas-acceptance.mjs > "$RUNNER_TEMP/extension-boundary-campaign.json"
+
+      - name: Export exact prepared extension assessment images
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          node scripts/ops/export-extension-acceptance-inputs.mjs
+          export EVIMED_ASSESSMENT_EXPORT="$RUNNER_TEMP/evimed-extension-assessment"
+          # One export deduplicates the SDK/kernel identity and all shared layers.
+          test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240
+          setsid bash -euo pipefail -c 'mapfile -t images < "$EVIMED_ASSESSMENT_EXPORT/images.txt"; docker save "${images[@]}" | gzip -1 > "$EVIMED_ASSESSMENT_EXPORT/images.tar.gz"' &
+          export_pid=$!
+          export_started=$SECONDS
+          trap 'kill -- "-$export_pid" 2>/dev/null || true; wait "$export_pid" || true' EXIT
+          while kill -0 "$export_pid" 2>/dev/null; do
+            if [ "$(df -B1 --output=avail / | tail -1)" -lt 5368709120 ] || \
+               [ "$(stat -c %s "$EVIMED_ASSESSMENT_EXPORT/images.tar.gz" 2>/dev/null || echo 0)" -gt 3221225472 ] || \
+               [ "$((SECONDS - export_started))" -gt 900 ]; then
+              echo "Assessment export exceeded its capacity, byte or time bound" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          wait "$export_pid"
+          trap - EXIT
+          chmod 400 "$EVIMED_ASSESSMENT_EXPORT/images.tar.gz"
+          python3 scripts/ops/extension-acceptance-archive.py
+
+      - name: Upload prepared extension assessment closure
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-extension-assessment-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-extension-assessment/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+      - name: Retain extension component evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-component-evidence-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/extension-boundary-campaign.json
+            .evimed-local/extensions/acceptance-preparation/run-*/publication-*/acceptance-inputs.json
+            .evimed-local/extensions/acceptance-preparation/run-*/publication-*/preparation-record.json
+            .evimed-local/extensions/acceptance-preparation/run-*/recovery-required.json
+            .evimed-local/extensions/acceptance-preparation/run-*/logs/*.log
 
       - name: Test DeepSeek compatibility and release gates
         run: >-
@@ -452,6 +573,9 @@ jobs:
     env:
       VCR_R_LIBS: ${{ github.workspace }}/.vcr-rlib
       VCR_ENGINE_TESTS: required
+      OPEN_SCIENCE_TEST_RESULT_ENGINES: "1"
+      EVIMED_RESULT_REPLAY_SIGNED_VCR: "1"
+      EVIMED_RESULT_REPLAY_PYTHON: ${{ github.workspace }}/.result-replay-venv/bin/python
     services:
       postgres:
         # The same image as the `web` job's: the production one.
@@ -502,6 +626,26 @@ jobs:
       - name: Install the engine service's Python requirements
         run: python3 -m pip install -r ../项目代码/vcr-engine/requirements.txt
 
+      - name: Install the fixed Python numerical replay environment from existing locks
+        shell: bash
+        run: |
+          python3 -m venv ../.result-replay-venv
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          selected = {}
+          for filename, names in [('../项目代码/meta/requirements.lock', {'numpy', 'scipy', 'pandas', 'python-dateutil', 'pytz', 'tzdata', 'six'}),
+                                  ('../项目代码/文献剂量分析/requirements.lock', {'networkx'})]:
+              for line in Path(filename).read_text().splitlines():
+                  match = re.fullmatch(r'([a-z0-9-]+)==([^ ]+)', line)
+                  if match and match[1] in names:
+                      selected[match[1]] = line
+              if not names.issubset(selected):
+                  raise SystemExit('The existing specialist lock lacks a numerical dependency.')
+          Path(os.environ['RUNNER_TEMP'], 'result-replay-numeric.lock').write_text('\n'.join(selected[name] for name in sorted(selected)) + '\n')
+          PY
+          "$EVIMED_RESULT_REPLAY_PYTHON" -m pip install -r deploy/specialist-adapter/requirements.lock -r "$RUNNER_TEMP/result-replay-numeric.lock"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -517,10 +661,40 @@ jobs:
       - name: Test the control plane against the real engine
         env:
           OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_vcr
-        run: >-
-          node --test --test-concurrency=1
-          apps/server/test/vcrEngineContract.integration.test.mjs
-          apps/server/test/vcrIntake.integration.test.mjs
+          EVIMED_RESULT_REPLAY_EVIDENCE_DIR: ${{ runner.temp }}/result-replay-evidence
+        shell: bash
+        run: |
+          node --test --test-concurrency=1 \
+            apps/server/test/vcrEngineContract.integration.test.mjs \
+            apps/server/test/vcrIntake.integration.test.mjs
+          NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
+            apps/server/test/resultReplayLifecycle.integration.test.mjs \
+            2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"
+          if ! grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/result-replay-five-paths.log"; then
+            echo "::error::the required five-path numerical replay proof did not complete without skips"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['EVIMED_RESULT_REPLAY_EVIDENCE_DIR'])
+          for method in ('meta.dl', 'faers.signals', 'bibliometric.network', 'design.analytic', 'comparator.evalue'):
+              evidence = json.loads((root / f'{method}.evidence.json').read_text())
+              if evidence['comparison']['numbers']['status'] != 'identical' or not evidence['originalRetained']:
+                  raise SystemExit(f'{method}: the frozen-input replay did not preserve numerical agreement and original bytes')
+              if method in ('design.analytic', 'comparator.evalue') and evidence['receipt']['signed'] is not True:
+                  raise SystemExit(f'{method}: the real R HTTP receipt was not verified')
+          PY
+
+      - name: Preserve five-path numerical replay receipts and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-replay-five-paths-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/result-replay-five-paths.log
+            ${{ runner.temp }}/result-replay-evidence
+          if-no-files-found: error
 
   docker-hosted:
     runs-on: ubuntu-24.04
@@ -595,6 +769,9 @@ jobs:
           # image that no longer exists while the DSH image sat under the other
           # name, verified by a later step and then never launched.
           echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031" >> "$GITHUB_ENV"
+          echo "EVIMED_VCR_ENGINE_IMAGE=evimed-vcr-engine:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DSH_VERSION=$(node -p "require('./deps-version.json').dsh.version")" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_CADDY_VERSION=2.11.4-alpine" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=ci-metrics-token-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789abcdef" >> "$GITHUB_ENV"
@@ -653,6 +830,10 @@ jobs:
             echo "OPEN_SCIENCE_BUILD_CREATED=${OPEN_SCIENCE_BUILD_CREATED}"
             echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=${OPEN_SCIENCE_WEB_CONTAINER_IMAGE}"
             echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
+            echo "OPEN_SCIENCE_RESULT_REPLAY_IMAGE=${OPEN_SCIENCE_RESULT_REPLAY_IMAGE}"
+            echo "OPEN_SCIENCE_RESULT_ENGINE_URL=${OPEN_SCIENCE_RESULT_ENGINE_URL}"
+            echo "EVIMED_VCR_ENGINE_IMAGE=${EVIMED_VCR_ENGINE_IMAGE}"
+            echo "OPEN_SCIENCE_VCR_ENABLED=false"
             echo "OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE=./release-manifest.json"
             echo "OPEN_SCIENCE_DOCKER_SOCKET_GID=${OPEN_SCIENCE_DOCKER_SOCKET_GID}"
             echo "OPEN_SCIENCE_AUTH_MODE=local"
@@ -735,14 +916,14 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
           df -h /
 
-      - name: Build hosted Web and agent runtime images
+      - name: Build hosted Web, agent runtime and deterministic replay images
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
-          extra_compose=(-f deploy/web/docker-compose.ingestion.yml)
+          extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml)
           build_flags=()
           if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
             build_flags=(--no-cache)
@@ -752,7 +933,7 @@ jobs:
             -f deploy/web/docker-compose.local-auth.yml \
             -f deploy/web/docker-compose.backup.yml \
             "${extra_compose[@]}" \
-            --profile backup --profile runtime-image build "${build_flags[@]}" &
+            --profile backup --profile runtime-image --profile vcr build "${build_flags[@]}" &
           build_pid=$!
           while kill -0 "$build_pid" 2>/dev/null; do
             if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ]; then
@@ -837,10 +1018,69 @@ jobs:
             wait "$pull_pid"
           done < "$dependency_file"
 
+      - name: Qualify isolated VCR candidate image without enabling the module
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const image = process.env.EVIMED_VCR_ENGINE_IMAGE;
+          const inspected = JSON.parse(execFileSync('docker', ['image', 'inspect', image], { encoding: 'utf8' }))[0];
+          const labels = inspected.Config.Labels;
+          assert.equal(labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          assert.equal(labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+          assert.equal(labels['org.opencontainers.image.created'], process.env.OPEN_SCIENCE_BUILD_CREATED);
+          const isolation = ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+            '--security-opt', 'no-new-privileges:true', '--pids-limit', '64', '--memory', '1g', '--cpus', '1',
+            '--tmpfs', '/tmp:size=256m,mode=1777'];
+          const r = 'root<-Sys.getenv("VCR_ENGINE_ROOT");source(file.path(root,"R","engine.R"));vcr_engine_load(root);cat(jsonlite::toJSON(vcr_engine_health(),auto_unbox=TRUE,digits=NA))';
+          const health = JSON.parse(execFileSync('docker', [...isolation, '--entrypoint', 'Rscript', image, '-e', r], { encoding: 'utf8', timeout: 120000 }));
+          assert.equal(health.ok, true);
+          // The same numerical_source_digest byte encoding, without constructing an HTTP service or requesting credentials.
+          const digestProgram = ['from pathlib import Path', 'import hashlib', 'root=Path("/opt/vcr-engine")',
+            'files=sorted(p for p in (root/"R").rglob("*") if p.suffix in {".R",".json"})',
+            'assert root/"R/engine.R" in files and root/"R/package-lock.json" in files', 'digest=hashlib.sha256()',
+            'for p in files:', ' assert not p.is_symlink() and p.is_file()', ' body=p.read_bytes()',
+            ' digest.update(f"{p.relative_to(root).as_posix()}\\0{len(body)}\\0{hashlib.sha256(body).hexdigest()}\\n".encode())',
+            'print(digest.hexdigest())'].join('\n');
+          const codeDigest = execFileSync('docker', [...isolation, '--entrypoint', 'python3', image, '-c', digestProgram],
+            { encoding: 'utf8', timeout: 30000 }).trim();
+          assert.match(codeDigest, /^[a-f0-9]{64}$/);
+          assert.match(health.packageLockHash, /^[a-f0-9]{64}$/);
+          const report = { schemaVersion: 1, kind: 'vcr-candidate-image-qualification', image, imageId: inspected.Id,
+            imageSize: inspected.Size, sourceRevision: process.env.OPEN_SCIENCE_SOURCE_REVISION, releaseId: process.env.OPEN_SCIENCE_RELEASE_ID,
+            codeDigest, health, executionBoundary: 'built_image_offline_numeric_self_check', moduleEnabled: false };
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'vcr-image-qualification.json'), JSON.stringify(report) + '\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, `OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID=${inspected.Id}\n`);
+          console.log(JSON.stringify({ image, imageId: inspected.Id, imageSize: inspected.Size, codeDigest, ready: true, moduleEnabled: false }));
+          JS
+
+      - name: Preserve isolated VCR candidate image qualification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcr-candidate-image-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/vcr-image-qualification.json
+          if-no-files-found: error
+
       - name: Generate and verify deployment release manifest
         run: |
+          replay_image_id="$(docker image inspect --format '{{.Id}}' "$OPEN_SCIENCE_RESULT_REPLAY_IMAGE")"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$OPEN_SCIENCE_RESULT_REPLAY_IMAGE")" = "$OPEN_SCIENCE_SOURCE_REVISION"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$OPEN_SCIENCE_RESULT_REPLAY_IMAGE")" = "$OPEN_SCIENCE_RELEASE_ID"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.created"}}' "$OPEN_SCIENCE_RESULT_REPLAY_IMAGE")" = "$OPEN_SCIENCE_BUILD_CREATED"
+          echo "OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID=$replay_image_id" >> "$GITHUB_ENV"
           pnpm release:manifest
           pnpm verify:release-manifest
+          OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID="$replay_image_id" node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const manifest = JSON.parse(fs.readFileSync('deploy/web/release-manifest.json', 'utf8'));
+          const replay = manifest.services.find(service => service.name === 'result-replay');
+          assert.equal(replay.image, process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE);
+          assert.equal(replay.imageId, process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID);
+          JS
 
       - name: Generate monitoring secrets
         run: |
@@ -858,6 +1098,7 @@ jobs:
         run: >-
           docker compose --env-file deploy/web/.env.ci
           -f deploy/web/docker-compose.yml
+          -f deploy/web/docker-compose.result-replay.yml
           --profile runtime-image up --no-build --pull never --no-start dsh-runtime-image
 
       - name: Verify production host prerequisites
@@ -897,6 +1138,7 @@ jobs:
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
           -f deploy/web/docker-compose.ingestion.yml
+          -f deploy/web/docker-compose.result-replay.yml
           --profile backup --profile monitoring --profile tls up -d
 
       - name: Verify actual PostgreSQL backup and restore before readiness
@@ -916,7 +1158,7 @@ jobs:
 
       - name: Wait for API and monitoring readiness
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml --profile backup --profile monitoring --profile tls)
           for attempt in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:8787/api/ready --connect-timeout 2 --max-time 5 >/dev/null \
               && curl -kfsS https://localhost/api/ready --connect-timeout 2 --max-time 5 >/dev/null \
@@ -967,14 +1209,14 @@ jobs:
 
       - name: Trust CI Caddy root and verify public HTTPS preflight
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml --profile backup --profile monitoring --profile tls)
           "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/open-science-caddy-root.crt
           test -s /tmp/open-science-caddy-root.crt
           NODE_EXTRA_CA_CERTS=/tmp/open-science-caddy-root.crt pnpm preflight:host --env-file deploy/web/.env.ci --online
 
       - name: Verify Docker socket privilege boundary
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml --profile backup --profile monitoring --profile tls)
           web_id="$("${compose[@]}" ps -q open-science-web)"
           controller_id="$("${compose[@]}" ps -q open-science-runtime-controller)"
           backup_id="$("${compose[@]}" ps -q open-science-backup)"
@@ -1004,6 +1246,42 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.RW}}{{end}}{{end}}' "$backup_id")" = "false"
           "${compose[@]}" exec -T open-science-web test -S /run/open-science-controller/controller.sock
 
+      - name: Verify built replay image isolation and signed numerical HTTP jobs
+        run: |
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml --profile backup --profile monitoring --profile tls)
+          replay_id="$("${compose[@]}" ps -q result-replay)"
+          test -n "$replay_id"
+          export EVIMED_CI_REPLAY_CONTAINER_ID="$replay_id"
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          import { validateReplayImageIsolation } from './scripts/ops/result-replay-image-smoke.mjs';
+          const container = JSON.parse(execFileSync('docker', ['inspect', process.env.EVIMED_CI_REPLAY_CONTAINER_ID], { encoding: 'utf8' }))[0];
+          const networkId = Object.values(container.NetworkSettings.Networks)[0].NetworkID;
+          const network = JSON.parse(execFileSync('docker', ['network', 'inspect', networkId], { encoding: 'utf8' }))[0];
+          console.log(validateReplayImageIsolation(container, network, { imageId: process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID,
+            dataVolume: process.env.OPEN_SCIENCE_DATA_VOLUME }));
+          JS
+          for attempt in $(seq 1 60); do
+            if "${compose[@]}" exec -T result-replay python -c "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8031/health',timeout=3))['ready']"; then
+              break
+            fi
+            test "$attempt" -lt 60 || exit 1
+            sleep 2
+          done
+          "${compose[@]}" exec -T \
+            -e OPEN_SCIENCE_RESULT_REPLAY_SMOKE_ACK=disposable-ci-fixtures \
+            -e OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID \
+            open-science-web node scripts/ops/result-replay-image-smoke.mjs \
+            | tee "$RUNNER_TEMP/result-replay-image-qualification.json"
+
+      - name: Preserve built replay image qualification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-replay-image-qualification-${{ github.sha }}
+          path: ${{ runner.temp }}/result-replay-image-qualification.json
+          if-no-files-found: error
+
       - name: Smoke real hosted runtime boundaries
         env:
           NODE_EXTRA_CA_CERTS: /tmp/open-science-caddy-root.crt
@@ -1012,6 +1290,9 @@ jobs:
           OPEN_SCIENCE_SMOKE_METRICS_TOKEN_FILE: deploy/web/secrets/operator-metrics-token.txt
           OPEN_SCIENCE_SMOKE_RUNTIME: "true"
           OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT: "false"
+          # The one stage that makes the composed controller write under the
+          # data volume and start a renderer from the built runtime image.
+          OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT: "true"
         run: |
           OPEN_SCIENCE_SMOKE_PASSWORD="$(tr -d '\r\n' < deploy/web/secrets/bootstrap-password.txt)" \
             pnpm smoke:deployment
@@ -1027,6 +1308,7 @@ jobs:
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.ingestion.yml
+          -f deploy/web/docker-compose.result-replay.yml
           --profile backup exec -T open-science-backup
           node -e "const fs=require('node:fs');const names=fs.readdirSync('/backups');process.exit(names.some(n=>n.endsWith('.tar.gz.enc'))&&names.includes('.open-science-backup-state.json')?0:1)"
 
@@ -1041,10 +1323,13 @@ jobs:
             -f deploy/web/docker-compose.local-auth.yml \
             -f deploy/web/docker-compose.backup.yml \
             -f deploy/web/docker-compose.ingestion.yml \
-            --profile backup --profile runtime-image config --format json \
-            | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(sorted({s["image"] for s in d["services"].values() if s.get("build") and (not s.get("profiles") or set(s["profiles"]) & {"backup", "runtime-image"})})))' \
+            -f deploy/web/docker-compose.result-replay.yml \
+            --profile backup --profile runtime-image --profile vcr config --format json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(sorted({s["image"] for s in d["services"].values() if s.get("build") and (not s.get("profiles") or set(s["profiles"]) & {"backup", "runtime-image", "vcr"})})))' \
             > "$RUNNER_TEMP/evimed-release/images.txt"
           test -s "$RUNNER_TEMP/evimed-release/images.txt"
+          grep -Fx "$OPEN_SCIENCE_RESULT_REPLAY_IMAGE" "$RUNNER_TEMP/evimed-release/images.txt"
+          grep -Fx "$EVIMED_VCR_ENGINE_IMAGE" "$RUNNER_TEMP/evimed-release/images.txt"
           export EVIMED_IMAGE_LIST="$RUNNER_TEMP/evimed-release/images.txt"
           export EVIMED_IMAGE_ARCHIVE="$RUNNER_TEMP/evimed-release/images.tar.gz"
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
@@ -1073,6 +1358,134 @@ jobs:
           printf '[package] archive checksum complete: elapsed=%ss\n' "$((SECONDS - package_phase_started))"
           printf '[package] streaming image inventory started\n'
           python3 scripts/ops/image-archive-inventory.py
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const archive = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
+          const replay = archive.images.find(image => image.references.includes(process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE));
+          assert.equal(replay.configDigest, process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID);
+          assert.equal(replay.labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          assert.equal(replay.labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+          const vcr = archive.images.find(image => image.references.includes(process.env.EVIMED_VCR_ENGINE_IMAGE));
+          assert.equal(vcr.configDigest, process.env.OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID);
+          assert.equal(vcr.labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          assert.equal(vcr.labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+          JS
+          cp deploy/web/release-manifest.json "$RUNNER_TEMP/evimed-release/release-manifest.json"
+          cp "$RUNNER_TEMP/result-replay-image-qualification.json" "$RUNNER_TEMP/evimed-release/result-replay-image-qualification.json"
+          cp "$RUNNER_TEMP/vcr-image-qualification.json" "$RUNNER_TEMP/evimed-release/vcr-image-qualification.json"
+
+      - name: Package bounded core and isolated VCR image subsets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        timeout-minutes: 35
+        run: |
+          set -euo pipefail
+          # Reuse qualified images; this never invokes a build or deletes existing images.
+          for subset in core vcr; do
+            export EVIMED_RELEASE_SUBSET="$subset"
+            node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          const subset = process.env.EVIMED_RELEASE_SUBSET;
+          assert.ok(['core', 'vcr'].includes(subset));
+          const root = path.join(process.env.RUNNER_TEMP, `evimed-${subset}-release`);
+          fs.mkdirSync(root, { mode: 0o700 });
+          const selected = subset === 'core' ? {
+            web: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            controller: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            backup: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE,
+            runtime: process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE,
+            resultReplay: process.env.OPEN_SCIENCE_RESULT_REPLAY_IMAGE,
+          } : { vcr: process.env.EVIMED_VCR_ENGINE_IMAGE };
+          const full = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'evimed-release/manifest.json'), 'utf8'));
+          assert.equal(full.sourceRevision, process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          const roles = {}, images = [], files = [];
+          for (const [role, reference] of Object.entries(selected)) {
+            const recorded = full.images.find(image => image.references.includes(reference));
+            assert.ok(recorded, `Missing full-release image for ${role}`);
+            const inspected = JSON.parse(execFileSync('docker', ['image', 'inspect', reference], { encoding: 'utf8' }))[0];
+            assert.equal(inspected.Id, recorded.configDigest);
+            assert.equal(inspected.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+            assert.equal(inspected.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+            assert.deepEqual(inspected.RootFS.Layers, recorded.rootfs.diff_ids);
+            assert.equal(`${inspected.Os}/${inspected.Architecture}`, 'linux/amd64');
+            roles[role] = { imageId: inspected.Id, reference };
+            if (!images.some(image => image.imageId === inspected.Id)) images.push({ reference, imageId: inspected.Id,
+              platform: 'linux/amd64', diffIds: inspected.RootFS.Layers, inspectedBytes: inspected.Size });
+          }
+          for (const [source, name] of [['deploy/web/release-manifest.json', 'release-manifest.json'],
+            [path.join(process.env.RUNNER_TEMP, subset === 'core' ? 'result-replay-image-qualification.json' : 'vcr-image-qualification.json'), 'image-qualification.json']]) {
+            const bytes = fs.readFileSync(source);
+            fs.writeFileSync(path.join(root, name), bytes, { flag: 'wx', mode: 0o400 });
+            files.push({ path: name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+          }
+          fs.writeFileSync(path.join(root, 'images.txt'), images.map(image => image.reference + '\n').join(''), { mode: 0o400 });
+          fs.writeFileSync(path.join(root, 'prepared-export.json'), JSON.stringify({ schemaVersion: 1,
+            scope: subset === 'core' ? 'candidate-core-image-subset' : 'isolated-vcr-image-subset',
+            sourceRevision: process.env.OPEN_SCIENCE_SOURCE_REVISION, releaseId: process.env.OPEN_SCIENCE_RELEASE_ID,
+            workflowRun: process.env.GITHUB_RUN_ID, workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            roles, images, files, ...(subset === 'vcr' ? { moduleEnabled: false } : {}),
+            capacityBoundary: 'Import admission must separately measure missing layers, overlayfs snapshots and temporary peak; streaming does not waive the host free-space floor.'
+          }, null, 2) + '\n', { mode: 0o400 });
+          JS
+            export EVIMED_SUBSET_ROOT="$RUNNER_TEMP/evimed-${subset}-release"
+            test "$(df -B1 --output=avail / | tail -1)" -ge 12884901888
+            setsid bash -euo pipefail -c 'mapfile -t images < "$EVIMED_SUBSET_ROOT/images.txt"; docker save "${images[@]}" | gzip -1 > "$EVIMED_SUBSET_ROOT/images.tar.gz"' &
+            subset_pid=$!
+            subset_started=$SECONDS
+            trap 'kill -- "-$subset_pid" 2>/dev/null || true; wait "$subset_pid" || true' EXIT
+            while kill -0 "$subset_pid" 2>/dev/null; do
+              if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ] || \
+                 [ "$(stat -c %s "$EVIMED_SUBSET_ROOT/images.tar.gz" 2>/dev/null || echo 0)" -gt 3221225472 ] || \
+                 [ "$((SECONDS - subset_started))" -gt 900 ]; then
+                echo "Release subset export exceeded its capacity, byte or time bound" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+            wait "$subset_pid"
+            trap - EXIT
+            chmod 400 "$EVIMED_SUBSET_ROOT/images.tar.gz"
+            python3 - <<'PYTHON'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('subset_inventory', 'scripts/ops/extension-acceptance-archive.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          root = Path(os.environ['EVIMED_SUBSET_ROOT'])
+          report = module.measure_archive(root)
+          print({'subset': os.environ['EVIMED_RELEASE_SUBSET'], 'images': len(report['images']),
+                 'compressedBytes': report['archive']['compressedBytes'],
+                 'uniqueUncompressedLayerBytes': report['archive']['uniqueUncompressedLayerBytes'],
+                 'conservativeDownloadAndLoadBytes': report['archive']['conservativeDownloadAndLoadBytes']})
+          PYTHON
+            # The root operator shell writes private artifacts; the upload action runs as the runner.
+            chown -R --reference="$RUNNER_TEMP" "$EVIMED_SUBSET_ROOT"
+          done
+
+      - name: Upload exact candidate core image subset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-core-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-core-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+      - name: Upload isolated candidate VCR image subset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-vcr-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-vcr-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
 
       - name: Upload verified full-release images
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
@@ -1080,6 +1493,54 @@ jobs:
         with:
           name: evimed-full-release-${{ github.sha }}
           path: ${{ runner.temp }}/evimed-release/
+          compression-level: 0
+          retention-days: 3
+
+      # A plain-Node pilot runs the API from the web image's /app copied out, and
+      # a release that changes only the control plane needs nothing else. Alone
+      # it is about 40 MB; inside the core subset it sits behind 1.6 GB that a
+      # slow link has to fetch and a small disk has to load to reach it.
+      - name: Export the web application closure for plain-Node pilots
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/evimed-web-bundle"
+          mkdir -p "$out"
+          container="$(docker create "$OPEN_SCIENCE_WEB_CONTAINER_IMAGE" true)"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/app" - | gzip -6 > "$out/app.tar.gz"
+          gzip -t "$out/app.tar.gz"
+          docker image inspect "$OPEN_SCIENCE_WEB_CONTAINER_IMAGE" > "$out/web-image.json"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const out = path.join(process.env.RUNNER_TEMP, 'evimed-web-bundle');
+          const [image] = JSON.parse(fs.readFileSync(path.join(out, 'web-image.json'), 'utf8'));
+          assert.equal(image.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          assert.equal(image.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+          assert.equal(`${image.Os}/${image.Architecture}`, 'linux/amd64');
+          const release = Object.fromEntries((image.Config.Env ?? []).map(pair => pair.split(/=(.*)/s).slice(0, 2))
+            .filter(([key]) => ['OPEN_SCIENCE_APP_VERSION', 'OPEN_SCIENCE_RELEASE_ID', 'OPEN_SCIENCE_SOURCE_REVISION', 'OPEN_SCIENCE_BUILD_CREATED'].includes(key)));
+          assert.equal(Object.keys(release).length, 4);
+          fs.writeFileSync(path.join(out, 'web-bundle.json'), JSON.stringify({ schemaVersion: 1, scope: 'web-application-closure',
+            sourceRevision: process.env.OPEN_SCIENCE_SOURCE_REVISION, releaseId: process.env.OPEN_SCIENCE_RELEASE_ID,
+            workflowRun: process.env.GITHUB_RUN_ID, workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            webImage: { reference: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE, imageId: image.Id, diffIds: image.RootFS.Layers },
+            release, root: 'app', node: image.Config.Env.find(pair => pair.startsWith('NODE_VERSION='))?.slice('NODE_VERSION='.length) ?? null,
+          }, null, 2) + '\n');
+          fs.rmSync(path.join(out, 'web-image.json'));
+          JS
+          (cd "$out" && sha256sum app.tar.gz > app.tar.gz.sha256)
+          ls -l "$out"
+
+      - name: Upload the web application closure
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-web-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-web-bundle/
+          if-no-files-found: error
           compression-level: 0
           retention-days: 3
 
@@ -1092,6 +1553,7 @@ jobs:
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
           -f deploy/web/docker-compose.ingestion.yml
+          -f deploy/web/docker-compose.result-replay.yml
           --profile backup --profile monitoring --profile tls logs --no-color
 
       - name: Stop Compose stack
@@ -1103,6 +1565,7 @@ jobs:
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
           -f deploy/web/docker-compose.ingestion.yml
+          -f deploy/web/docker-compose.result-replay.yml
           --profile runtime-image --profile backup --profile monitoring --profile tls down -v --remove-orphans
 
   hosted-production-e2e:

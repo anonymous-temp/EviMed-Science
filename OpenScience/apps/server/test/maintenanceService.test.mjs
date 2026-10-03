@@ -264,7 +264,11 @@ test("TaskManager keeps already queued work intact while maintenance pauses clai
 
   allowed = true;
   manager.resumeClaims();
-  for (let attempt = 0; attempt < 20 && invoked === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+  // Admission starts the owned run synchronously, but the command follows
+  // persisted state/event I/O. Await completion instead of 100 ms of CI time.
+  const resumed = manager.tasks.get(queued.id)?.runPromise;
+  assert.ok(resumed, "resuming claims must admit the retained queued task");
+  await resumed;
   assert.equal(invoked, 1);
   assert.equal((await manager.get(ctx, queued.id)).status, "succeeded");
 });

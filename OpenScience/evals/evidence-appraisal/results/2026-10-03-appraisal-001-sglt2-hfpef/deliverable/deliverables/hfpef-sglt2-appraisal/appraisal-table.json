@@ -1,0 +1,105 @@
+{
+  "question": "在射血分数保留的心衰（HFpEF，LVEF ≥40%）成人患者中，SGLT2 抑制剂（恩格列净、达格列净）能否降低心衰再住院？证据的确定性有多高？评价结局：心衰再住院、心血管死亡、全因死亡。本评价采用类 GRADE 框架（GRADE 的评价域与高/中/低/极低四级阶梯），并非经认证的 GRADE 评估，也未署名应用 RoB 2、ROBINS-I、NOS、AMSTAR 2 等量表。",
+  "studies": [
+    {
+      "id": "S1",
+      "design": "randomized-controlled-trial",
+      "citation": "Anker Stefan D., Butler Javed, Filippatos Gerasimos, 等. Empagliflozin in Heart Failure with a Preserved Ejection Fraction[J]. New England Journal of Medicine, 2021, 385(16): 1451-1461. doi:10.1056/NEJMoa2107038. PMID 34449189.",
+      "identifier": { "type": "doi", "value": "10.1056/NEJMoa2107038" },
+      "appraised": true,
+      "designNote": "多中心、随机、双盲、安慰剂对照试验（EMPEROR-Preserved，ClinicalTrials.gov NCT03057951）；5988 例纽约心功能 II–IV 级、LVEF >40% 的慢性心衰患者按 1:1 分配至恩格列净 10 mg 每日一次或安慰剂，中位随访 26.2 个月。题面第六项（EMPEROR-Preserved 的 2022 年按 LVEF 分层的二次分析）是同一试验的伴生发表，合并计入本行，不重复计入证据体。",
+      "domains": {
+        "riskOfBias": { "rating": "low", "reason": "随机分配、双盲、安慰剂对照、意向性分析，终点事件由设盲委员会裁定；未发现分配、盲法、失访或选择性报告方面的系统性偏倚来源。" },
+        "indirectness": { "rating": "low", "reason": "人群（LVEF >40% 的慢性心衰，覆盖 HFmrEF 与 HFpEF）、干预（恩格列净 10 mg 每日一次）、对照（安慰剂）与结局（心衰住院、心血管死亡）四轴均与所问问题一致。" },
+        "imprecision": { "rating": "low", "reason": "主要终点 HR 0.79 (95% CI 0.69–0.90)、P<0.001；总心衰住院 HR 0.73 (0.61–0.88)，区间窄且远离 1，样本量充足（5988 例）。心血管死亡与全因死亡等次要结局区间跨 1，其不精确性在结局体层面处理。" }
+      }
+    },
+    {
+      "id": "S2",
+      "design": "randomized-controlled-trial",
+      "citation": "Solomon Scott D., McMurray John J.V., Claggett Brian, 等. Dapagliflozin in Heart Failure with Mildly Reduced or Preserved Ejection Fraction[J]. New England Journal of Medicine, 2022, 387(12): 1089-1098. doi:10.1056/NEJMoa2206286. PMID 36027570.",
+      "identifier": { "type": "doi", "value": "10.1056/NEJMoa2206286" },
+      "appraised": true,
+      "designNote": "多中心、随机、双盲、安慰剂对照试验（DELIVER，ClinicalTrials.gov NCT03619213）；6263 例 LVEF >40% 的心衰患者按 1:1 分配至达格列净 10 mg 每日一次或安慰剂，中位随访 2.3 年。主要终点为心衰恶化（计划外心衰住院或心衰急诊就诊）或心血管死亡的复合。",
+      "domains": {
+        "riskOfBias": { "rating": "low", "reason": "随机分配、双盲、安慰剂对照、意向性分析，终点由设盲委员会裁定；未发现分配、盲法、失访或选择性报告方面的系统性偏倚来源。" },
+        "indirectness": { "rating": "low", "reason": "人群、干预、对照与所问问题一致；其主要终点中的'心衰恶化'组分包含计划外心衰急诊就诊，较单纯'心衰再住院'略宽，在心衰再住院结局体层面说明。" },
+        "imprecision": { "rating": "low", "reason": "主要终点 HR 0.82 (0.73–0.92)、P<0.001，区间窄且远离 1。心血管死亡 HR 0.88 (0.74–1.05) 跨 1，其不精确性在结局体层面处理。" }
+      }
+    },
+    {
+      "id": "S3",
+      "design": "systematic-review",
+      "citation": "Vaduganathan Muthiah, Docherty Kieran F, Claggett Brian L, 等. SGLT2 inhibitors in patients with heart failure: a comprehensive meta-analysis of five randomised controlled trials[J]. The Lancet, 2022, 400(10354): 757-767. doi:10.1016/S0140-6736(22)01429-5. PMID 36041474.",
+      "identifier": { "type": "doi", "value": "10.1016/S0140-6736(22)01429-5" },
+      "appraised": true,
+      "designNote": "预注册（PROSPERO CRD42022327527）的试验水平数据 Meta 分析，统一终点定义并采用固定效应模型；纳入 DELIVER、EMPEROR-Preserved、DAPA-HF、EMPEROR-Reduced、SOLOIST-WHF 五项 RCT（共 21947 例）。其中 DELIVER 与 EMPEROR-Preserved 两项 HFmrEF/HFpEF 试验（共 12251 例）提供本问题直接证据；题面所述'两项试验的合并分析'即指此两试验子集。",
+      "domains": {
+        "riskOfBias": { "rating": "low", "reason": "预注册方案、试验水平个体数据、统一终点定义、固定效应合并；成分试验均为低偏倚 RCT，未发现方法学层面的系统性偏倚来源。" },
+        "indirectness": { "rating": "low", "reason": "其 DELIVER + EMPEROR-Preserved 两试验子集直接针对 HFmrEF/HFpEF 人群与心衰住院、心血管死亡结局，与所问问题一致。" },
+        "imprecision": { "rating": "low", "reason": "主要复合终点区间窄（两试验子集 HR 0.80 [0.73–0.87]；五试验 HR 0.77 [0.72–0.82]）。心血管死亡（0.88 [0.77–1.00]）与全因死亡（0.92 [0.86–0.99]，五试验）区间触及或紧贴 1，其不精确性在结局体层面处理。" }
+      }
+    },
+    {
+      "id": "S4",
+      "design": "retrospective-cohort",
+      "citation": "瑞典心衰登记队列（2023 年，回顾性，倾向评分匹配）——题面描述，未提供可解析标识符。",
+      "appraised": false,
+      "notAppraisedReason": "题面仅给出登记队列、年份与研究设计描述，未提供 DOI/PMID/NCT 等可唯一解析的标识符；在无法唯一定位原始文献的情况下不作领域评价，以免替换或臆造文献。"
+    },
+    {
+      "id": "S5",
+      "design": "retrospective-cohort",
+      "citation": "美国医保理赔数据库队列（2022 年，回顾性）——题面描述，未提供可解析标识符。",
+      "appraised": false,
+      "notAppraisedReason": "题面仅给出理赔数据库、年份与研究设计描述，未提供 DOI/PMID/NCT 等可唯一解析的标识符；在无法唯一定位原始文献的情况下不作领域评价，以免替换或臆造文献。"
+    }
+  ],
+  "bodies": [
+    {
+      "outcome": "心衰再住院",
+      "studies": ["S1", "S2", "S3"],
+      "startingCertainty": "high",
+      "downgrades": [
+        { "domain": "riskOfBias", "steps": 0, "reason": "两项随机、双盲、安慰剂对照试验（S1、S2）与预注册的试验水平 Meta 分析（S3）均无系统性偏倚来源，不降级。" },
+        { "domain": "inconsistency", "steps": 0, "reason": "方向与量级一致：EMPEROR-Preserved 总心衰住院 HR 0.73 (0.61–0.88)，DELIVER 心衰恶化 HR 0.79 (0.69–0.91)，两试验合并首次因心衰住院 HR 0.74 (0.67–0.83)，均显著低于 1 且无相互矛盾，不降级。" },
+        { "domain": "indirectness", "steps": 0, "reason": "结局直接针对心衰住院：合并分析采用'首次因心衰住院'（HR 0.74），EMPEROR-Preserved 报告总心衰住院（HR 0.73）；DELIVER 单个估计为'心衰恶化'（计划外心衰住院或心衰急诊就诊），略宽于单纯住院，但不改变方向与结论，不降级。" },
+        { "domain": "imprecision", "steps": 0, "reason": "两试验合并首次因心衰住院 HR 0.74 (0.67–0.83)，区间窄且上界 0.83 远低于 1，足以支持'降低心衰住院'的判断，不降级。" },
+        { "domain": "publicationBias", "steps": 0, "reason": "两项大型确证性试验与预注册 Meta 分析，无小阳性研究堆叠迹象，不降级。" }
+      ],
+      "upgrades": [],
+      "certainty": "high",
+      "whatWouldChange": "一项以心衰住院为主要终点、设计良好的独立随机试验若显示 HR 跨越 1，或发现两项试验存在选择性报告，可使确定性下降。"
+    },
+    {
+      "outcome": "心血管死亡",
+      "studies": ["S1", "S2", "S3"],
+      "startingCertainty": "high",
+      "downgrades": [
+        { "domain": "riskOfBias", "steps": 0, "reason": "两项随机、双盲、安慰剂对照试验与预注册 Meta 分析均无系统性偏倚来源，不降级。" },
+        { "domain": "inconsistency", "steps": 0, "reason": "方向一致：DELIVER 心血管死亡 HR 0.88 (0.74–1.05)，两试验合并 0.88 (0.77–1.00)，五试验合并 0.87 (0.79–0.95)，不降级。" },
+        { "domain": "indirectness", "steps": 0, "reason": "心血管死亡直接测量，无替代结局，不降级。" },
+        { "domain": "imprecision", "steps": 1, "reason": "两试验合并心血管死亡 HR 0.88 (0.77–1.00)，区间上界触及 1.00，不能排除无心血管死亡获益，降一级。" },
+        { "domain": "publicationBias", "steps": 0, "reason": "无小阳性研究堆叠迹象，不降级。" }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "whatWouldChange": "更多 HFpEF 特异的心血管死亡事件或更长随访使区间收窄并远离 1，可升至高；若区间稳定跨 1，则确认无心血管死亡获益。"
+    },
+    {
+      "outcome": "全因死亡",
+      "studies": ["S1", "S2", "S3"],
+      "startingCertainty": "high",
+      "downgrades": [
+        { "domain": "riskOfBias", "steps": 0, "reason": "两项随机、双盲、安慰剂对照试验与预注册 Meta 分析均无系统性偏倚来源，不降级。" },
+        { "domain": "inconsistency", "steps": 0, "reason": "方向一致，未见相互矛盾，不降级。" },
+        { "domain": "indirectness", "steps": 0, "reason": "全因死亡直接测量，不降级。" },
+        { "domain": "imprecision", "steps": 1, "reason": "HFmrEF/HFpEF 两试验的全因死亡效应未在已核实摘要中单独报告；五试验合并全因死亡 HR 0.92 (0.86–0.99) 紧贴 1 且主要由 HFrEF 试验驱动，就 HFpEF 人群而言全因死亡获益不精确，降一级。" },
+        { "domain": "publicationBias", "steps": 0, "reason": "无小阳性研究堆叠迹象，不降级。" }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "whatWouldChange": "HFmrEF/HFpEF 亚组的全因死亡个体水平合并估计若区间远离 1，可升至高；若无获益则维持较低确定性。"
+    }
+  ]
+}

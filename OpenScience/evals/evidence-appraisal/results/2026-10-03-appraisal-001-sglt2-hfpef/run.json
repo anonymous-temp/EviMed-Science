@@ -1,0 +1,60 @@
+{
+  "capability": "evidence-appraisal",
+  "brief": "appraisal-001-sglt2-hfpef",
+  "base": "https://123.57.53.47",
+  "project": "acceptance-evidence-appraisal",
+  "session": "acc-evidence-appraisal-musc4diz",
+  "runId": "run_e84f15ad0ba3aca2cc48e1beec36bde8",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-10-03T11:55:01.008Z",
+  "observedAt": "2026-10-03T12:18:35Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "在射血分数保留的心衰（HFpEF）患者中，SGLT2 抑制剂能否降低心衰再住院？证据的确定性有多高？\nPopulation: 射血分数 ≥ 40% 的慢性心衰成人.\nIntervention: 恩格列净、达格列净.\nOutcomes: 心衰再住院; 心血管死亡; 全因死亡.\n\nSupplied study reports:\n- EMPEROR-Preserved（Anker 2021, N Engl J Med）\n- DELIVER（Solomon 2022, N Engl J Med）\n- 两项试验的合并分析（Vaduganathan 2022, Lancet）\n- 一项瑞典心衰登记队列（2023，回顾性，倾向评分匹配）\n- 一项美国医保理赔数据库队列（2022，回顾性）\n- EMPEROR-Preserved 按 LVEF 分层的二次分析（2022）",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-03T11:55:01.008Z",
+    "finishedAt": "2026-10-03T12:18:34.848Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/hfpef-sglt2-appraisal/_validate.py",
+      "deliverables/hfpef-sglt2-appraisal/appraisal-table.csv",
+      "deliverables/hfpef-sglt2-appraisal/appraisal-table.json",
+      "deliverables/hfpef-sglt2-appraisal/appraisal-table.md",
+      "deliverables/hfpef-sglt2-appraisal/citation-ledger.csv",
+      "deliverables/hfpef-sglt2-appraisal/delivery-summary.md",
+      "deliverables/hfpef-sglt2-appraisal/revision-notes.md",
+      "delivery-summary.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "appraisal_study_identifier_missing",
+        "check": "appraisal-study-identifier",
+        "severity": "advice",
+        "title": "研究标识缺失或有误",
+        "detail": "文件 appraisal-table.json",
+        "file": "appraisal-table.json",
+        "text": "S4 carries no identifier. Give it {type, value} with type one of doi / pmid / pmcid / nct / isrctn / url — a row nobody can resolve to a specific paper is a row nobody can check."
+      },
+      {
+        "code": "appraisal_study_identifier_missing",
+        "check": "appraisal-study-identifier",
+        "severity": "advice",
+        "title": "研究标识缺失或有误",
+        "detail": "文件 appraisal-table.json",
+        "file": "appraisal-table.json",
+        "text": "S5 carries no identifier. Give it {type, value} with type one of doi / pmid / pmcid / nct / isrctn / url — a row nobody can resolve to a specific paper is a row nobody can check."
+      }
+    ],
+    "effectiveAgentId": "evidence-appraisal",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1413840,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-pro"
+  }
+}

@@ -667,7 +667,10 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(metaService, /read_only:\s+true/);
   assert.doesNotMatch(metaService, /^\s+ports:/m);
   assert.match(controllerService, /command:\s+\["node", "apps\/server\/src\/runtimeControllerIndex\.mjs"\]/);
-  assert.match(controllerService, /open-science-data:\/data:ro/);
+  // The controller writes render markers and staged skill-validation inputs
+  // under the data directory, so a read-only mount fails both features.
+  assert.match(controllerService, /^\s+- open-science-data:\/data$/m);
+  assert.doesNotMatch(controllerService, /open-science-data:\/data:ro/);
   assert.match(controllerService, /open-science-runtime-control:\/run\/open-science-controller/);
   assert.match(controllerService, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
   assert.match(
@@ -726,6 +729,28 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /source:\s+\$\{OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-\.\/release-manifest\.json\}/);
   assert.match(compose, /target:\s+\/run\/open-science\/release-manifest\.json/);
   assert.match(compose, /\/api\/ready/);
+});
+
+test("the controller's data mount is writable wherever the controller writes under the data directory", async () => {
+  const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const controller = compose.services["open-science-runtime-controller"];
+  const controllerServer = await readFile(path.join(repoRoot, "apps/server/src/runtimeControllerServer.mjs"), "utf8");
+  // Both run inside the controller process and write below config.dataDir: the
+  // render's creation marker, and the staged input a validation container mounts.
+  const writers = {
+    "documentRenderController.mjs": /writeFileSync\(uncertain,/,
+    "skillValidationController.mjs": /writeFileExclusiveNoFollow\(config\.dataDir,/,
+  };
+  for (const [file, pattern] of Object.entries(writers)) {
+    const source = await readFile(path.join(repoRoot, "apps/server/src", file), "utf8");
+    assert.match(source, pattern, `${file} no longer writes under the data directory, so this test's premise changed`);
+    assert.ok(controllerServer.includes(`"./${file}"`), `${file} is no longer composed into the controller`);
+  }
+  assert.equal(controller.environment.OPEN_SCIENCE_DATA_DIR, "/data");
+  const dataMounts = controller.volumes.filter((entry) => typeof entry === "string" && entry.startsWith("open-science-data:"));
+  assert.deepEqual(dataMounts, ["open-science-data:/data"], "a read-only data mount fails every document export and skill import at its first marker write");
+  // Its own filesystem stays read-only; only the two named volumes are writable.
+  assert.equal(controller.read_only, true);
 });
 
 test("backup compose overlay runs an unexposed least-privilege encrypted scheduler", async () => {
@@ -1315,7 +1340,9 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /docker-hosted:/);
   assert.match(workflow, /runs-on:\s+ubuntu-22\.04/);
   assert.match(workflow, /run:\s+pnpm audit:dependencies/);
-  assert.match(workflow, /--profile runtime-image build/);
+  assert.match(workflow, /--profile runtime-image --profile vcr build/);
+  assert.match(workflow, /docker-compose\.result-replay\.yml/);
+  assert.match(workflow, /Qualify isolated VCR candidate image without enabling the module/);
   assert.match(workflow, /pnpm release:manifest/);
   assert.match(workflow, /pnpm verify:release-manifest/);
   assert.match(workflow, /pnpm configure:monitoring/);
@@ -1378,6 +1405,7 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.equal(workflow.includes("OPEN_SCIENCE_SMOKE_ALLOW_HTTP"), false);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME:\s+"true"/);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT:\s+"false"/);
+  assert.match(workflowStep(workflow, "Smoke real hosted runtime boundaries"), /OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT:\s+"true"/);
   assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.runtime=true/);
   assert.match(workflow, /--profile backup --profile monitoring --profile tls down -v --remove-orphans/);
   assert.equal(workflow.includes("open-science-opencode:latest"), false);
@@ -1519,6 +1547,21 @@ test("the profile is pre-initialized outside the path the runtime volume mounts 
   assert.match(dockerfile, /evimed-profile-seed\.mjs seal/);
   const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
   assert.match(smoke, /evimed-profile-seed\.mjs sync/);
+});
+
+test("the immutable public profile is readable and the actual build boot drops root before syncing it", async () => {
+  const install = await readFile(path.join(repoRoot, "deploy/runtime-dsh/install-runtime.sh"), "utf8");
+  const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
+  const publicMode = install.indexOf('chmod 0644 "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"');
+  const seal = install.indexOf('evimed-profile-seed.mjs seal "${DSH_HOME_SEED}"');
+  assert.ok(publicMode >= 0 && publicMode < seal, "the plugin manager's private manifest must become public before the immutable seed is sealed");
+  const rootGuard = smoke.indexOf('if [ "$(id -u)" -eq 0 ]');
+  const dropRoot = smoke.indexOf('exec runuser -u nobody -- "$0" "$@"');
+  assert.ok(rootGuard >= 0 && dropRoot > rootGuard && dropRoot < smoke.indexOf("evimed-profile-seed.mjs sync"), "the CI image must boot the profile as an unprivileged user");
+  assert.match(smoke, /export HOME="\$\{smoke_home\}\/home" XDG_CONFIG_HOME=/);
+  assert.match(smoke, /chmod 600 "\$\{smoke_home\}\/\.credentials.yaml"/);
+  assert.match(smoke, /sed .*\/runtime\/dsh-home\/sessions.*\$\{smoke_home\}\/sessions/);
+  assert.match(smoke, /DSH_HOME="\$\{smoke_home\}" dsh --profile "\$\{profile\}" --patch "\$\{patch\}"/);
 });
 
 // Confirmed against a real installed `dsh` binary: `--patch` is a *launcher*

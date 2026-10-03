@@ -1,3 +1,4 @@
+import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 
 /**
@@ -47,6 +48,7 @@ export const repairableEvidencePackageErrorCodes = new Set([
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
 export const recoverableEvidenceSourceErrorCodes = new Set([
+  ...Object.keys(RESULT_WORKBENCH_ERROR_MESSAGES),
   "tooluniverse_upstream_unavailable",
   "tooluniverse_unavailable",
   "tooluniverse_busy",
@@ -1256,7 +1258,16 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
  * return" and once as "what a researcher can be shown" — is what keeps the
  * second list from being derived by accident and drifting.
  */
+export const EXTENSION_ERROR_CODES = Object.freeze([
+  'extension_contract_invalid', 'extension_proof_untrusted',
+  'extension_proof_stale', 'extension_proof_incomplete', 'extension_access_denied', 'extension_storage_capacity',
+])
+
+export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
+
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
+  ...EXTENSION_ERROR_CODES,
+  ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
@@ -1323,12 +1334,26 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  managed_browser_invalid: '网址或操作无效，请检查后重试。',
+  managed_browser_not_found: '浏览会话已结束，请重新打开。',
+  managed_browser_sequence_conflict: '页面状态已更新，请刷新后再操作。',
+  managed_browser_busy: '浏览器正在处理操作，请稍后重试。',
+  managed_browser_unavailable: '浏览器暂时无法连接，可稍后重试。',
+  managed_browser_action_unknown: '本次操作结果尚未确认，请先查看页面再继续。',
+
+  extension_contract_invalid: '扩展信息格式不正确，请检查后重新提交。',
+  extension_proof_untrusted: '这个扩展尚未取得平台可核对的兼容记录。',
+  extension_proof_stale: '扩展或运行环境版本已变化，兼容记录需要重新核对。',
+  extension_proof_incomplete: '扩展的兼容核验尚未完成，已有科研任务仍可继续。',
+  extension_access_denied: '你没有执行这个扩展操作的权限，请检查项目和连接授权。',
+  extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
   document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
   ...DOCUMENT_EXPORT_ERROR_MESSAGES,
+  ...RESULT_WORKBENCH_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
@@ -2047,6 +2072,10 @@ export function errorCodeOutcome(code) {
   // nothing to share yet, an account that is not here, a missing password —
   // never as a verdict on a run.
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
+  // Optional extension refusals affect that operation, not research delivery.
+  if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
+  if (text === 'managed_browser_busy') return 'capped'
+  if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
   // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.

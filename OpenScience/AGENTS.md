@@ -45,9 +45,9 @@ per-project workspace + JSONL provenance.
   workspace layout, the four state vocabularies, the error-code registry and the
   delivery-gate rules), `harness-port` (the only package that may import
   `@deepseek-ai/*`), `socket` (`@evimed/dsh-socket` — the plug: the
-  `evimed-universal` composition and its thirteen plugins — eight agent-scope
-  rows in the preset, each switchable off from the environment, and five
-  host-scope rows the bundle's own `cordis.patch.yml` inserts), `contracts` (one
+  `evimed-universal` composition and its sixteen plugins — eight core agent
+  policies plus the scoped Cowork bridge in the preset, and seven host-scope
+  rows the bundle's own `cordis.patch.yml` inserts), `contracts` (one
   directory per tracked upstream pin).
 - `capabilities/` — one directory per capability: `capability.yaml` (the only
   definition of a capability) plus its SKILL.md and scripts. `capability-skills/`
@@ -184,6 +184,22 @@ per-project workspace + JSONL provenance.
 - **A capsule is context, never permission.** Nothing a memory capsule or an
   imported workstyle pack says can loosen a contract, relax a safety rule, or
   reach a host the gateway would not.
+
+## Hosted extension preparation
+
+The owner authorized an ordinary-user extension and personal-skill center. Reuse
+native DSH package inspection, preparation, skill parsing and scoped loading;
+only harness-port may import upstream DSH packages. Do not expose unrestricted
+profile administration or enable HMR in a serving research installation.
+
+Exact packages may be prepared in bounded disposable jobs outside the web
+process, without customer workspaces, provider credentials or host-control
+sockets. Activate a deployment-owned read-only generation after current work
+finishes; retain the exact extension and skill identities on each run. Unknown
+host code uses an admitted isolated tool/viewer boundary or stays unsupported.
+Only independently measured artifact/adapter/runtime/permission combinations
+may be offered as SaaS qualified. Personal imports cannot grant permissions,
+shadow required methods, supply qualification flags or export connection secrets.
 
 ## Working conventions
 

@@ -166,10 +166,11 @@ function snapshotView(record) {
 /** Portable snapshots are immutable ciphertext; online state can be revoked, offline copies cannot. */
 export class CapsuleTransferService {
   /** @param {{documents: import('./productStore.mjs').ProductDocuments, capsules: import('./capsuleService.mjs').CapsuleService, identities: import('./capsuleIdentityStore.mjs').CapsuleIdentityStore, dataDir: string,
-   *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null}} options */
-  constructor({ documents, capsules, identities, dataDir, scanner = null }) {
+   *   scanner?: import('./capsuleScan.mjs').CapsuleScanner | null, privateAccountCleanup?: ((userId:string)=>Promise<void>) | null}} options */
+  constructor({ documents, capsules, identities, dataDir, scanner = null, privateAccountCleanup = null }) {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
     this.scanner = scanner;
+    this.privateAccountCleanup = privateAccountCleanup;
     /** One scan per pack and account while a preview turns into an import. @type {Map<string, { at: number, result: any }>} */
     this.scans = new Map();
   }
@@ -634,12 +635,16 @@ export class CapsuleTransferService {
         const live = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
         // DB rollback leaves the original live account and its private keys intact.
         if (live?.generation === state.accountCreatedAt) return { completed: false, awaitingAccountDeletion: true };
+        // Private extension roots are account-owned, so a recreated account
+        // must not have its new files erased by an older pending deletion.
+        if (live && this.privateAccountCleanup) return { completed: false, awaitingAccountDeletion: true };
         const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
         const files = await fs.opendir(directory);
         for await (const file of files) {
           if (file.name.startsWith(`${capsuleAccountHash(userId)}-`) && /\.evimedcap(?:\.[a-f0-9-]{36}\.tmp)?$/.test(file.name)) await unlinkCapsuleFile(directory, file.name);
         }
         await syncCapsuleDirectory(directory);
+        await this.privateAccountCleanup?.(userId);
         await this.identities.finishDeletion(userId, state);
         return { completed: true };
       });

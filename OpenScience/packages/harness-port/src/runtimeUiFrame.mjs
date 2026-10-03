@@ -13,14 +13,16 @@
  * 340-line function into several bodies is what this shape allows without
  * giving that rule up.
  *
- * Every body is individually switchable. The control plane lists the switched
+ * Feature bodies are individually switchable. The control plane lists the switched
  * off ones in the frame's bootstrap object (`off`), from
  * `OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF`, and the composed plugin skips them; a
  * body that throws while starting is logged and skipped the same way. With
  * every body off the kernel's own conversation still works — that is the
  * control every body is measured against (principle 11). The bridge alone is
  * not switchable: it is the channel the shell navigates through, not a
- * feature, and without it the shell cannot open a session at all.
+ * feature, and without it the shell cannot open a session at all. The managed
+ * browser body is also mandatory whenever the deployment enables that provider;
+ * switching off presentation must never restore an external page iframe.
  *
  * @module @evimed/harness-port/runtime-ui-frame
  */
@@ -45,13 +47,15 @@ import {
 } from '@evimed/domain';
 
 import { BODY as BRIDGE } from './runtimeUiBridge.mjs';
+import { BODY as COMPOSER } from './runtimeUiComposer.mjs';
 import { BODY as COMMANDS } from './runtimeUiCommands.mjs';
 import { KIT_PARTS } from './runtimeUiKit.mjs';
 import { BODY as LOCALE } from './runtimeUiLocale.mjs';
+import { BODY as MANAGED_BROWSER } from './runtimeUiManagedBrowser.mjs';
 import { BODY as PANELS } from './runtimeUiPanels.mjs';
 import { BODY as REPLY_CHECKS } from './runtimeUiReplyChecks.mjs';
 import { BODY as SHELL } from './runtimeUiShell.mjs';
-import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS } from './runtimeUiSlots.mjs';
+import { RUNTIME_UI_KERNEL_PIN, RUNTIME_UI_SLOTS, RUNTIME_UI_NATIVE_BROWSER_KEY } from './runtimeUiSlots.mjs';
 import { BODY as SOURCES } from './runtimeUiSources.mjs';
 import { BODY as THEME } from './runtimeUiTheme.mjs';
 import { BODY as TOOLVIEWS } from './runtimeUiToolviews.mjs';
@@ -72,7 +76,7 @@ import { BODY as TRANSCRIPT } from './runtimeUiTranscript.mjs';
  * in the language pack.)
  * @type {readonly FrameBody[]}
  */
-export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, SOURCES, COMMANDS]);
+export const FRAME_BODIES = Object.freeze([BRIDGE, LOCALE, THEME, SHELL, COMPOSER, TRANSCRIPT, REPLY_CHECKS, TOOLVIEWS, PANELS, MANAGED_BROWSER, SOURCES, COMMANDS]);
 
 /** The switch names an operator may list; the bridge is not one of them. */
 export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => body.name).filter((name) => name !== 'bridge'));
@@ -85,6 +89,7 @@ export const FRAME_SWITCHABLE_BODIES = Object.freeze(FRAME_BODIES.map((body) => 
 export const FRAME_VOCABULARY = Object.freeze({
   kernelPin: RUNTIME_UI_KERNEL_PIN,
   slots: RUNTIME_UI_SLOTS,
+  nativeBrowserKey: RUNTIME_UI_NATIVE_BROWSER_KEY,
   // The product's palette and type, from the one token module the shell's own
   // stylesheet and Tailwind theme are generated from. Inlined here at build
   // time because a frame body may import nothing: the frame reaches the browser
@@ -195,7 +200,7 @@ export function renderFrameClient({ bodies = FRAME_BODIES, vocabulary = FRAME_VO
     `    return { inject: ${JSON.stringify(inject)}, apply: (ctx, config) => {`,
     '      const kit = createKit(ctx, globalThis, require, vocabulary);',
     '      for (const [name, body] of bodies) {',
-    "        if (name !== 'bridge' && kit.isOff(name)) continue;",
+    "        if (name !== 'bridge' && kit.isOff(name) && !(name === 'managedbrowser' && kit.frame.managedBrowser)) continue;",
     '        try { body(ctx, config, globalThis, require, kit); }',
     '        catch (error) { globalThis.console?.error?.(`[evimed-frame] ${name} did not start:`, error); }',
     '      }',

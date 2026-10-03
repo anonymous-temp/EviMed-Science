@@ -452,3 +452,10 @@ test("the config lever is off by default and every knob is checked at load", () 
     process.env = saved;
   }
 });
+
+
+test("wallet balance reads retain supplied fractional credit precision", () => {
+  assert.equal(upstreamAmount("0.00000001"), 0.00000001);
+  assert.equal(upstreamAmount("1.12345678"), 1.12345678);
+  assert.equal(upstreamAmount("1.123456789"), null);
+});

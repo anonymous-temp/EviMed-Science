@@ -20,6 +20,8 @@
     # Startup self-check. Gate-level seams missing, an overridden row that did
     # not take, or a sandbox that cannot enforce all crash the process here,
     # before a run can be accepted and quietly under-protected.
+    - id: evimed-skill-catalogue
+      name: '@evimed/dsh-socket/plugins/skill-catalogue'
     - id: evimed-plugin-probe
       name: '@evimed/dsh-socket/plugins/plugin-probe'
     - id: evimed-seam-probe

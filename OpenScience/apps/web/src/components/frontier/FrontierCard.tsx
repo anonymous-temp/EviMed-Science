@@ -1,3 +1,4 @@
+import { rememberFrontierPosition, useFrontierOrigin } from "./frontierReadingState";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { Star } from "lucide-react";
@@ -34,6 +35,8 @@ const BAND_DOT = { high: "bg-accent", medium: "bg-text-2", low: "bg-text-3" } as
 
 export interface FrontierCardProps {
   item: FrontierItem;
+  expanded?: boolean;
+  onExpand?: () => void;
   /** Inside a day group the time column is the clock; elsewhere it is the day. */
   grouped?: boolean;
   /** Where not every item is 精选 (全部, a search), say which are — the dot, and words for a screen reader. */
@@ -72,9 +75,10 @@ export interface FrontierCardProps {
  * A read card's title steps down to the secondary colour; a safety alert says
  * 「安全警示」 first and has no score — it is selected whatever it scored.
  */
-export function FrontierCard({ item, grouped = true, markSelected = false, onStar, onHide, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
+export function FrontierCard({ item, expanded = false, onExpand, grouped = true, markSelected = false, onStar, onHide, onSave, saving = false, onOpened, onTag }: FrontierCardProps) {
   const titleId = useId();
   const navigate = useNavigate();
+  const origin = useFrontierOrigin();
   const [details, setDetails] = useState(false);
   const evidence = evidenceTag(item);
   const flags = item.flags.filter((flag) => CARD_FLAG_KEYS.has(flag.key));
@@ -97,13 +101,14 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
   };
   const more: MenuEntry[] = [
     { label: "详情", onSelect: () => setDetails(true) },
+    { label: "整理为证据卡片", onSelect: () => { rememberFrontierPosition(); navigate(`/app/frontier/zones?fromItem=${encodeURIComponent(item.id)}`); } },
     ...(onSave ? [{ label: "存入知识库", disabled: saving, onSelect: () => onSave(item) }] : []),
     { label: "复制为 Markdown", onSelect: () => void copy() },
     { label: "不感兴趣", onSelect: () => onHide(item) },
     "separator",
     { label: `关注 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name) },
     { label: `屏蔽 ${item.source.name}`, onSelect: () => void follow("source", item.source.id, item.source.name, true) },
-    ...(item.event ? [{ label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
+    ...(item.event ? [{ label: "同一事件的全部报道", onSelect: () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); } }, { label: "关注此事件", onSelect: () => void follow("event", item.event!.id, item.title.slice(0, 120)) }] : []),
     ...item.entities.drugs.slice(0, 3).map((drug) => ({ label: `关注药物：${drug}`, onSelect: () => void follow("drug", drug, drug) })),
     ...item.specialties.slice(0, 2).map((specialty) => ({ label: `关注专科：${specialty.label}`, onSelect: () => void follow("specialty", specialty.key, specialty.label) })),
   ];
@@ -116,7 +121,7 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
         onOpened?.(item);
       },
     })),
-    ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: () => navigate(eventPath(item.event!.id)) }] : []),
+    ...(item.event ? ["separator" as const, { label: "同一事件的全部报道", onSelect: () => { rememberFrontierPosition(); navigate(eventPath(item.event!.id), { state: origin }); } }] : []),
   ];
 
   return (
@@ -151,9 +156,11 @@ export function FrontierCard({ item, grouped = true, markSelected = false, onSta
             {item.title}
           </a>
         </h3>
-        {item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
+        {item.summary && <p className={cn("mt-1 max-w-measure whitespace-pre-line text-ui text-text-2", !expanded && "line-clamp-3")}>{item.summary}</p>}
 
         <div className="-ml-1 mt-2 flex min-h-6 flex-wrap items-center gap-x-2 text-ui text-text-3">
+          {item.summary && onExpand && <button type="button" aria-expanded={expanded} onClick={onExpand} className={cn(INLINE_ACTION, "px-1 hover:text-text")}><span className="text-caption">{expanded ? "收起摘要" : "展开摘要"}</span></button>}
+          <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">阅读详情</span></button>
           {also > 0 && (
             <Menu label={`另有 ${also} 家报道`} align="start" items={reports}>
               <button type="button" className={cn(INLINE_ACTION, "px-1 hover:text-text")}>

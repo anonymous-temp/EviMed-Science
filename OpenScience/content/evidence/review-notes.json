@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-01T09:13:20.616769+00:00",
+  "reviewer": {
+    "kind": "ai",
+    "name": "EviMed source verification AI",
+    "model": "gpt-6.1-sol"
+  },
+  "reviewType": "Author-side source verification; independent final review still pending",
+  "sampleFindings": [
+    {
+      "kind": "topic-contamination",
+      "text": "AF anticoagulation sample inserts GLP-1/SGLT2, DURATION-8 and diabetes guidelines; they do not support the AF question."
+    },
+    {
+      "kind": "unsupported-ranking",
+      "text": "No direct head-to-head evidence supplied for dabigatran intracranial-bleeding superiority; apixaban special suitability and rivaroxaban adherence conclusions exceed the provided sources."
+    },
+    {
+      "kind": "untraceable-source",
+      "text": "REAL WORLD is not an identifiable study citation and cannot support a claim."
+    }
+  ],
+  "publicationRules": [
+    "No invented numerical review score or human reviewer identity.",
+    "No cross-drug ranking from separate placebo/warfarin trials.",
+    "No NNT derived from HR or annualized rates.",
+    "Chart counts require matched denominators; only DAPA-CKD uses an equal-denominator comparison.",
+    "Explicit abstract-only and excerpt-only coverage; no unpublished full-text validation claims."
+  ],
+  "independentReviewChecklist": [
+    "Verify card content against the current preserved source text and source hashes.",
+    "Verify all event counts, denominators, units, CI and follow-up qualifiers.",
+    "Verify guideline valve exclusions and no patient-specific dosing advice.",
+    "Check interpretation cards for nonduplicate educational purpose."
+  ],
+  "deterministicCalculations": [
+    {
+      "cardKey": "absolute-relative-time",
+      "expression": "(312 - 197) / 2152 * 100",
+      "resultPercentagePoints": 5.343866171003717,
+      "note": "Crude observed trial-period proportions; not fixed-horizon Kaplan-Meier risk, no derived NNT."
+    }
+  ]
+}

@@ -11,7 +11,7 @@
  * the one this workspace installs next to the port.
  */
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -24,7 +24,7 @@ import { kernelModuleUrl } from '../index.mjs'
  * @param {import('node:test').TestContext} t
  */
 async function fakeKernel(t) {
-  const root = await mkdtemp(path.join(tmpdir(), 'evimed-kernel-'))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'evimed-kernel-')))
   t.after(() => rm(root, { recursive: true, force: true }))
   const cli = path.join(root, 'lib/node_modules/@deepseek-ai/dsh')
   await mkdir(path.join(cli, 'lib'), { recursive: true })

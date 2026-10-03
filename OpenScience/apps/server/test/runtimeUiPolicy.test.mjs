@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, agentRuns = null, audit = undefined } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, agentRuns, audit });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -1406,4 +1406,95 @@ test("failed native supplemental context never refuses an otherwise authorized p
   const response = await fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(request) });
   assert.equal(response.status, 200);
   assert.ok(audits.some(item => item.code === "handbook_context_timeout"));
+});
+
+test('HTTP and mux personal-generation barriers refuse stale new turns before context/observation, while running native steer remains usable', { timeout: 10000 }, async t => {
+  let prepared = 0
+  const f = await fixture(t, {}, {}, { authorizePrompt: async () => {}, preparePrompt: async () => { prepared++ } })
+  const project = await f.store.requireProject(f.user, 'default')
+  const pin = { skillId: 'removed-skill', revision: 1, digest: `sha256:${'a'.repeat(64)}` }
+  f.manager.runtimes.set(f.manager.key(project), { personalSkillGeneration: { pins: [pin] } })
+  f.manager.personalSkillGenerations = { current: async () => ({ payload: { desired: { pins: [] } } }) }
+  let running = true
+  let admitted = false
+  f.manager.pluginService = { withAdmission: async (_project, work) => { admitted = true; try { return await work() } finally { admitted = false } } }
+  f.manager.callKernel = async (_runtime, _project, method) => {
+    assert.equal(admitted, true)
+    assert.equal(method, 'session/list')
+    return { items: [{ sessionId: 'existing-turn', running }] }
+  }
+  let httpForwarded = 0
+  f.manager.proxy = async (_req, res) => { httpForwarded++; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}') }
+  const httpPrompt = request => fetch(`${f.base}/api/session/prompt`, { method: 'POST', headers: {
+    cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json',
+  }, body: JSON.stringify({ type: 'client-request', rpcId: 'personal-prompt', method: 'session/prompt', payload: { args: { request } } }) })
+  const queue = { sessionId: 'existing-turn', requestId: 'queue-new', mode: 'queue', content: [{ type: 'text', text: '/removed-method' }] }
+  assert.equal((await httpPrompt(queue)).status, 409)
+  assert.equal(prepared, 0)
+  assert.equal(httpForwarded, 0)
+  const steer = { ...queue, requestId: 'steer-old', mode: 'steer' }
+  assert.equal((await httpPrompt(steer)).status, 200)
+  assert.equal(prepared, 1)
+  const connection = f.connect(); await connection.opened
+  connection.send(open('stale-queue', 'session/prompt', { request: queue }))
+  assertNativeError(await connection.next(), 'stale-queue', 'extension_contract_invalid')
+  assert.deepEqual(await connection.next(), { type: 'end', streamId: 'stale-queue' })
+  assert.equal(f.received.length, 0)
+  assert.equal(prepared, 1)
+  connection.send(open('active-steer', 'session/prompt', { request: steer }))
+  assert.equal((await connection.next()).type, 'item')
+  assert.equal(f.received.length, 1)
+  for (const peer of f.peers) peer.send(JSON.stringify({ type: 'end', streamId: 'active-steer' }))
+  assert.equal((await connection.next()).type, 'end')
+  running = false
+  connection.send(open('idle-steer', 'session/prompt', { request: steer }))
+  assertNativeError(await connection.next(), 'idle-steer', 'extension_contract_invalid')
+  await connection.next()
+  assert.equal(f.received.length, 1)
+  f.manager.runtimes.get(f.manager.key(project)).personalSkillGeneration = { pins: [] }
+  assert.equal((await httpPrompt(queue)).status, 200, 'safe baseline preserves ordinary research')
+})
+
+
+test('HTTP and mux bind only the authenticated actor after generation admission, and binding failure leaves core forwarding usable',async t=>{
+  const bindings=[],audits=[];let fail=false;
+  const f=await fixture(t,{}, {}, {recordPromptActor:async(user,project,request)=>{assert.equal(user.id,f.user.id);assert.equal(project.id,'default');if(fail)throw new HttpError(503,'product_state_unavailable','Fixture binding failure');bindings.push({actor:user.id,request:structuredClone(request)});},audit:async(event,detail)=>audits.push({event,...detail})});
+  const request={requestId:'actual-actor-http',sessionId:'ordinary',mode:'queue',content:[{type:'text',text:'Question'}]};
+  const post=body=>fetch(`${f.base}/api/session/prompt`,{method:'POST',headers:{cookie:f.cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'transport',method:'session/prompt',payload:{args:{request:body}}})});
+  assert.equal((await post(request)).status,200);assert.deepEqual(bindings[0],{actor:f.user.id,request});
+  f.manager.assertPersonalSkillPromptGeneration=async()=>{throw Object.assign(new HttpError(409,'extension_contract_invalid','Stale'),{definitivelyRejected:true});};
+  assert.equal((await post({...request,requestId:'refused'})).status,409);assert.equal(bindings.length,1);
+  const connection=f.connect();await connection.opened;connection.send(open('actor-stale-mux','session/prompt',{request:{...request,requestId:'refused-mux'}}));
+  assertNativeError(await connection.next(),'actor-stale-mux','extension_contract_invalid');await connection.next();assert.equal(bindings.length,1);
+  f.manager.assertPersonalSkillPromptGeneration=async()=>{};
+  const frame=open('actor-mux','session/prompt',{request:{...request,requestId:'actual-actor-mux'}});connection.send(frame);assert.equal((await connection.next()).type,'item');assert.deepEqual(bindings[1],{actor:f.user.id,request:frame.payload.args.request});
+  fail=true;assert.equal((await post({...request,requestId:'unbound-core'})).status,200);assert(audits.some(item=>item.event==='extension.actor.bind'&&item.userId===f.user.id));assert.equal(bindings.length,2);
+});
+
+test("unconfirmed managed browser release cannot keep native frame transports alive", { timeout: 5000 }, async t => {
+  const f = await fixture(t, {}, {}, { managedBrowser: {
+    releaseFrame: async () => { throw new HttpError(503, "managed_browser_unavailable", "Cleanup unconfirmed"); },
+    close: async () => {},
+  } });
+  const project = await f.store.requireProject(f.user, "default");
+  const connection = f.connect();assert.equal(await connection.opened, 101);
+  await eventually(() => f.manager.activeProxyCountForProject(project) === 1);
+  const closed = once(connection.ws, "close");
+  await assert.rejects(f.ui.releaseFrame(f.frame.frameId, f.user.id), { code: "managed_browser_unavailable" });
+  await closed;
+  assert.equal(f.manager.activeProxyCountForProject(project), 0);
+});
+
+test("runtime UI shutdown joins its sockets and listener even when browser cleanup fails", { timeout: 5000 }, async t => {
+  let refuse = true;
+  const f = await fixture(t, {}, {}, { managedBrowser: {
+    releaseFrame: async () => {},
+    close: async () => { if (refuse) throw new HttpError(503, "managed_browser_unavailable", "Cleanup unconfirmed"); },
+  } });
+  const connection = f.connect();assert.equal(await connection.opened, 101);
+  const closed = once(connection.ws, "close");
+  try { await assert.rejects(f.ui.close(), { code: "managed_browser_unavailable" }); }
+  finally { refuse = false; }
+  await closed;
+  assert.equal(f.ui.address(), null);
 });

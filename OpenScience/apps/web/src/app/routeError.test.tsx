@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
@@ -81,7 +81,7 @@ describe("a page that fails", () => {
     open("/app/inbox");
     expect(await screen.findByText("页面已更新，正在刷新")).toBeInTheDocument();
     expect(screen.getByText("侧栏")).toBeInTheDocument();
-    expect(mocks.reloadForNewRelease).toHaveBeenCalled();
+    await waitFor(() => expect(mocks.reloadForNewRelease).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "重新载入" })).toBeInTheDocument();
   });
 

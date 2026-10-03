@@ -474,3 +474,74 @@ def test_module_sanitizer_removes_first_claims_and_pseudo_precise_site_counts():
     assert "至少8-10家" not in serialized
     assert "亟需" not in serialized
     assert "唯有如此" not in serialized
+
+
+def test_actual_ecosystem_prompt_binds_counts_to_selected_records(monkeypatch):
+    from collections import Counter
+    from modules.new_analysis_modules import M2_ResearchEcosystemModule
+    module = M2_ResearchEcosystemModule()
+    captured = []
+    async def observe(prompt, *_args, **_kwargs):
+        captured.append(prompt)
+        return '{}'
+    monkeypatch.setattr(module, '_llm_analyze', observe)
+    for count in [3, 714]:
+        asyncio.run(module._generate_ecosystem_analysis(
+            Counter({'Author': 4}), Counter({'Journal': 5}), {'density': .005},
+            EvidenceStats(evidence_count=count, earliest_year=2024, latest_year=2027), 'topic'))
+    captured = [' '.join(text.split()) for text in captured]
+    assert all('本次检索选入记录数' in text for text in captured)
+    assert all('选入关键词共现网络密度' in text and '合作网络密度:' not in text for text in captured)
+    assert '714' in captured[1] and '3' in captured[0]
+    for text in captured:
+        assert 'selected retrieved records' in text
+        assert 'complete year coverage' in text
+        assert 'field-wide growth' in text
+
+
+def test_all_analysis_and_report_prompts_share_sample_interpretation_contract():
+    from collections import OrderedDict
+    from config import prompts
+    for name in ['M1_PROBLEM_LANDSCAPE_PROMPT', 'M2_RESEARCH_ECOSYSTEM_PROMPT',
+                 'M3_EVIDENCE_SYSTEM_PROMPT', 'M4_SCIENTIFIC_CONTRADICTION_PROMPT',
+                 'M5_BREAKTHROUGH_OPPORTUNITY_PROMPT', 'M6_RESEARCH_AGENDA_PROMPT']:
+        text = ' '.join(getattr(prompts, name).split())
+        assert 'selected retrieved records' in text and 'field-wide growth' in text
+    text = ReportGenerator()._build_chapter_prompt(
+        3, 'M2_RESEARCH_ECOSYSTEM', 'ecosystem', {'count': 714}, [], [], [], {}, 'topic', OrderedDict())
+    text = ' '.join(text.split())
+    assert '714' in text and 'selected retrieved records' in text
+    assert 'complete year coverage' in text
+
+
+def test_outline_keeps_observed_issue_years_without_fabricating_calendar_coverage(monkeypatch):
+    from core.new_report_generator import llm_service
+    captured = []
+    async def observe(prompt, **_kwargs):
+        captured.append(prompt)
+        return '{"M2_RESEARCH_ECOSYSTEM":{"subsections":[]}}'
+    monkeypatch.setattr(llm_service, 'complete', observe)
+    for earliest, latest in [(2024, 2027), (2030, 2032)]:
+        materials = {'module_data': {'M2_RESEARCH_ECOSYSTEM': {}}, 'all_key_insights': [],
+                     'evidence_stats_summary': {'total_papers': 714, 'clinical_ratio': .23,
+                                                'earliest_year': earliest, 'latest_year': latest}}
+        asyncio.run(ReportGenerator()._generate_outline('topic', materials))
+    captured = [' '.join(text.split()) for text in captured]
+    assert '2024' in captured[0] and '2027' in captured[0]
+    assert '2030' in captured[1] and '2032' in captured[1]
+    assert all('时间跨度: 2022-2026' not in text for text in captured)
+    assert all('selected retrieved records' in text for text in captured)
+
+
+def test_summary_and_conclusion_prompts_keep_the_same_selected_record_scope():
+    generator = ReportGenerator()
+    stats = EvidenceStats(evidence_count=714, clinical_ratio=.23, earliest_year=2024, latest_year=2027)
+    materials = {'module_data': {}, 'all_key_insights': [], 'evidence_stats_summary': {
+        'total_papers': 714, 'clinical_ratio': .23, 'earliest_year': 2024, 'latest_year': 2027,
+        'design_distribution': {'Clinical Study': 164, 'Review': 550}}}
+    for text in [generator._build_executive_summary_prompt('topic', materials, stats),
+                 generator._build_conclusion_prompt('topic', materials, stats)]:
+        text = ' '.join(text.split())
+        assert 'selected retrieved records' in text and 'complete year coverage' in text
+        assert '714' in text and '2027' in text
+        assert '时间跨度: 2022-2026' not in text

@@ -87,12 +87,15 @@ test("every setting the runtime depends on still holds in the composition the im
   // PTC, image offload, Office preview, workspace changes and new settings
   // leaves; `code-runtime`, `workflow-worker-thread` and `agent-presets` left.
   // 192 on 2026-09-30: the request-scoped engine execution-context plugin.
-  assert.equal(report.counts.baselineRows, 192, "the recorded composition includes the native client, citation bundle, ECO03 plugin probe the two community client bundles and the engine execution-context plugin");
+  // 193 on 2026-10-02: the scoped native skill catalogue host plugin.
+  assert.equal(report.counts.baselineRows, 193, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context and scoped skill catalogue");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
+  assert.equal(baseline.rows.filter(row => row.id === "evimed-skill-catalogue").length, 1);
+  assert.equal(baseline.byId.get("evimed-skill-catalogue").name, "@evimed/dsh-socket/plugins/skill-catalogue");
   // 25 since 2026-09-07: the compaction group gained `evimed-compaction`, the
   // provider swap that preserves a run's durable handles across a compaction.
   // It sits beside the kernel's own engine rather than replacing the row,
@@ -101,8 +104,10 @@ test("every setting the runtime depends on still holds in the composition the im
   // kernel's subagent, subagent-control, workflow and workflow-worker tools)
   // left the preset; delegation is evimed_delegate over the host's subagent
   // service, and nothing called the workflow tool.
-  assert.equal(report.counts.presetRows, 20, "the preset includes the managed citation bridge, the compaction provider, and grouped native tools");
+  assert.equal(report.counts.presetRows, 21, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
+  assert.equal(preset.rows.filter(row => row.id === "evimed-cowork-bridge").length, 1);
+  assert.equal(preset.byId.get("evimed-cowork-bridge").name, "@evimed/dsh-socket/extensions/cowork");
   assert.equal(preset.rows.filter(row => row.id === "evimed-compaction").length, 1);
   assert.equal(preset.rows.filter(row => row.id === "evimed-citation-bridge").length, 1);
   assert.equal(preset.byId.get("evimed-citation-bridge").name, "@evimed/dsh-socket/plugins/citation-bridge");

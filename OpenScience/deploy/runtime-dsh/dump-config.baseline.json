@@ -1295,6 +1295,8 @@
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
+- id: evimed-skill-catalogue
+  name: '@evimed/dsh-socket/plugins/skill-catalogue'
 - id: evimed-plugin-probe
   name: '@evimed/dsh-socket/plugins/plugin-probe'
 - id: evimed-seam-probe
@@ -1408,6 +1410,7 @@
         name: '@deepseek-ai/dsh-skill-filesystem'
         config:
           includeDefaultRoots: false
+          watch: false
           customSkillDirs:
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/core'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/evimed'
@@ -1415,6 +1418,9 @@
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/office'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/geo-private/skills'
             - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
+            - !!js >-
+              process.env.EVIMED_PERSONAL_SKILLS_DIR ||
+              '/opt/evimed/personal-skills'
       - id: tool-skill
         name: '@deepseek-ai/dsh-tool-skill'
       - id: tool-ask-user
@@ -1448,6 +1454,13 @@
               thresholdChars: 8192
               headChars: 4096
               tailChars: 1024
+      - id: evimed-cowork-bridge
+        name: '@evimed/dsh-socket/extensions/cowork'
+        config:
+          projectionFile: !!js process.env.EVIMED_EXTENSION_PROJECTION_FILE ?? ''
+          gatewayUrl: !!js process.env.EVIMED_EXTENSION_GATEWAY_URL ?? ''
+          tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE ?? ''
+          generationTokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE ?? ''
 # == dsh-cite
 - id: cite
   name: dsh-cite

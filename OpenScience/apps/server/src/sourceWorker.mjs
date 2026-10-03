@@ -119,13 +119,14 @@ export class SourceIngestionWorker {
     const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
+    let parseController = null;
     let renewing = false;
     const renewal = setInterval(() => {
       if (renewing) return;
       renewing = true;
       void this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs)
-        .then((renewed) => { if (!renewed) leaseLost = true; })
-        .catch(() => { leaseLost = true; }).finally(() => { renewing = false; });
+        .then((renewed) => { if (!renewed) { leaseLost = true; parseController?.abort(Object.assign(new Error("The ingestion lease was lost."), { code: "product_job_lease_lost" })); } })
+        .catch(() => { leaseLost = true; parseController?.abort(Object.assign(new Error("The ingestion lease was lost."), { code: "product_job_lease_lost" })); }).finally(() => { renewing = false; });
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     let processing = null;
@@ -187,12 +188,30 @@ export class SourceIngestionWorker {
         const resolved = await this.resolveSource(job, processing);
         resolvedFile = resolved;
         const file = typeof resolved === "string" ? resolved : resolved.localPath;
-        const result = await this.parser.parse({
-          path: file,
-          mimeType: processing.payload.fingerprint.mimeType,
-          sha256: processing.payload.fingerprint.sha256,
-          sourceId: processing.id,
-        });
+        const controller = new AbortController();
+        parseController = controller;
+        let checking = false;
+        const cancellationCheck = setInterval(() => {
+          if (checking || controller.signal.aborted) return;
+          checking = true;
+          void this.#assertCurrent(job.userId, processing.id, actualGeneration)
+            .catch(error => controller.abort(error)).finally(() => { checking = false; });
+        }, Math.max(100, Math.min(1000, this.pollMs)));
+        cancellationCheck.unref();
+        let result;
+        try {
+          result = await this.parser.parse({ path: file,
+            mimeType: processing.payload.fingerprint.mimeType,
+            sha256: processing.payload.fingerprint.sha256,
+            sourceId: processing.id, signal: controller.signal,
+          });
+        } catch (error) {
+          if (controller.signal.aborted) throw controller.signal.reason;
+          throw error;
+        } finally {
+          clearInterval(cancellationCheck);
+          parseController = null;
+        }
         // A model wrote the parser's metadata; the DOI is checked against
         // Crossref here, outside the capture's transaction, so a slow lookup
         // never holds a row lock. It cannot fail the parse: an unreachable

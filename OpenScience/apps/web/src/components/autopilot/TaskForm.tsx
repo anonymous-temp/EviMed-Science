@@ -3,7 +3,7 @@ import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, 
 import { productErrorMessage } from "@/lib/productClient";
 import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Input, Textarea, inputClasses } from "@/components/ui/Input";
+import { Input, Textarea, Select } from "@/components/ui/Input";
 import { scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, type Recommendation } from "./taskPresentation";
 
 export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorded, onBusyChange, onCancel }: {
@@ -64,25 +64,25 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
     } finally { if (live.current) { setSaving(false); onBusyChange(false); } }
   };
   return <form className="space-y-5" onSubmit={submit}>
-    <fieldset disabled={saving || !!created || conflict} className="space-y-5">
+    <fieldset disabled={saving || !!created || conflict} className="min-w-0 space-y-4">
       <Input label="名称" value={title} maxLength={200} placeholder="为任务起个名字" onChange={event => setTitle(event.target.value)} />
-      <Textarea label="任务指令" required rows={7} maxLength={20000} value={prompt} placeholder="说明研究问题、关注范围和希望收到的结果…" onChange={event => setPrompt(event.target.value)} />
-      <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-2 text-ui font-medium text-text">重复<select aria-label="重复" className={inputClasses()} value={schedule.kind} onChange={event => setSchedule({ ...schedule, kind: event.target.value as AgendaSchedule["kind"], weekdays: schedule.weekdays ?? [1] })}>
+      <Textarea label="任务指令" required rows={5} maxLength={20000} value={prompt} placeholder="说明研究问题、关注范围和希望收到的结果…" onChange={event => setPrompt(event.target.value)} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Select label="重复" value={schedule.kind} onChange={event => setSchedule({ ...schedule, kind: event.target.value as AgendaSchedule["kind"], weekdays: schedule.weekdays ?? [1] })}>
           <option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option>
-        </select></label>
+        </Select>
         <Input label="时间" type="time" required value={schedule.time} onChange={event => setSchedule({ ...schedule, time: event.target.value })} />
       </div>
       {schedule.kind === "once" && <Input label="日期" type="date" required value={schedule.date ?? ""} onChange={event => setSchedule({ ...schedule, date: event.target.value })} />}
       {schedule.kind === "weekly" && <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">星期</legend>{WEEKDAYS.map((day, index) => <label key={day} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={schedule.weekdays?.includes(index + 1) ?? false} onChange={event => setSchedule({ ...schedule, weekdays: event.target.checked ? [...(schedule.weekdays ?? []), index + 1].sort() : schedule.weekdays?.filter(value => value !== index + 1) })} />{day}</label>)}</fieldset>}
-      <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
-      <Disclosure summary="高级设置"><div className="space-y-4">
+      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone}><div className="space-y-4 pt-2">
+        <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
-        {([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min="0.01" step="0.01" value={budgets[key]} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min="0.01" step="0.01" value={budgets[key]} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
         <p className="text-caption text-text-3">单次 ≤ 每日 ≤ 每周</p>
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
-    <div className="flex gap-2"><Button type="submit" loading={saving} disabled={!valid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button><Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button></div>
+    <div className="flex justify-end gap-2 border-t border-border pt-4"><Button variant="secondary" disabled={saving} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button><Button type="submit" loading={saving} disabled={!valid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button></div>
   </form>;
 }

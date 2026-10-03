@@ -43,7 +43,10 @@ test("plugin-support.json lists every socket plugin the composition mounts, and 
   // The walk has to have read both files, or an empty list agrees with an empty record.
   assert.ok(host.length >= 4 && agent.length >= 6, `read ${host.length} host and ${agent.length} agent rows; the scan is wrong`);
   assert.deepEqual([...host].sort(), [...HOST_PLUGIN_IDS].sort(), "the bundle's declared host rows are the ones its patch inserts");
-  assert.deepEqual([...agent].sort(), [...AGENT_PLUGIN_IDS].sort(), "the bundle's declared agent rows are the ones its preset mounts");
+  // The hosted extension shim is platform-owned, separate from the eight core
+  // policy plugins. Its presence declares a bridge, not package qualification.
+  assert.deepEqual([...agent].sort(), [...AGENT_PLUGIN_IDS, "evimed-cowork-bridge"].sort(),
+    "the preset mounts exactly the core policy plugins and the trusted extension shim");
 
   const recorded = support.nativePlugins;
   assert.equal(new Set(recorded).size, recorded.length, "a plugin is recorded twice");

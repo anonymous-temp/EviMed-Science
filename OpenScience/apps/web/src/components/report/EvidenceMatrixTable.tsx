@@ -93,7 +93,7 @@ export function EvidenceMatrixTable({
                         <span className="flex flex-wrap items-center gap-1">
                           {source.sourceType !== "other" && <Tag>{EVIDENCE_SOURCE_TYPE_LABELS_ZH[source.sourceType]}</Tag>}
                           {source.accessLevel && ACCESS_LABEL[source.accessLevel] && <span className="text-caption text-text-3">{ACCESS_LABEL[source.accessLevel]}</span>}
-                          <SourceUpdateBadges updates={check?.sources[index]?.updates} />
+                          <SourceUpdateBadges updates={check?.sources[index]?.updates} updateStatus={check?.sources[index]?.updateStatus} />
                         </span>
                         <span className="mt-0.5 block text-caption text-text">{source.sourceTitle ?? source.identifier ?? "来源未记录"}</span>
                         {source.identifier && source.sourceTitle && <span className="block text-caption text-muted">{source.identifier}</span>}
@@ -140,7 +140,7 @@ function QuoteLink({ source, runId }: { source: ReturnType<typeof claimSources>[
   if (runId && source.artifactPath) {
     return (
       <Tooltip content="在保存的原文中定位这段引文">
-        <Link to={preservedSourceHref(runId, source.artifactPath, source.supportQuote)} className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link">
+        <Link to={preservedSourceHref(runId, source.artifactPath, source.supportQuote, source.resultVersionId)} className="line-clamp-4 text-text underline decoration-border underline-offset-2 hover:decoration-link">
           {excerpt}
         </Link>
       </Tooltip>

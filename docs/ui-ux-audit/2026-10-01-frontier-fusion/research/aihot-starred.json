@@ -1,0 +1,111 @@
+{
+  "url": "https://aihot.news/starred",
+  "status": 200,
+  "title": "我的收藏 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:25.447531+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\n收藏\n\n本机收藏的 AIHOT 内容，适合稍后阅读和回看。\n\n导入旧站收藏\n导入文件\n\n收藏只保存在当前浏览器；清除浏览器数据或换设备后不会同步。\n\n还没有收藏内容。点开任意一条内容，在详情页点击收藏即可添加。\n\n去看精选 →",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "去看精选 →",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 1000,
+      "top": 0,
+      "right": 1440,
+      "bottom": 1000,
+      "left": 180
+    },
+    "firstArticle": null
+  }
+}

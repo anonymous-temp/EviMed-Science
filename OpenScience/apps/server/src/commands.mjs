@@ -26,7 +26,7 @@ import {
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "./security.mjs";
-import { attachSourceUpdates } from "./sourceUpdates.mjs";
+import { attachSourceUpdates, attachUnavailableSourceUpdates } from "./sourceUpdates.mjs";
 
 export const BUNDLED_EXAMPLES = Object.freeze({
   "climate-trends": Object.freeze([
@@ -281,11 +281,12 @@ const TASK_COMMAND_ALLOWLIST = new Set([
 
 /**
  * @param {{ config: any, runtimeManager: any, sourceUpdates?: { lookup: (dois: readonly string[], options?: { signal?: AbortSignal }) => Promise<Map<string, any[]>> } | null,
+ *   resultImpacts?: { reconcileVerification: (userId:string, projectId:string, verdict:any) => Promise<any> } | null,
  *   knowledgeBaseUploads?: { covers: (root: string, rel: string) => boolean, admit: (rel: string) => void, register: (ctx: any, rel: string, buffer: Buffer) => Promise<any> } | null }} dependencies
  *   `sourceUpdates`: the Crossref notice lookup (sourceUpdates.mjs); null when switched off.
  *   `knowledgeBaseUploads`: turns an `upload_file` into the knowledge base into a source; null without the source service.
  */
-export function createCommandRegistry({ config, runtimeManager, sourceUpdates = null, knowledgeBaseUploads = null }) {
+export function createCommandRegistry({ config, runtimeManager, sourceUpdates = null, knowledgeBaseUploads = null, resultImpacts = null }) {
   const handlers = {
     // The value returned is the control plane's own surface, not a kernel's.
     // It used to be a pass-through base URL the browser then spoke a kernel's
@@ -469,7 +470,7 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
         try { source = await readText(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, artifactPath)); } catch { /* an unsafe path is an unread source */ }
         if (source) sourceArtifacts[artifactPath] = source;
       }
-      const verdict = claimVerification({ matrix, sourceArtifacts });
+      const verdict = /** @type {ReturnType<typeof claimVerification> & {resultImpacts?: Array<Record<string, any>>, resultImpactStatus?: string}} */ (claimVerification({ matrix, sourceArtifacts }));
       // What each quoted source is (C8), for the badge beside it. The
       // preserving tool wrote it into the capture as `source.json` when it
       // preserved the text; a capture from before that is typed from the URL
@@ -496,6 +497,15 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       // beside it (plan §3.9): read from Crossref, bounded, and never a
       // verdict — a lookup that fails leaves the verification as it was.
       if (sourceUpdates) await attachSourceUpdates(verdict, { matrix, sourceArtifacts, lookup: sourceUpdates.lookup });
+      else attachUnavailableSourceUpdates(verdict);
+      if (resultImpacts) {
+        try {
+          const impacts = await resultImpacts.reconcileVerification(ctx.user?.id ?? ctx.project.userId, ctx.project.id, verdict);
+          verdict.resultImpacts = impacts.items.map(item => ({ id: item.id, revision: item.revision, ...item.payload }));
+        } catch {
+          verdict.resultImpactStatus = "unavailable";
+        }
+      }
       return verdict;
     },
 
@@ -620,7 +630,8 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       const model = optionalLimitedString(args.model, "model", 256);
       return withProjectStorageMutation(ctx.project, async () => {
         const existing = await readProvenance(ctx.project);
-        if (callId && existing.some((item) => item.callId === callId && (item.sessionId ?? undefined) === sessionId)) {
+        if (callId && existing.some((item) => item.callId === callId && item.path === artifactPath
+          && (item.sessionId ?? undefined) === sessionId && item.content === content)) {
           return null;
         }
         if (
@@ -633,6 +644,8 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
           version,
           ts: Math.floor(Date.now() / 1000),
           tool: assertString(args.tool ?? "unknown", "tool", { max: 256 }),
+          captureAuthority: "client-asserted",
+          snapshotStatus: "legacy-text-only",
           ...(content ? { content } : {}),
           ...(log ? { log } : {}),
           ...(sessionId ? { sessionId } : {}),

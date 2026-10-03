@@ -162,7 +162,9 @@ async function main() {
   await jsonFetch(`${base}/api/projects`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...auth },
-    body: JSON.stringify({ id: projectId, name: `F0 session-stream acceptance ${marker}` }),
+    // One line of at most 40 characters (store.mjs `maxProjectName`); the
+    // longer name this used made every run since 2026-09-18 stop here on 400.
+    body: JSON.stringify({ id: projectId, name: `F0 stream acceptance ${marker}` }),
   });
   const scoped = { ...auth, "X-Open-Science-Project": projectId };
 

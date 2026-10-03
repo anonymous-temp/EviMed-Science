@@ -117,5 +117,16 @@
       "deepseek-v4-pro"
     ],
     "notes": "The research model: DeepSeek's OpenAI-compatible chat API, reached only through the control plane's model gateway (apps/server/src/modelGateway.mjs) — the runtime holds no key. `model` is what a deployment runs when OPEN_SCIENCE_DEEPSEEK_MODEL is unset, and what the release receipt certifies end to end; `certified` is the gateway's allowlist (`supportedDeepSeekModels`): readiness refuses to serve and the runtime refuses to launch on any other name. Until 2026-09-27 the model was written only in the gateway, config.mjs, .env.example and compose, with nothing holding them equal (platform audit I1-13); packages/contracts/deepseek now does, together with the frontier and memory-extraction defaults and the specialist engines' LLM_MODEL. Moving the pin is one edit here plus the gateway's constants, and a new release receipt against the new model. From DSH 0.1.7 the kernel reaches the model through the gateway's Anthropic Messages route (/internal/model/v1/messages -> DeepSeek's /anthropic/v1/messages), the only protocol 0.1.7's DeepSeek adapter speaks; the control plane's own callers stay on chat/completions. Both routes reserve and settle through the same usage ledger."
+  },
+  "$runtimeSecurity": {
+    "js-yaml": {
+      "version": "4.3.2",
+      "integrity": "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==",
+      "advisories": [
+        "GHSA-5p4m-2wfm-xmqj",
+        "GHSA-2883-xcg3-v3hh"
+      ],
+      "notes": "Required security backport for YAML4 CPU bounds. Workspace and both pinned kernel/profile copies must match this package without changing the DSH namespace; runtime build-hook integration is pending in this development checkpoint."
+    }
   }
 }

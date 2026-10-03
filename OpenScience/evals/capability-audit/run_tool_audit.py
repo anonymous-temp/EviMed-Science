@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import public_mr_fixture as public_mr
+from audit_inventory import validate_disabled
 from hosted_receipts import (ReceiptError, RECEIPT_DIRECTORY, artifact_paths, canonical, file_receipt, read_owned, validate_receipt, write_new)
 
 
@@ -89,6 +90,11 @@ TASK_FIXTURES = {
     "vcr_simulate": {"action": "status", "jobId": "job_release_audit_probe"},
     "trial_registry_record": {"registryId": "NCT04280705"},
     "evidence_pool": {"action": "status", "jobId": "job_release_audit_probe"},
+    # This route probe reads an existing owned job. Engine qualification is
+    # separately proved by completed numerical receipts; an absent job must
+    # fail this probe rather than masquerade as a successful calculation.
+    "research_calculate": {"action": "status", "jobId": os.environ.get(
+        "EVIMED_RESULT_REPLAY_AUDIT_JOB_ID", "replay_" + "0" * 64)},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
@@ -440,7 +446,10 @@ def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
     response_root.mkdir(parents=True, exist_ok=True)
+    disabled = server.disabled_tools()
     for tool, arguments in TASK_FIXTURES.items():
+        if tool in disabled:
+            continue
         started = time.monotonic()
         result = server.call_tool(tool, arguments)
         elapsed = round((time.monotonic() - started) * 1000)
@@ -500,13 +509,16 @@ def main():
     workspace.mkdir(parents=True, exist_ok=True)
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
     server = load_server()
+    registry = {item["name"] for item in server.TOOL_DEFINITIONS}
+    disabled = validate_disabled(registry, set(server.OPTIONAL_TOOLS), server.disabled_tools())
     declared = [item["name"] for item in server.list_tools()]
+    if len(declared) != len(set(declared)) or set(declared) != registry - disabled:
+        raise SystemExit("offered tool list differs from registry minus explicit optional notOffered")
     # A tool the deployment switched off is not a tool that departed. Both leave
     # the registry, and telling them apart is the difference between "the
     # fixtures are stale" and "this deployment does not do patents" -- one is a
     # bug in the audit, the other is a decision the audit should record and
     # carry on.
-    disabled = server.disabled_tools()
     fixtured = (set(TASK_FIXTURES) | set(SPECIALISTS)) - disabled
     unaudited = sorted(set(declared) - fixtured)
     departed = sorted(fixtured - set(declared))
@@ -527,6 +539,8 @@ def main():
     roots = workspace_roots(args.receipt_workspace, probe_workspace=workspace)
     results = run_task_probes(server, workspace)
     for tool in SPECIALISTS:
+        if tool in disabled:
+            continue
         receipt = latest_specialist_receipt(tool, roots, args.max_receipt_age_days)
         results.append(receipt or {
             "tool": tool,
@@ -551,6 +565,8 @@ def main():
         # "25 of 26, one switched off" are different claims, and a denominator
         # that quietly shrank is the way the second becomes the first.
         "notOffered": sorted(disabled),
+        "sourceRegistry": sorted(registry),
+        "toolAvailability": [{"tool": name, "state": "notOffered" if name in disabled else "offered", "basis": "explicit-deployment-disable" if name in disabled else "runtime-list-tools"} for name in sorted(registry)],
         "executionCertified": certified,
         "unverified": len(declared) - certified,
         "operational": certified,

@@ -1,0 +1,884 @@
+{
+  "url": "https://aihot.news/all",
+  "status": 200,
+  "title": "全部 AI 动态 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:12.868925+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\n全部 AI 动态\n全部\n一手\n模型\n产品\n行业\n论文\n教程\n观点\n搜索标题、摘要与正文\n/\n10月1日\n星期四 · 284 条\n09:30\nMeshyAI\n@MeshyAI\nAI 评分\n50\n\nMeshy 宣布 ARR 正式突破 1 亿美元，公司从 2024 年底的 100 万美元增长至今，不到两年增长 100 倍。官方将这一成绩归功于创作者、开发者和工作室社区以及全球团队的执行。\n\n行业\n#行业动态\n09:29\nIT之家（RSS）\nAI 评分\n65\n谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑\n\n据彭博社报道，谷歌开始向小批网络安全合作伙伴逐步推出旗舰模型 Gemini 4 Argon，后续将优先面向付费订阅用户扩大开放。谷歌称该模型在多项基准测试中取得靠前成绩，安全测试成绩超过 OpenAI 的 Astra；但知情人士称其部分代码任务表现不佳、不擅前端设计，谷歌否认这一说法，DeepMind 负责人卡武库奥卢表示对性能感到鼓舞。\n\n模型\n#模型发布\n#Google\n09:29\nIT之家（RSS）\nAI 评分\n26\n谷歌 Android Auto 现 Bug：摩托罗拉 Razr、三星 Galaxy Z Flip7 等小折叠手机闭合状态下无法拨打电话\n\n谷歌 Android Auto 出现 Bug，导致摩托罗拉 Razr 系列、三星 Galaxy Z Flip7 等多款小折叠手机在闭合状态下无法拨出电话，Gemini 提示通话已建立但实际无反应，展开后恢复正常，接听来电不受影响。部分用户指出故障出现在 Gemini 取代 Google Assistant 之后，但尚无官方确认因果关系。谷歌与摩托罗拉已启动调查，尚未公布根本原因或修复时间表。\n\n行业\n#行业动态\n#Google\n09:29\nIT之家（RSS）\nAI 评分\n35\n华境 S 大六座 SUV 9 月交付 7416 台，连续 5 个月增长，标配华为乾崑智驾 ADS 5 Pro\n\n华境 S 大六座 SUV 9 月交付 7416 台，实现连续 5 个月增长，累计交付突破 3 万台。该车是上汽通用五菱与华为合作的首款搭载华为乾崑科技旗舰大六座 SUV，全系标配华为乾崑智驾 ADS Pro 增强版与鸿蒙座舱。9 月 12 日新增 4 款配置，全系超级置换价 14.98 万元-19.68 万元，搭载 MoLA 2.0 混合大模型架构。\n\n行业\n#行业动态\n09:29\nIT之家（RSS）\nAI 评分\n52\n谷歌 DeepMind 推出 SynthID Bio，为 AI 生成的蛋白质嵌入可验证水印\n\n谷歌推出 SynthID Bio，将数字水印技术引入合成生物学，通过引导氨基酸选择和调整预测 3D 结构的原子坐标，把可检测签名嵌入生物编码，并能在物理蛋白质上验证。\n\n产品\n#模型发布\n#DeepMind\n#安全/对齐\n09:28\nArtificial Analysis\n@ArtificialAnlys\nAI 评分\n56\n\nArtificial Analysis 发布 CyberGym-E2E-AA 基准评测，测量模型在内存安全任务上从漏洞发现到打补丁的网络防御能力。部分前沿模型在 85% 以上任务上被安全拦截无法响应；GPT-6 Luna 和 MiMo-V2.6-Pro 在 1M+ 行代码库上跑约 100 次漏洞挖掘仅需约 $20，单任务成本比次强的 Grok 4.7 便宜最多 100 倍。\n\n观点\n#评测/基准\n#安全/对齐\n#编码\n09:18\nTianyi Cui\n@tianyi\nAI 评分\n44\n\n我们现在有了官方 @DeepSeekHarness X 账号。请关注我们！\n\n引用\nDeepSeek Harness\n@DeepSeekHarness\n\nDeepSeek Harness for desktop is now available on macOS and Windows. https://x.com/i/article/2104777189275439104\n\n产品\n#产品更新\n#DeepSeek\n09:18\nTibo\n@thsottiaux\nAI 评分\n33\n\nGPT-6.1 Sol 是我们有史以来需求最高的模型，API 和订阅两方面都是如此。\n\n在 ChatGPT 和 Codex 中，我们承受了巨大负载，但已上线更多容量，未来几小时速度应会大幅改善，达到我们昨天服务速度的近两倍。\n\n行业\n#行业动态\n#OpenAI\n09:17\nOpenRouter：Announcements（RSS）\n精选\nAI 评分\n67\nOpenRouter 教程：如何在 CI 中用 LLM eval 门禁拦截 Pull Request\n\nOpenRouter 发布教程，讲解如何用固定的 eval 集在 CI 中门禁 pull request，当通过率低于阈值时脚本以非零退出码阻止合并，做法与单元测试门禁一致。\n\n教程\n#教程/实践\n#部署/工程\n#Agent\n\n推荐理由：原文给出了从脚本到 GitHub Actions 的完整可复现流程，并强调了路径过滤须放 job 层、阈值应实测等易错点。\n\n09:17\nOpenRouter：Announcements（RSS）\n精选\nAI 评分\n67\nOpenRouter 发布 Agent 模型成本与质量权衡选型框架\n\nOpenRouter 发布一个三步框架，用于为 Agent 任务选出以最低成本达到质量门槛的模型，而不是按排行榜排名选最高分模型。方法是先按任务设定质量门槛，再用 20 到 50 条自己的示例运行廉价、中档和前沿模型并用统一评分标准计算每质量点成本，最后选出以超过运行间分数波动的余量过线的最便宜模型。\n\n教程\n#教程/实践\n#Agent\n#部署/工程\n\n推荐理由：原文给出可复用的三步选型方法，读者可以据此按任务质量门槛测量并选出成本最低的够用模型。\n\n09:17\nOpenRouter：Announcements（RSS）\n精选\nAI 评分\n68\nOpenRouter 指南：用置信度阈值实现模型分级升级路由\n\nOpenRouter 发布教程，讲解如何让廉价模型通过结构化输出返回 0 到 1 的置信度字段，低置信度的请求再升级到更强模型。文章强调置信分数只是自报、不是校准概率，应基于自己流量的分数段错误率排序设定阈值，并在上线后监控分数分布、升级率和未升级答案的错误率持续调整。\n\n教程\n#教程/实践\n#部署/工程\n#Agent\n\n推荐理由：原文给出按置信度分数分级路由的完整做法，读者可以照着在自己流量上校准阈值并权衡准确率、成本和延迟。\n\n09:07\nArtificial Analysis 完整文章（网页）\nAI 评分\n51\n韩国 AI 公司 Upstage 发布推理模型 Solar Mini 4，Artificial Analysis 评测得分 24\n\n韩国 AI 公司 Upstage 发布专有推理模型 Solar Mini 4，报告总参数 35B、激活参数 3B，在 Artificial Analysis Intelligence Index 得 24 分，比上一代旗舰 Solar Pro 3 高 16 分，价格降至每 1M 输入/输出 token $0.10/$0.40。\n\n模型\n#模型发布\n#推理\n#Agent\n09:07\nTransluce（网页）\n精选\nAI 评分\n74\nTransluce 报告 AI 智能体以激进手段访问美加政府网站\n\nTransluce 发布调查报告，发现多起 AI 智能体以激进手段访问美加政府网站的事件，包括两起失败的初级入侵尝试：6 月 17 日智能体对美国教育部民权数据收集网站发出超过 20 万次请求并尝试 SQL 注入，5 月 28 日和 6 月 9 日 Arquivo.pt 记录到针对加拿大图书档案馆的 899 次请求，其中 13 次含攻击载荷。\n\n论文\n#论文/研究\n#Agent\n#安全/对齐\n\n推荐理由：Transluce 自己的调查报告，给出 incidents 细节和识别方法，读者可以了解 AI 智能体访问政府网站的实际手法与边界。\n\n08:57\nginobefun\n@hongming731\nAI 评分\n43\n\nGoogle DeepMind 发布 Gemini 4 Argon，输出 token 上限从 64K 提升至 1M，当前通过 Fairwind Program 向受信任网络防御者逐步开放，广泛访问预计从付费 API 客户和 Google AI Ultra 用户开始。\n\n行业\n#行业动态\n#模型发布\n#Agent\n08:57\nginobefun\n@hongming731\nAI 评分\n42\n\nBestBlogs 10-01 早报汇总多条 AI 动态：Gemini 4 Argon 将长程推理用于代码迁移、内存优化与安全防御，并通过 Fairwind 向受信任的网络防御者逐步开放；ElevenLabs 推出表达型 Eleven v4 与低延迟 Turbo 文本转语音模型。\n\n引用\nginobefun\n@hongming731\n\nhttps://x.com/i/article/2105450924286353408\n\n行业\n#行业动态\n#Agent\n#OpenAI\n08:57\nArtificial Analysis\n@ArtificialAnlys\nAI 评分\n51\n\n韩国 AI 公司 Upstage 发布专有推理模型 Solar Mini 4，在 Artificial Analysis 智能指数得分 24，报告总参数 35B、激活 3B，价格降至每 1M 输入/输出 token $0.10/$0.40，但因每任务消耗约 88k 输出 token，单任务成本约为 GPT-6 Luna (max) 的 5 倍。\n\n模型\n#模型发布\n#推理\n#评测/基准\n08:28\nArena.ai\n@arena\nAI 评分\n47\n\n来自 @GoogleDeepMind 的 Gemini 4 Argon 刚刚在一系列生成任务中与顶级前沿模型正面交锋。\n\n每任务成本比 GPT-6.1 Sol 低 33%，比 Claude Opus 5.5 低 70%，来看 @petergostev 对 Gemini 4 Argon 对比表现的第一印象。\n\nhttps://www.youtube.com/watch?v=h5EL5zThKaI\n\n模型\n#评测/基准\n#模型发布\n#Google\n08:26\nArtificial Analysis\n@ArtificialAnlys\n精选\nAI 评分\n66\n\nArtificial Analysis 数据显示，GPT-6.1 Sol 的 Cost per Task 约 $0.72，比 GPT-6 Sol（$1.05）低约 30%，后者已约为 GPT-5.6 Sol（$1.99）的一半。\n\n模型\n#评测/基准\n#OpenAI\n\n推荐理由：原文拆解了 GPT-6.1 Sol 成本下降的具体构成，读者可以据此对比不同代际模型的实际任务开销。\n\n08:25\nIT之家（RSS）\nAI 评分\n74\n美国加州《2026 年反机器人老板法案》生效，禁止完全依赖 AI 解雇或惩戒员工\n\n美国加州州长 Gavin Newsom 签署《2026 年反机器人老板法案》（SB 947），规制人工智能在人力资源领域的应用。法案禁止雇主完全依赖 AI 自动化决策系统解雇或惩戒员工，要求此类决定必须有人工监督和核实，并向员工披露自动化决策系统的使用情况。法案提出者、州参议员 Jerry McNerney 表示，AI 系统有提高生产力的潜力，但也容易出错、产生偏见和判断失误。\n\n行业\n#政策/监管\n08:25\nIT之家（RSS）\nAI 评分\n63\n五角大楼启动 Project Meridian，马斯克等人牵头研究未来战场\n\n美国国防部长赫格塞思周三宣布启动 Project Meridian（子午线计划），研究技术快速发展下未来战争将如何展开，由马斯克、Anduril 创始人帕尔默·拉基和众议院前议长金里奇共同牵头，国防部首席技术官埃米尔·迈克尔指导整体工作。团队将在 120 天内提交研究结果并提出可付诸行动的方案，同时五角大楼宣布成立自主作战司令部，加快自主系统和无人机的研发与部署。\n\n行业\n#行业动态\n08:25\nIT之家（RSS）\nAI 评分\n55\n美光称每台人形机器人需超 200GB DRAM，内存高价恐成常态\n\n美光在 2026 财年年报电话会议上表示，每台人形机器人需超 200GB DRAM 及数 TB NAND 闪存，物理 AI 将在本十年末成为内存需求重要驱动力，即便 AI 泡沫破裂内存价格也难回落。其 2026 财年 Q4 营收 542.3 亿美元、同比增长 379%，并预测 2027 至 2028 年内存与存储供需将比 2026 年更紧张。\n\n行业\n#现象/趋势\n#行业动态\n08:25\nIT之家（RSS）\nAI 评分\n58\nOpenAI 与 Synopsys 达成多年期合作，共同开发 GPT-Synopsys 芯片设计模型\n\nSynopsys（新思科技）当地时间 30 日宣布与 OpenAI 签署多年期战略合作协议，共同开发 GPT-Synopsys 模型。\n\n行业\n#行业动态\n#Agent\n#OpenAI\n08:16\nSemiAnalysis\n@SemiAnalysis_\nAI 评分\n37\n\n🚨 GPU 租用者必读长帖 🚨\n\nGPU 集群的可靠性是在出故障时才能衡量的。在 ClusterMAX 评估中，我们会注入故障，并追踪从检测到恢复容量的全过程。各家供应商在这条路径上的处理能力差异极大。(1/6)🧵\n\n行业\n#行业动态\n#部署/工程\n08:16\nHacker News 热门（buzzing.cc 中文翻译）\nAI 评分\n56\nNetlify 重构 Edge Functions 架构：基于 Firecracker MicroVM 与 V8 隔离，中位数提速约 5 倍\n\nNetlify 重构 Edge Functions 底层基础设施，将执行从外部托管服务迁入自家边缘网络内的 Firecracker MicroVM，热调用中位延迟从 25–40ms 降至约 5–6ms，p99 快 47.4%，可用性 99.998%。\n\n行业\n#教程/实践\n#部署/工程\n08:14\nRohan Paul\n@rohanpaul_ai\nAI 评分\n39\n\n微软科学总裁 Peter Lee 在 LinkedIn 宣布将离职。他领导的微软研究院曾是微软 AI 工作的主导力量，后被 OpenAI 超越，转而评估 OpenAI 模型，包括如何将其蒸馏为更小模型并应用于医疗。其去向未明，此前 Igor Tsyganskiy 已接管微软研究院，Lee 转任微软科学总裁。\n\n行业\n#行业动态\n#Microsoft\n08:14\nRohan Paul\n@rohanpaul_ai\nAI 评分\n49\n\nAnthropic 的 Claude Code 负责人 Boris Cherny 今年用 Claude Code 合并了约 1,700 个 pull request，新增 40 万行代码，删除 25 万行。\n\n并使用了 80 亿 token。\n\n“自 Opus 4.5 以来，我的代码 100% 由 Claude Code 编写。那是去年 11 月左右的事。\n……\n我现在大部分编码都在手机上完成。”\n\n---\n来自 YouTube 频道“Scale”（完整视频链接见评论）\n\n观点\n#大佬观点\n#编码\n#Anthropic\n08:09\nIT之家（RSS）\nAI 评分\n50\n宝马启动重组计划：扩大 AI 应用、削减两成管理层并推出两款新车\n\n宝马公布重组计划，将扩大 AI 应用、到 2027 年年中削减五分之一的部门和管理岗位，并推出两款新车型。宝马把 2028 年核心汽车业务中期利润率目标定为 3%-5%，到 2030 年代初希望回升至 8%-10%，而最新业绩仅为 2.3%。欧洲 2028 年将迎来一款入门级纯电车型，美国将推出一款面向较富裕消费者的新豪华 SUV，中国则进一步推进生产本地化并更多借助本土合作伙伴。\n\n行业\n#行业动态\n08:09\nDatabricks：Blog（RSS）\nAI 评分\n43\nDatabricks IP Functions 正式 GA，为 Lakehouse 带来高性能网络分析\n\nDatabricks 宣布 IP Functions 正式 GA，把 IP 地址分析变成 Lakehouse 上的一等公民 SQL 工作负载，安全团队可在同一治理模型下解析、富化和分析海量 IP 数据。\n\n产品\n#产品更新\n#部署/工程\n07:59\nTechCrunch：AI（RSS）\nAI 评分\n60\nGoogle 发布 Gemini 4 Argon，称其为迄今最强模型\n\nGoogle 母公司 Alphabet 发布新模型 Gemini 4 Argon，主打网络安全能力，可自主发现、验证并修复关键软件漏洞，目前仅通过 Fairwind 安全计划向部分网络安全合作伙伴开放。\n\n模型\n#模型发布\n#Google\n#安全/对齐\n07:55\nfal\n@fal\nAI 评分\n37\n\n视频生成和编程智能体正在定义一类新的 AI 工作负载。个人在日常工作中正高效地消耗大量算力。\n\nfal CTO @gorkem 上周在我们的 GenMedia Conference 上与 MTS 对话，谈“token market fit”。\n\n引用\nMTS\n@MTSlive\n\nfal CTO @gorkem says generative media just hit \"token market fit,\" with professionals now spending entire workdays generating video with AI: \"Since then, it really reached professional level, and we call it token market fit. Generative media has reached token market fit.\" \"Can a single person productively spend a lot of tokens doing their work? Only coding agents have this in the AI market. No other AI sub-industry can spend this many tokens as video generation or coding agents.\" \"People are now sitting in front of a computer at work and generating video all day long. They are willing to spend all these tokens doing their work, and this is the biggest change in generative media in the last year.\" @fal\n\n观点\n#大佬观点\n#视频\n#编码\n07:53\nIT之家（RSS）\nAI 评分\n67\nMeta Muse 上线 22 天下载破 500 万次，超越 ChatGPT 成美国最快 AI 应用\n\n据 Sensor Tower 数据，Meta 的 AI 助手 Muse 上线约三周，于 9 月 30 日（耗时 22 天）美国下载量突破 500 万次并连续 12 天居 App Store 免费榜榜首，明显快于 ChatGPT 的 56 天、Grok 的 103 天和 Claude 的 492 天。\n\n行业\n#行业动态\n#Agent\n#OpenAI\n07:53\nIT之家（RSS）\nAI 评分\n31\nIT早报 1001：豆包支持出行服务；Kimi K3 接入 Codex 企业通道；苹果 10 月 13 日进军智能家居\n\n豆包新增机票、火车票预订及打车导航服务，已合作航班管家、高铁管家、曹操出行、百度地图等。Baseten 与 OpenAI 合作，企业用户可通过 Codex 或 Responses API 调用 Kimi K3、GLM 5.3 等开源模型，Kimi K3 拥有 2.8 万亿参数和 100 万 Token 上下文窗口。\n\n行业\n#行业动态\n#OpenAI\n07:43\nRohan Paul\n@rohanpaul_ai\nAI 评分\n58\n\nMeta 等机构发布 Context Language Models（CLMs）论文，让语言模型把上下文当作文件、原生自主管理上下文，无需外部 harness。\n\n引用\nRulin Shao\n@RulinShao\n\n‼️The Bitter Lesson for context management: Giving LMs unrestricted control over their context beats human-designed SOTA! Introducing 🩵Context Language Models (CLMs)🩵 - Natively manage their own context - Treat context as a file - Learn policies in CLM weights, no harness\n\n论文\n#论文/研究\n#Agent\n#Meta\n07:43\nRohan Paul\n@rohanpaul_ai\nAI 评分\n56\n\nInworld 收购 Ultravox，前者是训练自有语音模型并提供 LLM 推理 API 的研究实验室，后者是开发者用来构建实时语音智能体的平台，合并后一家公司同时拥有智能体的语音能力和运行平台。\n\n行业\n#行业动态\n#语音\n#Agent\n07:43\nRohan Paul\n@rohanpaul_ai\nAI 评分\n32\n\nAI 软件的钱集中在顶部。\n\n仅 2.24 亿高薪知识工作者，占总数的四分之一，却代表了 41 万亿美元市场中的超过 25 万亿美元。\n\n也就是说，收入最高的 25% 知识工作者贡献了 41 万亿美元机会的近三分之二。而他们大多在北美和欧洲\n\n- ARK research\n\n引用\nBrett Winton\n@wintonARK\n\nIf, as it diffuses, super intelligence can drive a 10x productivity boost for knowledge workers and businesses will pay 10% of the productive value for a piece of software out to the software vendor. There is a $40 trillion AI software market opportunity today...\n\n观点\n#大佬观点\n#现象/趋势\n07:43\nRohan Paul\n@rohanpaul_ai\nAI 评分\n34\n\nMark Cuban 的方法：用 AI 打造商业模拟器来检验假设。\n\n创始人现在可以生成草案计划、成本结构、供应商名单和专利大纲。\n\n这缩短了从灵感到首次严肃可行性测试之间的距离。\n\n----\n来自 \"Alex Kantrowitz\" YouTube 频道，（链接见评论）\n\n引用\nRohan Paul\n@rohanpaul_ai\n\nEric Schmidt's (ex-Google CEO) advice to college students: Use AI to scale your own work, whatever that work is. \"If you're a non-technical person, you should figure out how to use these tools to make your dreams and your realities extraordinarily scaled. You want to be a global star, a global influencer, a global impactor, a global discoverer, a global singer, you want to use these tools, whatever it is that you want. Figure out a way to use them to amplify you and what you care about and your innate goodness. If you're a technical person, use the same tools to invent stuff and to invent stuff that changes the world. I've never seen the cost of entry to be so low and the availability of these ideas so great. The only thing that limits you is your curiosity, your willingness to take risks and so forth. So, get over it. And say, I want to dream, I want to use these tools to have this enormous impact, right?\" ---- From \"Blackstone and Eric Schmidt\" YouTube channel, (link in comment)\n\n观点\n#大佬观点\n#Agent\n07:43\nNathan Lambert\n@natolambert\nAI 评分\n54\n\nNathan Lambert 发文称很高兴看到 Google 用 Gemini 4 给人们带来惊喜。他认为更多实验室处于前沿对消费者（竞争）和世界（减少权力集中）都有好处，并期待其在真实场景中的表现。\n\n观点\n#大佬观点\n#Google\n07:37\nIT之家（RSS）\nAI 评分\n26\n苹果 Invites App 升级 1.12.0：支持全分辨率照片共享、扩展图乐园\n\n苹果 Invites App 更新至 1.12.0 版本，共享相册现支持全分辨率照片共享，任何收到链接的人均可加入并上传照片，包括非 Apple 设备用户。新版扩展图乐园（Image Playground）功能，新增照片级逼真背景生成能力，并简化邮箱验证流程，宾客点击收件箱链接即可加入活动，无需输入验证码。创建活动需订阅 iCloud+（50GB 起，月费 0.99 美元），接收链接者可免费回复。\n\n产品\n#产品更新\n#图像生成\n07:37\nIT之家（RSS）\nAI 评分\n18\n苹果 iPad Mini 8 前瞻：首次支持 IP 防水，搭载 A20 Pro 芯片、OLED 屏与 12GB 内存\n\n苹果 iPad mini 8 将首次引入 IP 等级防水，搭载台积电 2nm 工艺的 A20 Pro 芯片，CPU 性能较 A17 Pro 提升约 1.5 倍、GPU 提升约 2.5 倍，并配备双 16 核 Neural Engine（合计 32 核）。\n\n行业\n#行业动态\n07:28\nHacker News 热门（buzzing.cc 中文翻译）\nAI 评分\n36\n新加坡政府约会应用采用 Gale-Shapley 稳定婚姻算法\n\n新加坡政府推出的约会应用采用 Gale-Shapley 稳定婚姻算法进行匹配。该算法即稳定婚姻算法，用于在配对中避免出现双方都更愿意彼此搭配而非各自当前对象的情况。\n\n行业\n#行业动态\n1\n2\n3\n…\n50\n下一页",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "一手",
+      "href": "/all?channel=firstParty"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "论文",
+      "href": "/all?category=paper"
+    },
+    {
+      "text": "教程",
+      "href": "/all?category=tip"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "一手",
+      "href": "/all?channel=firstParty"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "论文",
+      "href": "/all?category=paper"
+    },
+    {
+      "text": "教程",
+      "href": "/all?category=tip"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "Meshy 宣布 ARR 正式突破 1 亿美元，公司从 2024 年底的 100 万美元增长至今，不到两年增长 100 倍。官方将这一成绩归功于创作者、开发者和工作室社区以及全球团队的执行。",
+      "href": "/items/vt7gzoqp2yghccusvtpzmo8it"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "谷歌逐步推出 Gemini 4 Argon 旗舰模型，内部对编码实战表现存在质疑",
+      "href": "/items/ns055r3g4avngzgtuhqkipbf5"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#Google",
+      "href": "/all?tag=Google"
+    },
+    {
+      "text": "谷歌 Android Auto 现 Bug：摩托罗拉 Razr、三星 Galaxy Z Flip7 等小折叠手机闭合状态下无法拨打电话",
+      "href": "/items/gvvqol8beqo1cq88iveozoozj"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#Google",
+      "href": "/all?tag=Google"
+    },
+    {
+      "text": "华境 S 大六座 SUV 9 月交付 7416 台，连续 5 个月增长，标配华为乾崑智驾 ADS 5 Pro",
+      "href": "/items/uwfyof46dv8ewks5np4u785m1"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "谷歌 DeepMind 推出 SynthID Bio，为 AI 生成的蛋白质嵌入可验证水印",
+      "href": "/items/l2nzpph1zgw88iilnsr3i41ms"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#DeepMind",
+      "href": "/all?tag=DeepMind"
+    },
+    {
+      "text": "#安全/对齐",
+      "href": "/all?tag=%E5%AE%89%E5%85%A8%2F%E5%AF%B9%E9%BD%90"
+    },
+    {
+      "text": "Artificial Analysis 发布 CyberGym-E2E-AA 基准评测，测量模型在内存安全任务上从漏洞发现到打补丁的网络防御能力。部分前沿模型在 85% 以上任务上被安全拦截无法响应；GPT-6 Luna 和 MiMo-V2.6-Pro 在 1M+ 行代码库上跑约 100 次漏洞挖掘仅需约 $20，单任务成本比次强的 Grok 4.7 便宜最多 100 倍。",
+      "href": "/items/mfgbm4l8osz1g9n7acz3u30g7"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#评测/基准",
+      "href": "/all?tag=%E8%AF%84%E6%B5%8B%2F%E5%9F%BA%E5%87%86"
+    },
+    {
+      "text": "#安全/对齐",
+      "href": "/all?tag=%E5%AE%89%E5%85%A8%2F%E5%AF%B9%E9%BD%90"
+    },
+    {
+      "text": "#编码",
+      "href": "/all?tag=%E7%BC%96%E7%A0%81"
+    },
+    {
+      "text": "我们现在有了官方 @DeepSeekHarness X 账号。请关注我们！",
+      "href": "/items/mc02fmwrvup3t4f68s1qzd4dp"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "#产品更新",
+      "href": "/all?tag=%E4%BA%A7%E5%93%81%E6%9B%B4%E6%96%B0"
+    },
+    {
+      "text": "#DeepSeek",
+      "href": "/all?tag=DeepSeek"
+    },
+    {
+      "text": "GPT-6.1 Sol 是我们有史以来需求最高的模型，API 和订阅两方面都是如此。\n\n在 ChatGPT 和 Codex 中，我们承受了巨大负载，但已上线更多容量，未来几小时速度应会大幅改善，达到我们昨天服务速度的近两倍。",
+      "href": "/items/tupi5wccxh503rzcjna1faafd"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "OpenRouter 教程：如何在 CI 中用 LLM eval 门禁拦截 Pull Request",
+      "href": "/items/ska7k3allx8q9uu8yv5vzy8zw"
+    },
+    {
+      "text": "教程",
+      "href": "/all?category=tip"
+    },
+    {
+      "text": "#教程/实践",
+      "href": "/all?tag=%E6%95%99%E7%A8%8B%2F%E5%AE%9E%E8%B7%B5"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "OpenRouter 发布 Agent 模型成本与质量权衡选型框架",
+      "href": "/items/v6j23p9krwwoxqvk05d9n0bfz"
+    },
+    {
+      "text": "教程",
+      "href": "/all?category=tip"
+    },
+    {
+      "text": "#教程/实践",
+      "href": "/all?tag=%E6%95%99%E7%A8%8B%2F%E5%AE%9E%E8%B7%B5"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "OpenRouter 指南：用置信度阈值实现模型分级升级路由",
+      "href": "/items/hi9uy4borcat6ams9rk5vkamo"
+    },
+    {
+      "text": "教程",
+      "href": "/all?category=tip"
+    },
+    {
+      "text": "#教程/实践",
+      "href": "/all?tag=%E6%95%99%E7%A8%8B%2F%E5%AE%9E%E8%B7%B5"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "韩国 AI 公司 Upstage 发布推理模型 Solar Mini 4，Artificial Analysis 评测得分 24",
+      "href": "/items/kkm30jte6yxdmc5zlzo1blj7c"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#推理",
+      "href": "/all?tag=%E6%8E%A8%E7%90%86"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "Transluce 报告 AI 智能体以激进手段访问美加政府网站",
+      "href": "/items/pmrfien75u21keottpq5php5z"
+    },
+    {
+      "text": "论文",
+      "href": "/all?category=paper"
+    },
+    {
+      "text": "#论文/研究",
+      "href": "/all?tag=%E8%AE%BA%E6%96%87%2F%E7%A0%94%E7%A9%B6"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#安全/对齐",
+      "href": "/all?tag=%E5%AE%89%E5%85%A8%2F%E5%AF%B9%E9%BD%90"
+    },
+    {
+      "text": "Google DeepMind 发布 Gemini 4 Argon，输出 token 上限从 64K 提升至 1M，当前通过 Fairwind Program 向受信任网络防御者逐步开放，广泛访问预计从付费 API 客户和 Google AI Ultra 用户开始。",
+      "href": "/items/oepd80efkckrp5105uaj46cbp"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "BestBlogs 10-01 早报汇总多条 AI 动态：Gemini 4 Argon 将长程推理用于代码迁移、内存优化与安全防御，并通过 Fairwind 向受信任的网络防御者逐步开放；ElevenLabs 推出表达型 Eleven v4 与低延迟 Turbo 文本转语音模型。",
+      "href": "/items/fv07hfwbdb8wsxthal3fvfqx1"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "韩国 AI 公司 Upstage 发布专有推理模型 Solar Mini 4，在 Artificial Analysis 智能指数得分 24，报告总参数 35B、激活 3B，价格降至每 1M 输入/输出 token $0.10/$0.40，但因每任务消耗约 88k 输出 token，单任务成本约为 GPT-6 Luna (max) 的 5 倍。",
+      "href": "/items/uskbm4kps4q3eyjrm660voji7"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#推理",
+      "href": "/all?tag=%E6%8E%A8%E7%90%86"
+    },
+    {
+      "text": "#评测/基准",
+      "href": "/all?tag=%E8%AF%84%E6%B5%8B%2F%E5%9F%BA%E5%87%86"
+    },
+    {
+      "text": "来自 @GoogleDeepMind 的 Gemini 4 Argon 刚刚在一系列生成任务中与顶级前沿模型正面交锋。\n\n每任务成本比 GPT-6.1 Sol 低 33%，比 Claude Opus 5.5 低 70%，来看 @petergostev 对 Gemini 4 Argon 对比表现的第一印象。\n\nhttps://www.youtube.com/watch?v=h5EL5zThKaI",
+      "href": "/items/fivtp2kgf8jv2mx9lujepq7re"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#评测/基准",
+      "href": "/all?tag=%E8%AF%84%E6%B5%8B%2F%E5%9F%BA%E5%87%86"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#Google",
+      "href": "/all?tag=Google"
+    },
+    {
+      "text": "Artificial Analysis 数据显示，GPT-6.1 Sol 的 Cost per Task 约 $0.72，比 GPT-6 Sol（$1.05）低约 30%，后者已约为 GPT-5.6 Sol（$1.99）的一半。",
+      "href": "/items/p3cwq54s9gugqpmljv3xm97lv"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#评测/基准",
+      "href": "/all?tag=%E8%AF%84%E6%B5%8B%2F%E5%9F%BA%E5%87%86"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "美国加州《2026 年反机器人老板法案》生效，禁止完全依赖 AI 解雇或惩戒员工",
+      "href": "/items/lsjmxz9solcxsoonl8xv7nrs5"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#政策/监管",
+      "href": "/all?tag=%E6%94%BF%E7%AD%96%2F%E7%9B%91%E7%AE%A1"
+    },
+    {
+      "text": "五角大楼启动 Project Meridian，马斯克等人牵头研究未来战场",
+      "href": "/items/gzgbpyowso5cclk9c9pe4stzc"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "美光称每台人形机器人需超 200GB DRAM，内存高价恐成常态",
+      "href": "/items/y2tcxkuxovc4xzrudcxwlw2ns"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#现象/趋势",
+      "href": "/all?tag=%E7%8E%B0%E8%B1%A1%2F%E8%B6%8B%E5%8A%BF"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "OpenAI 与 Synopsys 达成多年期合作，共同开发 GPT-Synopsys 芯片设计模型",
+      "href": "/items/wci1abywae78xn8xn172eilpr"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "🚨 GPU 租用者必读长帖 🚨\n\nGPU 集群的可靠性是在出故障时才能衡量的。在 ClusterMAX 评估中，我们会注入故障，并追踪从检测到恢复容量的全过程。各家供应商在这条路径上的处理能力差异极大。(1/6)🧵",
+      "href": "/items/yvz4i6rvk0360ikl8lpa1698n"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "Netlify 重构 Edge Functions 架构：基于 Firecracker MicroVM 与 V8 隔离，中位数提速约 5 倍",
+      "href": "/items/oastdh7lmob2udtb3kng904w7"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#教程/实践",
+      "href": "/all?tag=%E6%95%99%E7%A8%8B%2F%E5%AE%9E%E8%B7%B5"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "微软科学总裁 Peter Lee 在 LinkedIn 宣布将离职。他领导的微软研究院曾是微软 AI 工作的主导力量，后被 OpenAI 超越，转而评估 OpenAI 模型，包括如何将其蒸馏为更小模型并应用于医疗。其去向未明，此前 Igor Tsyganskiy 已接管微软研究院，Lee 转任微软科学总裁。",
+      "href": "/items/g7n5bczj0dv0idw2gbg2van7t"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#Microsoft",
+      "href": "/all?tag=Microsoft"
+    },
+    {
+      "text": "Anthropic 的 Claude Code 负责人 Boris Cherny 今年用 Claude Code 合并了约 1,700 个 pull request，新增 40 万行代码，删除 25 万行。\n\n并使用了 80 亿 token。\n\n“自 Opus 4.5 以来，我的代码 100% 由 Claude Code 编写。那是去年 11 月左右的事。\n……\n我现在大部分编码都在手机上完成。”\n\n---\n来自 YouTube 频道“Scale”（完整视频链接见评论）",
+      "href": "/items/rdtpwripkv8pp0ev7jm5n4f0y"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#大佬观点",
+      "href": "/all?tag=%E5%A4%A7%E4%BD%AC%E8%A7%82%E7%82%B9"
+    },
+    {
+      "text": "#编码",
+      "href": "/all?tag=%E7%BC%96%E7%A0%81"
+    },
+    {
+      "text": "#Anthropic",
+      "href": "/all?tag=Anthropic"
+    },
+    {
+      "text": "宝马启动重组计划：扩大 AI 应用、削减两成管理层并推出两款新车",
+      "href": "/items/xl4vplj0ahximlgjz5j85qe2l"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "Databricks IP Functions 正式 GA，为 Lakehouse 带来高性能网络分析",
+      "href": "/items/swe7vhm6254n24zkxag6arz0c"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "#产品更新",
+      "href": "/all?tag=%E4%BA%A7%E5%93%81%E6%9B%B4%E6%96%B0"
+    },
+    {
+      "text": "#部署/工程",
+      "href": "/all?tag=%E9%83%A8%E7%BD%B2%2F%E5%B7%A5%E7%A8%8B"
+    },
+    {
+      "text": "Google 发布 Gemini 4 Argon，称其为迄今最强模型",
+      "href": "/items/nphcmtyw8yyfsx8ypkg3ivnwn"
+    },
+    {
+      "text": "模型",
+      "href": "/all?category=ai-models"
+    },
+    {
+      "text": "#模型发布",
+      "href": "/all?tag=%E6%A8%A1%E5%9E%8B%E5%8F%91%E5%B8%83"
+    },
+    {
+      "text": "#Google",
+      "href": "/all?tag=Google"
+    },
+    {
+      "text": "#安全/对齐",
+      "href": "/all?tag=%E5%AE%89%E5%85%A8%2F%E5%AF%B9%E9%BD%90"
+    },
+    {
+      "text": "视频生成和编程智能体正在定义一类新的 AI 工作负载。个人在日常工作中正高效地消耗大量算力。\n\nfal CTO @gorkem 上周在我们的 GenMedia Conference 上与 MTS 对话，谈“token market fit”。",
+      "href": "/items/qbhzbrhptv84anf79dws5b1r0"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#大佬观点",
+      "href": "/all?tag=%E5%A4%A7%E4%BD%AC%E8%A7%82%E7%82%B9"
+    },
+    {
+      "text": "#视频",
+      "href": "/all?tag=%E8%A7%86%E9%A2%91"
+    },
+    {
+      "text": "#编码",
+      "href": "/all?tag=%E7%BC%96%E7%A0%81"
+    },
+    {
+      "text": "Meta Muse 上线 22 天下载破 500 万次，超越 ChatGPT 成美国最快 AI 应用",
+      "href": "/items/b4g80zcaq9j1sh1ntkl9ure2u"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "IT早报 1001：豆包支持出行服务；Kimi K3 接入 Codex 企业通道；苹果 10 月 13 日进军智能家居",
+      "href": "/items/gmzu84w07atlabs5lo3iuhqyy"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#OpenAI",
+      "href": "/all?tag=OpenAI"
+    },
+    {
+      "text": "Meta 等机构发布 Context Language Models（CLMs）论文，让语言模型把上下文当作文件、原生自主管理上下文，无需外部 harness。",
+      "href": "/items/nn7inchbxd3hqquawkz6lp2wl"
+    },
+    {
+      "text": "论文",
+      "href": "/all?category=paper"
+    },
+    {
+      "text": "#论文/研究",
+      "href": "/all?tag=%E8%AE%BA%E6%96%87%2F%E7%A0%94%E7%A9%B6"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "#Meta",
+      "href": "/all?tag=Meta"
+    },
+    {
+      "text": "Inworld 收购 Ultravox，前者是训练自有语音模型并提供 LLM 推理 API 的研究实验室，后者是开发者用来构建实时语音智能体的平台，合并后一家公司同时拥有智能体的语音能力和运行平台。",
+      "href": "/items/vp7ccnpb55cjuedmdjukwmdng"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "#语音",
+      "href": "/all?tag=%E8%AF%AD%E9%9F%B3"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "AI 软件的钱集中在顶部。\n\n仅 2.24 亿高薪知识工作者，占总数的四分之一，却代表了 41 万亿美元市场中的超过 25 万亿美元。\n\n也就是说，收入最高的 25% 知识工作者贡献了 41 万亿美元机会的近三分之二。而他们大多在北美和欧洲\n\n- ARK research",
+      "href": "/items/lwg9t38ezray08emgcybf1vec"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#大佬观点",
+      "href": "/all?tag=%E5%A4%A7%E4%BD%AC%E8%A7%82%E7%82%B9"
+    },
+    {
+      "text": "#现象/趋势",
+      "href": "/all?tag=%E7%8E%B0%E8%B1%A1%2F%E8%B6%8B%E5%8A%BF"
+    },
+    {
+      "text": "Mark Cuban 的方法：用 AI 打造商业模拟器来检验假设。\n\n创始人现在可以生成草案计划、成本结构、供应商名单和专利大纲。\n\n这缩短了从灵感到首次严肃可行性测试之间的距离。\n\n----\n来自 \"Alex Kantrowitz\" YouTube 频道，（链接见评论）",
+      "href": "/items/e0g1fbdqwoa5xd7er3xx7ei36"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#大佬观点",
+      "href": "/all?tag=%E5%A4%A7%E4%BD%AC%E8%A7%82%E7%82%B9"
+    },
+    {
+      "text": "#Agent",
+      "href": "/all?tag=Agent"
+    },
+    {
+      "text": "Nathan Lambert 发文称很高兴看到 Google 用 Gemini 4 给人们带来惊喜。他认为更多实验室处于前沿对消费者（竞争）和世界（减少权力集中）都有好处，并期待其在真实场景中的表现。",
+      "href": "/items/mbx8q7c6rnmzujyengjydo8l7"
+    },
+    {
+      "text": "观点",
+      "href": "/all?category=opinion"
+    },
+    {
+      "text": "#大佬观点",
+      "href": "/all?tag=%E5%A4%A7%E4%BD%AC%E8%A7%82%E7%82%B9"
+    },
+    {
+      "text": "#Google",
+      "href": "/all?tag=Google"
+    },
+    {
+      "text": "苹果 Invites App 升级 1.12.0：支持全分辨率照片共享、扩展图乐园",
+      "href": "/items/owhch2b1zcrucmatjeb0ohcf0"
+    },
+    {
+      "text": "产品",
+      "href": "/all?category=ai-products"
+    },
+    {
+      "text": "#产品更新",
+      "href": "/all?tag=%E4%BA%A7%E5%93%81%E6%9B%B4%E6%96%B0"
+    },
+    {
+      "text": "#图像生成",
+      "href": "/all?tag=%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90"
+    },
+    {
+      "text": "苹果 iPad Mini 8 前瞻：首次支持 IP 防水，搭载 A20 Pro 芯片、OLED 屏与 12GB 内存",
+      "href": "/items/hc9oqpq74vf4k834gsi228wa4"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "新加坡政府约会应用采用 Gale-Shapley 稳定婚姻算法",
+      "href": "/items/cgqg0rf0vvu2sxc1ppsu7mwce"
+    },
+    {
+      "text": "行业",
+      "href": "/all?category=industry"
+    },
+    {
+      "text": "#行业动态",
+      "href": "/all?tag=%E8%A1%8C%E4%B8%9A%E5%8A%A8%E6%80%81"
+    },
+    {
+      "text": "1",
+      "href": "/all"
+    },
+    {
+      "text": "2",
+      "href": "/all?page=2"
+    },
+    {
+      "text": "3",
+      "href": "/all?page=3"
+    },
+    {
+      "text": "50",
+      "href": "/all?page=50"
+    },
+    {
+      "text": "下一页",
+      "href": "/all?page=2"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 9543.75,
+      "top": 0,
+      "right": 1440,
+      "bottom": 9543.75,
+      "left": 180
+    },
+    "firstArticle": {
+      "x": 294,
+      "y": 181.1875,
+      "width": 1118,
+      "height": 261.5,
+      "top": 181.1875,
+      "right": 1412,
+      "bottom": 442.6875,
+      "left": 294
+    }
+  }
+}

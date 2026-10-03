@@ -7,6 +7,7 @@
   "files": [
     "index.mjs",
     "plugins",
+    "extensions/cowork",
     "presets",
     "src",
     "cordis.patch.yml",
@@ -20,6 +21,7 @@
   "exports": {
     ".": "./index.mjs",
     "./plugins/*": "./plugins/*.mjs",
+    "./extensions/cowork": "./extensions/cowork/bridge.mjs",
     "./src/*": "./src/*.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./presets/*.patch.yml": "./presets/*.patch.yml",

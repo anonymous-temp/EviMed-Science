@@ -1,0 +1,10 @@
+{
+  "sourceId": "ni-methods",
+  "title": "Non-adherence in non-inferiority trials: pitfalls and recommendations",
+  "url": "https://www.bmj.com/content/370/bmj.m2215",
+  "checkedAt": "2026-10-01T09:07:07.907800+00:00",
+  "coverage": "excerpt",
+  "quote": "Non-inferiority is concluded if the upper confidence interval bound is less than the non-inferiority margin.",
+  "quoteSha256": "69c640790e5ded41acab21d673aba835aa42bb5ce77b7c2ac821d299432cdf92",
+  "documentTextSha256": "2f115c68d1c95f79d3193a670438b92352e69a9bf0a98b71404b0138c8a8c68f"
+}

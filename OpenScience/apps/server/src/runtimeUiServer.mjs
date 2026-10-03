@@ -1,3 +1,4 @@
+import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
@@ -257,13 +258,14 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ *   managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, authorizeMutation = null,
-  agentRuns = null, audit = async () => {} }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, authorizeMutation = null,
+  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
    * the run it steers, so the learning loop's correction trigger has an in-run
@@ -304,6 +306,26 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     catch (error) {
       await audit("handbook.native.prepare", { userId: project.userId, projectId: project.id,
         code: typeof error?.code === "string" ? error.code : "handbook_context_unavailable" }).catch(() => {});
+    }
+  }
+  // An explicit selection is part of this operation's authority, not an
+  // optional supplement. Refuse stale selections without forwarding a prompt
+  // that silently loses the user's target. Strip our envelope before DSH.
+  async function bindNativeResult(user, project, payload) {
+    const request = payload?.args?.request;
+    if (request?.evimedResultRevision === undefined) return;
+    if (!bindResultRevision) throw new HttpError(503, "result_revision_unavailable", "Result revision is unavailable.");
+    await bindResultRevision(user, project, request);
+    delete request.evimedResultRevision;
+  }
+  /** The authenticated frame supplies the actor. Failed derived binding keeps core research usable and extension access unbound.
+   * @param {any} user @param {any} project @param {any} payload */
+  async function recordNativeActor(user, project, payload) {
+    if (!recordPromptActor) return;
+    try { await recordPromptActor(user, project, payload?.args?.request); }
+    catch (error) {
+      await audit("extension.actor.bind", { userId: user.id, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "extension_access_denied" }).catch(() => {});
     }
   }
   async function authorizePromptSession(project, payload) {
@@ -497,6 +519,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // would receive is this deployment's, and minting one here would make a
     // frame a way in. It is told to log in, in the surface it is displayed in.
     if (!runtimeUiCookie(req, config.sessionCookieName)) {
+      if (/^\/__evimed\/f\/[A-Za-z0-9_-]{32}\/__evimed_browser\//.test(req.url ?? "")) throw new HttpError(401,"unauthorized","Authentication is required.");
       sendNotice(res, 401, "请先登录", "请在 EviMed 中登录后重新打开。", { code: "unauthorized", shellOrigin });
       return;
     }
@@ -506,6 +529,18 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     const { user, project, frame, claims } = await resolveFrame(req, res);
     const runtimeUrl = new URL(frame.suffix, "http://runtime.local");
     const pathname = runtimeUrl.pathname;
+    if (pathname.startsWith("/__evimed_browser")) {
+      const requestSnapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+      const scope = { userId: user.id, projectId: project.id, authSessionHash: claims.authSessionHash, frameId: frame.frameId };
+      await handleManagedBrowserRequest({ req, res, pathname, scope, service: managedBrowser,
+        authorizeSession: sessionId => authorizePromptSession(project, { args: { request: { sessionId } } }),
+        authorizeOpenSession: authorizeOpenSession ? sessionId => authorizeOpenSession(user, project, sessionId) : null,
+        revalidate: async () => {
+          const current = await resolveFrame(requestSnapshot, null);
+          if (current.user.id !== scope.userId || current.project.id !== scope.projectId || current.claims.authSessionHash !== scope.authSessionHash) throw new HttpError(403,"managed_browser_not_found","The browser session is unavailable.");
+        } });
+      return;
+    }
     const hostResult = SEAMS.wire.gatewayEndpoints.hostInteractionResult;
     const method = pathname === `/api/${hostResult}` ? hostResult : runtimeUiMethodFromPath(pathname);
     // Only canonical native API method names enter the policy. Decode solely
@@ -557,7 +592,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     let workspaceBody = null;
     let promptBody = null;
     let modelBody = null;
-    if (method === "session/prompt" && (authorizePrompt || agentRuns || preparePrompt)) {
+    if (method === "session/prompt") {
       const raw = await readBody(req, config.maxJsonBytes);
       req.__openScienceProxyBody = raw;
       try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
@@ -617,6 +652,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, assets: SHARED_UI_ASSET_PREFIX,
         shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project),
         capabilities: await heroCapabilities(),
+        managedBrowser: config.managedBrowserEnabled ? { provider: "managed", available: managedBrowser?.enabled === true } : null,
         operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
         off: Array.isArray(config.runtimeUiFrameOff) ? config.runtimeUiFrameOff : [],
       }, installRuntimeUiTransport);
@@ -657,8 +693,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // Counted inside the admission, so a prompt the plugin fence refuses is
       // not a message that arrived.
       const admitted = async () => {
+        await runtimeManager.assertPersonalSkillPromptGeneration(project, promptBody?.payload?.args?.request ?? {});
+        const current = await resolveFrame(snapshot, null);
+        await bindNativeResult(current.user, current.project, promptBody?.payload);
+        await recordNativeActor(current.user, current.project, promptBody?.payload);
         await prepareNativeContext(project, promptBody?.payload);
         await recordSteer(project, promptBody?.payload);
+        req.__openScienceProxyBody = Buffer.from(JSON.stringify(promptBody));
+        req.headers["content-length"] = String(req.__openScienceProxyBody.length);
         return forward();
       };
       return runtimeManager.pluginService
@@ -682,6 +724,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }
       const status = error instanceof HttpError ? error.status : 502;
       const code = error?.code ?? "runtime_ui_failed";
+      if (/^\/__evimed\/f\/[A-Za-z0-9_-]{32}\/__evimed_browser\//.test(req.url ?? "")) {
+        const safeCode = /^[a-z][a-z0-9_]{1,79}$/.test(String(code)) ? String(code) : "managed_browser_unavailable";
+        const payload = JSON.stringify({ error: errorCodeMessage(safeCode), code: safeCode });
+        res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+        res.end(payload); return;
+      }
       if (code === "runtime_reserved_for_autopilot") {
         sendNotice(res, status, "项目正忙，请稍后再试", "", { code, shellOrigin });
         return;
@@ -702,11 +750,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         if (!config.runtimeUiProxyEnabled) return destroyUpgrade(socket, 404, "not_found");
         if (!runtimeUiCookie(req, config.sessionCookieName)) return destroyUpgrade(socket, 401, "unauthorized");
         assertBrowserOrigin(req, config);
-        const { project, frame, claims } = await resolveFrame(req, null);
+        const initial = await resolveFrame(req, null);
+        const { project, frame, claims } = initial;
+        let currentActor = initial;
         // Revalidation keeps the handshake login; only a validated renewal may replace its ticket.
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
         trackFrame(snapshot, claims, socket);
-        const revalidate = async () => { await resolveFrame(snapshot, null); };
+        const revalidate = async () => { currentActor = await resolveFrame(snapshot, null); };
         const authorize = async (endpoint, payload = null) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
@@ -718,6 +768,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             await authorizePromptSession(project, payload);
           }
           if (endpoint === "session/prompt") {
+            await revalidate();
             // The mux's plugin admission owns the full upstream operation. This
             // short maintenance admission serializes its start with an expiring
             // drain request; the run ledger then keeps accepted work visible.
@@ -728,13 +779,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         };
         // The mux calls `observe` inside the prompt's admission, right before
         // the frame goes upstream — the same point the HTTP path counts at.
+        const prepare = async (endpoint, payload = null) => {
+          if (endpoint === "session/prompt") await bindNativeResult(currentActor.user, currentActor.project, payload);
+        };
         const observe = async (endpoint, payload = null) => {
           if (endpoint === "session/prompt") {
+            await recordNativeActor(currentActor.user, currentActor.project, payload);
             await prepareNativeContext(project, payload);
             await recordSteer(project, payload);
           }
         };
-        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe });
+        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe, prepare });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
       }
@@ -759,6 +814,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
      * @returns {Promise<number>} how many connections were closed
      */
     async releaseFrame(frameId, userId) {
+      // Browser cleanup may remain unconfirmed. It must never keep the native
+      // frame's own transports alive; join both and report the browser failure.
+      const browserClosing = Promise.resolve().then(() => managedBrowser?.releaseFrame(userId, frameId))
+        .then(() => null, error => error);
       const closing = [];
       for (const connection of frameConnections.get(frameId) ?? []) {
         if (connection.claims.userId !== userId) continue;
@@ -766,7 +825,6 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         closing.push(new Promise((resolve) => { transport.once("close", resolve); }));
         transport.destroy();
       }
-      if (!closing.length) return 0;
       /** @type {NodeJS.Timeout | undefined} */
       let bound;
       await Promise.race([
@@ -774,6 +832,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         new Promise((resolve) => { bound = setTimeout(resolve, FRAME_RELEASE_WAIT_MS); bound.unref(); }),
       ]);
       clearTimeout(bound);
+      const browserError = await browserClosing;
+      if (browserError) throw browserError;
       return closing.length;
     },
     /** Called only after renewal proof, live login, CSRF and project access are validated. */
@@ -808,12 +868,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       return server.listening ? server.address() : null;
     },
     async close() {
+      const browserClosing = Promise.resolve().then(() => managedBrowser?.close()).then(() => null, error => error);
       for (const socket of upgradeSockets) socket.destroy();
       frameConnections.clear();
-      if (!server.listening) return;
-      await new Promise((resolve, reject) => {
+      if (server.listening) await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      const browserError = await browserClosing;
+      if (browserError) throw browserError;
     },
   };
 }

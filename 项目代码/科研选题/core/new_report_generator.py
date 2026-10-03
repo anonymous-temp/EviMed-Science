@@ -23,6 +23,7 @@ from services.llm_service import llm_service
 from utils import number_display as shown
 from utils import safe_parse_json
 from core.research_context import render_research_context
+from config.prompts import SELECTED_EVIDENCE_SCOPE
 
 logger = logging.getLogger(__name__)
 
@@ -402,13 +403,15 @@ class ReportGenerator:
 {query_context}
 
 ## 已有分析素材
-- 文献总量: {stats['total_papers']}篇
-- 时间跨度: 2022-2026
+- 本次检索选入记录数: {stats['total_papers']}条
+- 记录书目年份范围: {stats.get('earliest_year', 'unknown')}—{stats.get('latest_year', 'unknown')}（非完整年度覆盖证明）
 - 临床研究占比: {shown.percent(stats['clinical_ratio'] * 100)}
 - 已完成的分析模块: {', '.join(modules_available)}
 
 ## 关键发现摘要
 {insights_text}
+
+{SELECTED_EVIDENCE_SCOPE}
 
 ## 要求
 为每个已完成的分析模块生成2-4个子章节标题和每个子章节的核心论点。
@@ -588,6 +591,8 @@ class ReportGenerator:
 {m5_linkage_note}
 ## 分析素材
 {data_summary}
+
+{SELECTED_EVIDENCE_SCOPE}
 
 ## 关键发现
 {chr(10).join(f'- {insight}' for insight in key_insights[:5]) if key_insights else '暂无'}
@@ -905,9 +910,11 @@ class ReportGenerator:
 {query_context}
 
 ## 证据基础
-- 系统检索并分析了{stats['total_papers']}篇相关文献（{datetime.now().year - 4}-{datetime.now().year}）
+- 本次检索选入记录数：{stats['total_papers']}条；记录书目年份范围：{stats.get('earliest_year', 'unknown')}—{stats.get('latest_year', 'unknown')}
 - 临床研究占比: {shown.percent(stats['clinical_ratio'] * 100)}
 - 研究设计分布: {json.dumps(stats['design_distribution'], ensure_ascii=False)}
+
+{SELECTED_EVIDENCE_SCOPE}
 
 ## 各模块核心发现
 {chr(10).join(module_summaries[:6])}
@@ -1051,8 +1058,10 @@ class ReportGenerator:
 {chr(10).join(f'- {i}' for i in insights) if insights else '暂无'}
 
 ## 证据基础
-- 文献总量: {stats['total_papers']}篇
-- 时间跨度: 2022-2026
+- 本次检索选入记录数：{stats['total_papers']}条
+- 记录书目年份范围：{stats.get('earliest_year', 'unknown')}—{stats.get('latest_year', 'unknown')}
+
+{SELECTED_EVIDENCE_SCOPE}
 
 ## 撰写要求
 1. 用1-2段文字（共200-300字）对上述六个维度的分析进行高度凝练的总结

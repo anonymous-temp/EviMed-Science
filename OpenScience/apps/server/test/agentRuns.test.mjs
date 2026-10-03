@@ -34,6 +34,43 @@ import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
 import { learningTriggersFor } from "../src/learningTriggers.mjs";
 
+test("run start persists exact trusted account incarnation and restores it after restart", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-account-incarnation-"));
+  const incarnation = "2026-10-03 04:01:02.123456+00";
+  const project = { id: "billing-provenance", userId: "researcher", rootDir: root,
+    accountCreatedAt: incarnation, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_billing", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const createStore = () => new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000,
+  });
+  const store = createStore();
+  const restarted = createStore();
+  try {
+    await assert.rejects(store.start(project, { sessionId: binding.sessionId, accountCreatedAt: "2099-01-01T00:00:00Z" }),
+      (error) => error instanceof HttpError && error.status === 400);
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    assert.equal(started.accountCreatedAt, incarnation);
+    const ledger = path.join(project.metaDir, "runs.jsonl");
+    const events = (await readFile(ledger, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(events.find((event) => event.event === "started").accountCreatedAt, incarnation);
+    await store.closeProject(project);
+    const replacementProject = { ...project, accountCreatedAt: "2099-01-01 00:00:00.654321+00" };
+    const restored = (await restarted.list(replacementProject)).find((run) => run.id === started.id);
+    assert.equal(restored.accountCreatedAt, incarnation, "restart must not adopt the current account generation");
+    // Older ledgers lack this provenance. The current project is not evidence
+    // of who owned work recorded before this field was introduced.
+    for (const event of events) delete event.accountCreatedAt;
+    await writeFile(ledger, events.map((event) => JSON.stringify(event)).join("\n") + "\n");
+    assert.equal((await restarted.list(replacementProject)).find((run) => run.id === started.id).accountCreatedAt, null);
+  } finally {
+    await store.closeProject(project);
+    await restarted.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("specialist dispatch preserves managed GEO provenance for learning and relevance", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-managed-geo-provenance-"));
   const project = { id: "brand-research", userId: "researcher", rootDir: root,
@@ -2882,29 +2919,44 @@ test("concurrent identical dispatch ids elect exactly one prompt sender", async 
         return [];
       },
     });
+    const senderEntered = Promise.withResolvers();
     let senderCalls = 0;
     let releaseSender;
     const senderBarrier = new Promise((resolve) => { releaseSender = resolve; });
     const sender = async () => {
       senderCalls += 1;
+      senderEntered.resolve();
       await senderBarrier;
       return { accepted: true };
     };
 
-    const concurrent = Promise.all([
+    const dispatches = [
       store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_same" }, sender),
       store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_same" }, sender),
-    ]);
-    for (let attempt = 0; attempt < 50 && senderCalls === 0; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    ];
+    const concurrent = Promise.all(dispatches);
+    let senderDeadline;
+    try {
+      await Promise.race([
+        senderEntered.promise,
+        new Promise((_, reject) => {
+          senderDeadline = setTimeout(() => reject(new Error("Prompt sender did not start")), 5_000);
+        }),
+        concurrent.then(() => { throw new Error("Dispatches settled without a blocked prompt sender"); }),
+      ]);
+      assert.equal(senderCalls, 1);
+      releaseSender();
+      const [first, second] = await concurrent;
+      assert.equal(first.id, second.id);
+      assert.equal(senderCalls, 1);
+      assert.equal((await store.list(project)).length, 1);
+    } finally {
+      clearTimeout(senderDeadline);
+      releaseBaselines();
+      releaseSender();
+      await Promise.allSettled(dispatches);
+      await store.closeProject(project, "canceled");
     }
-    assert.equal(senderCalls, 1);
-    releaseSender();
-    const [first, second] = await concurrent;
-    assert.equal(first.id, second.id);
-    assert.equal(senderCalls, 1);
-    assert.equal((await store.list(project)).length, 1);
-    await store.closeProject(project, "canceled");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -5371,6 +5423,89 @@ test("a stored verification value outside the three is read as null", async () =
 // project directory the caller had already finished with, and the failure
 // surfaced as "agent run not found" somewhere unrelated. It only reproduced
 // under load, which is the worst kind of true.
+test("closing all recovered projects waits for a terminal monitor's remaining writes", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-terminal-close-"));
+  const project = { id: "default", userId: "alice", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let entered;
+  const terminalWrite = new Promise((resolve) => { entered = resolve; });
+  const store = new AgentRunStore({}, {
+    model: "deepseek/deepseek-v4-flash",
+    readSessionHistory: async () => { throw new HttpError(409, "runtime_not_running", "Runtime is stopped."); },
+    onRunFinished: async () => {
+      entered();
+      await held;
+      await writeFile(path.join(project.metaDir, "terminal-tail.json"), "finished");
+    },
+  });
+  let closing;
+  let monitor;
+  try {
+    const run = await store.createRun(project, { sessionId: "ses_terminal", mode: "open-domain",
+      agentId: null, agentVersion: null, runtimeAgent: null });
+    await store.recover(project);
+    await terminalWrite;
+    const terminalSnapshot = await store.list(project);
+    assert.equal(terminalSnapshot.find((item) => item.id === run.id).status, "failed");
+    assert.equal(store.monitors.has(run.id), true);
+    monitor = store.monitors.get(run.id).promise;
+    // Use the actual terminal ledger snapshot, without unrelated disk I/O
+    // delaying close enough to hide a missing await on the held monitor.
+    store.list = async () => terminalSnapshot;
+    let closed = false;
+    closing = store.closeAll().then(() => { closed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(closed, false, "the terminal ledger row does not mean its monitor has stopped writing");
+    release();
+    await closing;
+    assert.equal(store.monitors.has(run.id), false);
+    assert.equal(await readFile(path.join(project.metaDir, "terminal-tail.json"), "utf8"), "finished");
+  } finally {
+    release();
+    await closing;
+    await monitor;
+    await store.closeAll();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a terminal monitor can close its bounded runtime project without awaiting itself", { timeout: 5_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-terminal-stop-"));
+  const project = { id: "bounded", userId: "alice", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  let completed = false;
+  const store = new AgentRunStore({}, {
+    model: "deepseek/deepseek-v4-flash",
+    readSessionHistory: async () => { throw new HttpError(409, "runtime_not_running", "Runtime is stopped."); },
+    onRunFinished: async () => {
+      // The server's bounded-runtime completion stops the runtime, which
+      // awaits onRuntimeStop -> closeProject before this callback can finish.
+      await store.closeProject(project, "failed");
+      await writeFile(path.join(project.metaDir, "bounded-complete.json"), "finished");
+      completed = true;
+    },
+  });
+  try {
+    const run = await store.createRun(project, { sessionId: "ses_bounded", mode: "open-domain",
+      agentId: null, agentVersion: null, runtimeAgent: null });
+    await store.recover(project);
+    const monitor = store.monitors.get(run.id).promise;
+    await awaitBackgroundMonitor(monitor);
+    assert.equal(completed, true);
+    assert.equal(store.monitors.has(run.id), false);
+    assert.equal(await readFile(path.join(project.metaDir, "bounded-complete.json"), "utf8"), "finished");
+  } finally {
+    await store.closeAll();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("closing a project waits for its monitor instead of only asking it to stop", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-close-"));
   try {

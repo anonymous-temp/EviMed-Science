@@ -1,6 +1,7 @@
 """Post-write consistency, plausibility and language guards."""
 from __future__ import annotations
 
+import math
 import re
 
 from new_meta.schemas.protocol import ResearchProtocol
@@ -413,11 +414,24 @@ class ConsistencyGuardsMixin:
 
         # 4. Narrative mode: auto-remove meta terms
         if rs.report_type == "narrative":
-            narrative_fixes = [
-                (r'合并效应量', '效应方向'),
-                (r'pooled\s+effect\s+(?:size|estimate)', 'individual effect estimate'),
-                (r'I²\s*=\s*\d+\.?\d*%', '(异质性未进行定量评估)'),
-            ]
+            # Review/readiness mode is not evidence that a recorded calculation
+            # never ran. Zero is a valid computed value, not missing data.
+            primary = (getattr(self, "_manuscript_facts", None) or {}).get("primary_effect")
+            primary = primary if isinstance(primary, dict) else {}
+            pooled = primary.get("pooled_effect")
+            count = primary.get("n_studies")
+            calculated = type(count) is int and count >= 2 and type(pooled) in (int, float) and math.isfinite(pooled)
+            i_squared = primary.get("i_squared")
+            recorded_i_squared = type(i_squared) in (int, float) and math.isfinite(i_squared)
+            narrative_fixes = []
+            if not calculated:
+                narrative_fixes.extend([
+                    (r'合并效应量', '效应方向'),
+                    (r'pooled\s+effect\s+(?:size|estimate)', 'individual effect estimate'),
+                ])
+            if not calculated or not recorded_i_squared:
+                missing = '(定量异质性结果未记录)' if self._zh else '(quantitative heterogeneity not recorded)'
+                narrative_fixes.append((r'I²\s*=\s*\d+\.?\d*%', missing))
             for pattern, repl in narrative_fixes:
                 new_ms = re.sub(pattern, repl, manuscript, flags=re.IGNORECASE)
                 if new_ms != manuscript:

@@ -201,6 +201,7 @@ def _open_access_pdf(doi: str) -> tuple[bytes, dict, dict | None, dict | None]:
         "origin": str(pdf.get("origin") or ""),
         "version": str(pdf.get("version") or ""),
         "license": str(pdf.get("license") or ""),
+        "resourceId": str(pdf.get("resourceId") or ""),
     }
     parsed = payload.get("parsed")
     if not (isinstance(parsed, dict) and isinstance(parsed.get("text"), str) and parsed["text"].strip()):
@@ -508,6 +509,7 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
             "openAccessOrigin": provenance.get("origin", ""),
             "openAccessVersion": provenance.get("version", ""),
             "license": provenance.get("license", ""),
+            "documentResourceId": provenance.get("resourceId", ""),
             "markdownPath": markdown_relative,
             "pdfPath": pdf_relative,
             "artifactSha256s": {

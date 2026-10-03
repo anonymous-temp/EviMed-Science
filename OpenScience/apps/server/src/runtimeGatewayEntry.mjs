@@ -48,7 +48,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr", "extensions", "results"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -76,6 +76,7 @@ export function publicRuntimeGatewayUrls(config) {
     webSearch: webSearchGatewayProviderUrl(config) ? `${base}/search/v1/query` : "",
     capsule: capsuleGatewayProviderUrl(config) ? `${base}/capsules/v1` : "",
     revision: revisionGatewayProviderUrl(config) ? `${base}/revisions/v1/authorize` : "",
+    results: config.resultsEnabled && config.stateStore === "postgres" ? `${base}/results/v1` : "",
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
@@ -137,7 +138,7 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
   const enabled = String(config.runtimeProvider ?? "docker") === "agentbay" && Boolean(publicRuntimeGatewayUrls(config));
 
   /** The active runtime a request's token belongs to, or a refusal. */
-  async function identify(req) {
+  async function identify(req, workloadOnly = false) {
     // The kernel's model route since DSH 0.1.7 is Messages, which carries the
     // token in `x-api-key`; every other caller sends a bearer header.
     const apiKey = req.headers["x-api-key"];
@@ -145,6 +146,7 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
       ?? (typeof apiKey === "string" && /^[^\s]+$/.test(apiKey) ? apiKey : undefined);
     if (!token) throw new HttpError(401, "runtime_gateway_unauthenticated", "A runtime token is required.");
     try {
+      if (workloadOnly) throw new Error("workload required");
       const payload = runtimeManager.assertActiveModelGatewayToken(token);
       return `${payload.userId}:${payload.projectId}`;
     } catch {
@@ -226,7 +228,7 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
         if (!enabled) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
         const resolved = resolveRuntimeGatewayPath(req.url);
         if (!resolved) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
-        admit(await identify(req));
+        admit(await identify(req, resolved.kind === "internal" && resolved.url.startsWith("/internal/extensions/")));
         if (resolved.kind === "internal") {
           req.url = resolved.url;
           return false;

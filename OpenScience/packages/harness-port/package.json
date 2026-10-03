@@ -27,7 +27,9 @@
     "./runtime-ui-sources": "./src/runtimeUiSources.mjs",
     "./runtime-ui-transcript": "./src/runtimeUiTranscript.mjs",
     "./runtime-ui-panels": "./src/runtimeUiPanels.mjs",
-    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs"
+    "./runtime-ui-styles": "./src/runtimeUiStyles.mjs",
+    "./personal-skills": "./src/personalSkills.mjs",
+    "./extension-preparation": "./src/extensionPreparation.mjs"
   },
   "scripts": {
     "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
@@ -43,11 +45,13 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
     "@deepseek-ai/dsh-scope": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
     "@deepseek-ai/dsh-typert-protocol": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-skill-filesystem": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-plugin-manager": "0.1.7-rc.2"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -67,6 +71,12 @@
     },
     "@deepseek-ai/dsh-system-prompt": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-skill-filesystem": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-plugin-manager": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -74,8 +84,12 @@
     "@deepseek-ai/dsh-attachment": "0.1.7-rc.2",
     "@deepseek-ai/dsh-brand": "0.1.7-rc.2",
     "@deepseek-ai/dsh-client-modules": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-browser": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
     "@deepseek-ai/dsh-invariants": "0.1.7-rc.2",
     "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-plugin-manager": "0.1.7-rc.2",
     "@deepseek-ai/dsh-ptc-runtime": "0.1.7-rc.2",
     "@deepseek-ai/dsh-sandbox": "0.1.7-rc.2",
     "@deepseek-ai/dsh-sandbox-policy": "0.1.7-rc.2",
@@ -84,6 +98,7 @@
     "@deepseek-ai/dsh-session-persistence": "0.1.7-rc.2",
     "@deepseek-ai/dsh-session-projection": "0.1.7-rc.2",
     "@deepseek-ai/dsh-skill": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.1.7-rc.2",
     "@deepseek-ai/dsh-storage": "0.1.7-rc.2",
     "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.2",
     "@deepseek-ai/dsh-timeout": "0.1.7-rc.2",

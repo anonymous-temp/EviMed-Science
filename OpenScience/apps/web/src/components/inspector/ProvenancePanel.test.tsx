@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProvenanceRecord } from "@ai4s/shared";
-import { ProvenancePanel, reproducePrompt } from "./ProvenancePanel";
+import { LegacyProvenancePanel as ProvenancePanel, reproducePrompt } from "./ProvenancePanel";
 
 const records: ProvenanceRecord[] = [
   { path: "fig/plot.py", version: 1, ts: 1751500000, tool: "write", content: "print(1)", sessionId: "ses_1" },
@@ -90,14 +90,14 @@ describe("ProvenancePanel", () => {
     // Latest version (expanded) shows its captured environment.
     expect(await screen.findByText("py 3.12.4 · macos-aarch64 · app 0.1.0")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /复现/ }));
+    await userEvent.click(screen.getByRole("button", { name: /发起后续分析/ }));
     // The draft rides the navigation state as a runtime-UI intent on the
     // version's own session; the bridge inside the kernel's page reads it.
     const state = JSON.parse(screen.getByTestId("nav-state").textContent || "null");
     expect(screen.getByTestId("location")).toHaveTextContent(`/app/chat/${records[records.length - 1].sessionId}`);
     expect(state.runtimeUiIntent.kind).toBe("open");
     const draft: string = state.runtimeUiIntent.draft;
-    expect(draft).toContain("复现 `fig/plot.py`（来源记录 v2）");
+    expect(draft).toContain("讨论 `fig/plot.py`（旧版记录 v2，未保存不可变文件内容）");
     expect(draft).toContain("Python 3.12.4");
     expect(draft).toContain("print(2)");
     // The reproduce prompt references the captured package lockfile.
@@ -144,6 +144,6 @@ describe("reproducePrompt", () => {
   it("flags truncated records and points at the full provenance store", () => {
     const prompt = reproducePrompt(record("big = 1\n… [truncated]"));
     expect(prompt).toContain("truncated");
-    expect(prompt).toContain(".openscience/provenance.jsonl");
+    expect(prompt).toContain("完整代码可能无法恢复");
   });
 });

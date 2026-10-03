@@ -96,6 +96,7 @@ const RECURRING_SWEEPS = [
 
 const USER_ID = "composition-user";
 const PROJECT_ID = "composition-project";
+const ACCOUNT_CREATED_AT = "2026-01-01 00:00:00.123456+00";
 
 /** A row as `evimed_product.documents` stores one. */
 function documentRow(kind, id, payload) {
@@ -143,6 +144,8 @@ class FakePool extends EventEmitter {
     super();
     /** @type {Map<string, any>} */
     this.documents = new Map(documents.map((row) => [`${row.kind}:${row.id}`, row]));
+    /** @type {Map<string, any>} Owned programme rows for the real GEO authority lookup. */
+    this.geoProjects = new Map();
     /** @type {Map<string, any>} Rows of `evimed_product.feedback_events`. */
     this.feedback = new Map();
     /** @type {Map<string, any>} Rows of `evimed_product.jobs`, distillation only. */
@@ -327,22 +330,27 @@ class FakePool extends EventEmitter {
       const now = Date.now();
       return { rows: [{
         user_id: USER_ID, csrf_token: "composition-csrf", created_at: new Date(now), expires_at: new Date(now + 3_600_000),
-        id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00",
+        id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: ACCOUNT_CREATED_AT,
       }], rowCount: 1 };
     }
-    if (/^SELECT id, name, password_hash, auth_type FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
+    if (/^SELECT id, name, password_hash, auth_type, created_at::text AS account_created_at FROM evimed_control\.users WHERE id = \$1/.test(sql)) {
       return values[0] === USER_ID
-        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local" }], rowCount: 1 }
+        ? { rows: [{ id: USER_ID, name: "Composed", password_hash: "", auth_type: "local", account_created_at: "2026-01-01 00:00:00+00" }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
+    }
+    if (/^SELECT .* FROM evimed_geo\.projects WHERE id = \$1 AND user_id = \$2 AND deleted_at IS NULL$/.test(sql)) {
+      const row = this.geoProjects.get(values[0]);
+      return row && row.user_id === values[1] && !row.deleted_at ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
+    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
+      || /^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -437,8 +445,9 @@ async function waitFor(predicate, timeoutMs = 2_000) {
  * @param {import("node:test").TestContext} t
  */
 async function composedApp(t, overrides = {}) {
-  const dataDir = await realpath(await mkdtemp(path.join(tmpdir(), "evimed-composition-")));
+  const dataDir = await realpath(await mkdtemp(path.join(process.platform === "darwin" ? "/private/tmp" : tmpdir(), "evimed-composition-")));
   const pool = new FakePool(capsuleFixtureRows());
+  if (overrides.geoEnabled) pool.geoProjects.set("geo_x", { id: "geo_x", user_id: USER_ID, project_id: PROJECT_ID, status: "active", steps: {}, created_at: new Date("2026-01-01T00:00:00Z"), updated_at: new Date("2026-01-01T00:00:00Z"), deleted_at: null });
 
   // Capsule cleanup issues no statement of its own; this is the one call the
   // composition root makes, wrapped rather than replaced so the real cleanup
@@ -653,8 +662,13 @@ test("startup arms every recurring sweep, and each timer really drives its own s
   }
 });
 
-test("a maintenance pause clears every recurring timer and reopening re-arms them", async (t) => {
-  const fixture = await composedApp(t);
+for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
+  const fixture = await composedApp(t, {
+    managedBrowserEnabled,
+    managedBrowserCdpUrl: "http://127.0.0.1:9222",
+    edgeProxyUrl: "https://proxy.example.org",
+    edgeProxyCredentials: "synthetic:fixture",
+  });
   const armedAtStartup = live(fixture.armed).length;
   assert.ok(armedAtStartup >= RECURRING_SWEEPS.length, "startup armed fewer timers than there are sweeps");
 
@@ -821,6 +835,7 @@ test("a verification runs in a workspace that does not contain the report it is 
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
 
   const user = await fixture.app.store.userById(USER_ID);
+  assert.equal(user.accountCreatedAt, "2026-01-01 00:00:00+00", "the current-user fixture preserves the database account epoch");
   const project = await fixture.app.store.requireProject(user, PROJECT_ID);
   // The episode's own report, where the episode wrote it.
   await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
@@ -1793,6 +1808,14 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   // A capability this deployment does not have is refused by name.
   await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-nonexistent",
     dispatchId: "geo-x-a1", reason: "geo:x", brief }), { status: 503, code: "geo_unavailable" });
+  const programme = fixture.pool.geoProjects.get("geo_x"), reservedBefore = reserved.length, promptsBefore = prompts.length;
+  programme.status = "paused";
+  await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-paused", reason: "geo:evidence", brief }), { status: 409, code: "geo_project_paused" });
+  programme.status = "active"; programme.user_id = "another-account";
+  await assert.rejects(dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
+    dispatchId: "geo-foreign", reason: "geo:evidence", brief }), { status: 404, code: "geo_project_not_found" });
+  assert.equal(reserved.length, reservedBefore); assert.equal(prompts.length, promptsBefore);
 });
 
 // The 2026-09-26 audit (M-8): a GEO run and an autopilot episode recall

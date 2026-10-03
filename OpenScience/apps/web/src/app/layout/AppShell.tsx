@@ -19,6 +19,7 @@ export function AppShell() {
   const currentProjectId = useProjectStore((state) => state.currentId);
   const location = useLocation();
   const onChat = isChatPath(location.pathname);
+  const onTasks = /^\/app\/autopilot\/?$/.test(location.pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   // Inside the EviMed Vue shell (`?embed=1`): the content area and nothing
   // else — the host draws the sidebar. Decided once, from the entry address,
@@ -39,7 +40,7 @@ export function AppShell() {
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
   // embedded shell has no sidebar to toggle, and the key is the host's.
   useEffect(() => {
-    if (embedded) return undefined;
+    if (embedded || onTasks) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
@@ -48,7 +49,7 @@ export function AppShell() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [embedded]);
+  }, [embedded, onTasks]);
 
   useEffect(() => {
     const clearSession = () => {
@@ -112,7 +113,7 @@ export function AppShell() {
           跳到主要内容
         </a>
       )}
-      {!embedded && (
+      {!embedded && !onTasks && (
         <>
           {/* The drawer's backdrop, below `lg` only, where the sidebar overlays
               the content. On the drawer tier and before the sidebar in the
@@ -129,7 +130,7 @@ export function AppShell() {
         </>
       )}
       <main id="main" ref={mainRef} tabIndex={-1} className="flex min-w-0 flex-1 flex-col focus:outline-none">
-        {!embedded && sidebarCollapsed && (
+        {!embedded && !onTasks && sidebarCollapsed && (
           <div className="flex h-12 shrink-0 items-center pl-2">
             {/* The chrome's 36 px icon button: below `lg` this is the only
                 way off a page a phone was sent to. */}

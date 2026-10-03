@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { resultReplayDeployment } from "./result-replay-deployment.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -71,7 +72,7 @@ function assertNoSymlinkPath(target) {
   }
 }
 
-function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV_BYTES } = {}) {
+function readRegularFileNoFollow(file, { privateFile = false, knowledgePluginSharedKey = false, maxBytes = MAX_ENV_BYTES } = {}) {
   const target = path.resolve(file);
   assertNoSymlinkPath(target);
   let handle;
@@ -82,7 +83,9 @@ function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV
     if (stat.size <= 0 || stat.size > maxBytes) {
       throw failure("preflight_file_size", `${target} has an invalid size.`);
     }
-    if (privateFile && process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
+    const supportedKnowledgeShare = knowledgePluginSharedKey && stat.uid === 0 && stat.gid === 10002
+      && (stat.mode & 0o7777) === 0o440;
+    if (privateFile && process.platform !== "win32" && (stat.mode & 0o077) !== 0 && !supportedKnowledgeShare) {
       throw failure(
         "preflight_file_permissions",
         `${target} must not be accessible by group or other users. Use chmod 600.`,
@@ -92,6 +95,12 @@ function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV
   } finally {
     if (handle != null) fs.closeSync(handle);
   }
+}
+
+// Only this shared credential is mounted by the knowledge plugin's pinned
+// UID/GID 10002. All other private files keep the owner-only policy.
+export function readEviMedApiKeyFile(file) {
+  return readRegularFileNoFollow(file, { privateFile: true, knowledgePluginSharedKey: true, maxBytes: 8 * 1024 });
 }
 
 function validateDeepSeekCompatibilityTool() {
@@ -355,6 +364,7 @@ function normalizeScriptPaths(values, envFile) {
     "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE",
     "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE",
     "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE",
+    "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE",
   ]) {
     if (normalized[name] && !path.isAbsolute(normalized[name])) {
       normalized[name] = resolveDeploymentPath(normalized[name], envFile);
@@ -401,6 +411,13 @@ export function validateDeploymentConfig(values, envFile) {
     required(values, "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE"),
     "Runtime image",
   );
+  const resultReplay = resultReplayDeployment(values);
+  if (resultReplay) {
+    validateImageReference(resultReplay.image, "Result replay image");
+    readModelGatewaySigningSecretFile(resolveDeploymentPath(
+      required(values, "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE"), envFile,
+    ));
+  }
   const caddyVersion = required(values, "OPEN_SCIENCE_CADDY_VERSION");
   if (!/^\d+\.\d+\.\d+-alpine$/.test(caddyVersion)) {
     throw failure("preflight_caddy_version", "OPEN_SCIENCE_CADDY_VERSION must use an exact x.y.z-alpine tag.");
@@ -611,9 +628,8 @@ export function validateDeploymentConfig(values, envFile) {
       },
     );
   }
-  const evimedApiKey = readRegularFileNoFollow(
+  const evimedApiKey = readEviMedApiKeyFile(
     resolveDeploymentPath(required(values, "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE"), envFile),
-    { privateFile: true, maxBytes: 8 * 1024 },
   ).replace(/\r?\n$/, "");
   if (!evimedApiKey || /[\r\n\0]/.test(evimedApiKey)) {
     throw failure("preflight_evimed_api_key", "The EviMed API key file must contain one non-empty credential.");
@@ -648,6 +664,7 @@ export function validateDeploymentConfig(values, envFile) {
     objectStorageUri,
     publicUrl,
     releaseId,
+    resultReplay,
     runtimeEgress,
     runtimeImage,
     sourceRevision,
@@ -672,6 +689,7 @@ export function buildComposeArgs(config, envFile) {
     files.push(path.join(repoRoot, "deploy/web/docker-compose.monitoring.yml"));
     profiles.push("monitoring");
   }
+  if (config.resultReplay) files.push(path.join(repoRoot, "deploy/web/docker-compose.result-replay.yml"));
   const args = ["compose", "--env-file", envFile];
   for (const file of files) args.push("-f", file);
   for (const profile of profiles) args.push("--profile", profile);
@@ -849,6 +867,11 @@ export async function runHostPreflight({
     engine.architecture,
     "Caddy",
   );
+  if (config.resultReplay) {
+    parseImageInfo(execute("docker", ["image", "inspect", "--format", imageFormat, config.resultReplay.image], commandOptions),
+      engine.architecture, "Result replay");
+    onCheck("result-replay-image", "isolated executor image matches host architecture");
+  }
   onCheck("container-images", "Web, Runtime, and Caddy images match host architecture");
 
   // The runtime image is only used while a job runs, so between jobs no

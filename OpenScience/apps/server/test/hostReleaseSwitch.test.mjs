@@ -15,10 +15,38 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { MaintenanceService } from "../src/maintenanceService.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const NEW = "1cf308956b6e";
 const PROJECT = "web";
+
+// These are actual public API payloads, not the service's internal cached state.
+async function maintenanceResponse(requestId, activeTasks = 0) {
+  const lease = {
+    request_id: requestId,
+    requested_at: new Date(),
+    expires_at: new Date(Date.now() + 3_600_000),
+  };
+  const database = {
+    async query(sql) {
+      if (sql.includes("FROM evimed_product.maintenance_lease")) return { rows: [lease] };
+      if (sql.includes("FROM evimed_product.jobs")) return { rows: [{ running_jobs: 0, pending_prompts: 0, active_sessions: 0 }] };
+      throw new Error(`Unexpected maintenance fixture query: ${sql}`);
+    },
+    async transaction(operation) { return operation(database); },
+  };
+  const service = new MaintenanceService(database, {
+    migrate: async () => {},
+    inspectActivity: async () => ({
+      activeCommands: 0, activeTasks, backgroundOperations: 0, runningAgentRuns: 0,
+      runtimes: { busy: 0, idle: 0, unknown: 0 },
+    }),
+    setTimer: () => ({ unref() {} }),
+    clearTimer: () => {},
+  });
+  return { data: { ...await service.status(), activity: await service.activity() } };
+}
 
 const FAKE_DOCKER = String.raw`#!/usr/bin/env node
 const fs = require("fs");
@@ -85,8 +113,36 @@ if (command === "exec") {
   if (rest[0] === "printenv") { out(state.runtimeImage + "\n"); process.exit(0); }
   const script = rest.join(" ");
   if (script.includes("/api/ready")) { out((state.ready ?? "ok 27 - backup=ok") + "\n"); process.exit(0); }
-  if (script.includes("/api/ops/maintenance?activity=1")) { out((state.activity ?? "0 0 0") + "\n"); process.exit(0); }
-  if (script.includes("/api/health")) process.exit(0);
+  if (script.includes("/api/ops/maintenance?activity=1") && state.activity !== undefined) { out(state.activity + "\n"); process.exit(0); }
+  if (script.includes("/api/ops/maintenance")) {
+    // Execute the switch's actual Node validation, replacing only the HTTP boundary.
+    // A canned "0 0 0" would never catch a public-status contract mismatch.
+    const payload = script.includes("?activity=1") ? state.maintenanceStatus : (state.releaseMaintenanceStatus ?? state.maintenanceStatus);
+    const bootstrap = "global.fetch = " + (async (_url, options = {}) => {
+        const fs = require("node:fs");
+        const state = JSON.parse(fs.readFileSync(process.env.FAKE_DOCKER_STATE, "utf8"));
+        if (options.method !== "POST") return { ok: true, json: async () => JSON.parse(process.env.FAKE_MAINTENANCE_RESPONSE) };
+        const body = JSON.parse(options.body);
+        if (state.maintenanceReleaseFails || body.requestId !== JSON.parse(process.env.FAKE_MAINTENANCE_RESPONSE).data.lease?.requestId)
+          return { ok: false, json: async () => ({}) };
+        state.releasedMaintenance = body.requestId;
+        fs.writeFileSync(process.env.FAKE_DOCKER_STATE, JSON.stringify(state));
+        return { ok: true, json: async () => ({ data: { state: "open", lease: null } }) };
+      }).toString() + ";";
+    const result = require("node:child_process").spawnSync(process.execPath, ["-e", bootstrap + rest[2], ...rest.slice(3)], {
+      encoding: "utf8",
+      env: { ...process.env, FAKE_MAINTENANCE_RESPONSE: JSON.stringify(payload),
+        OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: "fixture-only", OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: "",
+        OPEN_SCIENCE_RELEASE_MANIFEST_FILE: state.manifestFile, OPEN_SCIENCE_SOURCE_REVISION: state.revision },
+    });
+    out(result.stdout ?? ""); process.stderr.write(result.stderr ?? ""); process.exit(result.status ?? 1);
+  }
+  if (script.includes("/api/health")) {
+    if (state.healthExit) process.exit(state.healthExit);
+    const bootstrap = "global.fetch=async()=>({ok:true,json:async()=>({data:{releaseId:" + JSON.stringify(state.releaseId) + "}})});";
+    const result=require("node:child_process").spawnSync(process.execPath,["-e",bootstrap+rest[2],...rest.slice(3)]);
+    process.exit(result.status ?? 1);
+  }
   process.exit(1);
 }
 if (command === "run" && flag("--entrypoint") === "sh") {
@@ -107,18 +163,21 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
   await mkdir(path.join(web, "monitoring"), { recursive: true });
   await mkdir(path.join(rel, "scripts/ops"), { recursive: true });
-  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs"]) {
+  for (const script of ["configure-monitoring.mjs", "check-runtime-skill-digests.mjs", "result-replay-deployment.mjs"]) {
     await copyFile(path.join(repoRoot, "scripts/ops", script), path.join(rel, "scripts/ops", script));
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
-  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({ runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill] }));
-  await writeFile(path.join(web, ".env"), "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\n");
+  await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
+    app: { releaseId }, source: { revision: NEW },
+    runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
+  }));
+  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
   await writeFile(path.join(root, "shared", `ops-source-${NEW}`, "compose.builtin.override.yml"), "services: {}\n");
@@ -131,7 +190,11 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   const container = (service, hash, binds, extra = {}) => ({ service, hash, running: true, startedAt: old, workingDir: through, binds, stale: false, ...extra });
   const state = {
     current,
+    maintenanceStatus: await maintenanceResponse("release-content-1"),
+    manifestFile: path.join(web, "release-manifest.json"),
+    revision: NEW,
     runtimeImage: `open-science-runtime:x-${NEW}`,
+    releaseId,
     restartDoesNotHelp,
     walkExit,
     // The readiness line the switch's probe prints (`<ok|notok> <checks> <failing but backup> backup=<code>`).
@@ -175,6 +238,7 @@ function runSwitch(root, flags = []) {
   const env = { ...process.env };
   delete env.OPEN_SCIENCE_PUBLIC_HEALTH_URL;
   delete env.OPEN_SCIENCE_EDGE_PROXY_URL;
+  delete env.OPEN_SCIENCE_MANAGED_BROWSER_ENABLED;
   return new Promise((resolve) => {
     execFile("bash", [path.join(repoRoot, "scripts/ops/host-release-switch.sh"), NEW, ...flags], {
       env: {
@@ -204,7 +268,7 @@ test("the switch restarts what still reads the previous release through current,
     assert.doesNotMatch(result.stdout, /restarted: web-open-science-release-receipt-1/);
     assert.match(result.stdout, /(\d+) bind\(s\) verified live inside their containers, 0 unverified/);
     const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
-    const up = calls.findIndex((line) => line.includes(" up -d --no-deps open-science-web"));
+    const up = calls.findIndex((line) => line.includes(" up -d --no-build --pull never --no-deps open-science-web"));
     const restart = calls.indexOf(`restart ${PROJECT}-prometheus-1`);
     assert.ok(up >= 0 && restart > up, "prometheus is restarted after the changed services are recreated");
     assert.ok(calls.some((line) => line.startsWith(`exec ${PROJECT}-prometheus-1 stat -c %h /etc/prometheus/rules/open-science.rules.json`)));
@@ -379,4 +443,165 @@ test("the plan names the containers the switch would restart, and restarts none"
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a drained switch releases only its named maintenance lease after health and before the receipt", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const state = JSON.parse(await readFile(path.join(root, "docker-state.json"), "utf8"));
+    assert.equal(state.releasedMaintenance, "release-content-1");
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const release = calls.findIndex((line) => line.includes('action: "release"'));
+    assert.ok(release > calls.findIndex((line) => line.includes("/api/health")));
+    assert.ok(release < calls.indexOf(`restart ${PROJECT}-open-science-release-receipt-1`));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a changed receipt scheduler starts after the maintenance lease is released", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const stateFile = path.join(root, "docker-state.json");
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    state.compose["open-science-release-receipt"] = "new";
+    await writeFile(stateFile, JSON.stringify(state));
+    const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const release = calls.findIndex((line) => line.includes('action: "release"'));
+    const receipt = calls.findIndex((line) => line.includes(" up -d ") && line.includes("--no-deps open-science-release-receipt"));
+    assert.ok(receipt > release, "the startup mint requires normal admission");
+    assert.ok(!calls.some((line) => line.includes("--no-deps open-science-web open-science-release-receipt")));
+    assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`), "the recreated scheduler already mints once");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("a maintenance switch refuses unknown activity and preserves the lease when health or release fails", { skip }, async () => {
+  for (const scenario of [{ activity: "unknown HTTP 503" }, { healthExit: 1 }, { maintenanceReleaseFails: true }]) {
+    const { root } = await host();
+    try {
+      const stateFile = path.join(root, "docker-state.json");
+      const state = JSON.parse(await readFile(stateFile, "utf8"));
+      await writeFile(stateFile, JSON.stringify({ ...state, ...scenario }));
+      const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+      assert.notEqual(result.code, 0, result.stdout + result.stderr);
+      const after = JSON.parse(await readFile(stateFile, "utf8"));
+      assert.equal(after.releasedMaintenance, undefined);
+      const calls = await readFile(path.join(root, "docker.log"), "utf8");
+      assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`));
+      if (scenario.activity) assert.doesNotMatch(result.stdout, /=== current -> /);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+});
+
+test("the public MaintenanceService idle/draining contract governs both phases of the switch", { skip }, async () => {
+  const idle = await maintenanceResponse("release-content-1");
+  const draining = await maintenanceResponse("release-content-1", 1);
+  assert.equal(idle.data.state, "idle");
+  assert.equal(draining.data.state, "draining");
+  assert.equal(draining.data.blockers.activeTasks, 1);
+  for (const [before, after, expected] of [[draining, idle, 3], [idle, draining, 0]]) {
+    const { root } = await host();
+    try {
+      const stateFile = path.join(root, "docker-state.json");
+      const state = JSON.parse(await readFile(stateFile, "utf8"));
+      await writeFile(stateFile, JSON.stringify({ ...state, maintenanceStatus: before, releaseMaintenanceStatus: after }));
+      const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+      assert.equal(result.code, expected, result.stdout + result.stderr);
+      const final = JSON.parse(await readFile(stateFile, "utf8"));
+      if (expected === 3) {
+        assert.doesNotMatch(result.stdout, /=== current -> /);
+        assert.equal(final.releasedMaintenance, undefined);
+      } else {
+        assert.equal(final.releasedMaintenance, "release-content-1", "new-instance activity does not prevent the owned lease from being resumed");
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }
+});
+
+test("a leased switch fails closed on another owner, expired or invalid expiry, and incomplete or nonzero counts", { skip }, async () => {
+  const idle = await maintenanceResponse("release-content-1");
+  const corrupt = (edit) => {
+    const value = structuredClone(idle);
+    edit(value.data);
+    return value;
+  };
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  const invalidLeases = [
+    corrupt((data) => { data.lease.requestId = "another-deployment"; }),
+    corrupt((data) => { data.lease.expiresAt = expired; }),
+    corrupt((data) => { delete data.lease.expiresAt; }),
+    corrupt((data) => { data.state = "maintenance"; }),
+  ];
+  const invalidCounts = [
+    corrupt((data) => { delete data.activity.activeDatabaseSessions; }),
+    corrupt((data) => { delete data.blockers.activeDatabaseSessions; }),
+    corrupt((data) => { data.activity = {}; }),
+    corrupt((data) => { data.blockers.activeCommands = 1; }),
+    corrupt((data) => { data.activity.unknown = 1; }),
+    corrupt((data) => { data.activity.activeTasks = "0"; }),
+  ];
+  for (const phase of ["before", "after"]) {
+    for (const payload of phase === "before" ? [...invalidLeases, ...invalidCounts] : invalidLeases) {
+      const { root } = await host();
+      try {
+        const stateFile = path.join(root, "docker-state.json");
+        const state = JSON.parse(await readFile(stateFile, "utf8"));
+        const field = phase === "before" ? "maintenanceStatus" : "releaseMaintenanceStatus";
+        await writeFile(stateFile, JSON.stringify({ ...state, [field]: payload }));
+        const result = await runSwitch(root, ["--no-prune", "--maintenance-request-id=release-content-1"]);
+        assert.equal(result.code, phase === "before" ? 3 : 1, `${phase}: ${JSON.stringify(payload)}\n${result.stdout}${result.stderr}`);
+        assert.equal(JSON.parse(await readFile(stateFile, "utf8")).releasedMaintenance, undefined);
+        const calls = await readFile(path.join(root, "docker.log"), "utf8");
+        assert.ok(!calls.includes(`restart ${PROJECT}-open-science-release-receipt-1`), "a rejected lease is never followed by a mint");
+        if (phase === "before") assert.doesNotMatch(result.stdout, /=== current -> /);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  }
+});
+
+
+test("release switch includes the isolated replay overlay only for a configured executor", async (t) => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = path.join(rel, "deploy/web/.env");
+  await writeFile(env, `OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1\n` + "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:revision\n");
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.equal(result.code, 0, result.stderr);
+  const log = await readFile(path.join(root, "docker.log"), "utf8");
+  assert.match(log, /-f docker-compose.result-replay.yml/);
+});
+
+test("release switch rejects a replay URL outside its internal network before moving current", async (t) => {
+  const { root, rel } = await host();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(rel, "deploy/web/.env"), `OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1\n` + "OPEN_SCIENCE_RESULT_ENGINE_URL=http://outside:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=replay:revision\n");
+  const result = await runSwitch(root, ["--no-prune"]);
+  assert.notEqual(result.code, 0);
+  await assert.rejects(realpath(path.join(root, "current")));
+});
+
+test("the enabled managed browser overlay follows private overrides in the actual release composition", { skip }, async () => {
+  const { root } = await host({ managedBrowser: true });
+  try {
+    const result = await runSwitch(root, ["--plan"]);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    const calls = (await readFile(path.join(root, "docker.log"), "utf8")).split("\n");
+    const compose = calls.find(line => line.startsWith("compose ") && line.includes(" config --hash"));
+    assert(compose);
+    assert(compose.indexOf("docker-compose.browser.yml") > compose.indexOf("compose.builtin.override.yml"));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("custom immutable manifest identity governs health and owned maintenance release",{skip},async()=>{
+ const releaseId="evimed-0d936480f496-assessment",{root}=await host({releaseId});try{
+ const file=path.join(root,"docker-state.json"),state=JSON.parse(await readFile(file,"utf8"));state.maintenanceStatus=await maintenanceResponse("custom-source-release");await writeFile(file,JSON.stringify(state));
+ const result=await runSwitch(root,["--no-prune","--maintenance-request-id=custom-source-release"]);assert.equal(result.code,0,result.stdout+result.stderr);assert.match(result.stdout,/web serves evimed-0d936480f496-assessment/);assert.equal(JSON.parse(await readFile(file,"utf8")).releasedMaintenance,"custom-source-release");
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test("manifest versus env identity mismatch refuses before current or shared configuration changes",{skip},async()=>{
+ const {root,rel}=await host();try{const env=path.join(rel,"deploy/web/.env");await writeFile(env,(await readFile(env,"utf8")).replace(`OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1`,`OPEN_SCIENCE_RELEASE_ID=foreign-release`));const result=await runSwitch(root,["--no-prune"]);assert.notEqual(result.code,0);await assert.rejects(realpath(path.join(root,"current")));assert.doesNotMatch(result.stdout,/probe targets follow|current ->/);}finally{await rm(root,{recursive:true,force:true});}
 });

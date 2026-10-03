@@ -14,9 +14,11 @@
  * @module kernel-install
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { officialYamlPackage, patchYamlInstallation } from "../../deploy/runtime-dsh/runtime-yaml-security.mjs";
 
 /**
  * The npm arguments that install the pinned kernel closure into `prefix`.
@@ -57,11 +59,16 @@ export function closureDrift(installed, pins) {
 /**
  * Install the pinned closure into a fresh temporary directory.
  * @param {Record<string, any>} pins
- * @returns {string} its `node_modules`
+ * @returns {Promise<string>} its `node_modules`
  */
-export function installKernel(pins) {
+export async function installKernel(pins) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "evimed-kernel-"));
   writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "evimed-kernel-probe", private: true }, null, 2));
   execFileSync("npm", kernelInstallArgs(pins, dir), { stdio: "inherit" });
+  const cache = mkdtempSync(path.join(os.tmpdir(), "evimed-kernel-security-"));
+  try {
+    const { pin, official } = await officialYamlPackage(fileURLToPath(new URL("../../deps-version.json", import.meta.url)), cache);
+    patchYamlInstallation(path.join(dir, "node_modules"), official, pin);
+  } finally { rmSync(cache, { recursive: true, force: true }); }
   return path.join(dir, "node_modules");
 }

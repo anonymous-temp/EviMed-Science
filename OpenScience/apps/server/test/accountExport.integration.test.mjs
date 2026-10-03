@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -9,6 +9,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { withAccountExportSnapshot } from "../src/accountExport.mjs";
+import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -104,6 +105,73 @@ test("account export includes the owner's PostgreSQL customer state and revision
   const serialized = [...entries.values()].map(value => value.toString()).join("\n");
   for (const forbidden of [f.other, "other original fact", "excluded-operator-provider-secret", "excluded-provider-request-id", "excluded-job-credential", "excluded-lease", "excluded-worker", f.cookie, f.csrf,
     "password_hash", "passwordHash", "csrf_token", "request_fingerprint", "lease_token", "worker_id"]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+// The refusal of 2026-10-03, at the level it happened. Result capture is on by
+// default, so an active account holds result documents; each kind written here
+// used to answer 503 for the whole archive, because the database accepted it
+// and the export's list did not name it. `accountExportKinds.test.mjs` holds
+// the list to PRODUCT_KINDS; this holds the route to PostgreSQL.
+test("an account with captured results, a calculation and a document conversion still exports", options, async t => {
+  const f = await fixture(t);
+  const user = await f.app.store.userById(f.owner);
+  const project = await f.app.store.requireProject(user, "default");
+  // A real capture of the owner's workspace file, by the service that writes them.
+  const results = new ResultProvenanceService({ documents: f.documents, config: f.app.config, authorizeProject: async () => project });
+  const version = await results.captureFile({ userId: f.owner, project, relativePath: "customer.md",
+    producer: { kind: "tool", sessionId: "session-owner", runId: "run-one", callId: "call-one", eventId: "7" } });
+  const at = new Date().toISOString();
+  const put = (kind, id, payload) => f.documents.put(f.owner, kind, id, payload, { expectedRevision: 0, projectId: "default" });
+  // The other records as their services store them (`ResultImpactService`,
+  // `ResultRevisionService.stage`, `ResultReplayService.request`,
+  // `DocumentExportService.requestFrozen`), with a marker in every field that
+  // is the platform's rather than the customer's.
+  await put("result-impact", `impact-${"a".repeat(48)}`, { schemaVersion: 1, recordType: "result-impact", versionId: version.versionId,
+    source: { id: "10.9999/paper", doi: "10.9999/paper" },
+    sourceStatus: { state: "changed", checkedAt: at, updates: [{ kind: "correction", noticeDoi: "10.9999/correction", date: "2026-10-01", source: "crossref" }] },
+    changeKey: "excluded-change-key", effect: "potentially_affected", claimIds: [], coverage: "result_inputs_only",
+    historicalResultPreserved: true, recomputed: false, observedAt: at,
+    continuation: { status: "preparing", agendaId: "agenda-one", requestedBy: "excluded-requester", requestedAt: at } });
+  await put("result-revision", `rr_${"b".repeat(64)}`, { recordType: "result-revision", id: `rr_${"b".repeat(64)}`, projectId: "default",
+    requestedBy: "excluded-requester", versionId: version.versionId, digest: version.digest, sessionId: "session-owner",
+    anchor: { kind: "text", elementId: "paragraph-1", selectedText: "owner workspace", matchMode: "raw_text" },
+    state: "staged", fingerprint: "excluded-fingerprint", draft: "excluded-draft", stagedAt: at, expiresAt: Date.now() + 86_400_000 });
+  await put("result-replay", `replay_${"c".repeat(64)}`, { recordType: "result-replay", id: `replay_${"c".repeat(64)}`, projectId: "default",
+    versionId: version.versionId, requestedBy: "excluded-requester", jobId: "excluded-job", state: "queued", createdAt: at });
+  await put("document-export", `dex_${"d".repeat(48)}`, { ownerId: f.owner, requestedBy: "excluded-requester", projectId: "default",
+    source: { artifactId: "customer.md", root: "workspace", workspace: "" }, sourceDigest: "excluded-source-digest", sourceRevision: version.digest,
+    title: "customer.md", rendererVersion: "pandoc-chromium-v1", reservedBytes: 67108910, sourceBytes: 23, attempts: 0, state: "queued",
+    formats: { docx: { state: "queued" } }, jobId: "excluded-job", inputDigest: "excluded-input-digest" });
+  // Declared unexported: an evaluation's instruction to this deployment's runtime.
+  await put("method-trial", "default", { methodIds: ["method-one"], digestById: { "method-one": "excluded-method-digest" },
+    expiresAt: at, requestedBy: "excluded-requester", setAt: at });
+
+  const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 200);
+  const entries = tarEntries(Buffer.from(await response.arrayBuffer()));
+  const state = JSON.parse(entries.get("account/customer-state.json").toString());
+  // Nothing was left out for want of a contract: `price-list` (the fixture's)
+  // and `method-trial` are decisions, not gaps.
+  assert.deepEqual(state.omissions, []);
+  for (const kind of ["result-version", "result-impact", "result-revision", "result-replay", "document-export"]) {
+    assert.ok(state.documents.some(row => row.kind === kind), kind);
+    assert.ok(state.revisions.some(row => row.kind === kind), kind);
+  }
+  assert.ok(!state.documents.some(row => ["method-trial", "price-list"].includes(row.kind)));
+  // The result version names the workspace file and its SHA-256, and the
+  // archive's copy of the workspace is where those bytes are.
+  const exported = state.documents.find(row => row.id === version.versionId).payload;
+  assert.equal(exported.path, "customer.md");
+  assert.equal(exported.digest, createHash("sha256").update("owner workspace content").digest("hex"));
+  assert.equal(exported.producer.callId, "call-one");
+  const bytes = entries.get(`projects/default/workspace/${exported.path}`);
+  assert.equal(bytes.length, exported.size);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), exported.digest);
+  assert.equal(state.documents.find(row => row.kind === "result-revision").payload.anchor.selectedText, "owner workspace");
+  assert.deepEqual(state.documents.find(row => row.kind === "document-export").payload.formats, { docx: { state: "queued" } });
+  const serialized = [...entries.values()].map(value => value.toString()).join("\n");
+  for (const forbidden of ["excluded-requester", "excluded-job", "excluded-fingerprint", "excluded-draft", "excluded-change-key",
+    "excluded-source-digest", "excluded-input-digest", "excluded-method-digest", "result-snapshots/"]) assert.equal(serialized.includes(forbidden), false, forbidden);
 });
 
 async function authenticatedGeneration(f) {

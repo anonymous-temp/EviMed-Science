@@ -30,7 +30,7 @@ import {
   syncRuntimeDshProfile,
 } from "../src/runtimeManager.mjs";
 import { expectedPluginTools, pluginProofMismatch, pluginUpstreamHealth, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
-import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
+import { renderProfilePatch, runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
@@ -53,6 +53,28 @@ const project = {
   runtimeDir: "/srv/open-science/users/alice/projects/paper1/runtime",
 };
 
+test("a test deployment with the browser proxy uses the hosted permission and UI policy", () => {
+  const config = {
+    production: false,
+    modelGatewayInternalUrl: "http://gateway:8787/internal/model/v1",
+    runtimeSandboxEnforcement: "partial",
+  };
+  const plan = { sandboxMode: "docker", dshHomeDir: "/runtime/dsh-home", capsuleMethodCount: 0 };
+  for (const runtimeUiProxyEnabled of [false, true]) {
+    const patch = renderProfilePatch(dshProfileInput(
+      { ...config, runtimeUiProxyEnabled }, project, plan, "deepseek-flash", "/runtime/workload-token",
+    ));
+    if (runtimeUiProxyEnabled) {
+      assert.match(patch, /defaultPreset: 'evimed-hosted'/);
+      assert.match(patch, /- id: ui-settings-models\n  disabled: true/);
+      assert.doesNotMatch(patch, /\n      danger-full-access:/);
+    } else {
+      assert.match(patch, /defaultPreset: 'workspace-write'/);
+      assert.doesNotMatch(patch, /- id: ui-settings-models/);
+    }
+  }
+});
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -72,6 +94,53 @@ function fakeRuntime(projectId, workspaceDir = project.workspaceDir) {
     exitedAt: null,
   };
 }
+
+for (const mode of ["ordinary", "composite", "personal"]) {
+  test(`actual startup ${mode} preserves the selected personal preparation boundary`, async () => {
+    const manager = new RuntimeManager({ runtimeProvider: "docker", runtimeMode: "kernel", dataDir: "/unused-test-data" });
+    const personal = { reference: null, pins: [], revision: 7 };
+    const composite = { identity: { baseRuntimeImageDigest: "sha256:" + "a".repeat(64) },
+      bindings: { personalRevision: 7 }, projection: { plugins: [], personal: { reference: null, pins: [] } } };
+    const frozenComposite = structuredClone(composite);
+    let preparationCalls = 0;
+    let preparedRevision = 7;
+    manager.personalSkillGenerations = { prepareForRuntime: async () => {
+      preparationCalls += 1;
+      preparedRevision += 1;
+      return personal;
+    } };
+    manager.syncCapsuleMethods = async () => ({ count: 0 });
+    const boundary = new Error("Stop before container or kernel startup");
+    let plan;
+    manager.provider = { preflight: async () => {}, prepare: async (_project, input) => { plan = input; throw boundary; } };
+    const key = manager.key(project);
+    if (mode === "composite") manager.extensionGenerationOverrides.set(key, composite);
+    if (mode === "personal") manager.personalSkillOverrides.set(key, personal);
+    await assert.rejects(manager.startKernel(project), error => error === boundary);
+    assert.equal(preparationCalls, mode === "ordinary" ? 1 : 0);
+    assert.equal(preparedRevision, mode === "ordinary" ? 8 : 7);
+    assert.equal(plan.personalSkillGeneration, mode === "composite" ? null : personal);
+    assert.equal(plan.extensionGeneration, mode === "composite" ? composite : null);
+    assert.deepEqual(composite, frozenComposite);
+    assert.deepEqual(personal, { reference: null, pins: [], revision: 7 });
+  });
+}
+
+test("composite override still verifies its frozen personal reference before provider startup", async () => {
+  const manager = new RuntimeManager({ runtimeProvider: "docker", runtimeMode: "kernel", dataDir: "/unused-test-data" });
+  let preparationCalls = 0;
+  let providerCalls = 0;
+  manager.personalSkillGenerations = { prepareForRuntime: async () => { preparationCalls += 1; return null; } };
+  manager.syncCapsuleMethods = async () => ({ count: 0 });
+  manager.provider = { preflight: async () => {}, prepare: async () => { providerCalls += 1; } };
+  manager.extensionGenerationOverrides.set(manager.key(project), {
+    identity: { baseRuntimeImageDigest: "sha256:" + "a".repeat(64) },
+    projection: { plugins: [], personal: { reference: { ownerHash: "foreign-owner" }, pins: [] } },
+  });
+  await assert.rejects(manager.startKernel(project), { code: "extension_contract_invalid" });
+  assert.equal(preparationCalls, 0);
+  assert.equal(providerCalls, 0);
+});
 
 async function fakeDockerRmBin(root) {
   const bin = path.join(root, "docker-rm-stub.mjs");

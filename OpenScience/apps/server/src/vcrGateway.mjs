@@ -57,7 +57,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS,
+  VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_RISKS, VCR_POPULATION_KINDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement,
 } from "@evimed/domain";
@@ -524,9 +524,12 @@ function distributionOf(item, field, value) {
 }
 
 /**
- * Everything a write of one kind needs, passed once.
+ * Everything a write of one kind needs, passed once. `caller` is what the
+ * gateway knows of who is calling beyond the study: the dispatch the calling
+ * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void }} WriteDeps
+ *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
+ *   caller?: { runtimeRunId?: string | null } | null }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -1195,16 +1198,41 @@ const WRITERS = {
    * text as the package's report (plan §8.3, principle 10c). The run is told what
    * did not resolve, never what it rendered to: a rendered number can be an exact
    * small count, which a model does not read.
+   *
+   * **Which export a report goes into is the dispatch's to say, never the kind a
+   * run types.** A run the orchestrator sent out for one export fills that export
+   * and nothing else: the kind it names has to be that export's (or be left out),
+   * and a different one is refused by name with nothing created. The export used
+   * to be picked by the typed kind, 「研究包」 when none was typed, and made when
+   * none was open — so a run sent to write a 模拟报告 that typed `study_package`
+   * left its own export to end 「未完成」 and made an orphan 研究包 nobody had
+   * asked for, which the next 导出研究包 then answered with (pilot acceptance,
+   * 2026-10-03). Only a write no export dispatch is out for — the researcher's own
+   * conversation — still opens a row of the kind it names.
    */
-  async report(item, { store, service, study }) {
+  async report(item, { store, service, study, orchestrator, caller }) {
     if (!item.only(["kind", "section", "template", "text"])) return null;
     const template = item.str("template", { max: 200_000 }) ?? item.str("text", { max: 200_000 });
     if (!template?.trim()) return void item.bad("template", "报告文字不能为空。");
-    const kind = item.choice("kind", VCR_EXPORT_KINDS, { fallback: "study_package" });
+    const named = item.choice("kind", VCR_EXPORT_KINDS);
     const section = item.str("section", { max: 60 }) ?? "main";
     if (!item.ok) return null;
-    const open = (await store.exports(study.id)).find((/** @type {any} */ row) => ["queued", "running"].includes(row.state) && row.kind === kind);
-    const target = open ?? await store.createExport({ studyId: study.id, userId: study.userId, kind, cover: {} });
+    const dispatched = typeof orchestrator?.exportDispatch === "function" ? await orchestrator.exportDispatch(study.id, caller ?? {}) : null;
+    /** @type {any} */
+    let target;
+    if (dispatched) {
+      target = await store.exportRow(study.id, dispatched.exportId);
+      if (!target) return void item.bad("kind", "这次运行要写的那份导出已经不在了，报告没有保存。", "vcr_write_refused");
+      if (named && named !== target.kind) {
+        const label = (/** @type {string} */ kind) => /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)[kind] ?? kind;
+        return void item.bad("kind", `这次运行是为导出「${label(target.kind)}」派发的，报告只能写进这一份：kind 写 ${target.kind}，或者不写 kind，再提交一次。`
+          + `没有另建「${label(named)}」，这次提交的正文也没有保存。`);
+      }
+    } else {
+      const kind = named ?? "study_package";
+      const open = (await store.exports(study.id)).find((/** @type {any} */ row) => ["queued", "running"].includes(row.state) && row.kind === kind);
+      target = open ?? await store.createExport({ studyId: study.id, userId: study.userId, kind, cover: {} });
+    }
     // The first section freezes the numerical and review snapshot. Later
     // sections bind to that model under the export row lock, including two
     // report writes arriving while a calculation changes the live study.
@@ -1235,7 +1263,7 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, seal = null, dataPlane = null, documents = null, report = () => {} }) {
+  matchStore = null, matching = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null }) {
   /** @type {string[]} */
   const ids = [];
   /** @type {Array<Record<string, any>>} */
@@ -1249,7 +1277,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
     return { ok: false, ids, issues: [issue(null, "", "vcr_write_empty", "这次写入没有任何内容。")] };
   }
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller };
 
   if (what === "protocol" || what === "criteria") {
     try {
@@ -1492,12 +1520,16 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         work = async () => ({ what: request.what, ...(await vcr.service.runtimeRead(study, request.what, request.filter)) });
       } else if (operation === "write") {
         const request = writeRequest(body);
+        // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
+        // study's own run slot, that is which run is calling — nothing the run sends says so.
+        const runtimeRunId = runtimeManager.boundedRuntimeScope?.({ userId: String(identity.userId), id: String(identity.projectId) })?.runId ?? null;
         work = async () => {
           const result = await vcrRuntimeWrite({
             store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator ?? null, study,
             what: request.what, items: request.items, data: request.data,
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
+            caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId) },
           });
           vcr.service.counters.writes += 1;
           vcr.service.counters.writeIssues += result.issues.length;

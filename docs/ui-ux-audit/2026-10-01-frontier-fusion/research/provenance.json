@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-01",
+  "main": "04e8b3509297b81973f076a275f67535500aef05",
+  "aihotRepository": "https://github.com/KKKKhazix/AIHOT",
+  "aihotCommit": "cf8f8d07d68dfa9079becc72b0717a45b33485f3",
+  "aihotSourceCaveat": "Official repository is a public framework snapshot; it does not prove exact identity with the current deployed build.",
+  "evimedReference": "/tmp/ev-base/evimed-web-feat-research-workflows-migration",
+  "evimedReferenceCaveat": "Local source snapshot from the earlier EviMed frontend review, not a freshly fetched upstream checkout. Current authenticated layout supplied by the owner in three screenshots.",
+  "evimedHashes": {
+    "src/views/evidence-zone/EvidenceZone.vue": "51eb4c77af5bf6757460fd9066e915e75e82191fe201e480814d17751e3a798c",
+    "src/views/evidence-zone/components/EvidenceZoneHub.vue": "0753db7ee1c5ca8a1c6bb578f6981b5ced8bc9183f3edf8a0e867ac34e4efd2f",
+    "src/views/evidence-zone/components/AcademicEvidencePreview.vue": "dac5e0386c6b9aec606c032143b7147f7a188c448e553ebcaed41492177b518a",
+    "src/components/knowledgeBase/component/EvidenceCardPreview.vue": "c99447010e62a02a682d31cff2c32b34399b7f08cb8b05b666787021fd2f663e",
+    "src/api/evidenceZone.js": "87b36c1d1952f767bf2ba4d28328da53860aba5145912a3866d2c6d6c9665520",
+    "src/views/geo-card/GeoCardOptimization.vue": "a5ff0700633309102301b8af08504c3d8d72d6749976b8a48d731837f5f130b2"
+  },
+  "productionAccess": "Science frontier requires login; current React render was captured with local fixtures, not production content. Public Vue navigation returned to home without a session.",
+  "validation": {
+    "scope": "existing frontend frontier tests; no live model evaluation or production mutations",
+    "files": 6,
+    "passed": 132,
+    "prototype": {
+      "viewports": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "pageChecks": 24,
+      "interactionChecks": 13,
+      "pageErrors": 0
+    },
+    "review": {
+      "localLinks": "all resolve",
+      "viewports": [
+        1440,
+        390
+      ],
+      "horizontalOverflow": false,
+      "pageErrors": 0
+    },
+    "productChanges": "No product behavior changes; temporary fixture entrypoints removed.",
+    "captureEntrypoints": "research/capture_current.py installs fixture entrypoints for capture and removes them in finally."
+  },
+  "completedAt": "2026-10-01T02:09:52.932190+00:00"
+}

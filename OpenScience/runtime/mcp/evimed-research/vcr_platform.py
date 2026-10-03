@@ -174,6 +174,12 @@ def tool_definitions():
                 "additionalProperties": False,
             },
         },
+        # The shapes below are held to the domain's scenario schemas by
+        # `test/test_vcr_platform.py`: every key a shape offers is one the
+        # method's schema reads, and a key the schema reads for some endpoint
+        # types only says which (`key[time_to_event]`). `accrual?` used to stand
+        # unmarked on all three patient generators; a run that followed it for a
+        # binary set was refused for a field the engine does not read.
         {
             "name": "vcr_simulate",
             "description": (
@@ -182,18 +188,22 @@ def tool_definitions():
                 "batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the "
                 "frozen setting of one method and is refused by name (the field's path) when it carries a key the "
                 "engine does not read, lacks a required one, or asks for a design or endpoint the method does not "
-                "implement. Shapes: design_analytic {design{kind,informationRates?,spending?,allocation?}, "
-                "endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?}; design_simulation "
+                "implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for "
+                "any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, "
+                "endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation "
                 "{design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, "
-                "analysis{method,alpha,sided,tau?}, accrual?, performance?, targetMcse?}; design_grid the same plus "
-                "designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth?, "
-                "analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,"
-                "missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; "
-                "generate_patients{,_binary,_continuous} {design{nTreat,nControl?}, endpoint, truth, accrual?}; "
-                "reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, "
-                "treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau?, ...}; "
-                "map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. "
-                "Truth spells the null case truth.null (boolean); dropout is accrual.dropoutAnnual; alpha is the total, "
+                "analysis{method,alpha,sided,tau?}, accrual?[time_to_event], performance?, targetMcse?}; design_grid "
+                "the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, "
+                "truth[continuous|binary], analysis}; generate_population {n, population{variables[{name,family,...}],"
+                "correlation?,constraints?,missing?}}; literature_population {n, "
+                "baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients {design{nTreat,nControl?}, "
+                "endpoint, truth, accrual?}; generate_patients_binary and generate_patients_continuous "
+                "{design{nTreat,nControl?}, endpoint, truth}; reconstruct_km {curve[{time,surv}], "
+                "riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; "
+                "weight_comparator {covariates[], estimand, endpoint, tau[time_to_event], ...}; map_prior "
+                "{historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells "
+                "the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) "
+                "exists only for a time_to_event endpoint; alpha is the total, "
                 "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, synthesize_population, "
                 "weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. "
                 "pool_evidence and match_criteria are built by the platform (evidence_pool; the protocol's criteria). "

@@ -1,0 +1,187 @@
+{
+  "url": "https://aihot.news/agent",
+  "status": 200,
+  "title": "Agent 接入 · AIHOT",
+  "capturedAt": "2026-10-01T01:44:27.689427+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "text": "跳到正文\n内容\n精选\n全部 AI 动态\n热点榜\nAI 日报\n主题\n收藏\n模型\n模型榜\nTibo重置监控\n更多\nAgent 接入\n关于\n更新日志\n反馈\nGitHub 开源\n深色\n跟随系统\n浅色\n京ICP备2026012723号-5\nAGENT 接入\n把 AIHOT 接进你的 Agent\n\nSkill、MCP、RSS、API 四种方式，读的是同一份精选、热点和日报。全部匿名只读，不用注册，也不用 API Key。\n\n服务正常\n版本\n2.0.0\n匿名只读 · 无需 Key\n旧接口和旧域名 2026 年 10 月 31 日一起停用　/api/public/* 请换到 /api/v1，字段一一对应；地址里还是 aihot.virxact.com 的 RSS、MCP、API，请换成 aihot.news，之后旧域名只做跳转。\n迁移指南 →\n最省事\nAgent Skill\n装一次，以后不用再更新\nClaude Code、Codex、Gemini CLI、OpenCode\nMCP\n填一个地址，多出 5 个工具\nClaude 桌面版、Cursor 等远程 MCP 客户端\nRSS\n复制地址，用阅读器订阅\nReeder、Folo、Inoreader、n8n\nREST API\n匿名 GET，自己写程序取数\n脚本、机器人、小程序、看板\n\n下面复制出去的配置里带一个本机生成的匿名标识，只用来合并统计，不是账号或密钥，清除浏览器数据后会换新。详见隐私说明。\n\nAGENT SKILL · 2.0.0\n装一次，以后不用再更新\n\n不用记接口，也不用写代码。适合 Claude Code、Codex、Gemini CLI、OpenCode 这类支持 Agent Skills 的工具。查什么、怎么整理都在 AIHOT 这边完成，Skill 只负责提问和转述；AIHOT 以后新增的能力，装好的 Skill 会自动用上。\n\n1\n把这段话发给你的 Agent\n安装器会先校验完整包，不覆盖别家 Skill，发现旧副本会先停下来问你。\n安装提示词\n复制\n请安装 AIHOT Skill：https://aihot.news/aihot-skill/README.md\n装完告诉我是否需要开启新会话。\n安装器支持时请追加：--actor 5631a144-8054-4e51-b8ac-e5e0196be06f\n2\n开一个新会话\n多数 Agent 只在会话开始时读取 Skill，当前对话里不一定看得到。\n3\n问一句试试\n过去 24 小时 AI 圈最重要的 5 件事是什么？\n复制\n\n回答注明了时间范围、给出中文摘要、标题链到 AIHOT，就是装好了。\n\n装过旧版？最后更新一次\n1.x 和 9 月 30 日前装的 2.0.0 都需要再更新一次，之后就是最终版，不用再更新，回答也更快。把这段话发给正在用它的 Agent：\n升级提示词\n复制\n请把我已安装的 AIHOT Skill 更新到最新版：https://aihot.news/aihot-skill/README.md\n先告诉我它现在装在哪个目录、是否存在重复副本，再替换同一目录。\n更新后开启新会话，用“过去 24 小时 AI 圈最重要的 5 件事是什么？”验证。\n装好后可以这样问\n最近一周最值得关注的 5 条 AI 资讯是什么？\n复制\n现在 AI 圈最热的事件是什么？\n复制\n给我今天的 AI 日报。\n复制\nOpenAI 最近发布了什么？\n复制\nTibo 最近有没有重置 Codex 额度？\n复制\n现在最热的那件事，来龙去脉是什么？\n复制\n用命令行安装\n没触发？按这个顺序查\n不装 Skill 也能用\n目前做不到的\n接入方式\nAgent Skill\nMCP\nRSS\nREST API\n接入资源\nllms.txt\n给大模型读的站点说明\nAgent 使用说明\nAgent 读了就能查，Skill 用的也是它\nOpenAPI 3.1\nREST API 的完整定义 · 2.0.0\nSkill 完整包\n安装说明与全部文件\nGitHub 镜像\nSkill 源文件 · 2.0.0\n没接上？\n\n把平台、版本和报错写在反馈页，别发 token 或本地文件。\n\n去反馈",
+  "links": [
+    {
+      "text": "跳到正文",
+      "href": "#main"
+    },
+    {
+      "text": "",
+      "href": "/"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部 AI 动态",
+      "href": "/all"
+    },
+    {
+      "text": "热点榜",
+      "href": "/hot"
+    },
+    {
+      "text": "AI 日报",
+      "href": "/daily"
+    },
+    {
+      "text": "主题",
+      "href": "/topics"
+    },
+    {
+      "text": "收藏",
+      "href": "/starred"
+    },
+    {
+      "text": "模型榜",
+      "href": "/leaderboard"
+    },
+    {
+      "text": "Tibo重置监控",
+      "href": "/codex-reset"
+    },
+    {
+      "text": "Agent 接入",
+      "href": "/agent"
+    },
+    {
+      "text": "关于",
+      "href": "/about"
+    },
+    {
+      "text": "更新日志",
+      "href": "/changelog"
+    },
+    {
+      "text": "反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "GitHub 开源",
+      "href": "https://github.com/KKKKhazix/AIHOT"
+    },
+    {
+      "text": "京ICP备2026012723号-5",
+      "href": "https://beian.miit.gov.cn/"
+    },
+    {
+      "text": "迁移指南 →",
+      "href": "/agent?tab=api#legacy-api-migration"
+    },
+    {
+      "text": "最省事Agent Skill装一次，以后不用再更新Claude Code、Codex、Gemini CLI、OpenCode",
+      "href": "/agent"
+    },
+    {
+      "text": "MCP填一个地址，多出 5 个工具Claude 桌面版、Cursor 等远程 MCP 客户端",
+      "href": "/agent?tab=mcp"
+    },
+    {
+      "text": "RSS复制地址，用阅读器订阅Reeder、Folo、Inoreader、n8n",
+      "href": "/agent?tab=rss"
+    },
+    {
+      "text": "REST API匿名 GET，自己写程序取数脚本、机器人、小程序、看板",
+      "href": "/agent?tab=api"
+    },
+    {
+      "text": "隐私说明",
+      "href": "/privacy"
+    },
+    {
+      "text": "install.sh",
+      "href": "/aihot-skill/install.sh"
+    },
+    {
+      "text": "SKILL.md",
+      "href": "/aihot-skill/SKILL.md"
+    },
+    {
+      "text": "反馈页",
+      "href": "/feedback"
+    },
+    {
+      "text": "https://aihot.news/api/v1/agent",
+      "href": "/api/v1/agent"
+    },
+    {
+      "text": "Agent Skill",
+      "href": "/agent"
+    },
+    {
+      "text": "MCP",
+      "href": "/agent?tab=mcp"
+    },
+    {
+      "text": "RSS",
+      "href": "/agent?tab=rss"
+    },
+    {
+      "text": "REST API",
+      "href": "/agent?tab=api"
+    },
+    {
+      "text": "llms.txt给大模型读的站点说明",
+      "href": "/llms.txt"
+    },
+    {
+      "text": "Agent 使用说明Agent 读了就能查，Skill 用的也是它",
+      "href": "/api/v1/agent"
+    },
+    {
+      "text": "OpenAPI 3.1REST API 的完整定义 · 2.0.0",
+      "href": "/openapi-v1.json"
+    },
+    {
+      "text": "Skill 完整包安装说明与全部文件",
+      "href": "/aihot-skill/README.md"
+    },
+    {
+      "text": "GitHub 镜像Skill 源文件 · 2.0.0",
+      "href": "https://github.com/KKKKhazix/khazix-skills/tree/main/aihot"
+    },
+    {
+      "text": "去反馈",
+      "href": "/feedback"
+    },
+    {
+      "text": "精选",
+      "href": "/"
+    },
+    {
+      "text": "全部",
+      "href": "/all"
+    },
+    {
+      "text": "日报",
+      "href": "/daily"
+    },
+    {
+      "text": "更多",
+      "href": "/more"
+    }
+  ],
+  "metrics": {
+    "scrollWidth": 1440,
+    "main": {
+      "x": 180,
+      "y": 0,
+      "width": 1260,
+      "height": 2215.671875,
+      "top": 0,
+      "right": 1440,
+      "bottom": 2215.671875,
+      "left": 180
+    },
+    "firstArticle": null
+  }
+}

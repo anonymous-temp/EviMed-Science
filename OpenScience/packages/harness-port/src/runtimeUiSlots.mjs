@@ -42,6 +42,9 @@
 /** The kernel client version these contracts were read from. */
 export const RUNTIME_UI_KERNEL_PIN = '0.1.7-rc.2';
 
+/** Public keyed body/title cell registered by the pinned sidebar-browser client. */
+export const RUNTIME_UI_NATIVE_BROWSER_KEY = '@deepseek-ai/dsh-client-ui-sidebar-browser';
+
 /**
  * The chat node kinds `ui-chat` registers (`registerChatNodeRenderers`). A
  * key in this list is a takeover, not an addition.
@@ -106,6 +109,8 @@ export const RUNTIME_UI_SLOTS = Object.freeze({
   // table.
   'conversation.composer.dock': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The composer: `conversation.composer.bar`'s children table.
+  'conversation.composer.bar': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
+  'conversation.input.left': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   'conversation.input.attachments': Object.freeze({ kind: 'single', scope: 'session-maybe', declaredBy: 'ui-conversation' }),
   'conversation.input.right': Object.freeze({ kind: 'list', scope: 'session', declaredBy: 'ui-conversation' }),
   // The transcript: the `chat` view's children table. `assistant-step` is

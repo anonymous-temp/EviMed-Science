@@ -39,6 +39,7 @@ import kb_search
 import frontier_search
 import geo_platform
 import vcr_platform
+import research_calculate
 
 
 SERVER_NAME = "evimed-research"
@@ -145,10 +146,12 @@ LABEL_SECTIONS = {"type": "array", "maxItems": 17, "items": SHORT_STRING}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
 STATUS_WAIT_MAX_SECONDS = 45
+MANAGED_JOB_ID_DESCRIPTION = "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
 STATUS_WAIT_SECONDS = {
     "type": "integer",
     "minimum": 0,
     "maximum": STATUS_WAIT_MAX_SECONDS,
+    "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting.",
 }
 
 ACTION = {"type": "string", "enum": ["requirements", "retrieve", "compile"]}
@@ -751,7 +754,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "topic": {"type": "string", "minLength": 1, "maxLength": 4000},
-                "jobId": {"type": "string", "pattern": r"^meta-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^meta-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
                 "maxPapers": {"type": "integer", "minimum": 2, "maximum": 200},
@@ -783,7 +786,7 @@ TOOL_DEFINITIONS = [
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "exposure": STRING,
                 "outcome": STRING,
-                "jobId": {"type": "string", "pattern": r"^mr-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^mr-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
                 "analysisDirection": {"type": "string", "enum": ["forward", "bidirectional"]},
@@ -800,7 +803,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "topic": STRING,
-                "jobId": {"type": "string", "pattern": r"^bibliometric-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^bibliometric-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "dateFrom": {"type": "string", "pattern": r"^\d{4}$"},
                 "dateTo": {"type": "string", "pattern": r"^\d{4}$"},
@@ -822,7 +825,7 @@ TOOL_DEFINITIONS = [
                 "studySetting": {"type": "string", "minLength": 1, "maxLength": 1000},
                 "resourceConstraints": {"type": "array", "maxItems": 20,
                                         "items": {"type": "string", "minLength": 1, "maxLength": 200}},
-                "jobId": {"type": "string", "pattern": r"^topic-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^topic-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
             },
@@ -836,7 +839,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "manuscript": {"type": "string", "minLength": 1, "maxLength": 512},
-                "jobId": {"type": "string", "pattern": r"^review-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^review-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "articleType": {"type": "string", "enum": ["original-research", "systematic-review", "case-report", "other"]},
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
@@ -868,7 +871,7 @@ TOOL_DEFINITIONS = [
                 "studyDateTo": DATE,
                 "backgroundDateFrom": DATE,
                 "backgroundDateTo": DATE,
-                "jobId": {"type": "string", "pattern": r"^safety-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^safety-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
             },
@@ -900,6 +903,7 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # (EVIMED_VCR_GATEWAY_URL), and used by the module's five capabilities' runs.
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
+TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -985,7 +989,7 @@ def disabled_tools():
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool", "research_calculate"})
 
 
 def list_tools():
@@ -1728,17 +1732,37 @@ def _managed_status_with_wait(status_call, arguments):
         time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
 
 
+# The tools whose bodies take the session's execution context. The kernel-side
+# wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
+# these, replacing anything a model wrote under that name;
+# apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", *specialist_jobs.SPECS})
+
+
 def call_tool(name, arguments):
     execution_context = None
     if isinstance(arguments, dict) and "__evimed_execution_context" in arguments:
         arguments = dict(arguments)
-        from execution_context import validate_context
+        from execution_context import InvalidContext, validate_context
         try:
             execution_context = validate_context(arguments.pop("__evimed_execution_context"))
-            if name not in {"meta_analysis", *specialist_jobs.SPECS}:
-                raise ValueError("execution context is only supported for engine tools")
-        except ValueError:
-            return failure("engine_execution_context_invalid", "The engine execution context is invalid.", False)
+            if name not in ENGINE_CONTEXT_TOOLS:
+                raise InvalidContext("tool")
+        except ValueError as error:
+            # On an engine tool the platform wrote this context, so no change to
+            # the call can correct it: the run is told to go on rather than to
+            # retry or look for the cause inside its container. Anywhere else
+            # the field has no business in the call at all.
+            engine_tool = name in ENGINE_CONTEXT_TOOLS
+            return failure(
+                "engine_execution_context_invalid",
+                "The engine execution context is invalid (%s)." % getattr(error, "field", "fields"),
+                False,
+                "Stop calling this tool in this conversation; the platform sets its execution context and the run cannot change it."
+                if engine_tool else "Stop until the call carries only the tool's declared inputs.",
+                ["Go on without this engine tool and say it is unavailable in this conversation; do not retry it or inspect the runtime."]
+                if engine_tool else ["Call again with only declared inputs; if the refusal repeats, go on without this tool."],
+            )
     result = (_dispatch(name, arguments, execution_context=execution_context) if execution_context is not None
               else _dispatch(name, arguments))
     return _with_source_types(name, result)
@@ -1996,6 +2020,17 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name == "research_calculate":
+        try:
+            return research_calculate.calculate(arguments, execution_context=execution_context)
+        except research_calculate.ResearchCalculateError as error:
+            if error.code == "result_input_invalid":
+                # Refused here, before the gateway: there is no job to inspect.
+                return failure(error.code, str(error), error.retryable, "invalid_input",
+                               ["Correct the named field and call again; nothing was started."])
+            return failure(error.code, str(error), error.retryable,
+                           "retry" if error.retryable else "unsupported",
+                           ["Inspect the same owned job after a lost response; preserve the prior result."])
     if name in ("geo_read", "geo_write", "social_posts_search"):
         try:
             if name == "geo_read":

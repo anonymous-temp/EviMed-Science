@@ -1728,6 +1728,48 @@ export async function exportWebProject(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
+/** Customer-facing allowance; supplier costs are never customer charges. */
+export interface WebResearchAllowance {
+  enabled: boolean;
+  status: "ready" | "unavailable" | "unlinked" | "disabled";
+  currency: "CNY";
+  available: number | null;
+  held: number | null;
+  balances?: { paid: number | null; member: number | null; promotional: number | null } | null;
+  month: { since: string; paid: number; pending: number };
+  membership?: { name: string; status: string; expiresAt: string | null } | null;
+  commerce: { rechargeUrl: string | null; membershipUrl: string | null; ordersUrl: string | null; refundsUrl: string | null };
+}
+
+export interface WebResearchStatement {
+  id: string;
+  runId: string | null;
+  title: string | null;
+  at: string | null;
+  status: "pending" | "settled" | "failed" | "waived";
+  amount: number | null;
+  waivedCny?: string;
+  pricingVersion?: string;
+  settlementPrecision?: "legacy-integer-floor" | "legacy-integer";
+}
+
+export interface WebResearchStatements {
+  items: WebResearchStatement[];
+  nextCursor: string | null;
+}
+
+export async function fetchWebResearchAllowance(): Promise<WebResearchAllowance> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.allowance");
+  return parseApiResponse<WebResearchAllowance>(await fetchWithWebAuth(apiUrl("/account/allowance")));
+}
+
+export async function fetchWebResearchStatements(cursor?: string): Promise<WebResearchStatements> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.allowance.statements");
+  const query = new URLSearchParams({ limit: "20" });
+  if (cursor) query.set("cursor", cursor);
+  return parseApiResponse<WebResearchStatements>(await fetchWithWebAuth(apiUrl(`/account/allowance/statements?${query}`)));
+}
+
 export interface WebUsageSummary {
   /** Start of the period the totals cover (the current calendar month, UTC). */
   since: string;

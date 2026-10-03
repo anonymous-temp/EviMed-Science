@@ -6,6 +6,7 @@ import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } fr
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
+import { useResearchBilling } from "@/lib/useResearchBilling";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { Button } from "@/components/ui/Button";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
@@ -178,6 +179,20 @@ export function FrameSkeleton({ title = null, line = "正在打开" }: { title?:
       <p className="text-ui text-muted">{line}</p>
     </div>
   );
+}
+
+/**
+ * The way from a refused conversation to the page that states the ceiling:
+ * 设置's usage section, which a deployment that bills research calls 科研额度
+ * and every other calls 用量, so the button says what the page is called
+ * (`useResearchBilling`; unknown reads as the usage wording, which is true
+ * everywhere). Its own component so that the allowance is read only when a
+ * ceiling has actually refused a conversation, not by every one that opens.
+ */
+function UsageButton() {
+  const navigate = useNavigate();
+  const { enabled } = useResearchBilling();
+  return <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>{enabled ? "查看科研额度" : "查看用量"}</Button>;
 }
 
 /**
@@ -681,7 +696,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     iframe.current.contentWindow.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}) },
     }, origin);
   }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
 
@@ -818,7 +833,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
           {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
           {/* The usage section of settings, where a spend ceiling is stated. */}
-          {error.capped && !error.concurrency && <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>查看用量</Button>}
+          {error.capped && !error.concurrency && <UsageButton />}
         </div>
       ) : (
         <>

@@ -1,6 +1,7 @@
 {
   "dsh": "0.1.7-rc.2",
   "cordis": "4.0.4",
+  "pnpm": "11.7.0",
   "services": {
     "required": [
       "tools",
@@ -89,7 +90,7 @@
     "@deepseek-ai/dsh-persona": "config-row",
     "@deepseek-ai/dsh-mcp-client": "config-row",
     "@deepseek-ai/dsh-agent-preset": "config-row",
-    "@deepseek-ai/dsh-skill-filesystem": "config-row",
+    "@deepseek-ai/dsh-skill-filesystem": "provider-base",
     "@deepseek-ai/dsh-compaction-basic": "provider-base",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",
@@ -103,7 +104,8 @@
     "@deepseek-ai/dsh-storage-json": "config-row",
     "@deepseek-ai/dsh-typert-protocol": "dependency",
     "@deepseek-ai/dsh-scope": "dependency",
-    "@deepseek-ai/dsh-system-prompt": "dependency"
+    "@deepseek-ai/dsh-system-prompt": "dependency",
+    "@deepseek-ai/dsh-plugin-manager": "dependency"
   },
   "providers": {
     "compaction": {
@@ -138,6 +140,30 @@
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
       "verifiedAgainst": "0.1.7-rc.2, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.1.7-rc.2/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto)"
+    },
+    "personalSkills": {
+      "package": "@deepseek-ai/dsh-skill-filesystem",
+      "export": "FileSystemSkillProvider",
+      "methods": [
+        "list",
+        "get",
+        "dispose"
+      ],
+      "policy": {
+        "includeDefaultRoots": false,
+        "watch": false
+      }
+    },
+    "extensionPreparation": {
+      "package": "@deepseek-ai/dsh-plugin-manager",
+      "export": "PluginManager",
+      "methods": [
+        "inspect",
+        "installBundle",
+        "cancelInstall",
+        "listBundles"
+      ],
+      "serving": false
     }
   },
   "promptSections": {
@@ -159,7 +185,12 @@
       "skills/list",
       "agentPresets/list",
       "evimedPlugins/status",
-      "evimedPlugins/verify"
+      "evimedPlugins/verify",
+      "evimedPlugins/verifyExtensions",
+      "evimedPlugins/extensionInvocationFacts",
+      "evimedSkills/list",
+      "evimedSkills/read",
+      "evimedSkills/snapshotBuiltin"
     ],
     "denied": [
       "account/ackBonusNotified",
@@ -314,7 +345,20 @@
       ],
       "agentPresets/list": [],
       "evimedPlugins/status": [],
-      "evimedPlugins/verify": []
+      "evimedPlugins/verify": [],
+      "evimedPlugins/verifyExtensions": [],
+      "evimedPlugins/extensionInvocationFacts": [
+        "request"
+      ],
+      "evimedSkills/list": [
+        "request"
+      ],
+      "evimedSkills/read": [
+        "request"
+      ],
+      "evimedSkills/snapshotBuiltin": [
+        "request"
+      ]
     },
     "mux": "/api/remote.mux",
     "streamEndpoints": {
@@ -446,6 +490,12 @@
       "note": "Hooks every `conversation.chat.node` occupant receives: the turn's own published values (the closing answer `ui-chat` chose, which its own answer row reads the same way), the chat snapshot (`timeline.turnOrder`), and the kernel's `file` resource (a workspace file's stat, `bytes`). The delivered-files body reads all three."
     },
     "inputMethod": "conversation.input.for(scope).setDraft",
+    "resultRevisionContext": {
+      "ownedGlobal": "__EVIMED_RESULT_REVISION__",
+      "requestEnvelope": "args.request.evimedResultRevision.referenceId",
+      "methods": ["stage", "clear"],
+      "note": "Control-plane-owned reference, staged after the native draft. The official fetch/openStream hooks attach it only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
+    },
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",
     "workspaceMethods": [

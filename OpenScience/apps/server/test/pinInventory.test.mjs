@@ -19,6 +19,16 @@ import test from "node:test";
 
 import { RULES, checkPinInventory, classify } from "../../../scripts/ops/check-pin-inventory.mjs";
 
+test("extension proof contracts and preparation anchors are pins, not historical evidence", () => {
+  for (const file of [
+    "OpenScience/apps/server/src/extensionDeployment.mjs", "OpenScience/apps/server/src/extensionGenerationService.mjs",
+    "OpenScience/packages/domain/src/extensions.mjs", "OpenScience/packages/domain/test/extensions.test.mjs",
+    "OpenScience/packages/harness-port/src/extensionPreparation.mjs",
+    "OpenScience/scripts/ops/test/prepareExtensionAcceptance.test.mjs",
+  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.1.7-rc.2'" }, { pin: "0.1.7-rc.2" })?.kind, "pin", file);
+  assert.equal(classify({ file: "OpenScience/packages/harness-port/src/unreviewedPreparation.mjs", line: 1, text: "0.1.7-rc.2" }), null);
+});
+
 test("every occurrence of the pin is classified", async () => {
   const report = await checkPinInventory({});
   assert.deepEqual(

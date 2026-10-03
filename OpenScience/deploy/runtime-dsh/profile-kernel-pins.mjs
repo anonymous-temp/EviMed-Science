@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { securityYamlPin } from "./runtime-yaml-security.mjs";
 
 function readManifest(file) {
   const value = JSON.parse(readFileSync(file, "utf8"));
@@ -64,13 +65,17 @@ export function peerPins(specs = []) {
   return pins;
 }
 
-export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, communityPeers = {}) {
+export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, communityPeers = {}, security = {}) {
   const pins = verifiedKernelPins(cliManifestPath, version, cordisVersion);
   const file = path.join(profileDir, "package.json");
   const manifest = readManifest(file);
   if (!Array.isArray(manifest.dsh?.profile?.bundles)) throw new Error("Initialize the profile through dsh before pinning its kernel");
   const policy = readFileSync(policyPath, "utf8");
   if (/^overrides\s*:/m.test(policy)) throw new Error("Profile policy already defines overrides");
+  for (const [name, pin] of Object.entries(security)) {
+    if (name !== "js-yaml" || !/^4\.\d+\.\d+$/.test(pin)) throw new Error("Unsupported runtime security override");
+    if (communityPeers[name] && communityPeers[name] !== pin) throw new Error("A community peer cannot weaken runtime security");
+  }
   // rc.1's plugin manager reconciles only dependencies into active bundle
   // layers. devDependencies satisfy pnpm 11.7's prerelease peer resolution
   // without activating every bundle shipped by the CLI. The final plugin add
@@ -79,7 +84,7 @@ export function seedProfileKernelPins(cliManifestPath, profileDir, policyPath, v
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
   // Community peers are overrides only: pnpm installs them for the bundle that
   // asks, and a devDependency would make the profile hold one no bundle does.
-  const overrides = Object.entries({ ...pins, ...communityPeers }).map(([name, pin]) => `  ${JSON.stringify(name)}: ${JSON.stringify(pin)}`).join("\n");
+  const overrides = Object.entries({ ...pins, ...communityPeers, ...security }).map(([name, pin]) => `  ${JSON.stringify(name)}: ${JSON.stringify(pin)}`).join("\n");
   writeFileSync(path.join(profileDir, "pnpm-workspace.yaml"), `${policy.trimEnd()}\n\noverrides:\n${overrides}\n`);
   return pins;
 }
@@ -90,7 +95,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     throw new Error("Usage: profile-kernel-pins.mjs CLI_PACKAGE_JSON PROFILE_DIR POLICY_YAML DSH_VERSION CORDIS_VERSION [PEER@EXACT_VERSION ...]");
   }
   const community = peerPins(peers);
-  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, community);
+  const security = securityYamlPin("/opt/evimed/runtime-deps-version.json");
+  const pins = seedProfileKernelPins(cliManifestPath, profileDir, policyPath, version, cordisVersion, community, { [security.name]: security.version });
   console.log(`Pinned ${Object.keys(pins).length} profile namespace packages to the verified CLI closure`
     + (Object.keys(community).length ? ` and ${Object.keys(community).length} community peer(s): ${Object.entries(community).map(([n, v]) => `${n}@${v}`).join(", ")}` : ""));
 }

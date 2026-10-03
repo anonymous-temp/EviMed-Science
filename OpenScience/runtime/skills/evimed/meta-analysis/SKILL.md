@@ -34,6 +34,17 @@ full text.
 
 ## Execute
 
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
 1. Call `meta_analysis` with `action=capabilities`. If it is unavailable,
    stop and report the exact deployment precondition.
 2. Call it with `action=start`, the complete topic, language, and only the

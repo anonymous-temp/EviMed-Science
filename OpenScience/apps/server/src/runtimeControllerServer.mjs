@@ -1,4 +1,9 @@
+import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { createDocumentRenderController } from "./documentRenderController.mjs";
+import { createSkillValidationController } from "./skillValidationController.mjs";
+import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
+import { canonicalJson } from "@evimed/domain";
+import { verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -325,9 +330,16 @@ async function prepareControllerSocket(socketPath) {
   }
 }
 
-export function createRuntimeController(overrides = {}) {
+export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
   const documents = createDocumentRenderController(config);
+  const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
+  // Protected construction supplies descriptors and signed/current authority resolvers.
+  // An absent composition never falls back to a development image or direct execution.
+  const extensionTools = hooks.extensionTools ?? null;
+  const assessmentAuthority = hooks.extensionGenerationAssessmentAuthority ?? null;
+  assertExtensionAssessmentAuthority(assessmentAuthority);
+  const verifyGeneration = (project, reference) => verifyExtensionGeneration(config, project, reference, {assessmentAuthority});
   const runtimeChildren = new Map();
   const runtimeOwners = new Map();
   // The last words of each runtime container, kept past its own death. A
@@ -470,7 +482,26 @@ export function createRuntimeController(overrides = {}) {
     const pluginConfig = payload.pluginConfig;
     if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
     validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig });
+    const extension = payload.extensionGeneration ? await verifyGeneration(project, payload.extensionGeneration) : null;
+    if (extension) {
+      if (inspectRuntimeImage(config).imageId !== extension.identity.baseRuntimeImageDigest) throw controllerFailure(409, 'extension_contract_invalid', 'The selected runtime image changed.');
+      if (canonicalJson(extension.projection.personal.reference) !== canonicalJson(payload.personalSkillGeneration ?? null)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected personal roots do not match.');
+      const legacy = extension.projection.plugins.find(plugin => plugin.compatibility === 'legacy-citation-v1');
+      if (legacy && canonicalJson({ revision: legacy.configRevision, enabled: legacy.enabled, settings: legacy.settings }) !== canonicalJson(pluginConfig)) throw controllerFailure(400, 'extension_contract_invalid', 'Selected citation configuration does not match.');
+      const external = extension.projection.plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1');
+      if (!extensionTools || external.length > 1 || external.some(plugin => {
+        const descriptor = extensionTools.descriptors.get(plugin.extensionId);
+        return !descriptor || descriptor.artifactDigest !== plugin.artifactDigest || descriptor.integrity !== plugin.integrity || plugin.executionClass !== 'isolated-tool'
+          || plugin.coordinate?.kind !== 'github' || plugin.coordinate.repository !== 'Jesse-njx/dsh-cowork' || !plugin.settings || Object.keys(plugin.settings).length !== 0 || !Array.isArray(plugin.connectionRefs) || plugin.connectionRefs.length !== 0;
+      })) throw controllerFailure(400, 'extension_contract_invalid', 'Selected tool bridge is unavailable.');
+    }
+    const personal = payload.personalSkillGeneration ? await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration) : null;
+    if (personal) {
+      const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+      if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
+    }
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig,
+      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -506,6 +537,46 @@ export function createRuntimeController(overrides = {}) {
     });
     try {
       await waitForSpawn(child);
+      if (personal) {
+        let proved = false;
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const inspected = spawnSync(config.runtimeContainerBin, ['inspect', '--format', '{{json .}}', plan.containerName], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+          if (inspected.status === 0) {
+            let state; try { state = JSON.parse(inspected.stdout); } catch { throw controllerFailure(503, 'runtime_start_failed', 'Runtime mount verification failed.'); }
+            const expected = path.join(personal.mountRoot);
+            const mount = state.HostConfig?.Mounts?.find(item => item.Target === '/opt/evimed/personal-skills');
+            const relative = path.relative(config.dataDir, expected).split(path.sep).join('/');
+            proved = state.Image === personal.identity.baseRuntimeImageDigest && mount?.ReadOnly === true
+              && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative
+                : mount.Type === 'bind' && mount.Source === expected)
+              && state.Mounts?.some(item => item.Destination === '/opt/evimed/personal-skills' && item.RW === false);
+            if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime personal skill mount did not match its generation.');
+            await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration, personal.identity.baseRuntimeImageDigest);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime personal skill mount could not be inspected.');
+      }
+      if (extension) {
+        let proved = false;
+        const expected = path.join(extensionGenerationRoot(config, extension.reference), 'selected');
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const inspected = spawnSync(config.runtimeContainerBin, ['inspect', '--format', '{{json .}}', plan.containerName], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
+          if (inspected.status === 0) {
+            let state; try { state = JSON.parse(inspected.stdout); } catch { throw controllerFailure(503, 'runtime_start_failed', 'Runtime projection verification failed.'); }
+            const mount = state.HostConfig?.Mounts?.find(item => item.Target === '/opt/evimed/extensions');
+            const relative = path.relative(config.dataDir, expected).split(path.sep).join('/');
+            proved = state.Image === extension.identity.baseRuntimeImageDigest && mount?.ReadOnly === true
+              && (config.runtimeDataVolume ? mount.Type === 'volume' && mount.Source === config.runtimeDataVolume && mount.VolumeOptions?.Subpath === relative : mount.Type === 'bind' && mount.Source === expected)
+              && state.Mounts?.some(item => item.Destination === '/opt/evimed/extensions' && item.RW === false);
+            if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime selected projection did not match.');
+            await verifyGeneration(project, extension.reference); break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        if (!proved) throw controllerFailure(503, 'runtime_start_failed', 'Runtime selected projection could not be inspected.');
+      }
     } catch (error) {
       await cleanupRuntime(project).catch(() => {});
       throw error;
@@ -603,6 +674,43 @@ export function createRuntimeController(overrides = {}) {
         } finally { res.removeListener("close", disconnected); }
         return;
       }
+      if (req.method === "POST" && ["/v1/skills/validate", "/v1/skills/cancel"].includes(url.pathname)) {
+        if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+          throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
+        }
+        const payload = await readJson(req, 4096);
+        assertExactKeys(payload, ["ownerHash", "kind", "contentId", "expectedName"]);
+        const abort = new AbortController();
+        const disconnected = () => { if (!res.writableEnded) abort.abort(); };
+        req.once("aborted", disconnected);
+        res.once("close", disconnected);
+        if (req.aborted || res.destroyed) abort.abort();
+        try {
+          const result = url.pathname.endsWith("/cancel") ? await skillValidation.cancel(payload) : await skillValidation.validate(payload, abort.signal);
+          if (!res.destroyed) sendJson(res, 200, { data: result });
+        } finally {
+          req.removeListener("aborted", disconnected);
+          res.removeListener("close", disconnected);
+        }
+        return;
+      }
+      if (req.method === "POST" && ["admission", "prepare", "execute", "cancel", "status"].some(name => url.pathname === `/v1/extensions/tool/${name}`)) {
+        if (!extensionTools) throw controllerFailure(503, "product_state_unavailable", "Extension execution is unavailable.");
+        if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
+        const payload = await readJson(req, 80 * 1024);
+        const operation = url.pathname.split("/").at(-1);
+        const handler = extensionTools.handlers()[`extension/tool/${operation}`];
+        const abort = new AbortController();
+        const disconnected = () => { if (!res.writableEnded) abort.abort(); };
+        req.once("aborted", disconnected); res.once("close", disconnected);
+        if (req.aborted || res.destroyed) abort.abort();
+        try {
+          const result = operation === "prepare" ? await extensionTools.prepare(payload, { signal: abort.signal })
+            : operation === "execute" ? await extensionTools.execute(payload, { signal: abort.signal }) : await handler(payload);
+          if (!res.destroyed) sendJson(res, 200, { data: result });
+        } finally { req.removeListener("aborted", disconnected); res.removeListener("close", disconnected); }
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/docker/info") {
         sendJson(res, 200, { data: dockerInfo(config) });
         return;
@@ -626,8 +734,10 @@ export function createRuntimeController(overrides = {}) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
         }
         const payload = await readJson(req, config.maxJsonBytes);
+        // Protocol 8 deliberately accepts this exact version-7 citation shape;
+        // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);
@@ -694,6 +804,10 @@ export function createRuntimeController(overrides = {}) {
       return socketPath;
     },
     async close() {
+      let skillValidationFailure = null;
+      let extensionFailure = null;
+      try { await extensionTools?.close(); } catch (error) { extensionFailure = error; }
+      try { await skillValidation.close(); } catch (error) { skillValidationFailure = error; }
       await documents.close();
       await Promise.allSettled(
         [...runtimeChildren.keys()].map(async (containerName) => {
@@ -740,6 +854,8 @@ export function createRuntimeController(overrides = {}) {
         }
         ownedSocket = null;
       }
+      if (skillValidationFailure) throw skillValidationFailure;
+      if (extensionFailure) throw extensionFailure;
     },
   };
 }

@@ -66,7 +66,7 @@ python3 -m pytest tests/service -q
 | `VCR_ENGINE_MAX_INPUT_BYTES` | R | one input file's size cap (default 512 MiB) |
 | `VCR_ENGINE_MAX_RECORDS` | R | most generated records per job (default 2,000,000) |
 | `VCR_ENGINE_DEBUG` | R | full R error text in `handler_error` (never set in production) |
-| `VCR_ENGINE_TOKEN_FILE`, `VCR_ENGINE_RECEIPT_KEY_FILE` | service | secrets, as files (>= 32 bytes, no symlink); `VCR_ENGINE_INSECURE_DEV=1` lets either be missing |
+| `VCR_ENGINE_TOKEN_FILE`, `VCR_ENGINE_RECEIPT_KEY_FILE` | service | required request token and optional receipt key, as files (>= 32 bytes, no symlink); omitting the receipt key preserves authenticated execution and hash verification. Only `VCR_ENGINE_INSECURE_DEV=1` permits a missing request token |
 | `VCR_ENGINE_MAX_TABLE_BYTES` | service | largest output table the table route streams (default 512 MiB; over it is 413 `table_too_large`) |
 | `VCR_ENGINE_WORK_DIR`, `VCR_ENGINE_CPU_SECONDS`, `VCR_ENGINE_MAX_CPU_SECONDS`, `VCR_ENGINE_MEMORY_BYTES`, `VCR_ENGINE_MAX_BODY_BYTES`, `VCR_ENGINE_KEEP_JOBS`, `VCR_ENGINE_CANCEL_GRACE_SECONDS`, `VCR_ENGINE_KILL_GRACE_SECONDS` | service | see the docstring of `service/app.py` |
 
@@ -102,7 +102,7 @@ GET    /health             -> {ok, engineVersion, rVersion, protocolVersion, met
 POST   /jobs               -> 202 {jobId, accepted}
 GET    /jobs/{id}          -> {jobId, state, progress:{done,total}, cpuSeconds, cpuSecondsLimit, error}
 POST   /jobs/{id}/cancel   -> {canceled}
-GET    /jobs/{id}/result   -> the full result, with manifest.signature added (409 until it exists)
+GET    /jobs/{id}/result   -> the full result, optionally signed when configured (409 until it exists)
 GET    /jobs/{id}/tables/{name} -> one output table's bytes (text/csv), only a table the finished result lists
 DELETE /jobs/{id}          -> {discarded: true}
 ```

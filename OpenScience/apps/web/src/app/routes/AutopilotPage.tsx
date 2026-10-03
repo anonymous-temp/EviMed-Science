@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowUp, CalendarClock, Plus, RefreshCw } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import { archiveAgenda, followUpAgenda, getDigest, listAgendas, listEpisodes, markDigestOpened, runAgendaNow, startAgenda, stopAgenda, type AgendaRecord, type EpisodeRecord } from "@/lib/autopilotClient";
@@ -7,9 +7,9 @@ import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
 import { chatPath } from "@/lib/runLocation";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Drawer } from "@/components/ui/Drawer";
+import { FormDialog } from "@/components/ui/FormDialog";
 import { Textarea } from "@/components/ui/Input";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -167,15 +167,17 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
 
   return <div className="flex h-full min-h-0 bg-bg">
     <PageTitle page="定时任务" />
-    <aside aria-label="定时任务列表" className={cn("min-h-0 w-full shrink-0 overflow-y-auto border-r border-border bg-surface p-4 md:w-72 lg:w-80", selectedId && "hidden md:block")}>
+    {/* One left edge in the list column (28 px): the title, the section names and the rows are inset 12 px, so the back link and 新建任务 take the same inset over their size's own 10 and 14. */}
+    <aside aria-label="定时任务列表" className={cn("min-h-0 w-full shrink-0 overflow-y-auto bg-surface-1 p-4 md:w-72", selectedId && "hidden md:block")}>
+      <Link to="/app/chat" className={cn(buttonClasses({ variant: "text", size: "sm" }), "mb-4 w-full justify-start px-3")}><ArrowLeft size={16} aria-hidden="true" />返回工作台</Link>
       <header className="mb-5 flex items-center justify-between px-3"><h1 className="text-heading font-semibold text-text">定时任务</h1><CalendarClock size={20} className="text-text-3" aria-hidden="true" /></header>
       <SearchInput label="搜索任务" className="mb-3 w-full" value={search} onChange={event => setSearch(event.target.value)} />
-      <Button variant="text" className="mb-6 w-full justify-start" onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />新建任务</Button>
+      <Button variant="text" className="mb-6 w-full justify-start px-3" onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />新建任务</Button>
       {error && <LoadError message={error} onRetry={() => void load()} />}
       {agendas === null ? <FilesSkeleton /> : <div className="space-y-6">
         {railList("即将执行", scheduled)}{railList("已暂停 / 已完成", inactive)}
         {visible.length === 0 && !error && <p className="px-3 text-ui text-text-3">{search ? "没有匹配的任务" : "还没有定时任务"}</p>}
-        <section aria-label="推荐" className="space-y-2"><h2 className="px-3 text-caption font-medium text-text-3">推荐</h2><ul className="space-y-1">{RECOMMENDATIONS.map(item => <li key={item.title}><Button variant="text" aria-label={item.title} className="h-auto w-full flex-col items-start whitespace-normal px-3 py-3 text-left" onClick={() => setEditor({ recommendation: item })}><span className="text-ui font-medium text-text">{item.title}</span><span className="line-clamp-2 text-caption font-normal text-text-3">{item.prompt}</span></Button></li>)}</ul></section>
+        <section aria-label="推荐" className="space-y-2"><h2 className="px-3 text-caption font-medium text-text-3">推荐</h2><ul className="space-y-1">{RECOMMENDATIONS.map(item => <li key={item.title}><Button variant="text" aria-label={item.title} className="h-auto w-full flex-col items-start whitespace-normal px-3 py-2 text-left" onClick={() => setEditor({ recommendation: item })}><span className="text-ui font-normal text-text-2">{item.title}</span><span className="line-clamp-1 text-caption font-normal text-text-3">{item.prompt}</span></Button></li>)}</ul></section>
       </div>}
     </aside>
     <section aria-label="任务详情" className={cn("min-h-0 min-w-0 flex-1 flex-col", selectedId ? "flex" : "hidden md:flex")}>
@@ -202,7 +204,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
         </form>{refreshExhausted && <div className="mx-auto mt-2 flex max-w-read items-center gap-2 text-caption text-text-3">自动刷新已暂停<Button variant="text" size="sm" onClick={() => { setRefreshExhausted(false); setRefreshCycle(value => value + 1); void Promise.all([load(), loadHistory()]); }}><RefreshCw size={16} aria-hidden="true" />刷新结果</Button></div>}</div>
       </> : <div className="flex h-full items-center justify-center p-6">{agendas === null ? <FilesSkeleton /> : <div><Button variant="text" className="mb-4 md:hidden" onClick={() => select(null)}><ArrowLeft size={16} aria-hidden="true" />返回任务列表</Button><EmptyState icon={CalendarClock} title={selectedId ? "未找到这个任务" : "让研究按时继续"} description={selectedId ? "返回列表选择其他任务。" : "选择一个任务查看记录，或从推荐开始。"} /></div>}</div>}
     </section>
-    {editor && <Drawer title={editor.agenda ? "编辑任务" : "新建任务"} onClose={() => { if (!editorSaving) setEditor(null); }}><TaskForm projectId={projectId} agenda={editor.agenda} recommendation={editor.recommendation} onRecorded={record} onBusyChange={setEditorSaving} onCancel={() => setEditor(null)} onSaved={value => { record(value); setEditor(null); select(value.id); }} /></Drawer>}
+    {editor && <FormDialog title={editor.agenda ? "编辑任务" : "新建任务"} busy={editorSaving} onClose={() => { if (!editorSaving) setEditor(null); }}><TaskForm projectId={projectId} agenda={editor.agenda} recommendation={editor.recommendation} onRecorded={record} onBusyChange={setEditorSaving} onCancel={() => setEditor(null)} onSaved={value => { record(value); setEditor(null); select(value.id); }} /></FormDialog>}
     {confirm && <ConfirmDialog title={confirm.kind === "run" ? "立即运行？" : confirm.kind === "pause" ? "暂停任务？" : "删除任务？"} body={confirm.kind === "run" ? `本次最多花费 ¥${confirm.agenda.payload.maxEpisodeCny}，不改变原定计划。` : confirm.kind === "pause" ? "暂停后将取消正在进行和排队中的研究，已产生的结果会保留。" : "删除后停止后续计划，取消正在进行和排队中的研究，并保留历史研究结果。"} tone={confirm.kind === "run" ? "primary" : "danger"} confirmLabel={confirm.kind === "run" ? "立即运行" : confirm.kind === "pause" ? "暂停任务" : "删除任务"} onCancel={() => setConfirm(null)} onConfirm={() => { const action = confirm; setConfirm(null); void operate(action); }} />}
   </div>;
 }

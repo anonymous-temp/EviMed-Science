@@ -11,11 +11,12 @@ import { createFrameKit } from "../../../../../packages/harness-port/src/runtime
 import { FRAME_VOCABULARY } from "../../../../../packages/harness-port/src/runtimeUiFrame.mjs";
 import { apply as applyFrameTheme } from "../../../../../packages/harness-port/src/runtimeUiTheme.mjs";
 import { useUiStore } from "@/lib/store";
+import { forgetResearchBilling } from "@/lib/useResearchBilling";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -31,6 +32,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   renewWebRuntimeUiFrame: mocks.renew, listWebAgentRuns: mocks.listRuns, warmWebRuntime: mocks.warm,
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
   listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
+  fetchWebResearchAllowance: mocks.allowance,
 }));
 // 循证 GEO's two calls: which GEO project this is, and writing an option to it.
 const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn() }));
@@ -44,6 +46,12 @@ vi.mock("@/lib/vcrClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/vcrClient")>()),
   getVcrHome: vcr.getVcrHome, getVcrStudy: vcr.getVcrStudy, patchVcrStudy: vcr.patchVcrStudy,
 }));
+/** `/api/account/allowance` on a deployment that does not bill research (every deployment today), and on one that does. */
+const billing = (enabled: boolean) => ({
+  enabled, currency: "CNY", status: enabled ? "ready" : "disabled", available: enabled ? 20 : null, held: null, balances: null, membership: null,
+  month: { since: "2026-10-01T00:00:00.000Z", paid: 0, pending: 0 },
+  commerce: { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null },
+});
 const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
@@ -85,6 +93,8 @@ beforeEach(() => {
   mocks.listAgents.mockReset(); mocks.listAgents.mockResolvedValue([{ id: "adr-analysis", version: "1.0.0" }]);
   mocks.listSessions.mockReset(); mocks.listSessions.mockResolvedValue([]);
   mocks.putSession.mockReset(); mocks.putSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
+  // Research billing is off unless a test says otherwise: every deployment today.
+  mocks.allowance.mockReset(); mocks.allowance.mockResolvedValue(billing(false)); forgetResearchBilling();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -321,20 +331,69 @@ describe("native frame identity and readiness", () => {
   // button beside it. Both halves were wrong for a ceiling: the sentence named
   // a cause the code contradicts, and the only offered action is the one action
   // that cannot work while the window is full.
+  const dailyLimit = () => new WebApiError("This account reached its daily spending limit.", {
+    status: 402, code: "credits_daily_limit_reached", requestId: "req_402", retryAfterSeconds: 11_520,
+  });
+
   it("names the ceiling that refused the frame, says when it frees, and offers the usage page instead of a retry", async () => {
-    mocks.create.mockRejectedValueOnce(new WebApiError("This account reached its daily spending limit.", {
-      status: 402, code: "credits_daily_limit_reached", requestId: "req_402", retryAfterSeconds: 11_520,
-    }));
+    mocks.create.mockRejectedValueOnce(dailyLimit());
     mount();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("今日额度上限已到");
     expect(alert).toHaveTextContent("约 3 小时 12 分后额度开始释放");
     expect(alert).toHaveTextContent("不是整点清零");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "查看用量" }));
+    // This deployment does not bill research, so the page is 用量 and so is the button.
+    await userEvent.click(await screen.findByRole("button", { name: "查看用量" }));
     expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
     expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
     expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  // The page behind the button is named by the deployment: 科研额度 only where
+  // research is billed (`useResearchBilling`), and the button says what the
+  // page is called.
+  it("calls the usage page 科研额度 on a deployment that bills research, and goes to the same address", async () => {
+    mocks.allowance.mockResolvedValue(billing(true));
+    mocks.create.mockRejectedValueOnce(dailyLimit());
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("今日额度上限已到");
+    await userEvent.click(await screen.findByRole("button", { name: "查看科研额度" }));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
+    expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+  });
+
+  it("says 查看用量 until the deployment has said it bills research, and offers the way to the page at once", async () => {
+    let answer!: (value: object) => void;
+    mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    mocks.create.mockRejectedValueOnce(dailyLimit());
+    mount();
+    expect(await screen.findByRole("button", { name: "查看用量" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    await act(async () => { answer(billing(true)); });
+    expect(screen.getByRole("button", { name: "查看科研额度" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+  });
+
+  it("says 查看用量 when the deployment's answer cannot be read, and still offers the way", async () => {
+    mocks.allowance.mockRejectedValue(new Error("network"));
+    mocks.create.mockRejectedValueOnce(dailyLimit());
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("今日额度上限已到");
+    await waitFor(() => expect(mocks.allowance).toHaveBeenCalled());
+    await act(async () => {});
+    await userEvent.click(screen.getByRole("button", { name: "查看用量" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("?tab=usage");
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+  });
+
+  it("reads the allowance only when a ceiling refused the conversation, not for every conversation that opens", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    await act(async () => {});
+    expect(mocks.allowance).not.toHaveBeenCalled();
   });
 
   // A refusal that is not a ceiling keeps its retry, but stops claiming the
@@ -363,6 +422,21 @@ describe("native frame identity and readiness", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("登录已失效，请重新登录。");
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(mocks.allowance).not.toHaveBeenCalled();
+  });
+
+  it("passes a persisted revision reference to the existing native draft without submitting it", async () => {
+    const referenceId = `rr_${"a".repeat(64)}`;
+    const intent = { kind: "open", sessionId: "session-a", draft: "Frozen selection:\n", requestId: "request-revision", projectId: "default", resultRevision: { referenceId } };
+    const { container } = mount({ runtimeUiIntent: intent });
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", intent: { draft: intent.draft, resultRevision: { referenceId } } });
+    expect(post.mock.calls[0][0].type).not.toContain("prompt");
   });
 
   it("keeps a capability intent pending until a matching success acknowledgement", async () => {

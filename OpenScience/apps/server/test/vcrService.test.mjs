@@ -7,10 +7,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VcrService, VCR_READ_WHATS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
-  vcrDominatedScenarios, vcrReadiness, vcrRouteOptions,
+  VcrService, VCR_READ_WHATS, VCR_REFERENCE_INPUTS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
+  vcrDominatedScenarios, vcrPatientScenarioKeys, vcrReadiness, vcrReferenceModelInputs, vcrRouteOptions,
 } from "../src/vcrService.mjs";
-import { VCR_COUNT_KEYS, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_TABS, intendedUseCeiling, missingModelEvidence } from "@evimed/domain";
+import {
+  VCR_COUNT_KEYS, VCR_ENDPOINT_TYPES, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_TABS, intendedUseCeiling, missingModelEvidence, validateScenario,
+} from "@evimed/domain";
 
 test("AC-01 the module is invisible unless it is on and open to this account", () => {
   const off = { vcrEnabled: false, vcrAudience: "all" };
@@ -119,6 +121,66 @@ test("the first catalogue seeds every engine method and the three reference simu
     assert.match(String(model.applicability.population), /情景推演/);
     assert.ok(model.card.knownLimits.length > 0 && model.card.retirement, "a model card states its limits and its retirement rule");
   }
+});
+
+/** The smallest scenario each patient generator takes, to hold one key at a time against the real validator. */
+const GENERATOR_BASE = /** @type {Record<string, Record<string, any>>} */ ({
+  continuous: { design: { nTreat: 100 }, endpoint: { type: "continuous" }, truth: { effect: 0.5 } },
+  binary: { design: { nTreat: 100 }, endpoint: { type: "binary" }, truth: { controlRate: 0.3, treatmentRate: 0.45 } },
+  time_to_event: { design: { nTreat: 100 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 } },
+});
+
+/**
+ * Whether the domain's own validator reads `top.sub` for one endpoint's patient
+ * generator: the key is set (under each accrual variant in turn) and the answer
+ * is whether it comes back as a field the engine does not read. A value of the
+ * wrong type is beside the point — the question is the key.
+ * @param {string} endpointType @param {string} key
+ */
+function generatorReads(endpointType, key) {
+  const [top, sub] = key.split(".");
+  return (top === "accrual" && sub !== "kind" ? ["uniform", "piecewise"] : [null]).some((variant) => {
+    const scenario = structuredClone(GENERATOR_BASE[endpointType]);
+    scenario[top] = { ...(scenario[top] ?? {}), ...(variant ? { kind: variant } : {}), [sub]: sub === "kind" ? "uniform" : 1 };
+    const unknown = validateScenario(`patients.${endpointType}`, scenario)
+      .filter((issue) => issue.code === "scenario_field_unknown").map((issue) => issue.field);
+    return !unknown.includes(`scenario.${top}`) && !unknown.includes(`scenario.${top}.${sub}`);
+  });
+}
+
+test("a reference simulator's card lists exactly the inputs its endpoint's schema reads: no follow-up or dropout for an endpoint that has none", () => {
+  assert.deepEqual(VCR_REFERENCE_MODELS.map((model) => model.endpointType).sort(), [...VCR_ENDPOINT_TYPES].sort(), "one simulator per endpoint family");
+  const tabled = VCR_REFERENCE_INPUTS.flatMap((input) => input.keys);
+  assert.equal(new Set(tabled).size, tabled.length, "a key belongs to one row");
+  for (const model of VCR_REFERENCE_MODELS) {
+    const endpoint = model.endpointType;
+    assert.equal(model.card.interface, `vcr-engine patients.${endpoint}`, "the card is read through its own method's schema");
+    // The oracle is the validator a job is refused by, not the helper that built the card.
+    for (const input of VCR_REFERENCE_INPUTS) {
+      const read = input.keys.filter((key) => generatorReads(endpoint, key));
+      assert.equal(model.card.inputs.includes(input.label), read.length > 0,
+        `${model.name}: 「${input.label}」 is ${read.length ? "read by" : "refused by"} the ${endpoint} schema`);
+    }
+    assert.deepEqual([...model.card.inputs], [...vcrReferenceModelInputs(endpoint)]);
+    // And nothing the schema reads is left off the card: a key the engine starts reading needs a row.
+    const keys = vcrPatientScenarioKeys(endpoint);
+    assert.ok(keys.length >= 6 && keys.includes("design.nTreat"), `${endpoint}: the walk found the schema's keys`);
+    for (const key of keys) {
+      assert.ok(generatorReads(endpoint, key), `${endpoint}: ${key} is not a key the validator reads`);
+      assert.ok(tabled.includes(key), `${endpoint}: the schema reads ${key} and no card row names it`);
+    }
+  }
+  for (const key of tabled) {
+    assert.ok(VCR_REFERENCE_MODELS.some((model) => generatorReads(model.endpointType, key)), `${key} is in the table and no generator reads it`);
+  }
+  // What the pilot's run was refused for: `accrual` on a binary set, offered by the binary card.
+  const followUp = /脱落|入组|随访/;
+  const card = (/** @type {string} */ endpoint) => VCR_REFERENCE_MODELS.find((model) => model.endpointType === endpoint)?.card.inputs ?? [];
+  assert.equal(card("binary").some((label) => followUp.test(label)), false);
+  assert.equal(card("continuous").some((label) => followUp.test(label)), false);
+  assert.equal(card("time_to_event").filter((label) => followUp.test(label)).length, 3);
+  assert.equal(generatorReads("binary", "accrual.dropoutAnnual"), false, "the validator refuses what the old card offered");
+  assert.equal(generatorReads("time_to_event", "accrual.dropoutAnnual"), true);
 });
 
 test("a catalogue the engine does not match is a notice, never a block", async () => {

@@ -1,0 +1,80 @@
+# Interactive SaaS pages use a dedicated browser, not the frontier crawler.
+# Its only network is internal: all public traffic crosses the authenticated
+# control plane's per-context, DNS-pinned proxy and then the Tokyo TLS proxy.
+# No host port, workspace, credentials, persistent profile or Docker socket.
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL: ${OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL:-http://managed-browser:9222}
+    networks:
+      - managed-browser-internal
+
+  managed-browser:
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26}
+    user: "10003:10003"
+    entrypoint: ["python3", "-c"]
+    command:
+      - |
+        import asyncio, subprocess, sys
+        CHROMIUM = ["/usr/bin/chromium", "--headless", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+                    "--remote-debugging-port=9223", "--user-data-dir=/tmp/chromium-profile",
+                    "--disk-cache-dir=/tmp/chromium-cache", "--crash-dumps-dir=/tmp", "--no-first-run",
+                    "--no-default-browser-check", "--disable-background-networking", "--disable-sync",
+                    "--disable-component-update", "--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                    "--disable-features=Translate,MediaRouter,OptimizationHints", "about:blank"]
+        async def pipe(reader, writer):
+            try:
+                while data := await reader.read(65536):
+                    writer.write(data)
+                    await writer.drain()
+            except (ConnectionError, OSError):
+                pass
+            finally:
+                writer.close()
+        async def forward(reader, writer):
+            try:
+                up_reader, up_writer = await asyncio.open_connection("127.0.0.1", 9223)
+            except OSError:
+                writer.close()
+                return
+            await asyncio.gather(pipe(reader, up_writer), pipe(up_reader, writer))
+        async def main():
+            chromium = subprocess.Popen(CHROMIUM)
+            server = await asyncio.start_server(forward, "0.0.0.0", 9222)
+            code = await asyncio.get_running_loop().run_in_executor(None, chromium.wait)
+            server.close()
+            await server.wait_closed()
+            print(f"chromium exited with {code}", file=sys.stderr, flush=True)
+            sys.exit(1)
+        asyncio.run(main())
+    environment:
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/xdg-config
+      XDG_CACHE_HOME: /tmp/xdg-cache
+      XDG_DATA_HOME: /tmp/xdg-data
+      XDG_STATE_HOME: /tmp/xdg-state
+    networks:
+      - managed-browser-internal
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9223/json/version', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=384m
+      - /workspace:ro,nosuid,nodev,noexec,size=1m
+      - /runtime:ro,nosuid,nodev,noexec,size=1m
+    restart: unless-stopped
+
+networks:
+  managed-browser-internal:
+    internal: true

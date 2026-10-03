@@ -214,6 +214,20 @@ function line(value, field, max) {
   return text;
 }
 
+/** The ceiling on a study name, for whoever composes one (the acceptance driver's test holds its own copy equal). */
+export const VCR_STUDY_NAME_MAX = NAME_MAX;
+
+/**
+ * A study name as the routes that take one read it. Exported so a caller that
+ * builds a name — the acceptance driver appends a tag to the owner's — can be
+ * held to this rule itself, not to a copy of the number: the driver's own test
+ * server took any name, and every live intake was refused `vcr_name_invalid`.
+ * @param {unknown} value
+ */
+export function vcrStudyName(value) {
+  return line(value, "name", NAME_MAX);
+}
+
 /** @param {unknown} value @param {readonly string[]} vocabulary @param {string} code @param {string} field */
 function word(value, vocabulary, code, field) {
   if (typeof value !== "string" || !vocabulary.includes(value)) {
@@ -415,7 +429,7 @@ export function createVcrRoutes(dependencies) {
       if (method === "POST") {
         const body = await bodyOf(req, maxJsonBytes, ["name", "question", "dataTier", "intendedUse", "action"]);
         const input = {
-          name: body.name == null ? undefined : line(body.name, "name", NAME_MAX),
+          name: body.name == null ? undefined : vcrStudyName(body.name),
           question: body.question == null ? "" : String(body.question).slice(0, QUESTION_MAX),
           dataTier: body.dataTier == null ? undefined : word(body.dataTier, VCR_DATA_TIERS, "vcr_tier_invalid", "dataTier"),
           intendedUse: body.intendedUse == null ? undefined
@@ -470,7 +484,7 @@ export function createVcrRoutes(dependencies) {
         if (body.name !== undefined || body.question !== undefined || body.action !== undefined || !changesStudy) await requireAbility(study, "write");
         /** @type {Record<string, any>} */
         const patch = {};
-        if (body.name !== undefined) patch.name = line(body.name, "name", NAME_MAX);
+        if (body.name !== undefined) patch.name = vcrStudyName(body.name);
         if (body.question !== undefined) patch.question = String(body.question).slice(0, QUESTION_MAX);
         // 起点 in the composer: which steps the programme is asked to run —
         // `auto` is all seven, an action is the one step it names (the same

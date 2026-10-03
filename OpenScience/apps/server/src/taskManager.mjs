@@ -317,8 +317,13 @@ export class TaskManager {
 
   async close() {
     const running = [];
+    const finishing = [];
     const changedProjects = new Map();
     for (const task of this.tasks.values()) {
+      // Terminal status precedes the final state/event writes in run().
+      if (task.runPromise) {
+        (ACTIVE_STATUSES.has(task.status) ? running : finishing).push(task.runPromise.catch(() => {}));
+      }
       if (ACTIVE_STATUSES.has(task.status)) {
         task.status = "canceled";
         task.finishedAt = task.finishedAt ?? nowIso();
@@ -326,12 +331,12 @@ export class TaskManager {
         task.controller.abort();
         if (task.project) changedProjects.set(projectKey(task.project), task.project);
         await appendTaskEvent(task, "canceled", this.config.maxLogFileBytes).catch(() => {});
-        if (task.runPromise) running.push(task.runPromise.catch(() => {}));
       }
     }
     this.queue = [];
     await Promise.all([...changedProjects.values()].map((project) => this.persistProject(project).catch(() => {})));
     await Promise.race([Promise.allSettled(running), delay(2_000)]);
+    await Promise.allSettled(finishing);
     await Promise.allSettled([...this.projectStateWrites.values()]);
   }
 

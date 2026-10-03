@@ -329,7 +329,7 @@ async function secretFiles(/** @type {Record<string, { size?: number, mode?: num
 
 const configWith = (/** @type {Record<string, unknown>} */ overrides) => loadConfig({ rootDir: repoRoot, vcrEnabled: true, ...overrides });
 
-test("CS-9 the engine's token and receipt key are files, and the engine is composed only when both are readable and long enough", async (t) => {
+test("CS-9 the engine requires request authentication and supports optional receipt signing without weakening configured keys", async (t) => {
   const { dir, files } = await secretFiles({ token: {}, receipt: {}, short: { size: 12 }, open: { mode: 0o644 }, linked: { link: true } });
   t.after(() => rm(dir, { recursive: true, force: true }));
   const database = { async transaction(run) { return run({ async query() { return { rows: [] }; } }); }, async query() { return { rows: [] }; } };
@@ -342,15 +342,24 @@ test("CS-9 the engine's token and receipt key are files, and the engine is compo
   const composed = composeVcr({ config: good, productDatabase: database });
   assert.equal(composed?.engine?.configured(), true);
   assert.equal(typeof composed?.removeEngineJob, "function", "and the job cleanup can reach it");
+  for (const vcrEngineReceiptKeyFile of [undefined, "/dev/null"]) {
+    const authenticated = configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile });
+    assert.equal(authenticated.vcrEngineConfigured, true);
+    assert.deepEqual(vcrEngineStatus(authenticated), { configured: true, reason: null });
+    const unsigned = composeVcr({ config: authenticated, productDatabase: database });
+    assert.equal(unsigned?.engine?.configured(), true);
+    assert.equal(typeof unsigned?.removeEngineJob, "function");
+    assert.deepEqual(withVcrEngineWarnings({ enabled: true, warnings: [] }, authenticated), { enabled: true, warnings: [] });
+  }
 
   /** @type {[string, Record<string, unknown>, string][]} */
   const cases = [
     ["a token file that is not there", { vcrEngineTokenFile: path.join(dir, "absent"), vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_unavailable"],
     ["a receipt key shorter than 32 bytes", { vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: files.short }, "vcr_engine_receipt_key_file_short"],
+    ["an explicitly configured missing receipt key", { vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: path.join(dir, "absent") }, "vcr_engine_receipt_key_file_unavailable"],
     ["a token file others can read", { vcrEngineTokenFile: files.open, vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_permissions"],
     ["a token file that is a symlink", { vcrEngineTokenFile: files.linked, vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_symlink"],
     ["a URL with no secret named at all", {}, "vcr_engine_secret_missing"],
-    ["a token with no receipt key", { vcrEngineTokenFile: files.token }, "vcr_engine_secret_missing"],
     ["/dev/null, which compose binds where there is none", { vcrEngineTokenFile: "/dev/null", vcrEngineReceiptKeyFile: "/dev/null" }, "vcr_engine_secret_missing"],
   ];
   for (const [label, extra, reason] of cases) {
@@ -465,7 +474,9 @@ test("DL-8 the compose stack runs the engine with the environment, secrets, path
   }
   assert.equal(engine.environment.VCR_ENGINE_TOKEN_FILE, "/run/secrets/vcr-engine-token");
   assert.equal(web.environment.OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE, "/run/secrets/vcr-engine-token");
-  assert.equal(web.environment.OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE, "/run/secrets/vcr-engine-receipt-key");
+  assert.equal(web.environment.OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE, "${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}");
+  assert.equal(engine.environment.VCR_ENGINE_RECEIPT_KEY_FILE, web.environment.OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE,
+    "an omitted receipt key must be unset in both services, not read from the /dev/null placeholder mount");
 
   // The data plane: one host directory, read-write in the control plane, read-only in the engine, one path.
   const planeWeb = bindsOf(web)["/data-plane"];

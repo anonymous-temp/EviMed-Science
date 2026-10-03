@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "checkedAt": "2026-10-01T13:54:00.980280+00:00",
+  "sources": [
+    {
+      "sourceId": "artesia",
+      "title": "Apixaban for Stroke Prevention in Subclinical Atrial Fibrillation.",
+      "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2310234",
+      "doi": "10.1056/NEJMoa2310234",
+      "checkedAt": "2026-10-01T13:48:11.683795+00:00",
+      "coverage": "full-text",
+      "quote": "6 minutes to 24 hours.",
+      "quoteSha256": "e89c935ff3e66ce3dfc0b7812a696660c328397c37316ffaae37d2888135788f",
+      "documentTextSha256": "d188ca76087e72ce026f94acc0cbcddb72a9e0bd23be0b271623fb8f7d21872d",
+      "rawDocumentPath": "artesia.pdf",
+      "documentTextPath": "artesia-preserved.txt",
+      "fetchUrl": "https://mediacenteratypon.nejmgroup-production.org/NEJMoa2310234.pdf",
+      "fetchedSha256": "93b9e91f66e674912145a2576930594457236594a2e6732a4f2f5e40fe38eb84",
+      "captureMethod": "Direct public original NEJM publisher PDF, HTTP 200; pdftotext -layout with whitespace normalization. Entire main-paper PDF and extraction retained privately; supplementary appendix not retrieved.",
+      "publicationCoverageNote": "Original main-paper methods, results and tables retained and checked. No supplement, later subgroup analysis or guideline coverage claimed.",
+      "retention": "Private ignored acceptance cache only. Public card uses original concise synthesis and one short quote per paper; no PDF or full text is published."
+    },
+    {
+      "sourceId": "noah-afnet-6",
+      "title": "Anticoagulation with Edoxaban in Patients with Atrial High-Rate Episodes.",
+      "url": "https://www.nejm.org/doi/full/10.1056/NEJMoa2303062",
+      "doi": "10.1056/NEJMoa2303062",
+      "checkedAt": "2026-10-01T13:48:15.580740+00:00",
+      "coverage": "full-text",
+      "quote": "a median follow-up of 21 months",
+      "quoteSha256": "89da9d46676b8df96079e81c2f9095bc19cfac89266975c8769811385c575f81",
+      "documentTextSha256": "9025e15d16792d7725023c8e48e8cd0c018d3b8ace118c92f2f7f16971d3ad6d",
+      "rawDocumentPath": "noah-afnet-6.pdf",
+      "documentTextPath": "noah-afnet-6-preserved.txt",
+      "fetchUrl": "https://mediacenteratypon.nejmgroup-production.org/NEJMoa2303062.pdf",
+      "fetchedSha256": "bbd3fc0f0430c0593f7602888ae849b9c3c8c197697d841c91d72b1ba9d68c76",
+      "captureMethod": "Direct public original NEJM publisher PDF, HTTP 200; pdftotext -layout with whitespace normalization. Entire main-paper PDF and extraction retained privately; supplementary appendix not retrieved.",
+      "publicationCoverageNote": "Original main-paper methods, results and tables retained and checked. No supplement, later subgroup analysis or guideline coverage claimed.",
+      "retention": "Private ignored acceptance cache only. Public card uses original concise synthesis and one short quote per paper; no PDF or full text is published."
+    }
+  ],
+  "sourceDirectory": ".evimed-local/acceptance/evidence-content-extension-20261001",
+  "pathBase": "sourceDirectory",
+  "sourceDirectoryOverride": "Use --source-dir to supply the private retained source directory; document paths are relative."
+}

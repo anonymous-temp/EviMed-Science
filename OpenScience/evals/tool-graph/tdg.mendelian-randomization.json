@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "mendelian-randomization",
-  "version": "sha256:14d3567dee3bc9fa3f01e79140f5b12673228ee0e9151fb98b14fa3b7842c124",
+  "version": "sha256:7dc2a6b16dc14ea09fe1ff6e030c2786668730a4966a76f705641da9dc8d7422",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 21,
@@ -855,12 +855,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^mr-[a-z0-9-]{8,80}$"
+            "pattern": "^mr-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "outputLanguage": {
             "type": "string",

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { PLUGIN_ID, defaultConfiguration, exportPluginPayload, pluginEntry, projectPluginId } from "./pluginService.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { EXTENSION_GENERATION_JOB_VARIANT } from "./extensionGenerationWorker.mjs";
 
 /**
  * The plugin one queued job is about.
@@ -194,14 +195,15 @@ export class PluginApplyWorker {
    * one `plugin.apply` line per finished apply, whatever its outcome, so an
    * apply that changed a project's runtime is never invisible.
    * @param {{service:any,runtime:any,resolveProject:(job:any)=>Promise<any>,ledgerBusy:(project:any)=>Promise<boolean>,pollMs?:number,leaseMs?:number,
-   *   audit?:((event:string,status:string,details:Record<string,any>)=>unknown)|null}} dependencies */
-  constructor({ service, runtime, resolveProject, ledgerBusy, pollMs = 1000, leaseMs = 300000, audit = null }) {
+   *   audit?:((event:string,status:string,details:Record<string,any>)=>unknown)|null, generationWorker?:any}} dependencies */
+  constructor({ service, runtime, resolveProject, ledgerBusy, pollMs = 1000, leaseMs = 300000, audit = null, generationWorker = null }) {
     this.service = service; this.jobs = service.jobs; this.database = service.database;
     this.runtime = runtime; this.resolveProject = resolveProject; this.ledgerBusy = ledgerBusy;
     this.pollMs = pollMs; this.leaseMs = leaseMs; this.workerId = `plugin-apply-${randomUUID()}`;
     this.kinds = ["plugin-apply"];
     this.timer = null; this.running = null; this.lastError = null;
     this.audit = audit;
+    this.generationWorker = generationWorker;
   }
   /** One ledger line; a ledger that cannot be written must not fail the apply
    *  it describes, and says so on stderr instead of vanishing.
@@ -237,6 +239,12 @@ export class PluginApplyWorker {
     await migrateProductStore(this.database);
     const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
+    if (Object.hasOwn(job.payload, "variant")) {
+      if (job.payload.variant !== EXTENSION_GENERATION_JOB_VARIANT || !this.generationWorker?.canHandle(job)) {
+        return this.jobs.fail(job.userId, job.id, job.leaseToken, { code: "plugin_not_supported", message: "This extension generation cannot be applied by the current deployment." }, { retry: false });
+      }
+      return this.generationWorker.runClaimed(job);
+    }
     let lost = false;
     const renewal = setInterval(() => { void this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs)
       .then(ok => { if (!ok) lost = true; }).catch(() => { lost = true; }); }, Math.floor(this.leaseMs / 3));

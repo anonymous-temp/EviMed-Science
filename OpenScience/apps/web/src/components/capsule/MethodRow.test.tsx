@@ -152,3 +152,11 @@ describe("a method's versions are its bodies", () => {
     expect(screen.queryByText(/Purpose/)).not.toBeInTheDocument();
   });
 });
+
+it("highlights and expands the actual existing learned row named by navigation", () => {
+  render(<ul><MethodRow method={method()} highlighted onChanged={() => {}} /></ul>);
+  const title = screen.getByRole("button", { name: /pre-submission-freeze-check/ });
+  expect(title.closest("li")).toHaveClass("bg-accent-soft");
+  expect(title).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText("1. 固定每个附件的副本。")).toBeInTheDocument();
+});

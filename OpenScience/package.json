@@ -22,7 +22,7 @@
     "test:specialist-driver": "python3 -m unittest discover -s evals/capability-audit -p 'test_specialist_driver.py'",
     "test:release-audit": "python3 -m unittest discover -s evals/capability-audit -p 'test_release_audit.py'",
     "test:phi-masking": "python3 -m unittest discover -s evals/capability-audit -p 'test_dataset_phi_masking.py'",
-    "test:ops": "python3 -m unittest discover -s scripts/ops/test -p 'test_*.py'",
+    "test:ops": "python3 -m unittest discover -s scripts/ops/test -p 'test_*.py' && node --import ./scripts/test/localhostProbeGuard.mjs --test scripts/ops/test/*.test.mjs scripts/vcr/test/*.test.mjs",
     "eval:drug-evidence": "python3 evals/drug-evidence-quality/run_benchmark.py",
     "eval:open-domain": "python3 evals/open-domain-answer-quality/run_eval.py && python3 evals/open-domain-answer-quality/judge.py",
     "eval:method-quality": "python3 evals/method-quality/run_paired.py",
@@ -44,6 +44,9 @@
     "check:kernel-defaults": "node scripts/ops/check-kernel-defaults.mjs",
     "check:pin-inventory": "node scripts/ops/check-pin-inventory.mjs",
     "check:evidence-connectors": "node scripts/ops/check-evidence-connectors.mjs",
+    "check:evidence-content": "node scripts/ops/import-evidence-content.mjs",
+    "import:evidence": "node scripts/ops/import-evidence-content.mjs",
+    "check:research-billing": "node scripts/ops/check-research-billing.mjs",
     "probe:monitoring": "node scripts/ops/configure-monitoring.mjs --probe",
     "configure:backup": "node scripts/ops/configure-backup.mjs",
     "check:backup": "node scripts/ops/configure-backup.mjs --check",
@@ -150,7 +153,8 @@
       "brace-expansion@5": "5.0.12",
       "exceljs>uuid": "11.1.1",
       "pptx-preview>echarts": "6.1.0",
-      "pptx-preview>uuid": "11.1.1"
+      "pptx-preview>uuid": "11.1.1",
+      "js-yaml": "4.3.2"
     }
   },
   "devDependencies": {

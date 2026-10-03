@@ -8,7 +8,7 @@
 
 **Tech Stack:** React/TypeScript/Vite; Node 22.22.0; pnpm 9.4.0; PostgreSQL; pinned DSH 0.1.7-rc.2; R 4.3.3; Python/FastAPI; Docker Compose; existing MCP, domain, harness-port and socket packages.
 
-**Status:** Execution in progress following the owner's explicit completion, merge, deployment and all-user delivery request. Production now serves `62faa8a002342915e16529ded1ca95b99ccc56c6`. PR #1 reconciled its full history into main at `04e8b3509297b81973f076a275f67535500aef05`; candidate `e40f9405f4cea17247dafc56e38ee60c61cc4aac` merges VCR `174a33e661ad942435b2afacd46cd81e81534e1d` on that baseline, resolving all ten conflicts. This is S1 source integration, not S4 delivery. Required shared export, automatic AI review, numerical extensions and live user acceptance remain in progress. See `.planning/platform-followups-20260929/combined_delivery.json` during execution and the tracked release checklist for final evidence.
+**Status (2026-10-03):** Source integration is on `codex/extension-center-20261002` through `951752345`, including frontier PR #3 and the result/replay release history. Both the production baseline and VCR history are verified ancestors. The combined branch is not yet merged into main. Production still serves `62faa8a00234`; VCR remains disabled there. Final candidate Web (`a41971281e1e`), runtime (`0d936480f496`), six current specialist images, VCR and result replay images are loaded on the native host but have not replaced serving containers. Local full regression and actual isolated browser/rendering/numerical checks are recorded separately from live delivery. Actual plugin document read/write now succeeds; full extension qualification, candidate migration/mint, production browser and exports, VCR S2-to-S4 workflows and source-current capability receipts remain open. No all-CI, all-user availability or final-delivery claim is made.
 
 **Owner decisions confirmed in this conversation:**
 
@@ -186,7 +186,7 @@ Expected at the recorded refs: 311 production commits, 763 changed paths and ten
 | `OpenScience/apps/server/test/server.test.mjs` | Retain live behavior and test the VCR-enabled/disabled composition |
 | `OpenScience/apps/server/test/uiWalk.test.mjs` | Preserve current navigation assertions and add VCR entry behavior |
 
-- [ ] Before candidate release, prove both source histories are ancestors of the actual candidate. Resolve changes explicitly if later edits supersede a production behavior; do not lose it by conflict choice.
+- [x] Before candidate release, prove both source histories are ancestors of the actual candidate. Resolve changes explicitly if later edits supersede a production behavior; do not lose it by conflict choice.
 
 ```bash
 # Run in the merged candidate checkout, not the unchanged main working directory.
@@ -217,7 +217,7 @@ The implementation portion of this task is complete on production at `c6c2a7f148
 
 These match the patch versions for [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr). Preserve the production lock; do not regenerate a competing lockfile, run a forced audit fix or lower the audit threshold. A genuinely new advisory is a separate targeted correction, not a reason to repeat this completed task.
 
-- [ ] Verify the combined candidate retains the deployed overrides and resolved lock entries. Keep unrelated pins unchanged.
+- [x] Verify the combined candidate retains the deployed overrides and resolved lock entries. Keep unrelated pins unchanged.
 - [ ] Install with the inherited frozen lock in the isolated candidate and rerun the existing audit and previously skipped frontend checks. This is integration verification, not reimplementation.
 
 ```bash
@@ -699,3 +699,27 @@ Additional owner-required acceptance:
 - [ ] Optional partner/human empirical work is recorded as pending when absent and is not an opening gate or a fabricated completed validation.
 
 At execution handoff, report the production baseline, codex-to-main merge SHA, VCR integration SHA and conflict resolutions; release/image identities; actual all-user upload/AI-review evidence; five capability run IDs and AC-35 duration; shared Word/PDF samples; reclaimed capacity; effective private-overlay keys; and rollback target. Separate completed technical checks from pending partner empirical observations and optional human reviews. A pending optional evaluation is not a failed opening, and absent evidence is never represented as a pass.
+
+## 22. Team handoff — 2026-10-03
+
+The owner requested a code handoff and assigned all subsequent work to the team. Stop new acceptance runs, cloud cleanup, merging and deployment in this execution stream. No production cutover or complete-delivery claim is made.
+
+- Integration branch: `codex/extension-center-20261002`; review: https://github.com/anonymous-temp/EviMed-Science/pull/5. Product changes end at `00a33eb7df0b9457e5be7e631b984500eca74117`; `fccf4d61f` repairs test fixtures and dispatch synchronization; `218fa38549444f2cb922f122f86204db78f1cd59` contains the reviewed native acceptance driver. `5c626956c` preserves eight owner-authored historical progress entries.
+- PR 3 frontier commit `5d3a875bcbf07de1f472098eb05025b0a0b0fc6e`, VCR integration `174a33e66`, and release integration `0a4abc9caba5f26f79cc5a58014e99786248e792` are already in this integration history. PR 5 remains a draft and is not merged into main. The primary checkout remains on `e15ba95ed13e1b340befb4b1e027a210ccf7b1d9`; unrelated untracked files and the original local progress file are preserved.
+- Production still serves `62faa8a00234`. Candidate directory: `/srv/evimed-science/releases/prepared-core0d-20261003-fecabd4316`. The native-staged Web image is `sha256:b15ae61ccaa289716b1376cb35c01280826af1e4ef7cc5f72f07e6999a8e9baa`, built from product source `00a33eb7df0b9457e5be7e631b984500eca74117`. Runtime image: `sha256:340a05f4ae4da6f291d53b7ad302b159fb89b565bd703d0937aa95c46490bb4c`, from source `0d936480f496e21d948d702109a4feb2bf44c05e`. Do not relabel either image as a later documentation/QA commit.
+- The candidate passed a signed real-model call and 18 host preflight checks. Local/native evidence includes 21 browser isolation controls, 15 DOCX/PDF/HTML renders, 16 replay-image checks and independently repeated 22-case PostgreSQL rollback checks. Corrected server composition passes 32/32 and the run-ledger file passes 157/157. These are scoped results, not complete production acceptance.
+- Full CI on `218fa3854` was running at handoff: push run `37114869486`, PR run `37114871851`. The earlier `00a33` CI had 17 failures subsequently addressed by the test-fixture and synchronization fixes. Verify the final workflow results; hosted-production E2E is separately skipped by that workflow and needs real execution.
+- An isolated VCR engine is running with its own internal network; the old application has not been switched to it. Its imported evidence validates 12 of 24 method entries, not all 24. Six updated specialist images and the replay image are staged; historical scientific runs cannot certify those changed sources.
+
+Remaining work, in dependency order:
+
+1. Finish exact artifact/adapter/runtime/permission qualification with genuine native observations for all 22 SaaS cases, including actual outbound/DNS capture and context/compaction provenance. Issue a qualification only after independent review, then exercise an ordinary authenticated installation without private assessment authority. The current partial observations are not a qualification.
+2. Review current CI and integration, merge PR 5, then synchronize the primary checkout while preserving its local files. Do not merge unrelated billing work by implication.
+3. Complete the reviewed paired backup/recovery procedure and deployment switch. The private cold-capture operator is a draft: review findings cover unknown-idle rejection, reconciliation after an uncertain backup-container start, restoration order, archive/restore evidence, and cleanup-error reporting. It has not been authorized as reviewed executable code, and no cold stops were performed. Do not run it merely because it exists.
+4. Verify production managed-browser/Tokyo navigation, account/project/session isolation, native UI interactions, ordinary document export and result-revision/replay flows. Prepared browser and VCR acceptance scripts have not been executed against the new production release.
+5. Complete VCR S2 acceptance, all five capabilities, three real briefs, inclusive timed T0, ordinary-account synthetic T1 upload-to-package, permissions, automatic advisory review and exports; then verify S4 audience `all`. Retain unknown/not-estimable results and partial artifacts honestly.
+6. Collect six source-current specialist receipts and run the audit against the current 47-tool registry (46 offered). Complete post-deployment readiness, owned-artifact cleanup and delivery reporting without promoting old receipts or inventing outcomes.
+
+Detailed protected evidence and recovery state remain under `.planning/platform-followups-20260929/extension-center-20261002/` in the `platform-followups` worktree: `root-release-checkpoint.json`, `candidate-00a33-readiness-checkpoint.json`, `dispatch-composition-test-independent-review.json`, `assessment-integrated-driver-independent-review.json`, `primary-pre-final-sync-preservation.json`, and the image/source receipt files. These local records are deliberately not committed because they contain private operational context. Private scripts are drafts unless their exact digest has an explicit reviewed approval. Preserve the primary checkout backup under `.evimed-local/git-backups/pre-final-main-sync-20261003T090447Z`.
+
+The existing GEO follow-up for October 5 remains a separate scheduled activity for the team to review. No early GEO sample or paid media order was performed in this handoff.

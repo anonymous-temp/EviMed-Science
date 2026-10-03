@@ -158,6 +158,10 @@ export const RULES = [
   { kind: "pin", where: /^OpenScience\/deploy\/web\//, why: "the deployed stack runs this version" },
   { kind: "pin", where: /^OpenScience\/docs\/WEB_DEPLOYMENT\.md$/, why: "operator instructions must name the version being deployed" },
   { kind: "pin", where: /^OpenScience\/apps\/server\/src\/config\.mjs$/, why: "the control plane refuses a runtime that is not this version" },
+  { kind: "pin", where: /^OpenScience\/apps\/server\/src\/(extensionDeployment|extensionGenerationService)\.mjs$/, why: "protected deployment manifests and generation proofs require the exact supported kernel version; an upgrade must revalidate these authority contracts" },
+  { kind: "pin", where: /^OpenScience\/packages\/domain\/(src\/extensions\.mjs|test\/extensions\.test\.mjs)$/, why: "the extension proof domain and its identity fixture enforce the current supported kernel rather than record a historical observation" },
+  { kind: "pin", where: /^OpenScience\/packages\/harness-port\/src\/extensionPreparation\.mjs$/, why: "the disposable native preparer refuses installation anchors outside the current supported kernel pin; this is executable compatibility admission" },
+  { kind: "pin", where: /^OpenScience\/scripts\/ops\/test\/prepareExtensionAcceptance\.test\.mjs$/, why: "the preparation identity fixture asserts the current supported kernel contract and does not represent a recorded acceptance result" },
   { kind: "pin", where: /^OpenScience\/apps\/server\/test\//, why: "a fixture or an assertion that a derived copy equals the pin; moves with them" },
   { kind: "pin", where: /^OpenScience\/apps\/web\/src\//, why: "frontend commentary naming the kernel it decodes" },
 ];

@@ -37,6 +37,16 @@
  *   A simulated measure printed with `pm` carries its Monte-Carlo standard
  *   error, because that is the only honest way to print a simulated number
  *   (AC-28).
+ * - **A format that states a unit answers to the unit the result recorded.**
+ *   The engine keeps a probability as a fraction with no unit (a power of 0.712)
+ *   and one summary as a percentage that says so (a generated arm's event rate:
+ *   46.08, unit 「%」). `pct1` multiplied both by a hundred, and a package went
+ *   out saying 「试验组事件率 4608.0%」 in Word, PDF and HTML (pilot acceptance,
+ *   2026-10-03). The number's unit travels with the reference now: a percentage
+ *   is printed as it stands, a fraction is scaled, and a unit the format cannot
+ *   be true of — months as a percentage, weeks as 「个月」, a log scale as
+ *   either — renders 「未计算」 and says which unit and which format, because a
+ *   wrong number reads exactly like a right one.
  * - **`vcrReportModel` is the other half.** It builds the `results.json` a
  *   package ships, from the study's own rows, so the template's references and
  *   the contract's traceability check read the same document.
@@ -77,17 +87,57 @@ const object = (value) => (value && typeof value === "object" && !Array.isArray(
 const list = (value) => (Array.isArray(value) ? value : []);
 
 /**
+ * The keys whose number is in the unit its own object records: a measure's or a
+ * card's `value`, the Monte-Carlo error beside it, and the two ends of an
+ * interval or a range that belongs to it. An interval's `level` (0.95) and a
+ * distribution's parameters are not: they are numbers about the value, on
+ * scales of their own.
+ */
+const UNIT_BEARING_KEYS = Object.freeze(["value", "mcse", "low", "high"]);
+
+/**
  * Read one path out of a results document. Understands dotted keys, array
  * indices, and `measure(<name>)` — which is how a template names a measure
  * without depending on the order the engine happened to return them in.
  * @param {unknown} root @param {string} path
  */
 export function vcrReadPath(root, path) {
+  return vcrResolvePath(root, path).value;
+}
+
+/**
+ * Read one path and the unit the result recorded for the number it ends at:
+ * the `unit` of the nearest object the path passed through that states one —
+ * the `{ value, unit }` cell itself, the measure an interval belongs to, the
+ * card a range belongs to. `null` when nothing on the way records a unit, or
+ * when the path ends at a key a unit does not speak for.
+ * @param {unknown} root @param {string} path
+ * @returns {{ value: unknown, unit: string | null }}
+ */
+export function vcrResolvePath(root, path) {
+  /** @type {unknown[]} every object the path passed through, outermost first */
+  const passed = [];
+  let lastKey = "";
+  const value = walkPath(root, path, (holder, key) => { passed.push(holder); lastKey = key; });
+  if (value === undefined || !UNIT_BEARING_KEYS.includes(lastKey)) return { value, unit: null };
+  for (const holder of passed.reverse()) {
+    const unit = Array.isArray(holder) ? null : object(holder).unit;
+    if (typeof unit === "string" && unit.trim()) return { value, unit: unit.trim() };
+  }
+  return { value, unit: null };
+}
+
+/**
+ * @param {unknown} root @param {string} path
+ * @param {(holder: unknown, key: string) => void} visit called for each step with what it read from and by which key
+ */
+function walkPath(root, path, visit) {
   let value = root;
   for (const rawSegment of String(path).split(".")) {
     if (value == null) return undefined;
     const segment = rawSegment.trim();
     if (!segment) return undefined;
+    visit(value, segment);
     const selector = /^measure\((.+)\)$/.exec(segment);
     if (selector) {
       // `measure(power)` is the headline result's measure of that name;
@@ -123,11 +173,33 @@ const fixed = (value, digits) => value.toFixed(digits);
 const grouped = (value) => Math.round(value).toLocaleString("en-US");
 
 /**
- * Render one resolved value in the format the reference asked for.
- * @param {unknown} value @param {string} format
+ * How a recorded unit reads to a format that states a unit of its own. Closed
+ * vocabularies, compared trimmed and lower-cased: the engine's own spellings
+ * (`%`, `月`, `months`) and the ones a card is written with. A value with no
+ * unit is the engine's fraction and a bare duration, which is what both formats
+ * were written for. The pooling engine writes the scale where a unit goes, and
+ * `identity` is the natural scale — it says nothing about the unit — while a
+ * `log` or `logit` value is not the quantity itself. Every other word is a unit
+ * the format is not about: a mismatch, never a guess.
+ */
+const PERCENT_UNITS = new Set(["percent", "pct", "百分比"]);
+const FRACTION_UNITS = new Set(["proportion", "fraction", "probability", "比例", "概率"]);
+const MONTH_UNITS = new Set(["months", "month", "月", "个月"]);
+const UNITLESS_SCALES = new Set(["identity"]);
+/** A percentage, or a percentage per something: 「%」, and 「%/年」 as a dropout card is kept. @param {string} unit */
+const isPercentUnit = (unit) => PERCENT_UNITS.has(unit) || unit.startsWith("%") || unit.startsWith("％");
+
+/** The formats that print a unit, and so have to agree with the one recorded. */
+export const VCR_UNIT_FORMATS = Object.freeze(["pct0", "pct1", "pct2", "months"]);
+
+/**
+ * Render one resolved value in the format the reference asked for. `unit` is
+ * what the result recorded for the value (`vcrResolvePath`); a caller that has
+ * a bare number and no result behind it leaves it out.
+ * @param {unknown} value @param {string} format @param {string | null} [unit]
  * @returns {{ ok: boolean, text: string, reason?: string }}
  */
-export function vcrFormatValue(value, format) {
+export function vcrFormatValue(value, format, unit = null) {
   if (value === undefined || value === null) return { ok: false, text: VCR_UNCOMPUTED, reason: "unbound" };
   if (format === "text") return { ok: true, text: String(value) };
   if (format === "ci") {
@@ -152,16 +224,25 @@ export function vcrFormatValue(value, format) {
   }
   const number = Number(value);
   if (!Number.isFinite(number)) return { ok: false, text: VCR_UNCOMPUTED, reason: "not_a_number" };
+  const word = String(unit ?? "").trim().toLowerCase();
+  const recorded = UNITLESS_SCALES.has(word) ? "" : word;
+  const mismatch = { ok: false, text: VCR_UNCOMPUTED, reason: "unit_mismatch" };
   switch (format) {
     case "int": return { ok: true, text: String(Math.round(number)) };
     case "f1": return { ok: true, text: fixed(number, 1) };
     case "f2": return { ok: true, text: fixed(number, 2) };
     case "f3": return { ok: true, text: fixed(number, 3) };
-    case "pct0": return { ok: true, text: `${fixed(number * 100, 0)}%` };
-    case "pct1": return { ok: true, text: `${fixed(number * 100, 1)}%` };
-    case "pct2": return { ok: true, text: `${fixed(number * 100, 2)}%` };
+    case "pct0": case "pct1": case "pct2": {
+      const digits = Number(format.slice(3));
+      // Already a percentage: printed as it stands. A fraction, said or unsaid: scaled.
+      if (isPercentUnit(recorded)) return { ok: true, text: `${fixed(number, digits)}%` };
+      if (recorded && !FRACTION_UNITS.has(recorded)) return mismatch;
+      return { ok: true, text: `${fixed(number * 100, digits)}%` };
+    }
     case "thousands": return { ok: true, text: grouped(number) };
-    case "months": return { ok: true, text: `${fixed(number, 1)} 个月` };
+    case "months":
+      if (recorded && !MONTH_UNITS.has(recorded)) return mismatch;
+      return { ok: true, text: `${fixed(number, 1)} 个月` };
     default: return { ok: true, text: String(number) };
   }
 }
@@ -235,13 +316,13 @@ export function vcrTypedNumbers(template) {
  *
  * @param {string} template the AI's prose with `{{n:…}}` references in it
  * @param {Record<string, any>} results the study's `results.json`
- * @returns {{ text: string, bindings: Array<{ ref: string, path: string, format: string, value: unknown, rendered: string, ok: boolean }>,
- *   issues: Array<{ code: string, path: string, message: string, severity: string }>, typed: string[] }}
+ * @returns {{ text: string, bindings: Array<{ ref: string, path: string, format: string, value: unknown, rendered: string, ok: boolean, unit?: string }>,
+ *   issues: Array<{ code: string, path: string, message: string, severity: string, reason?: string, unit?: string | null, format?: string }>, typed: string[] }}
  */
 export function renderVcrNumbers(template, results) {
-  /** @type {Array<{ ref: string, path: string, format: string, value: unknown, rendered: string, ok: boolean }>} */
+  /** @type {Array<{ ref: string, path: string, format: string, value: unknown, rendered: string, ok: boolean, unit?: string }>} */
   const bindings = [];
-  /** @type {Array<{ code: string, path: string, message: string, severity: string }>} */
+  /** @type {Array<{ code: string, path: string, message: string, severity: string, reason?: string, unit?: string | null, format?: string }>} */
   const issues = [];
   const document = object(results);
   const source = String(template ?? "");
@@ -295,18 +376,26 @@ export function renderVcrNumbers(template, results) {
       issues.push({ code: "vcr_number_format_unknown", path,
         message: `「${rawFormat}」不是已知的数字格式，按原值呈现。`, severity: "advisory" });
     }
-    const value = vcrReadPath(document, path);
-    const rendered = vcrFormatValue(value, format);
-    bindings.push({ ref: String(ref), path, format, value, rendered: rendered.text, ok: rendered.ok });
+    const { value, unit } = vcrResolvePath(document, path);
+    const rendered = vcrFormatValue(value, format, unit);
+    // The unit is kept beside the binding: it is why a percentage was not scaled.
+    bindings.push({ ref: String(ref), path, format, value, rendered: rendered.text, ok: rendered.ok, ...(unit ? { unit } : {}) });
     if (!rendered.ok) {
       issues.push({
+        // A unit the format cannot be true of is filed with the references that
+        // did not bind — the report reads 「未计算」 there just the same — and the
+        // sentence says which unit and which format, so the run changes the
+        // format rather than looking for a field that is not missing.
         code: rendered.reason === "mcse_missing" ? "vcr_number_mcse_missing"
           : rendered.reason === "interval_kind_unnamed" ? "vcr_interval_unnamed" : "vcr_number_unbound",
         path,
         message: rendered.reason === "mcse_missing" ? `「${path}」是仿真结果但没有蒙特卡洛标准误（AC-28）。`
           : rendered.reason === "interval_kind_unnamed" ? `「${path}」的区间没有写明是哪一种（方案 §8.3）。`
-            : `结果里没有「${path}」，报告此处写「${VCR_UNCOMPUTED}」。`,
+            : rendered.reason === "unit_mismatch"
+              ? `「${path}」在结果里记的单位是「${unit}」，不能按 ${format} 呈现，报告此处写「${VCR_UNCOMPUTED}」；改用 f1、f2 这类不带单位的格式，单位写在文字里。`
+              : `结果里没有「${path}」，报告此处写「${VCR_UNCOMPUTED}」。`,
         severity: "advisory",
+        ...(rendered.reason === "unit_mismatch" ? { reason: "unit_mismatch", unit, format } : {}),
       });
     }
     text += rendered.text;
@@ -447,6 +536,17 @@ export function vcrReportModel(input) {
     }),
     seal: input.seal ?? null,
   };
+}
+
+/**
+ * Whether an export holds a document: the results it was frozen on and at least
+ * one report written against them. The one rule for what 导出 answers with, what
+ * a finished export run is judged by and what the study page counts as a
+ * document the reader already has — three places that must not disagree.
+ * @param {any} cover
+ */
+export function vcrExportHoldsDocument(cover) {
+  return Boolean(cover?.results?.study && (cover.reports?.length || cover.report));
 }
 
 /** Report content identity for advisory review. Rendering/job/review status is not scientific content.

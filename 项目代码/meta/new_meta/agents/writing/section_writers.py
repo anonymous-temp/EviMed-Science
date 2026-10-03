@@ -105,8 +105,18 @@ class SectionWritersMixin:
         studies: list = None,
     ) -> str:
         n_studies = self._included_count
+        po = getattr(results, "primary_outcome", None)
+        recorded_quantitative = po is not None and po.model in {"fixed", "random"} and po.n_studies >= 2
+        facts = getattr(self, "_manuscript_facts", None) or {}
+        method = executed_method_from_facts(facts) or (po.execution_metadata() if po is not None else None)
+        execution_contract = (
+            "\n\n## Recorded execution (authoritative, including partial delivery)\n"
+            "Protocol choices describe planned methods, not proof of execution. "
+            + describe_pooling_method(method, zh=self._zh)
+            + self._section_fact_contract_block("abstract")
+        )
 
-        if self._narrative_mode:
+        if self._narrative_mode and not recorded_quantitative:
             # Build study results summary so the abstract has real data to work with
             study_summary = self._build_study_results_text(studies or [])
             n_direct = len(getattr(self, '_direct_rct_studies', []))
@@ -121,9 +131,9 @@ class SectionWritersMixin:
             prompt += (
                 f"\n\n## Individual Study Results (use ONLY these data):\n{study_summary}"
             )
+            prompt += execution_contract
             return self.call_llm(prompt, max_tokens=self._writing_tokens("abstract"))
 
-        po = results.primary_outcome
         pub_bias = "Not assessed"
         if results.publication_bias:
             pb = results.publication_bias
@@ -148,6 +158,7 @@ class SectionWritersMixin:
             grade_conclusion=grade_conclusion,
             evidence_class_summary=getattr(self, '_evidence_class_summary', ''),
         )
+        prompt += execution_contract
         return self.call_llm(prompt, max_tokens=self._writing_tokens("abstract"))
 
     def _write_introduction(self, protocol: ResearchProtocol) -> str:

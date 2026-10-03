@@ -436,6 +436,20 @@ describe("记忆胶囊", () => {
     expect(title.closest("li")).toHaveClass("bg-accent-soft");
     expect(title).toHaveAttribute("aria-expanded", "true");
   });
+
+  it("opens the same learned method named by a skill-catalogue link without creating a method record", async () => {
+    open(`?method=${encodeURIComponent(method.id)}`);
+    const title = await screen.findByRole("button", { name: /提交前给成品做最后把关/ });
+    expect(title.closest("li")).toHaveClass("bg-accent-soft");
+    expect(title).toHaveAttribute("aria-expanded", "true");
+    expect(title.closest("li")).toHaveTextContent(method.body.replace(/\s+/g, " "));
+    expect(screen.queryByText(/药学背景/)).not.toBeInTheDocument();
+  });
+
+  it("does not invent a method when the requested ID is absent from the loaded authoritative list", async () => {
+    open("?method=method%3Amissing");
+    expect(await screen.findByText("当前列表中没有找到这条做法。")).toBeInTheDocument();
+  });
 });
 
 it("identifies the account holding the memories without relabeling an imported issuer", async () => {

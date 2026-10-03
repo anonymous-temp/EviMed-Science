@@ -332,6 +332,12 @@ services:
       # derives the list from config.mjs. Value-less: unset, the code's default
       # holds.
       # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
+      OPEN_SCIENCE_RESULTS_ENABLED:
+      OPEN_SCIENCE_RESULT_ENGINE_URL:
+      OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS:
+      OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS:
+      OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES:
+      OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES:
       OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED:
       # A run's budgets, the delivery retry ceiling and the runtime's own
       # switches, read wherever a launch plan is built — here and in the
@@ -499,10 +505,10 @@ services:
       OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
       # The engine's bearer token and receipt key are files, like every other
       # key this service holds (bound below; /dev/null where the deployment has
-      # no engine, which reads as none). Set the URL without both and the module
-      # says the engine is unconfigured and makes no client.
+      # no engine, which reads as none). The bearer token is required; signing
+      # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
-      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
       OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS:
       OPEN_SCIENCE_VCR_JOB_CPU_SECONDS:
       OPEN_SCIENCE_VCR_STUDY_CPU_BUDGET:
@@ -530,8 +536,17 @@ services:
       OPEN_SCIENCE_EVIMED_CREDITS_TIMEOUT_MS:
       OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY:
       OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS:
+      # Versioned task charges opt in independently of the allowance page.
+      OPEN_SCIENCE_RESEARCH_BILLING_ENABLED:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_TRUSTED_ORIGINS:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_RECHARGE_URL:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_MEMBERSHIP_URL:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_ORDERS_URL:
+      OPEN_SCIENCE_RESEARCH_COMMERCE_REFUNDS_URL:
       OPEN_SCIENCE_REVIEW_ENABLED:
       OPEN_SCIENCE_REVIEW_MODEL:
+      OPEN_SCIENCE_REVIEW_PROVIDER:
       OPEN_SCIENCE_REVIEW_API_BASE:
       OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS:
       OPEN_SCIENCE_REVIEW_THINKING_BUDGET:
@@ -841,6 +856,10 @@ services:
       OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK: ${OPEN_SCIENCE_WEB_READ_EDGE_FALLBACK:-true}
       OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_READ_DIRECT_TIMEOUT_MS:-12000}
       OPEN_SCIENCE_WEB_READ_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_READ_TIMEOUT_MS:-150000}
+      OPEN_SCIENCE_MANAGED_BROWSER_ENABLED: ${OPEN_SCIENCE_MANAGED_BROWSER_ENABLED:-false}
+      OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL: ${OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL:-}
+      OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS: ${OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS:-4}
+      OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER: ${OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER:-2}
       OPEN_SCIENCE_WEB_RENDER_ENABLED: ${OPEN_SCIENCE_WEB_RENDER_ENABLED:-false}
       OPEN_SCIENCE_WEB_RENDER_CDP_URL: ${OPEN_SCIENCE_WEB_RENDER_CDP_URL:-}
       OPEN_SCIENCE_WEB_RENDER_MAX_BYTES: ${OPEN_SCIENCE_WEB_RENDER_MAX_BYTES:-33554432}
@@ -947,7 +966,7 @@ services:
         read_only: true
       # 「虚拟临研」's engine token and receipt key (each at least 32 bytes,
       # owner-and-group readable: the engine reads the same files through its
-      # group). Optional: without them the engine is not composed.
+      # group). The token is required for an engine; the receipt key is optional.
       - type: bind
         source: ${OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE:-/dev/null}
         target: /run/secrets/vcr-engine-token
@@ -1129,6 +1148,9 @@ services:
       context: ../../../项目代码/vcr-engine
       dockerfile: Dockerfile
       args:
+        RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:-untracked}
+        SOURCE_REVISION: ${OPEN_SCIENCE_SOURCE_REVISION:-untracked}
+        BUILD_CREATED: ${OPEN_SCIENCE_BUILD_CREATED:-1970-01-01T00:00:00.000Z}
         APT_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_ARCHIVE_MIRROR:-http://archive.ubuntu.com/ubuntu}
         UBUNTU_SECURITY_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}
         UBUNTU_PORTS_MIRROR: ${OPEN_SCIENCE_VCR_UBUNTU_PORTS_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}
@@ -1142,9 +1164,9 @@ services:
     environment:
       # The names the engine reads (`service/app.py`), one variable each. The
       # token the control plane presents and the key its results are signed
-      # with are files, never values: the service refuses to start without both.
+      # with are files, never values: the token is required, signing is optional.
       VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token
-      VCR_ENGINE_RECEIPT_KEY_FILE: /run/secrets/vcr-engine-receipt-key
+      VCR_ENGINE_RECEIPT_KEY_FILE: ${OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE:+/run/secrets/vcr-engine-receipt-key}
       # A job's directory, on the named volume below; and the only place a job's
       # inputs may be opened from, read-only.
       VCR_ENGINE_WORK_DIR: /jobs
@@ -1686,6 +1708,7 @@ services:
       OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-}
       OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/tooluniverse/v1/rpc}
       OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET: /run/open-science-controller/controller.sock
+      OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-}
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
@@ -1749,7 +1772,11 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       <<: *runtime-caps
     volumes:
-      - open-science-data:/data:ro
+      # Writable since 2026-10-03. The controller stages each personal-skill
+      # validation input and keeps the render and validation recovery markers
+      # under the data directory; mounted read-only, every document export and
+      # skill import in this stack stopped at the first marker write (EROFS).
+      - open-science-data:/data
       - open-science-runtime-control:/run/open-science-controller
       - type: bind
         source: ${OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-./release-manifest.json}

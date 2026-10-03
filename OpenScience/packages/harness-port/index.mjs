@@ -1231,7 +1231,7 @@ async function probeSandbox(ctx, required) {
   }
 }
 
-export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion } from './src/pluginProbe.mjs'
+export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
 
 // The structured compaction provider. The engine itself is resolved lazily —
 // the pinned base class lives in the runtime image, not in this workspace — so
@@ -1262,3 +1262,7 @@ export {
 } from './src/compaction.mjs'
 
 export { decorateEngineToolContext, ENGINE_EXECUTION_CONTEXT } from './src/engineContext.mjs'
+export { parsePersonalSkill, createPersonalSkillProvider, validatePersonalSkillRoot } from './src/personalSkills.mjs'
+export { createNativeExtensionPreparer, createDisposableNativeExtensionPreparer } from './src/extensionPreparation.mjs'
+
+export { createScopedSkillCatalogue, registerScopedSkillCatalogue, SCOPED_SKILL_ROOTS } from './src/scopedSkillCatalogue.mjs'

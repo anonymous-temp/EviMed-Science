@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "peer-review",
-  "version": "sha256:9b745416a200112025971a0e18ef3e7dd6b1fd7ceef05f4a1d67c031e65a13f0",
+  "version": "sha256:d7024d292686bc3727a8248e9a715ddb8569649df6bcdc1b5aedef269e9a985d",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 20,
@@ -722,12 +722,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^review-[a-z0-9-]{8,80}$"
+            "pattern": "^review-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "articleType": {
             "type": "string",

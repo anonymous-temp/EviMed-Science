@@ -407,6 +407,7 @@ function foldEvents(events) {
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
+        ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         sessionId: safeStoredId(event.sessionId, "sessionId"),
         mode,
         agentId: event.agentId,
@@ -428,6 +429,7 @@ function foldEvents(events) {
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
+        accountCreatedAt: event.accountCreatedAt == null ? null : storedTimestamp(event.accountCreatedAt, "accountCreatedAt"),
         finishedAt: null,
         durationMs: null,
         errorCode: null,
@@ -604,6 +606,7 @@ function foldEvents(events) {
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
+        ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
         // The web pages the run read (contract X5), and how many in all when
         // the list was capped (webReadPages.mjs).
@@ -751,6 +754,22 @@ function normalizeMountedSkills(value) {
     .filter((item) => typeof item === "string" && item.trim())
     .map((item) => item.trim().slice(0, 160));
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
+}
+
+/** Exact observed personal revisions, without resources, instructions or
+ * filesystem locations. Malformed observational metadata cannot break a run.
+ * @param {any} value */
+function normalizePersonalSkillGeneration(value) {
+  if (!value || !/^[a-f0-9]{64}$/.test(value.generationId ?? "") || !Array.isArray(value.pins) || value.pins.length > 64) return undefined;
+  const pins = [], seen = new Set();
+  for (const pin of value.pins) {
+    if (!pin || typeof pin.skillId !== "string" || !/^skill:[a-f0-9-]{36}$/.test(pin.skillId)
+      || !Number.isSafeInteger(pin.revision) || pin.revision < 1 || !/^sha256:[a-f0-9]{64}$/.test(pin.digest)
+      || !/^personal-[a-z0-9-]+$/.test(pin.nativeName ?? "") || pin.nativeName.length > 160 || pin.source !== "personal" || seen.has(pin.skillId)) return undefined;
+    seen.add(pin.skillId);
+    pins.push({ skillId: pin.skillId, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, source: "personal" });
+  }
+  return { generationId: value.generationId, pins };
 }
 
 /**
@@ -1021,7 +1040,7 @@ function storedKernelRequestId(value) {
 }
 
 /** The log, not elapsed time or matching text, assigns messages to a run. */
-function runHistory(run, history) {
+export function runHistory(run, history) {
   const turns = new Set(history.filter((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
     .map((message) => message.info?.turnStartSeq).filter((seq) => Number.isSafeInteger(seq)));
   if (run.nativeTurn && !run.kernelRequestIds?.length) turns.add(run.nativeTurn.startSeq);
@@ -2833,7 +2852,7 @@ async function specialistCompletionOutcome(
  * @param {Record<string, any>} project
  * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
  */
-async function readDeliveryReceipt(project, run = null) {
+export async function readDeliveryReceipt(project, run = null) {
   let text;
   try {
     text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
@@ -3613,12 +3632,16 @@ export class AgentRunStore {
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
     this.now = options.now ?? (() => new Date());
+    // Long-lived monitors must not inherit a dispatch's checked-out database
+    // transaction. Their reads retain the normal project/run authorization.
+    this.independentWork = options.independentWork ?? (work => work());
     this.id = options.id ?? (() => randomId("run_"));
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
     this.readChildSessionActivity = options.readChildSessionActivity ?? (async () => []);
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
+    this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
     // What the independent reviewer found on this run's deliverables, as
     // notices (reviewService.mjs). Placed first in the finished run's list:
     // behind forty gate notices, the 2026-09-22 review's seven contradictions
@@ -4137,6 +4160,7 @@ export class AgentRunStore {
       const now = this.now().toISOString();
       const id = safeId(this.id(), "agent run id");
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
+      const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
       const event = {
         event: "started",
         id,
@@ -4159,8 +4183,11 @@ export class AgentRunStore {
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
         createdAt: now,
+        // Exact financial ownership comes from the trusted project, never prompt input.
+        accountCreatedAt: project.accountCreatedAt == null ? null : storedTimestamp(project.accountCreatedAt, "accountCreatedAt"),
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
+        ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       };
       const text = serializeNext(events, event, this.maxBytes);
       if (dispatchId) this.dispatchOwners.add(id);
@@ -4185,6 +4212,14 @@ export class AgentRunStore {
     this.projects.set(`${project.userId}:${project.id}`, runProject);
     this.scheduleMonitor(runProject, run.id);
     return unknown;
+  }
+
+  /** A cold dispatch starts its runtime after reservation; attach that exact
+   * immutable generation once, and preserve it through later revisions.
+   * @param {any} project @param {string} runId */
+  async recordRuntimePersonalSkills(project, runId) {
+    const snapshot = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project));
+    if (snapshot) await this.recordLearning(project, runId, { personalSkillGeneration: snapshot });
   }
 
   async dispatch(project, input, sendPrompt) {
@@ -4232,6 +4267,7 @@ export class AgentRunStore {
       if (result?.accepted === false) {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
       }
+      await this.recordRuntimePersonalSkills(project, record.id);
       const accepted = await this.markDispatch(project, record.id, "accepted");
       this.clinicalRepairSenders.set(record.id, async (repairText) => {
         const updated = await this.recordKernelRequest(project, record.id, randomId("req_"));
@@ -4415,7 +4451,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], capabilityHandbooks?: any[], appendCapabilityHandbooks?: any[], mountedSkills?: string[], recalledMemories?: {id: string, kind?: string, scope?: string}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -4446,6 +4482,8 @@ export class AgentRunStore {
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
+        ...(current.personalSkillGeneration ? { personalSkillGeneration: current.personalSkillGeneration }
+          : patch.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(patch.personalSkillGeneration) } : {}),
         // Which durable memories this dispatch actually recalled.
         //
         // The recall happened at dispatch and then existed only as a file in
@@ -6145,6 +6183,10 @@ export class AgentRunStore {
   }
 
   scheduleMonitor(project, runId) {
+    return this.independentWork(() => this.scheduleIndependentMonitor(project, runId));
+  }
+
+  scheduleIndependentMonitor(project, runId) {
     if (this.closing || this.monitors.has(runId)) return;
     let canceled = false;
     /**
@@ -6795,9 +6837,16 @@ export class AgentRunStore {
         // other project's runs from being marked canceled on shutdown.
       }
     }
-    // A terminal ledger row can precede its completion hook. Drain every
-    // producer, including direct reconciliations, before storage is released.
-    await Promise.allSettled([...monitors.map(monitor => monitor.promise), ...this.reconciles.values()]);
+    // The terminal row can precede callback writes. Drain the initial monitors,
+    // finishing monitors and direct reconciliations only at global shutdown:
+    // a completion hook may stop its runtime and re-enter closeProject.
+    const finishing = [...this.monitors.values()];
+    for (const monitor of finishing) monitor.cancel();
+    await Promise.allSettled([...new Set([
+      ...monitors.map(monitor => monitor.promise),
+      ...finishing.map(monitor => monitor.promise),
+      ...this.reconciles.values(),
+    ])]);
     await Promise.allSettled([...this.backgroundLabels]);
     this.projects.clear();
     this.dispatchOwners.clear();

@@ -206,6 +206,15 @@ opening traffic. Preserve tenant volumes, credentials and tested backups;
 recreate the selected services using `--no-build --pull never`, then complete
 the deployment checks below. Keep other products on a shared host untouched.
 
+For a drained switch, acquire a durable maintenance lease under the deployment
+lock, verify that its activity is known and idle, and pass the same request ID
+to `host-release-switch.sh <sha> --no-prune --maintenance-request-id=<id>`.
+The switch releases that lease only after the new Web release answers health,
+before minting the live model receipt and walking the pages. A failed health or
+lease release stops the switch without minting; inspect the staged release and
+keep the lease renewed while recovering. The legacy `--plan` moves `current`
+and must not be used as a read-only preparation step.
+
 ## Deployment Check
 
 Run before opening traffic and after every deployment:
@@ -700,3 +709,320 @@ Arbitrary-URL Europe PMC full-text tools are deliberately excluded from this
 sidecar. Use EviMed’s existing controlled full-text/source gateway instead.
 Execution accepts only declared parameters and canonical publication/trial IDs;
 caller-provided URLs cannot select a sidecar network destination.
+
+
+## October 2 internal-test release sequence
+
+The owner requires completion of the local platform/VCR gap audit and the DSH
+extension-center implementation before further deployment or live acceptance.
+The c58 candidate is staged only; it is not permission to switch current.
+
+After local completion, remove verified obsolete EviMed images, build caches,
+old release files and temporary artifacts before deploying the final integrated
+source. For this internal-test release the owner accepts downtime and waives
+online platform rollback-image retention. Identify references and local original
+code/data coverage before deleting historical data; preserve other products,
+active databases/volumes, credentials and the invariant customer CDSS token.
+Do not use this waiver to remove functional per-project extension/skill revision
+rollback or encrypted data-recovery tests. Package caches still retain active or
+pinned immutable generations until their references are released.
+
+Prepare extension packages with the pinned native manager in a separate bounded
+job. The live profile remains read-only. Native host bundles are platform-admitted
+code; arbitrary user packages use verified isolated paths. Qualification and
+activation records belong to the trusted control plane and bind exact package,
+adapter, runtime image, permission and test identities. Never install a package
+in the web process or treat a package-written health file as a SaaS proof.
+
+## Aliyun plain-Node controlled pilot
+
+This variant uses systemd and the existing Nginx routes rather than the Compose
+stack above. It remains a controlled pilot with `NODE_ENV=development`; it is
+not a commercial-production acceptance claim. Backups are encrypted local
+copies, with no off-host backup configured.
+
+The live source root is the API unit's `WorkingDirectory` under
+`/data/evimed-science/releases/<source-revision>/OpenScience`. The accepted
+bundle contains seven commit-bound backend module patches and the reviewed
+glossary seed over the native Web bundle from revision
+`246698666c2b192c331a270f9549f5991940fac5`, whose full CI run `36895897092`
+passed. The runtime image still has the separate original `246698666c2b`
+identity; this host patch is not a new CI image or runtime build.
+
+The API and controller run as `evimed-science` using `/opt/node22/bin/node`,
+`/etc/evimed-science/test.env`, and the units `evimed-science-test.service` and
+`evimed-science-test-controller.service`. Only the controller has Docker access.
+Keep their existing systemd security and resource limits, Nginx routes, loopback
+API binding, and private runtime network. App data remains
+`/data/evimed-science/app-data`; PostgreSQL remains in
+`evimed-science-test-postgres`. The knowledge plugin uses its own database and
+private token at the loopback endpoint `http://127.0.0.1:18080`.
+
+### Gateway addresses the runtime is given
+
+Outside `NODE_ENV=production` five gateway addresses default to
+`http://127.0.0.1:<port>/…`, which a sandboxed runtime on the internal network
+cannot reach. Set each to the gateway listener (`http://172.30.253.1:8787` here):
+`OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL` (`/internal/model/v1`),
+`OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL` (`/internal/sources/v1/fetch`),
+`OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/search/v1/query`),
+`OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/kb/v1/search`) and, where
+those modules are on, `OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL` and
+`OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL`. The frontier, result, VCR and
+capsule gateways follow the model gateway's address and need no key. The
+knowledge-base one was missing until 2026-10-03, so `kb_search` could not reach
+the control plane from any conversation on this host.
+
+### Runtime slots on a small host
+
+Allow two runtimes, not one (`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=2`,
+`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=2`, with
+`OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT=1g` to keep the same 2 GiB ceiling). The
+platform's background work may always hold one runtime
+(`backgroundRuntimeLimit` never returns less than one), and a researcher's
+start does not retire it. With a single slot the learning loop held it for more
+than fifteen minutes after each finished run on 2026-10-03, and every dispatch
+in that time answered 429 `runtime_limit_exceeded`. A driver that leaves its
+runtime up (the stream acceptance, the conversation walk) has the same effect;
+stop it with `stop_runtime` under that project's header.
+
+### Bundle updates and identity
+
+Extract the verified CI Web image's complete `/app` closure into a new release;
+do not rebuild on this host. Verify config bytes, ordered rootfs diff IDs,
+labels, and image references. On Docker 29, bind the actual inspected image ID
+to its `Descriptor` digest, media type, and size; preserve the CI config digest
+separately. Repacking compression changes manifest/index digests and requires
+an explicit derivation record. Admit storage separately for `/data/docker` and
+root-disk `/var/lib/containerd`, retaining at least 5 GiB on each filesystem
+plus the applicable blob, snapshot, temporary archive, and growth reserves.
+
+A full-release CI run also uploads `evimed-web-bundle-<sha>`: the Web image's
+`/app` as `app.tar.gz` with its checksum and `web-bundle.json` (release
+identity, image id and layer ids), about 40 MB. A release that changes only the
+control plane needs nothing else on this host: unpack it into the new release
+directory and keep the runtime image already loaded, recording that the two
+identities differ. The core subset is still what carries a new runtime image;
+loaded from `docker save` it occupies about twice its uncompressed size in
+containerd, so check `/` before loading it.
+
+Preserve the deployed pnpm closure and relative links. The known self-link
+`apps/server/node_modules/.pnpm/node_modules/@ai4s/server` needs only its exact
+host relocation from `../../../../../app/apps/server` to `../../../..`;
+verify the original target and `@ai4s/server` package before changing it, then
+check imports as the service account. For a backend patch, `cp -al` may reuse
+the verified bundle, but replace each changed file with a new inode and verify
+that the base bytes remain unchanged. Also copy and atomically replace
+`examples/climate-trends/README.md` and
+`examples/climate-trends/data/gistemp_global_means.csv` with identical bytes and
+independent inodes: scoped file reads refuse `nlink > 1`. Do not loosen that
+guard or rewrite other links.
+
+Before activation, confirm no active user run, task, or managed runtime; a
+maintenance endpoint returning 404 is not that proof. Stop API/controller
+writers, review the exact environment/unit change plan, and apply only its
+matching digest with private originals retained. Change source, static, example,
+and file-backup working-directory/entrypoint paths together. Preserve data and
+secret paths and the separately verified runtime image. Reload systemd, start
+controller before API, and run the file-backup unit from the new source.
+
+Pilot `/api/health` currently returns `releaseId=null`; do not present it as
+release provenance. Verify the live systemd PID and start time, service UID,
+`/proc` cwd, exact Node entrypoint argv, and allowlisted release environment
+including `OPEN_SCIENCE_SOURCE_REVISION`. Never log the complete environment.
+Check `/api/ready`, public HTTPS routes, and ordinary-reader browser behavior.
+Native QA must independently bind the runtime container's user/project labels,
+image ID, and original runtime revision, rather than require it to match the
+backend patch revision. The recorded 27 readiness checks passed. Native QA on
+revision `416d3eed27b7` completed a real `frontier_search` answer, 5 settled Pro calls
+(0.133226 CNY), 1,442 SSE frames, reconnect/replay validation, and exact-project
+runtime shutdown. Its receipt is
+`build/evidence-20261001/final-cutover-tools/native-qa-416d3eed27b7-pro-frontier-v1/receipt.json`.
+Readiness alone does not prove a model response or an independent content review.
+
+The pilot uses `deepseek-v4-pro` for its runtime and frontier operations. Real
+Flash requests timed out after successful HTTP headers on 2026-10-01, while the
+same gateway/account completed Pro calls; retain the original uncertain billing
+records. Evidence authors use bounded low thinking, while feed operations and
+independent review retain their separate non-thinking calls. Only final response
+content is parsed; an explicitly incomplete response or JSON mentioned in
+reasoning cannot become published evidence. Owner-requested rewrites retain the
+previous question, numerical tables/figures and source mapping, and derive new
+prose from retained sources and feedback. Ordinary unchanged-source checks keep
+the existing scientific content and atomically refresh capture metadata.
+
+The normal frontier limit is 10 CNY per Shanghai calendar day. This release used
+a temporary 15 CNY acceptance ceiling, with all diagnostic and actual editorial
+calls recorded normally. The 10 CNY configuration was restored and activated after acceptance;
+spent acceptance calls remain in the ledger, so the existing budget guard can
+defer further model work until the next budget window. Ingestion and reading
+continue independently. Do not change timestamps or settled costs to bypass it.
+
+Three published evidence zones have enabled daily source checks, with 12
+published AI-reviewed cards (nine imported starter cards and three actual
+model-created cards). Actual model
+creation and subsequent owner-requested corrections have completed for the new
+cards; retained documents, scientific hashes, revision-bound AI reviews and
+source-check receipts are separately verifiable. AI reviewer accounts identify
+themselves as AI and do not imply physician review. Preserve the distinction
+between imported independently checked content and a native model review.
+The final independent review made 12 minimal text corrections in three cards
+through the existing import path; these revisions keep their true AI author and
+reviewer identity, import origin, retained sources and source-check times. All
+12 card hashes, review revisions, and 18 retained sources passed integrity
+checks. The final four-card reader check passed 62 desktop/mobile/source checks.
+Review scientific meaning separately from JSON/schema validity and do not call
+abstract-only or excerpt-only work a full-text review. Recent daily references and actual publication in this module
+remain eligible for an owed edit even when an item's original source date is
+older than the ordinary seven-day edit window. Neither source nor publication
+dates are advanced by a re-edit.
+
+The expanded source service has 720 registered sources and 492 enabled. At
+22:07 UTC on 2026-10-01, 483 enabled sources were healthy and nine were degraded;
+485 had fetched successfully at least once. It retained 13,838 entries, including
+13,598 new entries from 464 distinct sources after expansion. Unavailable
+upstream pages remain visible as degraded and retry normally; do not claim that
+enabling a source proves a successful fetch. Frontier model work respects the
+daily ceiling, so title-only publications and deferred edits can remain after
+the acceptance budget is spent.
+
+Scientific review of actual published outputs withdrew twelve identified erroneous
+items through authenticated `/api/frontier/ops/items/:id/withdraw` calls. Source
+material and the withdrawal reasons remain preserved. The final sweep found no
+remaining published occurrence of the identified testosterone mistranslation.
+The dexamethasone sweep retained the one original source that explicitly names
+the sodium-phosphate formulation while withdrawing unsupported salt assignments.
+The erroneous generated drug name was corrected through the existing glossary
+seeder's `handRows`/`applyRows` path: two replacements and one form-specific new
+entry, leaving 2,509 other rows unchanged. Generated glossary names are now
+candidates, not mandatory translations; even hand-kept names must match the
+source's actual substance, salt, ester and formulation. Prompt changes do not
+constitute independent scientific verification or silently retranslate cached
+content. Preserve the operator receipts in `ops/evidence-20261001/acceptance`.
+
+### Local recovery
+
+Keep the existing PostgreSQL schedules for `evimed` and `evimed_knowledge`, plus
+`evimed-evidence-file-backup.service` for app data. Preserve the scheduler's
+sibling backup/restore scripts, private passphrases, per-database archives, and
+restore receipts under `/data/evimed-science/backups`. Host-managed recovery uses
+`OPEN_SCIENCE_BACKUP_MODE=external`, `OPEN_SCIENCE_BACKUP_EXTERNAL_ACK`, and
+`OPEN_SCIENCE_RESTORE_DRILL_ACK`; these do not assert an offsite copy. Pilot
+readiness does not independently verify PostgreSQL recovery. A fresh final-content backup on 2026-10-01 passed actual decrypt/restore drills
+for both PostgreSQL databases and app data, with matching table inventories,
+verified archive checksums, successful clone cleanup, and no omitted file
+content. Writers were quiesced for the separate snapshots and resumed after
+verification; the snapshots are not one cross-component atomic transaction.
+The file-backup unit now keeps `OPEN_SCIENCE_BACKUP_STRICT=true`. The receipt is
+`build/evidence-20261001/final-cutover-tools/final-content-backup-v2.json`.
+
+For rollback, stop writers and check for later operator changes before restoring
+the saved environment/units and restarting the retained controller/API and
+runtime image. Configuration rollback does not roll back PostgreSQL. Restore
+encrypted app data and database clones into separate disposable targets,
+verify them before any deliberate replacement, and preserve post-snapshot work.
+Keep the base bundle and rollback evidence until acceptance is complete.
+
+
+### Optional aggregate result replay
+
+Configure `OPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031` and an exact
+`OPEN_SCIENCE_RESULT_REPLAY_IMAGE` tag or digest to select
+`deploy/web/docker-compose.result-replay.yml`. Keep the URL empty when this
+executor is unavailable. Native VCR configuration remains independent; enabling
+this overlay does not enable or replace the VCR engine.
+
+Build `deploy/specialist-adapter/Dockerfile.result-replay` from the repository
+root, with the same `RELEASE_ID`, `SOURCE_REVISION`, and `BUILD_CREATED` arguments
+as the web image. Transfer and load this image together with the release images.
+`host-delta-release.sh` builds and pins it when the staged deployment config
+selects it. Generate the release manifest after loading/building all images; its
+`result-replay` service records the exact image ID. Host preflight checks the
+selected image architecture and the existing private workload signing host file;
+the release switch selects the same overlay before comparing service hashes.
+Do not carry an old `OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID` into a new build.
+
+The executor uses `OPEN_SCIENCE_DATA_VOLUME` and the existing
+`OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE`. It has only an internal
+network, no published port, provider credential, Docker socket, or VCR patient
+data plane mount. Only the control plane joins its network and submits scoped,
+signed aggregate jobs. A successful Compose render or numerical component test
+is not serving qualification: exercise an authorized replay through the deployed
+control plane and record its exact input, recipe, image, output, and cancellation
+receipt before claiming the provider available.
+
+## Research allowance billing
+
+The account page uses CNY research allowance. The existing EviMed wallet remains
+authoritative; this deployment does not create a second wallet or process payment
+provider callbacks. `/api/account/allowance` and its `/statements` endpoint require
+the signed-in account. `/estimate` returns a non-binding estimate, not a reservation.
+An unavailable wallet is unknown, never zero. Confirmed task charges remain separate
+from supplier costs and background operating expenses.
+
+The default keeps revised charging off. To evaluate the public configuration:
+
+```sh
+pnpm check:research-billing
+pnpm check:research-billing --require-billing
+pnpm check:research-billing --require-handoffs=recharge,membership,orders,refunds
+```
+
+These are configuration checks only. They do not read credentials, contact a
+payment service, verify an external account or prove an actual payment. The
+report states `endToEndVerified: false`. Validate the actual EviMed wallet contract
+and target-environment account mapping before enabling deductions.
+
+For versioned task charging, retain `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED=true`
+with verified balance/deduction endpoints and `OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY=1`,
+then set `OPEN_SCIENCE_RESEARCH_BILLING_ENABLED=true`. Startup persists the policy
+activation time before accepting research. First deploy the new code with this
+flag off to every HTTP and runtime-controller process, and drain earlier runs.
+New runs persist the exact account creation identity at startup; pre-upgrade runs
+without that identity cannot be charged by the new policy. Historical receipts keep their original
+conversion and are never recomputed. Requests predating activation cannot be newly
+charged through an alias or retry. Once activated, the new policy remains active
+if only the research-policy flag is rolled back; disable the wallet module to stop
+deductions. Do not delete the policy row or financial tables during rollback.
+After activation, do not downgrade to code that predates this policy: an older
+binary cannot honor its cutoff or retained account identities.
+
+The current external deduction contract accepts whole credits only. The new policy
+records exact resource costs at eight decimal places, excludes platform overhead,
+then rounds the billable task amount down to whole credits and records the remainder
+as waived. For example, CNY 1.90000001 eligible usage results in one credit requested
+and CNY 0.90000001 waived. Failed or canceled work without an earned-stage contract
+is waived. Unconfirmed provider use and late usage outside the terminal snapshot
+are not retrospectively charged. These are explicit compatibility limits, not
+fractional settlement or a promise of free unlimited research.
+
+The financial outbox is written before deduction and retries with the same upstream
+idempotency key. An unknown result remains unconfirmed; do not manually replay it
+with a different key. The retry limit and backoff remain bounded. Reconcile an
+abandoned deduction against the upstream receipt before making an adjustment.
+Retained financial rows are isolated by account creation identity, not a reusable
+username. Preserve their schema, payer snapshot and receipt references in backups.
+
+Hosted commerce is separately enabled with `OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED`
+and an explicit comma-separated HTTPS origin allowlist. Configure only existing
+recharge, membership, order and refund page URLs; no tokens, user identifiers,
+query strings or fragments are added to links. A missing page stays unavailable.
+Do not advertise subscription grants, automatic renewals, payment confirmation,
+refund processing, balance-source breakdowns or wallet holds from these links.
+
+```sh
+pnpm check:research-billing --require-precision
+pnpm check:research-billing --require-automatic-commerce
+```
+
+Both commands intentionally fail until the corresponding upstream contracts and
+integration have been implemented and verified. Required upstream details include
+amount precision, idempotency and lookup semantics, reservation/capture/release,
+refund receipts, membership periods and entitlements, and paid/promotional balance
+sources. The current branch must not be certified as a complete payment or
+subscription system based only on passing local tests.
+
+Run focused integration tests only against a disposable localhost PostgreSQL whose
+database name contains `evimed_test`. Use separate databases for suites that test
+policy activation. No production provider call or real payment is needed for the
+unit, HTTP, migration, concurrency and account-isolation tests.

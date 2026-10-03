@@ -32,10 +32,17 @@ const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ d
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
 const VcrHomePage = lazy(() => import("./virtual-research/VcrHomePage").then((m) => ({ default: m.VcrHomePage })));
 const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((m) => ({ default: m.VcrStudyPage })));
+const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
+const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m) => ({ default: m.EvidenceZonePage })));
+const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
 const HandoffRoute = lazy(() => import("./routes/HandoffRoute").then((m) => ({ default: m.HandoffRoute })));
+const SkillsPage = lazy(() => import("./extensions/SkillsPage").then((m) => ({ default: m.SkillsPage })));
+const SkillDetailPage = lazy(() => import("./extensions/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })));
+const PluginsPage = lazy(() => import("./extensions/PluginsPage").then((m) => ({ default: m.PluginsPage })));
+const PluginDetailPage = lazy(() => import("./extensions/PluginDetailPage").then((m) => ({ default: m.PluginDetailPage })));
 
 /**
  * One prefix for the workbench, so that everything outside it — the login
@@ -83,6 +90,9 @@ export const routes: RouteObject[] = [
         // can arrive at without the study around it.
         { path: "virtual-research", element: <VcrHomePage /> },
         { path: "virtual-research/:studyId/:tab?", element: <VcrStudyPage /> },
+        { path: "frontier/zones", element: <EvidenceZonesPage /> },
+        { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
+        { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         // 「循证 GEO」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.
@@ -103,6 +113,11 @@ export const routes: RouteObject[] = [
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/plugins" replace /> },
+        { path: "extensions/plugins", element: <PluginsPage /> },
+        { path: "extensions/plugins/:extensionId", element: <PluginDetailPage /> },
+        { path: "extensions/skills", element: <SkillsPage /> },
+        { path: "extensions/skills/:skillId", element: <SkillDetailPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
         // below were top-level pages until then; each is now a view of one of the
         // six, and each keeps its address, because these are in people's

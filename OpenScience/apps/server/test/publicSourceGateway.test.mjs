@@ -43,6 +43,28 @@ function runtimeManager() {
   };
 }
 
+test('only a checked open-access PDF reaches the trusted document callback and response resource reference', async t => {
+  const bytes = Buffer.from('%PDF-1.4\npublic fixture\n%%EOF');
+  let captured = 0;
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { unpaywall: 'contact@example.test' } }, runtimeManager(), {
+      fetchImpl: async () => Response.json({ best_oa_location: { url_for_pdf: 'https://repo.example/public.pdf' } }),
+      resolveImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+      pdfTransport: fetchWebTransport(async () => new Response(bytes, { headers: { 'content-type': 'application/pdf' } })),
+      capturePdf: async (owner, actual, provenance) => {
+        assert.deepEqual(owner, { userId: 'alice', projectId: 'paper-1' });
+        assert.deepEqual(actual, bytes); assert.equal(provenance.origin, 'https://repo.example');
+        captured++; return { resourceId: 'pub_' + 'a'.repeat(64) };
+      },
+    }));
+  const base = await listen(server); t.after(() => close(server));
+  const response = await gatewayRequest(base, { openAccessPdfDoi: '10.1234/public', parse: true });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-evimed-document-resource'), 'pub_' + 'a'.repeat(64));
+  assert.equal((await response.json()).pdf.resourceId, 'pub_' + 'a'.repeat(64));
+  assert.equal(captured, 1);
+});
+
 async function gatewayRequest(base, body, token = "runtime-token") {
   return fetch(`${base}/internal/sources/v1/fetch`, {
     method: "POST",

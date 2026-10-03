@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "adr-analysis",
-  "version": "sha256:b0ff32c9765a528aae11682b7cd64600c54a79b83d9f350a1ddfb175641eb528",
+  "version": "sha256:5867bdc16d13ca53accf8f5a6216ad35a42c72919cad870d32acececab721661",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 26,
@@ -900,12 +900,14 @@
           },
           "jobId": {
             "type": "string",
-            "pattern": "^safety-[a-z0-9-]{8,80}$"
+            "pattern": "^safety-[a-z0-9-]{8,80}$",
+            "description": "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
           },
           "waitSeconds": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 45
+            "maximum": 45,
+            "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting."
           },
           "outputLanguage": {
             "type": "string",

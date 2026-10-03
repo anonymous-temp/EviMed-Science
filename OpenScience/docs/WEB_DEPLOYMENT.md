@@ -983,8 +983,11 @@ startup by name rather than starting with the value ignored. Only the unexposed
 `open-science-runtime-controller` service mounts the host Docker socket. The Web
 API mounts a read-only view of a separate control volume and calls the controller over
 `/run/open-science-controller/controller.sock`; the controller mounts `/data`
-read-only, publishes no port, drops Linux capabilities, and joins only the
-numeric Docker-socket group verified by host preflight. This preserves access
+writable (since 2026-10-03: it stages personal-skill validation inputs and keeps
+render and validation recovery markers there, and a read-only mount failed both
+with EROFS), keeps its own root filesystem read-only, publishes no port, drops
+Linux capabilities, and joins only the numeric Docker-socket group verified by
+host preflight. This preserves access
 to the explicitly mounted socket without restoring broad filesystem
 capabilities. The controller creates all runtime launch arguments from its own
 deployment configuration. Treat the

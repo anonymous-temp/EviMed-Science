@@ -49,6 +49,19 @@ describe("scheduled tasks", () => {
     await userEvent.clear(screen.getByRole("searchbox")); await userEvent.click(screen.getByRole("button", { name: "心衰证据追踪" }));
     expect(screen.getByTestId("location")).toHaveTextContent("task=agenda-one");
   });
+  it("offers a clear return to the workbench and a compact editor with optional settings collapsed", async () => {
+    render();
+    expect(screen.getByRole("link", { name: "返回工作台" })).toHaveAttribute("href", "/app/chat");
+    await userEvent.click(screen.getByRole("button", { name: "新建任务" }));
+    const dialog = screen.getByRole("dialog", { name: "新建任务" });
+    expect(dialog).not.toHaveClass("h-full");
+    const advanced = within(dialog).getByText("高级设置").closest("details")!;
+    expect(advanced).not.toHaveAttribute("open");
+    await userEvent.click(within(dialog).getByText("高级设置"));
+    expect(advanced).toHaveAttribute("open");
+    expect(within(dialog).getByLabelText("时区")).toBeVisible();
+    expect(within(dialog).getByLabelText("单次上限 ¥")).toBeVisible();
+  });
   it("creates and enables a weekly task without altering its raw prompt", async () => {
     render(); await userEvent.click(screen.getByRole("button", { name: "新建任务" }));
     const form = await screen.findByRole("dialog", { name: "新建任务" });
@@ -56,6 +69,7 @@ describe("scheduled tasks", () => {
     fireEvent.change(within(form).getByLabelText("任务指令"), { target: { value: raw } });
     await userEvent.selectOptions(within(form).getByLabelText("重复"), "weekly");
     fireEvent.change(within(form).getByLabelText("时间"), { target: { value: "09:45" } });
+    await userEvent.click(within(form).getByText("高级设置"));
     fireEvent.change(within(form).getByLabelText("时区"), { target: { value: "America/New_York" } });
     await userEvent.click(within(form).getByRole("button", { name: "创建并启用" }));
     await waitFor(() => expect(mocks.createAgenda).toHaveBeenCalledWith(expect.objectContaining({ prompt: raw, schedule: { kind: "weekly", weekdays: [1], time: "09:45", timeZone: "America/New_York" } })));

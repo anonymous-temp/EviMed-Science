@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
 import {
   VCR_GATEWAY_OPERATIONS, VCR_GATEWAY_PATH, VCR_GATEWAY_WINDOW_LIMITS, createVcrGatewayHandler, vcrGatewayProviderUrl,
   vcrGatewayRoutePattern, vcrRuntimeWrite,
@@ -303,6 +304,101 @@ test("C2-10 a reference the renderer cannot parse is an issue and never reaches 
   assert.deepEqual(data.issues.map((/** @type {any} */ issue) => issue.code), ["vcr_number_unparsed", "vcr_number_unparsed"]);
   const rendered = calls.find((call) => call[0] === "updateExport")?.[3].cover.report.rendered;
   assert.equal(rendered, "功效为 未计算，把握 未计算。");
+});
+
+/**
+ * A study with one run out for one export: the orchestrator's answer to "which
+ * export is this run for", and the export rows the store holds.
+ * @param {{ kind: string, rows?: Array<Record<string, any>>, manager?: Record<string, any> }} input
+ */
+function exportRunFixture({ kind, rows = [], manager = runtimeManager }) {
+  /** @type {Array<[string, any]>} */
+  const asked = [];
+  const held = new Map([{ id: "exp_wanted", kind, state: "queued", cover: {} }, ...rows].map((row) => [row.id, row]));
+  const made = fixture({
+    orchestrator: {
+      async exportDispatch(/** @type {string} */ studyId, /** @type {any} */ caller) {
+        asked.push([studyId, caller]);
+        return { key: "run:export:exp_wanted", exportId: "exp_wanted", dispatchId: "vcr-run-export-exp_wanted-1", runId: "run_1" };
+      },
+    },
+  });
+  made.vcr.store.exportRow = async (/** @type {string} */ _studyId, /** @type {string} */ id) => held.get(id) ?? null;
+  made.vcr.store.exports = async () => [...held.values()];
+  return { ...made, asked, held, handler: createVcrGatewayHandler(config, manager, { vcr: made.vcr }) };
+}
+
+/** @param {(request: any, response: any) => Promise<unknown>} handler @param {Record<string, any>} data */
+async function writeReport(handler, data) {
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "report", data }), res);
+  assert.equal(res.status, 200, res.body);
+  return res.json().data;
+}
+
+test("a run sent out for an export fills that export and no other, whichever of the four documents it is", async () => {
+  for (const kind of VCR_EXPORT_KINDS) {
+    const { calls, handler } = exportRunFixture({ kind });
+    const written = await writeReport(handler, { kind, template: "方法与局限。" });
+    assert.deepEqual([written.ok, written.ids], [true, ["exp_wanted"]], kind);
+    // No kind typed is the same export: the dispatch says which, the run does not have to.
+    const unnamed = await writeReport(handler, { template: "方法与局限。" });
+    assert.deepEqual([unnamed.ok, unnamed.ids], [true, ["exp_wanted"]], kind);
+    assert.deepEqual(calls.filter((call) => call[0] === "export"), [], `no export is made for a run that already has one (${kind})`);
+    assert.deepEqual(calls.filter((call) => call[0] === "updateExport").map((call) => call[1]), ["exp_wanted", "exp_wanted"]);
+  }
+});
+
+test("a report that names another document than the one its run was sent for is refused by name, and nothing is made or saved", async () => {
+  for (const kind of VCR_EXPORT_KINDS) {
+    for (const typed of VCR_EXPORT_KINDS.filter((other) => other !== kind)) {
+      // An open export of the typed kind is what the write used to land in; with none, it used to make one.
+      const { calls, handler } = exportRunFixture({ kind, rows: [{ id: "exp_other", kind: typed, state: "queued", cover: {} }] });
+      const refused = await writeReport(handler, { kind: typed, template: "方法与局限。" });
+      assert.deepEqual([refused.ok, refused.ids], [false, []], `${typed} into a run for ${kind}`);
+      assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["kind", "vcr_write_value_invalid"]]);
+      const labels = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH);
+      const message = refused.issues[0].message;
+      assert.ok(message.includes(`「${labels[kind]}」`) && message.includes(`「${labels[typed]}」`), "both documents are named in words");
+      assert.ok(message.includes(`kind 写 ${kind}`), "and the message says what to write instead");
+      assert.deepEqual(calls.filter((call) => ["export", "updateExport"].includes(call[0])), [], "no row is made and no row is written");
+    }
+  }
+});
+
+test("which run is calling is the runtime's reservation, never a field of the request; with no export run out a report opens its own row", async () => {
+  /** @type {any[]} */
+  const projects = [];
+  const reserved = { ...runtimeManager, boundedRuntimeScope: (/** @type {any} */ project) => { projects.push(project); return { runId: "vcr-run-export-exp_wanted-1" }; } };
+  const bounded = exportRunFixture({ kind: "simulation_report", manager: reserved });
+  await writeReport(bounded.handler, { template: "方法与局限。" });
+  assert.deepEqual(projects, [{ userId: "u1", id: "prj_1" }], "the scope asked for is the token's project");
+  assert.deepEqual(bounded.asked, [["std_1", { runtimeRunId: "vcr-run-export-exp_wanted-1" }]]);
+
+  // The researcher's own open runtime is reserved for nothing: the study's run slot alone says which export.
+  const open = exportRunFixture({ kind: "simulation_report" });
+  await writeReport(open.handler, { template: "方法与局限。" });
+  assert.deepEqual(open.asked, [["std_1", { runtimeRunId: null }]]);
+
+  // A field of the request cannot say it: the item's fields are closed.
+  const forged = await writeReport(open.handler, { template: "方法与局限。", exportId: "exp_other" });
+  assert.deepEqual(forged.issues.map((/** @type {any} */ issue) => issue.field), ["exportId"]);
+
+  // No export run out (the researcher's conversation): the write opens a row of the kind it names, as before.
+  const { calls, vcr, handler } = fixture({ orchestrator: { exportDispatch: async () => null } });
+  vcr.store.exportRow = async () => { throw new Error("an unbound write reads no dispatched export"); };
+  const own = await writeReport(handler, { kind: "validation_pack", template: "方法与局限。" });
+  assert.deepEqual([own.ok, own.ids], [true, ["exp_1"]]);
+  assert.deepEqual(calls.filter((call) => call[0] === "export").map((call) => call[1]), ["validation_pack"]);
+});
+
+test("a run whose export is gone is told so, and its report is not filed anywhere else", async () => {
+  const { calls, held, handler } = exportRunFixture({ kind: "study_package" });
+  held.delete("exp_wanted");
+  const refused = await writeReport(handler, { kind: "study_package", template: "方法与局限。" });
+  assert.deepEqual([refused.ok, refused.ids], [false, []]);
+  assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["kind", "vcr_write_refused"]]);
+  assert.deepEqual(calls.filter((call) => ["export", "updateExport"].includes(call[0])), []);
 });
 
 test("C2-7 a design grid's comparison goal names the measures it compares; a result-shaped `measures` is still refused", async () => {

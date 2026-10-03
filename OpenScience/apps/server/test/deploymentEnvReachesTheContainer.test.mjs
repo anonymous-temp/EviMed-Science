@@ -23,6 +23,7 @@
 // deliver an empty string, which `Number("")` turns into 0 and a validating
 // parser turns into a startup failure.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -38,6 +39,7 @@ const deployDir = path.join(repoRoot, "deploy/web");
  *  a container. The exemption names the script, and the test reads that script:
  *  an entry that stops being true stops protecting anything. */
 const hostSideOnly = {
+  OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: "scripts/ops/result-replay-deployment.mjs",
   OPEN_SCIENCE_VCR_BACKUP_DIR: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_ENABLED: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_MAX_SETS: "scripts/ops/vcr-backup.mjs",
@@ -65,6 +67,7 @@ const hostSideOnly = {
  *  written to prove: a documented lever that no service receives is a knob that
  *  does nothing and says nothing. */
 const operatorLevers = {
+  OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   // Both launch paths must install the optional MCP; its private token stays on web.
   OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL: ["open-science-web", "open-science-runtime-controller"],
@@ -357,10 +360,17 @@ test("every variable config.mjs reads reaches the web API, or says why it does n
   // so the feature could not be turned on in any deployment. The class, not
   // the instance: every name config.mjs reads is a lever someone will set.
   const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
-  const code = configSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  // And the settings modules config.mjs delegates to. The research billing
+  // keys are read in researchBillingConfig.mjs (2026-10-03), so a scan of
+  // config.mjs alone could not see a compose file drop any of the seven.
+  const settingsModules = [...configSource.matchAll(/^import .* from "\.\/([A-Za-z0-9]+Config\.mjs)";?$/gm)].map((match) => match[1]);
+  assert.ok(settingsModules.includes("researchBillingConfig.mjs"), `found ${settingsModules.length} settings modules imported by config.mjs; the derivation did not walk`);
+  const sources = [configSource, ...await Promise.all(settingsModules.map((name) => readFile(path.join(repoRoot, "apps/server/src", name), "utf8")))];
+  const code = sources.join("\n").split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
   const read = new Set(code.match(/OPEN_SCIENCE_[A-Z0-9_]+/g) ?? []);
-  assert.ok(read.size >= 300 && read.has("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED") && read.has("OPEN_SCIENCE_DEEPSEEK_API_KEY"),
-    `read ${read.size} names from config.mjs; the scan did not walk`);
+  assert.ok(read.size >= 300 && read.has("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED") && read.has("OPEN_SCIENCE_DEEPSEEK_API_KEY")
+    && read.has("OPEN_SCIENCE_RESEARCH_BILLING_ENABLED"),
+    `read ${read.size} names from config.mjs and its settings modules; the scan did not walk`);
 
   const files = await composeFiles();
   const dockerfile = await readFile(path.join(deployDir, "Dockerfile"), "utf8");
@@ -624,4 +634,30 @@ test("ToolUniverse service authentication stays between web and the bounded side
   const holders = Object.entries(services).filter(([, service]) => service.volumes?.some(volume => volume.target === "/run/secrets/tooluniverse-api-token")).map(([name]) => name).sort();
   assert.deepEqual(holders, ["open-science-web", "tooluniverse"]);
   for (const holder of holders) assert.equal(services[holder].volumes.find(volume => volume.target === "/run/secrets/tooluniverse-api-token").read_only, true);
+});
+
+
+test("runtime UI proxy settings reach both processes after real Compose base and API-only interpolation", {
+  skip: spawnSync("docker",["compose","version"],{stdio:"ignore"}).status !== 0 && "Docker Compose CLI required",
+}, async () => {
+  const base=path.join(deployDir,"docker-compose.yml"),apiOnly=path.join(deployDir,"docker-compose.api-only.yml");
+  const source=await readFile(base,"utf8");
+  const env={...process.env};
+  // Supply only synthetic required values; never load an operator's .env.
+  for(const match of source.matchAll(/\$\{([A-Z0-9_]+):\?/g))
+    env[match[1]]=match[1].endsWith("_HOST_FILE") ? "/tmp/evimed-env-forwarding-fixture" : "fixture";
+  env.OPEN_SCIENCE_DOCKER_SOCKET_GID="0";
+  for(const overlay of [false,true])for(const value of [undefined,"true","false"]){
+    if(value===undefined)delete env.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED;
+    else env.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED=value;
+    const result=spawnSync("docker",["compose","--env-file","/dev/null","--profile","full-product","-f",base,
+      ...(overlay ? ["-f",apiOnly] : []),"config","--format","json","--no-env-resolution"],
+      {env,encoding:"utf8",timeout:30000,maxBuffer:4*1024*1024});
+    assert.equal(result.status,0,"Compose configuration must succeed without starting any service");
+    const services=JSON.parse(result.stdout).services;
+    const expected=value ?? (overlay ? "false" : "");
+    for(const name of ["open-science-web","open-science-runtime-controller"])
+      assert.equal(services[name].environment.OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED,expected,
+        `${name} receives ${String(value)} in ${overlay ? "API-only" : "base"}`);
+  }
 });

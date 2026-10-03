@@ -341,6 +341,7 @@ def open_access_pdf_bytes(doi, max_bytes, timeout_seconds=60):
             "origin": urllib.parse.unquote(response.headers.get("x-evimed-oa-source", "")),
             "version": urllib.parse.unquote(response.headers.get("x-evimed-oa-version", "")),
             "license": urllib.parse.unquote(response.headers.get("x-evimed-oa-license", "")),
+            "resourceId": response.headers.get("x-evimed-document-resource", ""),
         }
 
 

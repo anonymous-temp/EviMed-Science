@@ -24,7 +24,14 @@
  *   exists, the comparator step when the design carries a result or a
  *   deterministic 「不可估计」 — which is a finished result, not a failure
  *   (plan §3.6). A failed run that wrote its object still counts (principle
- *   19); a finished run that wrote nothing fails its steps.
+ *   19); a run that failed and wrote nothing fails its steps, and one that
+ *   ended well and wrote nothing leaves them not started, to be sent again
+ *   within the key's attempts or asked for again.
+ * - **「进行中」 is a statement about now.** A step reads running only while a
+ *   job of its own is open or a run the study's slot holds covers it — never
+ *   because its input exists, and never because a run once went out for it
+ *   (`vcrStepUpdates`). A run is sent only for a step that is not running, so
+ *   a step that read running with nothing out was a step nothing could move.
  * - **Every side effect is claimed first** in `evimed_vcr.schedule_marks` by a
  *   key that names it (`run:analysis`, `job:trial_scenario:scn_x@2`,
  *   `notice:not-estimable:<result>`, `recompute:<node>`). The key is what
@@ -51,8 +58,9 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS,
-  VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, lineageNode, parseLineageNode, recomputePlan, whenHolds,
+  VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
+  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, lineageNode, parseLineageNode, recomputePlan,
+  whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -63,7 +71,7 @@ import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrReviewIsCurrent } from "./vcrViews.mjs";
-import { vcrReportReviewRevision } from "./vcrRender.mjs";
+import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
 
 /** Which capability thinks each step (the domain's map, named here for readers). */
 export const VCR_RUN_CAPABILITIES = VCR_STEP_CAPABILITIES;
@@ -158,6 +166,78 @@ export function vcrRunPrompt(brief, dispatchId) {
 }
 
 /**
+ * What each exportable document is, in one sentence: the outline the plan gives
+ * it (§5.4, §8.3). Text a brief carries, so the run is told which document is
+ * wanted in words and not only by a kind — the package capability's own skill
+ * describes the study package in full and the other three by name alone.
+ */
+export const VCR_EXPORT_OUTLINES = Object.freeze(/** @type {Record<string, string>} */ ({
+  study_package: "按研究包的九个部分写全：研究与分析概要、输入清单、假设登记表、人群与对照定义、结果、图表、执行记录、验证与局限、决策记录。",
+  cde_communication_pack: "按《真实世界证据支持药物注册申请的沟通交流指导原则》的要点组织：必要性与可行性、数据适用性、方案与统计分析计划、偏倚控制与敏感性分析。",
+  simulation_report: "按复杂创新设计的模拟报告清单写：设计总述、一个示例试验、情景参数及其依据（零假设情景必写）、每个情景的重复次数及理由、各情景的运行特征与蒙特卡洛误差、敏感性情景、方法版本与随机种子、总结。",
+  validation_pack: "按方法逐个写：这项研究用到的每个方法及其版本、前提假设、数值验证的记录与参照用例、每次执行的种子与计算环境；平台没有记录的项照实写「未记录」，不要补写。",
+}));
+
+/**
+ * The lines of a brief that say which document an export run is for and where
+ * its words go. The dispatch is bound to that one export (`exportDispatch`): the
+ * brief says so, because a run that is not told writes 「研究包」 — the kind its
+ * skill's example shows — whatever it was sent for.
+ * @param {string} kind one of `VCR_EXPORT_KINDS`
+ */
+export function vcrExportBriefLines(kind) {
+  const label = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)[kind] ?? kind;
+  return [
+    `本次只写一份资料：这项研究的「${label}」（kind: ${kind}）${kind === "study_package" ? "" : "，不是研究包，也不是别的资料"}。`,
+    VCR_EXPORT_OUTLINES[kind] ?? "",
+    `正文用 vcr_write 提交：what 写 report，data.kind 写 ${kind}。这次运行的报告只收进这一份导出；写成别的 kind 会被拒绝，不会另建一份。`,
+    "工作区交付文件的文件名照能力清单不变，study-package.md 里放的就是这份正文。",
+    "用 vcr_read 读研究已有的定义、假设、结果和可引用的字段（report_model）；报告里的数一律写成 {{n:…}} 引用，由平台渲染，不要自己算数，也不要手打数字。",
+  ].filter(Boolean);
+}
+
+/**
+ * The brief a dispatched run gets when whoever composed the module injected
+ * none: the study's own question, then what this run is for — the document of
+ * an export run, the steps of a step run.
+ * @param {{ study: any, scope?: readonly string[], detail?: Record<string, any> }} input
+ */
+export function vcrDefaultBrief({ study, scope = [], detail = {} }) {
+  const head = [
+    `研究：${study.name}。`,
+    study.question ? `研究问题：${study.question}` : "",
+    `数据档位：${study.dataTier}；预期用途：${study.intendedUse}。`,
+  ];
+  const wanted = object(detail);
+  if (wanted.exportId && VCR_EXPORT_KINDS.includes(String(wanted.kind))) {
+    return [...head, ...vcrExportBriefLines(String(wanted.kind))].filter(Boolean).join("\n");
+  }
+  const steps = scope.length ? `本次要做的步骤：${scope.join("、")}。` : "";
+  const minimal = wanted.fidelity === "minimal" ? "上游缺的部分先补一个最小版本，并标明「AI 设定」。" : "";
+  return [
+    ...head, steps, minimal,
+    "用 vcr_read 读研究已有的定义、假设与结果；用 vcr_write 写定义、条件、假设、设计与决策；确定性计算一律用 vcr_simulate 排作业，不要自己算数。",
+  ].filter(Boolean).join("\n");
+}
+
+/**
+ * The brief of the one revision a review may ask for. The revision is the same
+ * document as its original and the run is told which: its report is filed only
+ * into the revision's export (`exportDispatch`), so a kind it guessed — the
+ * skill's example shows 研究包 — would be refused rather than filed.
+ * @param {{ revisionId: string, originalId: string, kind: string, templates: string, findings: readonly any[] }} input
+ */
+export function vcrReviewRepairBrief({ revisionId, originalId, kind, templates, findings }) {
+  const label = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)[kind] ?? kind;
+  return `Revise the retained report in place within a new version. Export ID: ${revisionId}. Original export: ${originalId}.\n`
+    + `Document: 「${label}」 (kind: ${kind}). Submit the complete revised body once with vcr_write what: "report", data.kind: "${kind}"; `
+    + "this run's report is filed only into this export, and any other kind is refused rather than filed elsewhere.\n"
+    + "Preserve every valid computation, source and artifact. Use saved numeric bindings. Do not rerun engines or invent inputs. Address supported findings once; explain unresolved or declined advice. Human signature is optional.\n"
+    + `Write this revision only under deliverables/vcr-review-${revisionId}/. Preserve every existing deliverable file.\n`
+    + `Complete retained report template (preserve {{n:…}} bindings):\n${templates}\nLocated advisory findings:\n${JSON.stringify(findings).slice(0, 24000)}`;
+}
+
+/**
  * What the program wants from its steps: every requested step and, as a
  * minimal version, whatever it needs upstream (`VCR_STEP_NEEDS`).
  * @param {Record<string, { status: string, requested: boolean }>} steps
@@ -197,6 +277,88 @@ export function vcrProgramSteps(steps) {
   if (VCR_STEPS.some((step) => out[step].requested)) return out;
   if (FINISHED.has(out.definition.status)) for (const step of VCR_STEPS) out[step].requested = true;
   return out;
+}
+
+/**
+ * The steps a run is out for right now: the scope of every run mark the
+ * study's slot holds (the caller reads the marks that are running, or claimed
+ * and not stale). An export run covers no step.
+ * @param {ReadonlyArray<{ detail?: any }>} marks
+ * @returns {Set<string>}
+ */
+export function vcrStepsInFlight(marks) {
+  /** @type {Set<string>} */
+  const steps = new Set();
+  for (const mark of marks) {
+    for (const entry of list(object(mark?.detail).scope)) {
+      const step = String(object(entry).step ?? entry);
+      if (VCR_STEPS.includes(step)) steps.add(step);
+    }
+  }
+  return steps;
+}
+
+/**
+ * What the data says of a step that has no computed object of its own — the
+ * definition, the evidence, the matching: 「进行中」 while a job of its own is
+ * open, finished when what it produces is there, and otherwise nothing — the
+ * data has no word on a step that has not produced its object, and what the
+ * step reads then is the dispatch's to say ({@link vcrIdleStepStatus}).
+ *
+ * It used to answer 「进行中」 whenever the step's input existed: above T0 the
+ * matching step read running from the moment a protocol had criteria, with no
+ * run and no job out — and since a run is dispatched only from a step that is
+ * not running, the matching run was never sent and 「让 AI 做」 did nothing.
+ * @param {{ complete: boolean, jobOpen?: boolean, minimal?: boolean }} facts
+ * @returns {{ status: string, note: null } | null}
+ */
+export function vcrSimpleStepStatus({ complete, jobOpen = false, minimal = false }) {
+  if (jobOpen) return { status: "running", note: null };
+  if (complete) return { status: minimal ? "minimal" : "done", note: null };
+  return null;
+}
+
+/**
+ * 「进行中」 is a statement about now. A step stored as running that the data
+ * says nothing of, and that no run is out for, is not running: its run ended
+ * and left nothing, or (the old matching rule) nothing was ever sent. It reads
+ * `none` — where a step nothing has produced stands — so the next pass may send
+ * a run again within the key's attempts, a run that failed is recorded as
+ * failed, and 「让 AI 做」 is a request again rather than a no-op.
+ * @param {string} stored the step's stored status @param {boolean} inFlight whether a run the slot holds covers the step
+ * @returns {{ status: string, note: null } | null} the correction, or null when the stored status stands
+ */
+export function vcrIdleStepStatus(stored, inFlight) {
+  return stored === "running" && !inFlight ? { status: "none", note: null } : null;
+}
+
+/**
+ * What one observation changes: for every step, what the data says of it
+ * (`seen`, null where it has no word), checked against the runs out for the
+ * study (`flying`) and against what the programme wants. Pure — `#observe`
+ * reads the data and writes what this returns.
+ * @param {{ steps: Record<string, any>, seen: ReadonlyArray<[string, { status: string, note: string | null } | null]>,
+ *   flying: ReadonlySet<string>, plan: { want: ReadonlySet<string> } }} input
+ * @returns {Array<{ step: string, fields: { status: string, note?: string | null } }>}
+ */
+export function vcrStepUpdates({ steps, seen, flying, plan }) {
+  /** @type {Array<{ step: string, fields: { status: string, note?: string | null } }>} */
+  const updates = [];
+  for (const [step, read] of seen) {
+    const stored = steps?.[step]?.status ?? "none";
+    // Where the data has no word, a step still stored as running with no run out for it is put back.
+    const idle = read ? null : vcrIdleStepStatus(stored, flying.has(step));
+    const found = read ?? idle;
+    if (!found) continue;
+    // A step a person has not asked for and which nothing has produced stays
+    // where it is: observation never invents progress.
+    if (!idle && !plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale") continue;
+    // Only a failure note is this pass's to write, and only a failed step's to clear.
+    const note = found.status === "failed" || found.status === "none" ? found.note : (stored === "failed" ? null : undefined);
+    if (stored === found.status && (note === undefined || (steps?.[step]?.note ?? null) === note)) continue;
+    updates.push({ step, fields: { status: found.status, ...(note === undefined ? {} : { note }) } });
+  }
+  return updates;
 }
 
 /** Why a job was not run that is not a failure: the engine does not implement it, or an earlier stage already ended the question. */
@@ -1087,10 +1249,7 @@ export class VcrOrchestrator {
       cover.revisionOf = original.id; cover.reviewRepair = { sourceDigest: input.sourceDigest, reportRevision,
         reviewIds: accepted.map((review) => review.platformReviewId) };
       const row = await this.store.createExport({ studyId, userId: study.userId, kind: original.kind, cover }, { client });
-      const brief = `Revise the retained report in place within a new version. Export ID: ${row.id}. Original export: ${original.id}.\n`
-        + "Preserve every valid computation, source and artifact. Use saved numeric bindings. Do not rerun engines or invent inputs. Address supported findings once; explain unresolved or declined advice. Human signature is optional.\n"
-        + `Write this revision only under deliverables/vcr-review-${row.id}/. Preserve every existing deliverable file.\n`
-        + `Complete retained report template (preserve {{n:…}} bindings):\n${templates}\nLocated advisory findings:\n${JSON.stringify(findings).slice(0, 24000)}`;
+      const brief = vcrReviewRepairBrief({ revisionId: row.id, originalId: original.id, kind: original.kind, templates, findings });
       await client.query(`INSERT INTO ${VCR_SCHEMA}.schedule_marks(study_id,key,user_id,kind,state,detail)
         VALUES($1,$2,$3,'run','pending',$4::jsonb)`, [studyId, key, study.userId,
         JSON.stringify({ purpose: "export", allowed: 1, kind: original.kind, exportId: row.id, revisionOf: original.id, reportRevision, brief })]);
@@ -1132,7 +1291,7 @@ export class VcrOrchestrator {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
-    const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && row.cover?.results?.study && (row.cover?.reports?.length || row.cover?.report));
+    const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && vcrExportHoldsDocument(row.cover));
     if (previous && this.queueExport) {
       const conversion = await this.queueExport(user, study, previous);
       return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };
@@ -1142,6 +1301,32 @@ export class VcrOrchestrator {
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
     const result = await this.advance(study.id);
     return { export: row, ...this.#answerShape(result) };
+  }
+
+  /**
+   * The export a run of this study is out for right now, or null: the mark the
+   * study's one run slot holds (claimed and not stale, or running), when the run
+   * was dispatched to write an export — an export the researcher asked for
+   * (`run:export:<id>`) or the one revision a review asked for
+   * (`run:review-repair:<id>`). This is what the runtime's gateway binds a report
+   * write to: the dispatch names the export, and the kind a run types never does.
+   *
+   * `runtimeRunId` is the dispatch the calling runtime is reserved for, when the
+   * gateway knows one (a bounded runtime). A runtime reserved for some other
+   * dispatch is not this export's run, whatever the slot holds.
+   * @param {string} studyId @param {{ runtimeRunId?: string | null }} [caller]
+   * @returns {Promise<{ key: string, exportId: string, dispatchId: string | null, runId: string | null } | null>}
+   */
+  async exportDispatch(studyId, { runtimeRunId = null } = {}) {
+    const mark = await this.store.one(`SELECT key, dispatch_id, run_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND kind = 'run'
+        AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2)))
+      ORDER BY updated_at DESC LIMIT 1`, [studyId, VCR_RUN_RULES.staleClaimMinutes]);
+    const detail = object(mark?.detail);
+    if (!mark || detail.purpose !== "export" || !detail.exportId) return null;
+    if (runtimeRunId && mark.dispatch_id && String(mark.dispatch_id) !== String(runtimeRunId)) return null;
+    return { key: String(mark.key), exportId: String(detail.exportId),
+      dispatchId: mark.dispatch_id == null ? null : String(mark.dispatch_id), runId: mark.run_id == null ? null : String(mark.run_id) };
   }
 
   /**
@@ -1371,37 +1556,33 @@ export class VcrOrchestrator {
       if (has("cancelled").length) return { status: "none", note: has("cancelled")[0].note };
       return { status: "queued", note: null };
     };
-    /** @param {string} step @param {{ has: boolean, complete: boolean, kinds?: readonly string[] }} facts */
-    const simple = (step, facts) => {
-      if ((facts.kinds ?? []).some((kind) => read.openKinds.has(kind))) return { status: "running", note: null };
-      if (facts.complete) return { status: plan.fidelity(step) === "minimal" && !plan.requested.has(step) ? "minimal" : "done", note: null };
-      return facts.has ? { status: "running", note: null } : null;
-    };
+    /** @param {string} step @param {{ complete: boolean, kinds?: readonly string[] }} facts */
+    const simple = (step, facts) => vcrSimpleStepStatus({
+      complete: facts.complete, jobOpen: (facts.kinds ?? []).some((kind) => read.openKinds.has(kind)),
+      minimal: plan.fidelity(step) === "minimal" && !plan.requested.has(step),
+    });
 
     // Structuring the eligibility criteria is what step 7 is at T0, where
     // nobody's records exist to match (plan §3.2); above T0 it is done when
     // patients have been judged.
     const facts = /** @type {Array<[string, { status: string, note: string | null } | null]>} */ ([
-      ["definition", simple("definition", { has: Boolean(read.definition), complete: Boolean(read.definition) })],
-      ["evidence", simple("evidence", { has: read.assumptions.length > 0, complete: read.assumptions.length > 0 })],
+      ["definition", simple("definition", { complete: Boolean(read.definition) })],
+      ["evidence", simple("evidence", { complete: read.assumptions.length > 0 })],
       ["population", aggregate("population")],
       ["patients", aggregate("patients")],
       ["comparator", aggregate("comparator")],
       ["trial", aggregate("trial")],
-      ["matching", simple("matching", { has: Boolean(read.protocol), kinds: ["match_criteria"],
+      ["matching", simple("matching", { kinds: ["match_criteria"],
         complete: criteria > 0 && (study.dataTier === "T0" || assessments > 0) })],
     ]);
+    // The runs out for this study now, by the steps they cover: what 「进行中」 is checked against.
+    const flying = vcrStepsInFlight(await this.store.rows(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND kind = 'run'
+        AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2)))`,
+    [study.id, VCR_RUN_RULES.staleClaimMinutes]));
     let current = study;
-    for (const [step, found] of facts) {
-      if (!found) continue;
-      const stored = current.steps[step]?.status ?? "none";
-      // A step a person has not asked for and which nothing has produced stays
-      // where it is: observation never invents progress.
-      if (!plan.want.has(step) && !FINISHED.has(found.status) && found.status !== "stale") continue;
-      // Only a failure note is this pass's to write, and only a failed step's to clear.
-      const note = found.status === "failed" || found.status === "none" ? found.note : (stored === "failed" ? null : undefined);
-      if (stored === found.status && (note === undefined || (current.steps[step]?.note ?? null) === note)) continue;
-      current = await this.#step(current, step, { status: found.status, ...(note === undefined ? {} : { note }) });
+    for (const update of vcrStepUpdates({ steps: study.steps, seen: facts, flying, plan })) {
+      current = await this.#step(current, update.step, update.fields);
     }
     return current;
   }
@@ -2078,8 +2259,9 @@ export class VcrOrchestrator {
   /**
    * What the run is told. A brief is text, injected by whoever composes the
    * module (so it stays editable prose, never a control flow — principle 7);
-   * without one the run gets the study's own question and the steps asked of
-   * it, which is enough for a capability whose SKILL.md carries the method.
+   * without one the run gets the study's own question and what it is for
+   * ({@link vcrDefaultBrief}): the steps asked of it, or — for an export — which
+   * document, which a skill cannot know and a run cannot guess.
    * @param {any} study @param {string} key @param {string[]} scope @param {Record<string, any>} detail
    */
   async #brief(study, key, scope, detail) {
@@ -2087,15 +2269,7 @@ export class VcrOrchestrator {
       const custom = await this.briefFor({ study, key, scope, detail, fidelity: (/** @type {string} */ step) => (scope.includes(step) ? "full" : "minimal") });
       if (custom) return String(custom);
     }
-    const steps = scope.length ? `本次要做的步骤：${scope.join("、")}。` : "";
-    const minimal = object(detail).fidelity === "minimal" ? "上游缺的部分先补一个最小版本，并标明「AI 设定」。" : "";
-    return [
-      `研究：${study.name}。`,
-      study.question ? `研究问题：${study.question}` : "",
-      `数据档位：${study.dataTier}；预期用途：${study.intendedUse}。`,
-      steps, minimal,
-      "用 vcr_read 读研究已有的定义、假设与结果；用 vcr_write 写定义、条件、假设、设计与决策；确定性计算一律用 vcr_simulate 排作业，不要自己算数。",
-    ].filter(Boolean).join("\n");
+    return vcrDefaultBrief({ study, scope, detail });
   }
 
   /**
@@ -2150,6 +2324,10 @@ export class VcrOrchestrator {
       if (TERMINAL_DISPATCH.has(code)) {
         await this.#update(study.id, spec.key, { state: "failed", detail: { lastError: code, allowed: Number(mark.attempts ?? 0) } }, ["claimed"]);
         for (const step of spec.steps) current = await this.#step(current, step, { status: "failed" });
+        // An export has no step to fail: its row is what says the run will never come, or it reads 「排队中」 for good.
+        if (spec.purpose === "export" && object(spec.detail).exportId) {
+          await this.store.updateExport(String(object(spec.detail).exportId), { state: "failed" });
+        }
         this.counters.dispatchFailed += 1;
         this.lastError = code;
         return { failed: code };
@@ -2190,11 +2368,13 @@ export class VcrOrchestrator {
     this.counters.runsFinished += 1;
     const detail = object(mark.detail);
     if (detail.purpose === "export" && detail.exportId) {
-      const existing = (await this.store.exports(study.id)).find((row2) => row2.id === String(detail.exportId));
+      const existing = await this.store.exportRow(study.id, String(detail.exportId));
       // The report's snapshot owns its cover; completion cannot relabel old
       // numbers with newer reviews or replace usable work after a run failure.
       const cover = existing?.cover ?? {};
-      const usable = Boolean(cover.results?.study && (cover.reports?.length || cover.report));
+      // A run that ends with no document in its export leaves the row `failed`, whatever the run's own status: the
+      // study page reads that row into 「需要关注」 the way it reads a step that did not finish (`attentionOf`).
+      const usable = vcrExportHoldsDocument(cover);
       const row = await this.store.updateExport(String(detail.exportId), {
         state: usable ? "ready" : "failed", runId: mark.run_id ?? null, cover,
       });
@@ -2209,7 +2389,9 @@ export class VcrOrchestrator {
     }
     // Everything else is read from the data on the next pass: a failed run
     // that wrote its object still counts, and a finished run that wrote
-    // nothing leaves its step where it was for a person to ask again.
+    // nothing leaves its step where it was for a person to ask again. The run
+    // is over by now, so a step it left nothing for no longer reads running
+    // (`vcrIdleStepStatus`) — which is what lets a run that failed be said here.
     const plan = wantedVcrSteps(vcrProgramSteps(study.steps));
     const observed = await this.#observe(study, plan);
     for (const entry of list(detail.scope)) {
@@ -2334,11 +2516,28 @@ export class VcrOrchestrator {
       if (!(await this.#claim(study, `detect:${node}`, "notice", "done", { detail: { sourceId, from: used, to: newest } }))) continue;
       await this.#mark_stale(study, [node], "source_corrected", { by: "detect", sourceId });
     }
-    const rows = await this.store.rows(`SELECT DISTINCT j.checkpoint ->> 'node' AS node, e.method, e.method_version
-      FROM ${VCR_SCHEMA}.results r
-      JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
-      JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
-      WHERE r.study_id = $1 AND r.superseded_by IS NULL AND j.checkpoint ? 'node'`, [study.id]);
+    // A current result can aggregate several stages. Its execution_id names
+    // only the last landing, while earlier stages still supply its numbers.
+    // Require the current stageResults bond and the stored job's study/node/
+    // stage, so a retired or foreign diagnostic reference grants no authority.
+    const rows = await this.store.rows(`WITH current_results AS (
+        SELECT r.study_id,r.diagnostics,e.id AS execution_id,j.checkpoint->>'node' AS node
+        FROM ${VCR_SCHEMA}.results r
+        JOIN ${VCR_SCHEMA}.executions e ON e.id=r.execution_id AND e.study_id=r.study_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=r.study_id
+        WHERE r.study_id=$1 AND r.superseded_by IS NULL AND j.checkpoint ? 'node'
+      ), contributions AS (
+        SELECT study_id,node,execution_id FROM current_results
+        UNION
+        SELECT c.study_id,c.node,e.id FROM current_results c
+        CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(c.diagnostics->'stages')='array'
+          THEN c.diagnostics->'stages' ELSE '[]'::jsonb END) AS s(stage)
+        JOIN ${VCR_SCHEMA}.executions e ON e.job_id=s.stage->>'jobId' AND e.study_id=c.study_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id=e.job_id AND j.study_id=c.study_id
+        WHERE c.diagnostics->'stageResults'->(s.stage->>'stage')->>'jobId'=e.job_id
+          AND j.checkpoint->>'node'=c.node AND j.checkpoint->>'stage'=s.stage->>'stage'
+      ) SELECT DISTINCT c.node,e.method,e.method_version FROM contributions c
+      JOIN ${VCR_SCHEMA}.executions e ON e.id=c.execution_id AND e.study_id=c.study_id`, [study.id]);
     for (const row of rows) {
       const now = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[String(row.method)]?.version;
       if (!now || now === String(row.method_version)) continue;

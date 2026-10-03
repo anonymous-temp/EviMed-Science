@@ -75,6 +75,8 @@ export function validFrame(value) {
     .filter((/** @type {unknown} */ name) => typeof name === 'string' && /^[a-z]{1,32}$/.test(name));
   return {
     version: 1,
+    prefix: /^[A-Za-z0-9_-]{32}$/.test(value.frameId ?? '') && value.prefix === '/__evimed/f/' + value.frameId + '/' ? value.prefix : null,
+    managedBrowser: value.managedBrowser == null ? null : { provider: 'managed', available: value.managedBrowser.provider === 'managed' && value.managedBrowser.available === true && Object.keys(value.managedBrowser).sort().join() === 'available,provider' },
     frameId: typeof value.frameId === 'string' ? value.frameId : '',
     projectId: typeof value.projectId === 'string' ? value.projectId : '',
     shellOrigin: typeof value.shellOrigin === 'string' ? value.shellOrigin : '',
@@ -384,7 +386,7 @@ export function createFrameKit(ctx, target, require, vocabulary) {
    * break THAT entry — the chat view, the composer — so it is caught and
    * logged instead, and costs only this occupant.
    *
-   * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string | (() => string) }} spec
+   * @param {{ slot: string, id?: string, key?: string, priority?: number, order?: number, select?: (owner: any) => any, locale?: string, inject?: any, label?: string | (() => string), inherit?: any }} spec
    * @param {any} Component
    * @returns {() => void}
    */
@@ -393,6 +395,11 @@ export function createFrameKit(ctx, target, require, vocabulary) {
     if (!contract) throw new Error(`[evimed-frame] slot "${spec?.slot}" is not in the pinned slot table; read its contract before occupying it`);
     /** @type {Record<string, any>} */
     const options = { name: spec.slot };
+    if (spec.inherit) {
+      if (!['single','keyed'].includes(contract.kind) || !ctx.slots.entries(spec.slot).includes(spec.inherit) || (contract.kind === 'keyed' && spec.inherit.options.key !== spec.key)) throw new Error('[evimed-frame] inherited entry must be a current matching single/keyed registration');
+      if (spec.inherit.children) throw new Error('[evimed-frame] native child declarations have a sole owner; shadow a child slot instead');
+      for (const field of ['inject', 'store', 'locale']) if (spec.inherit[field] !== undefined) options[field] = spec.inherit[field];
+    }
     if (contract.kind === 'list') {
       if (typeof spec.id !== 'string' || !spec.id) throw new Error(`[evimed-frame] list slot "${spec.slot}" needs an id (a key registers nothing here)`);
       options.id = spec.id;
@@ -427,8 +434,8 @@ export function createFrameKit(ctx, target, require, vocabulary) {
   }
 
   /**
-   * The component a takeover shadows: in a keyed slot, the entry for the same
-   * key at the next priority above the takeover's own.
+   * The component a takeover shadows: the next priority above its own, in
+   * the same keyed cell or the public single-slot cell (key=null).
    *
    * A takeover renders what it shadows first and adds its own after it, so
    * two bodies can each add something after one kernel row — the reply check
@@ -437,12 +444,12 @@ export function createFrameKit(ctx, target, require, vocabulary) {
    * after a crash) the other still renders the kernel's own row. Read off the
    * slot ledger's `entries()`, the documented inspection surface.
    *
-   * @param {string} slot @param {string} key @param {any} component the takeover's own component
+   * @param {string} slot @param {string | null} key @param {any} component the takeover's own component
    * @returns {any} the shadowed component, or null
    */
   function shadowed(slot, key, component) {
     const entries = typeof ctx.slots?.entries === 'function' ? ctx.slots.entries(slot) : [];
-    const cell = (Array.isArray(entries) ? entries : []).filter((/** @type {any} */ entry) => entry && entry.options && entry.options.key === key);
+    const cell = (Array.isArray(entries) ? entries : []).filter((/** @type {any} */ entry) => entry && entry.options && (slots[slot]?.kind === 'single' ? key === null : entry.options.key === key));
     const own = cell.find((/** @type {any} */ entry) => entry.component === component);
     if (!own) return null;
     const floor = own.options.priority ?? 0;

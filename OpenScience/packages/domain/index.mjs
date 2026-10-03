@@ -26,6 +26,31 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+/** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
+/** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
+/** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */
+/** @typedef {import('./src/extensions.mjs').ExtensionProofIdentity} ExtensionProofIdentity */
+
+export {
+  EXTENSION_EXECUTION_CLASSES,
+  EXTENSION_EVIDENCE_STATES,
+  EXTENSION_APPLY_PHASES,
+  EXTENSION_PRODUCT_KINDS,
+  EXTENSION_JOB_KINDS,
+  EXTENSION_SAAS_CASE_IDS,
+  ExtensionContractError,
+  canonicalExtensionCoordinate,
+  validateExtensionInstallRequest,
+  validateSkillWriteRequest,
+  personalSkillName,
+  canonicalPersonalSkillResourcePath,
+  extensionGenerationIdentity,
+  validateExtensionProofIdentity,
+  extensionProofDigest,
+  extensionProofAdapterRevision,
+  qualifyExtensionProof,
+} from './src/extensions.mjs'
+
 export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'
 
 
@@ -107,7 +132,7 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 24 exports
+// errorCodes
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
@@ -116,8 +141,10 @@ export {
   ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
   ERROR_DETAIL_FIELDS,
+  EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
+  MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
   VCR_MODULE_ERROR_CODES,
   VCR_PROTOCOL_ISSUE_CODES,
@@ -1213,3 +1240,7 @@ export {
 } from './src/vcrContracts.mjs'
 
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+
+export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
+export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
+export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge } from './src/researchBilling.mjs';

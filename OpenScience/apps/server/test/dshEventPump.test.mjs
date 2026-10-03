@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -191,6 +192,32 @@ test("a run the ledger notes after the mux is already up gets its own follow str
   pump.detach(project);
 });
 
+test("a run noted from inside a caller's async context is followed in the pump's own context", async () => {
+  // The dispatch route notes its run from inside its admission transaction.
+  // The follow stream opened by that call used to inherit the transaction's
+  // AsyncLocalStorage store for its whole life, so every result capture made
+  // from that stream found the scope closed and was refused with
+  // product_revision_conflict: on the pilot (2026-10-03) a dispatched run
+  // recorded 63 failed captures and no result version, while a turn typed in
+  // the kernel's own frame, adopted from the pump's context, recorded all of its.
+  const scope = new AsyncLocalStorage();
+  /** @type {unknown[]} */
+  const seen = [];
+  const { pump, muxes } = pumpOnFakeMux({ onRunEvent: () => { seen.push(scope.getStore() ?? null); } });
+  const project = { userId: "alice", id: "paper-context" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  await waitFor(() => muxes[0]?.streams.some((stream) => stream.endpoint === "$events"), "the host stream");
+
+  scope.run({ transaction: "the dispatch's, long since committed" }, () => {
+    pump.noteRun(project, { id: "run-context", sessionId: "s-context", status: "running" });
+  });
+  await waitFor(() => muxes[0].follow("s-context"), "a follow stream for the run noted inside the scope");
+  muxes[0].follow("s-context").push(sessionEvent({ type: "assistant/message", seq: 1, data: { message: { content: [{ type: "text", text: "在自己的上下文里" }] } } }));
+  await waitFor(() => seen.length > 0, "the event to be handled");
+  assert.deepEqual(seen, [null], "the stream's handler saw the caller's store: work it starts would use a transaction that has ended");
+  pump.detach(project);
+});
+
 test("a subagent discovered mid-run is followed at its parent address, and its own turn ending becomes a subagent/update", async () => {
   const { runEvents, pump, muxes } = pumpOnFakeMux();
   const project = { userId: "alice", id: "paper-4" };
@@ -290,7 +317,7 @@ test("a child named only by the delegation's own receipts is followed, the retri
   });
   const project = { userId: "alice", id: "paper-4c" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
-  pump.noteRun(project, { id: "run-4c", sessionId: "s-root", status: "running" });
+  pump.noteRun(project, { id: "run-4c", sessionId: "s-root", status: "running", forkedFrom: "s-original" });
   await waitFor(() => muxes[0]?.follow("s-root"), "the root session's stream");
   const receipt = (seq, name, value) => sessionEvent({
     type: "tool/result",
@@ -314,12 +341,20 @@ test("a child named only by the delegation's own receipts is followed, the retri
     type: "tool/call", seq: 1, data: { callId: "r-1", name: "mcp__evimed__literature_search", arguments: "{\"query\":\"x\"}" },
   }));
   await waitFor(() => observed.some((entry) => entry.sessionId === "s-retry" && entry.child === true), "the retried child's call reaching the run's progress feed");
+  const childObservation = observed.find(entry => entry.sessionId === "s-retry");
+  assert.equal(childObservation.parentSessionId, "s-root");
+  assert.equal(childObservation.branchId, "s-root");
+  assert.deepEqual(pump.sessionOwner(project, "s-retry"), { runId: "run-4c", child: true, parentSessionId: "s-root", branchId: "s-root" });
+  assert.equal(pump.sessionOwner({ ...project, userId: "other" }, "s-retry"), null);
   // A failed receipt names nothing, and a tool that is not a delegation is not read.
   muxes[0].follow("s-root").push(sessionEvent({
     type: "tool/result", seq: 3, data: { message: { name: "evimed_delegate", callId: "c-3", content: [{ type: "text", text: "failed: dependency_unmet\n- (required) dependency_unmet wait for h-1" }] } },
   }));
   muxes[0].follow("s-root").push(receipt(4, "evimed_plan", { childSessionId: "s-not-a-child" }));
   await waitFor(() => observed.some((entry) => entry.sessionId === "s-root" && entry.event.seq === 4), "the last root event");
+  const rootObservation = observed.find(entry => entry.sessionId === "s-root");
+  assert.equal(rootObservation.parentSessionId, "s-original");
+  assert.equal(rootObservation.branchId, "s-root");
   assert.equal(muxes[0].follow("s-not-a-child"), null);
   pump.detach(project);
 });

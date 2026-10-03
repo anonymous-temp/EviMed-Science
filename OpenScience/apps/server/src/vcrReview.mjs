@@ -7,6 +7,31 @@ import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
 import { studyReviewDigest } from './studyReview.mjs';
 import { HttpError } from './security.mjs';
 
+/** Whether a stored value holds a number anywhere in it. @param {unknown} value @returns {boolean} */
+const holdsNumber = value => typeof value === 'number' ? Number.isFinite(value)
+  : Boolean(value) && typeof value === 'object' && Object.values(/** @type {Record<string, unknown>} */ (value)).some(holdsNumber);
+
+/**
+ * A verdict the control plane derived itself has nothing to trace. A comparator
+ * route the study's data tier cannot reach is recorded by the orchestrator as a
+ * finished 「不可估计」 with its gaps (`#unavailable`): no job was queued, so no
+ * execution and no stage receipt exist, and the row states no number a receipt
+ * could bind — no measure, no table, every count null, words in its diagnostics.
+ * The receipt check found it 「untraced」 in every review and attached a fix, and
+ * a fix sends the package to a paid revision that can only add a paragraph about
+ * a number that is not there (14 of 18 reviews, pilot acceptance 2026-10-03).
+ *
+ * Exactly that shape and nothing wider: a result with no execution that carries
+ * a measure, a count, a table or a number in its diagnostics is still untraced,
+ * and so is any result that names an execution whose receipt does not bind it.
+ * @param {any} result
+ */
+export function vcrIsNumberlessVerdict(result) {
+  return !result?.executionId && result?.conclusion === 'not_estimable'
+    && !(result.measures ?? []).length && !(result.tables ?? []).length
+    && !holdsNumber(result.counts) && !holdsNumber(result.diagnostics);
+}
+
 /** @param {any} input */
 export function buildVcrReviewInput({ model, results, executions, evidence, reports, forModel }) {
   const nodes = [...results.map(row => `result:${row.id}@${row.version}`),
@@ -15,7 +40,9 @@ export function buildVcrReviewInput({ model, results, executions, evidence, repo
     ...(model.scenarios ?? []).map(row => `trial_scenario:${row.id}@${row.version}`),
     ...Object.entries(model.inputVersions ?? {}).filter(([, value]) => value).map(([kind, value]) => `${kind === "comparator" ? "comparator_design" : kind}:${value.id}@${value.version}`)].sort();
   const findings = [];
+  const verdicts = results.filter(vcrIsNumberlessVerdict);
   for (const result of results) {
+    if (verdicts.includes(result)) continue;
     const execution = executions.find(row => row.id === result.executionId);
     const actual = vcrRecordedResultHash(result);
     const proof = execution?.receipt;
@@ -34,14 +61,22 @@ export function buildVcrReviewInput({ model, results, executions, evidence, repo
     results: model.results, scenarios: model.scenarios, scenarioResults: model.scenarioResults, models: model.models, inputVersions: model.inputVersions,
     intendedUse: model.intendedUse, conclusion: model.conclusion, notEstimableRule: model.notEstimableRule, stale: model.stale });
   const rendered = reports.map(report => renderVcrNumbers(String(report.template ?? ''), safe));
-  for (const report of rendered) for (const issue of report.issues) findings.push({ kind: 'number_untraced', location: issue.path,
+  // Whether a reference binds is a fact about the report a reader gets, which is
+  // rendered from the exact model. Judged on the reviewer's copy, a reference to
+  // a cell the boundary hides (or to a part of the model the reviewer is not
+  // sent) read as 「结果里没有」 and carried a fix for a report that had the
+  // number. An issue names a path, a format and a unit, never a value.
+  const bound = reports.map(report => renderVcrNumbers(String(report.template ?? ''), model));
+  for (const report of bound) for (const issue of report.issues) findings.push({ kind: 'number_untraced', location: issue.path,
     evidence: '', message: issue.message, fix: '使用已保存结果的数字引用，并保留缺失值标记。' });
   const frozenInput = { model: safe, report: rendered.map(row => row.text).join('\n\n'),
     evidence: evidence.filter(row => referenced.has(row.id)).map(row => ({ id: row.id, quote: row.quote, source: /^(https?:\/\/|doi:|pmid:|NCT|ChiCTR)/i.test(row.source_ref ?? '') ? row.source_ref : null,
       verification: row.locator?.verification, parameter: row.parameter, value: row.value, unit: row.unit })),
     methods: executions.map(row => ({ method: row.method, version: row.method_version, validation: row.environment?.validation ?? null })) };
-  return { nodes, frozenInput, deterministic: { numbers: { checked: results.length, bindings: rendered.reduce((sum, row) => sum + row.bindings.length, 0) },
-    references: { checked: referenced.size }, findings } };
+  // `checked` counts the results whose receipt was held to them; `verdicts` the ones with no number to hold.
+  return { nodes, frozenInput, deterministic: { numbers: { checked: results.length - verdicts.length, verdicts: verdicts.length,
+    bindings: bound.reduce((sum, row) => sum + row.bindings.length, 0) },
+  references: { checked: referenced.size }, findings } };
 }
 
 /** Read only trusted terminal records for one exact frozen report. A failed

@@ -294,6 +294,20 @@ describe("the 「⋯」 menu", () => {
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
   });
 
+  it.each([
+    ["导出模拟报告", "simulation_report"],
+    ["导出系统验证文档包", "validation_pack"],
+  ])("dispatches %s through the current reader's export ability", async (label, kind) => {
+    const study = fixture("ev201/study.json");
+    study.abilities = ["read", "export"];
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw();
+    await openMenu(label);
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/export", "POST", { kind }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    expect(server.calls.filter((call) => call.path === "/vcr/studies/std_1/export")).toHaveLength(1);
+  });
+
   // CW-16: the pause toast says what the server did, nothing more.
   it("pauses the study and says only that", async () => {
     draw();
@@ -339,13 +353,13 @@ describe("the 「⋯」 menu follows the reader's abilities", () => {
 
   it("offers the lead everything, the members entry included", async () => {
     draw();
-    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "设定计算预算", "成员与角色", "暂停", "删除"]);
+    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "导出模拟报告", "导出系统验证文档包", "设定计算预算", "成员与角色", "暂停", "删除"]);
   });
 
-  it("offers a reader who only exports the two exports and nothing that changes the study", async () => {
+  it("offers a reader who only exports all four exports and nothing that changes the study", async () => {
     withAbilities(["read", "review_clinical", "export"]);
     draw();
-    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包"]);
+    expect(await items()).toEqual(["导出研究包", "导出 CDE 沟通交流资料包", "导出模拟报告", "导出系统验证文档包"]);
   });
 
   it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead", async () => {

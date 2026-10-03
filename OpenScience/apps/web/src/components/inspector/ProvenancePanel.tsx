@@ -1,3 +1,4 @@
+import { ResultVersionInspector } from "./ResultVersionInspector";
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -6,6 +7,7 @@ import { listProvenance, readEnvLockfile } from "@/lib/provenance";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
+import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/cn";
 
@@ -13,7 +15,7 @@ import { cn } from "@/lib/cn";
 export function reproducePrompt(r: ProvenanceRecord): string {
   const pkgs = r.env?.packages;
   const pkgNote = pkgs
-    ? ` 该环境安装了 ${pkgs.count} 个 Python 包，记录在 \`.openscience/env/${pkgs.hash}.txt\`；如复现结果不同，请按锁定文件安装相同版本后重试。`
+    ? ` 该环境安装了 ${pkgs.count} 个 Python 包，记录在 \`.openscience/env/${pkgs.hash}.txt\`。`
     : "";
   const env = r.env
     ? ` 该结果使用${r.env.python ? ` Python ${r.env.python}，运行于` : ""} ${r.env.platform}。${pkgNote}`
@@ -25,13 +27,12 @@ export function reproducePrompt(r: ProvenanceRecord): string {
   // Records are capped at 100 KB (provenance.rs cap_content) — a truncated
   // record is not runnable, so tell the agent where the full code lives.
   const truncNote = content.endsWith("[truncated]")
-    ? " 注意：下方记录代码因存储上限被截断；复现前请先从 `.openscience/provenance.jsonl` 读取 " +
-      `\`${r.path}\` 的完整记录。`
+    ? " 注意：下方记录代码因存储上限被截断；完整代码未保存，请检查现有输入；完整代码可能无法恢复。"
     : "";
   return (
-    `复现 \`${r.path}\`（来源记录 v${r.version}）。${env} ` +
-    `重新运行下方记录的生成代码，再把新生成的文件与当前 \`${r.path}\` 比较，` +
-    `说明二者是否一致；如不一致，请列出变化。` +
+    `讨论 \`${r.path}\`（旧版记录 v${r.version}，未保存不可变文件内容）。${env} ` +
+    `根据下方记录说明可以如何继续分析 \`${r.path}\`，` +
+    `先检查依赖和输入是否可用；此请求不是确定性重算。` +
     `${truncNote}\n\n${fence}\n${content}\n${fence}`
   );
 }
@@ -47,8 +48,16 @@ function longestBacktickRun(text: string): number {
  * that produced it, the tool, the model, and a link back to the originating
  * conversation. Data comes from `.openscience/provenance.jsonl` (P0-3).
  */
-export function ProvenancePanel({ path, language }: { path: string; language?: string }) {
+export function ProvenancePanel({ path, language, runId, initialVersionId }: { path: string; language?: string; runId?: string; initialVersionId?: string }) {
+  const [legacy, setLegacy] = useState(false);
+  if (!legacy) return <ResultVersionInspector path={path} runId={runId} initialVersionId={initialVersionId} onLegacy={() => setLegacy(true)} />;
+  return <LegacyProvenancePanel path={path} language={language} />;
+}
+
+export function LegacyProvenancePanel({ path, language }: { path: string; language?: string }) {
   const [records, setRecords] = useState<ProvenanceRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
   // The package lockfile currently shown, keyed by its content hash.
   const [lockfile, setLockfile] = useState<{ hash: string; text: string | null } | null>(null);
@@ -86,16 +95,18 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
 
   useEffect(() => {
     let cancelled = false;
-    setRecords(null);
+    setRecords(null); setError(null);
     void listProvenance(path).then((r) => {
       if (cancelled) return;
       setRecords([...r].reverse()); // newest first
       setExpanded(r.length > 0 ? r[r.length - 1].version : null);
-    });
+    }).catch(() => { if (!cancelled) setError("无法读取旧版记录，请重试"); });
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, reload]);
+
+  if (error) return <div role="alert" className="space-y-2 p-4 text-ui text-error"><p>{error}</p><Button variant="secondary" onClick={() => setReload((n) => n + 1)}>重试</Button></div>;
 
   if (records === null) {
     return (
@@ -108,8 +119,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   if (records.length === 0) {
     return (
       <div className="p-4 text-ui text-muted">
-        暂无版本记录。科研助手每次写入 <span className="font-mono text-text">{path}</span> 时，
-        系统都会记录对应的代码、模型和来源对话。
+        暂无版本记录。<span className="font-mono text-text">{path}</span> 的历史文件内容尚未保存。
       </div>
     );
   }
@@ -169,9 +179,9 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                   {r.log && <Tooltip content={r.log} kind="label" whenTruncated><span className="truncate">{r.log}</span></Tooltip>}
                   <span className="flex-1" />
                   {r.content && (
-                    <Tooltip content="生成复现此版本并比较结果的任务">
+                    <Tooltip content="在对话中讨论旧版代码记录">
                       <button className="flex items-center gap-1 text-link hover:underline" onClick={() => reproduce(r)}>
-                        <RotateCcw size={16} aria-hidden="true" /> 复现
+                        <RotateCcw size={16} aria-hidden="true" /> 发起后续分析
                       </button>
                     </Tooltip>
                   )}

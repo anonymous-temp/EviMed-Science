@@ -6,6 +6,7 @@ import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePa
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
 import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
+import { researchBillingSettings } from "./researchBillingConfig.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -432,13 +433,13 @@ function geoSettings(overrides) {
 export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
 
 /**
- * The independent reviewer (plan 2026-09-22, tiered review): a model of
- * another family than the kernel's, called by the control plane on a
+ * The reviewer (plan 2026-09-22, tiered review), called by the control plane on a
  * submitted deliverable (L2/L3) and on a cited or medicine-naming reply (L1).
  *
  * - Off by default, like every module that calls a paid model: it needs
  *   PostgreSQL for its ledger of findings and answers, and the operator's
- *   DashScope key.
+ *   selected provider's key. DashScope preserves the cross-family default;
+ *   an explicit DeepSeek deployment reuses the control plane's DeepSeek key.
  * - The model and endpoint default to the pin in `deps-version.json`
  *   (`dashscope.review`), recorded off the live wire; a deployment may name
  *   another model, and the price list decides whether it can be billed.
@@ -499,9 +500,10 @@ function vcrSettings(overrides) {
    * other key files: a file named by `<NAME>_FILE`, opened without following a
    * symlink, no wider than owner and group (the engine container reads the same
    * file through its group). There is no value-in-the-environment form: the
-   * token and the receipt key are the only thing that makes a result the
-   * engine's, and an environment is what a process listing and a crash report
-   * carry. An `overrides` value exists for tests alone.
+   * token authenticates requests; an optional receipt key adds HMAC checking.
+   * Engine/job/input identity and output hashes are checked in either case.
+   * A process listing or crash report must not carry either secret.
+   * An `overrides` value exists for tests alone.
    * @param {string} valueKey @param {string} fileKey @param {string} fileEnv @param {string} code
    * @returns {{ value: string, error: string | null }}
    */
@@ -537,19 +539,15 @@ function vcrSettings(overrides) {
     vcrBackupStateFile: String(overrides.vcrBackupStateFile ?? process.env.OPEN_SCIENCE_VCR_BACKUP_STATE_FILE ?? '').trim(),
     vcrBackupMaxAgeSeconds: integer('vcrBackupMaxAgeSeconds', 'OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS', 90_000, 60, 604_800),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-    // The engine's two secrets, read from the files the deployment mounts
-    // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
-    // the control plane presents and the key its results are signed with. With
-    // the URL set and either one missing, unreadable or under 32 bytes the
-    // module says the engine is unconfigured and no client is made: an engine
-    // that would take unauthenticated calls, or whose results could not be
-    // told from a forgery, is worse than the step saying 「暂不可用」.
-    // The `…Error` fields carry why, for readiness (never the secret).
+    // Request authentication is required; receipt signing is optional. An
+    // explicitly configured unreadable or invalid key is an error, never an
+    // invitation to fall back to unsigned verification. Readiness names only
+    // the error, never the secret. Hash and job identity checks always apply.
     vcrEngineToken: engineToken.value,
     vcrEngineTokenError: engineToken.error,
     vcrEngineReceiptKey: engineReceiptKey.value,
     vcrEngineReceiptKeyError: engineReceiptKey.error,
-    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && Boolean(engineReceiptKey.value),
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error && !engineReceiptKey.error,
     // One at a time on the shared host (plan §11.4).
     vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
     // Every job's own CPU ceiling; over it, the job stops at a checkpoint.
@@ -584,10 +582,19 @@ function reviewSettings(overrides) {
     }
     return number;
   };
-  const pin = depsVersions.dashscope?.review ?? {};
+  const provider = String(read("reviewProvider", "OPEN_SCIENCE_REVIEW_PROVIDER", "dashscope")).trim();
+  if (!["dashscope", "deepseek"].includes(provider)) {
+    throw new Error("OPEN_SCIENCE_REVIEW_PROVIDER must be dashscope or deepseek.");
+  }
+  const pin = provider === "deepseek"
+    ? { apiBase: overrides.deepseekBaseUrl ?? process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL ?? depsVersions.deepseek.apiBase, model: "deepseek-v4-pro", thinkingBudget: 16_000 }
+    : depsVersions.dashscope?.review ?? {};
   const model = String(read("reviewModel", "OPEN_SCIENCE_REVIEW_MODEL", pin.model ?? "")).trim();
   if (!/^[a-z0-9][a-z0-9.-]{1,63}$/.test(model)) {
     throw new Error(`OPEN_SCIENCE_REVIEW_MODEL must be a model id, got ${JSON.stringify(model)}.`);
+  }
+  if (provider === "deepseek" && !supportedDeepSeekModels.has(model)) {
+    throw new Error("OPEN_SCIENCE_REVIEW_MODEL must be a certified DeepSeek model.");
   }
   const apiBase = String(read("reviewApiBase", "OPEN_SCIENCE_REVIEW_API_BASE", pin.apiBase ?? "")).trim().replace(/\/+$/, "");
   let parsed = null;
@@ -597,6 +604,7 @@ function reviewSettings(overrides) {
   }
   return {
     reviewEnabled: reviewConfigured(overrides),
+    reviewProvider: provider,
     reviewModel: model,
     reviewApiBase: apiBase,
     reviewEditorTimeoutMs: integer("reviewEditorTimeoutMs", "OPEN_SCIENCE_REVIEW_EDITOR_TIMEOUT_MS", 900_000, 60_000, 3_600_000),
@@ -2147,6 +2155,7 @@ export function loadConfig(overrides = {}) {
     ...mediaMarketSettings(overrides),
     // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---
     ...evimedCreditsSettings(overrides),
+    ...researchBillingSettings(overrides, evimedCreditsSettings(overrides)),
     ...reviewJevSettings(overrides, Boolean(typesafeSecret.value)),
     // The learning loop's own knobs.
     //
@@ -2495,6 +2504,11 @@ export function loadConfig(overrides = {}) {
     // or with neither, a page that needs a browser is the named error
     // `web_read_needs_browser` and the run uses another source.
     webRenderEnabled: overrides.webRenderEnabled ?? boolEnv("OPEN_SCIENCE_WEB_RENDER_ENABLED", false),
+    // Interactive browser contexts are opt-in and remain separate from research runtimes.
+    managedBrowserEnabled: overrides.managedBrowserEnabled ?? boolEnv("OPEN_SCIENCE_MANAGED_BROWSER_ENABLED", false),
+    managedBrowserCdpUrl: String(overrides.managedBrowserCdpUrl ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_CDP_URL ?? "").trim(),
+    managedBrowserMaxContexts: Number(overrides.managedBrowserMaxContexts ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS ?? 4),
+    managedBrowserMaxContextsPerUser: Number(overrides.managedBrowserMaxContextsPerUser ?? process.env.OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER ?? 2),
     // The DevTools address of the deployment's own browser (the knowledge
     // overlay's `frontier-browser`). Empty = no local browser.
     webRenderCdpUrl: String(overrides.webRenderCdpUrl ?? process.env.OPEN_SCIENCE_WEB_RENDER_CDP_URL ?? "").trim(),
@@ -2528,6 +2542,20 @@ export function loadConfig(overrides = {}) {
     // from Crossref when its 「依据」 are opened. A notice, never a gate
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
+    resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    resultEngineUrl: String(overrides.resultEngineUrl ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_URL ?? "").trim(),
+    resultEngineRequestTimeoutMs: Math.max(1000, Math.min(60000, Number(
+      overrides.resultEngineRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS ?? 15000,
+    ) || 15000)),
+    resultReplayTimeoutMs: Math.max(1000, Math.min(1800000, Number(
+      overrides.resultReplayTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS ?? 300000,
+    ) || 300000)),
+    resultSnapshotMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultSnapshotMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
+    resultExportMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultExportMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
     // One Crossref request for twenty cited works, made while a reader waits
     // for a report's 「依据」 marks: past this the badges are simply absent.
     // Counted in open_science_source_updates_total{outcome="failed"}. Six

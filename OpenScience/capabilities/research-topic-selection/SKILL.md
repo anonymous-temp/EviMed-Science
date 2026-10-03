@@ -29,6 +29,17 @@ highly that the wider search shows was answered in 2024 is a finding.
 
 ## Execute
 
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
 1. Preserve the user's disease, population, intervention or exposure, outcomes,
    available data, methods, and feasibility constraints. State only assumptions
    that do not materially change the direction.

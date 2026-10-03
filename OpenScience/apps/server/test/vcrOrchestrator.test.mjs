@@ -7,14 +7,16 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_RUN_CAPABILITIES, vcrAssumptionConflicts, vcrBindAssumptions,
-  vcrBuildStages, vcrDesignPriorFrom, vcrDispatchId, vcrGapsForRule, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
-  vcrProgramSteps, vcrProjectScenario, vcrRunId, vcrRunPrompt, vcrSupersededNodes, wantedVcrSteps,
+  VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_EXPORT_OUTLINES, VCR_RUN_CAPABILITIES, VcrOrchestrator,
+  vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrExportBriefLines,
+  vcrGapsForRule, vcrIdleStepStatus, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
+  vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
+  vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
-  VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES,
-  VCR_STEP_NEEDS, validateEngineJob, validateScenario,
+  VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
+  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -53,6 +55,77 @@ test("a study whose definition exists and which nobody asked anything of runs th
   // A step a run left queued counts as requested, so a restart picks it up.
   const queued = vcrProgramSteps({ ...steps([]), trial: { status: "queued", requested: false } });
   assert.equal(queued.trial.requested, true);
+});
+
+test("above T0 a protocol with criteria and nobody judged is not a running matching step: 「进行中」 is a job or a run out for the step, never its input existing", () => {
+  const plan = wantedVcrSteps(steps(["matching"]));
+  const stored = (/** @type {string} */ status, /** @type {string | null} */ note = null) => ({ ...steps(["matching"]), matching: { status, requested: true, note } });
+  // What the data says of matching above T0 with criteria structured and no patient judged: nothing. It used to say running.
+  const unjudged = vcrSimpleStepStatus({ complete: false });
+  assert.equal(unjudged, null);
+  const observe = (/** @type {Record<string, any>} */ studySteps, /** @type {any} */ seen, /** @type {string[]} */ flying = []) =>
+    vcrStepUpdates({ steps: studySteps, seen: [["matching", seen]], flying: new Set(flying), plan });
+
+  // Stored running by the old rule and never dispatched: put back to where a run is sent from.
+  assert.deepEqual(observe(stored("running"), unjudged), [{ step: "matching", fields: { status: "none", note: null } }]);
+  // 「让 AI 做」 stores queued: observation leaves it for the dispatcher — it used to overwrite it with running, and nothing was sent.
+  assert.deepEqual(observe(stored("queued"), unjudged), []);
+  assert.deepEqual(observe(stored("none"), unjudged), []);
+  // The matching run is out: running stands for as long as the slot holds it.
+  assert.deepEqual(observe(stored("running"), unjudged, ["matching"]), []);
+  assert.deepEqual(observe(stored("running"), unjudged, ["population", "trial"]), [{ step: "matching", fields: { status: "none", note: null } }],
+    "a run out for other steps is not this step's");
+  // A matching job of its own is out, with or without a run.
+  const judging = vcrSimpleStepStatus({ complete: false, jobOpen: true });
+  assert.deepEqual(judging, { status: "running", note: null });
+  assert.deepEqual(observe(stored("none"), judging), [{ step: "matching", fields: { status: "running" } }]);
+  assert.deepEqual(observe(stored("running"), judging), []);
+  // Patients judged (or, at T0, criteria structured): done, and a minimal upstream version says it is one.
+  assert.deepEqual(observe(stored("running"), vcrSimpleStepStatus({ complete: true })), [{ step: "matching", fields: { status: "done" } }]);
+  assert.deepEqual(vcrSimpleStepStatus({ complete: true, minimal: true }), { status: "minimal", note: null });
+  // A failure stands, with its note, until somebody asks again; a finished step is not touched by a run going out.
+  assert.deepEqual(observe(stored("failed", "引擎暂不可用"), unjudged), []);
+  assert.deepEqual(observe(stored("done"), unjudged, ["matching"]), []);
+});
+
+test("a run that ended and left nothing does not leave its steps reading 「进行中」, whichever step it was sent for and whether or not it is still wanted", () => {
+  const running = (/** @type {string[]} */ names) => Object.fromEntries(VCR_STEPS.map((step) => [step, { status: names.includes(step) ? "running" : "none", requested: false }]));
+  const silent = /** @type {Array<[string, null]>} */ (VCR_STEPS.map((step) => [step, null]));
+  // The analysis run was sent for four steps and wrote nothing; nothing is requested any more.
+  const plan = wantedVcrSteps(steps([]));
+  assert.deepEqual(vcrStepUpdates({ steps: running([...VCR_ANALYSIS_STEPS]), seen: silent, flying: new Set(), plan }),
+    VCR_ANALYSIS_STEPS.map((step) => ({ step, fields: { status: "none", note: null } })));
+  // While it is out, every step in its scope reads running and no other does.
+  assert.deepEqual(vcrStepUpdates({ steps: running([...VCR_ANALYSIS_STEPS, "evidence"]), seen: silent, flying: new Set(VCR_ANALYSIS_STEPS), plan }),
+    [{ step: "evidence", fields: { status: "none", note: null } }]);
+  // Only a stored running is ever put back.
+  for (const status of ["none", "queued", "failed", "stale", "done", "minimal"]) assert.equal(vcrIdleStepStatus(status, false), null, status);
+  assert.equal(vcrIdleStepStatus("running", true), null);
+
+  // The steps a run is out for are the scope of the marks the slot holds; an export run covers none.
+  assert.deepEqual([...vcrStepsInFlight([{ detail: { purpose: "analysis", scope: [{ step: "population", fidelity: "full" }, { step: "trial", fidelity: "minimal" }] } }])], ["population", "trial"]);
+  assert.deepEqual([...vcrStepsInFlight([{ detail: { purpose: "matching", scope: [{ step: "matching", fidelity: "full" }] } }, { detail: null }])], ["matching"]);
+  assert.deepEqual([...vcrStepsInFlight([{ detail: { purpose: "export", kind: "study_package", exportId: "exp_1" } }])], []);
+  assert.deepEqual([...vcrStepsInFlight([{ detail: { scope: ["evidence", "not_a_step"] } }])], ["evidence"]);
+  assert.deepEqual([...vcrStepsInFlight([])], []);
+});
+
+test("observation still never invents progress: what the data says of a step nobody asked for is written only when it is finished or stale", () => {
+  const plan = wantedVcrSteps(steps(["trial"]));
+  const seen = /** @type {Array<[string, { status: string, note: string | null } | null]>} */ ([
+    ["evidence", { status: "done", note: null }], ["population", { status: "queued", note: null }], ["comparator", { status: "stale", note: null }],
+    ["patients", { status: "failed", note: "模型不覆盖这个终点" }], ["trial", { status: "failed", note: "设计不受支持" }],
+  ]);
+  assert.deepEqual(vcrStepUpdates({ steps: steps(["trial"]), seen, flying: new Set(), plan }), [
+    { step: "evidence", fields: { status: "done" } },
+    { step: "comparator", fields: { status: "stale" } },
+    { step: "trial", fields: { status: "failed", note: "设计不受支持" } },
+  ]);
+  // A failed step that reads done clears its note; an unchanged status with an unchanged note writes nothing.
+  const failed = { ...steps(["trial"]), trial: { status: "failed", requested: true, note: "设计不受支持" } };
+  assert.deepEqual(vcrStepUpdates({ steps: failed, seen: [["trial", { status: "done", note: null }]], flying: new Set(), plan }),
+    [{ step: "trial", fields: { status: "done", note: null } }]);
+  assert.deepEqual(vcrStepUpdates({ steps: failed, seen: [["trial", { status: "failed", note: "设计不受支持" }]], flying: new Set(), plan }), []);
 });
 
 test("which engine job a research object needs is deterministic, and is the one the engine runs for that method", () => {
@@ -101,6 +174,98 @@ test("a dispatch id is one token, and the prompt carries it as a literal tag", (
   assert.match(vcrRunPrompt("做一下试验设计。", "vcr-run-analysis-1"),
     /^做一下试验设计。\n\n<evimed-vcr-run>vcr-run-analysis-1<\/evimed-vcr-run>$/);
   assert.ok(vcrDispatchId("run:analysis", 1).startsWith("vcr-"), "the ledger finds this module's runs by prefix");
+});
+
+const briefStudy = { name: "EV-201", question: "单臂试验能否用外部对照？", dataTier: "T0", intendedUse: "exploratory" };
+
+test("an export run's brief names the one document it is for, in words and by kind, for each of the four", () => {
+  const labels = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH);
+  assert.deepEqual(Object.keys(VCR_EXPORT_OUTLINES).sort(), [...VCR_EXPORT_KINDS].sort(), "every document has an outline, and nothing else does");
+  for (const kind of VCR_EXPORT_KINDS) {
+    const brief = vcrDefaultBrief({ study: briefStudy, scope: [], detail: { kind, exportId: "exp_1" } });
+    assert.ok(brief.startsWith("研究：EV-201。\n研究问题：单臂试验能否用外部对照？\n数据档位：T0；预期用途：exploratory。\n"), kind);
+    assert.ok(brief.includes(`「${labels[kind]}」（kind: ${kind}）`), `the brief says which document (${kind})`);
+    assert.ok(brief.includes(VCR_EXPORT_OUTLINES[kind]), `and what that document holds (${kind})`);
+    assert.ok(brief.includes(`data.kind 写 ${kind}。`), `and the kind its report is written under (${kind})`);
+    assert.ok(brief.includes("写成别的 kind 会被拒绝"), "and that another kind is refused, which the gateway holds it to");
+    // Every other document's name is absent: a brief that listed all four would not have said which.
+    for (const other of VCR_EXPORT_KINDS.filter((entry) => entry !== kind && entry !== "study_package")) {
+      assert.equal(brief.includes(labels[other]), false, `${kind} does not mention ${other}`);
+    }
+    assert.equal(brief.includes("本次要做的步骤"), false, "an export run has no steps to be told");
+    assert.deepEqual(vcrExportBriefLines(kind).filter((line) => !brief.includes(line)), [], "the brief carries every export line");
+  }
+});
+
+test("a step run's brief is the steps asked of it, and a detail that names no export is not read as one", () => {
+  const stepBrief = vcrDefaultBrief({ study: briefStudy, scope: ["population", "trial"], detail: { fidelity: "minimal" } });
+  assert.equal(stepBrief, [
+    "研究：EV-201。", "研究问题：单臂试验能否用外部对照？", "数据档位：T0；预期用途：exploratory。",
+    "本次要做的步骤：population、trial。", "上游缺的部分先补一个最小版本，并标明「AI 设定」。",
+    "用 vcr_read 读研究已有的定义、假设与结果；用 vcr_write 写定义、条件、假设、设计与决策；确定性计算一律用 vcr_simulate 排作业，不要自己算数。",
+  ].join("\n"));
+  for (const detail of [{ kind: "simulation_report" }, { kind: "not_a_document", exportId: "exp_1" }, {}]) {
+    assert.equal(vcrDefaultBrief({ study: briefStudy, scope: [], detail }).includes("本次只写一份资料"), false, JSON.stringify(detail));
+  }
+});
+
+test("the brief of a review's one revision names the document it revises, whichever of the four it is, and keeps what it was told before", () => {
+  const labels = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH);
+  for (const kind of VCR_EXPORT_KINDS) {
+    const brief = vcrReviewRepairBrief({ revisionId: "exp_2", originalId: "exp_1", kind,
+      templates: "功效为 {{n:measure(power).value|pct1}}。", findings: [{ kind: "wording", location: "main", fix: "Clarify uncertainty." }] });
+    assert.ok(brief.includes(`Document: 「${labels[kind]}」 (kind: ${kind}).`), kind);
+    assert.ok(brief.includes(`data.kind: "${kind}"`), `the kind its report is written under (${kind})`);
+    assert.match(brief, /any other kind is refused rather than filed elsewhere/);
+    assert.match(brief, /^Revise the retained report in place within a new version\. Export ID: exp_2\. Original export: exp_1\.\n/);
+    assert.match(brief, /Do not rerun engines or invent inputs\./);
+    assert.match(brief, /deliverables\/vcr-review-exp_2\//);
+    assert.ok(brief.includes("功效为 {{n:measure(power).value|pct1}}。") && brief.includes("Clarify uncertainty."), "the retained template and the findings are in it");
+  }
+});
+
+/**
+ * An orchestrator over a store that answers the one question `exportDispatch`
+ * asks — which run mark holds the study's slot — with the given row.
+ * @param {Record<string, any> | null} mark
+ */
+function slotHeldBy(mark) {
+  /** @type {Array<{ sql: string, params: any[] }>} */
+  const asked = [];
+  const store = { async one(/** @type {string} */ sql, /** @type {any[]} */ params) { asked.push({ sql, params }); return mark; } };
+  return { asked, orchestrator: new VcrOrchestrator({ store: /** @type {any} */ (store), jobs: /** @type {any} */ ({}) }) };
+}
+
+test("the export a run is out for is read from the study's run slot: an asked-for export, the one revision of a review, and nothing else", async () => {
+  const exportMark = { key: "run:export:exp_9", dispatch_id: "vcr-run-export-exp_9-1", run_id: "run_7",
+    detail: { purpose: "export", kind: "simulation_report", exportId: "exp_9" } };
+  const asked = slotHeldBy(exportMark);
+  assert.deepEqual(await asked.orchestrator.exportDispatch("std_1"),
+    { key: "run:export:exp_9", exportId: "exp_9", dispatchId: "vcr-run-export-exp_9-1", runId: "run_7" });
+  assert.deepEqual(asked.asked[0].params, ["std_1", 10], "the slot is the study's, and a claim older than the stale-claim window does not hold it");
+  assert.match(asked.asked[0].sql, /kind = 'run'[\s\S]*state = 'running' OR \(state = 'claimed'/);
+
+  // The revision a review asked for is an export run too, and its export is the new revision row, not the original.
+  const repair = slotHeldBy({ key: "run:review-repair:exp_1", dispatch_id: "vcr-run-review-repair-exp_1-1", run_id: null,
+    detail: { purpose: "export", kind: "study_package", exportId: "exp_2", revisionOf: "exp_1" } });
+  assert.deepEqual(await repair.orchestrator.exportDispatch("std_1"),
+    { key: "run:review-repair:exp_1", exportId: "exp_2", dispatchId: "vcr-run-review-repair-exp_1-1", runId: null });
+
+  // A step run holds the slot: its report writes are nobody's export.
+  assert.equal(await slotHeldBy({ key: "run:analysis", dispatch_id: "vcr-run-analysis-1", run_id: "run_3",
+    detail: { purpose: "analysis", scope: [{ step: "trial" }] } }).orchestrator.exportDispatch("std_1"), null);
+  // No run out, or an export mark that names no export.
+  assert.equal(await slotHeldBy(null).orchestrator.exportDispatch("std_1"), null);
+  assert.equal(await slotHeldBy({ key: "run:export:exp_9", dispatch_id: "d", run_id: null, detail: { purpose: "export" } }).orchestrator.exportDispatch("std_1"), null);
+});
+
+test("a runtime reserved for another dispatch is not the export's run; the researcher's own open runtime is judged by the slot alone", async () => {
+  const mark = { key: "run:export:exp_9", dispatch_id: "vcr-run-export-exp_9-1", run_id: "run_7", detail: { purpose: "export", kind: "validation_pack", exportId: "exp_9" } };
+  const { orchestrator } = slotHeldBy(mark);
+  assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: "vcr-run-export-exp_9-1" }))?.exportId, "exp_9");
+  assert.equal(await orchestrator.exportDispatch("std_1", { runtimeRunId: "autopilot-episode-4" }), null);
+  assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: null }))?.exportId, "exp_9");
+  assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });
 
 test("there are exactly five notices, and they are the domain's five", () => {

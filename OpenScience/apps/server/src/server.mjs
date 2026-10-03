@@ -1,4 +1,21 @@
 import { DocumentExportService, freezeArtifactDocument } from "./documentExport.mjs";
+import { ResultProvenanceService } from "./resultProvenanceService.mjs";
+import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
+import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
+import { captureResultDelivery } from "./resultDeliveryCapture.mjs";
+import { ResultReplayClient } from "./resultReplayClient.mjs";
+import { ResultEngineRouter } from "./resultEngineRouter.mjs";
+import { ResultVcrReplay } from "./resultVcrReplay.mjs";
+import { ResultReplayService } from "./resultReplayService.mjs";
+import { ResultReplayWorker } from "./resultReplayWorker.mjs";
+import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
+import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
+import { ResultExportService } from "./resultExport.mjs";
+import { ResultRevisionService } from "./resultRevision.mjs";
+import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
+import { ResultImpactService } from "./resultImpact.mjs";
+import { createResultImpactRoutes } from "./resultImpactRoutes.mjs";
+import { createResultSourceUpdatesRoutes } from "./resultSourceUpdatesRoutes.mjs";
 import { DocumentExportWorker } from "./documentExportWorker.mjs";
 import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
 import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
@@ -8,6 +25,27 @@ import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
+import { createPluginInventoryRoutes } from "./pluginInventoryRoutes.mjs";
+import { ExtensionAccess } from "./extensionAccess.mjs";
+import { ExtensionService } from "./extensionService.mjs";
+import { createExtensionRoutes } from "./extensionRoutes.mjs";
+import { loadExtensionDeployment } from "./extensionDeployment.mjs";
+import { createHostedExtensionIntegration } from "./extensionHostedIntegration.mjs";
+import { EXTENSION_GATEWAY_PATH } from "./extensionGateway.mjs";
+import { SkillLibraryService } from "./skillLibraryService.mjs";
+import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
+import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
+import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
+import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
+import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
+import { createPersonalSkillTransferRoutes } from "./personalSkillTransferRoutes.mjs";
+import { sessionListItems } from "./dshRuntimeAdapter.mjs";
+import { decodeSkillArchive } from "./skillArchive.mjs";
+import { ExtensionConnections } from "./extensionConnections.mjs";
+import { PersonalSkillGenerationService } from "./personalSkillGenerationService.mjs";
+import { PersonalSkillGenerationWorker } from "./personalSkillGenerationWorker.mjs";
+import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs";
+import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -22,7 +60,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -36,7 +74,7 @@ import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
+import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
@@ -126,8 +164,11 @@ import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
 import { EvimedCreditsService } from "./evimedCreditsService.mjs";
+import { prepareResearchBillingAccountDeletion } from "./evimedCreditsPersistence.mjs";
 import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
 import { createEvimedCreditsRoutes, evimedCreditsRoutePattern } from "./evimedCreditsRoutes.mjs";
+import { createResearchAllowanceRoutes, researchAllowanceRoutePattern } from "./researchAllowanceRoutes.mjs";
+import { createResearchCommerce } from "./researchCommerce.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
@@ -159,6 +200,10 @@ import { FrontierPipeline } from "./frontierPipeline.mjs";
 import { FrontierService, frontierAudienceAllows, frontierDomainVocabulary, frontierMetricFamilies, frontierMetricsSnapshot,
   frontierReadiness } from "./frontierService.mjs";
 import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs";
+import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
+import { EvidenceEditorial } from "./evidenceEditorial.mjs";
+import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
@@ -236,6 +281,7 @@ import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
+import { createManagedBrowserService } from "./managedBrowserService.mjs";
 import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame, releaseRuntimeUiFrameCookie, renewRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
@@ -535,6 +581,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/inbox/")) return "/api/inbox/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage" || pathname === "/api/account/usage/runs") return pathname;
+  if (pathname === "/api/account/allowance" || pathname.startsWith("/api/account/allowance/")) return researchAllowanceRoutePattern(pathname);
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
@@ -879,8 +926,10 @@ function clientAddress(req, config) {
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} overrides
  */
-export function createWebApiApp(overrides = {}) {
+export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
+  if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
@@ -895,8 +944,99 @@ export function createWebApiApp(overrides = {}) {
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
+  const pluginInventoryRoutes = createPluginInventoryRoutes({ store, pluginService, config });
+  const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
+    if (!vcr) return null;
+    const study = await vcr.store.studyByControlProject(user.id, projectId, client);
+    if (!study) return null;
+    const membership = await vcr.dataStore.membershipAuthority(study.id, user.id, client);
+    return { ownerId: study.userId, roles: study.userId === user.id ? ["lead"] : membership.roles, epoch: study.userId === user.id ? null : membership.epoch };
+  }, connectionAccess: overrides.extensionConnectionAccess ?? null });
+  const extensionConnections = new ExtensionConnections({ credentials: connectorCredentials, access: extensionAccess,
+    adapters: overrides.extensionConnectionAdapters ?? new Map() });
+  if (!overrides.extensionConnectionAccess) extensionAccess.connectionAccess = (user, ref, scope) => extensionConnections.authorize(user, ref, scope);
+  const extensionDeployment = loadExtensionDeployment(config);
+  /** @type {any} */
+  let hostedExtensions = null;
+  const recordExtensionPromptActor = async (user, project, request) => {
+    if (!hostedExtensions) return;
+    try { await hostedExtensions.actors.accept(user, project, request); }
+    catch (error) { await securityAudit(config, "extension.actor.admission", "unavailable", { userId: user.id, projectId: project.id, code: error?.code ?? "product_state_unavailable" }); }
+  };
+  const extensionService = productDatabase ? new ExtensionService(productDatabase, {
+    access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
+    proofAuthority: overrides.extensionProofAuthority ?? null,
+    catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
+    connectionList: (user, entry, projectId) => extensionConnections.list(user, entry, projectId),
+  }) : null;
+  const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes,
+    onSelectionChanged: async (user, projectId) => {
+      if (!hostedExtensions) return;
+      try { await hostedExtensions.reconcile(user, projectId); }
+      catch (error) { await securityAudit(config, "extension.selection.reconcile", "waiting", { userId: user.id, projectId, code: error?.code ?? "product_state_unavailable" }); }
+    },
+    projectState: (user, projectId, view) => hostedExtensions ? hostedExtensions.projectState(user, projectId, view) : view,
+  });
+  const skillRoot = path.join(config.dataDir, ".openscience", "skill-library");
+  const skillController = overrides.skillValidationController ?? new RuntimeControllerClient(config);
+  let skillStorageReady = false;
+  const skillArtifacts = productDatabase ? new SkillLibraryArtifacts({
+    root: skillRoot, decodeArchive: decodeSkillArchive,
+    sharedStorageRoots: ["personal-skill-generations", "extension-generations"].map(namespace => path.join(config.dataDir, ".openscience", namespace)),
+    parseSkill: async (root, options) => {
+      if (!skillStorageReady) throw new HttpError(503, "product_state_unavailable", "Skill storage is unavailable.");
+      const relative = path.relative(skillRoot, root).split(path.sep).join("/");
+      const match = /^([a-f0-9]{64})\/(imports|packages)\/([a-f0-9]{64})$/.exec(relative);
+      if (!match) throw new HttpError(400, "extension_contract_invalid", "Invalid owned skill reference.");
+      return skillController.validatePersonalSkill({ ownerHash: match[1], kind: match[2], contentId: match[3], expectedName: options.expectedName ?? null }, { signal: options.signal });
+    },
+    withStorageAdmission: async (work, existingClient) => {
+      if (!skillStorageReady) throw new HttpError(503, "product_state_unavailable", "Skill storage is unavailable.");
+      const admit = async client => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["evimed-personal-skill-storage"]);
+        return work();
+      };
+      return existingClient ? admit(existingClient) : productDatabase.transaction(admit);
+    },
+  }) : null;
+  const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
+    artifacts: skillArtifacts,
+    projectAccess: async (user, project) => {
+      const current = await store.requireProject(user, project.id);
+      if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+    },
+    invoke: overrides.personalSkillInvocation ?? (input => {
+      if (config.runtimeMode !== "kernel") throw new HttpError(503, "product_state_unavailable", "Native skill invocation is unavailable.");
+      return runtimeManager.invokePersonalSkill({ ...input,
+        recordPromptActor: request => recordExtensionPromptActor(input.user, input.project, request),
+      });
+    }),
+    onRemoved: async (user, skillId) => {
+      if (config.runtimeMode !== "kernel") return;
+      const affected = await productDatabase.query(`SELECT project_id FROM evimed_product.documents
+        WHERE user_id=$1 AND kind='extension-defaults' AND id LIKE 'skills:project:%' AND deleted_at IS NULL
+        AND payload->'skills' @> $2::jsonb ORDER BY project_id LIMIT 1001`, [user.id, JSON.stringify([{ skillId }])]);
+      if (affected.rows.length > 1000) throw new HttpError(413, "project_scan_too_large", "Too many projects select this skill.");
+      for (const row of affected.rows) {
+        const project = await store.requireProject(user, row.project_id);
+        await pluginService.withAdmission(project, () => personalSkillGenerations.reconcile(user, project));
+      }
+    },
+  }) : null;
+  const skillLibraryRoutes = createSkillLibraryRoutes({ store, service: skillLibraryService, maxJsonBytes: config.maxJsonBytes,
+    saveProject: (user, project, input) => pluginService.withAdmission(project, () => productDatabase.transaction(async () => {
+      const selection = await skillLibraryService.saveProjectSelections(user, project, input);
+      if (config.runtimeMode !== "kernel") return selection;
+      const candidate = await personalSkillGenerations.reconcile(user, project);
+      return { ...selection, activation: { phase: "waiting", ...(candidate.waiting ? { code: "runtime_image_unavailable" } : {}) } };
+    })),
+  });
+  const personalSkillTransfer = skillLibraryService ? new PersonalSkillTransfer({ skills: skillLibraryService, artifacts: skillArtifacts }) : null;
+  const personalSkillTransferRoutes = createPersonalSkillTransferRoutes({ store, service: personalSkillTransfer, skills: skillLibraryService,
+    artifacts: skillArtifacts, maxJsonBytes: config.maxJsonBytes });
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
@@ -1123,7 +1263,8 @@ export function createWebApiApp(overrides = {}) {
         ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
       });
     }
-    const derived = runMethodObservations({ run, projection, methods, sessions });
+    const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
+    const derived = runMethodObservations({ run, projection, methods, sessions: observedSessions });
     learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
       // A run that carried an unproven method has to say so on its own row.
@@ -1203,7 +1344,9 @@ export function createWebApiApp(overrides = {}) {
   const capsuleService = productDocuments
     ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict, scanner: capsuleScanner })
     : null;
-  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner }) : null;
+  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
+    privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
+  }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
@@ -1439,6 +1582,10 @@ export function createWebApiApp(overrides = {}) {
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
+    authorizeContinuation: async (userId, projectId, binding) => {
+      if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
+      await resultImpacts.assertContinuation(userId, projectId, binding);
+    },
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
@@ -1447,7 +1594,7 @@ export function createWebApiApp(overrides = {}) {
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
@@ -1506,8 +1653,11 @@ export function createWebApiApp(overrides = {}) {
     const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
+    const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
+      readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
-      ingest, pipeline, composer, database: productDatabase,
+      ingest, pipeline, composer, evidence:evidenceEditorial, database: productDatabase,
       ensureOwner: async () => {
         const owner = await ensureFrontierProject({ store, config });
         editor.owner = owner;
@@ -1518,10 +1668,12 @@ export function createWebApiApp(overrides = {}) {
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`),
     });
-    frontier = { client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
+    frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
+    frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -1562,6 +1714,10 @@ export function createWebApiApp(overrides = {}) {
     }
     const data = await store.createProject(user, id, name);
     const project = await store.requireProject(user, id);
+    if (skillLibraryService && !existing.some(item => item.id === id)) {
+      // Defaults snapshot only on actual creation. An optional method must never prevent ordinary research project creation.
+      await skillLibraryService.initializeProject(user, project).catch(() => { process.stderr.write("new-project personal skill defaults snapshot failed\n"); });
+    }
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
@@ -1690,6 +1846,61 @@ export function createWebApiApp(overrides = {}) {
     controller: documentController, admission: client => heavyWorkAdmission(client, "render"),
     report: code => process.stderr.write(`document export: ${code}\n`) }) : null;
   const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
+  const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
+    documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
+    resolveCaptureContext: async (project, input) => {
+      if (!input.relativePath.startsWith("artifacts/result-revisions/") || !input.producer?.runId || !agentRuns) return null;
+      const run = (await agentRuns.list(project)).find(row => row.id === input.producer.runId);
+      return resultRevisions.captureContext(project, input, run);
+    },
+    authorizeProject: async (userId, projectId) => {
+      const user = await store.userById(userId);
+      if (!user) throw new HttpError(403, "result_project_forbidden", "The result project is unavailable.");
+      return store.requireProject(user, projectId);
+    },
+    authorizeReference: async (_userId, project, reference) => {
+      if (reference.versionId) {
+        const row = await productDocuments.get(project.userId, "result-version", reference.versionId);
+        if (!row) return { ...reference, path: null, availability: "deleted" };
+        if (row.projectId !== project.id || row.payload.recordType !== "result-version" || row.payload.digest !== reference.digest) return null;
+        return { ...reference, path: row.payload.path, availability: "captured" };
+      }
+      if (reference.kind === "source" && reference.id.startsWith("src_")) {
+        const row = await productDocuments.get(project.userId, "source", reference.id);
+        if (!row) return { ...reference, path: null, availability: "deleted" };
+        if (row.projectId !== project.id) return null;
+        return { ...reference, path: null, availability: "reference" };
+      }
+      return { ...reference, path: null, availability: "reference" };
+    },
+  }) : null;
+  const resultRevisions = resultProvenance ? new ResultRevisionService({ results: resultProvenance,
+    documents: productDocuments, config, mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes) }) : null;
+  const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, maxBytes: config.resultExportMaxBytes }) : null;
+  const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
+    vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
+      authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
+  const resultReplays = resultProvenance && productJobs ? new ResultReplayService({ results: resultProvenance,
+    documents: productDocuments, jobs: productJobs, engine: resultEngine, config }) : null;
+  if (resultProvenance && resultReplays) resultProvenance.deriveEligibility = (userId, version) => resultReplays.eligibility(userId, version);
+  const resultReplayWorker = resultReplays ? new ResultReplayWorker({ service: resultReplays, jobs: productJobs,
+    engine: resultEngine, config, admission: client => heavyWorkAdmission(client, "replay"),
+    report: code => process.stderr.write(`result replay: ${code}\n`) }) : null;
+  const resultReplayRoutes = createResultReplayRoutes({ store, service: resultReplays });
+  const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
+    autopilot: autopilotService, notifications: notificationService }) : null;
+  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance });
+  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
+  const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
+  const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
+    runtimeWorkspaceRoot: project => runtimeManager.runtimeWorkspaceRoot(project),
+    onFailure: failure => { void securityAudit(config, "result.capture", "failed", failure).catch(() => {}); } }) : null;
+  // Keep native call/result order while hydrating the pump's project stub.
+  // Capture failures are observations; they never remove a usable delivery.
+  const resultCaptureQueue = createResultCaptureQueue({ capture: resultCapture,
+    resolveProject: project => resultProvenance.scope(project.userId, project.id),
+    onFailure: failure => securityAudit(config, "result.capture", "failed", failure) });
+  const observeResult = (project, runId, observed) => resultCaptureQueue.observe(project, runId, observed);
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -1701,7 +1912,7 @@ export function createWebApiApp(overrides = {}) {
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
       remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
       }),
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
@@ -1939,7 +2150,10 @@ export function createWebApiApp(overrides = {}) {
     // The same events, into the run's progress aggregate (`run/progress`): a
     // delegated child's tool calls reach the count within a second instead of
     // at the monitor's next read of the child's own history.
-    onRunEvent: (project, runId, observed) => agentRuns?.noteRunEvent(project, runId, observed),
+    onRunEvent: (project, runId, observed) => {
+      agentRuns?.noteRunEvent(project, runId, observed);
+      observeResult(project, runId, observed);
+    },
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
     // needs the ledger. Today the answer is expected to be "never" — the
@@ -1964,7 +2178,7 @@ export function createWebApiApp(overrides = {}) {
   // the two halves are a handoff, and a Map owned by one of them would read as
   // that one's private state.
   const preStopTranscripts = new PreStopTranscripts();
-  const runtimeManager = new RuntimeManager(config, {
+  const runtimeManager = runtimeManagerFactory(config, {
     agentRegistry,
     // Read the conversations while the container is still answering.
     //
@@ -2040,10 +2254,12 @@ export function createWebApiApp(overrides = {}) {
     // slot to another project: the stop would close that run as cancelled.
     hasRunningRuns: async (project) => Boolean(agentRuns) && (await agentRuns.list(project)).some((run) => run.status === "running"),
     onRuntimeStart: (project, runtime) => {
-      runtimeEventPump.attach(project, runtime);
-      if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
-        void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
-      }
+      independentProductWork(() => {
+        runtimeEventPump.attach(project, runtime);
+        if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
+          void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
+        }
+      });
     },
   });
   runtimeManager.pluginService = pluginService;
@@ -2062,6 +2278,22 @@ export function createWebApiApp(overrides = {}) {
   runtimeManager.learningService = learningService;
   // And what each launch mounted of it, for the loop's counters.
   runtimeManager.learningMetrics = learningMetrics;
+  /** Actual project-owned native inventory, independent of optional research-session metadata.
+   * @param {any} user @param {any} project @param {string} sessionId */
+  async function authorizeOwnedNativeSession(user, project, sessionId) {
+    const current = await store.requireProject(user, project.id);
+    if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+    await assertPublicSessionPrompt(current, sessionId);
+    const runtime = runtimeManager.runtimes.get(runtimeManager.key(current)), generation = runtimeManager.runtimeGeneration(current);
+    if (!runtime || !generation) throw new HttpError(503, "product_state_unavailable", "The current native session inventory is unavailable.");
+    const listed = await runtimeManager.callKernel(runtime, current, "session/list", { _request: {} }, AbortSignal.timeout(10000)).catch(() => { throw new HttpError(503, "product_state_unavailable", "The native session inventory is unavailable."); });
+    if (runtimeManager.runtimes.get(runtimeManager.key(current)) !== runtime || runtimeManager.runtimeGeneration(current) !== generation) throw new HttpError(503, "product_state_unavailable", "The native session inventory changed.");
+    if (!sessionListItems(listed).some(item => item.sessionId === sessionId)) throw new HttpError(404, "runtime_session_not_found", "The current native session is unavailable.");
+  }
+  if (skillLibraryService && config.runtimeMode === "kernel") {
+    skillLibraryService.nativeCatalogue = new NativeSkillCatalogue({ runtimeManager, authorizeSession: authorizeOwnedNativeSession });
+    skillLibraryService.learnedMethods = user => learningService ? learningService.listMethods(user.id, { limit: 50 }) : [];
+  }
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
   const pluginApplyWorker = pluginService ? new PluginApplyWorker({
     service: pluginService, runtime: runtimeManager,
@@ -2132,6 +2364,9 @@ export function createWebApiApp(overrides = {}) {
     credits = { service, worker };
   }
   const creditsRoutes = createEvimedCreditsRoutes({ store, service: credits?.service ?? null, config });
+  const allowanceRoutes = createResearchAllowanceRoutes({
+    store, service: credits?.service ?? null, config, commerce: createResearchCommerce(config),
+  });
   // What one question would do, answered before it is sent (fusion plan §9.5).
   // Advice, not a gate: it runs the same router the dispatch runs and decides
   // nothing. Composed after the credits service because the price half of the
@@ -2147,6 +2382,7 @@ export function createWebApiApp(overrides = {}) {
   });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
+    independentWork: independentProductWork,
     maxClinicalRepairAttempts: config.gateRepairRounds,
     model: `deepseek/${config.deepseekModel}`,
     // Both poll counts are periods of this interval. It was assumed rather than
@@ -2172,6 +2408,18 @@ export function createWebApiApp(overrides = {}) {
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimePersonalSkills: (project, observation = {}) => {
+      if (observation.nativeTurn) {
+        const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
+        // Recovered historical native turns predate this installation. Their
+        // logged skill content remains authoritative; today's pins are not
+        // retroactively attributed to an earlier conversation.
+        const observedAt = Date.parse(observation.startedAt ?? ""), launchedAt = Date.parse(runtime?.startedAt ?? "");
+        if (!Number.isFinite(observedAt) || !Number.isFinite(launchedAt) || observedAt < launchedAt) return null;
+      }
+      const generation = runtimeManager.runtimePersonalSkillGeneration(project);
+      return generation?.reference ? { generationId: generation.reference.generationHash, pins: runtimeManager.runtimePersonalSkillPins(project) } : null;
+    },
     // Which workspace a run belongs to, re-derived rather than remembered. It
     // is asked on recovery, so a verification in flight when the control plane
     // restarted has to answer the same as when it was dispatched — otherwise the
@@ -2208,7 +2456,7 @@ export function createWebApiApp(overrides = {}) {
       // a fresh run's session becomes routable the moment the ledger knows
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
-      runTitles.consider(project, run);
+      independentProductWork(() => runTitles.consider(project, run));
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
@@ -2218,7 +2466,7 @@ export function createWebApiApp(overrides = {}) {
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
       if (geo && !isInternalProject(project.id)) {
-        geo.importDelivery(project, run).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
+        independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
     },
     // The run's own projection of itself — evidence counts and budget — read
@@ -2229,6 +2477,20 @@ export function createWebApiApp(overrides = {}) {
       runEvents.publish(run.id, type, data);
     },
     onRunFinished: async (project, run) => {
+      if (resultProvenance) {
+        await resultCaptureQueue.drain();
+        try {
+          const receipt = await readDeliveryReceipt(project, run);
+          if (receipt) {
+            const captured = await captureResultDelivery({ results: resultProvenance, project, run, receipt });
+            for (const failure of captured.failures) await securityAudit(config, "result.capture", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
+          }
+        } catch (error) {
+          await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
+            runId: run.id, code: error?.code ?? "result_capture_failed" });
+        }
+      }
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       runEvents.publish(run.id, "run/state", {
         state: run.status,
@@ -2365,6 +2627,11 @@ export function createWebApiApp(overrides = {}) {
           dispatchId: run.dispatchId ?? null,
           status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
           effectiveRouteReason: run.effectiveRouteReason,
+          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
+          automated: run.automated === true,
+          accountCreatedAt: run.accountCreatedAt ?? null,
+          startedAt: run.startedAt ?? run.createdAt ?? null,
+          finishedAt: run.finishedAt ?? null,
           capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
           subject: run.title ?? run.question ?? null,
         });
@@ -2671,6 +2938,31 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  const personalSkillGenerations = productDatabase ? new PersonalSkillGenerationService(productDatabase, {
+    config, skillService: skillLibraryService, pluginService, jobs: productJobs,
+    resolveUser: async project => {
+      const user = await store.userById(project.userId);
+      if (!user) throw new HttpError(404, "project_not_found", "Project not found.");
+      const current = await store.requireProject(user, project.id);
+      if (current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
+      return user;
+    },
+    identities: overrides.personalSkillRuntimeIdentities ?? (() => personalSkillRuntimeIdentity(runtimeManager)),
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+  }) : null;
+  runtimeManager.personalSkillGenerations = personalSkillGenerations;
+  if (productDatabase && config.runtimeMode === "kernel" && extensionDeployment.status === "configured"
+    && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32) {
+    hostedExtensions = extensionIntegrationFactory({ config, database: productDatabase, store, agentRuns, runtimeManager,
+      controller: skillController, extensions: extensionService, plugins: pluginService, pluginWorker: pluginApplyWorker,
+      deployment: extensionDeployment, resolveProject: sourceProject,
+      audit: (event, status, details) => securityAudit(config, event, status, details),
+    });
+  }
+  const personalSkillWorker = personalSkillGenerations ? new PersonalSkillGenerationWorker({
+    service: personalSkillGenerations, runtime: runtimeManager, resolveProject: sourceProject,
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+  }) : null;
   const ownedContextDependencies = {
     learning: learningService, registry: agentRegistry, config, runtimeManager, agentRuns,
     paused: (userId, projectId, sessionId) => memoryPausedFor(researchMemory, userId, projectId, sessionId),
@@ -3120,6 +3412,7 @@ export function createWebApiApp(overrides = {}) {
             // Record the attempt before checking the lease: a refusal now has
             // durable proof of no prompt for the next owner to reclaim.
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
             } catch (error) {
@@ -3164,7 +3457,14 @@ export function createWebApiApp(overrides = {}) {
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             return runtimeManager.dispatchPrompt(project, session.id, {
+              recordPromptActor: async request => {
+                if (typeof episode.assertDispatchAllowed !== "function") throw new HttpError(409, "product_job_lease_lost", "Autopilot dispatch authority is unavailable.");
+                await assertAutopilotDispatchAllowed(episode, user);
+                await store.requireProject(user, project.id);
+                await recordExtensionPromptActor(user, project, request);
+              },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
               system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
@@ -3178,7 +3478,7 @@ export function createWebApiApp(overrides = {}) {
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
           if (error?.code === "product_job_lease_lost") throw error;
-          if (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+          if (error?.code === "result_impact_source_unavailable" || (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code))) {
             await releaseOwnRuntime();
             throw error;
           }
@@ -3228,7 +3528,7 @@ export function createWebApiApp(overrides = {}) {
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
     frontierDeliveryPolicy: (item) => frontier?.notifications.deliveryAllowed(item) ?? Promise.resolve(false),
-    steerRun: ({ project, runId, text }) => steerChannelRun(project, runId, text),
+    steerRun: ({ user, project, runId, text }) => steerChannelRun(user, project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext,
@@ -3252,6 +3552,8 @@ export function createWebApiApp(overrides = {}) {
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
+  const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns,
+    resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -3293,6 +3595,10 @@ export function createWebApiApp(overrides = {}) {
     directTimeoutMs: config.webReadDirectTimeoutMs,
     edgeFallback: config.webReadEdgeFallback !== false,
   });
+  if (skillLibraryService) {
+    const repositoryImport = new PersonalSkillRepositoryImport({ transport: webTransport, skills: skillLibraryService });
+    skillLibraryService.repositoryPreview = (user, body) => repositoryImport.preview(user, body);
+  }
   const webReader = createWebReader(config, {
     transport: webTransport,
     renderer: overrides.webRenderer ?? createConfiguredWebRenderer(config),
@@ -3306,6 +3612,20 @@ export function createWebApiApp(overrides = {}) {
     connectorCredentials,
     webReader,
     documentParser,
+    preparePdfCapture: hostedExtensions ? async principal => {
+      try { return await hostedExtensions.documents.prepareCapture(principal); }
+      catch (error) {
+        await securityAudit(config, "extension.document.prepare", "unavailable", { userId: principal.userId, projectId: principal.projectId, code: error?.code ?? "product_state_unavailable" });
+        return null;
+      }
+    } : null,
+    capturePdf: hostedExtensions ? async (principal, bytes, provenance, captured, validateCurrent) => {
+      try { return await hostedExtensions.documents.capturePdf(principal, bytes, provenance, captured, validateCurrent); }
+      catch (error) {
+        await securityAudit(config, "extension.document.capture", "unavailable", { userId: principal.userId, projectId: principal.projectId, code: error?.code ?? "product_state_unavailable" });
+        return null;
+      }
+    } : null,
   });
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
@@ -3331,6 +3651,8 @@ export function createWebApiApp(overrides = {}) {
     mailto: config.publicSourceCredentials?.unpaywall ?? null,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
   });
+  const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
+    lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
@@ -3569,15 +3891,22 @@ export function createWebApiApp(overrides = {}) {
    * idle. Any run already running in the project refuses with `runtime_busy`
    * (one GEO run per project; the orchestrator retries next tick), as does a
    * full runtime quota.
-   * @param {{ userId: string, projectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   * @param {{ userId: string, projectId: string, geoProjectId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
    */
-  async function dispatchGeoRun({ userId, projectId, capabilityId, dispatchId, reason, brief }) {
+  async function dispatchGeoRun({ userId, projectId, geoProjectId, capabilityId, dispatchId, reason, brief }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "geo_project_not_found", "The GEO project's account is unavailable.");
     const project = await store.requireProject(user, projectId);
+    const assertGeoProgramAuthority = async () => {
+      const current = await geo.service.requireProject(user, geoProjectId);
+      if (current.userId !== user.id || current.projectId !== project.id) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+      if (current.status !== "active") throw new HttpError(409, "geo_project_paused", "This GEO project is paused.");
+      await store.requireProject(user, project.id);
+    };
     const ledger = await agentRuns.list(project);
     const replay = ledger.find((run) => run.dispatchId === dispatchId);
     if (replay) return { runId: replay.id, sessionId: replay.sessionId ?? null, status: replay.status };
+    await assertGeoProgramAuthority();
     if (ledger.some((run) => run.status === "running")) throw new HttpError(409, "runtime_busy", "The project has a run in progress; the GEO step waits.");
     if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
@@ -3612,6 +3941,10 @@ export function createWebApiApp(overrides = {}) {
           secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id, runId: dispatchId, ...budget.scope,
         });
         return runtimeManager.dispatchPrompt(project, session.id, {
+          recordPromptActor: async request => {
+            await assertGeoProgramAuthority();
+            await recordExtensionPromptActor(user, project, request);
+          },
           // The brief first: the kernel names a session after its first message.
           // The GEO mark always, open runtime or not: a brief is never the
           // researcher's words (the same text `geoRunPrompt` writes).
@@ -3636,7 +3969,7 @@ export function createWebApiApp(overrides = {}) {
     runtimeManager, service: review?.service ?? null, config,
     report: (code) => process.stderr.write(`review gateway: ${code}\n`),
   });
-  const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
+  const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads, resultImpacts });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -3678,6 +4011,9 @@ export function createWebApiApp(overrides = {}) {
           capsuleCleanupRun,
           autopilotScheduleRun,
           pluginApplyWorker?.running,
+          personalSkillWorker?.running,
+          hostedExtensions?.preparation.running,
+          hostedExtensions?.worker.running,
           memoryIndexWorker?.status?.().running,
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
@@ -3687,7 +4023,7 @@ export function createWebApiApp(overrides = {}) {
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
-          documentExportWorker?.running,
+          documentExportWorker?.running, resultReplayWorker?.running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -3849,7 +4185,9 @@ export function createWebApiApp(overrides = {}) {
           ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
         });
       }
+      await runtimeManager.start(project);
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
+        recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
         system: prepared.system,
         memoryContext: prepared.memoryContext,
@@ -3867,14 +4205,15 @@ export function createWebApiApp(overrides = {}) {
   /**
    * A chat message the model judged to add to the task already running: the
    * page's 「补充」 route, same run, same contract (`/api/agent-runs/:id/steer`).
-   * @param {any} project @param {string} runId @param {string} text
+   * @param {any} user @param {any} project @param {string} runId @param {string} text
    */
-  async function steerChannelRun(project, runId, text) {
+  async function steerChannelRun(user, project, runId, text) {
     const run = (await agentRuns.list(project)).find((item) => item.id === runId);
     if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
     const correctionRequestId = randomId("req_");
     const updated = await agentRuns.recordCorrection(project, runId, correctionRequestId);
     await runtimeManager.dispatchPrompt(project, run.sessionId, {
+      recordPromptActor: request => recordExtensionPromptActor(user, project, request),
       text: `<evimed-correction>${String(text).slice(0, 4000)}</evimed-correction>`,
       runId,
       requestId: correctionRequestId,
@@ -3946,7 +4285,9 @@ export function createWebApiApp(overrides = {}) {
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname === TOOL_UNIVERSE_GATEWAY_PATH
+    const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
+      ? resultGatewayHandler
+      : pathname === TOOL_UNIVERSE_GATEWAY_PATH
       ? toolUniverseGatewayHandler
       : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
@@ -3976,7 +4317,12 @@ export function createWebApiApp(overrides = {}) {
                     ? geoGatewayHandler
                     : pathname.startsWith(`${VCR_GATEWAY_PATH}/`)
                       ? vcrGatewayHandler
-                      : null;
+                      : pathname.startsWith(`${EXTENSION_GATEWAY_PATH}/`)
+                        ? (request, response) => {
+                          if (!hostedExtensions) { sendError(response, new HttpError(503, "product_state_unavailable", "Extension execution is unavailable.")); return; }
+                          return hostedExtensions.gateway(request, response);
+                        }
+                        : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);
@@ -4055,18 +4401,29 @@ export function createWebApiApp(overrides = {}) {
       }
       if (await evimedAuthRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
+      if (await personalSkillTransferRoutes(req, res)) return;
+      if (await pluginInventoryRoutes(req, res)) return;
+      if (await extensionRoutes(req, res)) return;
+      if (await skillLibraryRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceZoneRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
+      if (await allowanceRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
+      if (await resultRoutes(req, res)) return;
+      if (await resultReuseRoutes(req, res)) return;
+      if (await resultImpactRoutes(req, res)) return;
+      if (await resultSourceUpdatesRoutes(req, res)) return;
+      if (await resultReplayRoutes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -4240,6 +4597,7 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/auth/logout" && req.method === "POST") {
         const { user } = await store.ensureSessionUser(req, res);
         await store.logout(req);
+        await managedBrowser.closeOwner(user.id).catch(async () => { await securityAudit(config, "browser.cleanup", "pending", { userId: user.id }); });
         clearSessionCookie(res, config.sessionCookieName);
         await securityAudit(config, "auth.logout", "completed", { userId: user.id });
         sendJson(res, 200, { data: true });
@@ -4816,7 +5174,9 @@ export function createWebApiApp(overrides = {}) {
               ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
             });
           }
+          await runtimeManager.start(ctx.project);
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
+            recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
             // The capsule a 「试用一次」 conversation is trying reaches it through
             // the capsule plugin at its first step (memorySessions.mjs), for a
@@ -4871,6 +5231,7 @@ export function createWebApiApp(overrides = {}) {
         // id the ledger has not seen cannot be matched to the run it belongs to.
         const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId);
         await runtimeManager.dispatchPrompt(ctx.project, run.sessionId, {
+          recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
           // Marked, so a compaction can carry it as a handle rather than
           // summarising away one half of a modified instruction — the failure
           // the published implementations of this feature all name.
@@ -5026,7 +5387,7 @@ export function createWebApiApp(overrides = {}) {
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        });
+        }, { skillArtifacts });
         return;
       }
 
@@ -5053,6 +5414,7 @@ export function createWebApiApp(overrides = {}) {
           }
         }
         await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
         // institution is gone, and nothing else would ever delete it.
@@ -5085,7 +5447,11 @@ export function createWebApiApp(overrides = {}) {
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
           beforeDelete: async (id, client) => {
-            if (client) await documentExportService?.cancelProject(id, null, client);
+            if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinAccount(id))) {
+              throw new HttpError(409, "account_busy", "Extension execution is still stopping.");
+            }
+            if (client) { await documentExportService?.cancelProject(id, null, client); await resultReplays?.cancelProject(id, null, client); }
+            if (client) await prepareResearchBillingAccountDeletion(client, id);
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
@@ -5235,7 +5601,11 @@ export function createWebApiApp(overrides = {}) {
           let vcrArtifacts = null;
           const data = await store.deleteProject(user, projectId, {
             beforeDelete: async (client) => {
-              if (client) await documentExportService?.cancelProject(user.id, project.id, client);
+              await managedBrowser.closeProject(user.id, project.id);
+              if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
+                throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
+              }
+              if (client) { await documentExportService?.cancelProject(user.id, project.id, client); await resultReplays?.cancelProject(user.id, project.id, client); }
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
@@ -5564,6 +5934,11 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if ((req.method === "GET" || req.method === "HEAD") && config.staticDir) {
+        // The single-page fallback is for the application's own addresses. An
+        // API or gateway path that nothing above served is a missing route:
+        // answered with index.html (200, text/html) it handed a JSON client a
+        // page of markup and read as healthy to anything counting statuses.
+        if (/^\/(?:api|internal)(?:\/|$)/.test(pathname)) throw new HttpError(404, "not_found", "Route not found.");
         await serveStatic(req, res, config, pathname);
         return;
       }
@@ -5638,7 +6013,11 @@ export function createWebApiApp(overrides = {}) {
     runtimeManager,
     agentRegistry,
     usageLedger,
+    managedBrowser,
+    authorizeOpenSession: authorizeOwnedNativeSession,
     authorizePrompt: assertPublicSessionPrompt,
+    recordPromptActor: recordExtensionPromptActor,
+    bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
@@ -5825,8 +6204,11 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
+    void Promise.resolve(managedBrowser.pause?.()).catch(() => {
+      process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
+    });
+    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -5854,7 +6236,11 @@ export function createWebApiApp(overrides = {}) {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
     try {
+      managedBrowser.start?.();
       pluginApplyWorker?.start();
+      if (config.runtimeMode === "kernel") personalSkillWorker?.start();
+      hostedExtensions?.preparation.start();
+      hostedExtensions?.worker.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
       kbIndex?.start();
@@ -5866,6 +6252,7 @@ export function createWebApiApp(overrides = {}) {
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
       documentExportWorker?.start();
+      resultReplayWorker?.start();
       credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -5970,6 +6357,11 @@ export function createWebApiApp(overrides = {}) {
     vcrService: vcr?.service ?? null,
     capsuleService,
     pluginService,
+    extensionService,
+    skillLibraryService,
+    personalSkillGenerations,
+    personalSkillWorker,
+    hostedExtensions,
     pluginApplyWorker,
     im,
     commands,
@@ -5985,6 +6377,15 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      // Activate the immutable charging policy before any research can start.
+      // A first completion must never establish its own retrospective cutoff.
+      if (credits) await credits.service.ready();
+      if (skillArtifacts) {
+        try {
+          const directory = await openScopedDirectoryNoFollow(config.dataDir, skillRoot, { create: true });
+          await directory.handle.close(); skillStorageReady = true;
+        } catch { process.stderr.write("personal skill storage initialization failed\n"); }
+      }
       // Optional module: a failed migration is named here and turns the
       // `frontier` readiness check red; it does not stop the control plane.
       if (frontier) {
@@ -6028,6 +6429,9 @@ export function createWebApiApp(overrides = {}) {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
+      await personalSkillWorker?.close();
+      await hostedExtensions?.preparation.close();
+      await hostedExtensions?.worker.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await kbIndex?.close();
@@ -6039,6 +6443,8 @@ export function createWebApiApp(overrides = {}) {
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
       await documentExportWorker?.close();
+      await resultReplayWorker?.close();
+      await resultCaptureQueue.drain();
       await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;

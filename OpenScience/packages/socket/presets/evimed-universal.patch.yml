@@ -201,6 +201,7 @@
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
               includeDefaultRoots: false
+              watch: false
               # Absolute, and not by accident. The loader resolves each root with
               # `path.resolve`, so a relative one lands under `process.cwd()` — which in a
               # runtime container is `/workspace`. These four were written `./skills/...`
@@ -226,6 +227,8 @@
                 # can displace a skill we wrote. What is in here is recorded in
                 # runtime/skills/community/sources.json, one entry per skill.
                 - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
+                # Exact selected personal revisions, mounted read-only outside the workspace.
+                - !!js process.env.EVIMED_PERSONAL_SKILLS_DIR || '/opt/evimed/personal-skills'
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
 
@@ -306,3 +309,12 @@
           #   tool-workflow, workflow-worker-thread  no skill, manifest or code path
           #                        calls the workflow tool; its schema (4 K characters)
           #                        rode every root request (2026-09-18)
+
+          # Platform-owned bridge reads only the selected immutable projection.
+          - id: evimed-cowork-bridge
+            name: '@evimed/dsh-socket/extensions/cowork'
+            config:
+              projectionFile: !!js process.env.EVIMED_EXTENSION_PROJECTION_FILE ?? ''
+              gatewayUrl: !!js process.env.EVIMED_EXTENSION_GATEWAY_URL ?? ''
+              tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE ?? ''
+              generationTokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE ?? ''

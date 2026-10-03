@@ -1,23 +1,59 @@
-import { priceListFor } from "@evimed/domain";
+import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectResultInput, projectResultVersion } from "@evimed/domain";
 import { PLUGIN_REGISTRY, exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
+import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkillResources } from "./extensionAccountExport.mjs";
+import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
-// The document kinds that are the customer's own data. "price-list" is absent
-// on the evidence: it is a declared PRODUCT_KIND that no product code reads or
-// writes (the only writer is the export integration test's fixture, which is
-// there to prove such a row never leaves), so nothing user-scoped is known to
-// live under it and there is no shape to export. Prices are not per-user at
-// all — they live in `@evimed/domain`'s price-list registry — and the export
-// carries the lists its own usage rows name, from there. See
-// `exportedPriceLists`.
-const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin"];
+// The document kinds that are the customer's own data, carried as rows of
+// `documents` and `revisions`. A kind whose stored payload holds more than
+// that — a storage location, a queue id, another user's id — leaves through a
+// projection; see `exportDocumentRow`.
+const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin",
+  "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_CUSTOMER_KINDS];
+
+/** The document kinds the archive deliberately leaves out, and why.
+ *
+ * Every kind `PRODUCT_KINDS` declares is either carried (`customerKinds`) or
+ * named here with a reason, and `accountExportKinds.test.mjs` fails by name on
+ * a kind that is neither. That test is the guard. Until 2026-10-03 the guard
+ * was a refusal at run time: the export answered 503 for an account holding a
+ * kind this file did not name. It did exactly what the paragraph on tables
+ * below says such a refusal does. The four result kinds entered
+ * `PRODUCT_KINDS` on 2026-10-02, result capture is on by default, and the
+ * export was down for every account with one captured result. `method-trial`
+ * (2026-09-10) and `document-export` (2026-10-01) were never named here
+ * either, so an account holding one of those was refused the same way.
+ *
+ * So a kind added to `PRODUCT_KINDS` needs a decision here before it merges,
+ * and a kind nothing here decided is no longer an outage: the export carries
+ * what it has a contract for and states the rest in its own `omissions`. */
+export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
+  "price-list": "declared in PRODUCT_KINDS but read and written by no product code, so nothing user-scoped is known to live under it; prices are platform data in the price-list registry, and the archive carries the lists its own usage rows name as priceLists",
+  "method-trial": "an evaluation identity's time-limited instruction to mount named methods in one project's next launches, expired on read; it steers this deployment's runtime and means nothing outside it, and the methods it names are exported under method",
+  "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
+  "extension-proof": "qualification the platform measures for itself; an archive carrying one would offer a compatibility claim no import may accept, and no product code writes this kind today",
+  "extension-resource": "the platform's own operation records: public-document grants and accepted-actor bindings signed with a deployment secret, and the journals of skill copies and adoptions; the documents and skills they refer to are workspace files and skill records, which are exported",
+});
+
+/** Every document kind the archive carries.
+ * @returns {string[]} */
+export function accountExportDocumentKinds() { return [...customerKinds]; }
+
 const queries = [
+  ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
+  ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
+  ["evidenceCardRevisions", "SELECT r.* FROM evimed_frontier.evidence_card_revisions r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id WHERE c.user_id=$1 ORDER BY r.card_id,r.revision"],
+  ["evidenceAutomation", "SELECT a.* FROM evimed_frontier.evidence_automation a JOIN evimed_frontier.evidence_zones z ON z.id=a.zone_id WHERE z.user_id=$1 ORDER BY a.zone_id"],
+  ["evidenceZoneFollows", "SELECT * FROM evimed_frontier.evidence_zone_follows WHERE user_id=$1 ORDER BY zone_id"],
+  ["evidenceComments", "SELECT * FROM evimed_frontier.evidence_comments WHERE user_id=$1 ORDER BY id"],
+  ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
+  ["evidenceZoneFeedback", "SELECT * FROM evimed_frontier.evidence_zone_feedback WHERE user_id=$1 ORDER BY id"],
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
@@ -68,9 +104,9 @@ export function accountExportTables(source = queries) {
 
 /** The user-scoped tables the archive deliberately leaves out, and why.
  *
- * The kind guard below refuses the export when it meets a `documents` kind
- * nobody declared. Nothing did the same for tables, so a new user-scoped table
- * — `evimed_product.feedback_events` was one — could be added and simply not
+ * `documents` kinds have had a guard since the first export. Nothing did the
+ * same for tables, so a new user-scoped table —
+ * `evimed_product.feedback_events` was one — could be added and simply not
  * exported, with no test and no runtime check noticing. This list is the
  * counterpart: `accountExport.test.mjs` walks the migration SQL and requires
  * every table with a `user_id` column to be either exported or named here with
@@ -129,6 +165,138 @@ export function exportPluginDocumentRow(row, registry = PLUGIN_REGISTRY) {
   return { ...row, payload: plugin };
 }
 
+/** The named keys a stored object holds, and nothing else it holds.
+ * @param {any} value @param {readonly string[]} keys @returns {Record<string, any>} */
+function pick(value, keys) {
+  /** @type {Record<string, any>} */
+  const picked = {};
+  if (value && typeof value === "object") for (const key of keys) if (Object.hasOwn(value, key)) picked[key] = value[key];
+  return picked;
+}
+
+/** @param {any} payload @param {string} recordType */
+function recorded(payload, recordType) {
+  if (payload?.recordType !== recordType) throw new Error(`Not a ${recordType} record.`);
+}
+
+/** Which conversation, run and call produced a result: the customer's own
+ * identifiers, the same ones `researchSessions` and `usage` carry. */
+const producerKeys = ["kind", "sessionId", "runId", "callId", "eventId", "parentSessionId", "branchId"];
+
+/** What the archive carries of a result and of a document conversion.
+ *
+ * Where the bytes are. A result version records a file the way a source record
+ * does: by its path in the project's workspace and its SHA-256 (`path`,
+ * `digest`, `size`, beside a source's `paths` and `fingerprint`), and this
+ * archive's copy of the project's workspace is where bytes travel. The record
+ * therefore says what the file was and lets a reader check the file at that
+ * path against it. It does not name `storagePath`, the platform's own
+ * content-addressed copy under `.openscience/result-snapshots/`: the archive
+ * does not carry that directory, so a version the workspace has since
+ * overwritten leaves as a record whose bytes this archive does not hold. A
+ * conversion's rendered files are in the same position — each format leaves
+ * with its SHA-256 and size and without the store path the archive does not
+ * carry — as are a calculation's outputs, which are workspace files named by
+ * `path` and `sha256`. The export embeds no file of its own accord: the base64
+ * route `personalSkillResources` takes exists for bytes outside the account's
+ * data root and is bounded at 32 MiB, and one result snapshot may be 64 MiB.
+ * What a record itself holds leaves with it, which for a delivered report
+ * includes the text of the evidence matrix it was checked against
+ * (`review.matrixText`), exactly as the result routes serve it.
+ *
+ * What stays behind. Another user's id (`requestedBy`, on a shared project a
+ * collaborator's), queue and process bookkeeping (`jobId`, `execution`,
+ * `attempt`, the retry and quota counters), and the digests that exist to make
+ * a write idempotent (`fingerprint`, `changeKey`, `instructionDigest`,
+ * `inputDigest`). Each projection names what it carries rather than what it
+ * drops, so a field a result module adds later stays behind until someone
+ * decides it is the customer's. One id is not hidden by this and is not meant
+ * to be: a calculation's job id is the `result-replays/<job>/` directory its
+ * files are written to in the workspace and the call its output version names
+ * as producer, so it leaves in those two places and not as a queue pointer.
+ *
+ * What is as recorded rather than as served. A reference's `availability` is
+ * the one captured with the result, not re-derived against today's sources:
+ * the archive is the owner's across all their projects, and the per-project
+ * re-authorization the result routes do answers a question it does not ask. A
+ * calculation's or a conversion's `state` is the record's own: a failure the
+ * worker recorded only on its queue job is not on the record, and the queue is
+ * not exported.
+ *
+ * @type {Record<string, (payload: any) => any>} */
+const payloadProjections = {
+  // The shape the result routes serve, from the same domain projection.
+  "result-version": payload => {
+    recorded(payload, "result-version");
+    const version = projectResultVersion(payload);
+    return { recordType: "result-version", ...version, findings: version.findings.map((/** @type {any} */ finding) => ({ ...finding,
+      sourceRefs: (Array.isArray(finding.sourceRefs) ? finding.sourceRefs : []).map((/** @type {any} */ reference) => projectResultInput({ kind: "source", ...reference })) })) };
+  },
+  // What was selected on which version, and what the researcher asked for.
+  // `draft` stays behind: it is the composer text the platform built around
+  // the selection, and `anchor` already carries the selection itself.
+  "result-revision": payload => {
+    recorded(payload, "result-revision");
+    return { ...pick(payload, ["recordType", "id", "projectId", "versionId", "digest", "sessionId", "state", "stagedAt", "boundAt", "instruction", "inputPath"]),
+      anchor: pick(payload.anchor, ["kind", "elementId", "elementKind", "selectedText", "matchMode", "page", "row", "column"]) };
+  },
+  // Which source changed under which result, and whether research continued.
+  "result-impact": payload => {
+    recorded(payload, "result-impact");
+    return { ...pick(payload, ["schemaVersion", "recordType", "versionId", "effect", "claimIds", "coverage", "historicalResultPreserved", "recomputed", "observedAt"]),
+      source: pick(payload.source, ["id", "digest", "versionId", "doi"]),
+      sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]),
+      continuation: pick(payload.continuation, ["status", "reason", "agendaId", "episodeId", "requestedAt", "scheduledAt"]) };
+  },
+  // Two record types share this kind: the frozen recipe of an engine result,
+  // and one request to calculate or recalculate.
+  "result-replay": payload => {
+    if (payload?.recordType === "result-replay-recipe") {
+      return pick(payload, ["recordType", "projectId", "versionId", "inputVersionId", "recipe", "recipeDigest", "machineValues", "receipt", "capturedAt"]);
+    }
+    recorded(payload, "result-replay");
+    return { ...pick(payload, ["recordType", "id", "projectId", "versionId", "state", "cleanup", "createdAt", "outputVersionId", "partial", "comparison"]),
+      ...(payload.stopError ? { error: { code: String(payload.stopError) } } : {}),
+      ...(Array.isArray(payload.artifacts) ? { artifacts: payload.artifacts.map((/** @type {any} */ file) => pick(file, ["path", "sha256", "bytes"])) } : {}),
+      ...(payload.initial ? { initial: { ...pick(payload.initial, ["recipe", "inputVersionId"]), producer: pick(payload.initial.producer, producerKeys) } } : {}) };
+  },
+  // What was converted, from which revision of it, and what came out.
+  "document-export": payload => ({
+    ...pick(payload, ["projectId", "title", "sourceRevision", "rendererVersion", "state"]),
+    source: pick(payload?.source, ["artifactId", "root", "workspace", "studyId", "exportId"]),
+    formats: Object.fromEntries(DOCUMENT_EXPORT_FORMATS.filter(format => Object.hasOwn(payload?.formats ?? {}, format))
+      .map(format => [format, pick(payload.formats[format], ["state", "mime", "sha256", "bytes", "code"])])),
+    findings: Array.isArray(payload?.findings) ? payload.findings.filter((/** @type {unknown} */ finding) => typeof finding === "string") : [],
+  }),
+};
+
+/** One stored document or revision row, as the customer's own archive carries it.
+ *
+ * Null for a row of a projected kind that does not read as one: a result
+ * record the product's own routes would not serve either. The caller leaves
+ * it out and says so in `omissions`, because one unreadable record is not a
+ * reason to withhold everything else the account holds.
+ *
+ * The refusals that remain are the ones made on purpose and held by tests: a
+ * plugin document the registry cannot name, an extension row that fails its
+ * own contract. Those are stored states nothing in the product wrote, where
+ * carrying on would hand the customer a configuration the platform never
+ * applied.
+ *
+ * @param {any} row @returns {any} */
+export function exportDocumentRow(row) {
+  if (Object.hasOwn(payloadProjections, row.kind)) {
+    try { return { ...row, payload: payloadProjections[row.kind](row.payload) }; }
+    catch { return null; }
+  }
+  if (EXTENSION_CUSTOMER_KINDS.includes(row.kind)) return exportExtensionAccountRow(row);
+  if (row.kind === "source") return { ...row, payload: projectSourceManifestRecord(row).payload };
+  const sourceDerived = projectSourceDerivedRecord(row);
+  if (sourceDerived) return { ...row, payload: sourceDerived };
+  if (row.kind !== "plugin") return row;
+  return exportPluginDocumentRow(row);
+}
+
 /** The price lists the exported usage rows name — every one this deployment
  * can still resolve, and a null for every one it cannot.
  * A usage row records a version, not a rate; an export that carried only the
@@ -162,9 +330,10 @@ export function exportedPriceLists(usageRows) {
  * user row stays shared-locked: account deletion locks it before removing files.
  * @param {any} database @param {any} user @param {Record<string,any>} config
  * @param {(snapshot:any) => Promise<any>} operation
- * @param {{maxRows?:number,maxBytes?:number}} limits */
+ * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
   if (!database) return operation(null);
+  const report = limits.report ?? ((/** @type {string} */ line) => { process.stderr.write(line); });
   if (typeof user.accountCreatedAt !== "string" || !user.accountCreatedAt) {
     throw new HttpError(409, "account_export_account_changed", "The authenticated account generation is no longer available.");
   }
@@ -175,6 +344,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateProductStore(database);
   await migrateNotifications(database);
   await migrateUsageLedger(database);
+  await migrateEvidenceZones(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -183,13 +353,21 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       transaction_timestamp() AS "snapshotAt" FROM evimed_control.users WHERE id=$1 FOR SHARE`, [user.id, user.accountCreatedAt]);
     const owner = account.rows[0];
     if (!owner?.sameGeneration) throw new HttpError(409, "account_export_account_changed", "The authenticated account generation changed before export.");
-    // New persisted kinds require an explicit customer export contract.
-    // "price-list" is tolerated here and exported nowhere: the kind is declared
-    // in PRODUCT_KINDS but no product code reads or writes it, so a row under it
-    // has no known customer meaning, and refusing the whole export over one
-    // would be a 503 for something nothing in the product put there.
-    const unsupported = await client.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND NOT(kind=ANY($2::text[])) LIMIT 1", [user.id, [...customerKinds, "price-list"]]);
-    if (unsupported.rowCount) throw new HttpError(503, "account_export_unsupported_state", "Stored settings need a supported customer export shape.");
+    // A persisted kind still needs an explicit export contract, and a kind
+    // without one still never leaves as stored. What changed is what happens
+    // to everything else the account holds: it is exported, and the kind that
+    // was left out is named in the archive's own `omissions` with how many
+    // documents it has. Which kinds exist is settled at test time
+    // (`UNEXPORTED_DOCUMENT_KINDS`); what can still reach this query is a
+    // database written by a release newer than the code reading it, and the
+    // answer to that is the customer's data with the gap stated, not a 503
+    // for all of it.
+    const undecided = await client.query(`SELECT kind,count(*)::int AS documents FROM evimed_product.documents
+      WHERE user_id=$1 AND NOT(kind=ANY($2::text[])) GROUP BY kind ORDER BY kind`, [user.id, [...customerKinds, ...Object.keys(UNEXPORTED_DOCUMENT_KINDS)]]);
+    /** @type {{kind:string,reason:string,documents:number,revisions?:number}[]} */
+    const omissions = undecided.rows.map((/** @type {any} */ row) => ({ kind: String(row.kind), reason: "no_export_contract", documents: Number(row.documents) }));
+    /** @type {Map<string, {kind:string,reason:string,documents:number,revisions:number}>} */
+    const unreadable = new Map();
     const tables = {};
     let rows = 0;
     let bytes = 0;
@@ -202,20 +380,30 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       bytes += Number(size.rows[0].bytes);
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
-      if (key === "documents" || key === "revisions") tables[key] = tables[key].map(row => {
-        if (row.kind === "source") return { ...row, payload: projectSourceManifestRecord(row).payload };
-        const sourceDerived = projectSourceDerivedRecord(row);
-        if (sourceDerived) return { ...row, payload: sourceDerived };
-        if (row.kind !== "plugin") return row;
-        return exportPluginDocumentRow(row);
+      if (key === "documents" || key === "revisions") tables[key] = tables[key].flatMap((/** @type {any} */ row) => {
+        const exported = exportDocumentRow(row);
+        if (exported) return [exported];
+        const entry = unreadable.get(row.kind) ?? { kind: String(row.kind), reason: "unreadable_record", documents: 0, revisions: 0 };
+        if (key === "documents") entry.documents += 1; else entry.revisions += 1;
+        unreadable.set(row.kind, entry);
+        return [];
       });
     }
-    // `version` stays 1 with `priceLists` and `feedbackEvents` added: v1 is an
-    // additive contract, so a new top-level key is not a break for a reader
-    // that keeps parsing the keys it knows, and a bump would tell every archive
-    // holder their parser needs revisiting when it does not. It moves when an
-    // existing key changes shape or leaves. `feedbackEvents` is a query like
-    // any other, so the row and byte pre-flight above already bounds it.
+    omissions.push(...unreadable.values());
+    // The archive says it; this line is so whoever runs the deployment hears
+    // it too. Kinds and counts only: neither is the customer's data.
+    for (const entry of omissions) {
+      report(`account export left out ${entry.kind}: ${entry.reason}, ${entry.documents} documents${entry.revisions === undefined ? "" : `, ${entry.revisions} revisions`}\n`);
+    }
+    // `version` stays 1 with `priceLists`, `feedbackEvents` and `omissions`
+    // added, and with new kinds among `documents`: v1 is an additive contract,
+    // so a new top-level key, or a kind a reader does not know, is not a break
+    // for a reader that keeps parsing what it knows, and a bump would tell
+    // every archive holder their parser needs revisiting when it does not. It
+    // moves when an existing key changes shape or leaves. `omissions` is
+    // always present and empty when nothing was left out: a missing key would
+    // read as nobody having looked. `feedbackEvents` is a query like any
+    // other, so the row and byte pre-flight above already bounds it.
     // What bounds `priceLists`: the pre-flight count above never sees it —
     // `maxRows` counts database rows — but it holds at most one entry per
     // distinct price version among usage rows already counted there, and the
@@ -225,8 +413,13 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       version: 1, snapshotAt: owner.snapshotAt, account: { id: owner.id, name: owner.name, accountCreatedAt: owner.accountCreatedAt },
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
-      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents,
+      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
+      evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
+      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,
     };
+    const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,
+      rows: [...tables.documents, ...tables.revisions], maxBytes: Math.min(32 * 1024 * 1024, maxBytes) });
+    if (skillResources.resources.length) state.personalSkillResources = skillResources.resources;
     const data = Buffer.from(`${JSON.stringify(state)}\n`, "utf8");
     if (data.length > maxBytes) throw tooLarge();
     return operation({ projects: tables.projects, data });
