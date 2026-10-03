@@ -231,6 +231,49 @@ async function smokeRuntime(baseUrl, headers) {
   assert(stopped.json?.data?.running === false, "Runtime did not stop cleanly.");
 }
 
+/**
+ * One real conversion through the deployed controller. It is the only stage
+ * that makes the controller write under the data directory and start a
+ * renderer container, so it is what shows the deployed mounts allow both.
+ */
+async function smokeDocumentExport(baseUrl, projectId, headers) {
+  const heading = "部署冒烟导出";
+  const markdown = `# ${heading}\n\n| 指标 | 数值 |\n|---|---|\n| 样本量 | 128 |\n\n正文一段，用于验证中文渲染。\n`;
+  const formats = (process.env.OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT_FORMATS ?? "docx,html").split(",").map((value) => value.trim()).filter(Boolean);
+  await jsonFetch(`${baseUrl}/api/files/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ filename: "smoke/report.md", encoding: "base64", data: Buffer.from(markdown).toString("base64") }),
+  });
+  const requested = await jsonFetch(`${baseUrl}/api/document-exports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ projectId, source: { artifactId: "smoke/report.md", root: "workspace" }, formats }),
+  });
+  const id = requested.json?.data?.id;
+  assert(typeof id === "string" && id.length > 0, "Document export request returned no id.");
+  const limit = Number(process.env.OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT_TIMEOUT_MS ?? 240_000);
+  const deadline = Date.now() + (Number.isFinite(limit) && limit > 0 ? limit : 240_000);
+  for (;;) {
+    const status = (await jsonFetch(`${baseUrl}/api/document-exports/${encodeURIComponent(id)}`, { headers })).json?.data;
+    const states = formats.map((format) => status?.formats?.[format]?.state);
+    if (states.every((state) => state === "ready")) break;
+    const summary = JSON.stringify({ state: status?.state, formats: status?.formats });
+    if (states.includes("failed") || ["failed", "canceled"].includes(status?.state)) throw new Error(`Document export failed: ${summary}`);
+    if (Date.now() > deadline) throw new Error(`Document export did not finish in time: ${summary}`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  for (const format of formats) {
+    const res = await fetchWithTimeout(`${baseUrl}/api/document-exports/${encodeURIComponent(id)}/download/${format}`, { headers });
+    assert(res.ok, `Document export download (${format}) -> ${res.status}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (format === "docx") assert(bytes.length > 2000 && bytes.subarray(0, 2).toString("latin1") === "PK", "The exported Word file is not a document archive.");
+    else if (format === "pdf") assert(bytes.length > 1000 && bytes.subarray(0, 5).toString("latin1") === "%PDF-", "The exported PDF is not a PDF.");
+    else assert(bytes.toString("utf8").includes(heading), "The exported HTML does not contain the report heading.");
+  }
+  return formats;
+}
+
 async function main() {
   const baseUrl = normalizeBaseUrl(process.env.OPEN_SCIENCE_SMOKE_BASE_URL ?? process.argv[2]);
   const projectId = smokeProjectId();
@@ -344,6 +387,11 @@ async function main() {
   if (boolEnv("OPEN_SCIENCE_SMOKE_RUNTIME")) {
     await smokeRuntime(baseUrl, scoped);
     log("runtime ok");
+  }
+
+  if (boolEnv("OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT")) {
+    const formats = await smokeDocumentExport(baseUrl, projectId, scoped);
+    log(`document export ok (${formats.join(", ")})`);
   }
 
   log("deployment smoke passed");

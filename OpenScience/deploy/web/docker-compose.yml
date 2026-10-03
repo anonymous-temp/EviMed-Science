@@ -1772,7 +1772,11 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       <<: *runtime-caps
     volumes:
-      - open-science-data:/data:ro
+      # Writable since 2026-10-03. The controller stages each personal-skill
+      # validation input and keeps the render and validation recovery markers
+      # under the data directory; mounted read-only, every document export and
+      # skill import in this stack stopped at the first marker write (EROFS).
+      - open-science-data:/data
       - open-science-runtime-control:/run/open-science-controller
       - type: bind
         source: ${OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-./release-manifest.json}

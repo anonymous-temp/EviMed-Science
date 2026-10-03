@@ -493,7 +493,7 @@ async function checkRuntimeContainerTopology() {
     /read_only:\s+true/.test(webService) &&
     /OPEN_SCIENCE_WEB_TMPFS_SIZE:-128m/.test(webService) &&
     /runtimeControllerIndex\.mjs/.test(controllerService) &&
-    /open-science-data:\/data:ro/.test(controllerService) &&
+    /^\s+- open-science-data:\/data$/m.test(controllerService) &&
     /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock/.test(controllerService) &&
     /group_add:\s*\n\s+- "\$\{OPEN_SCIENCE_DOCKER_SOCKET_GID:\?set OPEN_SCIENCE_DOCKER_SOCKET_GID\}"/.test(controllerService) &&
     !/^\s+ports:/m.test(controllerService) &&

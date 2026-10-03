@@ -68,6 +68,45 @@ test("deployment smoke script validates a hosted Web deployment through public A
   }
 });
 
+test("the document export stage is off unless asked for, and names the refusal where conversion is unavailable", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-smoke-export-"));
+  // The file store has no product ledger, so this deployment cannot convert.
+  const app = createWebApiApp({
+    dataDir,
+    port: 0,
+    runtimeMode: "mock",
+    devAuth: false,
+    bootstrapUser: "alice",
+    bootstrapPassword: "correct horse battery staple",
+    operatorMetricsToken: "metrics-secret",
+    maxProjectBytes: 1024 * 1024,
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  const env = {
+    ...process.env,
+    OPEN_SCIENCE_SMOKE_BASE_URL: `http://127.0.0.1:${address.port}`,
+    OPEN_SCIENCE_SMOKE_USERNAME: "alice",
+    OPEN_SCIENCE_SMOKE_PASSWORD: "correct horse battery staple",
+    OPEN_SCIENCE_SMOKE_PROJECT_ID: "smokeexport",
+    OPEN_SCIENCE_SMOKE_METRICS_TOKEN: "metrics-secret",
+  };
+  try {
+    const plain = await runSmoke(env);
+    assert.doesNotMatch(plain.stdout, /document export/);
+    assert.match(plain.stdout, /\[smoke\] deployment smoke passed/);
+    await assert.rejects(runSmoke({ ...env, OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT: "true" }), (error) => {
+      assert.match(error.stderr, /POST http:\/\/127\.0\.0\.1:\d+\/api\/document-exports -> 503/);
+      assert.match(error.stderr, /document_export_unavailable/);
+      assert.match(error.stdout, /\[smoke\] file upload\/read\/preview\/download ok/);
+      assert.doesNotMatch(error.stdout, /deployment smoke passed/);
+      return true;
+    });
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("deployment smoke accepts an operator-supplied OIDC session without password credentials", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-smoke-oidc-"));
   const app = createWebApiApp({

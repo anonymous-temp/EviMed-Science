@@ -1287,6 +1287,9 @@ jobs:
           OPEN_SCIENCE_SMOKE_METRICS_TOKEN_FILE: deploy/web/secrets/operator-metrics-token.txt
           OPEN_SCIENCE_SMOKE_RUNTIME: "true"
           OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT: "false"
+          # The one stage that makes the composed controller write under the
+          # data volume and start a renderer from the built runtime image.
+          OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT: "true"
         run: |
           OPEN_SCIENCE_SMOKE_PASSWORD="$(tr -d '\r\n' < deploy/web/secrets/bootstrap-password.txt)" \
             pnpm smoke:deployment

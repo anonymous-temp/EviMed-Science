@@ -667,7 +667,10 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(metaService, /read_only:\s+true/);
   assert.doesNotMatch(metaService, /^\s+ports:/m);
   assert.match(controllerService, /command:\s+\["node", "apps\/server\/src\/runtimeControllerIndex\.mjs"\]/);
-  assert.match(controllerService, /open-science-data:\/data:ro/);
+  // The controller writes render markers and staged skill-validation inputs
+  // under the data directory, so a read-only mount fails both features.
+  assert.match(controllerService, /^\s+- open-science-data:\/data$/m);
+  assert.doesNotMatch(controllerService, /open-science-data:\/data:ro/);
   assert.match(controllerService, /open-science-runtime-control:\/run\/open-science-controller/);
   assert.match(controllerService, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
   assert.match(
@@ -726,6 +729,28 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /source:\s+\$\{OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-\.\/release-manifest\.json\}/);
   assert.match(compose, /target:\s+\/run\/open-science\/release-manifest\.json/);
   assert.match(compose, /\/api\/ready/);
+});
+
+test("the controller's data mount is writable wherever the controller writes under the data directory", async () => {
+  const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const controller = compose.services["open-science-runtime-controller"];
+  const controllerServer = await readFile(path.join(repoRoot, "apps/server/src/runtimeControllerServer.mjs"), "utf8");
+  // Both run inside the controller process and write below config.dataDir: the
+  // render's creation marker, and the staged input a validation container mounts.
+  const writers = {
+    "documentRenderController.mjs": /writeFileSync\(uncertain,/,
+    "skillValidationController.mjs": /writeFileExclusiveNoFollow\(config\.dataDir,/,
+  };
+  for (const [file, pattern] of Object.entries(writers)) {
+    const source = await readFile(path.join(repoRoot, "apps/server/src", file), "utf8");
+    assert.match(source, pattern, `${file} no longer writes under the data directory, so this test's premise changed`);
+    assert.ok(controllerServer.includes(`"./${file}"`), `${file} is no longer composed into the controller`);
+  }
+  assert.equal(controller.environment.OPEN_SCIENCE_DATA_DIR, "/data");
+  const dataMounts = controller.volumes.filter((entry) => typeof entry === "string" && entry.startsWith("open-science-data:"));
+  assert.deepEqual(dataMounts, ["open-science-data:/data"], "a read-only data mount fails every document export and skill import at its first marker write");
+  // Its own filesystem stays read-only; only the two named volumes are writable.
+  assert.equal(controller.read_only, true);
 });
 
 test("backup compose overlay runs an unexposed least-privilege encrypted scheduler", async () => {
@@ -1380,6 +1405,7 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.equal(workflow.includes("OPEN_SCIENCE_SMOKE_ALLOW_HTTP"), false);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME:\s+"true"/);
   assert.match(workflow, /OPEN_SCIENCE_SMOKE_RUNTIME_PROMPT:\s+"false"/);
+  assert.match(workflowStep(workflow, "Smoke real hosted runtime boundaries"), /OPEN_SCIENCE_SMOKE_DOCUMENT_EXPORT:\s+"true"/);
   assert.match(workflow, /docker ps -aq --filter label=open-science\.web\.runtime=true/);
   assert.match(workflow, /--profile backup --profile monitoring --profile tls down -v --remove-orphans/);
   assert.equal(workflow.includes("open-science-opencode:latest"), false);
