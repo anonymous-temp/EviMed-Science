@@ -223,6 +223,31 @@ export function observeCampaignGenerationProbe(manager,record){
  };
  return()=>{manager.probeGeneration=original;};
 }
+/** Four real lifecycle stages, observed only in the private driver. Summary booleans never replace the worker's independent proof assertion. */
+export function observeCampaignGenerationLifecycle(manager,record,now=Date.now){
+ const names=['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'],originals=new Map(),wrappers=new Map();let emitted=0;
+ if(typeof record!=='function'||names.some(name=>typeof manager[name]!=='function'))throw new Error('real_generation_campaign_required');
+ const emit=async value=>{if(emitted>=32)return;emitted++;try{await record({...value,sequence:emitted});}catch{ /* An unavailable diagnostic sink cannot alter real execution. */ }};
+ const hashed=value=>digest(canonicalJson(value??null));
+ for(const stage of names){const original=manager[stage];originals.set(stage,original);
+  const wrapper=async function(...args){const project=args[0],candidate=args[1],started=now(),generationHash=typeof candidate?.reference?.generationHash==='string'&&/^[a-f0-9]{64}$/.test(candidate.reference.generationHash)?candidate.reference.generationHash:null;
+   await emit({stage,outcome:'begin',elapsedMs:0,generationHash,referencePresent:Boolean(candidate?.reference)});
+   try{const result=await original.apply(this,args);let summary={};
+    try{summary={joined:typeof result?.joined==='boolean'?result.joined:null,manifestDigestMatch:typeof result?.manifestDigest==='string'?result.manifestDigest===hashed(candidate):null};
+     if(stage==='probeGeneration'){
+      const expectedInventory=candidate.projection.plugins.map(plugin=>({extensionId:plugin.extensionId,artifactDigest:plugin.artifactDigest,configRevision:plugin.configRevision,configDigest:plugin.configDigest,enabled:plugin.enabled})),epoch=this.runtimeGeneration(project);
+      const pairs={reference:[result?.reference??null,candidate.reference??null],inventory:[result?.inventory,expectedInventory],personal:[result?.personal,candidate.projection.personal],baseRuntimeImageDigest:[result?.baseRuntimeImageDigest,candidate.identity.baseRuntimeImageDigest],adapterRevision:[result?.adapterRevision,candidate.identity.adapterRevision],permissionProfileRevision:[result?.permissionProfileRevision,candidate.identity.permissionProfileRevision]};
+      summary.proofMatches={runtimeEpoch:typeof result?.runtimeGeneration==='string'&&Boolean(result.runtimeGeneration)&&result.runtimeGeneration===epoch};summary.proofDigests={runtimeEpoch:{actual:hashed(result?.runtimeGeneration),expected:hashed(epoch)}};
+      for(const[key,[actual,expected]]of Object.entries(pairs)){summary.proofMatches[key]=key==='baseRuntimeImageDigest'||key==='adapterRevision'||key==='permissionProfileRevision'?actual===expected:canonicalJson(actual??null)===canonicalJson(expected??null);summary.proofDigests[key]={actual:hashed(actual),expected:hashed(expected)};}
+      summary.inventoryCounts={actual:Array.isArray(result?.inventory)?result.inventory.length:null,expected:expectedInventory.length};
+     }
+    }catch{summary={summaryUnavailable:true};}
+    await emit({stage,outcome:'succeeded',generationHash,elapsedMs:Math.max(0,Math.floor(now()-started)),...summary});return result;
+   }catch(error){const codes=['extension_probe_config_invalid','extension_probe_registrations_invalid','citation_probe_runtime_busy','citation_probe_agent_unavailable','citation_probe_config_invalid','citation_probe_registrations_invalid'];await emit({stage,outcome:'failed',generationHash,elapsedMs:Math.max(0,Math.floor(now()-started)),code:safeCampaignDiagnosticCode(error),nativeCode:codes.find(code=>String(error?.message??'').includes(code))??null,frames:safeCampaignStackFrames(error).slice(0,8)});throw error;}
+  };wrappers.set(stage,wrapper);manager[stage]=wrapper;
+ }
+ return()=>{for(const name of names)if(manager[name]===wrappers.get(name))manager[name]=originals.get(name);};
+}
 /** Bounded owned state evidence. No job payload, lease token, error message, provider value or native session token is returned. */
 export async function campaignGenerationStatus(app,project,current=null){
  current??=await app.hostedExtensions.generations.current(project);
@@ -308,7 +333,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     if(nativeLinux)relay.bindTarget(privateFixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root,imageId:inputs.runtimeImageId,network,fixtureUrl:privateFixture.baseUrl+'/',gatewayHost:inputs.gatewayHost});
     const privateApp=privateFixture.app,project=await resolveCampaignProject(privateApp,owner),view=await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     candidateProject=project;
-    let probeIndex=0;observeCampaignGenerationProbe(privateApp.runtimeManager,evidence=>++probeIndex<=8?saveProtected(path.join(root,'generation-probe-failure-'+probeIndex+'.json'),evidence):Promise.resolve());
+    observeCampaignGenerationLifecycle(privateApp.runtimeManager,evidence=>saveProtected(path.join(root,'generation-lifecycle-'+evidence.sequence+'.json'),evidence));
     await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     await campaignPoll(()=>campaignGenerationReady(privateApp,project),Date.now()+inputs.deadlineMs,signal);
     stage='physical-runtime-image-uid-mount-verification';const runtime=privateApp.runtimeManager.runtimes.get(privateApp.runtimeManager.key(project));assert(runtime?.containerName);

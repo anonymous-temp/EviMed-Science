@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -119,4 +119,22 @@ test('preparation diagnostics distinguish controller timeout vs cancel and prese
  const observed=observeCampaignPreparation(controller,async evidence=>records.push(evidence),()=>time);assert.equal(await observed.prepare(body,options,'extra'),result);assert.equal(records[0].elapsedMs,15003);assert.equal(records[0].joined,true);assert.equal(observed.admissionAvailable(),'actual');
  controller.fail=true;await assert.rejects(observed.prepare(body,options,'extra'),error=>error===failure);assert.equal(records[1].canceled,false);assert.equal(records[1].elapsedMs,15003);failure.canceled=true;await assert.rejects(observed.prepare(body,options,'extra'),error=>error===failure);assert.equal(records[2].canceled,true);assert.equal(JSON.stringify(records).includes('private-payload-must-not-leak'),false);
  const failedSink=observeCampaignPreparation(controller,async()=>{throw new Error('sink-failed');});await assert.rejects(failedSink.prepare(body,options,'extra'),error=>error===failure);
+});
+
+test('full lifecycle observer preserves every stage receiver/all arguments/value/error and never changes proof verdict',async()=>{
+ const candidate={reference:{generationHash:'d'.repeat(64)},projection:{plugins:[{extensionId:'cowork-portable',artifactDigest:'artifact',configRevision:1,configDigest:'config',enabled:true}],personal:{reference:null,pins:[]}},identity:{baseRuntimeImageDigest:'image',adapterRevision:'adapter',permissionProfileRevision:'permission'}},project={id:'owned'},records=[],failure=Object.assign(new Error('extension_probe_config_invalid private-secret-must-not-leak'),{code:'plugin_apply_failed'}),proof={reference:candidate.reference,runtimeGeneration:'epoch',inventory:candidate.projection.plugins,personal:candidate.projection.personal,...candidate.identity},prepared={joined:true,manifestDigest:'sha256:'+createHash('sha256').update(canonicalJson(candidate)).digest('hex')};
+ let clock=1;const manager={marker:'actual',runtimeGeneration(input){assert.equal(input,project);return'epoch';}};
+ for(const name of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])manager[name]=async function(input,value,extra){assert.equal(this,manager);assert.equal(input,project);assert.equal(value,candidate);assert.equal(extra,'all-args');clock+=5;if(this.failStage===name)throw failure;return name==='probeGeneration'?proof:prepared;};
+ const originals=new Map(Object.entries(manager)),restore=observeCampaignGenerationLifecycle(manager,async value=>records.push(value),()=>clock);
+ for(const stage of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])assert.equal(await manager[stage](project,candidate,'all-args'),stage==='probeGeneration'?proof:prepared);
+ assert.equal(records.length,8);const native=records.find(row=>row.stage==='probeGeneration'&&row.outcome==='succeeded');assert.ok(Object.values(native.proofMatches).every(Boolean));assert.deepEqual(native.inventoryCounts,{actual:1,expected:1});assert.equal(native.elapsedMs,5);assert.equal(records[1].manifestDigestMatch,true);
+ proof.inventory=[];proof.adapterRevision='changed';await manager.probeGeneration(project,candidate,'all-args');const mismatch=records.at(-1);assert.equal(mismatch.proofMatches.inventory,false);assert.equal(mismatch.proofMatches.adapterRevision,false);assert.equal(mismatch.proofMatches.reference,true);
+ for(const stage of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration']){manager.failStage=stage;await assert.rejects(manager[stage](project,candidate,'all-args'),error=>error===failure);assert.equal(records.at(-1).outcome,'failed');assert.equal(records.at(-1).nativeCode,'extension_probe_config_invalid');}
+ assert.equal(JSON.stringify(records).includes('private-secret-must-not-leak'),false);restore();for(const stage of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])assert.equal(manager[stage],originals.get(stage));
+});
+test('lifecycle diagnostics stop at32 records while all real operations continue and sink errors do not alter errors',async()=>{
+ const error=Object.assign(new Error('actual'),{code:'plugin_apply_failed'}),manager={runtimeGeneration:()=>null};let calls=0;
+ for(const name of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])manager[name]=async()=>{calls++;if(manager.fail)throw error;return{joined:true};};
+ const records=[];observeCampaignGenerationLifecycle(manager,async value=>records.push(value));for(let i=0;i<25;i++)await manager.prepareGeneration({},null);assert.equal(calls,25);assert.equal(records.length,32);
+ const second={...manager};for(const name of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])second[name]=async()=>{throw error;};observeCampaignGenerationLifecycle(second,async()=>{throw new Error('sink-failed');});await assert.rejects(second.replaceGeneration({},null),actual=>actual===error);
 });
