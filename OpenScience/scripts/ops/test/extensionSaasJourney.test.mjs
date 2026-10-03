@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, campaignDocumentJobs, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, controlledCampaignResponse, controlledCampaignTransport, campaignDocumentJobs, campaignDocumentTranscriptReady, campaignObserveDocumentCompletion, campaignNativeFailureFacts, campaignUsageFacts, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, dispatchOrdinaryCampaignTurn, campaignPreparedInstallerBinding, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, observeCampaignInvocationRefusal, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -266,4 +266,20 @@ test('real ledger auth invocation JSON header is parsed strictly without allowin
  const rejected=[row(JSON.stringify({sessionId:'foreign-session'})),row('{invalid'),row(null),row('x'.repeat(16385))];
  const app={store:{database:{query:async()=>({rows:[...accepted,...rejected]})}},agentRuns:{list:async()=>[]}};
  assert.deepEqual(await campaignDocumentJobs(app,{userId:'owner',id:'project'},'run','owned-session',new Date().toISOString()),accepted);
+});
+
+test('document observation waits for actual native completion after ledger settlement and rejects errors or duplicate tools',()=>{
+ const part=(tool,status='completed',error=null)=>({type:'tool',tool,status,error}),transcript=parts=>({messages:[{parts}]});
+ assert.equal(campaignDocumentTranscriptReady(transcript([part('doc_read'),part('doc_write','pending')])),null);
+ const ready=transcript([part('doc_read'),part('doc_write')]);assert.equal(campaignDocumentTranscriptReady(ready).transcript,ready);
+ for(const parts of [[part('doc_read'),part('doc_write','failed')],[part('doc_read'),part('doc_write','completed','closed tool error')],[part('doc_read'),part('doc_write'),part('doc_write')]])assert.throws(()=>campaignDocumentTranscriptReady(transcript(parts)),{code:'native_campaign_document_tool_failed'});
+ assert.equal(campaignDocumentTranscriptReady(transcript([part('doc_read'),part('doc_read')])),null);
+});
+
+test('run success advancing after a pending transcript read polls again rather than rejecting completion',async()=>{
+ const part=(tool,status)=>({type:'tool',tool,status}),pending={messages:[{parts:[part('doc_read','completed'),part('doc_write','pending')]}]},ready={messages:[{parts:[part('doc_read','completed'),part('doc_write','completed')]}]};
+ let read=0,runReads=0;const app={agentRuns:{list:async()=>{runReads++;return[{id:'owned',status:'succeeded'}];}}},readTranscript=async()=>++read===1?pending:ready;
+ assert.equal(await campaignObserveDocumentCompletion(app,{},'owned','session',readTranscript),null);
+ assert.equal((await campaignObserveDocumentCompletion(app,{},'owned','session',readTranscript)).transcript,ready);assert.equal(runReads,1);
+ for(const status of ['failed','canceled']){app.agentRuns.list=async()=>[{id:'owned',status}];await assert.rejects(campaignObserveDocumentCompletion(app,{},'owned','session',async()=>pending),error=>error.code==='native_campaign_document_tool_failed'&&error.terminalRun.status===status);}
 });

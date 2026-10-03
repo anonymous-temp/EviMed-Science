@@ -343,6 +343,20 @@ export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt
  if(run&&['failed','canceled','succeeded'].includes(run.status))throw Object.assign(new Error('native_campaign_run_terminal'),{code:run.status==='succeeded'?'native_campaign_doc_jobs_incomplete':safeCampaignDiagnosticCode({code:run.errorCode??'native_campaign_run_terminal'}),terminalRun:{id:run.id,sessionId,status:run.status,errorCode:run.errorCode?safeCampaignDiagnosticCode({code:run.errorCode}):null,documentJobs:rows.length}});
  return null;
 }
+/** Ledger completion precedes native status polling; only the real settled tool events complete this observation. */
+export function campaignDocumentTranscriptReady(transcript) {
+ const parts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&['doc_read','doc_write'].includes(part.tool));
+ if(parts.some(part=>part.error||['failed','canceled'].includes(part.status))||parts.length>2)throw Object.assign(new Error('native_campaign_document_tool_failed'),{code:'native_campaign_document_tool_failed'});
+ if(parts.length!==2||new Set(parts.map(part=>part.tool)).size!==2||!parts.every(part=>part.status==='completed'))return null;
+ return{transcript,toolParts:parts};
+}
+export async function campaignObserveDocumentCompletion(app,project,runId,sessionId,readTranscript) {
+ const settled=campaignDocumentTranscriptReady(await readTranscript());if(settled)return settled;
+ const run=(await app.agentRuns.list(project)).find(item=>item.id===runId);
+ if(run&&['failed','canceled'].includes(run.status))throw Object.assign(new Error('native_campaign_document_tool_failed'),{code:'native_campaign_document_tool_failed',terminalRun:{id:runId,sessionId,status:run.status}});
+ // Success may advance between the transcript and run reads. Observe its settled transcript again.
+ return null;
+}
 /** Native error DTO only; no prompt, provider message, profile or token text enters diagnostics. */
 export function campaignNativeFailureFacts(transcript){
  const errors=(transcript?.messages??[]).flatMap(message=>[message?.info?.error,...(message.parts??[]).filter(part=>part.type==='error'||part.type==='tool'&&part.status!=='completed'&&part.status!=='pending').map(part=>part.error??part.state?.error??part)]).filter(Boolean).slice(0,8);
@@ -496,9 +510,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     assert.equal(jobs.filter(job=>job.status==='succeeded'&&job.payload.request.operation==='doc_write').length,1);
     stage='workspace-output-and-native-transcript-verification';const written=jobs.find(job=>job.payload.request.operation==='doc_write'),published=await readCampaignDocumentOutput(app,project,written,session.id,'outputs/extensions/'+targetId+'.ipynb'),outputPath=published.path,output=published.bytes,notebook=JSON.parse(output);
     assert(notebook.cells.some(cell=>cell.cell_type==='code'&&cell.execution_count===null&&(cell.outputs??[]).length===0));
-    const transcript=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript');
-    const toolParts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&['doc_read','doc_write'].includes(part.tool));assert.equal(toolParts.length,2);
-    assert(toolParts.every(part=>part.status==='completed'));
+    const {transcript,toolParts}=await campaignPoll(()=>campaignObserveDocumentCompletion(app,project,run.id,session.id,()=>campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript')),deadline,signal);
     observations.push({caseId:'SAAS-04',scope:'actual-private-native-prompt-gateway-ledger-controller-workspace',setup:'Ordinary registered account and actual kernel/mux/actor/job/controller; signed private measurement admission; synthetic loopback model and explicitly trusted public fixture capture, not real scholarly retrieval/model quality',expected:'Real pending native doc_read/doc_write preserve owner scope and reach contained tools and active workspace',actual:{sessionId:session.id,runId:run.id,runtimeGeneration:principal.jti,jobIds:jobs.map(job=>job.id),operations:jobs.map(job=>job.payload.request.operation),outputDigest:digest(output),nativeToolCalls:toolParts.length,admissionDigest:state.admission.assessmentAdmissionDigest,metadataQualified:false,physicalRuntime:physical}});
     observations.push({caseId:'SAAS-01',scope:'actual-ordinary-http-private-execution-owner-isolation',setup:'Two real local-auth accounts; real concealed installation metadata; no operator account executes native tools',expected:'Foreign installation hidden and own optional extension remains unqualified while controlled native operations succeed',actual:{foreignInstallationStatus:404,ordinaryActors:state.actors.map(actor=>actor.user.id),ownExecutionJobs:2}});
     observations.push({caseId:'SAAS-18',scope:'actual-idle-private-generation-application',setup:'Normal selection/reconcile/preparation/apply workers; real RuntimeManager and independently verifying controller',expected:'Exact private generation applies and is observed physically without fabricated qualified receipt',actual:{generationHash:effective.payload.effective.reference.generationHash,manifestDigest:digest(canonicalJson(effective.payload.effective)),uncovered:'Busy deferral and failed candidate rollback still require additional controlled stages'}});
@@ -633,8 +645,9 @@ export async function ordinaryQualifiedSmoke(inputs,{signal=null}={}){
     stage='ordinary-qualified-native-gateway-ledger-controller-documents';const publicRoot=path.join(root,'public-fixtures'),files=await createFixtures(publicRoot),pdf=await fs.readFile(path.join(publicRoot,files.res_pdf.file)),principal={userId:actor.user.id,projectId:project.id,jti:app.runtimeManager.runtimeGeneration(project)},captured=await app.hostedExtensions.documents.prepareCapture(principal);
     const resource=await app.hostedExtensions.documents.capturePdf(principal,pdf,{doi:'synthetic-public-fixture',origin:'https://example.invalid/synthetic-public-fixture'},captured,async()=>{assert.equal(app.runtimeManager.runtimeGeneration(project),principal.jti);return principal;});
     const id=randomUUID(),key=id+':read-write',target='qualified_result_ipynb';transport.plans.set(key,[{name:'doc_read',input:{resourceId:resource.resourceId}},{name:'doc_write',input:{targetId:target,format:'ipynb',spec:{kind:'create',cells:[{type:'markdown',source:'Controlled ordinary qualification smoke; public PDF fixture 42.'},{type:'code',source:'raise SystemExit("must remain inert")'}]}}}]);
-    const {session}=await dispatchOrdinaryCampaignTurn(baseUrl,actor,{dispatchId:'qualified-smoke-'+id,text:'EVIMED_ASSESSMENT_STAGE:'+key+'\nRead the supplied public fixture and write an inert notebook with the selected document tools.'},signal);
-    const jobs=await campaignPoll(async()=>{const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' ORDER BY created_at",[actor.user.id,project.id])).rows;return rows.length===2&&rows.every(row=>row.status==='succeeded')?rows:null;},deadline,signal);
+    const documentJobsStartedAt=new Date().toISOString();const {session,run}=await dispatchOrdinaryCampaignTurn(baseUrl,actor,{dispatchId:'qualified-smoke-'+id,text:'EVIMED_ASSESSMENT_STAGE:'+key+'\nRead the supplied public fixture and write an inert notebook with the selected document tools.'},signal);
+    const jobs=await campaignPoll(()=>campaignDocumentJobs(app,project,run.id,session.id,documentJobsStartedAt),deadline,signal);assert.equal(jobs.length,2);assert(jobs.every(job=>job.status==='succeeded'));
+    await campaignPoll(()=>campaignObserveDocumentCompletion(app,project,run.id,session.id,()=>campaignRequest(baseUrl,actor,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript')),deadline,signal);
     const written=jobs.find(job=>job.payload.request.operation==='doc_write'),published=await readCampaignDocumentOutput(app,project,written,session.id,'outputs/extensions/'+target+'.ipynb'),output=published.bytes,notebook=JSON.parse(output);assert(notebook.cells.some(cell=>cell.cell_type==='code'&&cell.execution_count===null&&(cell.outputs??[]).length===0));
     result={status:'ordinary-qualified-admission-smoke-observed',sessionId:session.id,receiptDigest:authority.receipt.receiptDigest,assessmentAuthorityUsed:false,ordinaryActor:actor.user.id,
       freshDatabaseNamespace:isolated.name,physicalRuntime:physical,jobIds:jobs.map(job=>job.id),operations:jobs.map(job=>job.payload.request.operation),outputDigest:digest(output),controlledTransportOnly:true,
