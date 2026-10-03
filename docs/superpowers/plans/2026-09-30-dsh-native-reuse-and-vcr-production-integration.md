@@ -8,7 +8,7 @@
 
 **Tech Stack:** React/TypeScript/Vite; Node 22.22.0; pnpm 9.4.0; PostgreSQL; pinned DSH 0.1.7-rc.2; R 4.3.3; Python/FastAPI; Docker Compose; existing MCP, domain, harness-port and socket packages.
 
-**Status:** Execution in progress following the owner's explicit completion, merge, deployment and all-user delivery request. Production now serves `62faa8a002342915e16529ded1ca95b99ccc56c6`. PR #1 reconciled its full history into main at `04e8b3509297b81973f076a275f67535500aef05`; candidate `e40f9405f4cea17247dafc56e38ee60c61cc4aac` merges VCR `174a33e661ad942435b2afacd46cd81e81534e1d` on that baseline, resolving all ten conflicts. This is S1 source integration, not S4 delivery. Required shared export, automatic AI review, numerical extensions and live user acceptance remain in progress. See `.planning/platform-followups-20260929/combined_delivery.json` during execution and the tracked release checklist for final evidence.
+**Status (2026-10-03):** Source integration is on `codex/extension-center-20261002` through `951752345`, including frontier PR #3 and the result/replay release history. Both the production baseline and VCR history are verified ancestors. The combined branch is not yet merged into main. Production still serves `62faa8a00234`; VCR remains disabled there. Final candidate Web (`a41971281e1e`), runtime (`0d936480f496`), six current specialist images, VCR and result replay images are loaded on the native host but have not replaced serving containers. Local full regression and actual isolated browser/rendering/numerical checks are recorded separately from live delivery. Actual plugin document read/write now succeeds; full extension qualification, candidate migration/mint, production browser and exports, VCR S2-to-S4 workflows and source-current capability receipts remain open. No all-CI, all-user availability or final-delivery claim is made.
 
 **Owner decisions confirmed in this conversation:**
 
@@ -186,7 +186,7 @@ Expected at the recorded refs: 311 production commits, 763 changed paths and ten
 | `OpenScience/apps/server/test/server.test.mjs` | Retain live behavior and test the VCR-enabled/disabled composition |
 | `OpenScience/apps/server/test/uiWalk.test.mjs` | Preserve current navigation assertions and add VCR entry behavior |
 
-- [ ] Before candidate release, prove both source histories are ancestors of the actual candidate. Resolve changes explicitly if later edits supersede a production behavior; do not lose it by conflict choice.
+- [x] Before candidate release, prove both source histories are ancestors of the actual candidate. Resolve changes explicitly if later edits supersede a production behavior; do not lose it by conflict choice.
 
 ```bash
 # Run in the merged candidate checkout, not the unchanged main working directory.
@@ -217,7 +217,7 @@ The implementation portion of this task is complete on production at `c6c2a7f148
 
 These match the patch versions for [GHSA-q2hr-2g5m-vwhr](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr). Preserve the production lock; do not regenerate a competing lockfile, run a forced audit fix or lower the audit threshold. A genuinely new advisory is a separate targeted correction, not a reason to repeat this completed task.
 
-- [ ] Verify the combined candidate retains the deployed overrides and resolved lock entries. Keep unrelated pins unchanged.
+- [x] Verify the combined candidate retains the deployed overrides and resolved lock entries. Keep unrelated pins unchanged.
 - [ ] Install with the inherited frozen lock in the isolated candidate and rerun the existing audit and previously skipped frontend checks. This is integration verification, not reimplementation.
 
 ```bash

@@ -1,6 +1,6 @@
 # 虚拟临研（vcr）：交付状态、验收对照与缺口清单
 
-> Integration update (2026-09-30): the deployed platform is `62faa8a00234`. Its full history is on main via PR #1 (`04e8b3509297b81973f076a275f67535500aef05`). VCR is integrated into candidate `e40f9405f4cea17247dafc56e38ee60c61cc4aac`, after ten semantic conflict resolutions, and is not yet deployed or available to ordinary users. The pre-integration test tables below are historical evidence, not certification of the combined candidate. Current focused merge checks: 269 server tests, 33 acceptance-ledger tests, web/server typechecks and 27 generated capability manifests passed; frozen-lockfile installation preserved the deployed dependency fixes. Required implementation and live acceptance remain open.
+> Integration update (2026-10-03): production still serves `62faa8a00234`. The combined source is on `codex/extension-center-20261002` through `951752345`, including frontier and result/replay work; main merge remains open. Actual native images are built and loaded, including VCR numerical engine `3b1bb72d...` and result replay `91b43fb7...`, but the serving release has not switched and VCR remains disabled. Native shared rendering produced 15 DOCX/PDF/HTML outputs; the replay image passed 16 Linux checks. These component results do not establish ordinary-account VCR delivery. Candidate migration/mint, complete extension qualification, real deployed VCR workflows, authenticated export and foreign-account denial, and final S4 opening remain to be executed. The September test tables below are historical and are not an exact-candidate release certificate.
 
 2026 年 9 月 30 日 · 分支 `feature/virtual-clinical-research`（工作树 `wt-vcr`）· 模块默认关闭（`OPEN_SCIENCE_VCR_ENABLED`）
 
@@ -47,9 +47,9 @@ No API, runtime skill or model-authored report can write this proof.
 
 | 项 | 状态 |
 |:--|:--|
-| 代码 | Integrated candidate `e40f9405f` contains production-preserving main and VCR history; ten conflicts were resolved and independently reviewed. |
+| 代码 | Current integration branch through `951752345` contains the production, VCR, frontier and result/replay histories. Later code and regression evidence supersede the initial `e40f9405f` merge snapshot. |
 | 是否合入 `main` | Platform reconciliation is complete at `04e8b3509`; the combined VCR candidate is not yet merged into main. |
-| 是否上线 | **没有。** 没有发版、没有构建引擎镜像、没有真实 DSH 对话验证、没有伙伴数据 |
+| 是否上线 | **VCR is not deployed or enabled yet.** Native engine/runtime images are prepared; ordinary deployed VCR research, uploads, AI review and export acceptance remain open. Partner data is optional and is not an opening gate. |
 | 默认行为 | 关。`OPEN_SCIENCE_VCR_ENABLED` 不设就看不到入口、`/api/vcr/*` 不存在；开也先只对运营账号（`OPEN_SCIENCE_VCR_AUDIENCE=operators`） |
 | 规模 | Initial integration `04e8b3509..e40f9405f`: 444 changed paths, 143,265 inserted and 241 deleted lines, including design assets and fixtures. Production reconciliation preserved 323 commits and 801 changed paths relative to former main. |
 
