@@ -360,10 +360,17 @@ test("every variable config.mjs reads reaches the web API, or says why it does n
   // so the feature could not be turned on in any deployment. The class, not
   // the instance: every name config.mjs reads is a lever someone will set.
   const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
-  const code = configSource.split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
+  // And the settings modules config.mjs delegates to. The research billing
+  // keys are read in researchBillingConfig.mjs (2026-10-03), so a scan of
+  // config.mjs alone could not see a compose file drop any of the seven.
+  const settingsModules = [...configSource.matchAll(/^import .* from "\.\/([A-Za-z0-9]+Config\.mjs)";?$/gm)].map((match) => match[1]);
+  assert.ok(settingsModules.includes("researchBillingConfig.mjs"), `found ${settingsModules.length} settings modules imported by config.mjs; the derivation did not walk`);
+  const sources = [configSource, ...await Promise.all(settingsModules.map((name) => readFile(path.join(repoRoot, "apps/server/src", name), "utf8")))];
+  const code = sources.join("\n").split("\n").filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join("\n");
   const read = new Set(code.match(/OPEN_SCIENCE_[A-Z0-9_]+/g) ?? []);
-  assert.ok(read.size >= 300 && read.has("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED") && read.has("OPEN_SCIENCE_DEEPSEEK_API_KEY"),
-    `read ${read.size} names from config.mjs; the scan did not walk`);
+  assert.ok(read.size >= 300 && read.has("OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED") && read.has("OPEN_SCIENCE_DEEPSEEK_API_KEY")
+    && read.has("OPEN_SCIENCE_RESEARCH_BILLING_ENABLED"),
+    `read ${read.size} names from config.mjs and its settings modules; the scan did not walk`);
 
   const files = await composeFiles();
   const dockerfile = await readFile(path.join(deployDir, "Dockerfile"), "utf8");
