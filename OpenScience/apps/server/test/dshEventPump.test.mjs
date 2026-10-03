@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -188,6 +189,32 @@ test("a run the ledger notes after the mux is already up gets its own follow str
   pump.noteRun(project, { id: "run-late", sessionId: "s-late", status: "succeeded" });
   await waitFor(() => stream.ended, "the follow stream to be closed when the run stops");
   assert.deepEqual(muxes[0].followedSessions, []);
+  pump.detach(project);
+});
+
+test("a run noted from inside a caller's async context is followed in the pump's own context", async () => {
+  // The dispatch route notes its run from inside its admission transaction.
+  // The follow stream opened by that call used to inherit the transaction's
+  // AsyncLocalStorage store for its whole life, so every result capture made
+  // from that stream found the scope closed and was refused with
+  // product_revision_conflict: on the pilot (2026-10-03) a dispatched run
+  // recorded 63 failed captures and no result version, while a turn typed in
+  // the kernel's own frame, adopted from the pump's context, recorded all of its.
+  const scope = new AsyncLocalStorage();
+  /** @type {unknown[]} */
+  const seen = [];
+  const { pump, muxes } = pumpOnFakeMux({ onRunEvent: () => { seen.push(scope.getStore() ?? null); } });
+  const project = { userId: "alice", id: "paper-context" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  await waitFor(() => muxes[0]?.streams.some((stream) => stream.endpoint === "$events"), "the host stream");
+
+  scope.run({ transaction: "the dispatch's, long since committed" }, () => {
+    pump.noteRun(project, { id: "run-context", sessionId: "s-context", status: "running" });
+  });
+  await waitFor(() => muxes[0].follow("s-context"), "a follow stream for the run noted inside the scope");
+  muxes[0].follow("s-context").push(sessionEvent({ type: "assistant/message", seq: 1, data: { message: { content: [{ type: "text", text: "在自己的上下文里" }] } } }));
+  await waitFor(() => seen.length > 0, "the event to be handled");
+  assert.deepEqual(seen, [null], "the stream's handler saw the caller's store: work it starts would use a transaction that has ended");
   pump.detach(project);
 });
 

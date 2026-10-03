@@ -27,6 +27,7 @@
  * @module dshEventPump
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { DshRuntimeAdapter, decodeHostInteraction, delegatedChildrenOf, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
@@ -493,7 +494,13 @@ export class RuntimeEventPump {
           }
         }
       };
-      state.resync = reconcile;
+      // Whoever wakes the reconciler, the streams it opens belong to this
+      // loop. `noteRun` is called from the dispatch route inside its admission
+      // transaction, and a stream started there kept that request's
+      // AsyncLocalStorage store for its whole life: every result capture made
+      // from it found the transaction scope closed and was refused.
+      const inOwnContext = AsyncLocalStorage.snapshot();
+      state.resync = () => inOwnContext(reconcile);
       signal.addEventListener("abort", () => {
         state.resync = null;
         resolve(undefined);
