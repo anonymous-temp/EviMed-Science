@@ -7,6 +7,8 @@ import shutil
 import tempfile
 import time
 import unittest
+import uuid
+from urllib.parse import urlsplit
 from unittest.mock import patch
 from pathlib import Path
 
@@ -17,6 +19,31 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PostgresBackupTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get("OPEN_SCIENCE_TEST_POSTGRES_URL"), "owned PostgreSQL fixture not configured")
+    def test_clone_marker_preserves_restore_name_across_real_connections(self):
+        url = os.environ["OPEN_SCIENCE_TEST_POSTGRES_URL"]
+        parsed = urlsplit(url)
+        self.assertIn(parsed.hostname, {"localhost", "127.0.0.1", "::1"})
+        self.assertTrue(parsed.path.startswith("/evimed_test"))
+        psql = shutil.which("psql")
+        if not psql:
+            self.skipTest("PostgreSQL client not available")
+        sql = [psql, url, "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-c"]
+        target = "evimed_restore_20261003T120000Z_" + uuid.uuid4().hex[:12]
+        marker = "evimed-recovery-owner:" + uuid.uuid4().hex
+        created = False
+        try:
+            MODULE.command(sql + [f'CREATE DATABASE "{target}";'])
+            created = True
+            MODULE.write_clone_marker(sql, target, marker)
+            # Separate psql processes prove the write committed and the exact
+            # mixed-case database, rather than a folded sibling, owns the bond.
+            self.assertEqual(MODULE.clone_marker(sql, target), marker)
+            self.assertEqual(MODULE.clone_oid(sql, target).isdigit(), True)
+        finally:
+            if created:
+                MODULE.command(sql + [f'DROP DATABASE "{target}";'])
+
     def test_managed_capture_pins_container_and_admits_tools_under_one_nonce(self):
         with tempfile.TemporaryDirectory() as value:
             environment = self.recovery_environment(value)
@@ -218,6 +245,7 @@ class PostgresBackupTests(unittest.TestCase):
                     if "SELECT oid::text" in sql:
                         return "24680\n"
                     if sql.startswith("COMMENT ON DATABASE"):
+                        self.assertEqual(sql.split(" IS '", 1)[0], 'COMMENT ON DATABASE "evimed_restore_20260907T120000Z_0123456789ab"')
                         ownership_marker["value"] = sql.split(" IS '", 1)[1][:-2]
                         return ""
                     if "shobj_description" in sql:

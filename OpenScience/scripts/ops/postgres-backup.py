@@ -1027,6 +1027,12 @@ def load_capture_receipt(root: RecoveryRoot, archive: Path, database: str) -> Ca
     return CaptureBundle(parent, archive_descriptor, archive_name, receipt, expected, excluded)
 
 
+def write_clone_marker(sql: list[str], target: str, marker: str) -> None:
+    # Validated restore names contain uppercase T/Z. Preserve the spelling
+    # used by createdb rather than letting SQL fold the identifier to lowercase.
+    command(sql + [f"COMMENT ON DATABASE \"{target}\" IS '{marker}';"], timeout=60)
+
+
 def clone_marker(sql: list[str], target: str) -> str:
     query = f"SELECT coalesce(shobj_description(oid,'pg_database'),'') FROM pg_database WHERE datname='{target}';"
     return command(sql + [query], capture=True, timeout=60).strip()
@@ -1093,7 +1099,7 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
                 bundle, identity, target_database, created_oid, marker_state, marker_digest,
                 "postgres_restore_in_progress", operation_id
             ), operation_id)
-            command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
+            write_clone_marker(sql, target_database, marker)
             marker_state = "mismatch"
             if clone_marker(sql, target_database) != marker:
                 raise BackupError("postgres_restore_ownership_unverified")
