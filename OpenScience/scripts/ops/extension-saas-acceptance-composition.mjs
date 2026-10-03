@@ -79,6 +79,70 @@ export async function startOwnedCampaignRelay({root,imageId,network,fixtureUrl,g
   return{close,containerId:id,sourceDigest:digest(source),upstreamPinnedUrl:actual.origin,scope:'Trusted fixed-path dual-network transport; no mounts/provider credentials/host-control socket; end-to-end workload authorization remains in real control plane'};
  }catch(error){try{await close();}catch(cleanupError){throw Object.assign(new Error('campaign_relay_cleanup_unconfirmed'),{originalFailure:constructorFailureDetails(error),cleanupFailure:constructorFailureDetails(cleanupError)});}throw error;}
 }
+/** Principal facts come from actual prepared installation history and current
+ * accounts/study rows. Context fields only select an already trusted subject;
+ * a package or public request never supplies an installer identity or verdict.
+ */
+export async function readAssessmentSubjects(database,context,entry,artifact){
+ const project=context.project,managerScope=context.managerScope??context.manifest?.scope;
+ const ownerId=project?.userId,projectId=project?.id,actorId=managerScope?.actorId??context.actor?.id;
+ if(![ownerId,projectId,actorId].every(value=>typeof value==='string'&&value)
+  ||context.scope&&!managerScope
+  ||managerScope&&(managerScope.ownerId!==ownerId||managerScope.projectId!==projectId))throw new Error('assessment_subject_unavailable');
+ let installationId,installerId,revision=null,prepareJobId=null;
+ if(context.binding||context.installerBinding){
+  const binding=context.binding??context.installerBinding;
+  if(binding.extensionId!==entry.id||binding.artifactDigest!==artifact.artifactDigest
+   ||typeof binding.installationId!=='string'||typeof binding.actorId!=='string'
+   ||!Number.isSafeInteger(binding.installationRevision)||typeof binding.prepareJobId!=='string')throw new Error('assessment_installer_unavailable');
+  installationId=binding.installationId;installerId=binding.actorId;revision=binding.installationRevision;prepareJobId=binding.prepareJobId;
+ }else{
+  const selected=(await database.query("SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND kind='extension-defaults' AND id=$2 AND deleted_at IS NULL",
+   [ownerId,'extensions:project:'+projectId])).rows[0]?.payload?.selections?.filter(item=>item.catalogueId===entry.id
+    &&item.integrity===entry.integrity&&canonicalExtensionCoordinate(item.coordinate)===canonicalExtensionCoordinate(entry.coordinate))??[];
+  if(selected.length!==1||typeof selected[0].installationId!=='string'||typeof selected[0].actorId!=='string')throw new Error('assessment_installer_unavailable');
+  installationId=selected[0].installationId;installerId=selected[0].actorId;
+ }
+ if(managerScope&&!context.manifest&&context.actor?.id!==installerId)throw new Error('assessment_installer_unavailable');
+ const installed=(await database.query(`WITH copies AS (
+  SELECT revision,payload FROM evimed_product.documents WHERE user_id=$1 AND kind='extension-installation' AND id=$2 AND deleted_at IS NULL
+  UNION SELECT revision,payload FROM evimed_product.revisions WHERE user_id=$1 AND kind='extension-installation' AND id=$2 AND deleted_at IS NULL
+ ) SELECT c.revision,j.payload->>'accountCreatedAt' AS "installerEpoch",j.payload->'projectTarget' AS "projectTarget",
+ j.payload ? 'projectTarget' AS "targetPresent" FROM copies c
+ JOIN evimed_product.jobs j ON j.user_id=$1 AND j.id=c.payload->>'prepareJobId'
+ WHERE ($3::integer IS NULL OR c.revision=$3) AND ($4::text IS NULL OR j.id=$4)
+  AND c.payload->'coordinate'=$5::jsonb AND c.payload->>'integrity'=$6
+  AND j.kind='extension-prepare' AND j.status='succeeded' AND j.payload->>'installationId'=$2
+  AND j.payload->>'installationRevision'=c.revision::text AND j.payload->>'integrity'=$6 AND j.payload->>'coordinate'=$8
+  AND j.result->>'installationId'=$2 AND j.result->>'installationRevision'=c.revision::text
+  AND j.result->>'artifactDigest'=$7 AND j.result->>'integrity'=$6
+ ORDER BY c.revision DESC LIMIT 1`,[installerId,installationId,revision,prepareJobId,JSON.stringify(entry.coordinate),entry.integrity,artifact.artifactDigest,canonicalExtensionCoordinate(entry.coordinate)])).rows[0];
+ if(!installed)throw new Error('assessment_installer_unavailable');
+ const current=(await database.query(`SELECT current_database() AS namespace,o.created_at::text AS "ownerEpoch",
+  a.created_at::text AS "actorEpoch",i.created_at::text AS "installerEpoch",p.created_at::text AS "projectEpoch"
+  FROM evimed_control.users o JOIN evimed_control.projects p ON p.user_id=o.id
+  JOIN evimed_control.users a ON a.id=$3 JOIN evimed_control.users i ON i.id=$4
+  WHERE o.id=$1 AND p.id=$2 FOR SHARE OF o,a,i,p`,[ownerId,projectId,actorId,installerId])).rows[0];
+ if(!current||!/^evimed_test[a-z0-9_]*$/.test(current.namespace)||current.installerEpoch!==installed.installerEpoch)throw new Error('assessment_database_subject_unavailable');
+ // Personal prepared libraries remain reusable. A project-scoped preparation
+ // never becomes a library grant for another owner/project or a recreated one.
+ const target=installed.projectTarget;
+ if(!installed.targetPresent||target!==null&&(!target||target.ownerId!==ownerId||target.projectId!==projectId||target.projectCreatedAt!==current.projectEpoch))throw new Error('assessment_installer_unavailable');
+ const membership=async(userId,ability)=>{
+  if(userId===ownerId)return null;
+  await database.query('SELECT id FROM evimed_vcr.studies WHERE project_id=$1 AND user_id=$2 AND deleted_at IS NULL FOR SHARE',[projectId,ownerId]);
+  const members=(await database.query(`SELECT s.id,m.role,m.created_at::text AS "createdAt" FROM evimed_vcr.studies s JOIN evimed_vcr.members m ON m.study_id=s.id
+   WHERE s.project_id=$1 AND s.user_id=$2 AND s.deleted_at IS NULL AND m.user_id=$3 ORDER BY m.role FOR SHARE OF m`,[projectId,ownerId,userId])).rows;
+  if(!members.length||new Set(members.map(member=>member.id)).size!==1||!members.some(member=>roleAllows(member.role,ability)))throw new Error('assessment_subject_unavailable');
+  return JSON.stringify({studyId:members[0].id,members:members.map(({role,createdAt})=>({role,createdAt}))});
+ };
+ const actorAbility=context.operation==='doc_read'?'read':context.operation==='doc_write'?'write':'manage_study';
+ const actorMembershipEpoch=await membership(actorId,actorAbility),installerMembershipEpoch=await membership(installerId,'manage_study');
+ const binding=context.binding??context.installerBinding;
+ if(binding&&(!Object.hasOwn(binding,'actorMembershipEpoch')||binding.actorMembershipEpoch!==installerMembershipEpoch))throw new Error('assessment_installer_unavailable');
+ return{ownerId,actorId,installerId,ownerAccountCreatedAt:current.ownerEpoch,actorAccountCreatedAt:current.actorEpoch,
+  installerAccountCreatedAt:current.installerEpoch,actorMembershipEpoch,installerMembershipEpoch,projectId,projectCreatedAt:current.projectEpoch,databaseNamespace:current.namespace};
+}
 /** Each reader independently reads protected deployment, actual image ID, database namespace and current epochs. */
 export function createAssessmentCurrentFacts({ getConfig, getDatabase, catalogueId = 'cowork-portable' }) {
   if (typeof getConfig !== 'function' || typeof getDatabase !== 'function') throw new Error('invalid_assessment_fact_sources');
@@ -93,21 +157,7 @@ export function createAssessmentCurrentFacts({ getConfig, getDatabase, catalogue
       { timeout: 5000, maxBuffer: 8192, env: assessmentDockerEnvironment() });
     const image = inspected.stdout.trim();
     if (!/^sha256:[a-f0-9]{64}$/.test(image)) throw new Error('assessment_image_unconfirmed');
-    const project = context.project, ownerId = project?.userId, projectId = project?.id,
-      actorId = context.binding?.actorId ?? context.actor?.id ?? context.scope?.actorId;
-    if (![ownerId, projectId, actorId].every(value => typeof value === 'string' && value)) throw new Error('assessment_subject_unavailable');
-    const current = (await database.query(`SELECT current_database() AS namespace,o.created_at::text AS "ownerEpoch",
-      a.created_at::text AS "actorEpoch",p.created_at::text AS "projectEpoch" FROM evimed_control.users o
-      JOIN evimed_control.projects p ON p.user_id=o.id JOIN evimed_control.users a ON a.id=$3
-      WHERE o.id=$1 AND p.id=$2`, [ownerId, projectId, actorId])).rows[0];
-    if (!current || !/^evimed_test[a-z0-9_]*$/.test(current.namespace)) throw new Error('assessment_database_subject_unavailable');
-    let membershipEpoch=null;
-    if(actorId!==ownerId){
-      const members=(await database.query(`SELECT s.id,m.role,m.created_at::text AS "createdAt" FROM evimed_vcr.studies s JOIN evimed_vcr.members m ON m.study_id=s.id
-        WHERE s.project_id=$1 AND s.user_id=$2 AND s.deleted_at IS NULL AND m.user_id=$3 ORDER BY m.role`,[projectId,ownerId,actorId])).rows;
-      if(!members.length||new Set(members.map(member=>member.id)).size!==1||!members.some(member=>roleAllows(member.role,'manage_study')))throw new Error('assessment_subject_unavailable');
-      membershipEpoch=JSON.stringify({studyId:members[0].id,members:members.map(({role,createdAt})=>({role,createdAt}))});
-    }
+    const subjects=await readAssessmentSubjects(database,context,entry,artifact);
     const identity = deploymentProofIdentity(deployment, entry, image), surface = deployment.surfaces.get(entry.id);
     if (!surface) throw new Error('assessment_surface_unavailable');
     return { catalogueId: entry.id, coordinate: canonicalExtensionCoordinate(entry.coordinate), sourceCommit: identity.sourceCommit,
@@ -115,9 +165,7 @@ export function createAssessmentCurrentFacts({ getConfig, getDatabase, catalogue
       adapterDigest: descriptor.adapterDigest, adapterRevision: identity.adapterRevision, runtimeImageDigest: image,
       dshVersion: identity.dshVersion, permissionProfileRevision: identity.permissionProfileRevision, suiteRevision: identity.suiteRevision,
       sourcePolicyDigest: digest(deployment.policy), descriptorDigest: surface.descriptorDigest, fixtureRootDigest: digest(fixtureRoot),
-      databaseNamespace: current.namespace, ownerId, actorId, ownerAccountCreatedAt: current.ownerEpoch,
-      actorAccountCreatedAt: current.actorEpoch, actorMembershipEpoch:membershipEpoch,installerMembershipEpoch:membershipEpoch,
-      projectId, projectCreatedAt: current.projectEpoch, entry, artifact, identity };
+      ...subjects, entry, artifact, identity };
   };
 }
 /** Installed only through createWebApiApp's second trusted JS argument; each app owns its lexical sources. */

@@ -6,16 +6,19 @@ import { canonicalJson } from '@evimed/domain';
 import { extensionRequestObject } from '../../apps/server/src/extensionAccess.mjs';
 import { EXTENSION_ASSESSMENT_DOMAIN } from '../../apps/server/src/extensionAssessmentAuthority.mjs';
 import { assertAssessmentFixtureRoot, ASSESSMENT_SHORT_PARENT } from './extension-saas-acceptance-manifest.mjs';
-export const ASSESSMENT_FACT_FIELDS = Object.freeze(['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerMembershipEpoch','projectId','projectCreatedAt']);
+export const ASSESSMENT_FACT_FIELDS = Object.freeze(['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerId','installerAccountCreatedAt','installerMembershipEpoch','projectId','projectCreatedAt']);
 const digestFields = ['packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest'];
 const digest = value => 'sha256:' + createHash('sha256').update(canonicalJson(value)).digest('hex');
 export function validateMeasurementAdmission(value, now = Date.now()) {
   extensionRequestObject(value, [...ASSESSMENT_FACT_FIELDS,'assessmentId','issuedAt','expiresAt','allowedOperations']);
   if (Object.keys(value).length !== ASSESSMENT_FACT_FIELDS.length + 4 || ASSESSMENT_FACT_FIELDS.some(field =>
     field === 'sourceCommit' ? value[field] !== null && !/^[a-f0-9]{40}$/.test(value[field])
-      : ['actorMembershipEpoch','installerMembershipEpoch'].includes(field) ? value.actorId===value.ownerId ? value[field]!==null : typeof value[field]!=='string'||!value[field]||value[field].length>16384
+      : ['actorMembershipEpoch','installerMembershipEpoch'].includes(field) ? value[field==='actorMembershipEpoch'?'actorId':'installerId']===value.ownerId ? value[field]!==null : typeof value[field]!=='string'||!value[field]||value[field].length>16384
       : typeof value[field] !== 'string' || !value[field] || value[field].length > 1024)
     || digestFields.some(field => !/^sha256:[a-f0-9]{64}$/.test(value[field]))
+    || value.actorId===value.ownerId&&value.actorAccountCreatedAt!==value.ownerAccountCreatedAt
+    || value.installerId===value.ownerId&&value.installerAccountCreatedAt!==value.ownerAccountCreatedAt
+    || value.actorId===value.installerId&&(value.actorAccountCreatedAt!==value.installerAccountCreatedAt||value.actorMembershipEpoch!==value.installerMembershipEpoch)
     || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(value.assessmentId)
     || !Array.isArray(value.allowedOperations) || !value.allowedOperations.length || value.allowedOperations.length > 2
     || new Set(value.allowedOperations).size !== value.allowedOperations.length || value.allowedOperations.some(operation => !['doc_read','doc_write'].includes(operation))) throw new Error('invalid_measurement_admission');

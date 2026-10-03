@@ -3,12 +3,14 @@ import fs from 'node:fs/promises';
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { canonicalJson, canonicalExtensionCoordinate, extensionProofAdapterRevision } from '@evimed/domain';
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from './security.mjs';
+import { extensionRequestObject } from './extensionAccess.mjs';
 
 export const EXTENSION_ASSESSMENT_DOMAIN = 'evimed-extension-assessment-admission-v1';
 const authorities = new WeakSet();
 const denied = () => new HttpError(403, 'extension_access_denied', 'The assessment admission is unavailable.');
-const factKeys = ['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerMembershipEpoch','projectId','projectCreatedAt'];
+const factKeys = ['catalogueId','coordinate','sourceCommit','packageIntegrity','artifactDigest','containedImageDigest','adapterDigest','adapterRevision','runtimeImageDigest','dshVersion','permissionProfileRevision','suiteRevision','sourcePolicyDigest','descriptorDigest','fixtureRootDigest','databaseNamespace','ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','installerId','installerAccountCreatedAt','installerMembershipEpoch','projectId','projectCreatedAt'];
 const nullableFacts=new Set(['sourceCommit','actorMembershipEpoch','installerMembershipEpoch']);
+const actorScopeKeys=['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','projectId','projectCreatedAt'];
 const digest = value => 'sha256:' + createHash('sha256').update(canonicalJson(value)).digest('hex');
 /** Constructor-only authority objects cannot be reconstructed from serialized flags. @param {any} value */
 export function assertExtensionAssessmentAuthority(value) { if (value !== null && !authorities.has(value)) throw denied(); }
@@ -44,22 +46,30 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
       return { envelope, assessmentAdmissionDigest: digest(envelope) };
     } finally { await file.handle.close(); }
   };
-  const admit = async context => {
-    const { envelope, assessmentAdmissionDigest } = await read(), facts = await currentFacts(context);
+  const matchedRecord = (envelope,facts) => {
     if(!facts||factKeys.some(field=>!Object.hasOwn(facts,field)||facts[field]===undefined))throw denied();
     const matches = envelope.payload.admissions.filter(record => factKeys.every(field => canonicalJson(record[field] ?? null) === canonicalJson(facts?.[field] ?? null)));
     if (matches.length !== 1) throw denied();
     const record = matches[0];
     if (Object.keys(record).sort().join(',') !== [...factKeys,'assessmentId','issuedAt','expiresAt','allowedOperations'].sort().join(',')
       || factKeys.some(field => record[field] === undefined || (record[field] === null && !nullableFacts.has(field)))
-      || (record.actorId===record.ownerId ? record.actorMembershipEpoch!==null||record.installerMembershipEpoch!==null
-        : typeof record.actorMembershipEpoch!=='string'||!record.actorMembershipEpoch||typeof record.installerMembershipEpoch!=='string'||!record.installerMembershipEpoch)
+      || (record.actorId===record.ownerId ? record.actorMembershipEpoch!==null : typeof record.actorMembershipEpoch!=='string'||!record.actorMembershipEpoch)
+      || (record.installerId===record.ownerId ? record.installerMembershipEpoch!==null : typeof record.installerMembershipEpoch!=='string'||!record.installerMembershipEpoch)
+      || typeof record.installerId!=='string'||!record.installerId||typeof record.installerAccountCreatedAt!=='string'||!record.installerAccountCreatedAt
+      || record.actorId===record.ownerId&&record.actorAccountCreatedAt!==record.ownerAccountCreatedAt
+      || record.installerId===record.ownerId&&record.installerAccountCreatedAt!==record.ownerAccountCreatedAt
+      || record.actorId===record.installerId&&(record.actorAccountCreatedAt!==record.installerAccountCreatedAt||record.actorMembershipEpoch!==record.installerMembershipEpoch)
       || typeof record.assessmentId !== 'string' || !record.assessmentId || !Number.isFinite(Date.parse(record.issuedAt))
       || !Number.isFinite(Date.parse(record.expiresAt)) || Date.parse(record.issuedAt) > now() || Date.parse(record.expiresAt) <= now()
       || Date.parse(record.expiresAt) <= Date.parse(record.issuedAt) || !Array.isArray(record.allowedOperations)
       || record.allowedOperations.length === 0 || new Set(record.allowedOperations).size !== record.allowedOperations.length
       || record.allowedOperations.some(operation => !['doc_read','doc_write'].includes(operation))) throw denied();
-    const { entry, artifact, identity, scope } = context;
+    return record;
+  };
+  const admit = async context => {
+    const { envelope, assessmentAdmissionDigest } = await read(), facts = await currentFacts(context);
+    const record=matchedRecord(envelope,facts);
+    const { entry, artifact, identity, managerScope: scope } = context;
     if (!entry || !artifact || !identity || !scope || entry.executionClass !== 'isolated-tool'
       || record.catalogueId !== entry.id || record.coordinate !== canonicalExtensionCoordinate(entry.coordinate)
       || record.packageIntegrity !== entry.integrity || record.artifactDigest !== artifact.artifactDigest
@@ -71,6 +81,9 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
     return Object.freeze({ assessmentAdmissionDigest });
   };
   const verifyManifest = async (manifest, project, options = {}) => {
+    extensionRequestObject(options,['callerScope','operation'],[]);
+    if(Object.hasOwn(options,'callerScope'))extensionRequestObject(options.callerScope,actorScopeKeys);
+    if(options.operation!==undefined&&!Object.hasOwn(options,'callerScope'))throw denied();
     for(const binding of manifest.bindings.installations){
       if(!Object.hasOwn(binding,'assessmentAdmissionDigest'))continue;
       const pins=manifest.projection.plugins.filter(plugin=>plugin.extensionId===binding.extensionId&&Object.hasOwn(plugin,'assessmentAdmissionDigest'));
@@ -82,9 +95,12 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
       if (!binding || binding.assessmentAdmissionDigest !== plugin.assessmentAdmissionDigest || Object.hasOwn(binding,'receiptDigest')
         || Object.hasOwn(plugin,'compatibility') || Object.hasOwn(plugin,'sourceDocumentId')
         || plugin.connectionRefs.length || Object.keys(plugin.settings).length || manifest.scope.ownerId !== project.userId || manifest.scope.projectId !== project.id) throw denied();
-      const context = { manifest, project, plugin, binding, operation: options.operation };
+      const callerScope=options.callerScope??null;
+      const context = { manifest, project, plugin, binding, operation: options.operation,
+        ...(callerScope?{managerScope:callerScope}:{}) };
       const facts = await currentFacts(context);
       const sha = value => createHash('sha256').update(value).digest('hex');
+      if(!facts||factKeys.some(field=>!Object.hasOwn(facts,field)||facts[field]===undefined))throw denied();
       if(plugin.extensionId!==facts.catalogueId || canonicalExtensionCoordinate(plugin.coordinate)!==facts.coordinate
         || plugin.integrity!==facts.packageIntegrity || plugin.artifactDigest!==facts.artifactDigest
         || plugin.adapterRevision!==facts.adapterRevision || plugin.executionClass!=='isolated-tool'
@@ -94,11 +110,19 @@ export function createExtensionAssessmentAuthority({ root, recordPath, publicKey
         || extensionProofAdapterRevision(facts.artifact.adapterRevision,manifest.identity.adapterRevision,sha)!==facts.adapterRevision
         || manifest.identity.ownerId!==manifest.scope.ownerId || manifest.identity.projectId!==manifest.scope.projectId
         || binding.coordinate!==facts.coordinate || binding.integrity!==plugin.integrity || binding.artifactDigest!==plugin.artifactDigest
-        || binding.configDigest!==plugin.configDigest || manifest.scope.actorId!==binding.actorId
+        || binding.configDigest!==plugin.configDigest || binding.actorId!==facts.installerId
         || binding.actorMembershipEpoch!==facts.installerMembershipEpoch
-        || ['ownerId','actorId','ownerAccountCreatedAt','actorAccountCreatedAt','actorMembershipEpoch','projectId','projectCreatedAt'].some(field=>manifest.scope[field]!==facts[field]))throw denied();
+        || (callerScope?['ownerId','ownerAccountCreatedAt','projectId','projectCreatedAt']:actorScopeKeys).some(field=>manifest.scope[field]!==facts[field]))throw denied();
+      if(callerScope){
+        // The immutable generation's origin is still signed, but its historical
+        // manager never stands in for today's authenticated operation caller.
+        const sealed=await read(),originFacts={...facts,actorId:manifest.scope.actorId,
+          actorAccountCreatedAt:manifest.scope.actorAccountCreatedAt,actorMembershipEpoch:manifest.scope.actorMembershipEpoch};
+        matchedRecord(sealed.envelope,originFacts);
+        if(sealed.assessmentAdmissionDigest!==plugin.assessmentAdmissionDigest)throw denied();
+      }
       const admission = await admit({ ...context, entry: facts.entry, artifact: facts.artifact, identity: facts.identity,
-        scope: { ...manifest.scope, actorId: binding.actorId, actorAccountCreatedAt: facts.actorAccountCreatedAt } });
+        managerScope: callerScope??manifest.scope, scope: callerScope??manifest.scope });
       if (admission.assessmentAdmissionDigest !== plugin.assessmentAdmissionDigest) throw denied();
     }
   };

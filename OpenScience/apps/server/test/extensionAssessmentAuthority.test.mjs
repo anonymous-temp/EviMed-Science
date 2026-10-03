@@ -15,11 +15,11 @@ async function fixture(t) {
   const composed=extensionProofAdapterRevision(D,D,value=>createHash('sha256').update(value).digest('hex'));
   const identity={sourceCommit:null,adapterRevision:composed,runtimeImageDigest:D,dshVersion:'0.1.7-rc.2',permissionProfileRevision:D,suiteRevision:D};
   const scope={ownerId:'owner',actorId:'owner',ownerAccountCreatedAt:'owner-epoch',actorAccountCreatedAt:'owner-epoch',actorMembershipEpoch:null,projectId:'project',projectCreatedAt:'project-epoch'};
-  const facts={catalogueId:entry.id,coordinate:canonicalExtensionCoordinate(entry.coordinate),sourceCommit:null,packageIntegrity:D,artifactDigest:D,containedImageDigest:D,adapterDigest:D,adapterRevision:composed,runtimeImageDigest:D,dshVersion:identity.dshVersion,permissionProfileRevision:D,suiteRevision:D,sourcePolicyDigest:D,descriptorDigest:D,fixtureRootDigest:D,databaseNamespace:'fixture-db',installerMembershipEpoch:null,...scope};
+  const facts={catalogueId:entry.id,coordinate:canonicalExtensionCoordinate(entry.coordinate),sourceCommit:null,packageIntegrity:D,artifactDigest:D,containedImageDigest:D,adapterDigest:D,adapterRevision:composed,runtimeImageDigest:D,dshVersion:identity.dshVersion,permissionProfileRevision:D,suiteRevision:D,sourcePolicyDigest:D,descriptorDigest:D,fixtureRootDigest:D,databaseNamespace:'fixture-db',installerId:'owner',installerAccountCreatedAt:'owner-epoch',installerMembershipEpoch:null,...scope};
   const record={...facts,assessmentId:'fixture-measurement',issuedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+1000).toISOString(),allowedOperations:['doc_read','doc_write']};
-  const write=async value=>{const payload={schemaVersion:1,admissions:[value]},domain=EXTENSION_ASSESSMENT_DOMAIN;const signature=sign(null,Buffer.from(canonicalJson({domain,payload})),keys.privateKey).toString('base64');await fs.chmod(recordPath,0o600).catch(()=>{});await fs.writeFile(recordPath,canonicalJson({domain,payload,signature})+'\n',{mode:0o400});await fs.chmod(recordPath,0o400);};await write(record);
-  let current={...facts};const options={root,recordPath,publicKey:keys.publicKey.export({type:'spki',format:'pem'}),currentFacts:async()=>({...current,entry,artifact,identity}),now:()=>now};
-  return{authority:createExtensionAssessmentAuthority(options),options,write,record,facts,change:value=>{current=value;},context:{entry,artifact,identity,scope,operation:'doc_read'},recordPath};
+  const write=async value=>{const payload={schemaVersion:1,admissions:Array.isArray(value)?value:[value]},domain=EXTENSION_ASSESSMENT_DOMAIN;const signature=sign(null,Buffer.from(canonicalJson({domain,payload})),keys.privateKey).toString('base64');await fs.chmod(recordPath,0o600).catch(()=>{});await fs.writeFile(recordPath,canonicalJson({domain,payload,signature})+'\n',{mode:0o400});await fs.chmod(recordPath,0o400);};await write(record);
+  let current={...facts};const options={root,recordPath,publicKey:keys.publicKey.export({type:'spki',format:'pem'}),currentFacts:async context=>({...typeof current==='function'?await current(context):current,entry,artifact,identity}),now:()=>now};
+  return{authority:createExtensionAssessmentAuthority(options),options,write,record,facts,change:value=>{current=value;},context:{entry,artifact,identity,scope,managerScope:scope,operation:'doc_read'},recordPath};
 }
 test('opaque constructor-only admission measures exact protected tuple, never returns a qualification receipt',async t=>{
  const f=await fixture(t),bond=await f.authority.admit(f.context);assert.match(bond.assessmentAdmissionDigest,/^sha256:[a-f0-9]{64}$/);assert.equal(bond.receiptDigest,undefined);assert.ok(Object.isFrozen(f.authority));assert.ok(Object.isFrozen(bond));assert.throws(()=>assertExtensionAssessmentAuthority({...f.authority}));assert.throws(()=>assertExtensionAssessmentAuthority(JSON.parse(JSON.stringify(f.authority))));
@@ -30,18 +30,19 @@ test('every protected tuple and epoch drift refuses current admission',async t=>
 });
 test('owner null membership is explicit and never aliases absent facts, smuggled epochs or unknown signed fields',async t=>{
  const f=await fixture(t);
- for(const field of ['actorMembershipEpoch','installerMembershipEpoch']){
+ for(const field of ['actorMembershipEpoch','installerId','installerAccountCreatedAt','installerMembershipEpoch']){
   const absent={...f.facts};delete absent[field];f.change(absent);await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
   f.change(f.facts);const unsignedField={...f.record};delete unsignedField[field];await f.write(unsignedField);await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
  }
  await f.write({...f.record,actorMembershipEpoch:'smuggled-membership'});await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
  await f.write({...f.record,unknownMembershipAuthority:true});await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
  await f.write(f.record);const absentScope={...f.context.scope};delete absentScope.actorMembershipEpoch;
- await assert.rejects(f.authority.admit({...f.context,scope:absentScope}),{code:'extension_access_denied'});
+ await assert.rejects(f.authority.admit({...f.context,managerScope:absentScope}),{code:'extension_access_denied'});
+ const oldContext={...f.context};delete oldContext.managerScope;await assert.rejects(f.authority.admit(oldContext),{code:'extension_access_denied'});
 });
 test('private collaborating actor and installer epochs are independently signed and revoke/regrant invalidates both',async t=>{
  const f=await fixture(t),epoch=JSON.stringify({studyId:'study',members:[{role:'lead',createdAt:'2026-10-03 12:00:00+00'}]}),scope={...f.context.scope,actorId:'collaborator',actorAccountCreatedAt:'collaborator-epoch',actorMembershipEpoch:epoch};
- const facts={...f.facts,...scope,installerMembershipEpoch:epoch};f.facts=facts;f.change(facts);f.context.scope=scope;
+ const facts={...f.facts,...scope,installerId:'collaborator',installerAccountCreatedAt:'collaborator-epoch',installerMembershipEpoch:epoch};f.facts=facts;f.change(facts);f.context.scope=scope;f.context.managerScope=scope;
  await f.write({...f.record,...facts});await f.authority.admit(f.context);
  const m=await immutableManifest(f);assert.deepEqual(await verifyExtensionGeneration(m.config,m.project,m.manifest.reference,{assessmentAuthority:f.authority}),m.manifest);
  for(const field of ['actorMembershipEpoch','installerMembershipEpoch']){
@@ -50,6 +51,44 @@ test('private collaborating actor and installer epochs are independently signed 
  }
  f.change(facts);await assert.rejects(async()=>{const changed=await immutableManifest(f,{},manifest=>{manifest.bindings.installations[0].actorMembershipEpoch=null;});return verifyExtensionGeneration(changed.config,changed.project,changed.manifest.reference,{assessmentAuthority:f.authority});},{code:'extension_access_denied'});
  await assert.rejects(async()=>{const mixed=await immutableManifest(f,{},manifest=>{manifest.scope.actorId='owner';manifest.scope.actorAccountCreatedAt='owner-epoch';manifest.scope.actorMembershipEpoch=null;});return verifyExtensionGeneration(mixed.config,mixed.project,mixed.manifest.reference,{assessmentAuthority:f.authority});},{code:'extension_access_denied'});
+});
+test('private owner manager and lead installer are independently bonded, never inferred from the overwritten installation scope',async t=>{
+ const f=await fixture(t),epoch=JSON.stringify({studyId:'study',members:[{role:'lead',createdAt:'installer-incarnation'}]});
+ const facts={...f.facts,installerId:'lead',installerAccountCreatedAt:'lead-epoch',installerMembershipEpoch:epoch};
+ f.facts=facts;f.change(facts);await f.write({...f.record,...facts});
+ f.context.scope={...f.context.scope,actorId:'lead',actorAccountCreatedAt:'lead-epoch'};
+ await f.authority.admit(f.context);
+ const m=await immutableManifest(f);
+ assert.equal(m.manifest.scope.actorId,'owner');assert.equal(m.manifest.bindings.installations[0].actorId,'lead');
+ assert.deepEqual(await verifyExtensionGeneration(m.config,m.project,m.manifest.reference,{assessmentAuthority:f.authority}),m.manifest);
+ for(const field of ['installerId','installerAccountCreatedAt','installerMembershipEpoch']){
+  f.change({...facts,[field]:field==='installerMembershipEpoch'?null:'tampered'});
+  await assert.rejects(f.authority.admit(f.context),{code:'extension_access_denied'});
+ }
+ f.change(facts);
+ await assert.rejects(async()=>{const changed=await immutableManifest(f,{},manifest=>{manifest.bindings.installations[0].actorId='owner';});return verifyExtensionGeneration(changed.config,changed.project,changed.manifest.reference,{assessmentAuthority:f.authority});},{code:'extension_access_denied'});
+});
+test('lead-configured generation requires separate current owner invocation admission; historical manager never grants caller authority',async t=>{
+ const f=await fixture(t),epoch=JSON.stringify({studyId:'study',members:[{role:'lead',createdAt:'lead-era'}]});
+ const leadScope={...f.context.managerScope,actorId:'lead',actorAccountCreatedAt:'lead-epoch',actorMembershipEpoch:epoch};
+ const leadFacts={...f.facts,...leadScope,installerId:'lead',installerAccountCreatedAt:'lead-epoch',installerMembershipEpoch:epoch};
+ const ownerScope={...f.context.managerScope},ownerFacts={...leadFacts,...ownerScope};
+ f.facts=leadFacts;f.context.scope=leadScope;f.context.managerScope=leadScope;
+ const current=context=>(context.managerScope??context.manifest?.scope)?.actorId==='owner'?ownerFacts:leadFacts;f.change(current);
+ const leadRecord={...f.record,...leadFacts,assessmentId:'lead-management'},ownerRecord={...f.record,...ownerFacts,assessmentId:'owner-operation'};
+ await f.write(leadRecord);const alone=await immutableManifest(f);
+ const invocation={callerScope:ownerScope,operation:'doc_read'};
+ await assert.rejects(verifyExtensionGeneration(alone.config,alone.project,alone.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:invocation}),{code:'extension_access_denied'});
+ await f.write([leadRecord,ownerRecord]);const both=await immutableManifest(f);
+ assert.equal(both.manifest.scope.actorId,'lead');assert.equal(both.manifest.bindings.installations[0].actorId,'lead');
+ assert.deepEqual(await verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:invocation}),both.manifest);
+ await assert.rejects(verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:{...invocation,callerScope:{...ownerScope,actorId:'outsider'}}}));
+ await assert.rejects(verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentContext:invocation}));
+ await assert.rejects(verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:{callerScope:null}}));
+ f.change(context=>({...current(context),...(context.managerScope?.actorId==='owner'?{actorAccountCreatedAt:'recreated-owner',ownerAccountCreatedAt:'recreated-owner'}:{})}));
+ await assert.rejects(verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:invocation}));
+ f.change(context=>({...current(context),installerMembershipEpoch:null}));
+ await assert.rejects(verifyExtensionGeneration(both.config,both.project,both.manifest.reference,{assessmentAuthority:f.authority,assessmentContext:invocation}));
 });
 test('expired, future-issued, revoked, disallowed and writable admissions refuse',async t=>{
  const f=await fixture(t);await assert.rejects(f.authority.admit({...f.context,operation:'network_fetch'}));
@@ -66,8 +105,8 @@ async function immutableManifest(f, patch={}, mutate=()=>{}) {
  const bond=await f.authority.admit(f.context),configDigest='sha256:'+hash(canonicalJson({enabled:true,settings:{},connectionRefs:[]}));
  const plugin={extensionId:'fixture',coordinate:f.context.entry.coordinate,integrity:D,artifactDigest:D,adapterRevision:f.context.identity.adapterRevision,configRevision:1,configDigest,enabled:true,settings:{},connectionRefs:[],executionClass:'isolated-tool',...bond,...patch};
  const identity={ownerId:'owner',projectId:'project',baseRuntimeImageDigest:D,adapterRevision:D,permissionProfileRevision:D,selections:[{extensionId:'fixture',artifactDigest:D,configRevision:1,configDigest,connectionRefs:[]}],skills:[]};
- const binding={extensionId:'fixture',installationId:'installation',installationRevision:1,actorId:f.context.scope.actorId,actorMembershipEpoch:f.facts.installerMembershipEpoch,prepareJobId:'prepared',coordinate:canonicalExtensionCoordinate(f.context.entry.coordinate),artifactDigest:D,integrity:D,configDigest,...bond,...(patch.receiptDigest?{receiptDigest:patch.receiptDigest}:{})};
- const manifest={schemaVersion:1,identity,scope:f.context.scope,bindings:{desiredRevision:1,legacyRevision:0,personalRevision:0,installations:[binding]},projection:{plugins:[plugin],personal:{pins:[],reference:null}},findings:[]};
+ const binding={extensionId:'fixture',installationId:'installation',installationRevision:1,actorId:f.facts.installerId,actorMembershipEpoch:f.facts.installerMembershipEpoch,prepareJobId:'prepared',coordinate:canonicalExtensionCoordinate(f.context.entry.coordinate),artifactDigest:D,integrity:D,configDigest,...bond,...(patch.receiptDigest?{receiptDigest:patch.receiptDigest}:{})};
+ const manifest={schemaVersion:1,identity,scope:f.context.managerScope,bindings:{desiredRevision:1,legacyRevision:0,personalRevision:0,installations:[binding]},projection:{plugins:[plugin],personal:{pins:[],reference:null}},findings:[]};
  mutate(manifest);
  const generationHash=hash(canonicalJson({...manifest,domainIdentity:extensionGenerationIdentity(identity,{ownerId:'owner',projectId:'project'},hash)}));
  manifest.reference={ownerHash:hash('owner'),projectHash:hash('project'),generationHash};

@@ -14,7 +14,7 @@ function admission() {
     coordinate: canonicalExtensionCoordinate({ kind: 'github', repository: 'Jesse-njx/dsh-cowork', commit: 'a'.repeat(40) }),
     sourceCommit: 'a'.repeat(40), dshVersion: 'fixture-pin', databaseNamespace: 'evimed_test_fixture',
     ownerId: 'owner', actorId: 'owner', projectId: 'project', ownerAccountCreatedAt: new Date(now).toISOString(),
-    actorAccountCreatedAt: new Date(now).toISOString(),actorMembershipEpoch:null,installerMembershipEpoch:null, projectCreatedAt: new Date(now).toISOString(),
+    actorAccountCreatedAt: new Date(now).toISOString(),actorMembershipEpoch:null,installerId:'owner',installerAccountCreatedAt:new Date(now).toISOString(),installerMembershipEpoch:null, projectCreatedAt: new Date(now).toISOString(),
     allowedOperations: ['doc_read','doc_write'], issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 60000).toISOString() };
 }
 test('private admission writer signs the exact canonical envelope, never returns or persists signing key', async () => {
@@ -45,10 +45,18 @@ test('writer rejects extra authority fields, wildcard operations, stale/overlong
   finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 test('private signer requires explicit current collaborating actor and installer epochs, never owner-null smuggling',()=>{
- const epoch=JSON.stringify({studyId:'fixture',members:[{role:'lead',createdAt:'fixture-created-at'}]}),collaborator={...admission(),actorId:'collaborator',actorMembershipEpoch:epoch,installerMembershipEpoch:epoch};
+ const epoch=JSON.stringify({studyId:'fixture',members:[{role:'lead',createdAt:'fixture-created-at'}]}),collaborator={...admission(),actorId:'collaborator',actorMembershipEpoch:epoch,installerId:'collaborator',installerMembershipEpoch:epoch};
  assert.equal(validateMeasurementAdmission(collaborator,now).installerMembershipEpoch,epoch);
  assert.throws(()=>validateMeasurementAdmission({...collaborator,actorMembershipEpoch:null},now));
  assert.throws(()=>validateMeasurementAdmission({...collaborator,installerMembershipEpoch:null},now));
+});
+test('signer requires independent installer identity/account even when manager is owner',()=>{
+ const epoch=JSON.stringify({studyId:'fixture',members:[{role:'lead',createdAt:'installer'}]}),mixed={...admission(),installerId:'lead',installerAccountCreatedAt:new Date(now+1).toISOString(),installerMembershipEpoch:epoch};
+ assert.equal(validateMeasurementAdmission(mixed,now).actorId,'owner');
+ for(const field of ['installerId','installerAccountCreatedAt','installerMembershipEpoch']){const missing={...mixed};delete missing[field];assert.throws(()=>validateMeasurementAdmission(missing,now));}
+ assert.throws(()=>validateMeasurementAdmission({...mixed,installerId:'owner'},now));
+ assert.throws(()=>validateMeasurementAdmission({...mixed,installerMembershipEpoch:null},now));
+ assert.throws(()=>validateMeasurementAdmission({...admission(),installerAccountCreatedAt:new Date(now+1).toISOString()},now));
 });
 test('independently constructed real readers verify signer records and refuse operation, identity drift and writable records', async () => {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'evimed-saas-assessment-'))), record = admission();
@@ -63,7 +71,7 @@ test('independently constructed real readers verify signer records and refuse op
     let webFacts = record, controllerFacts = record;
     const web = createExtensionAssessmentAuthority({ ...written, currentFacts: async () => webFacts, now: () => now });
     const controller = createExtensionAssessmentAuthority({ ...written, currentFacts: async () => controllerFacts, now: () => now });
-    const context = { entry, artifact, identity, scope, operation: 'doc_read' };
+    const context = { entry, artifact, identity, scope, managerScope:scope, operation: 'doc_read' };
     assert.notEqual(web, controller);
     assert.equal((await web.admit(context)).assessmentAdmissionDigest, written.assessmentAdmissionDigest);
     assert.equal((await controller.admit(context)).assessmentAdmissionDigest, written.assessmentAdmissionDigest);
