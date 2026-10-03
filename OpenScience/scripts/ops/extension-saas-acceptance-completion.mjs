@@ -159,7 +159,11 @@ export async function runStudyRoleControls({ app, state, baseUrl, fixture, owner
     [`/api/extensions/connections?catalogueId=${encodeURIComponent(state.descriptor.id)}&projectId=${encodeURIComponent(project.id)}`, 'GET', undefined],
   ]) {
     const denied = await request(baseUrl, viewer, route, { method, body, signal, expected: [403, 404] });
-    requireControl(['extension_access_denied', 'project_not_found', 'vcr_role_forbids', 'vcr_study_not_found'].includes(denied.receipt.code), 'completion_http_role_refusal_mismatch');
+    // VcrRoutes' public ability guard names its refusal vcr_forbidden;
+    // VcrAccess' internal judge names the same role verdict vcr_role_forbids.
+    if (!['extension_access_denied', 'project_not_found', 'vcr_forbidden', 'vcr_role_forbids', 'vcr_study_not_found'].includes(denied.receipt.code)) {
+      throw Object.assign(new Error('completion_http_role_refusal_mismatch'), { refusalReceipt: denied.receipt });
+    }
     receipts.push(denied.receipt);
   }
   requireControl(await countJobs() === before, 'completion_forbidden_job_created');
