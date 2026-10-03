@@ -758,6 +758,19 @@ API binding, and private runtime network. App data remains
 `evimed-science-test-postgres`. The knowledge plugin uses its own database and
 private token at the loopback endpoint `http://127.0.0.1:18080`.
 
+### Runtime slots on a small host
+
+Allow two runtimes, not one (`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=2`,
+`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER=2`, with
+`OPEN_SCIENCE_RUNTIME_MEMORY_LIMIT=1g` to keep the same 2 GiB ceiling). The
+platform's background work may always hold one runtime
+(`backgroundRuntimeLimit` never returns less than one), and a researcher's
+start does not retire it. With a single slot the learning loop held it for more
+than fifteen minutes after each finished run on 2026-10-03, and every dispatch
+in that time answered 429 `runtime_limit_exceeded`. A driver that leaves its
+runtime up (the stream acceptance, the conversation walk) has the same effect;
+stop it with `stop_runtime` under that project's header.
+
 ### Bundle updates and identity
 
 Extract the verified CI Web image's complete `/app` closure into a new release;
