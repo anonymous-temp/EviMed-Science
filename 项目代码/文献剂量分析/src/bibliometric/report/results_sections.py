@@ -35,6 +35,12 @@ _COUNTRY_ZH = {
 
 def _get_narrative(ctx: dict, key: str) -> str:
     """Return an AI/template narrative paragraph for a Results subsection."""
+    if key == "results_trends":
+        # The input contract records selected metadata, not complete calendar
+        # coverage. Preserve counts without importing an AI growth extrapolation.
+        from bibliometric.insight.templates import template_results_trends, template_results_trends_zh
+        renderer = template_results_trends_zh if _zh(ctx) else template_results_trends
+        return "\n" + renderer(ctx["stats"]) + "\n"
     text = ctx["stats"].get("ai_narratives", {}).get(key, "")
     if not text:
         return ""
@@ -97,7 +103,7 @@ def _results_overview(ctx):
         lines.append("| 阶段 | 操作 | 记录数 |")
         lines.append("|------|------|--------|")
         lines.append(f"| 检索 | MEDLINE (via PubMed) 数据库检索 | {ctx['total_found']:,} |")
-        lines.append(f"| 获取 | API 批量获取全文记录 | {ctx['total_fetched']:,} |")
+        lines.append(f"| 获取 | API 批量获取书目元数据（含可用摘要；非论文全文） | {ctx['total_fetched']:,} |")
         lines.append(f"| 去重 | 去重后剩余记录 | {ctx['after_dedup']:,} |")
         if excluded_clean > 0:
             lines.append(f"| 排除 | 排除（元数据缺失/无法解析）| -{excluded_clean:,} |")
@@ -107,15 +113,16 @@ def _results_overview(ctx):
             max_r = ctx.get("max_records", 0)
             lines.append(
                 f"\n> **抽样说明：** PubMed 共返回 {ctx['total_found']:,} 条记录，"
-                f"受检索上限（max_records={max_r}）限制，本次分析了 {ctx['total_fetched']:,} 篇"
-                f"（占总量的 {pct:.1f}%）。结果应理解为对全部文献的代表性样本。\n"
+                f"配置的检索上限：{max_r or '未记录'}；本次获取了 {ctx['total_fetched']:,} 条书目记录"
+                f"（占总量的 {pct:.1f}%）。检索排序：{ctx.get('search_sort') or '未记录'}。"
+                "结果仅描述选入的已获取记录；代表性未经验证，不能外推全部文献或完整年度产出。\n"
             )
     else:
         lines.append("### 3.1 Study Selection (PRISMA-Adapted Flow)\n")
         lines.append("| Stage | Action | Records |")
         lines.append("|-------|--------|---------|")
         lines.append(f"| Identification | MEDLINE (via PubMed) database search | {ctx['total_found']:,} |")
-        lines.append(f"| Retrieval | API batch fetch of full records | {ctx['total_fetched']:,} |")
+        lines.append(f"| Retrieval | API batch fetch of bibliographic metadata (available abstracts, not article full text) | {ctx['total_fetched']:,} |")
         lines.append(f"| Screening | After deduplication | {ctx['after_dedup']:,} |")
         if excluded_clean > 0:
             lines.append(f"| Excluded | Missing/unparseable metadata | -{excluded_clean:,} |")
@@ -125,9 +132,11 @@ def _results_overview(ctx):
             max_r = ctx.get("max_records", 0)
             lines.append(
                 f"\n> **Sampling note:** PubMed returned {ctx['total_found']:,} records. "
-                f"Due to the retrieval limit (max_records={max_r}), "
-                f"{ctx['total_fetched']:,} were analyzed ({pct:.1f}% of available). "
-                f"Results represent a sample of the full literature.\n"
+                f"Configured retrieval limit: {max_r or 'not recorded'}; "
+                f"{ctx['total_fetched']:,} bibliographic records were fetched ({pct:.1f}% of matches). "
+                f"Search sort: {ctx.get('search_sort') or 'not recorded'}. "
+                "Results describe selected retrieved records only; representativeness is unverified. "
+                "Do not extrapolate to all literature or complete calendar-year output.\n"
             )
 
     lines.append(("### 3.2 发文趋势\n" if zh else "### 3.2 Publication Trends\n"))
