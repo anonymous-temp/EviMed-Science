@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -137,4 +137,16 @@ test('lifecycle diagnostics stop at32 records while all real operations continue
  for(const name of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])manager[name]=async()=>{calls++;if(manager.fail)throw error;return{joined:true};};
  const records=[];observeCampaignGenerationLifecycle(manager,async value=>records.push(value));for(let i=0;i<25;i++)await manager.prepareGeneration({},null);assert.equal(calls,25);assert.equal(records.length,32);
  const second={...manager};for(const name of ['prepareGeneration','replaceGeneration','probeGeneration','restoreGeneration'])second[name]=async()=>{throw error;};observeCampaignGenerationLifecycle(second,async()=>{throw new Error('sink-failed');});await assert.rejects(second.replaceGeneration({},null),actual=>actual===error);
+});
+
+test('actual Docker omitted ReadOnly false is normalized narrowly while volume ownership/subpaths and explicit invalid flags still refuse',()=>{
+ const root='/owned',rootDigest='sha256:'+createHash('sha256').update(canonicalJson(root)).digest('hex'),network={Name:'owned',Id:'b'.repeat(64),Internal:true,Driver:'bridge',Labels:{'io.evimed.campaign-root':rootDigest}},volume={Name:'owned-volume',Driver:'local',Options:{type:'none',o:'bind',device:root},Labels:{'io.evimed.campaign-root':rootDigest}},expected={imageId:'sha256:'+'a'.repeat(64),ownerId:'owner',projectId:'project',authorityRoot:'/owned/admission',qualificationRoot:'/owned/qualification',dataDir:root,dataVolume:volume.Name,volume,network};
+ const planned={Type:'volume',Source:volume.Name,Target:'/workspace',VolumeOptions:{Subpath:'users/owner/projects/project/workspace'}},actual={Id:'a'.repeat(64),Image:expected.imageId,Config:{User:'10001:10001',Env:['PRIVATE_TOKEN=must-not-leak'],Labels:{'open-science.user':'owner','open-science.project':'project',private:'must-not-leak'}},State:{Running:true},HostConfig:{ReadonlyRootfs:true,NanoCpus:1_000_000_000,Memory:1536*1024*1024,Privileged:false,CapDrop:['ALL'],SecurityOpt:['no-new-privileges'],NetworkMode:network.Name,Mounts:[planned]},NetworkSettings:{Networks:{[network.Name]:{NetworkID:network.Id,IPAMConfig:{private:'must-not-leak'}}}},Mounts:[{Type:'volume',Source:'/var/lib/docker/volumes/owned-volume/_data',Name:volume.Name,Destination:'/workspace',RW:true}]};
+ assert.equal(validatePrivateRuntimeMounts(actual,expected).uid,10001);assert.equal(Object.hasOwn(planned,'ReadOnly'),false);
+ for(const flag of [null,'false',0,true])assert.throws(()=>validatePrivateRuntimeMounts({...actual,HostConfig:{...actual.HostConfig,Mounts:[{...planned,ReadOnly:flag}]}},expected),/volume_identity/);
+ assert.equal(validatePrivateRuntimeMounts({...actual,HostConfig:{...actual.HostConfig,Mounts:[{...planned,ReadOnly:false}]}},expected).uid,10001);
+ for(const subpath of ['','../workspace','admission','qualification','.openscience/../workspace'])assert.throws(()=>validatePrivateRuntimeMounts({...actual,HostConfig:{...actual.HostConfig,Mounts:[{...planned,VolumeOptions:{Subpath:subpath}}]}},expected));
+ for(const changed of [{...volume,Driver:'other'},{...volume,Options:{...volume.Options,device:'/other'}},{...volume,Labels:{}}])assert.throws(()=>validatePrivateRuntimeMounts(actual,{...expected,volume:changed}),/volume_identity/);
+ assert.throws(()=>validatePrivateRuntimeMounts({...actual,Mounts:[{...actual.Mounts[0],RW:null}]},expected),/volume_identity/);
+ const metadata=campaignPhysicalInspectionMetadata(actual,volume,network);assert.equal(JSON.stringify(metadata).includes('must-not-leak'),false);assert.equal(Object.hasOwn(metadata.container.HostConfig.Mounts[0],'ReadOnly'),false);assert.equal(metadata.volume.Options.device,root);
 });

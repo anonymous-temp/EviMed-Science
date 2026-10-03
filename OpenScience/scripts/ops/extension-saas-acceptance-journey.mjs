@@ -120,11 +120,11 @@ export function validatePrivateRuntimeMounts(actual, { imageId, ownerId, project
     let source;
     if(mount.Type==='bind')source=path.resolve(mount.Source);
     else if(mount.Type==='volume'){
-      const planned=actual.HostConfig.Mounts?.find(item=>item.Target===mount.Destination),subpath=planned?.VolumeOptions?.Subpath;
-      if(!dataDir||!dataVolume||!volume||volume.Name!==dataVolume||volume.Options?.type!=='none'||volume.Options?.o!=='bind'||volume.Options?.device!==dataDir
+      const planned=actual.HostConfig.Mounts?.find(item=>item.Target===mount.Destination),subpath=planned?.VolumeOptions?.Subpath,readOnly=planned&&Object.hasOwn(planned,'ReadOnly')?planned.ReadOnly:false;
+      if(!dataDir||!dataVolume||!volume||volume.Name!==dataVolume||volume.Driver!=='local'||volume.Options?.type!=='none'||volume.Options?.o!=='bind'||volume.Options?.device!==dataDir
         ||volume.Labels?.['io.evimed.campaign-root']!==digest(canonicalJson(dataDir))||mount.Name!==dataVolume
         ||planned?.Type!=='volume'||planned.Source!==dataVolume||typeof subpath!=='string'||subpath.split('/').some(part=>!part||part==='.'||part==='..')
-        ||planned.ReadOnly!==!mount.RW)throw new Error('private_runtime_volume_identity_unconfirmed');
+        ||typeof readOnly!=='boolean'||typeof mount.RW!=='boolean'||readOnly!==!mount.RW)throw new Error('private_runtime_volume_identity_unconfirmed');
       source=path.resolve(dataDir,subpath);
     }else throw new Error('private_runtime_mount_type_unconfirmed');
     if (protectedRoots.some(root => root === source || root.startsWith(source + path.sep) || source.startsWith(root + path.sep))) throw new Error('protected_authority_runtime_mount_refused');
@@ -132,6 +132,15 @@ export function validatePrivateRuntimeMounts(actual, { imageId, ownerId, project
   const forbiddenEnv = (actual.Config.Env ?? []).filter(value => /^(?:DEEPSEEK_API_KEY|DASHSCOPE_API_KEY|OTEL_EXPORTER_OTLP_ENDPOINT)=/.test(value));
   if (forbiddenEnv.length) throw new Error('runtime_provider_or_telemetry_configuration_refused');
   return { containerId: actual.Id, imageId, uid: 10001,resources:{nanoCpus:actual.HostConfig.NanoCpus,memoryBytes:actual.HostConfig.Memory},privileged:false,capDropAll:true,noNewPrivileges:true,network:{Id:network.Id,Name:network.Name,Internal:network.Internal,Driver:network.Driver}, mounts: actual.Mounts.map(({ Source,Destination,RW,Type,Name }) => ({ Source,Destination,RW,Type,Name:Name??null })),volumeIdentity:volume?{Name:volume.Name,Options:volume.Options,Labels:volume.Labels}:null };
+}
+/** Allowlisted physical failure evidence excludes runtime environment values and unrelated labels. */
+export function campaignPhysicalInspectionMetadata(actual,volume,network){
+ const host=actual?.HostConfig??{},config=actual?.Config??{};
+ return{container:{Id:actual?.Id,Image:actual?.Image,User:config.User,Labels:{'open-science.user':config.Labels?.['open-science.user'],'open-science.project':config.Labels?.['open-science.project']},Running:actual?.State?.Running,
+  HostConfig:{ReadonlyRootfs:host.ReadonlyRootfs,Privileged:host.Privileged,CapDrop:host.CapDrop,SecurityOpt:host.SecurityOpt,NetworkMode:host.NetworkMode,NanoCpus:host.NanoCpus,Memory:host.Memory,Mounts:(host.Mounts??[]).map(m=>({Type:m.Type,Source:m.Source,Target:m.Target,...(Object.hasOwn(m,'ReadOnly')?{ReadOnly:m.ReadOnly}:{}),VolumeOptions:{Subpath:m.VolumeOptions?.Subpath}}))},
+  Mounts:(actual?.Mounts??[]).map(m=>({Source:m.Source,Destination:m.Destination,RW:m.RW,Type:m.Type,Name:m.Name})),Networks:Object.fromEntries(Object.entries(actual?.NetworkSettings?.Networks??{}).map(([name,value])=>[name,{NetworkID:value.NetworkID}]))},
+  volume:volume?{Name:volume.Name,Driver:volume.Driver,Options:{type:volume.Options?.type,o:volume.Options?.o,device:volume.Options?.device},Labels:{'io.evimed.campaign-root':volume.Labels?.['io.evimed.campaign-root']}}:null,
+  network:network?{Id:network.Id,Name:network.Name,Internal:network.Internal,Driver:network.Driver,Labels:{'io.evimed.campaign-root':network.Labels?.['io.evimed.campaign-root']}}:null};
 }
 /** Controlled loopback upstream implements only the model transport; numerical/content quality is not measured. */
 export function controlledCampaignTurn(body, plans, counts) {
@@ -340,6 +349,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const actual=JSON.parse((await execute(path.join(root,'docker-fixture.mjs'),['inspect','--format','{{json .}}',runtime.containerName],{timeout:10000,maxBuffer:256*1024,env:assessmentDockerEnvironment()})).stdout);
     const volume=volumeName?JSON.parse((await execute('docker',['volume','inspect',volumeName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0]:null;
     const inspectedNetwork=JSON.parse((await execute('docker',['network','inspect',network.id],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:65536})).stdout)[0];
+    await saveProtected(path.join(root,'physical-inspection-before-admission.json'),campaignPhysicalInspectionMetadata(actual,volume,inspectedNetwork));
     const physical=validatePrivateRuntimeMounts(actual,{imageId:inputs.runtimeImageId,ownerId:owner.user.id,projectId:owner.projectId,authorityRoot:admission.root,qualificationRoot:deployment.qualificationRoot,dataDir:root,dataVolume:volumeName,volume,network:inspectedNetwork});
     assert.equal(transport.requests.length,0);
     const current=await privateApp.hostedExtensions.generations.current(project);
@@ -384,6 +394,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     stage='current-physical-runtime-verification';const runtime=app.runtimeManager.runtimes.get(app.runtimeManager.key(project)),actual=JSON.parse((await execute(app.config.runtimeContainerBin,['inspect','--format','{{json .}}',runtime.containerName],{timeout:10000,maxBuffer:256*1024,env:assessmentDockerEnvironment()})).stdout);
     const volume=state.overrides.runtimeDataVolume?JSON.parse((await execute('docker',['volume','inspect',state.overrides.runtimeDataVolume],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0]:null;
     const inspectedNetwork=JSON.parse((await execute('docker',['network','inspect',state.network.id],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:65536})).stdout)[0];
+    await saveProtected(path.join(state.root,'physical-inspection-measure-'+randomUUID()+'.json'),campaignPhysicalInspectionMetadata(actual,volume,inspectedNetwork));
     const physical=validatePrivateRuntimeMounts(actual,{imageId:state.overrides.runtimeContainerImage,ownerId:owner.user.id,projectId:owner.projectId,authorityRoot:state.admission.root,qualificationRoot:state.qualificationRoot,dataDir:state.root,dataVolume:state.overrides.runtimeDataVolume,volume,network:inspectedNetwork});
     await campaignRequest(baseUrl,other,'/api/extensions/installations/'+encodeURIComponent(state.installedId),'GET',undefined,404,signal);
     const catalogue=await campaignRequest(baseUrl,owner,'/api/extensions/catalogue');assert.equal(JSON.stringify(catalogue).includes('saas-qualified'),false);
@@ -535,6 +546,7 @@ export async function ordinaryQualifiedSmoke(inputs,{signal=null}={}){
     assert.equal(effective.payload.effective.projection.plugins.find(plugin=>plugin.extensionId===descriptor.id).receiptDigest,authority.receipt.receiptDigest);
     const runtime=app.runtimeManager.runtimes.get(app.runtimeManager.key(project)),actual=JSON.parse((await execute(app.config.runtimeContainerBin,['inspect','--format','{{json .}}',runtime.containerName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:256*1024})).stdout),volume=volumeName?JSON.parse((await execute('docker',['volume','inspect',volumeName],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0]:null;
     const inspectedNetwork=JSON.parse((await execute('docker',['network','inspect',network.id],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:65536})).stdout)[0];
+    await saveProtected(path.join(root,'physical-inspection-ordinary-smoke.json'),campaignPhysicalInspectionMetadata(actual,volume,inspectedNetwork));
     const physical=validatePrivateRuntimeMounts(actual,{imageId:overrides.runtimeContainerImage,ownerId:actor.user.id,projectId:project.id,authorityRoot:deployment.qualificationRoot,qualificationRoot:deployment.qualificationRoot,dataDir:root,dataVolume:volumeName,volume,network:inspectedNetwork});
     stage='ordinary-qualified-native-gateway-ledger-controller-documents';const publicRoot=path.join(root,'public-fixtures'),files=await createFixtures(publicRoot),pdf=await fs.readFile(path.join(publicRoot,files.res_pdf.file)),principal={userId:actor.user.id,projectId:project.id,jti:app.runtimeManager.runtimeGeneration(project)},captured=await app.hostedExtensions.documents.prepareCapture(principal);
     const resource=await app.hostedExtensions.documents.capturePdf(principal,pdf,{doi:'synthetic-public-fixture',origin:'https://example.invalid/synthetic-public-fixture'},captured,async()=>{assert.equal(app.runtimeManager.runtimeGeneration(project),principal.jti);return principal;});
