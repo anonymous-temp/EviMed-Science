@@ -138,6 +138,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=HERE / "results")
+    parser.add_argument("--evidence-dir", type=Path, default=RESULTS,
+                        help="retained task reports; use the same directory when verifying the new summary")
     args = parser.parse_args()
     payload = json.loads(args.input.read_text(encoding="utf-8"))
     incoming = payload.get("items", []) if isinstance(payload, dict) else payload
@@ -146,7 +148,8 @@ def main() -> None:
     mapping = capability_mapping()
     composition = skill_composition(REPO)
     web_packages = {item["id"] for item in composition["packages"]}
-    coverage = skill_execution_coverage(REPO, RESULTS, composition)
+    evidence_dir = args.evidence_dir.resolve()
+    coverage = skill_execution_coverage(REPO, evidence_dir, composition)
     certified_packages = {row["packageId"] for row in coverage if row["state"] == "bounded-historical-task-matched"}
     rows = []
     for source in incoming:
@@ -232,7 +235,7 @@ def main() -> None:
         "sourcePlannedSkillPackages": len(web_packages),
         "imageObservation": "unknown",
         "executionCoverage": coverage,
-        "historicalExecutionEvidence": skill_evidence_metadata(RESULTS),
+        "historicalExecutionEvidence": skill_evidence_metadata(evidence_dir),
         "boundedHistoricalTaskPackageCount": len(certified_packages),
         "boundedHistoricalTaskPackageIds": sorted(certified_packages),
         "unknownExecutionPackageIds": [row["packageId"] for row in coverage if row["state"] == "unknown"],

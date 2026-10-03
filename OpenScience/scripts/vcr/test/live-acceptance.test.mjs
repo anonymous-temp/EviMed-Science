@@ -48,16 +48,18 @@ test('completed artifact exports poll, hash both outputs and prove denial; denia
     await writeFile(owner, JSON.stringify({ cookie: 'session=owner', csrf: 'owner-secret' }), { mode: 0o600 });
     await writeFile(stranger, JSON.stringify({ cookie: 'session=stranger', csrf: 'stranger-secret' }), { mode: 0o600 });
     await writeFile(input, JSON.stringify({ projectId: 'prj_1', source: { artifactId: 'art_1', root: 'deliverables', revision: 'sha256:known' } }));
-    const config = { command: 'artifact-export', stage: 'staging', baseUrl: `http://127.0.0.1:${server.address().port}`, credentials: owner, strangerCredentials: stranger, input, timeoutMs: 1000, output: path.join(dir, 'success') };
+    // This success fixture includes durable fsync writes; timeout behavior has separate short-deadline controls.
+    const config = { command: 'artifact-export', stage: 'staging', baseUrl: `http://127.0.0.1:${server.address().port}`, credentials: owner, strangerCredentials: stranger, input, timeoutMs: 10000, output: path.join(dir, 'success') };
+    const failureSummary = receipt => JSON.stringify({ errorType: receipt.error?.match(/^[a-z][a-z0-9_]*$/)?.[0] ?? (receipt.error ? 'other_error' : null), steps: receipt.steps.map(({ method, status, durationMs, bytes }) => ({ method, status, durationMs, bytes })), outputCount: receipt.outputs.length });
     const result = await runAcceptance(config);
-    assert.equal(result.status, 'completed_scoped_checks');
+    assert.equal(result.status, 'completed_scoped_checks', failureSummary(result));
     assert.equal(result.outputs.length, 2);
     assert.equal((await stat(path.join(config.output, 'receipt.json'))).mode & 0o077, 0);
     assert.equal((await readFile(path.join(config.output, 'receipt.json'), 'utf8')).includes('owner-secret'), false);
     assert.equal(calls.some(([, route]) => route.includes('/vcr/')), false, 'non-VCR export has no VCR dependency');
     leak = true;
     const incomplete = await runAcceptance({ ...config, output: path.join(dir, 'denial-failed') });
-    assert.equal(incomplete.status, 'incomplete');
+    assert.equal(incomplete.status, 'incomplete', failureSummary(incomplete));
     assert.equal(incomplete.error, 'http_200');
     assert.equal(incomplete.outputs.length, 0);
     await assert.rejects(runAcceptance(config), /EEXIST/);

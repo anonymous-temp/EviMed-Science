@@ -393,6 +393,24 @@ class CurrentSkillInventory(unittest.TestCase):
             with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(output)]), self.assertRaisesRegex(SystemExit, "already exists"):
                 builder.main()
 
+    def test_generator_and_verifier_read_the_selected_evidence_directory(self):
+        import build_skill_audit as builder
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "new-evidence"
+            evidence.mkdir()
+            output = root / "new-report"
+            source = audit.RESULTS / "skill-audit-v4.json"
+            with patch.object(sys, "argv", ["build", "--input", str(source), "--output-dir", str(output),
+                                           "--evidence-dir", str(evidence)]), contextlib.redirect_stdout(io.StringIO()):
+                builder.main()
+            summary = json.loads((output / "skill-audit-v5.json").read_text())["summary"]
+            self.assertTrue(all(item["state"] == "missing" for item in summary["historicalExecutionEvidence"]))
+            with patch.object(audit, "REPORTS", output), patch.object(audit, "RESULTS", evidence):
+                with self.assertRaisesRegex(SystemExit, "current skill task evidence is unknown"):
+                    audit.verify_skills()
+            self.assertEqual(list(evidence.iterdir()), [])
+
     def test_retired_notebook_and_legacy_target_are_not_claimed_current(self):
         import build_skill_audit as builder
         with tempfile.TemporaryDirectory() as temporary:
