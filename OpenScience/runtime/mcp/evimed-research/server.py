@@ -145,10 +145,12 @@ LABEL_SECTIONS = {"type": "array", "maxItems": 17, "items": SHORT_STRING}
 DATE = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 YEAR = {"type": "integer", "minimum": 1900, "maximum": 2100}
 STATUS_WAIT_MAX_SECONDS = 45
+MANAGED_JOB_ID_DESCRIPTION = "Use the actual jobId returned by action=start; never invent it or substitute a platform run/session id."
 STATUS_WAIT_SECONDS = {
     "type": "integer",
     "minimum": 0,
     "maximum": STATUS_WAIT_MAX_SECONDS,
+    "description": "Only for action=status polling. Omit on start and capabilities; start returns the jobId without waiting.",
 }
 
 ACTION = {"type": "string", "enum": ["requirements", "retrieve", "compile"]}
@@ -751,7 +753,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "topic": {"type": "string", "minLength": 1, "maxLength": 4000},
-                "jobId": {"type": "string", "pattern": r"^meta-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^meta-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
                 "maxPapers": {"type": "integer", "minimum": 2, "maximum": 200},
@@ -783,7 +785,7 @@ TOOL_DEFINITIONS = [
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "exposure": STRING,
                 "outcome": STRING,
-                "jobId": {"type": "string", "pattern": r"^mr-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^mr-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
                 "analysisDirection": {"type": "string", "enum": ["forward", "bidirectional"]},
@@ -800,7 +802,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "topic": STRING,
-                "jobId": {"type": "string", "pattern": r"^bibliometric-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^bibliometric-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "dateFrom": {"type": "string", "pattern": r"^\d{4}$"},
                 "dateTo": {"type": "string", "pattern": r"^\d{4}$"},
@@ -822,7 +824,7 @@ TOOL_DEFINITIONS = [
                 "studySetting": {"type": "string", "minLength": 1, "maxLength": 1000},
                 "resourceConstraints": {"type": "array", "maxItems": 20,
                                         "items": {"type": "string", "minLength": 1, "maxLength": 200}},
-                "jobId": {"type": "string", "pattern": r"^topic-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^topic-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
             },
@@ -836,7 +838,7 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "manuscript": {"type": "string", "minLength": 1, "maxLength": 512},
-                "jobId": {"type": "string", "pattern": r"^review-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^review-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "articleType": {"type": "string", "enum": ["original-research", "systematic-review", "case-report", "other"]},
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
@@ -868,7 +870,7 @@ TOOL_DEFINITIONS = [
                 "studyDateTo": DATE,
                 "backgroundDateFrom": DATE,
                 "backgroundDateTo": DATE,
-                "jobId": {"type": "string", "pattern": r"^safety-[a-z0-9-]{8,80}$"},
+                "jobId": {"type": "string", "pattern": r"^safety-[a-z0-9-]{8,80}$", "description": MANAGED_JOB_ID_DESCRIPTION},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
             },

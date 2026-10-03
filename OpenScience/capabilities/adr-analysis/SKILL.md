@@ -27,6 +27,17 @@ signals from clinical evidence, describe important limitations, and never infer
 incidence from a reporting database. Use the declared EviMed tools only; do not
 substitute unverified figures from memory.
 
+
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
 For an open-domain request that asks for a drug-safety analysis or structured
 pharmacovigilance report, call `mcp__evimed__drug_safety_analysis` with
 `action=capabilities`, then start the managed job with the drug and optional

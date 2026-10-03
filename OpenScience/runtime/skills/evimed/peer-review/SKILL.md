@@ -12,9 +12,20 @@ The review is decision support for authors and editors, not a journal decision.
 
 ## Execute
 
+For managed jobs, send `action=start` with only the declared analysis inputs;
+omit `waitSeconds` on `start` and `capabilities`. Save the returned `jobId`,
+then use `action=status` with that exact id and `waitSeconds=45` for polling.
+
+Record only actual managed worker ids, terminal states and returned artifacts.
+If no managed worker ran, distinguish supported in-session interpretation from
+managed execution that was not performed. Do not invent a job id, substitute
+a platform run/session id, or claim uncomputed managed results. Advisory
+bookkeeping notices never justify discarding supported work.
+
+
 1. Confirm the workspace-relative manuscript and its likely article type. Call
-   `peer_review` with `action=capabilities`, then start and poll the job
-   with `waitSeconds=45` until terminal.
+   `peer_review` with `action=capabilities`, then start without `waitSeconds` and retain the returned `jobId`. Poll with
+   `action=status`, that exact `jobId`, and `waitSeconds=45` until terminal.
 2. Preserve the selected reporting rubrics and every evidence location. Separate
    confirmed defects from uncertain findings caused by parsing or retrieval
    limits. Never claim that a missing item is absent when the relevant section,
