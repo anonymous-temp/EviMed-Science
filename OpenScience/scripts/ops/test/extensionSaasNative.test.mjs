@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateNativeObservation, runNativeBoundaryControls, observeRuntimeBusyDeferral, observeRuntimeCandidateRollback, observeQueuedOperationRevocation, validateCandidateFaultTarget } from '../extension-saas-acceptance-native.mjs';
+import { readCampaignDocumentOutput, readCampaignWorkspaceArtifact, validateNativeObservation, runNativeBoundaryControls, observeRuntimeBusyDeferral, observeRuntimeCandidateRollback, observeQueuedOperationRevocation, validateCandidateFaultTarget } from '../extension-saas-acceptance-native.mjs';
 test('startup fault control fences immutable new candidate by owner/project/image/generation mount and creation time',()=>{
  const expected={previousId:'a'.repeat(64),containerName:'fixture',imageId:'sha256:'+'a'.repeat(64),ownerId:'owner',projectId:'project',attemptStartedAt:1000,
   selectedPath:'/owned/generation-new/selected',dataVolume:null};
@@ -55,4 +55,25 @@ test('volume mutation failure remains tracked until owned physical inventory con
  const owner='evimed-saas-native-33333333-3333-3333-3333-333333333333',name=owner+'-enabled';let exists=false;
  const command=async args=>{if(args[1]==='create'){exists=true;throw new Error('controlled CLI failure after volume create');}if(args[1]==='inspect')return JSON.stringify([{Name:name,Labels:{'io.evimed.saas-campaign':owner}}]);if(args[1]==='rm'){exists=false;return'';}throw new Error('unexpected command');};
  const lifecycle=createNativeAssessmentOwnership(command,owner);await assert.rejects(lifecycle.volume(name));assert.equal(lifecycle.empty(),false);await lifecycle.cleanup();assert.equal(exists,false);assert.equal(lifecycle.empty(),true);
+});
+
+test('host workspace artifact is scoped and stable while logical container alias and links refuse',async()=>{
+ const fs=await import('node:fs/promises'),path=await import('node:path'),os=await import('node:os');const dataDir=await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'evimed-workspace-test-'));
+ try{const workspaceDir=path.join(dataDir,'workspace');await fs.mkdir(path.join(workspaceDir,'outputs/extensions'),{recursive:true});const relative='outputs/extensions/result.ipynb',bytes=Buffer.from('{"cells":[]}');await fs.writeFile(path.join(workspaceDir,relative),bytes);
+ assert.deepEqual(await readCampaignWorkspaceArtifact({dataDir,workspaceDir},relative),bytes);
+ await assert.rejects(readCampaignWorkspaceArtifact({dataDir,workspaceDir:'/workspace'},relative),{message:'invalid_completed_artifact'});
+ await assert.rejects(readCampaignWorkspaceArtifact({dataDir,workspaceDir},'../foreign.ipynb'),{message:'invalid_completed_artifact'});
+ const link=path.join(dataDir,'alias');await fs.symlink(workspaceDir,link);await assert.rejects(readCampaignWorkspaceArtifact({dataDir,workspaceDir:link},relative),{message:'invalid_completed_artifact'});
+ await fs.link(path.join(workspaceDir,relative),path.join(workspaceDir,'hardlink'));await assert.rejects(readCampaignWorkspaceArtifact({dataDir,workspaceDir},relative));
+ }finally{await fs.rm(dataDir,{recursive:true,force:true});}
+});
+
+test('publication reads real nested host workspace only for exact succeeded job scope/session/path/hash',async()=>{
+ const fs=await import('node:fs/promises'),path=await import('node:path'),os=await import('node:os'),{createHash}=await import('node:crypto');const dataDir=await fs.mkdtemp(path.join(await fs.realpath(os.tmpdir()),'evimed-publication-test-'));
+ try{const workspaceDir=path.join(dataDir,'users/owner/projects/project/workspace/active');await fs.mkdir(path.join(workspaceDir,'outputs/extensions'),{recursive:true});const relative='outputs/extensions/result.ipynb',bytes=Buffer.from('{"cells":[]}'),sha256=createHash('sha256').update(bytes).digest('hex');await fs.writeFile(path.join(workspaceDir,relative),bytes);
+ const project={id:'project',userId:'owner',workspaceDir},job={status:'succeeded',payload:{request:{operation:'doc_write',format:'ipynb',targetId:'result'},invocation:{sessionId:'session'},scope:{projectId:'project',ownerId:'owner'}},result:{artifactPath:relative,sha256,format:'ipynb'}},app={config:{dataDir},hostedExtensions:{documents:{projectRoot:async()=>workspaceDir}}};
+ assert.deepEqual((await readCampaignDocumentOutput(app,project,job,'session',relative)).bytes,bytes);
+ for(const altered of [{...job,status:'queued'},{...job,payload:{...job.payload,scope:{projectId:'foreign',ownerId:'owner'}}},{...job,payload:{...job.payload,scope:{projectId:'project',ownerId:'foreign'}}},{...job,payload:{...job.payload,invocation:{sessionId:'foreign'}}},{...job,result:{...job.result,sha256:'0'.repeat(64)}},{...job,result:{...job.result,artifactPath:'../foreign.ipynb'}}])await assert.rejects(readCampaignDocumentOutput(app,project,altered,'session',relative),{message:'invalid_completed_artifact'});
+ app.hostedExtensions.documents.projectRoot=async()=>'/workspace';await assert.rejects(readCampaignDocumentOutput(app,project,job,'session',relative),{message:'invalid_completed_artifact'});
+ }finally{await fs.rm(dataDir,{recursive:true,force:true});}
 });

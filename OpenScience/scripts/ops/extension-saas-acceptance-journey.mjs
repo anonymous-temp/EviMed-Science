@@ -26,7 +26,7 @@ import { loadExtensionDeployment, deploymentProofIdentity } from '../../apps/ser
 import { createFixtures } from '../runtime/extensions/cowork/fixtures.mjs';
 import { createCampaignReport } from './extension-saas-acceptance.mjs';
 import { extensionRequestObject } from '../../apps/server/src/extensionAccess.mjs';
-import { observeRuntimeBusyDeferral, runRuntimeCandidateFailureControl, observeQueuedOperationRevocation } from './extension-saas-acceptance-native.mjs';
+import { readCampaignDocumentOutput, observeRuntimeBusyDeferral, runRuntimeCandidateFailureControl, observeQueuedOperationRevocation } from './extension-saas-acceptance-native.mjs';
 import { ConnectorCredentialStore } from '../../apps/server/src/connectorCredentials.mjs';
 import { gunzipSync } from 'node:zlib';
 import { delegatedChildrenOf } from '../../apps/server/src/dshRuntimeAdapter.mjs';
@@ -494,7 +494,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const jobs=await campaignPoll(()=>campaignDocumentJobs(app,project,run.id,session.id,documentJobsStartedAt),deadline,signal);
     assert.equal(jobs.filter(job=>job.status==='succeeded'&&job.payload.request.operation==='doc_read').length,1);
     assert.equal(jobs.filter(job=>job.status==='succeeded'&&job.payload.request.operation==='doc_write').length,1);
-    stage='workspace-output-and-native-transcript-verification';const workspace=await app.runtimeManager.workspaceRootForDelivery(project),outputPath=path.join(workspace,'outputs/extensions/'+targetId+'.ipynb'),output=await fs.readFile(outputPath),notebook=JSON.parse(output);
+    stage='workspace-output-and-native-transcript-verification';const written=jobs.find(job=>job.payload.request.operation==='doc_write'),published=await readCampaignDocumentOutput(app,project,written,session.id,'outputs/extensions/'+targetId+'.ipynb'),outputPath=published.path,output=published.bytes,notebook=JSON.parse(output);
     assert(notebook.cells.some(cell=>cell.cell_type==='code'&&cell.execution_count===null&&(cell.outputs??[]).length===0));
     const transcript=await campaignRequest(baseUrl,owner,'/api/runtime/sessions/'+encodeURIComponent(session.id)+'/transcript');
     const toolParts=(transcript.messages??[]).flatMap(message=>message.parts??[]).filter(part=>part.type==='tool'&&['doc_read','doc_write'].includes(part.tool));assert.equal(toolParts.length,2);
@@ -635,7 +635,7 @@ export async function ordinaryQualifiedSmoke(inputs,{signal=null}={}){
     const id=randomUUID(),key=id+':read-write',target='qualified_result_ipynb';transport.plans.set(key,[{name:'doc_read',input:{resourceId:resource.resourceId}},{name:'doc_write',input:{targetId:target,format:'ipynb',spec:{kind:'create',cells:[{type:'markdown',source:'Controlled ordinary qualification smoke; public PDF fixture 42.'},{type:'code',source:'raise SystemExit("must remain inert")'}]}}}]);
     const {session}=await dispatchOrdinaryCampaignTurn(baseUrl,actor,{dispatchId:'qualified-smoke-'+id,text:'EVIMED_ASSESSMENT_STAGE:'+key+'\nRead the supplied public fixture and write an inert notebook with the selected document tools.'},signal);
     const jobs=await campaignPoll(async()=>{const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' ORDER BY created_at",[actor.user.id,project.id])).rows;return rows.length===2&&rows.every(row=>row.status==='succeeded')?rows:null;},deadline,signal);
-    const workspace=await app.runtimeManager.workspaceRootForDelivery(project),output=await fs.readFile(path.join(workspace,'outputs/extensions/'+target+'.ipynb')),notebook=JSON.parse(output);assert(notebook.cells.some(cell=>cell.cell_type==='code'&&cell.execution_count===null&&(cell.outputs??[]).length===0));
+    const written=jobs.find(job=>job.payload.request.operation==='doc_write'),published=await readCampaignDocumentOutput(app,project,written,session.id,'outputs/extensions/'+target+'.ipynb'),output=published.bytes,notebook=JSON.parse(output);assert(notebook.cells.some(cell=>cell.cell_type==='code'&&cell.execution_count===null&&(cell.outputs??[]).length===0));
     result={status:'ordinary-qualified-admission-smoke-observed',sessionId:session.id,receiptDigest:authority.receipt.receiptDigest,assessmentAuthorityUsed:false,ordinaryActor:actor.user.id,
       freshDatabaseNamespace:isolated.name,physicalRuntime:physical,jobIds:jobs.map(job=>job.id),operations:jobs.map(job=>job.payload.request.operation),outputDigest:digest(output),controlledTransportOnly:true,
       note:'Separate post-qualification ordinary admission smoke; does not amend or retroactively supply prior22 measurement outcomes.'};

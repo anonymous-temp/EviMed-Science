@@ -24,10 +24,30 @@ function campaignGenerationServices(app, project, job) {
   ||worker.runtime!==runtime||worker.service!==service||job?.userId!==project?.userId||job?.projectId!==project?.id||job.status!=='running'||!worker.canHandle(job))throw new Error('real_generation_campaign_required');
  return{runtime,service,worker};
 }
-async function completedWorkspaceDigest(runtime,project,relativePath) {
+/** Operator-side reads use the trusted host workspace, never the kernel's /workspace alias. */
+export async function readCampaignWorkspaceArtifact({dataDir,workspaceDir},relativePath) {
  if(typeof relativePath!=='string'||relativePath.split('/').some(part=>!part||part==='.'||part==='..')||path.isAbsolute(relativePath)||relativePath.includes('\\'))throw new Error('invalid_completed_artifact');
- const root=await runtime.workspaceRootForDelivery(project),opened=await openScopedFileNoFollow(root,path.join(root,relativePath));
- try{if(opened.stat.size>8*1024*1024)throw new Error('completed_artifact_unbounded');return 'sha256:'+hash(await readStableFileHandle(opened.handle,opened.stat));}finally{await opened.handle.close();}
+ if(typeof dataDir!=='string'||typeof workspaceDir!=='string'||!path.isAbsolute(dataDir)||!path.isAbsolute(workspaceDir)
+  ||!workspaceDir.startsWith(dataDir+path.sep)||await fs.realpath(dataDir)!==dataDir||await fs.realpath(workspaceDir)!==workspaceDir)throw new Error('invalid_completed_artifact');
+ const opened=await openScopedFileNoFollow(workspaceDir,path.join(workspaceDir,relativePath));
+ try{if(opened.stat.size<1||opened.stat.size>8*1024*1024||opened.stat.nlink!==1)throw new Error('completed_artifact_unbounded');return await readStableFileHandle(opened.handle,opened.stat);}finally{await opened.handle.close();}
+}
+/** A completed job's trusted scope and publication record, not a kernel path, bind the host read. */
+export async function readCampaignDocumentOutput(app,project,job,sessionId,expectedArtifactPath) {
+ if(job?.status!=='succeeded'||job.payload?.request?.operation!=='doc_write'||job.payload?.invocation?.sessionId!==sessionId
+  ||job.payload.scope?.projectId!==project.id||(job.payload.scope.ownerId??job.payload.scope.userId)!==project.userId
+  ||!['ipynb','xlsx'].includes(job.payload.request.format)||job.result?.format!==job.payload.request.format
+  ||expectedArtifactPath!=='outputs/extensions/'+job.payload.request.targetId+'.'+job.payload.request.format
+  ||job.result?.artifactPath!==expectedArtifactPath||!/^outputs\/extensions\/[A-Za-z0-9_-]+\.(?:ipynb|xlsx)$/.test(expectedArtifactPath)
+  ||!/^[a-f0-9]{64}$/.test(job.result.sha256??''))throw new Error('invalid_completed_artifact');
+ const workspace=await app.hostedExtensions.documents.projectRoot(job.payload.scope,null);
+ if(workspace!==project.workspaceDir)throw new Error('invalid_completed_artifact');
+ const bytes=await readCampaignWorkspaceArtifact({dataDir:app.config.dataDir,workspaceDir:workspace},job.result.artifactPath);
+ if(hash(bytes)!==job.result.sha256)throw new Error('invalid_completed_artifact');
+ return{bytes,path:path.join(workspace,job.result.artifactPath)};
+}
+async function completedWorkspaceDigest(runtime,project,relativePath) {
+ return 'sha256:'+hash(await readCampaignWorkspaceArtifact({dataDir:runtime.config.dataDir,workspaceDir:project.workspaceDir},relativePath));
 }
 /** Root provisions a genuinely pending native turn and an owned leased normal apply job before this call. */
 export async function observeRuntimeBusyDeferral({app,project,job,completedArtifact}) {
