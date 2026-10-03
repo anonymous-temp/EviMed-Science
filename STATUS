@@ -815,3 +815,33 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-09-21T02:22:06+00:00 OPEN REL-0921 发布 UX-0920 整改（239bbc8ff，已推 github/main）：生产库核过 notes=0、sessions incognito/excluded 无数据；备份触发；构建 web 全量 + 运行时增量（预设只改人设文字与 reviewEnabled，无新内核包）
 2026-09-21T02:48:29+00:00 DONE REL-0921 生产 evimed-239bbc8ffcac-1（就绪 24/24）：web 首次构建卡在阿里云 alpine CDN（apk 9 分钟无数据），终止后清掉新播种目录、改腾讯内网镜像重跑成功；运行时增量冒烟 1；切换重建 6 个服务、PG 未动；新外键 usage_model_requests_project_fk 以 NOT VALID 加上导致 relationalIntegrity 红，跑 check-relational-integrity --validate 后 24/24；保留 2 版、删 53a824c1e287；Prometheus 重启读新内存告警规则（18 条）。发布前备份 02:22Z restoreVerified。下一步：verify-0920b、tool-0921、deep-0921（项目 0921a 保留）。
 2026-09-21T03:18:38+00:00 DONE REL-0921-VERIFY 线上验收 verify-0920b v2 27/29（剩下两项=主动科研/账户版心，已修未发布）；工具落地走查全绿；站内切换 0 重建；深度实测 26 分钟/177 请求/30.1M/两件首提通过/69/69/引用编号一致/追问 12 s；发布后修复 4 个提交已推 github（完整性检查孤儿误判、版心、e2e 笔记接口、飞书链接测试），未发布，等业主说发。自迭代核查结论写入 PROGRESS 与记忆 learning-loop-never-ran-2026-09-21。
+
+# ── 2026-10-03 integration, pilot deployment and acceptance (branch codex/release-integration-20261003) ──
+2026-10-03T10:23Z DONE INT-1003-backup-local-dirty-files result=ok path=.evimed-local/git-backups/pre-integration-20261003
+2026-10-03T10:24Z DONE INT-1003-create-integration-branch result=ok branch=codex/release-integration-20261003 base=721b44ba1
+2026-10-03T10:25Z DONE INT-1003-merge-development-closure result=ok commit=e2bd1fa2a source=08546480e
+2026-10-03T10:27Z DONE INT-1003-merge-research-billing result=ok commit=ec46a0beb source=a4066070e
+2026-10-03T10:28Z DONE INT-1003-private-runtime-ops-branch result=not-merged reason=branch-bound-ops-tooling-kept-separate
+2026-10-03T10:31Z DONE INT-1003-push-integration-branch result=ok head=a1f96dc79 remote=github/codex/release-integration-20261003
+2026-10-03T10:31Z DONE INT-1003-alibaba-host-cleanup result=ok root_free=15G data_free=23G receipt=/data/evimed-science/build/cleanup-20261003.txt kept=c6c2-production-rollback-archive,orphan-pg-volume-b22a1088
+2026-10-03T10:36Z DONE INT-1003-local-gate result=ok packages,audit-suites,ops,generated,types-audits,mcp,web=pass server=4713-pass-11-fail(all vcrBackupCycle.test.mjs under local umask 002; 17/17 under umask 022)
+2026-10-03T10:40Z DONE INT-1003-fix-umask-dependent-test result=edited-not-committed file=OpenScience/apps/server/test/vcrBackupCycle.test.mjs (commit after candidate CI finishes, to avoid cancelling the image build)
+2026-10-03T10:47Z DONE INT-1003-commit-umask-test-fix commit=ca49a56ae local-only until candidate CI finishes
+2026-10-03T11:26Z DONE INT-1003-candidate-ci result=success run=37116687260 head=a1f96dc79 jobs=web,gallery,vcr-r-library,vcr-engine,vcr-seam,docker-hosted artifacts=core:11272637261,vcr:11273275815,full:11272746906
+2026-10-03T11:45Z DONE INT-1003-pilot-cutover result=ok host=evimed-test release=a1f96dc79944 ready=28/28 tables=62-before-62-after rows-lost=0 backups=evimed+knowledge(restore-verified),app-data-snapshot rollback=/etc/evimed-science/cutover-backups/a1f96dc79944 previous=5d3a875bcbf0
+2026-10-03T11:56Z DONE INT-1003-push-fixes head=c1b56a596 commits=umask-test,compose-controller-mount+export-smoke,ci-billing-order+env-guard,web-usage-page,driver-project-names,autopilot-alignment
+2026-10-03T12:26Z DONE INT-1003-pilot-acceptance-core smoke=pass document-export(docx,pdf,html)=pass stream-acceptance(real-model,cut-resume)=pass capability(evidence-appraisal/appraisal-001)=succeeded,verification=none,23.5min,CNY4.63 isolation(B->A export/run/project)=404 ui-walk=33-views,2-budget-failures(frontier-daily control kinds 10/9; autopilot left edge fixed in 35d5b2c68)
+2026-10-03T12:26Z DONE INT-1003-pilot-modules frontier-browser->new-runtime-image old-runtime-image-removed replay-executor=172.30.252.2:8031 vcr-engine=172.30.251.2:8080(24 methods) env-backup=/etc/evimed-science/cutover-backups/a1f96dc79944-modules ready=28/28 vcr=enabled,operators+preview
+2026-10-03T12:42Z DONE INT-1003-candidate-ci-2 result=success run=37121231241 head=c1b56a596 compose-smoke-document-export=pass
+2026-10-03T13:52Z DONE INT-1003-pilot-config two-runtimes(1g each) backup=/etc/evimed-science/cutover-backups/a1f96dc79944-two-runtimes reason=learning-loop-held-the-single-slot-15min
+2026-10-03T14:26Z DONE FRONTIER-DESIGN-doc OpenScience/docs/FRONTIER_FEED_TECHNICAL_DESIGN.md (1821 lines, 7 mermaid diagrams validated, 3 fact-check rounds against code; uncommitted, untracked) — pre-publication scrub list in the hand-off message
+2026-10-03T15:23Z DONE INT-1003-acceptance-results-skills verdict=results+revisions+export+skills-work-on-native-path replay=blocked(research_calculate fails on deepseek-v4-pro) defects=9 evidence=/tmp/results-acceptance spend=CNY2.36
+2026-10-03T15:23Z DONE INT-1003-acceptance-vcr verdict=T0-chain-to-docx/pdf/html-works,boundaries-hold defects=10(non-study_package exports fail; evidence+matching never dispatched; pct x100; review flags own verdict; tool desc accrual; driver) study=std_e5f5e0d3e7654b6eb7dd88 evidence=/tmp/vcr-acceptance spend=CNY32.31
+2026-10-03T15:23Z DONE INT-1003-fixes-local commits=f2bdd10a5(api-404),c92523ff9(walk),f29a3595f(web-bundle-artifact),1dd88c482(capability-display),e5610fddd(pump-context),19fa9ee65(skill-ref),docs in-progress=engine-context(agent),account-export(agent),vcr(agent)
+2026-10-03T18:12Z DONE INT-1003-push-final-candidate head=3b9ec9e46 local-gate=all-pass-except-4-timing-flakes-in-agentRuns.test.mjs-under-io-pressure(157-158/158 alone)
+2026-10-03T19:03Z DONE INT-1003-candidate-ci-3 result=success run=37143357726 head=3b9ec9e46 artifacts=web-bundle:11283130042,core:11282955377,vcr:11282490951
+2026-10-03T19:10Z DONE INT-1003-pilot-final-deploy release=3b9ec9e46497 web-bundle+runtime(ci-37143357726-1)+replay ready=28/28 tables=113/113 rows-lost=0 vcr-engine=unchanged(ci-37116687260-1)
+2026-10-03T19:23Z DONE INT-1003-merge pr=8 main=e9db68e58 auto-merged=PR3,PR4,PR5,PR6,PR7 local-main-synced
+2026-10-03T19:23Z DONE INT-1003-final-regression smoke(runtime+docx/pdf/html)=pass ui-walk=39-views-0-failures dispatch-capture=1-version-0-failures research_calculate(pro)=ok replay=numbers-identical account-export=200 api-404=json skill-ref=present usage-tab=restored
+2026-10-03T19:33Z DONE INT-1003-vcr-export-regression simulation_report=ready(exp_917bd9d3f2fa40e3842e81,10min) fix-verified-live
+2026-10-03T19:33Z DONE INT-1003-final main=dd217d09f(pr8 merge + progress) pilot=3b9ec9e46497 ready=28/28 obsolete-releases-removed production=untouched(62faa8a00234)
