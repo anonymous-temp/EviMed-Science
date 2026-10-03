@@ -6199,6 +6199,28 @@ test("a build file the release no longer has is a 404, while every page address 
   });
 });
 
+test("an API or gateway path no route serves is a 404 in JSON, never the page", async () => {
+  // Found on the pilot (2026-10-03): GET /api/plugins, a route the server does
+  // not have, answered 200 text/html with index.html, signed in or not. A JSON
+  // client got markup, and anything counting statuses saw a healthy call.
+  await withStaticApp(async ({ base }) => {
+    for (const missing of ["/api/definitely-not-a-route", "/api/plugins", "/api", "/api/", "/internal/nothing/v1", "/internal"]) {
+      for (const method of ["GET", "HEAD"]) {
+        const answer = await fetch(`${base}${missing}`, { method });
+        assert.equal(answer.status, 404, `${method} ${missing}`);
+        assert.match(answer.headers.get("content-type") ?? "", /application\/json/, `${method} ${missing} must not be the page`);
+        if (method === "GET") assert.equal((await answer.json()).code, "not_found", missing);
+      }
+    }
+    // A page whose address merely starts with the same letters is still a page.
+    for (const page of ["/apiary", "/internals", "/app/api"]) {
+      const route = await fetch(`${base}${page}`);
+      assert.equal(route.status, 200, page);
+      assert.equal(await route.text(), "<div id=\"root\"></div>", page);
+    }
+  });
+});
+
 test("static frontend assets reject symbolic links", async () => {
   await withStaticApp(async ({ base, dataDir, staticDir }) => {
     const outside = path.join(dataDir, "outside.js");

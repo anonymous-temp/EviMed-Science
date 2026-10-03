@@ -5934,6 +5934,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
 
       if ((req.method === "GET" || req.method === "HEAD") && config.staticDir) {
+        // The single-page fallback is for the application's own addresses. An
+        // API or gateway path that nothing above served is a missing route:
+        // answered with index.html (200, text/html) it handed a JSON client a
+        // page of markup and read as healthy to anything counting statuses.
+        if (/^\/(?:api|internal)(?:\/|$)/.test(pathname)) throw new HttpError(404, "not_found", "Route not found.");
         await serveStatic(req, res, config, pathname);
         return;
       }
