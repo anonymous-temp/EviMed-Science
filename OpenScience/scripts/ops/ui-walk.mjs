@@ -188,10 +188,12 @@ export const VCR_TABS_WALK = [
  * they shipped. The numbers are the measured ones: 插件 draws five kinds of
  * border (the tab underline, the row rule, the project card, the saved-state
  * box inside it and the field) and 技能 four, against the reading page's 3.
- * Nobody has ruled that five is right for a settings list; this holds the
- * pages where they are, so a sixth kind fails, until someone does.
+ * With skills in the list, 技能 also draws nine kinds of control (the row's
+ * own history action is the ninth) against the reading page's 8. Nobody has
+ * ruled what a settings list may spend; this holds the pages where they are,
+ * so one more kind of either fails, until someone does.
  */
-const EXTENSION_BUDGET = { borders: 5 };
+const EXTENSION_BUDGET = { controls: 9, borders: 5 };
 export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
   // The zones' home is a frontier page: the same rail and tabs, measured at nine.
