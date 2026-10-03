@@ -34,6 +34,27 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
+test("every page the router serves at a fixed address is walked, or says why it is not", async () => {
+  // The extension centre's two pages and the evidence zones' home shipped
+  // without the walk ever opening them (found 2026-10-03): the route list is
+  // written by hand and nothing compared it with the router.
+  const router = await readFile(path.join(repoRoot, "apps/web/src/app/router.tsx"), "utf8");
+  const app = router.slice(router.indexOf('path: "/app"'), router.indexOf('{ path: "*", element: <NotFound /> }'));
+  const pages = [...app.matchAll(/\{ path: "([^"]+)", element: <(\w+)/g)]
+    .filter(([, address, element]) => element !== "Navigate" && !address.includes(":") && !address.includes("*"))
+    .map(([, address]) => `/app/${address}`);
+  assert.ok(pages.length >= 12 && pages.includes("/app/frontier") && pages.includes("/app/account"), `read ${pages.length} fixed pages from the router; the scan did not walk`);
+  const notWalked = {
+    // The conversation is the kernel's own frame; OPEN_SCIENCE_WALK_CHAT=1 opens it.
+    "/app/handoff": "opens only with a hand-off in the address; without one it returns to the conversation",
+    "/app/runs": "a redirect to the newest run's conversation, decided at run time",
+  };
+  const walked = new Set(ROUTES.map(([, address]) => address.split("?")[0]));
+  const missing = pages.filter((page) => !walked.has(page) && !Object.hasOwn(notWalked, page));
+  assert.deepEqual(missing, [], `the router serves ${missing.join(", ")} and the walk never opens ${missing.length === 1 ? "it" : "them"}: add a ROUTES row, or name the reason here`);
+  for (const page of Object.keys(notWalked)) assert.ok(pages.includes(page), `${page} is exempted, and the router no longer serves it; drop the row`);
+});
+
 test("the walk covers every tab a study has, and the domain is where the list lives", async () => {
   // The browser derives its tabs from `@evimed/domain`'s VCR_TABS rather than
   // restating them, so this reads the domain and compares the walk to it. A

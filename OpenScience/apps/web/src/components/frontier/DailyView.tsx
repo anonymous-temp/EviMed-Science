@@ -194,7 +194,8 @@ function DailyRow({ item, number, safety }: { item: FrontierItem; number: number
         {!safety && item.summary && <p className="mt-1 line-clamp-3 max-w-measure text-ui text-text-2">{item.summary}</p>}
         <div className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
           <span className="min-w-0 truncate">{item.source.name}</span>
-          <Button size="sm" variant="text" onClick={() => setDetails(true)}>阅读详情</Button>
+          {/* The feed card's own look for this action, and its neighbour 原文's: a sized button here was the page's tenth kind of control. */}
+          <button type="button" onClick={() => setDetails(true)} className={cn(INLINE_ACTION, "px-1 text-accent")}><span className="text-caption">阅读详情</span></button>
           <span aria-hidden="true">·</span>
           <a href={item.url} {...EXTERNAL} className={cn(INLINE_ACTION, "-ml-1 px-1 text-accent")}>
             <span className="text-caption">原文<span aria-hidden="true"> ↗</span></span>

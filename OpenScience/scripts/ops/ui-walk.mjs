@@ -92,6 +92,9 @@ export const ROUTES = [
   ["frontier-hot", "/app/frontier?view=hot"],
   ["frontier-daily", "/app/frontier?view=daily"],
   ["frontier-all", "/app/frontier?view=all"],
+  // The evidence zones' home (2026-10-01). A zone and a reading page are
+  // content addresses with ids; the home is the one every account can open.
+  ["frontier-zones", "/app/frontier/zones"],
   ["capabilities", "/app/capabilities"],
   // 循证 GEO's home — its one sentence where the account is not offered the
   // module; one project's seven tabs are added when the account has one
@@ -108,6 +111,10 @@ export const ROUTES = [
   ["account-usage", "/app/account?tab=usage"],
   ["account-connectors", "/app/account?tab=connectors"],
   ["account-projects", "/app/account?tab=projects"],
+  // The extension centre's two lists (2026-10-02), reached from 设置. Neither
+  // was walked until 2026-10-03: the list above was written before they were.
+  ["extensions-plugins", "/app/extensions/plugins"],
+  ["extensions-skills", "/app/extensions/skills"],
   ["not-found", "/app/does-not-exist"],
 ];
 // 1512 is the owner's screen (2026-09-23 plan §3: measured at that width).
@@ -176,8 +183,20 @@ export const VCR_TABS_WALK = [
   ["vcr-overview", ""], ["vcr-population", "/population"], ["vcr-patients", "/patients"],
   ["vcr-comparator", "/comparator"], ["vcr-trial", "/trial"], ["vcr-matching", "/matching"], ["vcr-data", "/data"],
 ];
+/**
+ * The extension centre's two lists, first walked on 2026-10-03, a day after
+ * they shipped. The numbers are the measured ones: 插件 draws five kinds of
+ * border (the tab underline, the row rule, the project card, the saved-state
+ * box inside it and the field) and 技能 four, against the reading page's 3.
+ * Nobody has ruled that five is right for a settings list; this holds the
+ * pages where they are, so a sixth kind fails, until someone does.
+ */
+const EXTENSION_BUDGET = { borders: 5 };
 export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
+  // The zones' home is a frontier page: the same rail and tabs, measured at nine.
+  "frontier-zones": FRONTIER_BUDGET,
+  "extensions-plugins": EXTENSION_BUDGET, "extensions-skills": EXTENSION_BUDGET,
   geo: DATA_BUDGET,
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),
   "virtual-research": DATA_BUDGET,
