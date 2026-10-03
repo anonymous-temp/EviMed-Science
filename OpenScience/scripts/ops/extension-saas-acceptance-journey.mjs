@@ -77,7 +77,7 @@ export function validateFullRuntimeImagePreflight(image,{imageId,platform,launch
     ||!image.Config||typeof defaultUser!=='string'||!['','10001:10001'].includes(defaultUser))throw new Error('full_runtime_image_preflight_refused');
   return{imageId,platform,defaultImageUser:defaultUser,configuredLaunchUser:launchUser,physicalContainerUidProof:'required-before-measurement'};
 }
-const INTERNAL_CAMPAIGN_CODES=new Set(['private_campaign_session_binding_unconfirmed','native_linux_operator_uid_refused','native_linux_remote_docker_refused','native_linux_sandbox_prerequisite_refused','native_linux_docker_socket_untrusted','native_linux_bridge_identity_refused','native_linux_bridge_interface_refused','native_linux_relay_binding_refused','native_linux_relay_target_rebind_refused','native_linux_relay_target_refused','full_runtime_image_preflight_refused','invalid_private_campaign_inputs','invalid_private_campaign_state','invalid_private_campaign_tuple','invalid_private_campaign_database','invalid_private_campaign_path','untrusted_private_campaign_parent','untrusted_private_campaign_record','private_runtime_identity_unconfirmed','private_runtime_resource_limits_unconfirmed','private_runtime_internal_network_unconfirmed','runtime_host_control_socket_refused','private_runtime_volume_identity_unconfirmed','private_runtime_mount_type_unconfirmed','protected_authority_runtime_mount_refused','runtime_provider_or_telemetry_configuration_refused','private_campaign_setup_required','explicit_owned_campaign_context_required','private_campaign_setup_untrusted','private_campaign_measure_required','private_campaign_deadline','private_campaign_http_failure','private_campaign_preparation_failed','private_campaign_setup_cleanup_unconfirmed','private_campaign_cleanup_unconfirmed','private_fixture_configuration_refused','assessment_requires_real_kernel','assessment_fact_sources_unavailable','assessment_fixture_root_changed','assessment_deployment_unavailable','assessment_image_unconfirmed','assessment_subject_unavailable','assessment_database_subject_unavailable','assessment_surface_unavailable','assessment_controller_unavailable','private_assessment_composition_missing','explicit_fixture_signing_secret_required','external_model_transport_refused','private_assessment_cleanup_unconfirmed','private_controller_failed','private_controller_unexpected_exit','private_controller_ready_deadline','private_controller_joined_deadline','private_controller_physical_join_unconfirmed','private_controller_cleanup_unconfirmed','campaign_internal_network_unconfirmed','campaign_network_cleanup_unconfirmed','campaign_relay_destination_refused','campaign_actual_fixture_url_required','campaign_relay_id_unconfirmed','campaign_relay_cleanup_identity_unconfirmed','campaign_relay_physical_boundary_unconfirmed','campaign_relay_cleanup_unconfirmed','campaign_volume_ownership_unconfirmed','unexpected_controlled_campaign_stage','unsupported_controlled_transport_route','controlled_transport_request_unbounded','campaign_canary_scan_unbounded','campaign_export_unbounded','foreign_generation_claim_refused','candidate_fault_identity_unconfirmed','candidate_fault_setup_incomplete','candidate_fault_manifest_changed','candidate_startup_identity_not_observed','real_generation_campaign_required','real_queued_revocation_campaign_required','invalid_completed_artifact','completed_artifact_unbounded','ordinary_smoke_protected_tuple_unavailable','ordinary_smoke_signing_configuration_invalid','ordinary_smoke_receipt_path_invalid','ordinary_smoke_genuine_receipt_required','ordinary_fixture_configuration_refused','ordinary_qualification_integration_missing','ordinary_controller_unavailable','ordinary_fixture_cleanup_unconfirmed','ordinary_preparation_failed','ordinary_smoke_cleanup_unconfirmed']);
+const INTERNAL_CAMPAIGN_CODES=new Set(['assessment_installer_unavailable','native_campaign_run_terminal','native_campaign_doc_jobs_incomplete','private_campaign_session_binding_unconfirmed','native_linux_operator_uid_refused','native_linux_remote_docker_refused','native_linux_sandbox_prerequisite_refused','native_linux_docker_socket_untrusted','native_linux_bridge_identity_refused','native_linux_bridge_interface_refused','native_linux_relay_binding_refused','native_linux_relay_target_rebind_refused','native_linux_relay_target_refused','full_runtime_image_preflight_refused','invalid_private_campaign_inputs','invalid_private_campaign_state','invalid_private_campaign_tuple','invalid_private_campaign_database','invalid_private_campaign_path','untrusted_private_campaign_parent','untrusted_private_campaign_record','private_runtime_identity_unconfirmed','private_runtime_resource_limits_unconfirmed','private_runtime_internal_network_unconfirmed','runtime_host_control_socket_refused','private_runtime_volume_identity_unconfirmed','private_runtime_mount_type_unconfirmed','protected_authority_runtime_mount_refused','runtime_provider_or_telemetry_configuration_refused','private_campaign_setup_required','explicit_owned_campaign_context_required','private_campaign_setup_untrusted','private_campaign_measure_required','private_campaign_deadline','private_campaign_http_failure','private_campaign_preparation_failed','private_campaign_setup_cleanup_unconfirmed','private_campaign_cleanup_unconfirmed','private_fixture_configuration_refused','assessment_requires_real_kernel','assessment_fact_sources_unavailable','assessment_fixture_root_changed','assessment_deployment_unavailable','assessment_image_unconfirmed','assessment_subject_unavailable','assessment_database_subject_unavailable','assessment_surface_unavailable','assessment_controller_unavailable','private_assessment_composition_missing','explicit_fixture_signing_secret_required','external_model_transport_refused','private_assessment_cleanup_unconfirmed','private_controller_failed','private_controller_unexpected_exit','private_controller_ready_deadline','private_controller_joined_deadline','private_controller_physical_join_unconfirmed','private_controller_cleanup_unconfirmed','campaign_internal_network_unconfirmed','campaign_network_cleanup_unconfirmed','campaign_relay_destination_refused','campaign_actual_fixture_url_required','campaign_relay_id_unconfirmed','campaign_relay_cleanup_identity_unconfirmed','campaign_relay_physical_boundary_unconfirmed','campaign_relay_cleanup_unconfirmed','campaign_volume_ownership_unconfirmed','unexpected_controlled_campaign_stage','unsupported_controlled_transport_route','controlled_transport_request_unbounded','campaign_canary_scan_unbounded','campaign_export_unbounded','foreign_generation_claim_refused','candidate_fault_identity_unconfirmed','candidate_fault_setup_incomplete','candidate_fault_manifest_changed','candidate_startup_identity_not_observed','real_generation_campaign_required','real_queued_revocation_campaign_required','invalid_completed_artifact','completed_artifact_unbounded','ordinary_smoke_protected_tuple_unavailable','ordinary_smoke_signing_configuration_invalid','ordinary_smoke_receipt_path_invalid','ordinary_smoke_genuine_receipt_required','ordinary_fixture_configuration_refused','ordinary_qualification_integration_missing','ordinary_controller_unavailable','ordinary_fixture_cleanup_unconfirmed','ordinary_preparation_failed','ordinary_smoke_cleanup_unconfirmed']);
 for(const code of ['invalid_measurement_admission','invalid_measurement_window','unowned_assessment_root','invalid_measurement_admissions','duplicate_measurement_subject','assessment_factory_reused','assessment_composition_sources_changed','invalid_assessment_fact_sources','invalid_assessment_artifact','invalid_assessment_root','assessment_descriptor_changed','unsafe_assessment_root','assessment_deployment_refused'])INTERNAL_CAMPAIGN_CODES.add(code);
 export function safeCampaignDiagnosticCode(error){
   if(typeof error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(error.code))return error.code;
@@ -164,30 +164,41 @@ export function controlledCampaignTurn(body, plans, counts) {
   if (!(body.tools ?? []).some(tool => tool.name === step.name)&&!(step.permissionProbe===true&&['doc_read','run_code'].includes(step.name))) throw new Error('native_campaign_tool_not_registered:' + step.name);
   return { ...step, id: 'assessment_' + stage[1].replaceAll('-', '') + '_' + count, stage: key };
 }
-async function controlledCampaignTransport() {
-  const plans = new Map(), counts = new Map(), holds = new Map(), requests = [], errors = [];
-  const server = http.createServer(async (req,res) => {
-    try {
-      if (req.method !== 'POST' || req.url !== '/anthropic/v1/messages') throw new Error('unsupported_controlled_transport_route');
-      let bytes = ''; for await (const chunk of req) { bytes += chunk; if (Buffer.byteLength(bytes) > 8 * 1024 * 1024) throw new Error('controlled_transport_request_unbounded'); }
-      const body = JSON.parse(bytes), turn = controlledCampaignTurn(body, plans, counts);
-      requests.push({ stage: turn.stage, requestDigest: digest(canonicalJson(body)), model: body.model, tools: (body.tools ?? []).map(tool => tool.name),toolSchemaDigest:digest(canonicalJson(body.tools??[])) });
-      if(turn.hold===true)await new Promise(resolve=>holds.set(turn.stage,resolve));
-      if(body.stream===false){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'assessment',type:'message',role:'assistant',model:body.model,content:[{type:'text',text:turn.text??'Controlled assessment'}],stop_reason:'end_turn',stop_sequence:null,usage:{input_tokens:1,output_tokens:1}}));return;}
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const tool = Boolean(turn.name), events = [
-        ['message_start',{ type:'message_start',message:{id:'assessment',type:'message',role:'assistant',content:[],model:body.model,stop_reason:null,usage:{input_tokens:1,output_tokens:0}} }],
-        ['content_block_start',{type:'content_block_start',index:0,content_block:tool?{type:'tool_use',id:turn.id,name:turn.name,input:{}}:{type:'text',text:''}}],
-        ['content_block_delta',{type:'content_block_delta',index:0,delta:tool?{type:'input_json_delta',partial_json:JSON.stringify(turn.input)}:{type:'text_delta',text:turn.text}}],
-        ['content_block_stop',{type:'content_block_stop',index:0}],
-        ['message_delta',{type:'message_delta',delta:{stop_reason:tool?'tool_use':'end_turn',stop_sequence:null},usage:{output_tokens:1}}],
-        ['message_stop',{type:'message_stop'}]
-      ];
-      for (const [event,data] of events) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); res.end();
-    } catch (error) { errors.push(error.message); if (!res.headersSent) res.writeHead(500, { 'content-type':'application/json' }); res.end(JSON.stringify({ error:{ type:'controlled_transport_error',message:'Controlled assessment transport failed.' } })); }
-  });
-  await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
-  return { plans,counts,holds,requests,errors,url:`http://127.0.0.1:${server.address().port}`,release:key=>{const release=holds.get(key);if(release){holds.delete(key);release();}},close:()=>{for(const release of holds.values())release();holds.clear();server.closeAllConnections();return new Promise(resolve=>server.close(resolve));} };
+/** Actual OpenAI ancillary and Messages wire shapes, matching the production gateway fixtures. */
+export function controlledCampaignResponse(body,turn,protocol){
+ const tool=Boolean(turn.name),text=turn.text??'Controlled assessment transport; no model-quality claim.',usage={input_tokens:1,cache_read_input_tokens:0,cache_creation_input_tokens:0,output_tokens:1},stream=body.stream===true;
+ if(protocol==='openai'){
+  const message=tool?{role:'assistant',content:null,tool_calls:[{id:turn.id,type:'function',function:{name:turn.name,arguments:JSON.stringify(turn.input)}}]}:{role:'assistant',content:text},finish=tool?'tool_calls':'stop',meter={prompt_tokens:1,completion_tokens:1,total_tokens:2,prompt_cache_hit_tokens:0,prompt_cache_miss_tokens:1};
+  if(!stream)return{contentType:'application/json',text:JSON.stringify({id:'assessment',object:'chat.completion',created:0,model:body.model,choices:[{index:0,message,finish_reason:finish}],usage:meter}),protocol:'openai-json'};
+  const delta=tool?{role:'assistant',tool_calls:[{index:0,id:turn.id,type:'function',function:{name:turn.name,arguments:JSON.stringify(turn.input)}}]}:{role:'assistant',content:text};
+  const chunks=[{id:'assessment',object:'chat.completion.chunk',created:0,model:body.model,choices:[{index:0,delta,finish_reason:null}]},{id:'assessment',object:'chat.completion.chunk',created:0,model:body.model,choices:[{index:0,delta:{},finish_reason:finish}],usage:meter}];
+  return{contentType:'text/event-stream',text:chunks.map(chunk=>'data: '+JSON.stringify(chunk)+'\n\n').join('')+'data: [DONE]\n\n',protocol:'openai-sse'};
+ }
+ const content=tool?{type:'tool_use',id:turn.id,name:turn.name,input:turn.input}:{type:'text',text},reason=tool?'tool_use':'end_turn';
+ if(!stream)return{contentType:'application/json',text:JSON.stringify({id:'assessment',type:'message',role:'assistant',model:body.model,content:[content],stop_reason:reason,stop_sequence:null,usage}),protocol:'anthropic-json'};
+ const events=[['message_start',{type:'message_start',message:{id:'assessment',type:'message',role:'assistant',content:[],model:body.model,stop_reason:null,stop_sequence:null,usage:{...usage,output_tokens:0}}}],
+  ['content_block_start',{type:'content_block_start',index:0,content_block:tool?{type:'tool_use',id:turn.id,name:turn.name,input:{}}:{type:'text',text:''}}],
+  ['content_block_delta',{type:'content_block_delta',index:0,delta:tool?{type:'input_json_delta',partial_json:JSON.stringify(turn.input)}:{type:'text_delta',text}}],
+  ['content_block_stop',{type:'content_block_stop',index:0}],['message_delta',{type:'message_delta',delta:{stop_reason:reason,stop_sequence:null},usage:{output_tokens:1}}],['message_stop',{type:'message_stop'}]];
+ return{contentType:'text/event-stream',text:events.map(([event,data])=>'event: '+event+'\ndata: '+JSON.stringify(data)+'\n\n').join(''),protocol:'anthropic-sse'};
+}
+export async function controlledCampaignTransport(){
+ const plans=new Map(),counts=new Map(),holds=new Map(),requests=[],errors=[];
+ const server=http.createServer(async(req,res)=>{
+  const protocol=req.url==='/anthropic/v1/messages'?'anthropic':['/chat/completions','/v1/chat/completions'].includes(req.url)?'openai':null;
+  const record={path:protocol?req.url:'unknown',method:req.method==='POST'?'POST':'other',protocol,status:null,responseProtocol:null,responseFinished:false};
+  if(requests.length>=128){res.writeHead(429);res.end();return;}requests.push(record);res.on('finish',()=>{record.responseFinished=true;});
+  try{
+   if(req.method!=='POST'||!protocol)throw new Error('unsupported_controlled_transport_route');
+   let bytes='';for await(const chunk of req){bytes+=chunk;if(Buffer.byteLength(bytes)>8*1024*1024)throw new Error('controlled_transport_request_unbounded');}
+   const body=JSON.parse(bytes),normalized=protocol==='openai'?{...body,tools:(body.tools??[]).map(tool=>tool.function??tool)}:body,turn=controlledCampaignTurn(normalized,plans,counts);
+   Object.assign(record,{stage:turn.stage,requestDigest:digest(canonicalJson(body)),model:['deepseek-flash','deepseek-v4-flash','deepseek-pro','deepseek-v4-pro'].includes(body.model)?body.model:'unknown',tools:(normalized.tools??[]).slice(0,256).map(tool=>['doc_read','doc_write','evimed_plan','evimed_delegate','run_code'].includes(tool.name)?tool.name:'other'),toolCount:(normalized.tools??[]).length,toolSchemaDigest:digest(canonicalJson(body.tools??[]))});
+   if(turn.hold===true)await new Promise(resolve=>holds.set(turn.stage,resolve));
+   const response=controlledCampaignResponse(body,turn,protocol);Object.assign(record,{status:200,responseProtocol:response.protocol,emittedUsage:{inputTokens:1,outputTokens:1,totalTokens:2},responseBytes:Buffer.byteLength(response.text),emittedWrites:1,emittedDataFrames:(response.text.match(/^data:/gm)??[]).length});res.writeHead(200,{'content-type':response.contentType});res.end(response.text);
+  }catch(error){const code=safeCampaignDiagnosticCode(error);if(errors.length<32)errors.push(code);record.errorCode=code;record.errorName=safeCampaignFailureDetails(error).errorName;record.status=res.headersSent?res.statusCode:500;if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:{type:'controlled_transport_error',message:'Controlled assessment transport failed.'}}));}
+ });server.maxConnections=16;server.headersTimeout=10000;server.requestTimeout=120000;
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ return{plans,counts,holds,requests,errors,url:'http://127.0.0.1:'+server.address().port,release:key=>{const release=holds.get(key);if(release){holds.delete(key);release();}},close:()=>{for(const release of holds.values())release();holds.clear();server.closeAllConnections();return new Promise(resolve=>server.close(resolve));}};
 }
 async function campaignRequest(base, actor, route, method='GET', body=undefined, expected=200, signal=null) {
   const response = await fetch(base + route, { method, headers:{ ...actor?.headers,'content-type':'application/json' },
@@ -204,6 +215,15 @@ export async function dispatchOrdinaryCampaignTurn(base,actor,{dispatchId,text},
  if(binding?.sessionId!==session.id||binding.mode!=='open-domain')throw new Error('private_campaign_session_binding_unconfirmed');
  const run=await request(base,actor,'/api/agent-runs/dispatch','POST',{sessionId:session.id,dispatchId,automated:true,line:'answer',text},202,signal);
  return{session,run};
+}
+/** Bootstrap selects only a real successful prepared installation; the independent reader still rechecks its database history and current epochs. */
+export function campaignPreparedInstallerBinding(descriptor,actor,installation,job){
+ const target=job?.payload?.projectTarget;
+ if(!descriptor||!installation||job?.kind!=='extension-prepare'||job.status!=='succeeded'||job.userId!==actor?.user?.id||job.payload?.installationId!==installation?.id
+  ||job.payload?.installationRevision!==installation.revision||job.result?.installationId!==installation.id||job.result?.installationRevision!==installation.revision
+  ||job.result?.artifactDigest!==descriptor.artifactDigest||job.result?.integrity!==descriptor.integrity||!target||target.projectId!==actor.projectId
+  ||!Object.hasOwn(target,'membershipEpoch')||target.membershipEpoch!==null&&(typeof target.membershipEpoch!=='string'||!target.membershipEpoch))throw new Error('assessment_installer_unavailable');
+ return Object.freeze({extensionId:descriptor.id,artifactDigest:descriptor.artifactDigest,installationId:installation.id,installationRevision:installation.revision,prepareJobId:job.id,actorId:job.userId,actorMembershipEpoch:target.membershipEpoch});
 }
 /** HTTP user DTOs intentionally have no filesystem roots. Hydrate the current store actor before the trusted project resolver. */
 export async function resolveCampaignProject(app,actor){
@@ -292,6 +312,21 @@ export async function campaignGenerationReady(app,project){
  }
  return null;
 }
+/** Do not wait for nonexistent tool jobs after an actual native run has already failed. */
+export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt){
+ if(typeof sessionId!=='string'||!sessionId||sessionId.length>200)throw new Error('real_generation_campaign_required');
+ const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' AND created_at >= $3::timestamptz AND payload->'invocation'->>'sessionId'=$4 AND (NOT COALESCE(payload->'auth' ? 'invocation',false) OR payload->'auth'->'invocation'->>'sessionId'=$4) ORDER BY created_at",[project.userId,project.id,startedAt,sessionId])).rows.filter(row=>row.payload?.invocation?.sessionId===sessionId&&(!row.payload.auth||!Object.hasOwn(row.payload.auth,'invocation')||row.payload.auth.invocation?.sessionId===sessionId));
+ if(rows.length>=2&&rows.every(row=>['succeeded','failed','canceled'].includes(row.status)))return rows;
+ const run=(await app.agentRuns.list(project)).find(item=>item.id===runId);
+ if(run&&['failed','canceled','succeeded'].includes(run.status))throw Object.assign(new Error('native_campaign_run_terminal'),{code:run.status==='succeeded'?'native_campaign_doc_jobs_incomplete':safeCampaignDiagnosticCode({code:run.errorCode??'native_campaign_run_terminal'}),terminalRun:{id:run.id,status:run.status,errorCode:run.errorCode?safeCampaignDiagnosticCode({code:run.errorCode}):null,documentJobs:rows.length}});
+ return null;
+}
+/** Actual owned ledger settlement facts; no request payload, provider secret or header is selected. */
+export async function campaignUsageFacts(app,project,startedAt){
+ const rows=(await app.store.database.query("SELECT id,run_id,purpose,model,status,error_code,cache_hit_tokens,cache_miss_tokens,output_tokens FROM evimed_usage.model_requests WHERE user_id=$1 AND project_id=$2 AND created_at >= $3::timestamptz ORDER BY created_at LIMIT 64",[project.userId,project.id,startedAt])).rows;
+ const count=value=>Number.isSafeInteger(Number(value))&&value!==null&&value!==undefined&&Number(value)>=0?Number(value):null;
+ return rows.map(row=>({id:row.id,runId:row.run_id??null,purpose:row.purpose,model:row.model,status:row.status,errorCode:row.error_code?safeCampaignDiagnosticCode({code:row.error_code}):null,usage:{cacheHitTokens:count(row.cache_hit_tokens),cacheMissTokens:count(row.cache_miss_tokens),outputTokens:count(row.output_tokens)}}));
+}
 async function scanOwnedCampaignTree(root,needle){
   let files=0,bytes=0,symlinksSkipped=0;const matches=[];
   const visit=async directory=>{for(const entry of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,entry.name),stat=await fs.lstat(target);
@@ -350,7 +385,10 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     const preparation=new ExtensionPreparationWorker({service:app.extensionService,controller:observedController,admittedArtifacts:deployment.admittedArtifacts});
     await preparation.tick();const job=await app.extensionService.jobs.get(owner.user.id,installed.job.id);if(job.status!=='succeeded')throw Object.assign(new Error('private_campaign_preparation_failed'),{code:job.error?.code??'private_campaign_preparation_failed'});assert.equal(job.result.artifactDigest,descriptor.artifactDigest);
     stage='independent-current-tuple-and-epoch-facts';const factsReader=createAssessmentCurrentFacts({getConfig:()=>app.config,getDatabase:()=>app.store.database}),admissions=[];
-    for(const actor of actors){const project=await resolveCampaignProject(app,actor),facts=await factsReader({project,actor:actor.user});admissions.push({...Object.fromEntries(ASSESSMENT_FACT_FIELDS.map(field=>[field,facts[field]])),assessmentId:'campaign-'+randomUUID(),issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),allowedOperations:['doc_read','doc_write']});}
+    const installerBinding=campaignPreparedInstallerBinding(descriptor,owner,installed.installation,job);
+    // The other ordinary account is a negative scope control, not a prepared addon installer.
+    const bootstrapProject=await resolveCampaignProject(app,owner),facts=await factsReader({project:bootstrapProject,actor:owner.user,installerBinding});
+    admissions.push({...Object.fromEntries(ASSESSMENT_FACT_FIELDS.map(field=>[field,facts[field]])),assessmentId:'campaign-'+randomUUID(),issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),allowedOperations:['doc_read','doc_write']});
     stage='protected-measurement-admission';const admission=await writeMeasurementAdmission({root,admissions});
     await composition.close();composition=null;await app.close();app=null;
     stage='independent-controller-real-candidate-application';privateFixture=await openPrivateAssessmentFixture({overrides:{...overrides,runtimeMode:'kernel'},admission});
@@ -395,14 +433,14 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
   if(state.schemaVersion!==1||state.status!=='setup-physical-observed-not-measured'||state.qualified!==false||state.physicalSetup?.operatorUid!==process.getuid()
     ||state.root!==path.dirname(inputs.statePath)||state.overrides.dataDir!==state.root||state.overrides.databaseUrl!==state.databaseUrl)throw new Error('private_campaign_setup_untrusted');
   if(state.operatorPlatform==='linux-native')assertNativeCampaignOperator(process.platform,process.getuid?.());
-  const transport=await controlledCampaignTransport(),observations=[];let fixture,relay,report,failure=null,cleanupConfirmed=false;
-  const deadline=Date.now()+inputs.deadlineMs;let stage='independent-controller-start';
+  const transport=await controlledCampaignTransport(),observations=[];let fixture,relay,report,measurementProject,failure=null,cleanupConfirmed=false;
+  const measurementStartedAt=new Date().toISOString(),deadline=Date.now()+inputs.deadlineMs;let stage='independent-controller-start';
   try{
     const nativeLinux=state.operatorPlatform==='linux-native';if(nativeLinux){await observeNativeLinuxPrerequisites(state.overrides.runtimeContainerImage);relay=await bindNativeLinuxRelay({root:state.root,network:state.network});}
     const gatewayOverrides=nativeLinux?{host:'127.0.0.1',modelGatewayInternalUrl:relay.gatewayUrl+'/internal/model/v1',extensionGatewayInternalUrl:relay.gatewayUrl+'/internal/extensions/v1'}:{};
     fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,...CAMPAIGN_RUNTIME_LIMITS,...gatewayOverrides,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});
     if(nativeLinux)relay.bindTarget(fixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:fixture.baseUrl+'/',gatewayHost:state.gatewayHost});
-    const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);stage='ordinary-selection-and-current-candidate-apply';
+    const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);measurementProject=project;stage='ordinary-selection-and-current-candidate-apply';
     const view=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     const effective=await campaignPoll(async()=>{const current=await app.hostedExtensions.generations.current(project);return current?.payload.phase==='effective'&&current.payload.effective?.bindings.desiredRevision===view.revision+1?current:null;},deadline,signal);
@@ -424,8 +462,9 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     });assert(resource?.resourceId);
     stage='ordinary-native-prompt-and-real-document-execution';const stageId=randomUUID(),targetId='assessment_result_ipynb';
     transport.plans.set(stageId+':read-write',[{name:'doc_read',input:{resourceId:resource.resourceId}},{name:'doc_write',input:{targetId,format:'ipynb',spec:{kind:'create',cells:[{type:'markdown',source:'Public PDF fixture 42. Controlled transport result; not scientific evidence.'},{type:'code',source:'raise SystemExit("must remain inert")'}]}}}]);
+    const documentJobsStartedAt=new Date().toISOString();
     const {session,run}=await dispatchOrdinaryCampaignTurn(baseUrl,owner,{dispatchId:'assessment-'+stageId,text:`EVIMED_ASSESSMENT_STAGE:${stageId}:read-write\nUse the selected public document tools to read the supplied bounded public fixture and produce its inert notebook.`},signal);
-    const jobs=await campaignPoll(async()=>{const rows=(await app.store.database.query("SELECT id,status,payload,result FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='extension-execute' ORDER BY created_at",[owner.user.id,owner.projectId])).rows;return rows.length>=2&&rows.every(row=>['succeeded','failed','canceled'].includes(row.status))?rows:null;},deadline,signal);
+    const jobs=await campaignPoll(()=>campaignDocumentJobs(app,project,run.id,session.id,documentJobsStartedAt),deadline,signal);
     assert.equal(jobs.filter(job=>job.status==='succeeded'&&job.payload.request.operation==='doc_read').length,1);
     assert.equal(jobs.filter(job=>job.status==='succeeded'&&job.payload.request.operation==='doc_write').length,1);
     stage='workspace-output-and-native-transcript-verification';const workspace=await app.runtimeManager.workspaceRootForDelivery(project),outputPath=path.join(workspace,'outputs/extensions/'+targetId+'.ipynb'),output=await fs.readFile(outputPath),notebook=JSON.parse(output);
@@ -507,8 +546,8 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     assert.equal(digest(await fs.readFile(outputPath)),digest(output));
     report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);
     report.privateJourney={status:'observed-main-path-partial',qualified:false,providerQualityMeasured:false,controlledTransport:{requests:transport.requests,errors:transport.errors},physicalSetupDigest:digest(canonicalJson(state.physicalSetup)),remaining:['Queued ordinary membership/credential revocation (private measurement admission revocation is measured separately)','Full outbound capture and other package/web-log canary scans','All22 complete current-identity outcomes and separate qualified ordinary smoke']};
-  }catch(error){failure=error;error.campaignStage=stage;report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);report.privateJourney={status:'incomplete',stage,...safeCampaignFailureDetails(error),route:error.campaignRoute??null,qualified:false};}
-  finally{for(const key of transport.holds.keys())transport.release(key);try{await fixture?.close();await relay?.close();await transport.close();cleanupConfirmed=true;}catch{cleanupConfirmed=false;}}
+  }catch(error){failure=error;error.campaignStage=stage;report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);report.privateJourney={status:'incomplete',stage,...safeCampaignFailureDetails(error),route:error.campaignRoute??null,terminalRun:error.terminalRun??null,controlledTransport:{requests:transport.requests,errors:transport.errors},qualified:false};}
+  finally{if(fixture&&measurementProject&&report)try{report.privateJourney.usageFacts=await campaignUsageFacts(fixture.app,measurementProject,measurementStartedAt);}catch(error){report.privateJourney.usageFactsUnavailable=safeCampaignDiagnosticCode(error);}for(const key of transport.holds.keys())transport.release(key);try{await fixture?.close();await relay?.close();await transport.close();cleanupConfirmed=true;}catch{cleanupConfirmed=false;}}
   report.cleanup={physicallyJoined:cleanupConfirmed};report.qualified=false;
   const reportPath=path.join(state.root,'campaign-measurement-'+randomUUID()+'.json');await saveProtected(reportPath,report);
   if(!cleanupConfirmed)throw Object.assign(new Error('private_campaign_cleanup_unconfirmed'),{code:'private_campaign_cleanup_unconfirmed',reportPath});

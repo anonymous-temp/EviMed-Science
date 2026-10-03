@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -52,7 +53,7 @@ def generate_ai_narratives(
     Tries DeepSeek V4 Pro, then falls back to deterministic smart templates.
     lang: 'en' (default) | 'zh' (Chinese output)
     """
-    data_summary = _build_data_summary(query, articles, stats, networks)
+    data_summary = _build_data_summary(query, articles, stats, networks, _search_observation(config))
 
     # Try LLM APIs
     narratives = _try_deepseek_api(data_summary, config, lang=lang)
@@ -65,7 +66,28 @@ def generate_ai_narratives(
     return narratives
 
 
-def _build_data_summary(query, articles, stats, networks) -> str:
+def _search_observation(config) -> dict:
+    """Read this run's preserved query metadata; absence remains unknown."""
+    output = getattr(config, "output_dir", None)
+    if output is None:
+        return {}
+    location = Path(output) / "data" / "search_metadata.json"
+    if not location.exists():
+        return {}
+    try:
+        if location.is_symlink() or location.stat().st_size > 128 * 1024:
+            raise ValueError("search observation unavailable")
+        value = json.loads(location.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("search observation unavailable")
+        fields = ["max_records", "total_found", "retrieved", "total_fetched", "truncated", "esearch_sort", "search_strategy"]
+        return {field: value[field] for field in fields if field in value}
+    except (OSError, ValueError, UnicodeDecodeError):
+        logger.warning("Preserved search observation unavailable; narrative coverage remains unknown")
+        return {}
+
+
+def _build_data_summary(query, articles, stats, networks, search_observation=None) -> str:
     """Build concise data summary for LLM prompt."""
     n = len(articles)
     years = sorted(set(str(a.get("year", "")) for a in articles if a.get("year")))
@@ -74,6 +96,7 @@ def _build_data_summary(query, articles, stats, networks) -> str:
         f"Topic: {query}",
         f"Total articles: {n}, Years: {years[0] if years else '?'}-{years[-1] if years else '?'}",
     ]
+    summary_parts.append("[SEARCH OBSERVATION]\n" + json.dumps(search_observation or {}, ensure_ascii=False))
 
     # Top keywords
     kw_df = stats.get("top_keywords")
@@ -409,7 +432,7 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
             '  "introduction": "2-3段，介绍研究主题背景及开展文献计量分析的必要性，引用Pritchard(1969)、Chen(2006)等方法论文献",\n'
             '  "discussion": "4-5段，综合多维度数据发现，结合领域知识解读意义，讨论证据缺口、方法局限与未来方向",\n'
             '  "conclusion": "1-2段，总结主要发现，向研究者和政策制定者提出具体建议",\n'
-            '  "results_trends": "描述发文量轨迹，分析增长阶段拐点的驱动因素（药物获批、指南更新、标志性研究）",\n'
+            '  "results_trends": "描述选入记录的年度计数及覆盖局限；不能据此推断全领域增长或完整年度产出",\n'
             '  "results_authors": "描述作者产出分布，分析集中/分散模式对领域成熟度和知识领袖涌现的意义",\n'
             '  "results_institutions": "描述机构产出排名，分析学术/产业/临床机构比例及转化研究管线",\n'
             '  "results_journals": "描述期刊分布，分析核心期刊谱揭示的学科定位和受众覆盖",\n'
@@ -434,6 +457,8 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
             "- 若Modularity Q < 0.3：聚类结构描述须谨慎，避免夸大主题边界\n"
             "- 若出现[CROSS-CHECK WARNING]：严格按其指示执行\n"
             "- 按检索范围与年份来源解释样本计数；不得从当前月份推造年化值或完整年度覆盖\n"
+            "- discussion与所有结果解释仅适用于选入、可能受上限截取的书目元数据；不得把全领域增长或完整年度趋势当作结论\n"
+            "- 实际检索字段、排序、上限与回退以SEARCH OBSERVATION保存的检索式和记录为准；未知信息不得补造\n"
             "- 禁止捏造数据中未出现的具体研究名称、作者发现或临床试验结果\n"
             "- discussion中对解释性判断须使用模糊限定语（可能、提示、表明、有待验证）\n"
             "【最终提醒】输出语言=简体中文。禁止韩文，禁止日文，禁止英文正文。"
@@ -452,7 +477,7 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
   "introduction": "2-3 paragraphs introducing the topic and justifying the bibliometric study. Cite Pritchard 1969, Chen 2006. Include domain-specific context.",
   "discussion": "4-5 substantive paragraphs synthesizing findings with domain knowledge. Reference specific data. Discuss evidence gaps and future directions.",
   "conclusion": "1-2 paragraphs with specific recommendations for researchers and policymakers.",
-  "results_trends": "Publication trajectory + analysis of growth drivers (drug approvals, guideline changes, landmark trials).",
+  "results_trends": "Describe selected-record year counts and coverage limits, not field-wide growth or complete calendar-year output.",
   "results_authors": "Productivity distribution + analysis of concentration pattern and field maturity.",
   "results_institutions": "Institutional rankings + analysis of academic vs industry mix and translational pipeline.",
   "results_journals": "Journal distribution + analysis of disciplinary identity and audience reach.",
@@ -476,6 +501,8 @@ def _build_llm_prompt(data_summary: str, lang: str = "en") -> str:
             "- If Modularity Q < 0.3: describe community structure as 'weak' or 'modest'\n"
             "- If a [CROSS-CHECK WARNING] appears, follow its instructions exactly\n"
             "- Interpret selected counts using query bounds and recorded-year provenance; do not infer calendar coverage or annualize from the current month\n"
+            "- Discussion and all interpretations concern selected, potentially capped bibliographic metadata, not field-wide growth or complete calendar-year trends\n"
+            "- Actual query fields, sort, cap and fallbacks come from SEARCH OBSERVATION; never invent missing metadata\n"
             "- Do NOT fabricate specific study names, author findings, or clinical trial results not present in the data\n"
             "- In 'discussion', use hedging language (may, could, suggests, warrants) for interpretive claims"
         )
@@ -650,9 +677,8 @@ def _smart_template_narratives(
             f"dominant research foci. "
             + (
                 f"Notably, the frontier analysis highlights "
-                f"{', '.join(frontier_topics)} as emerging areas with "
-                f"particularly strong recent growth, suggesting these may "
-                f"represent the next wave of research emphasis."
+                f"{', '.join(frontier_topics)} in the selected sample's score ranking. "
+                "Ranking alone establishes neither field-wide growth nor future research importance."
                 if frontier_topics
                 else "Further investigation of emerging subtopics within these "
                 f"broad themes would be valuable."
@@ -661,11 +687,9 @@ def _smart_template_narratives(
 
     # Paragraph 4: Implications
     if h_index > 0:
-        impact_word = "substantial" if h_index > 20 else "growing"
         disc_parts.append(
             f"The h-index of {h_index} over the articles with observed citations "
-            f"indicates a {impact_word} "
-            f"citation impact. "
+            "describes this citation snapshot, not growth over time. "
             f"These findings have several practical implications: researchers "
             f"entering this field should consider the identified knowledge gaps "
             f"and emerging frontiers; funding agencies can use the cluster analysis "
@@ -766,16 +790,15 @@ def _smart_template_narratives_zh(
             frontier_str = "、".join(frontier_topics)
             disc_parts.append(
                 f"高频关键词分析显示，{kw_str}是当前主要研究焦点。"
-                f"前沿评分分析进一步表明，{frontier_str}等方向近年增长势头强劲，"
-                f"可能代表该领域下一阶段的研究重点。"
+                f"本次样本的前沿评分排序列出{frontier_str}等方向；"
+                "排序本身不能证明全领域增长或未来研究重要性。"
             )
         else:
             disc_parts.append(f"高频关键词分析显示，{kw_str}是当前核心研究焦点，建议后续深入探索其中的新兴子主题。")
 
     if h_index > 0:
-        impact_word = "显著" if h_index > 20 else "持续增长的"
         disc_parts.append(
-            f"在取得引用观测值的文献上，该领域的 h 指数为 {h_index}，体现出{impact_word}的引用影响力。"
+            f"在取得引用观测值的文献上，本次 h 指数为 {h_index}；它描述引用快照，不能证明随时间增长。"
             f"上述发现具有多方面实践价值：进入该领域的研究者应重点关注已识别的知识缺口与前沿方向；"
             f"资助机构可借助聚类分析评估研究组合的均衡性；"
             f"系统综述团队可利用主题图谱合理界定综述范围。"
