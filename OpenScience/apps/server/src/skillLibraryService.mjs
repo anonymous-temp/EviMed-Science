@@ -199,7 +199,8 @@ export class SkillLibraryService {
     if (!pin) return item;
     try { const row = await this.atRevision(user, pin.skillId, pin.revision);
       if (row.payload.digest !== pin.digest) return item;
-      return { ...item, personalRef: { skillId: row.id, revision: pin.revision, title: row.payload.title } };
+      // The revision row carries no id of its own; the pin names the skill it was read by.
+      return { ...item, personalRef: { skillId: pin.skillId, revision: pin.revision, title: row.payload.title } };
     } catch (error) { if (error?.status !== 404) throw error; return item; }
   }
   /** @param {any} user @param {any} project @param {any} body */

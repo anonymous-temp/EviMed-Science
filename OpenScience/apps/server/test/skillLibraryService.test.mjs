@@ -28,8 +28,12 @@ function fixture() {
     async get(user, kind, id, { includeDeleted = false } = {}) {
       const row = current.get(key(user, kind, id)); return row && (!row.deletedAt || includeDeleted) ? structuredClone(row) : null;
     },
+    // The real store's shape (productStore.mjs `history`): a revision row has
+    // no id, kind or project of its own. This double returned whole documents,
+    // which is how a reader of `row.id` passed here and was undefined live.
     async history(user, kind, id, { beforeRevision = null, limit = 50 } = {}) {
-      return structuredClone((versions.get(key(user, kind, id)) ?? []).filter(row => beforeRevision == null || row.revision < beforeRevision).reverse().slice(0, limit));
+      return structuredClone((versions.get(key(user, kind, id)) ?? []).filter(row => beforeRevision == null || row.revision < beforeRevision).reverse().slice(0, limit)
+        .map(row => ({ revision: row.revision, payload: row.payload, deletedAt: row.deletedAt, recordedAt: "2026-10-02T00:00:00.000Z" })));
     },
     async list(user, kind) { return { items: [...current.entries()].filter(([k, row]) => JSON.parse(k)[0] === user && row.kind === kind && !row.deletedAt).map(([, row]) => structuredClone(row)), nextCursor: null }; },
     async remove(user, kind, id, expectedRevision) {
@@ -59,6 +63,20 @@ test("personal skill CAS and exact historical restore preserve native namespace"
   assert.equal(restored.payload.digest, created.payload.digest);
   assert.deepEqual((await service.history(owner, created.id)).map(row => row.revision), [3, 2, 1]);
 });
+test("a mounted personal skill in the session catalogue names the skill it came from", async () => {
+  // Found on the pilot (2026-10-03): the effective list's personalRef had no
+  // skillId, so 「打开个人技能」 linked to /app/extensions/skills/undefined.
+  const { service } = fixture();
+  const skill = await service.create(owner, content);
+  const project = { id: "paper", userId: owner.id };
+  service.nativeCatalogue = { runtime: { runtimePersonalSkillPins: () => [{ nativeName: skill.payload.nativeName, skillId: skill.id, revision: 1, digest: skill.payload.digest }] } };
+  const item = await service.personalCatalogueRef(owner, project, { source: "personal", name: skill.payload.nativeName, key: "opaque" });
+  assert.deepEqual(item.personalRef, { skillId: skill.id, revision: 1, title: content.title });
+  // A pin whose digest is not the stored revision's is left unlabelled, not mislabelled.
+  service.nativeCatalogue = { runtime: { runtimePersonalSkillPins: () => [{ nativeName: skill.payload.nativeName, skillId: skill.id, revision: 1, digest: "sha256:" + "0".repeat(64) }] } };
+  assert.equal((await service.personalCatalogueRef(owner, project, { source: "personal", name: skill.payload.nativeName, key: "opaque" })).personalRef, undefined);
+});
+
 test("foreign skill reads, revisions and mutations are concealed", async () => {
   const { service } = fixture(), created = await service.create(owner, content);
   for (const operation of [() => service.get(other, created.id), () => service.history(other, created.id),
