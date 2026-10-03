@@ -93,6 +93,12 @@ export function safeCampaignStackFrames(error){
   }
   return frames;
 }
+/** Shared phase diagnostics never serialize exception messages, payloads or provider stderr. */
+export function safeCampaignFailureDetails(error){
+ const names=['Error','TypeError','ReferenceError','RangeError','SyntaxError','AssertionError','AbortError','TimeoutError','HttpError'];
+ const protocolNumbers={};for(const key of ['status','statusCode','actual','expected'])if(Number.isSafeInteger(error?.[key])&&error[key]>=0&&error[key]<=999)protocolNumbers[key]=error[key];
+ return{code:safeCampaignDiagnosticCode(error),errorName:names.includes(error?.name)?error.name:'UnknownError',frames:safeCampaignStackFrames(error).slice(0,8),...(Object.keys(protocolNumbers).length?{protocolNumbers}:{})};
+}
 async function removeCampaignVolume(root,name){
   const volume=JSON.parse((await execute('docker',['volume','inspect',name],{env:assessmentDockerEnvironment(),timeout:5000,maxBuffer:16384})).stdout)[0];
   if(!/^evimed-saas-campaign-[a-f0-9-]{36}$/.test(name)||volume.Name!==name||volume.Options?.device!==root||volume.Labels?.['io.evimed.campaign-root']!==digest(canonicalJson(root)))throw new Error('campaign_volume_ownership_unconfirmed');
@@ -361,7 +367,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     result={status:state.status,qualified:false,statePath:path.join(root,'campaign-state.json'),physicalSetup:state.physicalSetup};
   }catch(error){failure=error;let generationStatus=error.generationStatus??null;
     if(privateFixture&&candidateProject)try{generationStatus=await campaignGenerationStatus(privateFixture.app,candidateProject);await saveProtected(path.join(root,'generation-status-at-failure.json'),generationStatus);}catch(snapshotError){generationStatus={snapshotUnavailable:safeCampaignDiagnosticCode(snapshotError)};}
-    error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,terminalJob:error.terminalJob??null,generationStatus,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
+    error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,...safeCampaignFailureDetails(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,terminalJob:error.terminalJob??null,generationStatus,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
   }finally{
     let cleanupFailed=false;const cleanupFailures=[];
     for(const [resource,release] of [['private-app-controller',()=>privateFixture?.close()],['bootstrap-controller',()=>composition?.close()],['bootstrap-app',()=>app?.close()],['owned-relay',()=>relay?.close()],['controlled-upstream',()=>transport.close()]])try{await release();}catch(error){cleanupFailed=true;cleanupFailures.push({resource,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}
@@ -493,7 +499,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     assert.equal(digest(await fs.readFile(outputPath)),digest(output));
     report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);
     report.privateJourney={status:'observed-main-path-partial',qualified:false,providerQualityMeasured:false,controlledTransport:{requests:transport.requests,errors:transport.errors},physicalSetupDigest:digest(canonicalJson(state.physicalSetup)),remaining:['Queued ordinary membership/credential revocation (private measurement admission revocation is measured separately)','Full outbound capture and other package/web-log canary scans','All22 complete current-identity outcomes and separate qualified ordinary smoke']};
-  }catch(error){failure=error;error.campaignStage=stage;report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);report.privateJourney={status:'incomplete',stage,code:safeCampaignDiagnosticCode(error),route:error.campaignRoute??null,qualified:false};}
+  }catch(error){failure=error;error.campaignStage=stage;report=createCampaignReport({artifactDigest:state.descriptor.artifactDigest,sourcePolicy:state.sourcePolicy,nativeImage:state.overrides.runtimeContainerImage,descriptor:state.descriptor},observations);report.privateJourney={status:'incomplete',stage,...safeCampaignFailureDetails(error),route:error.campaignRoute??null,qualified:false};}
   finally{for(const key of transport.holds.keys())transport.release(key);try{await fixture?.close();await relay?.close();await transport.close();cleanupConfirmed=true;}catch{cleanupConfirmed=false;}}
   report.cleanup={physicallyJoined:cleanupConfirmed};report.qualified=false;
   const reportPath=path.join(state.root,'campaign-measurement-'+randomUUID()+'.json');await saveProtected(reportPath,report);
@@ -557,7 +563,7 @@ export async function ordinaryQualifiedSmoke(inputs,{signal=null}={}){
     result={status:'ordinary-qualified-admission-smoke-observed',receiptDigest:authority.receipt.receiptDigest,assessmentAuthorityUsed:false,ordinaryActor:actor.user.id,
       freshDatabaseNamespace:isolated.name,physicalRuntime:physical,jobIds:jobs.map(job=>job.id),operations:jobs.map(job=>job.payload.request.operation),outputDigest:digest(output),controlledTransportOnly:true,
       note:'Separate post-qualification ordinary admission smoke; does not amend or retroactively supply prior22 measurement outcomes.'};
-  }catch(error){failure=error;result={status:'ordinary-qualified-smoke-incomplete',stage,code:safeCampaignDiagnosticCode(error),receiptDigest:authority.receipt.receiptDigest,assessmentAuthorityUsed:false};}
+  }catch(error){failure=error;result={status:'ordinary-qualified-smoke-incomplete',stage,...safeCampaignFailureDetails(error),receiptDigest:authority.receipt.receiptDigest,assessmentAuthorityUsed:false};}
   finally{try{await fixture?.close();await relay?.close();await transport.close();if(volumeName)await removeCampaignVolume(root,volumeName);if(network)await removeOwnedCampaignNetwork(network);await isolated.drop();cleanupConfirmed=true;}catch{cleanupConfirmed=false;}}
   result.cleanup={physicallyJoined:cleanupConfirmed};const reportPath=path.join(path.dirname(inputs.signingKeyPath),'ordinary-qualified-smoke-'+randomUUID()+'.json');await saveProtected(reportPath,result);
   if(!cleanupConfirmed)throw Object.assign(new Error('ordinary_smoke_cleanup_unconfirmed'),{code:'ordinary_smoke_cleanup_unconfirmed',reportPath});if(failure)throw Object.assign(failure,{reportPath});

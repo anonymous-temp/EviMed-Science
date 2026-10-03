@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, campaignPhysicalInspectionMetadata, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, safeCampaignFailureDetails, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, observeCampaignPreparation, observeCampaignGenerationLifecycle, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -149,4 +149,11 @@ test('actual Docker omitted ReadOnly false is normalized narrowly while volume o
  for(const changed of [{...volume,Driver:'other'},{...volume,Options:{...volume.Options,device:'/other'}},{...volume,Labels:{}}])assert.throws(()=>validatePrivateRuntimeMounts(actual,{...expected,volume:changed}),/volume_identity/);
  assert.throws(()=>validatePrivateRuntimeMounts({...actual,Mounts:[{...actual.Mounts[0],RW:null}]},expected),/volume_identity/);
  const metadata=campaignPhysicalInspectionMetadata(actual,volume,network);assert.equal(JSON.stringify(metadata).includes('must-not-leak'),false);assert.equal(Object.hasOwn(metadata.container.HostConfig.Mounts[0],'ReadOnly'),false);assert.equal(metadata.volume.Options.device,root);
+});
+
+test('shared private-phase exception diagnostic identifies reference errors and only bounded numeric protocol facts',()=>{
+ const secret='private-provider-must-not-leak',error=Object.assign(new ReferenceError(secret),{status:403,expected:200,actual:secret,stderr:secret,payload:{secret}}),diagnostic=safeCampaignFailureDetails(error);
+ assert.equal(diagnostic.errorName,'ReferenceError');assert.deepEqual(diagnostic.protocolNumbers,{status:403,expected:200});assert.equal(JSON.stringify(diagnostic).includes(secret),false);
+ assert.equal(safeCampaignFailureDetails({name:secret,message:secret,code:secret}).errorName,'UnknownError');
+ assert.equal(Object.hasOwn(safeCampaignFailureDetails({status:-1,statusCode:99999,expected:'200'}),'protocolNumbers'),false);
 });
