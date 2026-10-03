@@ -758,6 +758,21 @@ API binding, and private runtime network. App data remains
 `evimed-science-test-postgres`. The knowledge plugin uses its own database and
 private token at the loopback endpoint `http://127.0.0.1:18080`.
 
+### Gateway addresses the runtime is given
+
+Outside `NODE_ENV=production` five gateway addresses default to
+`http://127.0.0.1:<port>/…`, which a sandboxed runtime on the internal network
+cannot reach. Set each to the gateway listener (`http://172.30.253.1:8787` here):
+`OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL` (`/internal/model/v1`),
+`OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_INTERNAL_URL` (`/internal/sources/v1/fetch`),
+`OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/search/v1/query`),
+`OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/kb/v1/search`) and, where
+those modules are on, `OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL` and
+`OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL`. The frontier, result, VCR and
+capsule gateways follow the model gateway's address and need no key. The
+knowledge-base one was missing until 2026-10-03, so `kb_search` could not reach
+the control plane from any conversation on this host.
+
 ### Runtime slots on a small host
 
 Allow two runtimes, not one (`OPEN_SCIENCE_MAX_RUNNING_RUNTIMES=2`,
