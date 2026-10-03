@@ -61,3 +61,24 @@ test('hosted personal image verification stays behind the controller and refuses
   const direct = new DockerRuntimeProvider({ config: { runtimeContainerBin: '/no-host-docker-access' } })
   await assert.rejects(direct.assertPersonalImage(expected), { code: 'runtime_image_unavailable' })
 })
+
+test('trusted skill actor callback observes the exact native request after unsent checks and before prompt execution', async () => {
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0 })
+  const project = { userId: 'owner', id: 'project', workspaceDir: '/workspace' }
+  const runtime = {}; manager.runtimes.set(manager.key(project), runtime)
+  manager.assertInteractiveRuntimeAvailable = () => {}
+  manager.assertPersonalSkillPromptGeneration = async () => {}
+  manager.enforceProjectQuota = async () => {}
+  let created = false, recorded, sent, rejectCreate = false
+  manager.callKernel = async (_runtime, _project, method, body) => {
+    if (method === 'session/create') { if (rejectCreate) throw new Error('unsent'); created = true; return {} }
+    assert.equal(method, 'session/prompt'); assert.equal(created, true); assert.equal(body.request, recorded)
+    sent = body.request; return {}
+  }
+  const recordPromptActor = async request => { assert.equal(created, true); recorded = request }
+  await manager.dispatchAdmittedPrompt(project, 'conversation', { text: '/personal-fixture', requestId: 'skill-request', recordPromptActor })
+  assert.deepEqual(sent, { sessionId: 'conversation', requestId: 'skill-request', mode: 'queue', content: [{ type: 'text', text: '/personal-fixture' }] })
+  rejectCreate = true; recorded = null; sent = null
+  await assert.rejects(manager.dispatchAdmittedPrompt(project, 'conversation', { text: '/personal-fixture', requestId: 'unsent-request', recordPromptActor }), /unsent/u)
+  assert.equal(recorded, null); assert.equal(sent, null)
+})

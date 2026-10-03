@@ -4802,7 +4802,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue", recordPromptActor = null }) {
     if (this.runtimeStops.has(this.key(project))) {
       const error = new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
       error.definitivelyRejected = true;
@@ -4851,23 +4851,17 @@ export class RuntimeManager {
         "runtime_prompt_rejected",
         "The runtime did not create the session in time.",
       );
+      const promptRequest = {
+        requestId: safeId(requestId, "runtime request id"),
+        sessionId,
+        mode: mode === "steer" ? "steer" : "queue",
+        content: [{ type: "text", text }],
+      };
+      // The trusted caller binds the exact native request only after unsent
+      // admission failures, before the kernel can execute its tools.
+      if (recordPromptActor) await recordPromptActor(promptRequest);
       await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session/prompt", {
-          request: {
-            // 0.1.2 requires the client's own identity for this submission; the
-            // kernel echoes it on the queued message so a client can retire its
-            // local echo. Ledger dispatches reserve this identity before
-            // sending; other callers use the per-call default above.
-            requestId: safeId(requestId, "runtime request id"),
-            sessionId,
-            // `queue` unless the caller is correcting a turn that is already
-            // running. The kernel routes the two to different methods and the
-            // difference is visible to the model: a queued message arrives
-            // after the current turn, a steered one inside it.
-            mode: mode === "steer" ? "steer" : "queue",
-            content: [{ type: "text", text }],
-          },
-        }, signal),
+        (signal) => this.callKernel(runtime, project, "session/prompt", { request: promptRequest }, signal),
         "runtime_prompt_acceptance_unknown",
         "Runtime prompt acceptance could not be confirmed.",
       );
@@ -5413,13 +5407,13 @@ export class RuntimeManager {
     return { generation, pendingSession: false };
   }
   /** The native skill consumer owns slash parsing and logged skill-invocation context.
-   * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string}} request */
-  async invokePersonalSkill({ project, skillId, revision, sessionId, idempotencyKey }) {
-    const invoke = () => this.invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey });
+   * @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string,recordPromptActor?:(request:any)=>Promise<void>}} request */
+  async invokePersonalSkill({ project, skillId, revision, sessionId, idempotencyKey, recordPromptActor }) {
+    const invoke = () => this.invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey, recordPromptActor });
     return this.pluginService ? this.pluginService.withAdmission(project, invoke, { prompt: true }) : invoke();
   }
-  /** @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string}} request */
-  async invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey }) {
+  /** @param {{project:any,skillId:string,revision:number,sessionId:string,idempotencyKey:string,recordPromptActor?:(request:any)=>Promise<void>}} request */
+  async invokeAdmittedPersonalSkill({ project, skillId, revision, sessionId, idempotencyKey, recordPromptActor }) {
     if (!this.personalSkillGenerations) throw new HttpError(503, 'product_state_unavailable', 'Personal skill invocation is unavailable.');
     const source = await this.personalSkillGenerations.requireInvocation(project, skillId, revision);
     await this.start(project);
@@ -5429,7 +5423,7 @@ export class RuntimeManager {
     }
     const proof = await this.probePersonalSkillGeneration(project, pinned, safeId(sessionId, 'session id'));
     if (proof.pendingSession) throw new HttpError(404, 'runtime_session_not_found', 'The target conversation is unavailable.');
-    await this.dispatchAdmittedPrompt(project, sessionId, { text: `/${source.nativeName}`, requestId: safeId(idempotencyKey, 'invocation id') });
+    await this.dispatchAdmittedPrompt(project, sessionId, { text: `/${source.nativeName}`, requestId: safeId(idempotencyKey, 'invocation id'), ...(recordPromptActor ? { recordPromptActor } : {}) });
     return { accepted: true, sessionId, skillId, revision, generation: pinned.reference.generationHash };
   }
 

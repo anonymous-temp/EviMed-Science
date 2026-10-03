@@ -1006,7 +1006,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     invoke: overrides.personalSkillInvocation ?? (input => {
       if (config.runtimeMode !== "kernel") throw new HttpError(503, "product_state_unavailable", "Native skill invocation is unavailable.");
-      return runtimeManager.invokePersonalSkill(input);
+      return runtimeManager.invokePersonalSkill({ ...input,
+        recordPromptActor: request => recordExtensionPromptActor(input.user, input.project, request),
+      });
     }),
     onRemoved: async (user, skillId) => {
       if (config.runtimeMode !== "kernel") return;
