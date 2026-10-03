@@ -167,11 +167,12 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
 
   return <div className="flex h-full min-h-0 bg-bg">
     <PageTitle page="定时任务" />
+    {/* One left edge in the list column (28 px): the title, the section names and the rows are inset 12 px, so the back link and 新建任务 take the same inset over their size's own 10 and 14. */}
     <aside aria-label="定时任务列表" className={cn("min-h-0 w-full shrink-0 overflow-y-auto bg-surface-1 p-4 md:w-72", selectedId && "hidden md:block")}>
-      <Link to="/app/chat" className={cn(buttonClasses({ variant: "text", size: "sm" }), "mb-4 w-full justify-start")}><ArrowLeft size={16} aria-hidden="true" />返回工作台</Link>
+      <Link to="/app/chat" className={cn(buttonClasses({ variant: "text", size: "sm" }), "mb-4 w-full justify-start px-3")}><ArrowLeft size={16} aria-hidden="true" />返回工作台</Link>
       <header className="mb-5 flex items-center justify-between px-3"><h1 className="text-heading font-semibold text-text">定时任务</h1><CalendarClock size={20} className="text-text-3" aria-hidden="true" /></header>
       <SearchInput label="搜索任务" className="mb-3 w-full" value={search} onChange={event => setSearch(event.target.value)} />
-      <Button variant="text" className="mb-6 w-full justify-start" onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />新建任务</Button>
+      <Button variant="text" className="mb-6 w-full justify-start px-3" onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />新建任务</Button>
       {error && <LoadError message={error} onRetry={() => void load()} />}
       {agendas === null ? <FilesSkeleton /> : <div className="space-y-6">
         {railList("即将执行", scheduled)}{railList("已暂停 / 已完成", inactive)}
