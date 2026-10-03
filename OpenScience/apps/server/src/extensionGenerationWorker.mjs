@@ -19,6 +19,29 @@ export class ExtensionGenerationWorker{
   canHandle(job){return job?.kind==='plugin-apply'&&job.payload?.variant===EXTENSION_GENERATION_JOB_VARIANT;}
   /** @param {any} job */
   defer(job){return this.jobs.withLease(job.userId,job.id,job.leaseToken,client=>client.query("UPDATE evimed_product.jobs SET status='queued',attempts=GREATEST(0,attempts-1),lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+interval '5 seconds' WHERE id=$1",[job.id]));}
+  /** A terminal pre-apply refusal may preserve only the observed unchanged runtime, never the rejected desired authority.
+   * @param {any} job @param {any} error */
+  failTerminal(job,error){return this.jobs.withLease(job.userId,job.id,job.leaseToken,client=>this.database.withTransactionClient(client,async()=>{
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`plugin-project:${job.userId}:${job.projectId}`]);
+    const project={userId:job.userId,id:job.projectId},state=await this.service.current(project);
+    if(state?.revision===job.payload.stateRevision&&canonicalJson(state.payload.desired?.reference??null)===canonicalJson(job.payload.reference)){
+      let baseline=null;try{baseline=await this.service.ordinaryRuntimeBaseline(project,client);}catch{ /* Missing current ownership cannot promote historical state. */ }
+      if(baseline&&baseline.owner.accountCreatedAt===job.payload.accountCreatedAt&&baseline.owner.projectCreatedAt===job.payload.projectCreatedAt){
+        const previous=state.payload.lastGood,installed=await this.runtime.currentGeneration(project);let proof=null;
+        if(previous&&canonicalJson(state.payload.effective?.reference??null)===canonicalJson(previous.reference)&&canonicalJson(installed?.reference??null)===canonicalJson(previous.reference)
+          &&previous.scope.ownerId===job.userId&&previous.scope.projectId===job.projectId&&previous.scope.ownerAccountCreatedAt===baseline.owner.accountCreatedAt&&previous.scope.projectCreatedAt===baseline.owner.projectCreatedAt
+          &&['baseRuntimeImageDigest','adapterRevision','permissionProfileRevision'].every(key=>baseline.identity[key]===previous.identity[key])
+          &&canonicalJson(baseline.personal)===canonicalJson(previous.projection.personal)
+          &&canonicalJson([baseline.legacy])===canonicalJson(previous.projection.plugins.filter(plugin=>plugin.compatibility==='legacy-citation-v1'))){
+          try{await this.service.verifyManifest(project,previous.reference);proof=await this.runtime.probeGeneration(project,previous);assertExtensionGenerationRuntimeProof(previous,proof,this.runtime.runtimeGeneration(project));if(canonicalJson((await this.runtime.currentGeneration(project))?.reference??null)!==canonicalJson(previous.reference))proof=null;}catch{proof=null;}
+        }
+        await this.service.documents.put(job.userId,'extension-generation',state.id,{...state.payload,phase:'failed',effective:proof?previous:null,runtimeGeneration:proof?.runtimeGeneration??null,
+          terminalApplyFailure:{jobId:job.id,reference:job.payload.reference,preservedRuntime:Boolean(proof)},findings:[...state.payload.findings,{extensionId:'selected-set',code:'plugin_apply_failed'}]},
+          {expectedRevision:state.revision,projectId:job.projectId,transactionClient:client});
+      }
+    }
+    return this.jobs.fail(job.userId,job.id,job.leaseToken,{code:error.code??'plugin_apply_failed',message:'The extension generation was not applied.'},{retry:false});
+  }));}
   /** @param {any} job */
   async runClaimed(job){if(!this.canHandle(job))throw new HttpError(400,'extension_contract_invalid','This job is not an extension generation apply.');let lost=false;
     try{return await this.database.transaction(client=>this.database.withTransactionClient(client,async()=>{
@@ -55,6 +78,6 @@ export class ExtensionGenerationWorker{
         }
       }finally{clearInterval(timer);await pending;}
     }));}catch(error){if(lost||error.code==='product_job_lease_lost'||error.joined===false)return null;
-      try{return await this.jobs.fail(job.userId,job.id,job.leaseToken,{code:error.code??'plugin_apply_failed',message:'The extension generation was not applied.'},{retry:false});}catch(failure){if(failure.code!=='product_job_lease_lost')throw failure;return null;}}
+      try{return await this.failTerminal(job,error);}catch(failure){if(failure.code!=='product_job_lease_lost')throw failure;return null;}}
   }
 }

@@ -46,9 +46,31 @@ export function composeExtensionExecution({config,database,store,agentRuns,runti
     const state = await generations.current(project), candidate = state?.payload.effective;
     if (!candidate) return null;
     try {
-      const actual = await database.transaction(client => database.withTransactionClient(client,
-        () => generations.snapshot({ id: candidate.scope.actorId, accountCreatedAt: candidate.scope.actorAccountCreatedAt }, project.id, client)));
-      return actual.manifest.reference.generationHash === candidate.reference.generationHash ? candidate : null;
+      const terminalKnownRuntime = state.payload.phase === 'failed' && state.payload.terminalApplyFailure?.preservedRuntime === true
+        && canonicalJson(state.payload.terminalApplyFailure.reference) === canonicalJson(state.payload.desired?.reference ?? null);
+      if (!['effective', 'rolled-back'].includes(state.payload.phase) && !terminalKnownRuntime) return null;
+      if (state.payload.phase !== 'rolled-back' && !terminalKnownRuntime) {
+        const actual = await database.transaction(client => database.withTransactionClient(client,
+          () => generations.snapshot({ id: candidate.scope.actorId, accountCreatedAt: candidate.scope.actorAccountCreatedAt }, project.id, client)));
+        return actual.manifest.reference.generationHash === candidate.reference.generationHash ? candidate : null;
+      }
+      // A terminal rollback keeps the observed last-good runtime usable for
+      // ordinary research. This is availability, never operation authority:
+      // every tool still checks current selection, caller grants and proof.
+      const installed = runtimeManager.currentGeneration(project);
+      if (!state.payload.lastGood
+        || canonicalJson(state.payload.lastGood.reference) !== canonicalJson(candidate.reference)
+        || canonicalJson(installed?.reference ?? null) !== canonicalJson(candidate.reference)
+        || state.payload.runtimeGeneration !== runtimeManager.runtimeGeneration(project)) return null;
+      const baseline = await database.transaction(client => database.withTransactionClient(client,
+        () => generations.ordinaryRuntimeBaseline(project, client)));
+      if (candidate.scope.ownerId !== project.userId || candidate.scope.projectId !== project.id
+        || candidate.scope.ownerAccountCreatedAt !== baseline.owner.accountCreatedAt || candidate.scope.projectCreatedAt !== baseline.owner.projectCreatedAt
+        || ['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => baseline.identity[key] !== candidate.identity[key])
+        || canonicalJson(baseline.personal) !== canonicalJson(candidate.projection.personal)
+        || canonicalJson([baseline.legacy]) !== canonicalJson(candidate.projection.plugins.filter(plugin => plugin.compatibility === 'legacy-citation-v1'))) return null;
+      await generations.verifyManifest(project, candidate.reference);
+      return candidate;
     } catch (error) {
       await audit('extension.generation.cold', 'refused', { userId: project.userId, projectId: project.id, code: error?.code ?? 'product_state_unavailable' });
       return null;

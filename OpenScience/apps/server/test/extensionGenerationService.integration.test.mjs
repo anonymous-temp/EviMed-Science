@@ -15,6 +15,8 @@ import {ExtensionService} from '../src/extensionService.mjs';
 import {PluginService} from '../src/pluginService.mjs';
 import {ExtensionGenerationService,verifyExtensionGeneration,extensionGenerationRoot} from '../src/extensionGenerationService.mjs';
 import {ExtensionGenerationWorker} from '../src/extensionGenerationWorker.mjs';
+import {composeExtensionExecution} from '../src/extensionHostedIntegration.mjs';
+import {RuntimeManager} from '../src/runtimeManager.mjs';
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??'',options={skip:!url&&'Isolated local PG generation fixture is required'};
 if(url){const parsed=new URL(url);assert.equal(parsed.hostname,'127.0.0.1');assert.match(parsed.pathname,/evimed_test/);}
 const h=value=>createHash('sha256').update(value).digest('hex'),d=value=>'sha256:'+h(canonicalJson(value));
@@ -44,6 +46,10 @@ after(async()=>{if(db){await db.query('DELETE FROM evimed_product.jobs WHERE use
 async function legacy(projectId,timeout){return plugins.documents.put(a.id,'plugin',`project:${projectId}:dsh-cite`,{schemaVersion:1,pluginId:'dsh-cite',binaryVersion:plugins.entry().version,enabled:true,settings:{timeoutMs:timeout}},{expectedRevision:0,projectId});}
 async function add(projectId,key){const installed=await extensions.install(a,{coordinate:entry.coordinate,scope:'project',projectId,idempotencyKey:key});await db.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE id=$1",[installed.job.id]);const job=await extensions.jobs.claim(['extension-prepare'],'fixture-preparer');await extensions.jobs.finish(a.id,job.id,job.leaseToken,{installationId:installed.installation.id,installationRevision:1,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,qualified:false});return installed;}
 async function claim(state){const result=await db.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='plugin-apply' AND payload->>'variant'='extension-generation-v1' AND (payload->>'stateRevision')::integer=$2 AND project_id=$3 ORDER BY created_at DESC LIMIT 1",[a.id,state.revision,state.projectId]);await db.query("UPDATE evimed_product.jobs SET run_after='1970-01-01'::timestamptz WHERE id=$1",[result.rows[0].id]);const claimed=await service.jobs.claim(['plugin-apply'],'fixture-dispatcher');assert.equal(claimed?.id,result.rows[0].id,'the fixture must claim its exact named generation job');return claimed;}
+function rollbackManager(project,good){
+  const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});manager.runtimes.set(manager.key(project),{extensionGeneration:good,modelGatewayTokenJti:'fixture-runtime'});
+  composeExtensionExecution({config:{dataDir:root,modelGatewaySigningSecret:'isolated-test-signing-secret-with-32-bytes'},database:db,store:{},agentRuns:{activeRuns:async()=>[]},runtimeManager:manager,controller:{},extensions,pluginWorker:{},deployment:{admittedDescriptors:[],admittedArtifacts:[]},resolveProject:async()=>project,audit:async()=>{}},{qualification:{authority:async()=>null},generations:service});return manager;
+}
 test('legacy compatibility migration twice preserves citation rows, settings and original history',options,async()=>{
   await legacy('p1',5000);await legacy('p2',9000);const before=await plugins.history(a,{id:'p1',userId:a.id});
   const first=await service.projectLegacy(a,'p1'),second=await service.projectLegacy(a,'p1');assert.equal(first.revision,second.revision);assert.equal(first.payload.sourceDocumentId,'project:p1:dsh-cite');assert.deepEqual(await plugins.history(a,{id:'p1',userId:a.id}),before);
@@ -61,7 +67,7 @@ test('untrusted optional package is omitted with a finding while ordinary resear
 test('busy runtime defers application and changed desired revisions supersede queued old generation',options,async()=>{
   const selected=await extensions.project(a,'p1');const state=await service.reconcile(a,'p1',{expectedRevision:selected.revision});kernelBusy=null;const unknown=await claim(state);await worker.runClaimed(unknown);assert.equal((await service.jobs.get(a.id,unknown.id)).status,'queued');kernelBusy=true;const pending=await claim(state);await worker.runClaimed(pending);assert.equal((await service.jobs.get(a.id,pending.id)).status,'queued');assert.equal(current,null);kernelBusy=false;
   const changed=await extensions.saveProject(a,'p1',{expectedRevision:selected.revision,selections:selected.selections.map(row=>({installationId:row.installationId,enabled:row.enabled,settings:{rows:9},connectionRefs:['connection-A']}))});const newer=await service.reconcile(a,'p1',{expectedRevision:changed.revision});
-  const old=await claim(state);assert.equal((await worker.runClaimed(old)).result.superseded,true);assert.equal((await service.current({id:'p1',userId:a.id})).payload.effective,null);assert.equal(newer.payload.desired.projection.plugins.find(p=>p.extensionId===entry.id).settings.rows,9);
+  const old=await claim(state);assert.equal((await worker.runClaimed(old)).result.superseded,true);const untouched=await service.current({id:'p1',userId:a.id});assert.equal(untouched.payload.effective,null);assert.equal(untouched.payload.phase,'waiting');assert.equal(untouched.revision,newer.revision);assert.equal(newer.payload.desired.projection.plugins.find(p=>p.extensionId===entry.id).settings.rows,9);
 });
 test('exact runtime inventory proof, then failed optional boot restores the known good generation',options,async()=>{
   let state=await service.current({id:'p1',userId:a.id});const claimed=await claim(state);const done=await worker.runClaimed(claimed);assert.equal(done.result.phase,'effective');const good=(await service.current({id:'p1',userId:a.id})).payload.lastGood;
@@ -70,6 +76,83 @@ test('exact runtime inventory proof, then failed optional boot restores the know
   runtime.probeGeneration=async(_project,candidate)=>{if(candidate.reference?.generationHash!==good.reference.generationHash)throw Object.assign(new Error('Fixture failure'),{code:'plugin_apply_failed'});return runtimeProof(candidate);};
   const failed=await worker.runClaimed(await claim(state));assert.equal(failed.result.phase,'rolled-back');assert.equal((await service.current({id:'p1',userId:a.id})).payload.effective.reference.generationHash,good.reference.generationHash);assert.equal(current.reference.generationHash,good.reference.generationHash);failCandidate=false;runtime.probeGeneration=async(_project,candidate)=>runtimeProof(candidate);
 });
+test('terminal rollback admits the next ordinary prompt without assigning failed desired settings to old tools',options,async()=>{
+  const project={id:'p1',userId:a.id},state=await service.current(project),good=state.payload.effective;
+  assert.equal(state.payload.phase,'rolled-back');assert.notEqual(state.payload.desired.reference.generationHash,good.reference.generationHash);
+  const manager=rollbackManager(project,good);await manager.assertExtensionPromptGeneration(project,{mode:'queue'});
+  await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_contract_invalid'});
+  const desired=await extensions.project(a,'p1'),pin=good.projection.plugins.find(row=>row.extensionId===entry.id);
+  await extensions.saveProject(a,'p1',{expectedRevision:desired.revision,selections:desired.selections.map(row=>({installationId:row.installationId,enabled:true,settings:pin.settings,connectionRefs:pin.connectionRefs}))});
+  const completed=path.join(root,'completed-rollback-research.txt');await fs.writeFile(completed,'preserved completed research');
+  await manager.assertExtensionPromptGeneration(project,{mode:'queue'});
+  const identity=await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read');assert.equal(identity.extensionGenerationHash,good.reference.generationHash);
+  assert.equal(await fs.readFile(completed,'utf8'),'preserved completed research');manager.runtimes.clear();
+});
+test('rolled-back old tools refuse current disable, changed configuration or changed installation actor even before reconciliation',options,async()=>{
+  const project={id:'p1',userId:a.id},good=(await service.current(project)).payload.effective,pin=good.projection.plugins.find(row=>row.extensionId===entry.id);
+  const manager=rollbackManager(project,good);
+  const update=async(user,rows)=>{const desired=await extensions.project(user,'p1');return extensions.saveProject(user,'p1',{expectedRevision:desired.revision,selections:rows});};
+  const original=(await extensions.project(a,'p1')).selections.map(row=>({installationId:row.installationId,enabled:true,settings:pin.settings,connectionRefs:pin.connectionRefs}));
+  await update(a,original.map(row=>({...row,enabled:false})));
+  await manager.assertExtensionPromptGeneration(project,{mode:'queue'});
+  await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});
+  await update(a,original.map(row=>({...row,settings:{rows:pin.settings.rows+1}})));
+  await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_contract_invalid'});
+  const installed=await extensions.install(lead,{coordinate:entry.coordinate,scope:'project',projectId:'p1',idempotencyKey:'rollback-other-installer'});
+  await db.query("UPDATE evimed_product.jobs SET run_after='1970-01-01'::timestamptz WHERE id=$1",[installed.job.id]);const prepared=await extensions.jobs.claim(['extension-prepare'],'rollback-preparer');
+  assert.equal(prepared.id,installed.job.id);await extensions.jobs.finish(lead.id,prepared.id,prepared.leaseToken,{installationId:installed.installation.id,installationRevision:1,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,qualified:false});
+  await update(lead,[{installationId:installed.installation.id,enabled:true,settings:pin.settings,connectionRefs:[]}]);
+  await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});
+  await update(a,original);assert.equal((await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read')).extensionGenerationHash,good.reference.generationHash);
+  proofEnabled=false;await manager.assertExtensionPromptGeneration(project,{mode:'queue'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'));proofEnabled=true;
+  connectionAllowed=false;await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});connectionAllowed=true;
+  manager.runtimes.clear();
+});
+test('current selection authority remains locked through the supplied operation transaction while a disable waits',options,async()=>{
+  const other=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:2,databaseConnectionTimeoutMs:1000}),id=extensions.projectDocumentId('p1');let release;
+  const held=new Promise(resolve=>{release=resolve;});let ready;const admitted=new Promise(resolve=>{ready=resolve;});let changed=false,update;
+  await other.migrate();const admission=db.transaction(client=>db.withTransactionClient(client,async()=>{await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read');ready();await held;}));
+  try{
+    await admitted;
+    const writer=await other.pool.connect();try{
+      const pid=(await writer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      update=writer.query("UPDATE evimed_product.documents SET payload=jsonb_set(payload,'{selections,0,enabled}','false'::jsonb) WHERE user_id=$1 AND kind='extension-defaults' AND id=$2",[a.id,id]).then(()=>{changed=true;});
+      let blocked=false;for(let i=0;i<30;i++){blocked=(await other.query('SELECT cardinality(pg_blocking_pids($1))>0 AS blocked',[pid])).rows[0].blocked;if(blocked)break;await new Promise(resolve=>setTimeout(resolve,10));}
+      assert.equal(blocked,true,'the actual selection update must wait on the held admission row lock');assert.equal(changed,false);release();await admission;await update;
+    }finally{release();await admission;await update?.catch(()=>{});writer.release();}
+    await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});
+  }finally{release();await admission;await other.close();const desired=await extensions.project(a,'p1');await extensions.saveProject(a,'p1',{expectedRevision:desired.revision,selections:desired.selections.map(row=>({installationId:row.installationId,enabled:true,settings:row.settings,connectionRefs:row.connectionRefs}))});}
+});
+test('rollback availability refuses stale runtime, source, personal state, account or nonterminal phase without borrowing old authority',options,async()=>{
+  const project={id:'p1',userId:a.id},state=await service.current(project),good=state.payload.effective,manager=rollbackManager(project,good);
+  manager.runtimes.get(manager.key(project)).modelGatewayTokenJti='another-runtime';await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});manager.runtimes.get(manager.key(project)).modelGatewayTokenJti='fixture-runtime';
+  const adapter=identities.adapterRevision;identities.adapterRevision=d('different-source');await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});identities.adapterRevision=adapter;
+  const personalId='personal-skills:project:p1';await service.documents.put(a.id,'extension-generation',personalId,{effective:{reference:null,pins:[{skillId:'changed-private-instructions',revision:1,digest:d('changed-private-instructions')}]},desired:null},{expectedRevision:0,projectId:project.id});await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await db.query("DELETE FROM evimed_product.revisions WHERE user_id=$1 AND kind='extension-generation' AND id=$2",[a.id,personalId]);await db.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND kind='extension-generation' AND id=$2",[a.id,personalId]);
+  const account=(await db.query('SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1',[a.id])).rows[0].epoch;
+  await db.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1",[a.id]);await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'));await db.query('UPDATE evimed_control.users SET created_at=$2::timestamptz WHERE id=$1',[a.id,account]);
+  let saved=await service.current(project);await service.documents.put(a.id,'extension-generation',saved.id,{...saved.payload,phase:'waiting'},{expectedRevision:saved.revision,projectId:project.id});await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});saved=await service.current(project);await service.documents.put(a.id,'extension-generation',saved.id,state.payload,{expectedRevision:saved.revision,projectId:project.id});
+  saved=await service.current(project);await service.documents.put(a.id,'extension-generation',saved.id,{...saved.payload,lastGood:saved.payload.desired},{expectedRevision:saved.revision,projectId:project.id});await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});saved=await service.current(project);await service.documents.put(a.id,'extension-generation',saved.id,state.payload,{expectedRevision:saved.revision,projectId:project.id});
+  const projection=path.join(extensionGenerationRoot(service.config,good.reference),'selected','projection.json'),bytes=await fs.readFile(projection);await fs.chmod(projection,0o600);await fs.writeFile(projection,'{"tampered":true}');await fs.chmod(projection,0o444);await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'));await fs.chmod(projection,0o600);await fs.writeFile(projection,bytes);await fs.chmod(projection,0o444);
+  await manager.assertExtensionPromptGeneration(project);manager.runtimes.clear();
+});
+test('revoking the real lead who configured a rolled-back generation leaves owner research available without retaining that installer authority',options,async()=>{
+  const project={id:'p1',userId:a.id},before=await extensions.project(a,'p1'),original=before.selections.map(row=>({installationId:row.installationId,enabled:true,settings:row.settings,connectionRefs:row.connectionRefs}));
+  const installed=await extensions.install(lead,{coordinate:entry.coordinate,scope:'project',projectId:'p1',idempotencyKey:'rollback-revoked-lead'});
+  await db.query("UPDATE evimed_product.jobs SET run_after='1970-01-01'::timestamptz WHERE id=$1",[installed.job.id]);const prepared=await extensions.jobs.claim(['extension-prepare'],'rollback-lead-preparer');assert.equal(prepared.id,installed.job.id);
+  await extensions.jobs.finish(lead.id,prepared.id,prepared.leaseToken,{installationId:installed.installation.id,installationRevision:installed.installation.revision,integrity:entry.integrity,artifactDigest:artifact.artifactDigest,qualified:false});
+  let selected=await extensions.project(lead,'p1');selected=await extensions.saveProject(lead,'p1',{expectedRevision:selected.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{rows:9},connectionRefs:[]}]});let state=await service.reconcile(lead,'p1',{expectedRevision:selected.revision});await worker.runClaimed(await claim(state));const good=(await service.current(project)).payload.effective;assert.equal(good.scope.actorId,lead.id);
+  selected=await extensions.saveProject(lead,'p1',{expectedRevision:selected.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{rows:10},connectionRefs:[]}]});state=await service.reconcile(lead,'p1',{expectedRevision:selected.revision});runtime.probeGeneration=async(_project,candidate)=>{if(candidate.reference?.generationHash!==good.reference.generationHash)throw Object.assign(new Error('Fixture refusal'),{code:'plugin_apply_failed'});return runtimeProof(candidate);};await worker.runClaimed(await claim(state));runtime.probeGeneration=async(_project,candidate)=>runtimeProof(candidate);
+  assert.equal((await service.current(project)).payload.phase,'rolled-back');await members.removeMember({studyId:study.id,userId:lead.id,role:'lead'});
+  const manager=rollbackManager(project,good);await manager.assertExtensionPromptGeneration(project);await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'project_not_found',status:404});manager.runtimes.clear();
+  await members.addMember({studyId:study.id,userId:lead.id,role:'lead'});selected=await extensions.project(a,'p1');await extensions.saveProject(a,'p1',{expectedRevision:selected.revision,selections:original});state=await service.reconcile(a,'p1',{expectedRevision:(await extensions.project(a,'p1')).revision});await worker.runClaimed(await claim(state));
+});
+test('an already admitted unchanged document operation retains its proven runtime pin while a no-op update waits',options,async()=>{
+  const project={id:'p1',userId:a.id},before=await service.current(project),good=before.payload.effective,desired=await extensions.project(a,'p1');
+  const changed=await extensions.saveProject(a,'p1',{expectedRevision:desired.revision,selections:desired.selections.map(row=>({installationId:row.installationId,enabled:row.enabled,settings:row.settings,connectionRefs:row.connectionRefs}))});const state=await service.reconcile(a,'p1',{expectedRevision:changed.revision});assert.equal(state.payload.phase,'waiting');assert.equal(state.payload.runtimeGeneration,'fixture-runtime');
+  const accepted=await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read');assert.equal(accepted.extensionGenerationHash,good.reference.generationHash);assert.notEqual(accepted.extensionGenerationHash,state.payload.desired.reference.generationHash);
+  const manager=rollbackManager(project,good);await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});manager.runtimes.clear();
+  const pending=await claim(state);kernelBusy=true;await worker.runClaimed(pending);kernelBusy=false;await service.jobs.cancel(a.id,pending.id);
+});
 test('the execution caller cannot borrow the installer connection and a revoked real lead cannot apply a queued generation',options,async()=>{
   await assert.rejects(service.operationIdentity(viewer,'p1',entry.id,'fixture-runtime','doc_read'),{status:403});
   const selected=await extensions.project(lead,'p1');const state=await service.reconcile(lead,'p1',{expectedRevision:selected.revision});
@@ -77,6 +160,8 @@ test('the execution caller cannot borrow the installer connection and a revoked 
   await members.removeMember({studyId:study.id,userId:lead.id,role:'lead'});
   await members.addMember({studyId:study.id,userId:lead.id,role:'lead'});
   const original=current;await worker.runClaimed(job);assert.equal((await service.jobs.get(a.id,job.id)).status,'failed');assert.equal(current,original);
+  const project={id:'p1',userId:a.id},terminal=await service.current(project);assert.equal(terminal.payload.phase,'failed');assert.equal(terminal.payload.terminalApplyFailure.jobId,job.id);assert.equal(terminal.payload.terminalApplyFailure.preservedRuntime,true);assert.equal(terminal.payload.effective.reference.generationHash,original.reference.generationHash);
+  const manager=rollbackManager(project,original);await manager.assertExtensionPromptGeneration(project);assert.equal((await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read')).extensionGenerationHash,original.reference.generationHash);manager.runtimes.clear();
   const renewed=await service.reconcile(lead,'p1',{expectedRevision:selected.revision});assert.notEqual(renewed.payload.desired.scope.actorMembershipEpoch,job.payload.actorMembershipEpoch);
   await members.addMember({studyId:study.id,userId:lead.id,role:'lead'});
 });
@@ -93,7 +178,7 @@ test('durable prompt admissions and ledger work defer the same exclusive apply w
 });
 test('a canceled lease or changed management authority cannot perform a runtime replacement',options,async()=>{
   const desired=await extensions.project(a,'p1');let changed=await extensions.saveProject(a,'p1',{expectedRevision:desired.revision,selections:desired.selections.map(row=>({installationId:row.installationId,enabled:true,settings:{rows:19},connectionRefs:['connection-A']}))});let state=await service.reconcile(a,'p1',{expectedRevision:changed.revision});let called=0;const replace=runtime.replaceGeneration;runtime.replaceGeneration=async(...args)=>{called++;return replace(...args);};
-  const canceled=await claim(state);await service.jobs.cancel(a.id,canceled.id);assert.equal(await worker.runClaimed(canceled),null);assert.equal(called,0);
+  const canceled=await claim(state);await service.jobs.cancel(a.id,canceled.id);const beforeCancel=await service.current({id:'p1',userId:a.id});assert.equal(await worker.runClaimed(canceled),null);assert.equal(called,0);const afterCancel=await service.current({id:'p1',userId:a.id});assert.equal(afterCancel.revision,beforeCancel.revision);assert.deepEqual(afterCancel.payload,beforeCancel.payload);
   changed=await extensions.saveProject(a,'p1',{expectedRevision:changed.revision,selections:desired.selections.map(row=>({installationId:row.installationId,enabled:true,settings:{rows:21},connectionRefs:['connection-A']}))});state=await service.reconcile(a,'p1',{expectedRevision:changed.revision});denied=true;assert.equal((await worker.runClaimed(await claim(state))).status,'failed');assert.equal(called,0);denied=false;runtime.replaceGeneration=replace;
 });
 test('a proven personal-state revision change supersedes an extension candidate on the shared project fence',options,async()=>{
