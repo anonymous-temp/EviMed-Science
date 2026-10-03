@@ -769,6 +769,15 @@ an explicit derivation record. Admit storage separately for `/data/docker` and
 root-disk `/var/lib/containerd`, retaining at least 5 GiB on each filesystem
 plus the applicable blob, snapshot, temporary archive, and growth reserves.
 
+A full-release CI run also uploads `evimed-web-bundle-<sha>`: the Web image's
+`/app` as `app.tar.gz` with its checksum and `web-bundle.json` (release
+identity, image id and layer ids), about 40 MB. A release that changes only the
+control plane needs nothing else on this host: unpack it into the new release
+directory and keep the runtime image already loaded, recording that the two
+identities differ. The core subset is still what carries a new runtime image;
+loaded from `docker save` it occupies about twice its uncompressed size in
+containerd, so check `/` before loading it.
+
 Preserve the deployed pnpm closure and relative links. The known self-link
 `apps/server/node_modules/.pnpm/node_modules/@ai4s/server` needs only its exact
 host relocation from `../../../../../app/apps/server` to `../../../..`;

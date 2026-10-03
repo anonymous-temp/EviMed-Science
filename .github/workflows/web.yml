@@ -1496,6 +1496,54 @@ jobs:
           compression-level: 0
           retention-days: 3
 
+      # A plain-Node pilot runs the API from the web image's /app copied out, and
+      # a release that changes only the control plane needs nothing else. Alone
+      # it is about 40 MB; inside the core subset it sits behind 1.6 GB that a
+      # slow link has to fetch and a small disk has to load to reach it.
+      - name: Export the web application closure for plain-Node pilots
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/evimed-web-bundle"
+          mkdir -p "$out"
+          container="$(docker create "$OPEN_SCIENCE_WEB_CONTAINER_IMAGE" true)"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$container:/app" - | gzip -6 > "$out/app.tar.gz"
+          gzip -t "$out/app.tar.gz"
+          docker image inspect "$OPEN_SCIENCE_WEB_CONTAINER_IMAGE" > "$out/web-image.json"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const out = path.join(process.env.RUNNER_TEMP, 'evimed-web-bundle');
+          const [image] = JSON.parse(fs.readFileSync(path.join(out, 'web-image.json'), 'utf8'));
+          assert.equal(image.Config.Labels['org.opencontainers.image.revision'], process.env.OPEN_SCIENCE_SOURCE_REVISION);
+          assert.equal(image.Config.Labels['org.opencontainers.image.version'], process.env.OPEN_SCIENCE_RELEASE_ID);
+          assert.equal(`${image.Os}/${image.Architecture}`, 'linux/amd64');
+          const release = Object.fromEntries((image.Config.Env ?? []).map(pair => pair.split(/=(.*)/s).slice(0, 2))
+            .filter(([key]) => ['OPEN_SCIENCE_APP_VERSION', 'OPEN_SCIENCE_RELEASE_ID', 'OPEN_SCIENCE_SOURCE_REVISION', 'OPEN_SCIENCE_BUILD_CREATED'].includes(key)));
+          assert.equal(Object.keys(release).length, 4);
+          fs.writeFileSync(path.join(out, 'web-bundle.json'), JSON.stringify({ schemaVersion: 1, scope: 'web-application-closure',
+            sourceRevision: process.env.OPEN_SCIENCE_SOURCE_REVISION, releaseId: process.env.OPEN_SCIENCE_RELEASE_ID,
+            workflowRun: process.env.GITHUB_RUN_ID, workflowAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            webImage: { reference: process.env.OPEN_SCIENCE_WEB_CONTAINER_IMAGE, imageId: image.Id, diffIds: image.RootFS.Layers },
+            release, root: 'app', node: image.Config.Env.find(pair => pair.startsWith('NODE_VERSION='))?.slice('NODE_VERSION='.length) ?? null,
+          }, null, 2) + '\n');
+          fs.rmSync(path.join(out, 'web-image.json'));
+          JS
+          (cd "$out" && sha256sum app.tar.gz > app.tar.gz.sha256)
+          ls -l "$out"
+
+      - name: Upload the web application closure
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-web-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-web-bundle/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
       - name: Print Compose logs on failure
         if: failure()
         run: >-
