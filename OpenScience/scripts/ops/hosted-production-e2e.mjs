@@ -223,7 +223,9 @@ async function main() {
     const project = await jsonFetch(`${base}/api/projects`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
-      body: JSON.stringify({ id: projectId, name: `Hosted production E2E ${marker}` }),
+      // One line of at most 40 characters (store.mjs `maxProjectName`): the
+      // 24-character marker after the longer label was 46, a 400 since 2026-09-18.
+      body: JSON.stringify({ id: projectId, name: `Hosted E2E ${marker}` }),
     });
     if (project.body?.data?.id !== projectId) throw failure("hosted_e2e_project_invalid", "Project creation returned the wrong identity.");
     projectCreated = true;
