@@ -8,6 +8,9 @@ import { HttpError } from './security.mjs';
 const purpose = 'evimed-extension-accepted-actor-v1\0';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const denied = () => new HttpError(403, 'extension_access_denied', 'The accepted caller is unavailable.');
+// These exact platform producers are normalized from trusted native session events.
+// Unknown sources and every RPC-correlated input remain caller boundaries.
+const platformContextSources = new Set(['runtime-context', 'plugin:evimed-run-policy', 'skill-catalog']);
 
 /** Actual authenticated prompt admission owns these derived records. An
  * owner-scoped runtime token, imported data or native lineage cannot mint one.
@@ -53,8 +56,10 @@ export class ExtensionActorBindings {
    * @param {any} auth @param {any} invocation @param {any} message @param {any} transcript */
   async resolve(auth, invocation, message, transcript) {
     const inputs = (transcript.messages ?? []).filter(item => item.role === 'user'
+      && !(platformContextSources.has(item.source) && item.sourceRequestId === null)
       && item.seq <= message.seq && item.turnStartSeq === message.turnStartSeq).sort((a, b) => b.seq - a.seq);
-    // A later input without a binding cannot borrow an earlier caller's record.
+    // Platform context is not a new caller. A later genuine or unknown input
+    // without a binding still cannot borrow an earlier caller's record.
     for (const input of inputs.slice(0, 1)) {
       if (typeof input.sourceRequestId !== 'string') return null;
       const row = await this.documents.get(auth.userId, 'extension-resource', this.id(auth.runtimeGeneration, invocation.sessionId, input.sourceRequestId));

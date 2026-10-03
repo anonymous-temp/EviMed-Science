@@ -26,6 +26,33 @@ test('actual actor records bind accepted input/current epochs and cannot borrow 
       const message = { seq: 4, turnStartSeq: 1 }, transcript = { messages: [{ role: 'user', seq: 2, turnStartSeq: 1, sourceRequestId: 'input-one' }] };
       assert.deepEqual(await bindings.resolve(auth, invocation, message, transcript), first);
       assert.equal(await bindings.resolve({ ...auth, userId: 'bob' }, invocation, message, transcript), null);
+      // The real final-runtime trace contains these four same-turn user events:
+      // accepted input, runtime context, platform run policy, skill catalogue.
+      const nativeMessage = { seq: 12, turnStartSeq: 4 }, nativeTranscript = { messages: [
+        { role: 'user', seq: 8, turnStartSeq: 4, source: 'user', sourceRequestId: 'input-one' },
+        { role: 'user', seq: 9, turnStartSeq: 4, source: 'runtime-context', sourceRequestId: null },
+        { role: 'user', seq: 10, turnStartSeq: 4, source: 'plugin:evimed-run-policy', sourceRequestId: null },
+        { role: 'user', seq: 11, turnStartSeq: 4, source: 'skill-catalog', sourceRequestId: null },
+      ] };
+      assert.deepEqual(await bindings.resolve(auth, invocation, nativeMessage, nativeTranscript), first);
+      assert.equal(await bindings.resolve({ ...auth, userId: 'bob' }, invocation, nativeMessage, nativeTranscript), null);
+      assert.equal(await bindings.resolve(auth, { sessionId: 'foreign-session' }, nativeMessage, nativeTranscript), null);
+      assert.equal(await bindings.resolve({ ...auth, runtimeGeneration: 'foreign-generation' }, invocation, nativeMessage, nativeTranscript), null);
+      for (const later of [
+        { source: 'user', sourceRequestId: null }, { source: undefined, sourceRequestId: null },
+        { source: 'skill-catalog', sourceRequestId: undefined },
+        { source: 'plugin:unknown', sourceRequestId: null }, { source: 'plugin', sourceRequestId: null },
+        { source: 'skill-catalog', sourceRequestId: 'unbound-real-rpc' },
+        { source: 'runtime-context', sourceRequestId: 'unbound-real-rpc' },
+        { source: 'plugin:evimed-run-policy', sourceRequestId: 'unbound-real-rpc' },
+      ]) {
+        const laterInput = { role: 'user', seq: 12, turnStartSeq: 4, ...later };
+        assert.equal(await bindings.resolve(auth, invocation, { seq: 14, turnStartSeq: 4 }, { messages: [...nativeTranscript.messages, laterInput,
+          { role: 'user', seq: 13, turnStartSeq: 4, source: 'skill-catalog', sourceRequestId: null },
+        ] }), null);
+      }
+      assert.equal(await bindings.resolve(auth, invocation, { seq: 12, turnStartSeq: 5 }, nativeTranscript), null);
+
       transcript.messages.push({ role: 'user', seq: 3, turnStartSeq: 1, sourceRequestId: 'unbound-later-input' });
       assert.equal(await bindings.resolve(auth, invocation, message, transcript), null);
       transcript.messages.pop();
