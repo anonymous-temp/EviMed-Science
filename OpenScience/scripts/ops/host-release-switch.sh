@@ -107,7 +107,7 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:-$(env -u COMPOSE_PROFILES node --en
 backup_state=ok
 finish() {
   if [ "$backup_state" != ok ]; then
-    echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE BACKUP IS UNHEALTHY (${backup_state}): fix it before the next backup window (docs/WEB_OPERATIONS_RUNBOOK.md, \"Evidence and Recovery\") ==="
+    echo "=== RELEASE ${EXPECTED_RELEASE_ID} IS LIVE, BUT THE BACKUP IS UNHEALTHY (${backup_state}): fix it before the next backup window (docs/WEB_OPERATIONS_RUNBOOK.md, \"Evidence and Recovery\") ==="
     exit 1
   fi
   exit "$1"
@@ -115,6 +115,17 @@ finish() {
 
 [ -f "${REL}/OpenScience/deploy/web/release-manifest.json" ] || { echo "no release manifest under ${REL}; generate it first"; exit 1; }
 [ -f "$OVERRIDE" ] || { echo "no compose override at ${OVERRIDE}"; exit 1; }
+
+# A prepared artifact's immutable release identity need not name its staging
+# directory. Refuse disagreement before shared configuration or current moves.
+EXPECTED_RELEASE_ID=$(env -u OPEN_SCIENCE_RELEASE_ID node --env-file="${REL}/OpenScience/deploy/web/.env" -e '
+  const fs = require("node:fs");
+  const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const id = manifest.app?.releaseId;
+  if (typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id)
+    || id !== process.env.OPEN_SCIENCE_RELEASE_ID) throw new Error("release_identity_mismatch");
+  process.stdout.write(id);
+' "${REL}/OpenScience/deploy/web/release-manifest.json")
 
 # Validate the optional executor before moving current or changing host state.
 RESULT_REPLAY=$(node --env-file="${REL}/OpenScience/deploy/web/.env" --input-type=module -e '
@@ -276,10 +287,10 @@ if [ "$alert_config_changed" -eq 1 ] && ! printf '%s\n' "${changed[@]:-}" | grep
   fi
 fi
 
-echo "=== mint the release receipt once web serves evimed-${NEW}-1 ==="
+echo "=== mint the release receipt once web serves ${EXPECTED_RELEASE_ID} ==="
 web_healthy=0
 for _ in $(seq 1 60); do
-  if docker exec "$WEB_CONTAINER" node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>r.ok?r.json():Promise.reject()).then(j=>process.exit(j.data&&j.data.releaseId==='evimed-${NEW}-1'?0:1)).catch(()=>process.exit(1))"; then web_healthy=1; break; fi
+  if docker exec "$WEB_CONTAINER" node -e 'fetch("http://127.0.0.1:8787/api/health").then(r=>r.ok?r.json():Promise.reject()).then(j=>process.exit(j.data&&j.data.releaseId===process.argv[1]?0:1)).catch(()=>process.exit(1))' "$EXPECTED_RELEASE_ID"; then web_healthy=1; break; fi
   sleep 5
 done
 [ "$web_healthy" = 1 ] || { echo "new release did not become healthy; keeping maintenance and old releases"; exit 1; }
@@ -317,7 +328,7 @@ if [ -n "$MAINTENANCE_REQUEST_ID" ]; then
       });
       const body = await response.json();
       if (!response.ok || body.data?.state !== "open" || body.data?.lease !== null) process.exit(1);
-    })().catch(() => process.exit(1));' "$MAINTENANCE_REQUEST_ID" "evimed-${NEW}-1" || { echo "maintenance lease release failed; receipt was not minted"; exit 1; }
+    })().catch(() => process.exit(1));' "$MAINTENANCE_REQUEST_ID" "$EXPECTED_RELEASE_ID" || { echo "maintenance lease release failed; receipt was not minted"; exit 1; }
 fi
 # The receipt scheduler mints immediately when it starts. Recreate it only
 # after admission resumes, not with the initial batch of changed services.
@@ -406,7 +417,7 @@ if [ "$PRUNE" -eq 1 ]; then
     [ -d "${ROOT}/releases/${rev}" ] || { rm -rf -- "$ops"; echo "removed ${ops}"; }
   done
 fi
-echo "=== switched to evimed-${NEW}-1 ==="
+echo "=== switched to ${EXPECTED_RELEASE_ID} ==="
 
 # The post-release walk of the live pages (item 9), as the account
 # `shared/ui-walk.env` names, in a throwaway container of the release's own
@@ -423,7 +434,7 @@ if [ ! -f "$WALK_ENV" ]; then
 fi
 echo "=== walk the live pages ==="
 walk_password=$(sed -n 's/^OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE=//p' "$WALK_ENV")
-[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; evimed-${NEW}-1 is live"; finish 1; }
+[ -f "$walk_password" ] || { echo "UI WALK NOT RUN: OPEN_SCIENCE_WALK_PASSWORD_HOST_FILE in ${WALK_ENV} names no file; ${EXPECTED_RELEASE_ID} is live"; finish 1; }
 walk_image=$(docker exec "$WEB_CONTAINER" printenv OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE)
 walk_out="${ROOT}/shared/ui-walk/${NEW}"
 mkdir -p "$walk_out"
@@ -439,7 +450,7 @@ walked=$?
 set -e
 case "$walked" in
   0) echo "=== UI walk passed; report in ${walk_out} ===" ;;
-  1) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK FAILED: the FAIL lines above name each page; report and screenshots in ${walk_out} ==="; finish 1 ;;
-  *) echo "=== RELEASE evimed-${NEW}-1 IS LIVE, BUT THE UI WALK COULD NOT RUN (exit ${walked}); nothing was judged ==="; finish 1 ;;
+  1) echo "=== RELEASE ${EXPECTED_RELEASE_ID} IS LIVE, BUT THE UI WALK FAILED: the FAIL lines above name each page; report and screenshots in ${walk_out} ==="; finish 1 ;;
+  *) echo "=== RELEASE ${EXPECTED_RELEASE_ID} IS LIVE, BUT THE UI WALK COULD NOT RUN (exit ${walked}); nothing was judged ==="; finish 1 ;;
 esac
 finish 0

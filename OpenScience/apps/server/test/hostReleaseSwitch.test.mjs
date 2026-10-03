@@ -137,7 +137,12 @@ if (command === "exec") {
     });
     out(result.stdout ?? ""); process.stderr.write(result.stderr ?? ""); process.exit(result.status ?? 1);
   }
-  if (script.includes("/api/health")) process.exit(state.healthExit ?? 0);
+  if (script.includes("/api/health")) {
+    if (state.healthExit) process.exit(state.healthExit);
+    const bootstrap = "global.fetch=async()=>({ok:true,json:async()=>({data:{releaseId:" + JSON.stringify(state.releaseId) + "}})});";
+    const result=require("node:child_process").spawnSync(process.execPath,["-e",bootstrap+rest[2],...rest.slice(3)]);
+    process.exit(result.status ?? 1);
+  }
   process.exit(1);
 }
 if (command === "run" && flag("--entrypoint") === "sh") {
@@ -158,7 +163,7 @@ process.exit(2);
 `;
 
 /** A host with one built release, a live stack and a docker that is a script. */
-async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false } = {}) {
+async function host({ restartDoesNotHelp = false, imageDigestMatches = true, walkExit = undefined, ready = undefined, managedBrowser = false, releaseId = `evimed-${NEW}-1` } = {}) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "release-switch-"));
   const rel = path.join(root, "releases", NEW, "OpenScience");
   const web = path.join(rel, "deploy/web");
@@ -169,10 +174,10 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
   }
   const skill = { name: "core", source: "runtime/skills/core", files: 25, digest: "sha256:recorded" };
   await writeFile(path.join(web, "release-manifest.json"), JSON.stringify({
-    app: { releaseId: `evimed-${NEW}-1` }, source: { revision: NEW },
+    app: { releaseId }, source: { revision: NEW },
     runtime: { image: `open-science-runtime:x-${NEW}` }, skills: [skill],
   }));
-  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
+  await writeFile(path.join(web, ".env"), `OPEN_SCIENCE_RELEASE_ID=${releaseId}\nOPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_MANAGED_BROWSER_ENABLED=${managedBrowser}\n`);
   await writeFile(path.join(web, "monitoring/open-science.rules.json"), "{}\n");
   await mkdir(path.join(root, "shared", `ops-source-${NEW}`), { recursive: true });
   await writeFile(path.join(root, "shared", `ops-source-${NEW}`, "compose.builtin.override.yml"), "services: {}\n");
@@ -189,6 +194,7 @@ async function host({ restartDoesNotHelp = false, imageDigestMatches = true, wal
     manifestFile: path.join(web, "release-manifest.json"),
     revision: NEW,
     runtimeImage: `open-science-runtime:x-${NEW}`,
+    releaseId,
     restartDoesNotHelp,
     walkExit,
     // The readiness line the switch's probe prints (`<ok|notok> <checks> <failing but backup> backup=<code>`).
@@ -560,7 +566,7 @@ test("release switch includes the isolated replay overlay only for a configured 
   const { root, rel } = await host();
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = path.join(rel, "deploy/web/.env");
-  await writeFile(env, "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:revision\n");
+  await writeFile(env, `OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1\n` + "OPEN_SCIENCE_PUBLIC_HEALTH_URL=https://evimed.example.org/api/health\nOPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=evimed-result-replay:revision\n");
   const result = await runSwitch(root, ["--no-prune"]);
   assert.equal(result.code, 0, result.stderr);
   const log = await readFile(path.join(root, "docker.log"), "utf8");
@@ -570,7 +576,7 @@ test("release switch includes the isolated replay overlay only for a configured 
 test("release switch rejects a replay URL outside its internal network before moving current", async (t) => {
   const { root, rel } = await host();
   t.after(() => rm(root, { recursive: true, force: true }));
-  await writeFile(path.join(rel, "deploy/web/.env"), "OPEN_SCIENCE_RESULT_ENGINE_URL=http://outside:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=replay:revision\n");
+  await writeFile(path.join(rel, "deploy/web/.env"), `OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1\n` + "OPEN_SCIENCE_RESULT_ENGINE_URL=http://outside:8031\nOPEN_SCIENCE_RESULT_REPLAY_IMAGE=replay:revision\n");
   const result = await runSwitch(root, ["--no-prune"]);
   assert.notEqual(result.code, 0);
   await assert.rejects(realpath(path.join(root, "current")));
@@ -586,4 +592,16 @@ test("the enabled managed browser overlay follows private overrides in the actua
     assert(compose);
     assert(compose.indexOf("docker-compose.browser.yml") > compose.indexOf("compose.builtin.override.yml"));
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("custom immutable manifest identity governs health and owned maintenance release",{skip},async()=>{
+ const releaseId="evimed-0d936480f496-assessment",{root}=await host({releaseId});try{
+ const file=path.join(root,"docker-state.json"),state=JSON.parse(await readFile(file,"utf8"));state.maintenanceStatus=await maintenanceResponse("custom-source-release");await writeFile(file,JSON.stringify(state));
+ const result=await runSwitch(root,["--no-prune","--maintenance-request-id=custom-source-release"]);assert.equal(result.code,0,result.stdout+result.stderr);assert.match(result.stdout,/web serves evimed-0d936480f496-assessment/);assert.equal(JSON.parse(await readFile(file,"utf8")).releasedMaintenance,"custom-source-release");
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test("manifest versus env identity mismatch refuses before current or shared configuration changes",{skip},async()=>{
+ const {root,rel}=await host();try{const env=path.join(rel,"deploy/web/.env");await writeFile(env,(await readFile(env,"utf8")).replace(`OPEN_SCIENCE_RELEASE_ID=evimed-${NEW}-1`,`OPEN_SCIENCE_RELEASE_ID=foreign-release`));const result=await runSwitch(root,["--no-prune"]);assert.notEqual(result.code,0);await assert.rejects(realpath(path.join(root,"current")));assert.doesNotMatch(result.stdout,/probe targets follow|current ->/);}finally{await rm(root,{recursive:true,force:true});}
 });
