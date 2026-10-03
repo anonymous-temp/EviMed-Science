@@ -313,6 +313,20 @@ export async function campaignGenerationReady(app,project){
  }
  return null;
 }
+/** Inspect only after the real invocation resolver has refused; diagnostic reads cannot turn that refusal into admission. */
+export function observeCampaignInvocationRefusal(app,project,record){
+ const service=app.hostedExtensions.operations,original=service.resolveInvocation;let count=0;
+ service.resolveInvocation=async function(...args){try{return await original.apply(this,args);}catch(error){
+  if(count++<8)try{const [auth,raw,request]=args,invocation=typeof raw==='string'?JSON.parse(raw):raw,evidence={...safeCampaignFailureDetails(error),snapshotTiming:'after-original-refusal',authMatchesOwnedProject:auth.userId===project.userId&&auth.projectId===project.id,rootCallMatches:invocation?.rootCallId===invocation?.callId,agentMatchesSession:invocation?.agentId===invocation?.sessionId,generationMatches:invocation?.runtimeGeneration===auth.runtimeGeneration,toolMatches:invocation?.toolName===request.operation};
+   if(evidence.authMatchesOwnedProject&&typeof invocation?.sessionId==='string'){
+    const facts=await app.runtimeManager.extensionInvocationFacts(project,invocation.sessionId),transcript=await app.runtimeManager.sessionTranscript(project,invocation.sessionId,{wake:false}),matches=(transcript.messages??[]).flatMap(message=>(message.parts??[]).filter(part=>part.type==='tool'&&part.callId===invocation.callId).map(part=>({message,part}))),turn=transcript.turns?.at(-1),match=matches[0];
+    evidence.nativeFacts={running:facts.running,origin:facts.origin,toolPermitted:facts.tools?.includes(invocation.toolName),generationMatches:facts.runtimeGeneration===auth.runtimeGeneration};evidence.callMatches=matches.length;evidence.pending=match?.part.status==='pending';evidence.nativeToolMatches=match?.part.tool===invocation.toolName;evidence.turnOpen=turn?.end===null;evidence.turnMatches=match?.message.turnStartSeq===turn?.startSeq;evidence.transcriptTruncated=transcript.truncated===true;
+    if(match){const input=match.part.input,users=(transcript.messages??[]).filter(message=>message.role==='user'&&message.seq<=match.message.seq&&message.turnStartSeq===match.message.turnStartSeq).sort((a,b)=>b.seq-a.seq);const inputKeys=input&&typeof input==='object'?Object.keys(input):[],schemaKeys=['resourceId','options','targetId','format','spec','operation'];evidence.nativeInputFields=inputKeys.filter(key=>schemaKeys.includes(key)).sort();evidence.nativeInputTotalCount=inputKeys.length;evidence.nativeInputUnknownCount=inputKeys.filter(key=>!schemaKeys.includes(key)).length;evidence.requestDigestMatches=digest(canonicalJson({operation:invocation.toolName,...input}))===digest(canonicalJson(request));evidence.userInputCount=users.length;evidence.sourceRequestIdPresent=typeof users[0]?.sourceRequestId==='string';evidence.actorResolved=Boolean(await app.hostedExtensions.actors.resolve(auth,invocation,match.message,transcript));}
+   }
+   await record(evidence);
+  }catch{ /* The original authority refusal retains precedence over any diagnostic failure. */ }throw error;}};
+ return()=>{service.resolveInvocation=original;};
+}
 /** Do not wait for nonexistent tool jobs after an actual native run has already failed. */
 export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt){
  if(typeof sessionId!=='string'||!sessionId||sessionId.length>200)throw new Error('real_generation_campaign_required');
@@ -324,7 +338,7 @@ export async function campaignDocumentJobs(app,project,runId,sessionId,startedAt
 }
 /** Native error DTO only; no prompt, provider message, profile or token text enters diagnostics. */
 export function campaignNativeFailureFacts(transcript){
- const errors=(transcript?.messages??[]).flatMap(message=>[message?.info?.error,...(message.parts??[]).filter(part=>part.type==='error').map(part=>part.error??part)]).filter(Boolean).slice(0,8);
+ const errors=(transcript?.messages??[]).flatMap(message=>[message?.info?.error,...(message.parts??[]).filter(part=>part.type==='error'||part.type==='tool'&&part.status!=='completed'&&part.status!=='pending').map(part=>part.error??part.state?.error??part)]).filter(Boolean).slice(0,8);
  return errors.map(error=>({code:typeof error.code==='string'&&/^[A-Za-z][A-Za-z0-9_.:-]{0,99}$/.test(error.code)?error.code:null,subCode:typeof error.subCode==='string'&&/^[A-Za-z][A-Za-z0-9_.:-]{0,99}$/.test(error.subCode)?error.subCode:null,type:['Error','TypeError','LlmError','APIError','HttpError','network','model','runtime'].includes(error.type??error.name)?error.type??error.name:'unknown',status:Number.isSafeInteger(error.status)&&error.status>=100&&error.status<=599?error.status:null,frames:safeCampaignStackFrames(error).slice(0,8)}));
 }
 /** Actual owned ledger settlement facts; no request payload, provider secret or header is selected. */
@@ -446,7 +460,7 @@ export async function measurePrivateCampaign(inputs,{signal=null}={}){
     const gatewayOverrides=nativeLinux?{host:'127.0.0.1',modelGatewayInternalUrl:relay.gatewayUrl+'/internal/model/v1',extensionGatewayInternalUrl:relay.gatewayUrl+'/internal/extensions/v1'}:{};
     fixture=await openPrivateAssessmentFixture({overrides:{...state.overrides,...CAMPAIGN_RUNTIME_LIMITS,...gatewayOverrides,runtimeMode:'kernel',deepseekProviderEnabled:true,deepseekBaseUrl:transport.url},admission:state.admission});
     if(nativeLinux)relay.bindTarget(fixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root:state.root,imageId:state.overrides.runtimeContainerImage,network:state.network,fixtureUrl:fixture.baseUrl+'/',gatewayHost:state.gatewayHost});
-    const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);measurementProject=project;stage='ordinary-selection-and-current-candidate-apply';
+    const {app,baseUrl}=fixture,owner=state.actors[0],other=state.actors[1],project=await resolveCampaignProject(app,owner);measurementProject=project;observeCampaignInvocationRefusal(app,project,evidence=>saveProtected(path.join(state.root,'invocation-refusal-'+randomUUID()+'.json'),evidence));stage='ordinary-selection-and-current-candidate-apply';
     const view=await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
     await campaignRequest(baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:state.installedId,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     const effective=await campaignPoll(async()=>{const current=await app.hostedExtensions.generations.current(project);return current?.payload.phase==='effective'&&current.payload.effective?.bindings.desiredRevision===view.revision+1?current:null;},deadline,signal);

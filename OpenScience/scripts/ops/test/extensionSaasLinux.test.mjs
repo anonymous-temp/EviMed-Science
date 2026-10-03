@@ -91,3 +91,9 @@ test('actual relay ingress records closed path/status/byte counts and excludes a
   const unknown=await fetch(relay.gatewayUrl+'/not-allowed?token='+secret);assert.equal(unknown.status,403);assert.equal(relay.observations[1].path,'unknown');assert.equal(JSON.stringify(relay.observations).includes(secret),false);
  }finally{await relay?.close();upstream.closeAllConnections();await new Promise(resolve=>upstream.close(resolve));}
 });
+
+test('relay error diagnostics extract only closed code/class from bounded JSON, never retain error body or secrets',async()=>{
+ const upstream=http.createServer((_req,res)=>{res.writeHead(403,{'content-type':'application/json'});res.end(JSON.stringify({code:'extension_access_denied',message:'The native invocation is unavailable.',details:{credential:'secret-must-not-leak'}}));});let relay;
+ try{await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));relay=await bindInspectedNativeLinuxRelay({gateway:'127.0.0.1'});relay.bindTarget('http://127.0.0.1:'+upstream.address().port+'/');const response=await fetch(relay.gatewayUrl+'/internal/extensions/v1/execute',{method:'POST',body:'{}'});assert.equal(response.status,403);await response.text();await new Promise(resolve=>setTimeout(resolve,10));assert.equal(relay.observations[0].errorCode,'extension_access_denied');assert.equal(relay.observations[0].errorClass,'native_invocation_unavailable');assert.equal(JSON.stringify(relay.observations).includes('secret-must-not-leak'),false);
+ }finally{await relay?.close();upstream.closeAllConnections();await new Promise(resolve=>upstream.close(resolve));}
+});
