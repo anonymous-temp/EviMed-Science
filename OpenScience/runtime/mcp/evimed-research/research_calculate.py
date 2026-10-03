@@ -20,6 +20,76 @@ import public_sources
 from execution_context import validate_context
 
 METHODS = ("meta.dl", "faers.signals", "bibliometric.network", "design.analytic", "comparator.evalue")
+
+# What each method reads from its frozen input file, written as an input that
+# runs. Every key is one its engine requires, except a key ending in `?`, which
+# may be left out; a tuple holds the alternatives a key admits, first the one
+# an example takes; a list is an array. `also` holds further inputs that run,
+# for what a note says in words.
+#
+# The engines check these shapes themselves and answer a wrong one with a
+# failed job that names no key. The description used to offer meta.dl
+# `studies {id,label,yi,vi}` and nothing else, and maxNodes as an option:
+# an input written from it was one the executor refuses. So the description
+# is rendered from this table, `calculate` takes its parameter names from it,
+# and tests hold it to the validators that run: deterministic_replay.py for
+# the first three methods, the control plane's VCR replay for the last two.
+_TWO_ARM = {"kind": ("two_arm_fixed",)}
+_BINARY = {"type": ("binary",)}
+_TIME_TO_EVENT = {"endpoint": {"type": ("time_to_event",)}, "truth": {"hazardRatio": 0.7, "controlMedian": 12}}
+_ANALYSIS = {"alpha": 0.05, "power": 0.8, "sided": 2}
+METHOD_INPUTS = {
+    "meta.dl": {
+        "input": {"studies": [{"id": "s1", "label": "Study 1", "yi": 0.12, "vi": 0.04},
+                              {"id": "s2", "label": "Study 2", "yi": 0.3, "vi": 0.09}],
+                  "effectMeasure": ("MD", "SMD", "RD", "OR", "RR", "HR", "IRR"), "outcome": "Outcome"},
+        "note": "two or more studies; yi is a study's effect on the analysis scale (the natural log for OR, RR, HR, "
+                "IRR) and vi its variance, above 0",
+    },
+    "faers.signals": {
+        "input": {"tables": [{"id": "T1", "a": 10, "b": 90, "c": 20, "d": 1880}]},
+        "note": "2x2 counts, integers of 0 or more: a the drug with the event, b the drug with other events, c other "
+                "drugs with the event, d other drugs with other events",
+        "parameters": {"optional": ("yates", "correctZeroCells")},
+    },
+    "bibliometric.network": {
+        "input": {"edges": [{"source": "A", "target": "B", "weight": 2, "source_freq": 8, "target_freq": 7}]},
+        "note": "weight is the pair's co-occurrence count, source_freq and target_freq each node's own frequency, all "
+                "above 0",
+        "parameters": {"required": ("maxNodes",)},
+    },
+    "design.analytic": {
+        "input": {"scenario": (
+            {"design": _TWO_ARM, "endpoint": {"type": ("continuous",)}, "truth": {"effect": 5, "sd?": 12},
+             "analysis?": {"alpha?": 0.05, "power?": 0.8, "sided?": 2}},
+            {"design": _TWO_ARM, "endpoint": _BINARY, "truth": {"controlRate": 0.3, "treatmentRate": 0.45}},
+            {"design": _TWO_ARM, **_TIME_TO_EVENT},
+            {"design": {"kind": ("group_sequential",), "informationRates": [0.5, 1]}, **_TIME_TO_EVENT},
+            {"design": {"kind": ("simon_two_stage",)}, "endpoint": _BINARY,
+             "truth": {"nullRate": 0.2, "alternativeRate": 0.4}},
+            {"design": {"kind": ("single_arm",), "n": 40}, "endpoint": _BINARY,
+             "truth": {"nullRate": 0.2, "responseRate": 0.4},
+             "analysis": {"method": ("exact_binomial",), "alternative": ("greater", "less")}},
+        )},
+        "also": (
+            {"scenario": {"design": {"kind": "two_arm_fixed"}, "endpoint": {"type": "binary"},
+                          "truth": {"controlRate": 0.3, "treatmentRate": 0.45}, "analysis": _ANALYSIS}},
+            {"scenario": {"design": {"kind": "two_arm_fixed"}, "endpoint": {"type": "time_to_event"},
+                          "truth": {"hazardRatio": 0.7, "controlMedian": 12}, "analysis": _ANALYSIS}},
+            {"scenario": {"design": {"kind": "group_sequential", "informationRates": [0.5, 1]},
+                          "endpoint": {"type": "time_to_event"},
+                          "truth": {"hazardRatio": 0.7, "controlMedian": 12}, "analysis": _ANALYSIS}},
+        ),
+        "note": "the optional analysis fits every two_arm_fixed and group_sequential scenario and defaults to alpha "
+                "0.025 in total, power 0.9, sided 1; sd defaults to 1; informationRates rise to 1",
+    },
+    "comparator.evalue": {
+        "input": {"scenario": {"riskRatio": 3.9, "confidenceLimit?": 1.8,
+                               "scale?": ("risk_ratio", "odds_ratio", "hazard_ratio"), "rare?": False}},
+        "note": "riskRatio is the estimate on that scale and confidenceLimit the interval limit nearer 1; rare reads "
+                "an odds or hazard ratio of a rare outcome as a risk ratio",
+    },
+}
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 30
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}")
@@ -40,20 +110,44 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect())
 
 
+def _shape(value):
+    """An input as the description writes it: keys, `[]` for an array, `|` between a key's alternatives."""
+    if isinstance(value, dict):
+        return "{%s}" % ",".join(key + _shape(item) for key, item in value.items())
+    if isinstance(value, list):
+        return "[%s]" % (_shape(value[0]) if isinstance(value[0], dict) else "")
+    if isinstance(value, tuple):
+        return ":" + "|".join(_shape(item) if isinstance(item, dict) else item for item in value)
+    return ""
+
+
+def _method_text(method):
+    spec = METHOD_INPUTS[method]
+    parameters = spec.get("parameters", {})
+    return "; ".join(["%s %s -- %s" % (method, _shape(spec["input"]), spec["note"]),
+                      *("parameters.%s is required" % name for name in parameters.get("required", ())),
+                      *(["optional parameters " + ", ".join(parameters["optional"])] if parameters.get("optional") else [])])
+
+
 def tool_definitions():
     return [{"name": "research_calculate", "description": (
-        "Compute frozen aggregate JSON with an admitted deterministic engine: meta.dl studies {id,label,yi,vi}, "
-        "faers.signals 2x2 tables {id,a,b,c,d}, bibliometric.network edges {source,target,weight,source_freq,target_freq}, "
-        "or VCR design.analytic/comparator.evalue scenarios. action=start/status/cancel; completed results preserve "
-        "input/code/environment identities and original bytes. No scripts, retrieval, fitted EBGM prior or patient rows."),
+        "Compute frozen aggregate JSON with an admitted deterministic engine. inputPath is a JSON file in its method's "
+        "shape, written here with ? after an optional key and | between a key's alternatives; a missing key, or one the "
+        "engine does not read, fails the calculation. "
+        + ". ".join(_method_text(method) for method in METHODS)
+        + ". action=start/status/cancel; completed results preserve input/code/environment identities and original "
+        "bytes. No scripts, retrieval, fitted EBGM prior or patient rows."),
         "inputSchema": {"type": "object", "additionalProperties": False, "required": ["action"], "properties": {
             "action": {"type": "string", "enum": ["start", "status", "cancel"]},
             "method": {"type": "string", "enum": list(METHODS)},
             "inputPath": {"type": "string", "minLength": 1, "maxLength": 2048,
-                          "description": "Workspace-relative frozen aggregate JSON (at most 8 MiB); never a patient-level file."},
+                          "description": "Workspace-relative frozen aggregate JSON in its method's shape (at most 8 MiB); never a patient-level file."},
             "parameters": {"type": "object", "additionalProperties": False, "properties": {
-                "maxNodes": {"type": "integer", "minimum": 1, "maximum": 500},
-                "yates": {"type": "boolean"}, "correctZeroCells": {"type": "boolean"}}},
+                "maxNodes": {"type": "integer", "minimum": 1, "maximum": 500,
+                             "description": "bibliometric.network, required: the graph keeps this many of the most frequent nodes."},
+                "yates": {"type": "boolean", "description": "faers.signals: Yates-correct the chi-square (default false)."},
+                "correctZeroCells": {"type": "boolean",
+                                     "description": "faers.signals: add 0.5 to every cell of a table that has a zero (default true); false fails the calculation on such a table."}}},
             "requestId": {"type": "string", "minLength": 1, "maxLength": 160},
             "jobId": {"type": "string", "minLength": 1, "maxLength": 160},
         }}}]
@@ -121,9 +215,13 @@ def calculate(arguments, execution_context=None):
         parameters = payload.setdefault("parameters", {})
         if not isinstance(parameters, dict):
             raise ResearchCalculateError("result_input_invalid", "Calculation parameters must be structured fields.")
-        allowed = {"yates", "correctZeroCells"} if payload["method"] == "faers.signals" else {"maxNodes"} if payload["method"] == "bibliometric.network" else set()
-        if set(parameters) - allowed:
+        accepted = METHOD_INPUTS[payload["method"]].get("parameters", {})
+        if set(parameters) - {*accepted.get("required", ()), *accepted.get("optional", ())}:
             raise ResearchCalculateError("result_input_invalid", "This method does not accept the supplied parameter.")
+        # The engine refuses the job without it, and says only that it failed.
+        for required in accepted.get("required", ()):
+            if required not in parameters:
+                raise ResearchCalculateError("result_input_invalid", "%s requires parameters.%s." % (payload["method"], required))
         if "maxNodes" in parameters and (type(parameters["maxNodes"]) is not int or not 1 <= parameters["maxNodes"] <= 500):
             raise ResearchCalculateError("result_input_invalid", "maxNodes must be between 1 and 500.")
         if any(type(parameters[key]) is not bool for key in {"yates", "correctZeroCells"} & set(parameters)):
@@ -164,7 +262,13 @@ def calculate(arguments, execution_context=None):
     except (ValueError, UnicodeDecodeError):
         raise ResearchCalculateError("result_response_invalid", "Calculation response did not identify an owned job.") from None
     state = data["state"]
+    next_actions = ["Read the named failure and continue from preserved work."]
+    if state == "failed":
+        # A wrong input shape arrives here as a bare failure; without this the
+        # run looks for the cause in its container instead of in its file.
+        next_actions.append("Before starting another, compare the input file with its method's shape in this tool's "
+                            "description: the engine fails a missing or unread key without naming it.")
     return {"status": "warning" if state in {"failed", "canceled", "timed_out", "ownership_unknown"} else "success",
             "summary": "Deterministic calculation is " + state + ".", "data": data,
             **({"warnings": ["The selected calculation has no usable new result; prior results remain available."],
-                "next_actions": ["Read the named failure and continue from preserved work."]} if state in {"failed", "canceled", "timed_out", "ownership_unknown"} else {})}
+                "next_actions": next_actions} if state in {"failed", "canceled", "timed_out", "ownership_unknown"} else {})}

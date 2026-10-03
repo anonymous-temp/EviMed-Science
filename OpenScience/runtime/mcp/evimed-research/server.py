@@ -1732,17 +1732,37 @@ def _managed_status_with_wait(status_call, arguments):
         time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
 
 
+# The tools whose bodies take the session's execution context. The kernel-side
+# wrapper (packages/harness-port/src/engineContext.mjs) attaches it to exactly
+# these, replacing anything a model wrote under that name;
+# apps/server/test/engineToolContract.test.mjs holds the two rosters equal.
+ENGINE_CONTEXT_TOOLS = frozenset({"meta_analysis", "research_calculate", *specialist_jobs.SPECS})
+
+
 def call_tool(name, arguments):
     execution_context = None
     if isinstance(arguments, dict) and "__evimed_execution_context" in arguments:
         arguments = dict(arguments)
-        from execution_context import validate_context
+        from execution_context import InvalidContext, validate_context
         try:
             execution_context = validate_context(arguments.pop("__evimed_execution_context"))
-            if name not in {"meta_analysis", "research_calculate", *specialist_jobs.SPECS}:
-                raise ValueError("execution context is only supported for engine tools")
-        except ValueError:
-            return failure("engine_execution_context_invalid", "The engine execution context is invalid.", False)
+            if name not in ENGINE_CONTEXT_TOOLS:
+                raise InvalidContext("tool")
+        except ValueError as error:
+            # On an engine tool the platform wrote this context, so no change to
+            # the call can correct it: the run is told to go on rather than to
+            # retry or look for the cause inside its container. Anywhere else
+            # the field has no business in the call at all.
+            engine_tool = name in ENGINE_CONTEXT_TOOLS
+            return failure(
+                "engine_execution_context_invalid",
+                "The engine execution context is invalid (%s)." % getattr(error, "field", "fields"),
+                False,
+                "Stop calling this tool in this conversation; the platform sets its execution context and the run cannot change it."
+                if engine_tool else "Stop until the call carries only the tool's declared inputs.",
+                ["Go on without this engine tool and say it is unavailable in this conversation; do not retry it or inspect the runtime."]
+                if engine_tool else ["Call again with only declared inputs; if the refusal repeats, go on without this tool."],
+            )
     result = (_dispatch(name, arguments, execution_context=execution_context) if execution_context is not None
               else _dispatch(name, arguments))
     return _with_source_types(name, result)
@@ -2004,8 +2024,12 @@ def _dispatch(name, arguments, execution_context=None):
         try:
             return research_calculate.calculate(arguments, execution_context=execution_context)
         except research_calculate.ResearchCalculateError as error:
+            if error.code == "result_input_invalid":
+                # Refused here, before the gateway: there is no job to inspect.
+                return failure(error.code, str(error), error.retryable, "invalid_input",
+                               ["Correct the named field and call again; nothing was started."])
             return failure(error.code, str(error), error.retryable,
-                           "invalid_input" if error.code == "result_input_invalid" else "retry" if error.retryable else "unsupported",
+                           "retry" if error.retryable else "unsupported",
                            ["Inspect the same owned job after a lost response; preserve the prior result."])
     if name in ("geo_read", "geo_write", "social_posts_search"):
         try:

@@ -87,6 +87,32 @@ def test_bibliometric_existing_selected_graph_fixture_keeps_scope_and_determinis
     assert replay.execute(frozen, blob)["receipt"]["outputDigest"] == first["receipt"]["outputDigest"]
 
 
+def test_the_real_engines_compute_every_input_the_calculation_tool_describes(engines):
+    # research_calculate's description is rendered from a table of inputs, and its own suite holds that table
+    # to this adapter's validation with the engines replaced by stand-ins. Here the engines are real: each
+    # described input computes, each step away from one is refused, and so is the single study that only the
+    # meta engine itself refuses. `{"studies": [...]}` alone is what the description once offered.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "runtime" / "mcp" / "evimed-research" / "test"))
+    import calculation_inputs
+    for method in replay.METHODS:
+        cases, parameters = calculation_inputs.cases(method), calculation_inputs.parameter_cases(method)
+        for value in cases["admitted"]:
+            for accepted in parameters["admitted"]:
+                frozen, blob = recipe(method, value, accepted)
+                assert replay.execute(frozen, blob)["machineValues"], (method, value, accepted)
+        refused = [(value, parameters["admitted"][0]) for value in cases["refused"]]
+        refused += [(cases["admitted"][0], changed) for changed in parameters["refused"]]
+        assert len(refused) >= 9, method
+        for value, supplied in refused:
+            with pytest.raises(replay.ReplayError, match="replay_input_invalid"):
+                replay.compute(method, value, supplied)
+    described = calculation_inputs.cases("meta.dl")["admitted"][0]
+    for value in ({"studies": described["studies"]}, {**described, "studies": described["studies"][:1]}):
+        frozen, blob = recipe("meta.dl", value)
+        with pytest.raises(replay.ReplayError, match="replay_input_invalid"):
+            replay.execute(frozen, blob)
+
+
 def test_changed_missing_or_incompatible_recipe_inputs_are_named(engines):
     frozen, blob = recipe("faers.signals", {"tables": [{"id": "T1", "a": 10, "b": 90, "c": 20, "d": 1880}]})
     with pytest.raises(replay.ReplayError, match="replay_input_changed"):

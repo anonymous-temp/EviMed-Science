@@ -12,10 +12,15 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "test"))
 import research_calculate
+import calculation_inputs
 
 CONTEXT = {"v": 1, "sessionId": "session", "callId": "call", "rootCallId": "root-call",
            "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "high"}
+# The two methods the R engine runs. Their inputs are held to the control
+# plane's VCR replay in apps/server/test/engineToolContract.test.mjs.
+VCR_METHODS = {"design.analytic", "comparator.evalue"}
 
 
 class Gateway(BaseHTTPRequestHandler):
@@ -97,6 +102,93 @@ class ResearchCalculationTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"EVIMED_RESULT_GATEWAY_URL": ""}):
             result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
         self.assertEqual(result["error"]["code"], "result_engine_unavailable")
+
+    def test_a_session_on_the_pro_model_starts_a_calculation(self):
+        context = {**CONTEXT, "model": "deepseek-v4-pro"}
+        result = self.server.call_tool("research_calculate", {"action": "start", "method": "meta.dl",
+                                                              "inputPath": "data/studies.json", "__evimed_execution_context": context})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(Gateway.seen[0]["context"], context)
+
+    # The description offered meta.dl `studies {id,label,yi,vi}` and nothing
+    # else, and maxNodes as an option; the executor requires effectMeasure and
+    # outcome too, and maxNodes, and answers a wrong input with a failed job
+    # and no reason. What the tool says is now rendered from one table.
+    def test_the_description_states_what_every_method_reads(self):
+        tool = self.server.TOOLS["research_calculate"]
+        self.assertEqual(tuple(research_calculate.METHOD_INPUTS), research_calculate.METHODS)
+        self.assertEqual(tool["inputSchema"]["properties"]["method"]["enum"], list(research_calculate.METHODS))
+        for method, spec in research_calculate.METHOD_INPUTS.items():
+            with self.subTest(method=method):
+                self.assertIn("%s %s -- %s" % (method, research_calculate._shape(spec["input"]), spec["note"]), tool["description"])
+        self.assertIn("meta.dl {studies[{id,label,yi,vi}],effectMeasure:MD|SMD|RD|OR|RR|HR|IRR,outcome} -- ", tool["description"])
+        self.assertIn("faers.signals {tables[{id,a,b,c,d}]} -- ", tool["description"])
+        self.assertIn("{edges[{source,target,weight,source_freq,target_freq}]} -- ", tool["description"])
+        self.assertIn("{scenario{riskRatio,confidenceLimit?,scale?:risk_ratio|odds_ratio|hazard_ratio,rare?}} -- ", tool["description"])
+        self.assertIn("{design{kind:two_arm_fixed},endpoint{type:time_to_event},truth{hazardRatio,controlMedian}}", tool["description"])
+        self.assertIn("parameters.maxNodes is required", tool["description"])
+        self.assertIn("optional parameters yates, correctZeroCells", tool["description"])
+        # Paid for on every request that offers the tool, and refused by the
+        # model gateway past 8 KiB: a form added to the table is weighed here.
+        self.assertLessEqual(len(tool["description"]), 2400)
+        named = {name for spec in research_calculate.METHOD_INPUTS.values()
+                 for names in spec.get("parameters", {}).values() for name in names}
+        self.assertEqual(named, set(tool["inputSchema"]["properties"]["parameters"]["properties"]))
+        self.assertEqual(named, set(calculation_inputs.PARAMETERS))
+
+    def test_the_executor_runs_every_described_input_and_refuses_each_step_away_from_it(self):
+        executed = set(calculation_inputs.deterministic_replay.METHODS)
+        self.assertEqual(set(research_calculate.METHODS) - executed, VCR_METHODS)
+        self.assertEqual(len(executed), 3)
+        for method in sorted(executed):
+            inputs, parameters = calculation_inputs.cases(method), calculation_inputs.parameter_cases(method)
+            self.assertGreaterEqual(len(inputs["refused"]), 8, method)
+            for value in inputs["admitted"]:
+                for accepted in parameters["admitted"]:
+                    with self.subTest(method=method, admitted=value, parameters=accepted):
+                        self.assertEqual(calculation_inputs.verdict(method, value, accepted), "admitted")
+            for value in inputs["refused"]:
+                with self.subTest(method=method, refused=value):
+                    self.assertEqual(calculation_inputs.verdict(method, value, parameters["admitted"][0]), "replay_input_invalid")
+            for refused in parameters["refused"]:
+                with self.subTest(method=method, parameters=refused):
+                    self.assertEqual(calculation_inputs.verdict(method, inputs["admitted"][0], refused), "replay_input_invalid")
+        # The shape the old description offered, and the option it called optional.
+        studies = calculation_inputs.cases("meta.dl")["admitted"][0]["studies"]
+        self.assertEqual(calculation_inputs.verdict("meta.dl", {"studies": studies}), "replay_input_invalid")
+        edges = calculation_inputs.cases("bibliometric.network")["admitted"][0]
+        self.assertEqual(calculation_inputs.verdict("bibliometric.network", edges, {}), "replay_input_invalid")
+
+    def test_a_parameter_is_admitted_or_refused_here_exactly_as_its_method_is_described(self):
+        for method in research_calculate.METHODS:
+            parameters = calculation_inputs.parameter_cases(method)
+            base = {"action": "start", "method": method, "inputPath": "data/input.json", "__evimed_execution_context": CONTEXT}
+            for accepted in parameters["admitted"]:
+                with self.subTest(method=method, admitted=accepted):
+                    seen = len(Gateway.seen)
+                    self.assertEqual(self.server.call_tool("research_calculate", {**base, "parameters": accepted})["status"], "success")
+                    self.assertEqual(Gateway.seen[seen]["body"]["parameters"], accepted)
+            for refused in parameters["refused"]:
+                with self.subTest(method=method, refused=refused):
+                    seen = len(Gateway.seen)
+                    result = self.server.call_tool("research_calculate", {**base, "parameters": refused})
+                    self.assertEqual(result["error"]["code"], "invalid_input" if "unexpected" in refused else "result_input_invalid")
+                    self.assertEqual(len(Gateway.seen), seen)
+        missing = self.server.call_tool("research_calculate", {"action": "start", "method": "bibliometric.network",
+                                                               "inputPath": "data/edges.json", "__evimed_execution_context": CONTEXT})
+        self.assertEqual(missing["error"]["message"], "bibliometric.network requires parameters.maxNodes.")
+        self.assertEqual(missing["error"]["stopReason"], "invalid_input")
+        self.assertIn("nothing was started", missing["next_actions"][0])
+
+    def test_a_failed_calculation_points_the_run_at_its_input_file(self):
+        Gateway.answer = {"data": {"id": "calculation-job", "state": "failed", "error": {"code": "result_replay_failed"}}}
+        result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["error"]["code"], "result_replay_failed")
+        self.assertIn("compare the input file with its method's shape", result["next_actions"][-1])
+        Gateway.answer = {"data": {"id": "calculation-job", "state": "canceled"}}
+        result = self.server.call_tool("research_calculate", {"action": "cancel", "jobId": "calculation-job"})
+        self.assertEqual(result["next_actions"], ["Read the named failure and continue from preserved work."])
 
     def test_streamed_response_uses_one_total_deadline_and_size_limit(self):
         class Stream:
