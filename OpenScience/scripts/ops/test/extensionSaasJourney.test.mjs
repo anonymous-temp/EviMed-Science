@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
-import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
+import { validatePrivateCampaignInputs, validatePrivateRuntimeMounts, controlledCampaignTurn, validateFullRuntimeImagePreflight, safeCampaignDiagnosticCode, safeCampaignStackFrames, resolveCampaignProject, campaignGenerationReady, campaignGenerationStatus, observeCampaignGenerationProbe, assertNativeCampaignOperator, CAMPAIGN_RUNTIME_LIMITS } from '../extension-saas-acceptance-journey.mjs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
@@ -91,4 +91,24 @@ test('native UID10001 has a distinct short root and never widens earlier UID1000
  assert.equal(parent,'/tmp/evimed-extension-acceptance-10001');
  assert.ok(Buffer.byteLength(parent+'/0123456789/.runtime-sockets/'+ 'a'.repeat(24)+'/dsh.sock')+1<=104);
  assert.equal(assessmentShortParent('darwin',10001),'/private/tmp/evimed-extension-acceptance');
+});
+
+test('succeeded apply job with rollback/failed outcome terminates desired campaign without waiting for deadline',async()=>{
+ const project={userId:'owner',id:'project'},hash='a'.repeat(64),state={revision:7,payload:{phase:'rolled-back',desired:{reference:{generationHash:hash},projection:{plugins:[{assessmentAdmissionDigest:'private'}]}}}},job={id:'exact-owned-job',status:'succeeded',attempts:1,result:{phase:'rolled-back',error:'plugin_apply_failed',privatePayload:'must-not-leak'}};
+ const app={hostedExtensions:{generations:{current:async()=>state}},store:{database:{query:async(_sql,args)=>{assert.deepEqual(args,['owner','project',hash]);return{rows:[job]};}}}};
+ await assert.rejects(campaignGenerationReady(app,project),error=>error.code==='plugin_apply_failed'&&error.generationStatus.phase==='rolled-back'&&error.terminalJob.resultPhase==='rolled-back'&&!JSON.stringify(error.generationStatus).includes('must-not-leak'));
+ job.result.phase='failed';state.payload.phase='failed';await assert.rejects(campaignGenerationReady(app,project),error=>error.generationStatus.job.status==='succeeded'&&error.generationStatus.job.resultPhase==='failed');
+ job.result={superseded:true};assert.equal(await campaignGenerationReady(app,project),null);
+});
+
+test('pre-cleanup generation snapshot is bounded to exact owned hash and excludes credentials/payload/lease/error messages',async()=>{
+ const project={userId:'owner',id:'project'},hash='b'.repeat(64),state={revision:8,payload:{phase:'waiting',desired:{reference:{generationHash:hash},projection:{plugins:[]}},effective:null,privateToken:'must-not-leak'}};
+ const app={hostedExtensions:{generations:{current:async()=>state}},store:{database:{query:async(sql,args)=>{assert.ok(sql.includes("payload->>'variant'='extension-generation-v1'"));assert.ok(sql.includes('LIMIT 1'));assert.deepEqual(args,['owner','project',hash]);return{rows:[{id:'owned',status:'running',attempts:2,error:{code:'plugin_apply_failed',message:'must-not-leak'},payload:{token:'must-not-leak'},lease_token:'must-not-leak',result:{privateValue:'must-not-leak'}}]};}}}};
+ const snapshot=await campaignGenerationStatus(app,project);assert.equal(snapshot.phase,'waiting');assert.equal(snapshot.desiredHash,hash);assert.equal(snapshot.job.status,'running');assert.equal(snapshot.job.attempts,2);assert.equal(JSON.stringify(snapshot).includes('must-not-leak'),false);
+});
+
+test('private probe observer preserves strict successful proof and original failure without leaking native message values',async()=>{
+ const originalError=Object.assign(new Error('extension_probe_registrations_invalid private-token-must-not-leak'),{code:'plugin_apply_failed'}),candidate={reference:{generationHash:'c'.repeat(64)}},records=[],proof={actualProof:true},manager={marker:'real',async probeGeneration(project,input,extra){assert.equal(extra,'retained-extra');assert.equal(this.marker,'real');assert.equal(input,candidate);if(project.fail)throw originalError;return proof;}};
+ const original=manager.probeGeneration,restore=observeCampaignGenerationProbe(manager,async record=>records.push(record));assert.equal(await manager.probeGeneration({},candidate,'retained-extra'),proof);assert.equal(records.length,0);
+ await assert.rejects(manager.probeGeneration({fail:true},candidate,'retained-extra'),error=>error===originalError);assert.equal(records[0].nativeCode,'extension_probe_registrations_invalid');assert.equal(JSON.stringify(records).includes('private-token-must-not-leak'),false);restore();assert.equal(manager.probeGeneration,original);
 });

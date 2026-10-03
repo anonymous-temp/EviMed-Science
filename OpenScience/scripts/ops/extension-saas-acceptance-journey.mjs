@@ -201,15 +201,39 @@ async function campaignPoll(check, deadline, signal) {
   while (Date.now() < deadline) { signal?.throwIfAborted(); const result = await check(); if (result) return result; await new Promise(resolve=>setTimeout(resolve,200)); }
   throw Object.assign(new Error('private_campaign_deadline'), { code:'private_campaign_deadline' });
 }
-/** Stop on the exact desired generation's durable terminal outcome; unrelated older jobs never short-circuit an active apply. */
-export async function campaignGenerationReady(app,project){
-  const current=await app.hostedExtensions.generations.current(project);
-  const desired=current?.payload.desired?.reference?.generationHash;
-  if(desired&&current?.payload.phase==='effective'&&current.payload.effective?.reference?.generationHash===desired&&current.payload.effective?.projection.plugins.some(plugin=>Object.hasOwn(plugin,'assessmentAdmissionDigest')))return current;
-  if(desired){const jobs=(await app.store.database.query("SELECT id,status,error FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='plugin-apply' AND payload->>'variant'='extension-generation-v1' AND payload->'reference'->>'generationHash'=$3 ORDER BY created_at DESC LIMIT 1",[project.userId,project.id,desired])).rows;
-    const job=jobs[0];if(job&&['failed','canceled'].includes(job.status))throw Object.assign(new Error('candidate_generation_terminal'),{code:typeof job.error?.code==='string'&&/^[A-Za-z0-9_:-]{1,100}$/.test(job.error.code)?job.error.code:'candidate_generation_terminal',terminalJob:{id:job.id,status:job.status,generationHash:desired}});
+/** Private observer preserves the real probe's return/error unchanged; evidence is written before the worker's rollback summarises it. */
+export function observeCampaignGenerationProbe(manager,record){
+ const original=manager.probeGeneration;
+ if(typeof original!=='function'||typeof record!=='function')throw new Error('real_generation_campaign_required');
+ manager.probeGeneration=async function(...args){
+  const candidate=args[1];try{return await original.apply(this,args);}catch(error){
+   const codes=['extension_probe_config_invalid','extension_probe_registrations_invalid','citation_probe_runtime_busy','citation_probe_agent_unavailable','citation_probe_config_invalid','citation_probe_registrations_invalid','runtime_transport_error','extension_contract_invalid','plugin_apply_failed'];
+   const nativeCode=codes.find(code=>String(error?.message??'').includes(code))??null;
+   try{await record({code:safeCampaignDiagnosticCode(error),nativeCode,frames:safeCampaignStackFrames(error).slice(0,8),generationHash:typeof candidate?.reference?.generationHash==='string'&&/^[a-f0-9]{64}$/.test(candidate.reference.generationHash)?candidate.reference.generationHash:null,referencePresent:Boolean(candidate?.reference)});}catch{ /* Probe errors retain precedence; no observer failure can become a successful generation. */ }
+   throw error;
   }
-  return null;
+ };
+ return()=>{manager.probeGeneration=original;};
+}
+/** Bounded owned state evidence. No job payload, lease token, error message, provider value or native session token is returned. */
+export async function campaignGenerationStatus(app,project,current=null){
+ current??=await app.hostedExtensions.generations.current(project);
+ const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value)?value:null;
+ const desired=hash(current?.payload.desired?.reference?.generationHash),effective=hash(current?.payload.effective?.reference?.generationHash);
+ const phase=['waiting','effective','rolled-back','failed'].includes(current?.payload.phase)?current.payload.phase:'unknown';
+ let job=null;if(desired){const rows=(await app.store.database.query("SELECT id,status,error,result,attempts FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='plugin-apply' AND payload->>'variant'='extension-generation-v1' AND payload->'reference'->>'generationHash'=$3 ORDER BY created_at DESC LIMIT 1",[project.userId,project.id,desired])).rows;
+  const actual=rows[0];if(actual)job={id:typeof actual.id==='string'?actual.id.slice(0,100):null,status:['queued','running','succeeded','failed','canceled'].includes(actual.status)?actual.status:'unknown',attempts:Number.isSafeInteger(actual.attempts)?actual.attempts:null,errorCode:actual.error?.code?safeCampaignDiagnosticCode({code:actual.error.code}):null,resultPhase:['effective','rolled-back','failed'].includes(actual.result?.phase)?actual.result.phase:null,resultErrorCode:actual.result?.error?safeCampaignDiagnosticCode({code:actual.result.error}):null,superseded:actual.result?.superseded===true};
+ }
+ return{phase,revision:Number.isSafeInteger(current?.revision)?current.revision:null,desiredHash:desired,effectiveHash:effective,hasAssessmentProjection:Boolean(current?.payload.desired?.projection?.plugins?.some(plugin=>Object.hasOwn(plugin,'assessmentAdmissionDigest'))),job};
+}
+/** A succeeded leased job may truthfully record a failed/rolled-back candidate, which is terminal for this desired hash. */
+export async function campaignGenerationReady(app,project){
+ const current=await app.hostedExtensions.generations.current(project),status=await campaignGenerationStatus(app,project,current);
+ if(status.desiredHash&&status.phase==='effective'&&status.effectiveHash===status.desiredHash&&current.payload.effective?.projection.plugins.some(plugin=>Object.hasOwn(plugin,'assessmentAdmissionDigest')))return current;
+ const job=status.job;if(job&&(['failed','canceled'].includes(job.status)||job.status==='succeeded'&&['failed','rolled-back'].includes(job.resultPhase))){
+  throw Object.assign(new Error('candidate_generation_terminal'),{code:job.errorCode??job.resultErrorCode??'candidate_generation_terminal',terminalJob:{id:job.id,status:job.status,resultPhase:job.resultPhase,generationHash:status.desiredHash},generationStatus:status});
+ }
+ return null;
 }
 async function scanOwnedCampaignTree(root,needle){
   let files=0,bytes=0,symlinksSkipped=0;const matches=[];
@@ -229,7 +253,7 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
   if (!nativeLinux&&assessmentDockerEnvironment().DOCKER_CONTEXT !== 'colima-evimed-extension-acceptance') throw new Error('explicit_owned_campaign_context_required');
   const prepared = await readAcceptanceInputs(inputs.acceptanceInputsPath),root=await createShortCampaignRoot();
   const isolated = await createGeoTestDatabase(inputs.databaseUrl,'campaign'), transport = await controlledCampaignTransport();
-  let app,composition,privateFixture,success=false,state,volumeName='',network,relay,stage='image-and-fixture-preflight',failure=null,result;
+  let app,composition,privateFixture,candidateProject,success=false,state,volumeName='',network,relay,stage='image-and-fixture-preflight',failure=null,result;
   try {
     const image = JSON.parse((await execute('docker',['image','inspect',inputs.runtimeImageId],{env:assessmentDockerEnvironment(),timeout:10000,maxBuffer:256*1024})).stdout)[0];
     const imagePreflight=validateFullRuntimeImagePreflight(image,{imageId:inputs.runtimeImageId,platform:prepared.platform,launchUser:'10001:10001'});
@@ -276,6 +300,8 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     stage='independent-controller-real-candidate-application';privateFixture=await openPrivateAssessmentFixture({overrides:{...overrides,runtimeMode:'kernel'},admission});
     if(nativeLinux)relay.bindTarget(privateFixture.baseUrl+'/');else relay=await startOwnedCampaignRelay({root,imageId:inputs.runtimeImageId,network,fixtureUrl:privateFixture.baseUrl+'/',gatewayHost:inputs.gatewayHost});
     const privateApp=privateFixture.app,project=await resolveCampaignProject(privateApp,owner),view=await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`);
+    candidateProject=project;
+    let probeIndex=0;observeCampaignGenerationProbe(privateApp.runtimeManager,evidence=>++probeIndex<=8?saveProtected(path.join(root,'generation-probe-failure-'+probeIndex+'.json'),evidence):Promise.resolve());
     await campaignRequest(privateFixture.baseUrl,owner,`/api/projects/${encodeURIComponent(owner.projectId)}/extensions`,'PUT',{expectedRevision:view.revision,selections:[{installationId:installed.installation.id,enabled:true,settings:{},connectionRefs:[]}]},200,signal);
     await campaignPoll(()=>campaignGenerationReady(privateApp,project),Date.now()+inputs.deadlineMs,signal);
     stage='physical-runtime-image-uid-mount-verification';const runtime=privateApp.runtimeManager.runtimes.get(privateApp.runtimeManager.key(project));assert(runtime?.containerName);
@@ -291,7 +317,9 @@ export async function setupPrivateCampaign(inputs, { signal=null }={}) {
     await privateFixture.close();privateFixture=null;
     await saveProtected(path.join(root,'campaign-state.json'),state);success=true;
     result={status:state.status,qualified:false,statePath:path.join(root,'campaign-state.json'),physicalSetup:state.physicalSetup};
-  }catch(error){failure=error;error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,terminalJob:error.terminalJob??null,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
+  }catch(error){failure=error;let generationStatus=error.generationStatus??null;
+    if(privateFixture&&candidateProject)try{generationStatus=await campaignGenerationStatus(privateFixture.app,candidateProject);await saveProtected(path.join(root,'generation-status-at-failure.json'),generationStatus);}catch(snapshotError){generationStatus={snapshotUnavailable:safeCampaignDiagnosticCode(snapshotError)};}
+    error.campaignStage=stage;error.reportPath=path.join(root,'setup-incomplete.json');await saveProtected(error.reportPath,{status:'incomplete',qualified:false,stage,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error),constructorFrames:error.constructorFrames??[],originalFailure:error.originalFailure??null,cleanupFailure:error.cleanupFailure??null,terminalJob:error.terminalJob??null,generationStatus,databaseNamespace:isolated.name,root,modelRequests:transport.requests.length,observationsAreNotCasePasses:true});
   }finally{
     let cleanupFailed=false;const cleanupFailures=[];
     for(const [resource,release] of [['private-app-controller',()=>privateFixture?.close()],['bootstrap-controller',()=>composition?.close()],['bootstrap-app',()=>app?.close()],['owned-relay',()=>relay?.close()],['controlled-upstream',()=>transport.close()]])try{await release();}catch(error){cleanupFailed=true;cleanupFailures.push({resource,code:safeCampaignDiagnosticCode(error),frames:safeCampaignStackFrames(error)});}
