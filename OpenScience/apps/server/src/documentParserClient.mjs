@@ -88,28 +88,39 @@ function retryAfterMs(headers) {
   return Number.isFinite(ms) ? Math.min(MAX_RETRY_AFTER_MS, Math.max(0, ms)) : null;
 }
 
-/** @param {Response} response @param {number} limit */
-async function boundedBody(response, limit) {
+/** Abort both response headers and streamed body reads, including injected transports. */
+async function abortable(operation, signal) {
+  signal.throwIfAborted();
+  let listener;
+  const canceled = new Promise((_, reject) => {
+    listener = () => reject(signal.reason);
+    signal.addEventListener("abort", listener, { once: true });
+  });
+  try { return await Promise.race([operation(), canceled]); }
+  finally { signal.removeEventListener("abort", listener); }
+}
+
+/** @param {Response} response @param {number} limit @param {AbortSignal} signal */
+async function boundedBody(response, limit, signal) {
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (declared > limit) {
-    await response.body?.cancel().catch(() => {});
+    void response.body?.cancel().catch(() => {});
     throw parserError(502, "source_parser_response_too_large", "Document parser response exceeded its limit.");
   }
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader();
   const chunks = [];
   let bytes = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > limit) {
-      await reader.cancel().catch(() => {});
-      throw parserError(502, "source_parser_response_too_large", "Document parser response exceeded its limit.");
+  try {
+    for (;;) {
+      const { done, value } = await abortable(() => reader.read(), signal);
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > limit) throw parserError(502, "source_parser_response_too_large", "Document parser response exceeded its limit.");
+      chunks.push(Buffer.from(value));
     }
-    chunks.push(Buffer.from(value));
-  }
-  return Buffer.concat(chunks);
+    return Buffer.concat(chunks);
+  } finally { void reader.cancel().catch(() => {}); }
 }
 
 /** A bounded string, or undefined. @param {unknown} value @param {number} max */
@@ -284,9 +295,10 @@ export class DocumentParserClient {
    * Parse a file the ingestion worker already resolved inside the project. Its
    * bytes are read once, without following a link, and checked against the
    * digest the source was registered under.
-   * @param {{path:string,mimeType?:string,sha256:string,sourceId?:string}} input
+   * @param {{path:string,mimeType?:string,sha256:string,sourceId?:string,signal?:AbortSignal}} input
    */
   async parse(input) {
+    if (input.signal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     const filename = path.basename(String(input.path ?? ""));
     const route = sourceFormatRoute(filename);
     // Refused before a byte is read: a recording can be gigabytes.
@@ -301,15 +313,16 @@ export class DocumentParserClient {
       if (stat.size > limit) throw parserError(413, "source_parser_input_too_large", "The source exceeds the parser's size limit.");
       bytes = await handle.readFile();
     } finally { await handle.close(); }
-    return this.parseBytes({ bytes, filename, mediaType: input.mimeType, sha256: input.sha256 });
+    return this.parseBytes({ bytes, filename, mediaType: input.mimeType, sha256: input.sha256, signal: input.signal });
   }
 
   /**
    * Parse bytes that never became a file — the entry point for a caller that
    * holds a download in memory (contract X2).
-   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string}} input
+   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal}} input
    */
-  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "" }) {
+  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined }) {
+    if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     if (!(bytes instanceof Uint8Array)) throw new TypeError("Document bytes are required.");
     const name = path.basename(String(filename ?? "")).trim();
     if (!name || name.length > 255 || name.includes("\0")) throw parserError(400, "source_format_unsupported", "The document needs a file name with its extension.");
@@ -330,20 +343,22 @@ export class DocumentParserClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     timer.unref?.();
+    const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
     try {
       let answer;
       let endpoint = "extract";
       try {
-        answer = await this.#withRetries(EXTRACT_PATH, request, controller.signal);
+        answer = await this.#withRetries(EXTRACT_PATH, request, signal);
       } catch (error) {
         // The metadata model failing is not the text failing: fall back once to
         // the text-only endpoint rather than lose the document (see the header).
         if (error?.code !== "source_parser_upstream_error") throw error;
-        answer = await this.#withRetries(PARSE_PATH, request, controller.signal);
+        answer = await this.#withRetries(PARSE_PATH, request, signal);
         endpoint = "parse";
       }
       return this.#apiResult(answer, endpoint);
     } catch (error) {
+      if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
       if (controller.signal.aborted && !(error instanceof HttpError && error.status < 500)) {
         throw parserError(503, "source_parser_timeout", "Document parsing timed out.");
       }
@@ -362,20 +377,20 @@ export class DocumentParserClient {
         form.append("checksum", request.sha256);
         form.append("filename", request.filename);
         form.append("format", request.format);
-        response = await this.fetch(`${this.baseUrl}${endpointPath}`, {
+        response = await abortable(() => this.fetch(`${this.baseUrl}${endpointPath}`, {
           method: "POST",
           headers: { accept: "application/json", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) },
           body: form,
           redirect: "error",
           signal,
-        });
+        }), signal);
       } catch {
         if (signal.aborted) throw parserError(503, "source_parser_timeout", "Document parsing timed out.");
         failure = { status: 503, code: "source_parser_unavailable", retry: true, message: "The document parser is unreachable." };
       }
       let wait = null;
       if (response) {
-        const body = await boundedBody(response, this.maxResponseBytes);
+        const body = await boundedBody(response, this.maxResponseBytes, signal);
         let envelope = null;
         try { envelope = JSON.parse(body.toString("utf8")); } catch { envelope = null; }
         if (response.ok) {
@@ -451,7 +466,7 @@ export class DocumentParserClient {
     timer.unref?.();
     try {
       const response = await this.fetch(`${this.baseUrl}${HEALTH_PATH}`, { headers: { accept: "application/json" }, redirect: "error", signal: controller.signal });
-      const body = await boundedBody(response, 16 * 1024);
+      const body = await boundedBody(response, 16 * 1024, controller.signal);
       let envelope = null;
       try { envelope = JSON.parse(body.toString("utf8")); } catch { envelope = null; }
       const status = envelope?.data?.status;

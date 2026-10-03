@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { resultReplayDeployment } from "./result-replay-deployment.mjs";
 import { spawnSync } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
@@ -96,12 +97,18 @@ const inputPaths = [
   "scripts/ops/restore-drill.sh",
   "scripts/ops/configure-oidc.mjs",
   "scripts/ops/host-preflight.mjs",
+  "scripts/ops/result-replay-deployment.mjs",
+  "scripts/ops/result-replay-image-smoke.mjs",
+  "scripts/ops/export-extension-acceptance-inputs.mjs",
+  "scripts/ops/extension-acceptance-archive.py",
+  "scripts/ops/image-archive-inventory.py",
   "scripts/ops/hosted-production-e2e.mjs",
   "scripts/ops/audit-saas-alignment.mjs",
   "deploy/web/docker-compose.yml",
   "deploy/web/docker-compose.backup.yml",
   "deploy/web/docker-compose.vcr-backup.yml",
   "deploy/web/docker-compose.engine-keyless.yml",
+  "deploy/web/docker-compose.result-replay.yml",
   "deploy/web/docker-compose.local-auth.yml",
   "deploy/web/docker-compose.oidc.yml",
   "deploy/web/docker-compose.saas.yml",
@@ -267,6 +274,8 @@ async function currentServiceImages() {
   if (["1", "true", "yes"].includes(String(process.env.OPEN_SCIENCE_VCR_ENABLED ?? "").toLowerCase())) {
     services.push({ name: "vcr-engine", image: requiredEnv("EVIMED_VCR_ENGINE_IMAGE"), envName: "OPEN_SCIENCE_VCR_ENGINE_IMAGE_ID" });
   }
+  const replay = resultReplayDeployment(process.env);
+  if (replay) services.push({ name: "result-replay", image: replay.image, envName: replay.envName });
   return services;
 }
 

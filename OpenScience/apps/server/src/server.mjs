@@ -1,4 +1,21 @@
 import { DocumentExportService, freezeArtifactDocument } from "./documentExport.mjs";
+import { ResultProvenanceService } from "./resultProvenanceService.mjs";
+import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
+import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
+import { captureResultDelivery } from "./resultDeliveryCapture.mjs";
+import { ResultReplayClient } from "./resultReplayClient.mjs";
+import { ResultEngineRouter } from "./resultEngineRouter.mjs";
+import { ResultVcrReplay } from "./resultVcrReplay.mjs";
+import { ResultReplayService } from "./resultReplayService.mjs";
+import { ResultReplayWorker } from "./resultReplayWorker.mjs";
+import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
+import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
+import { ResultExportService } from "./resultExport.mjs";
+import { ResultRevisionService } from "./resultRevision.mjs";
+import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
+import { ResultImpactService } from "./resultImpact.mjs";
+import { createResultImpactRoutes } from "./resultImpactRoutes.mjs";
+import { createResultSourceUpdatesRoutes } from "./resultSourceUpdatesRoutes.mjs";
 import { DocumentExportWorker } from "./documentExportWorker.mjs";
 import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
 import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
@@ -43,7 +60,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
-import { AgentRunStore, readRunStateProjection, runNotice } from "./agentRuns.mjs";
+import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
@@ -57,7 +74,7 @@ import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
-import { recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
+import { methodObservationSessionsForRun, recordHandbookRunObservations, runMethodObservations } from "./methodObservations.mjs";
 import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learningSummary } from "./learningMetrics.mjs";
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
@@ -1240,7 +1257,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
       });
     }
-    const derived = runMethodObservations({ run, projection, methods, sessions });
+    const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
+    const derived = runMethodObservations({ run, projection, methods, sessions: observedSessions });
     learningMetrics.observeRun({ loaded: derived.methodsLoaded.length, invoked: derived.methodsInvoked.length });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
       // A run that carried an unproven method has to say so on its own row.
@@ -1558,6 +1576,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
+    authorizeContinuation: async (userId, projectId, binding) => {
+      if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
+      await resultImpacts.assertContinuation(userId, projectId, binding);
+    },
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
   // 「前沿动态」 (frontierService.mjs): composed only when switched on and a
@@ -1818,6 +1840,61 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     controller: documentController, admission: client => heavyWorkAdmission(client, "render"),
     report: code => process.stderr.write(`document export: ${code}\n`) }) : null;
   const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
+  const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
+    documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
+    resolveCaptureContext: async (project, input) => {
+      if (!input.relativePath.startsWith("artifacts/result-revisions/") || !input.producer?.runId || !agentRuns) return null;
+      const run = (await agentRuns.list(project)).find(row => row.id === input.producer.runId);
+      return resultRevisions.captureContext(project, input, run);
+    },
+    authorizeProject: async (userId, projectId) => {
+      const user = await store.userById(userId);
+      if (!user) throw new HttpError(403, "result_project_forbidden", "The result project is unavailable.");
+      return store.requireProject(user, projectId);
+    },
+    authorizeReference: async (_userId, project, reference) => {
+      if (reference.versionId) {
+        const row = await productDocuments.get(project.userId, "result-version", reference.versionId);
+        if (!row) return { ...reference, path: null, availability: "deleted" };
+        if (row.projectId !== project.id || row.payload.recordType !== "result-version" || row.payload.digest !== reference.digest) return null;
+        return { ...reference, path: row.payload.path, availability: "captured" };
+      }
+      if (reference.kind === "source" && reference.id.startsWith("src_")) {
+        const row = await productDocuments.get(project.userId, "source", reference.id);
+        if (!row) return { ...reference, path: null, availability: "deleted" };
+        if (row.projectId !== project.id) return null;
+        return { ...reference, path: null, availability: "reference" };
+      }
+      return { ...reference, path: null, availability: "reference" };
+    },
+  }) : null;
+  const resultRevisions = resultProvenance ? new ResultRevisionService({ results: resultProvenance,
+    documents: productDocuments, config, mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes) }) : null;
+  const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, maxBytes: config.resultExportMaxBytes }) : null;
+  const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
+    vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
+      authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
+  const resultReplays = resultProvenance && productJobs ? new ResultReplayService({ results: resultProvenance,
+    documents: productDocuments, jobs: productJobs, engine: resultEngine, config }) : null;
+  if (resultProvenance && resultReplays) resultProvenance.deriveEligibility = (userId, version) => resultReplays.eligibility(userId, version);
+  const resultReplayWorker = resultReplays ? new ResultReplayWorker({ service: resultReplays, jobs: productJobs,
+    engine: resultEngine, config, admission: client => heavyWorkAdmission(client, "replay"),
+    report: code => process.stderr.write(`result replay: ${code}\n`) }) : null;
+  const resultReplayRoutes = createResultReplayRoutes({ store, service: resultReplays });
+  const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
+    autopilot: autopilotService, notifications: notificationService }) : null;
+  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance });
+  const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
+  const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
+  const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
+    runtimeWorkspaceRoot: project => runtimeManager.runtimeWorkspaceRoot(project),
+    onFailure: failure => { void securityAudit(config, "result.capture", "failed", failure).catch(() => {}); } }) : null;
+  // Keep native call/result order while hydrating the pump's project stub.
+  // Capture failures are observations; they never remove a usable delivery.
+  const resultCaptureQueue = createResultCaptureQueue({ capture: resultCapture,
+    resolveProject: project => resultProvenance.scope(project.userId, project.id),
+    onFailure: failure => securityAudit(config, "result.capture", "failed", failure) });
+  const observeResult = (project, runId, observed) => resultCaptureQueue.observe(project, runId, observed);
   const vcrRoutes = createVcrRoutes({
     // The platform's store answers the session and the CSRF check; every
     // question about a study goes to the module's own (review CS-1).
@@ -1829,7 +1906,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // project the same request made with it, and the study row if one got as
       // far as existing, in the one transaction a project deletion is.
       remove: (user, projectId) => store.deleteProject(user, projectId, {
-        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
+        beforeDelete: async (client) => { await managedBrowser.closeProject(user.id, projectId); if (client) { await documentExportService?.cancelProject(user.id, projectId, client); await resultReplays?.cancelProject(user.id, projectId, client); await deleteVcrProjectRows(client, user.id, projectId); } },
       }),
       // The study's first conversation, bound to a 虚拟临研 capability before
       // the study has a step to run: the binding is what puts the module's
@@ -2067,7 +2144,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The same events, into the run's progress aggregate (`run/progress`): a
     // delegated child's tool calls reach the count within a second instead of
     // at the monitor's next read of the child's own history.
-    onRunEvent: (project, runId, observed) => agentRuns?.noteRunEvent(project, runId, observed),
+    onRunEvent: (project, runId, observed) => {
+      agentRuns?.noteRunEvent(project, runId, observed);
+      observeResult(project, runId, observed);
+    },
     // Recorded, not merely published: the browser shows a compaction card and
     // forgets it, while "does compaction ever fire, and what does it cost"
     // needs the ledger. Today the answer is expected to be "never" — the
@@ -2388,6 +2468,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runEvents.publish(run.id, type, data);
     },
     onRunFinished: async (project, run) => {
+      if (resultProvenance) {
+        await resultCaptureQueue.drain();
+        try {
+          const receipt = await readDeliveryReceipt(project, run);
+          if (receipt) {
+            const captured = await captureResultDelivery({ results: resultProvenance, project, run, receipt });
+            for (const failure of captured.failures) await securityAudit(config, "result.capture", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
+          }
+        } catch (error) {
+          await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
+            runId: run.id, code: error?.code ?? "result_capture_failed" });
+        }
+      }
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       runEvents.publish(run.id, "run/state", {
         state: run.status,
@@ -3304,6 +3398,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // Record the attempt before checking the lease: a refusal now has
             // durable proof of no prompt for the next owner to reclaim.
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             try {
               await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
             } catch (error) {
@@ -3348,6 +3443,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               weeklyLimit, runLimit: Number(episode.budgetCny),
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
+            else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);
             return runtimeManager.dispatchPrompt(project, session.id, {
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
@@ -3362,7 +3458,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           return { runId: run.id, sessionId: session.id };
         } catch (error) {
           if (error?.code === "product_job_lease_lost") throw error;
-          if (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code)) {
+          if (error?.code === "result_impact_source_unavailable" || (error?.definitivelyRejected === true && ["autopilot_paused", "autopilot_stopped"].includes(error?.code))) {
             await releaseOwnRuntime();
             throw error;
           }
@@ -3436,6 +3532,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
+  const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns,
+    resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -3533,6 +3631,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     mailto: config.publicSourceCredentials?.unpaywall ?? null,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
   });
+  const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
+    lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
@@ -3838,7 +3938,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     runtimeManager, service: review?.service ?? null, config,
     report: (code) => process.stderr.write(`review gateway: ${code}\n`),
   });
-  const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads });
+  const commands =createCommandRegistry({ config, runtimeManager, sourceUpdates, knowledgeBaseUploads, resultImpacts });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
     claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
   });
@@ -3892,7 +3992,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
-          documentExportWorker?.running,
+          documentExportWorker?.running, resultReplayWorker?.running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -4153,7 +4253,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname === TOOL_UNIVERSE_GATEWAY_PATH
+    const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
+      ? resultGatewayHandler
+      : pathname === TOOL_UNIVERSE_GATEWAY_PATH
       ? toolUniverseGatewayHandler
       : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
       ? capsuleGatewayHandler
@@ -4284,6 +4386,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await creditsRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
+      if (await resultRoutes(req, res)) return;
+      if (await resultReuseRoutes(req, res)) return;
+      if (await resultImpactRoutes(req, res)) return;
+      if (await resultSourceUpdatesRoutes(req, res)) return;
+      if (await resultReplayRoutes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -5309,7 +5416,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinAccount(id))) {
               throw new HttpError(409, "account_busy", "Extension execution is still stopping.");
             }
-            if (client) await documentExportService?.cancelProject(id, null, client);
+            if (client) { await documentExportService?.cancelProject(id, null, client); await resultReplays?.cancelProject(id, null, client); }
             if (memoryIndexing) {
               memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
             }
@@ -5463,7 +5570,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
                 throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
               }
-              if (client) await documentExportService?.cancelProject(user.id, project.id, client);
+              if (client) { await documentExportService?.cancelProject(user.id, project.id, client); await resultReplays?.cancelProject(user.id, project.id, client); }
               if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
               // A GEO project's rows go with it, whether or not the module is
               // on today (its money rows stay; geoStore.mjs).
@@ -5870,6 +5977,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     authorizeOpenSession: authorizeOwnedNativeSession,
     authorizePrompt: assertPublicSessionPrompt,
     recordPromptActor: recordExtensionPromptActor,
+    bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
     authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
     // A message steered into a running turn from the kernel's window is counted
@@ -6060,7 +6168,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker]) {
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -6104,6 +6212,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
       documentExportWorker?.start();
+      resultReplayWorker?.start();
       credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -6291,6 +6400,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
       await documentExportWorker?.close();
+      await resultReplayWorker?.close();
+      await resultCaptureQueue.drain();
       await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;

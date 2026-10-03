@@ -490,6 +490,12 @@
       "note": "Hooks every `conversation.chat.node` occupant receives: the turn's own published values (the closing answer `ui-chat` chose, which its own answer row reads the same way), the chat snapshot (`timeline.turnOrder`), and the kernel's `file` resource (a workspace file's stat, `bytes`). The delivered-files body reads all three."
     },
     "inputMethod": "conversation.input.for(scope).setDraft",
+    "resultRevisionContext": {
+      "ownedGlobal": "__EVIMED_RESULT_REVISION__",
+      "requestEnvelope": "args.request.evimedResultRevision.referenceId",
+      "methods": ["stage", "clear"],
+      "note": "Control-plane-owned reference, staged after the native draft. The official fetch/openStream hooks attach it only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
+    },
     "generation": "connection.generation",
     "failureMarker": "dshRemoteStreamFailure",
     "workspaceMethods": [

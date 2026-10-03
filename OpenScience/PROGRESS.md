@@ -11,18 +11,25 @@
 2026-10-03 05:18 · Connected extensions to real study roles with original-caller and trusted-owner separation, membership epoch replay refusal and transactional revocation/hydration checks;42 isolated PostgreSQL and14 pure checks passed, with independent source review and one separate PG rerun. Complete SaaS qualification remains pending.
 2026-10-03 04:45 · Completed21 actual full-image browser isolation controls on web1ae88/runtime088: foreign native sessions refuse before creation, per-account cookies remain separate, and logout joins owned contexts to zero. Local browser acceptance is complete; production release remains pending.
 2026-10-03 04:37 · Verified native upload, file tree, previews, zoom and managed browser navigation in full088 images, then reproduced and fixed foreign-project native-session admission; independent73-case checks pass with one explicit PG skip. Final image scope regression and release remain pending.
+2026-10-03 04:21 · Integrated PR 5 through 088518fb0 with one private extension assessment authority and genuine constructor factories; native browser polling/history, real Chromium, scoped manifest and source-continuation regressions pass; final CI artifacts and hosted qualification remain pending.
+2026-10-03 04:14 · Closed source-revocation continuation races and current-request handbook attribution, preserved completed research, hardened extension manifest bonds, and reproduced the CI private-artifact ownership fix; focused checks pass while new PostgreSQL and serving acceptance remain pending.
 2026-10-03 03:57 · Fixed native browser snapshot queue pressure and BFCache Back/Forward acknowledgements; independent published-DSH assembly and real Chromium regressions pass, including34ms/55ms Linux history restores. Final full-image interaction checks remain pending.
 2026-10-03 03:53 · Added independently reviewed private measurement admission bound to exact plugin, adapter, image, permission and account epochs; ordinary hosted qualification remains unchanged. Real Docker isolation and complete SaaS qualification are still pending.
+2026-10-03 03:09 · Integrated PR #5 through a46e948e with actual native slot ownership fixes; 29 pinned UI assembly checks, one Chromium isolation case, port lint/typecheck and server typecheck passed. Docker fixture transport now preserves every production sandbox mount; hosted candidate qualification remains pending.
+2026-10-03 01:50 · Integrated the latest team browser isolation and bounded VCR acceptance work while preserving result revisions, replay cleanup and permission freshness; 182 focused checks pass, with one PostgreSQL case awaiting CI and full-image hosted release acceptance pending.
 2026-10-03 01:42 · Added an independently reviewed bounded VCR and shared-export acceptance driver with private attempted-action receipts, strict input/table admission, retained incomplete reviews and cross-account denial checks; 12 driver tests pass, while live S1-S4 evidence remains outstanding.
 2026-10-03 01:17 · Implemented and independently reviewed tenant-bound managed pages behind native DSH browser chrome, Tokyo DNS/TLS egress, input/lifecycle isolation and maintenance cleanup; real CDP/HTTP controls, Chromium input checks and an internal-only Docker browser probe passed. Full-image UI acceptance and platform release remain pending.
+2026-10-03 00:47 · Bound learned-method use to the actual current native request or recorded turn and assigned child sessions; 224 regressions pass without trimming preserved history, while hosted acceptance and release remain pending.
 2026-10-03 00:28 · Verified signed native-frame HTTP against disposable Chromium: cross-account reads are refused and logout/unknown-open closure physically releases contexts; actual Tencent-to-Tokyo DNS and pinned TLS probes identified and corrected the browser reachability path. Native interaction review, complete acceptance and deployment remain pending.
+2026-10-03 00:02 · Integrated the reviewed native upload and cancellable cold-start fixes, isolated assessment admission and optional VCR receipt signatures; candidate CI now verifies and exports exact core/replay/VCR image subsets, while live qualification, unified deployment and final release remain pending.
+2026-10-02 23:02 · Implemented immutable result inspection, request-bound revisions, selected exports and source-change continuation; all five numerical methods pass real PostgreSQL and signed Python/R replay with retained originals, while final hosted acceptance, integration and release remain pending.
+2026-10-02 22:40 · Confirmed real study role/export integration and separately bound installer/reconciler epochs with 64 existing PostgreSQL cases; repaired revoked-operation cancellation with strict original caller/incarnation checks, transaction-free physical join and no result hydration. The operation suite passes 23/23 without skips, including 8 new cancellation cases; focused lint/typecheck pass. Hosted qualification remains pending.
 2026-10-02 20:59 · Fixed containerized extension preparation and input snapshots to use verified read-only data-volume subpaths; independent review and an actual Web-container-to-Docker Chinese DOCX read passed with joined cleanup. Final serving image, SaaS qualification and production release remain pending.
 2026-10-02 20:46 · Pushed reviewed local integration and boundary controls, built and booted the full AMD64 DSH runtime with the YAML security backport and exact native baseline, and verified isolated PostgreSQL regressions; final extension qualification, fresh tool receipts, merge and deployment remain pending.
 2026-10-02 18:33 · Pushed the integrated development branch to GitHub with frontier and VCR ancestry; actual ordinary-user acceptance still finds remaining preparation gaps, so merge, SaaS qualification and deployment remain pending.
 2026-10-02 17:24 · Completed independently reviewed native skill browsing, repository duplication/import and resumable authored-history migration, with actual isolated native/PostgreSQL validation; corrected active-workspace output placement and retained project-wide quota, while full SaaS qualification and deployment remain pending.
-2026-10-02 08:27 · Independently verified private skill account-epoch lifetime, clean-database startup, durable account purge, historical resource export and per-run exact revision provenance; actual readonly generation activation and SaaS qualification remain pending.
-
 2026-10-02 15:06 · Integrated reviewed leased extension execution, actual native registry/call facts, authenticated actor binding, scoped deletion joins, cold activation and maintenance settlement; local PostgreSQL/Docker/SDK controls pass, final SaaS qualification and release remain pending.
+2026-10-02 08:27 · Independently verified private skill account-epoch lifetime, clean-database startup, durable account purge, historical resource export and per-run exact revision provenance; actual readonly generation activation and SaaS qualification remain pending.
 2026-10-02 07:32 · Committed independently verified isolated Cowork dependency closure; personal skill runtime composition and pool-one detached monitor regression pass locally, with package activation and SaaS qualification still pending.
 2026-10-02 06:08 · Ordinary-user Plugins/Skills pages passed independent UI review after nine pin, configuration, revocation and pagination fixes; actual runtime activation and SaaS qualification remain pending.
 2026-10-02 05:21 · Protocol8 skill validation now parses with the pinned SDK in a verified isolated read-only Docker task and joins cancellation; native boundary regression passed, while full serving-image and SaaS qualification remain pending.
@@ -657,27 +664,6 @@
 2026-07-02 08:20 · Slice #2 (Hermes integration layer): `packages/sdk` `HermesClient` speaks the Hermes TUI Gateway JSON-RPC contract over WebSocket (session.create/prompt, streamed message.delta/tool.start/tool.complete/approval.request/session.done), transport injectable. Wired into the desktop: live `/live` session folds streamed events into thread blocks, real runtime status in the sidebar + Settings Gateway URL + Connect. Proven against a protocol-compatible mock gateway both in an integration test and live in the browser UI (connect → prompt → streamed tool + text + done). 24 vitest tests, typecheck/lint/build green. Note: a real agent turn still needs the actual Hermes binary + a model API key (kept empty per requirement).
 2026-07-02 08:05 · Slice #1 (UI shell + static workspace) built browser-first: pnpm workspace + Vite/React/TS/Tailwind/Radix. Three-column Claude-Science-style UI (sessions sidebar / thread / contextual inspector) with warm paper theme, reproducing all three reference screenshots (figure+artifact, table+notebook, literature+PDF) from mock data. Settings has fillable, empty API-key fields with Hermes as runtime. Verified on Mac: typecheck ✓, eslint ✓, 19 vitest tests ✓, vite build ✓; screenshots confirmed against references.
 2026-07-02 07:04 · Initialized project skeleton: monorepo directory tree (apps / packages / runtime / docs / examples / scripts), AGENTS.md + CLAUDE.md symlink, README, MIT LICENSE, .gitignore, and English PRD + TECHNICAL_DESIGN docs. No build tooling yet.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 手工分类反而暴露了 D 为什么注定错:103 处 `0.1.2-alpha.3` 不是一类东西。**76 处是钉子**(要一起动,否则装出两个 release 的混合树,已经发生过一次)、**13 处是出处**(金帧的「Booted @deepseek-ai/dsh@0.1.2-alpha.3」、六处「recorded/confirmed against a running alpha.3」、基线 provenance、以及断言「那个被删的包最新只到 alpha.3」的一行——改写它等于宣称证据取自一个它从未接触过的二进制)、**14 处是历史**(不重新标日期)。所以 D 改造成它唯一站得住的形态:不是重写器,是**分类清单守卫** `check:pin-inventory` ——每一处都必须被某条规则认领,无人认领即失败;两种拼写都扫(字面量与转义 `0\.1\.2-alpha\.3`,后者正是 D 当初看不见的十处)。三个守卫都已进 CI。
 `scripts/ops/capability-acceptance.mjs` is the vehicle the acceptance ledger never had. Fourteen of eighteen rows say `not-run` and the reason was not that nobody tried: the hosted e2e drives one hardcoded capability, deployment-smoke never waits for a run to finish, and the briefs in `evals/*/briefs.json` had no code that could dispatch them. It renders a brief from the harness the ledger already names, binds the session to that capability so the router cannot redirect it, waits, and writes a result file where the ledger's `evidence` field wants one. It does not update the ledger — an acceptance that writes its own verdict is not one.

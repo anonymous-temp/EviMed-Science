@@ -499,9 +499,10 @@ function vcrSettings(overrides) {
    * other key files: a file named by `<NAME>_FILE`, opened without following a
    * symlink, no wider than owner and group (the engine container reads the same
    * file through its group). There is no value-in-the-environment form: the
-   * token and the receipt key are the only thing that makes a result the
-   * engine's, and an environment is what a process listing and a crash report
-   * carry. An `overrides` value exists for tests alone.
+   * token authenticates requests; an optional receipt key adds HMAC checking.
+   * Engine/job/input identity and output hashes are checked in either case.
+   * A process listing or crash report must not carry either secret.
+   * An `overrides` value exists for tests alone.
    * @param {string} valueKey @param {string} fileKey @param {string} fileEnv @param {string} code
    * @returns {{ value: string, error: string | null }}
    */
@@ -537,19 +538,15 @@ function vcrSettings(overrides) {
     vcrBackupStateFile: String(overrides.vcrBackupStateFile ?? process.env.OPEN_SCIENCE_VCR_BACKUP_STATE_FILE ?? '').trim(),
     vcrBackupMaxAgeSeconds: integer('vcrBackupMaxAgeSeconds', 'OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS', 90_000, 60, 604_800),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-    // The engine's two secrets, read from the files the deployment mounts
-    // (`OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE`, `…_RECEIPT_KEY_FILE`): the bearer
-    // the control plane presents and the key its results are signed with. With
-    // the URL set and either one missing, unreadable or under 32 bytes the
-    // module says the engine is unconfigured and no client is made: an engine
-    // that would take unauthenticated calls, or whose results could not be
-    // told from a forgery, is worse than the step saying 「暂不可用」.
-    // The `…Error` fields carry why, for readiness (never the secret).
+    // Request authentication is required; receipt signing is optional. An
+    // explicitly configured unreadable or invalid key is an error, never an
+    // invitation to fall back to unsigned verification. Readiness names only
+    // the error, never the secret. Hash and job identity checks always apply.
     vcrEngineToken: engineToken.value,
     vcrEngineTokenError: engineToken.error,
     vcrEngineReceiptKey: engineReceiptKey.value,
     vcrEngineReceiptKeyError: engineReceiptKey.error,
-    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && Boolean(engineReceiptKey.value),
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error && !engineReceiptKey.error,
     // One at a time on the shared host (plan §11.4).
     vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
     // Every job's own CPU ceiling; over it, the job stops at a checkpoint.
@@ -2543,6 +2540,20 @@ export function loadConfig(overrides = {}) {
     // from Crossref when its 「依据」 are opened. A notice, never a gate
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
+    resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    resultEngineUrl: String(overrides.resultEngineUrl ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_URL ?? "").trim(),
+    resultEngineRequestTimeoutMs: Math.max(1000, Math.min(60000, Number(
+      overrides.resultEngineRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS ?? 15000,
+    ) || 15000)),
+    resultReplayTimeoutMs: Math.max(1000, Math.min(1800000, Number(
+      overrides.resultReplayTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS ?? 300000,
+    ) || 300000)),
+    resultSnapshotMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultSnapshotMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
+    resultExportMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
+      overrides.resultExportMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES ?? 64 * 1024 * 1024,
+    ) || 64 * 1024 * 1024)),
     // One Crossref request for twenty cited works, made while a reader waits
     // for a report's 「依据」 marks: past this the badges are simply absent.
     // Counted in open_science_source_updates_total{outcome="failed"}. Six

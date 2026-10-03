@@ -885,3 +885,31 @@ runtime image. Configuration rollback does not roll back PostgreSQL. Restore
 encrypted app data and database clones into separate disposable targets,
 verify them before any deliberate replacement, and preserve post-snapshot work.
 Keep the base bundle and rollback evidence until acceptance is complete.
+
+
+### Optional aggregate result replay
+
+Configure `OPEN_SCIENCE_RESULT_ENGINE_URL=http://result-replay:8031` and an exact
+`OPEN_SCIENCE_RESULT_REPLAY_IMAGE` tag or digest to select
+`deploy/web/docker-compose.result-replay.yml`. Keep the URL empty when this
+executor is unavailable. Native VCR configuration remains independent; enabling
+this overlay does not enable or replace the VCR engine.
+
+Build `deploy/specialist-adapter/Dockerfile.result-replay` from the repository
+root, with the same `RELEASE_ID`, `SOURCE_REVISION`, and `BUILD_CREATED` arguments
+as the web image. Transfer and load this image together with the release images.
+`host-delta-release.sh` builds and pins it when the staged deployment config
+selects it. Generate the release manifest after loading/building all images; its
+`result-replay` service records the exact image ID. Host preflight checks the
+selected image architecture and the existing private workload signing host file;
+the release switch selects the same overlay before comparing service hashes.
+Do not carry an old `OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID` into a new build.
+
+The executor uses `OPEN_SCIENCE_DATA_VOLUME` and the existing
+`OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE`. It has only an internal
+network, no published port, provider credential, Docker socket, or VCR patient
+data plane mount. Only the control plane joins its network and submits scoped,
+signed aggregate jobs. A successful Compose render or numerical component test
+is not serving qualification: exercise an authorized replay through the deployed
+control plane and record its exact input, recipe, image, output, and cancellation
+receipt before claiming the provider available.

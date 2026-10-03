@@ -320,11 +320,31 @@ class AuthenticationTest(EngineCase):
 
 
 class SecretFilesTest(EngineCase):
-    def test_refuses_to_start_without_the_files(self) -> None:
-        for missing in ("VCR_ENGINE_TOKEN_FILE", "VCR_ENGINE_RECEIPT_KEY_FILE"):
-            with self.assertRaises(RuntimeError) as caught:
-                engine_app.create_app(self.environ(**{missing: None}))
-            self.assertIn(missing, str(caught.exception))
+    def test_refuses_to_start_without_the_request_token(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            engine_app.create_app(self.environ(VCR_ENGINE_TOKEN_FILE=None))
+        self.assertIn("VCR_ENGINE_TOKEN_FILE", str(caught.exception))
+
+    def test_authenticated_unsigned_jobs_finish_without_a_receipt_key_or_development_mode(self) -> None:
+        client = self.client(VCR_ENGINE_RECEIPT_KEY_FILE=None)
+        self.assertEqual(client.post("/jobs", json=self.job("unsigned_auth")).status_code, 202)
+        self.assertEqual(self.wait_for(client, "unsigned_auth")["state"], "succeeded")
+        result = client.get("/jobs/unsigned_auth/result").json()
+        self.assertEqual(result["jobId"], "unsigned_auth")
+        self.assertEqual(result["manifest"]["outputHash"], "d" * 64)
+        self.assertNotIn("signature", result["manifest"])
+        unauthenticated = self.client(authorized=False, VCR_ENGINE_RECEIPT_KEY_FILE=None)
+        self.assertEqual(unauthenticated.post("/jobs", json=self.job("blocked")).status_code, 401)
+        self.assertEqual(unauthenticated.get("/jobs/unsigned_auth/result").status_code, 401)
+
+    def test_a_named_receipt_key_remains_strict_in_authenticated_unsigned_capable_mode(self) -> None:
+        self.key_file.write_text("short")
+        with self.assertRaises(RuntimeError) as caught:
+            self.make_app()
+        self.assertIn("VCR_ENGINE_RECEIPT_KEY_FILE", str(caught.exception))
+        missing = self.secrets_dir / "missing-receipt-key"
+        with self.assertRaises(RuntimeError):
+            self.make_app(VCR_ENGINE_RECEIPT_KEY_FILE=str(missing))
 
     def test_refuses_at_import_under_uvicorn(self) -> None:
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "PYTHONDONTWRITEBYTECODE": "1",
@@ -728,16 +748,19 @@ class CancelAndLimitsTest(EngineCase):
         self.assertFalse((self.work / ".canceled-diskfull").exists(), "missing durable proof is never invented")
 
     def test_cancel_before_acceptance_survives_restart_and_refuses_a_late_submit(self) -> None:
-        client = self.client()
-        self.assertEqual(client.post("/jobs/notaccepted/cancel").json(), {"canceled": True})
-        self.assertEqual(client.get("/jobs/notaccepted").json()["state"], "canceled")
-        late = client.post("/jobs", json=self.job("notaccepted"))
-        self.assertEqual(late.status_code, 409)
-        self.assertEqual(late.json()["detail"], "job_canceled")
-        again = self.client()
-        self.assertEqual(again.get("/jobs/notaccepted").json()["state"], "canceled")
-        self.assertEqual(again.post("/jobs", json=self.job("notaccepted")).status_code, 409)
-        self.assertFalse((self.stub / "pid-notaccepted.txt").exists())
+        for receipt_key in (str(self.key_file), None):
+            with self.subTest(signed=receipt_key is not None):
+                job_id = "notaccepted_signed" if receipt_key else "notaccepted_unsigned"
+                client = self.client(VCR_ENGINE_RECEIPT_KEY_FILE=receipt_key)
+                self.assertEqual(client.post(f"/jobs/{job_id}/cancel").json(), {"canceled": True})
+                self.assertEqual(client.get(f"/jobs/{job_id}").json()["state"], "canceled")
+                late = client.post("/jobs", json=self.job(job_id))
+                self.assertEqual(late.status_code, 409)
+                self.assertEqual(late.json()["detail"], "job_canceled")
+                again = self.client(VCR_ENGINE_RECEIPT_KEY_FILE=receipt_key)
+                self.assertEqual(again.get(f"/jobs/{job_id}").json()["state"], "canceled")
+                self.assertEqual(again.post("/jobs", json=self.job(job_id)).status_code, 409)
+                self.assertFalse((self.stub / f"pid-{job_id}.txt").exists())
 
     def test_cancel_kills_the_whole_process_group(self) -> None:
         client = self.client()

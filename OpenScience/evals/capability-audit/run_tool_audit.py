@@ -89,6 +89,11 @@ TASK_FIXTURES = {
     "vcr_simulate": {"action": "status", "jobId": "job_release_audit_probe"},
     "trial_registry_record": {"registryId": "NCT04280705"},
     "evidence_pool": {"action": "status", "jobId": "job_release_audit_probe"},
+    # This route probe reads an existing owned job. Engine qualification is
+    # separately proved by completed numerical receipts; an absent job must
+    # fail this probe rather than masquerade as a successful calculation.
+    "research_calculate": {"action": "status", "jobId": os.environ.get(
+        "EVIMED_RESULT_REPLAY_AUDIT_JOB_ID", "replay_" + "0" * 64)},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
@@ -440,7 +445,10 @@ def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
     response_root.mkdir(parents=True, exist_ok=True)
+    disabled = server.disabled_tools()
     for tool, arguments in TASK_FIXTURES.items():
+        if tool in disabled:
+            continue
         started = time.monotonic()
         result = server.call_tool(tool, arguments)
         elapsed = round((time.monotonic() - started) * 1000)

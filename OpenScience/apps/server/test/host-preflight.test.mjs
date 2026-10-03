@@ -553,3 +553,48 @@ test("4.2 GB serving capacity fails before image inspection or any write operati
   }), { code: "preflight_disk_space" });
   assert.equal(calls.some((call) => call.some((part) => ["build", "pull", "load", "prune", "image"].includes(part))), false);
 });
+
+
+test("host preflight selects aggregate replay only with exact isolated URL, image and private existing key", async (t) => {
+  const values = deploymentValues({ OPEN_SCIENCE_RESULT_ENGINE_URL: "http://result-replay:8031",
+    OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "evimed-result-replay:revision", OPEN_SCIENCE_VCR_ENABLED: "false",
+    OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE: "./secrets/workload-key.txt" });
+  const fixture = await deploymentFixture(values);
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  const key = path.join(fixture.dir, "secrets/workload-key.txt");
+  await writeFile(key, `${"a".repeat(64)}\n`, { mode: 0o600 });
+  const config = validateDeploymentConfig(values, fixture.envFile);
+  const args = buildComposeArgs(config, fixture.envFile).join(" ");
+  assert.match(args, /docker-compose.result-replay.yml/);
+  assert.equal(config.resultReplay.image, values.OPEN_SCIENCE_RESULT_REPLAY_IMAGE);
+  assert.doesNotMatch(buildComposeArgs(validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_ENGINE_URL: "" }, fixture.envFile), fixture.envFile).join(" "), /result-replay.yml/);
+  assert.throws(() => validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_ENGINE_URL: "http:\/\/external:8031" }, fixture.envFile));
+  assert.throws(() => validateDeploymentConfig({ ...values, OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "replay:latest" }, fixture.envFile));
+  await chmod(key, 0o644);
+  assert.throws(() => validateDeploymentConfig(values, fixture.envFile));
+});
+
+test("host preflight refuses a configured replay image with the wrong architecture before Compose or writes", async (t) => {
+  const values = deploymentValues({ OPEN_SCIENCE_RESULT_ENGINE_URL: "http://result-replay:8031",
+    OPEN_SCIENCE_RESULT_REPLAY_IMAGE: "evimed-result-replay:revision",
+    OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE: "./secrets/workload-key.txt" });
+  const fixture = await deploymentFixture(values);
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  await writeFile(path.join(fixture.dir, "secrets/workload-key.txt"), `${"a".repeat(64)}\n`, { mode: 0o600 });
+  const calls = [];
+  await assert.rejects(runHostPreflight({ envFile: fixture.envFile, online: false, processEnv: {}, platform: "linux",
+    stat: () => ({ gid: 998, mode: 0o140660, isSocket: () => true }),
+    statfs: () => ({ bavail: 4_000_000n, bsize: 4096n }), readLsm: () => "landlock",
+    onCheck: () => {}, execute: (command, args) => {
+      calls.push([command, ...args]);
+      if (command === "uname") return "7.0.0";
+      if (args[0] === "version") return "26.1.4|linux|amd64";
+      if (args[0] === "info") return "/var/lib/docker";
+      if (args[0] === "compose" && args[1] === "version") return "v2.40.3";
+      if (args[0] === "image") return `sha256:${"b".repeat(64)}|linux|${args.at(-1) === values.OPEN_SCIENCE_RESULT_REPLAY_IMAGE ? "arm64" : "amd64"}`;
+      assert.fail(`Unexpected operation before image qualification: ${command}`);
+    },
+  }), { code: "preflight_image_arch" });
+  assert.ok(calls.some(call => call.at(-1) === values.OPEN_SCIENCE_RESULT_REPLAY_IMAGE));
+  assert.equal(calls.some(call => call.includes("config")), false);
+});

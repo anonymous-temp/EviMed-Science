@@ -139,7 +139,8 @@ test("the counters have a producer, which is the whole difference between wired 
   assert.match(serverSource, /const recordMethodUse = async \(\{ project, run, sessions \}\) => \{/);
   assert.match(serverSource, /learningService\.recordObservation\(/, "no producer for the success counters");
   assert.match(serverSource, /learningService\.recordEligible\(/, "no producer for the denominator");
-  assert.match(serverSource, /runMethodObservations\(\{ run, projection, methods, sessions \}\)/);
+  assert.match(serverSource, /const observedSessions = methodObservationSessionsForRun\(\{ run, projection, sessions \}\);\s*const derived = runMethodObservations\(\{ run, projection, methods, sessions: observedSessions \}\);/,
+    "the counter producer must receive only the sessions attributed to the current run");
   // `mark` stamps `trial: true` on the entries whose method was on trial, so
   // the ledger can tell a measured arm from an ordinary run; the receipt it
   // writes is still derived, which is what this asserts.

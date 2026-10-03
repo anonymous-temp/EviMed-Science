@@ -46,3 +46,15 @@ describe("retraction and correction notices on a cited source", () => {
     expect(screen.getByLabelText("引文已在保存的原文中核对")).toHaveTextContent("✓");
   });
 });
+
+it("shows unknown and unavailable checks without implying no source update", () => {
+  const { rerender } = render(<SourceUpdateBadges updates={[]} updateStatus={{ state: "unavailable", checkedAt: null, reason: "timeout", updates: [] }} />);
+  expect(screen.getByText("更新查询不可用")).toBeInTheDocument();
+  expect(screen.queryByText("未发现更新")).toBeNull();
+  rerender(<SourceUpdateBadges updates={[]} updateStatus={{ state: "unknown", checkedAt: null, updates: [] }} />);
+  expect(screen.getByText("更新状态未知")).toBeInTheDocument();
+});
+it("shows no update only for an explicitly completed update check", () => {
+  render(<SourceUpdateBadges updates={[]} updateStatus={{ state: "no_update", checkedAt: "2026-10-02T12:00:00Z", updates: [] }} />);
+  expect(screen.getByText("未发现更新")).toBeInTheDocument();
+});

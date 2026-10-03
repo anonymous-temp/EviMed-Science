@@ -39,6 +39,7 @@ import kb_search
 import frontier_search
 import geo_platform
 import vcr_platform
+import research_calculate
 
 
 SERVER_NAME = "evimed-research"
@@ -900,6 +901,7 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # (EVIMED_VCR_GATEWAY_URL), and used by the module's five capabilities' runs.
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
+TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -985,7 +987,7 @@ def disabled_tools():
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool", "research_calculate"})
 
 
 def list_tools():
@@ -1735,7 +1737,7 @@ def call_tool(name, arguments):
         from execution_context import validate_context
         try:
             execution_context = validate_context(arguments.pop("__evimed_execution_context"))
-            if name not in {"meta_analysis", *specialist_jobs.SPECS}:
+            if name not in {"meta_analysis", "research_calculate", *specialist_jobs.SPECS}:
                 raise ValueError("execution context is only supported for engine tools")
         except ValueError:
             return failure("engine_execution_context_invalid", "The engine execution context is invalid.", False)
@@ -1996,6 +1998,13 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name == "research_calculate":
+        try:
+            return research_calculate.calculate(arguments, execution_context=execution_context)
+        except research_calculate.ResearchCalculateError as error:
+            return failure(error.code, str(error), error.retryable,
+                           "invalid_input" if error.code == "result_input_invalid" else "retry" if error.retryable else "unsupported",
+                           ["Inspect the same owned job after a lost response; preserve the prior result."])
     if name in ("geo_read", "geo_write", "social_posts_search"):
         try:
             if name == "geo_read":

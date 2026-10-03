@@ -59,6 +59,17 @@ test("the tests that need the engine's R and Python are exactly the ones the dur
   const named = [...String(step.run).matchAll(/apps\/server\/test\/(\S+\.test\.mjs)/g)].map((match) => match[1]);
   assert.deepEqual(named.sort(), [...ENGINE_BACKED_INTEGRATION_TESTS].sort());
   assert.match(step.env.OPEN_SCIENCE_TEST_POSTGRES_URL, /^postgresql:\/\/postgres@127\.0\.0\.1:5432\/evimed_test/, "a loopback test database the tests accept");
+  assert.equal(seam.env.OPEN_SCIENCE_TEST_RESULT_ENGINES, "1");
+  assert.equal(seam.env.EVIMED_RESULT_REPLAY_SIGNED_VCR, "1");
+  assert.match(step.run, /skipped 0/, "the required numerical proof cannot appear green by skipping itself");
+  assert.match(step.run, /receipt.*signed/, "the R proof must verify signed HTTP receipts");
+  const python = seam.steps.find(entry => entry.name === "Install the fixed Python numerical replay environment from existing locks");
+  assert.ok(python, "the deterministic Python engines need their existing pinned numerical environment");
+  assert.match(python.run, /specialist-adapter\/requirements\.lock/);
+  assert.match(python.run, /meta\/requirements\.lock/);
+  assert.match(python.run, /文献剂量分析\/requirements\.lock/);
+  const receipts = seam.steps.find(entry => entry.name === "Preserve five-path numerical replay receipts and log");
+  assert.equal(receipts?.if, "always()"); assert.equal(receipts?.with?.["if-no-files-found"], "error");
 });
 
 test("the three engine jobs are wired to one R library, and a missing R is a red job rather than a skipped test", async () => {
@@ -221,16 +232,19 @@ test("no machine path is committed in the module's scripts, its CI or the runner
     "项目代码/vcr-engine/tests/run_all.R",
     "项目代码/vcr-engine/tests/service/test_service.py",
   ];
-  async function includeScripts(directory) {
+  async function collectScripts(directory) {
     for (const entry of await readdir(path.join(repoRoot, directory), { withFileTypes: true })) {
       if (entry.name === "__pycache__") continue;
       const file = path.join(directory, entry.name);
-      if (entry.isDirectory()) await includeScripts(file);
-      else if (entry.isFile()) files.push(file);
-      else assert.fail(`Unsupported script entry: ${file}`);
+      if (entry.isDirectory()) await collectScripts(file);
+      else {
+        assert.ok(entry.isFile(), `the script scan requires a regular file: ${file}`);
+        files.push(file);
+      }
     }
   }
-  await includeScripts("OpenScience/scripts/vcr");
+  await collectScripts("OpenScience/scripts/vcr");
+  assert.ok(files.includes(path.join("OpenScience", "scripts/vcr/test/live-acceptance.test.mjs")), "the nested acceptance test is scanned");
   assert.ok(files.length >= 12, "the scan named its files");
   const found = [];
   for (const file of files) {

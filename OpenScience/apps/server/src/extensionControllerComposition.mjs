@@ -62,7 +62,10 @@ export function createControllerExtensionComposition({ config, deployment, datab
       if (!candidate || candidate.scope.ownerAccountCreatedAt !== (scope.ownerAccountCreatedAt ?? scope.accountCreatedAt) || candidate.scope.projectCreatedAt !== scope.projectCreatedAt) return false;
       const actualImage = await imageId(), identities = deploymentGenerationIdentities(deployment, actualImage);
       if (['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => candidate.identity[key] !== identities[key])) return false;
-      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: ownerId }, candidate.reference, {assessmentAuthority});
+      const callerScope={ownerId,actorId:scope.userId,ownerAccountCreatedAt:scope.ownerAccountCreatedAt,actorAccountCreatedAt:scope.accountCreatedAt,
+        actorMembershipEpoch:scope.membershipEpoch,projectId:scope.projectId,projectCreatedAt:scope.projectCreatedAt};
+      const assessmentContext=assessmentAuthority?{callerScope,operation:request.operation}:null;
+      const manifest = await verifyExtensionGeneration(config, { id: scope.projectId, userId: ownerId }, candidate.reference, {assessmentAuthority,assessmentContext});
       const observed = extractExtensionGenerationOperationIdentity(manifest, { userId: scope.userId, ownerId, ownerAccountCreatedAt: current.accountCreatedAt, membershipEpoch: scope.membershipEpoch,
         projectId: scope.projectId, accountCreatedAt: scope.accountCreatedAt, projectCreatedAt: scope.projectCreatedAt,
         runtimeGeneration: scope.runtimeGeneration }, scope.descriptorId);
@@ -86,7 +89,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
         || prepared.payload.accountCreatedAt !== installer.createdAt || prepared.payload.installationId !== scope.installationId
         || prepared.payload.installationRevision !== scope.installationRevision || prepared.result.installationId !== scope.installationId
         || prepared.result.installationRevision !== scope.installationRevision || prepared.result.integrity !== pin.integrity) return false;
-      if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:ownerId}, {operation:request.operation}); return true; }
+      if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:ownerId}, assessmentContext); return true; }
       const proof = await qualification.authority(entry);
       return proof?.receipt.receiptDigest === pin.receiptDigest;
     } catch { return false; }

@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {ExtensionToolController} from '../src/extensionToolController.mjs';
+import {ExtensionToolController,extensionExecutionIdentity} from '../src/extensionToolController.mjs';
+import {containedExtensionExecutionIdentity} from './helpers/containedExtensionFixture.mjs';
+
+test('the actual Docker execution fixture carries current owner and membership identity before any image is required',()=>{
+  const identity=containedExtensionExecutionIdentity({id:'fixture-descriptor',artifactDigest:'sha256:'+'b'.repeat(64)},1);
+  assert.deepEqual(extensionExecutionIdentity(identity),identity);
+  assert.equal(identity.ownerId,identity.userId);assert.equal(identity.ownerAccountCreatedAt,identity.accountCreatedAt);assert.equal(identity.membershipEpoch,null);
+  const member={...identity,userId:'fixture-member',accountCreatedAt:'member-epoch',membershipEpoch:'current-membership-epoch'};
+  assert.deepEqual(extensionExecutionIdentity(member),member);
+  for(const key of ['ownerId','ownerAccountCreatedAt','membershipEpoch']){
+    const missing={...identity};delete missing[key];assert.throws(()=>extensionExecutionIdentity(missing),{code:'extension_contract_invalid'});
+  }
+  assert.throws(()=>extensionExecutionIdentity({...identity,ownerId:''}),{code:'product_identifier_invalid'});
+  for(const changed of [{ownerAccountCreatedAt:''},{membershipEpoch:undefined},{membershipEpoch:[]},{hostPath:'/private'}]){
+    assert.throws(()=>extensionExecutionIdentity({...identity,...changed}),{code:'extension_contract_invalid'});
+  }
+});
 
 test('controller accepts no caller-selected execution authority and unsupported descriptors stay unsupported',async()=>{
   const controller=new ExtensionToolController({admittedDescriptors:[],stateRoot:'/tmp/unused-extension-controller',adapterRoot:'/tmp/unused-adapter',inputRoot:'/tmp/unused-input'});

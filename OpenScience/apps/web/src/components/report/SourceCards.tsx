@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { Check, Copy, ExternalLink, FileText } from "lucide-react";
 import { EVIDENCE_SOURCE_TYPES, EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
-import { claimSources, type ClaimEvidence, type ClaimSource, type SourceUpdate } from "@/lib/claimCitations";
+import { claimSources, type ClaimEvidence, type ClaimSource, type SourceUpdate, type SourceUpdateStatus } from "@/lib/claimCitations";
 import { cn } from "@/lib/cn";
 import { tagClasses } from "@/components/ui/Tag";
 import { Menu } from "@/components/ui/Menu";
@@ -58,10 +58,12 @@ export interface SourceCardEntry {
   /** What `claim_verification` found for that quotation. */
   status?: string;
   updates?: readonly SourceUpdate[];
+  updateStatus?: SourceUpdateStatus;
   /** How many of the report's claims stand on it. */
   claims: number;
   /** Where to read the quotation in the preserved source. */
   artifactPath?: string;
+  resultVersionId?: string;
 }
 
 const STATUS_MARK: Record<string, { mark: string; label: string; className: string }> = {
@@ -104,7 +106,9 @@ export function sourceCardEntries(
         ...(source.supportQuote ? { quote: source.supportQuote } : {}),
         ...(checked?.status ? { status: checked.status } : {}),
         ...(checked?.updates?.length ? { updates: checked.updates } : {}),
+        ...(checked?.updateStatus ? { updateStatus: checked.updateStatus } : {}),
         ...(source.artifactPath ? { artifactPath: source.artifactPath } : {}),
+        ...(source.resultVersionId ? { resultVersionId: source.resultVersionId } : {}),
         ...(source.authors?.length ? { authors: source.authors } : {}),
         ...(source.journal ? { journal: source.journal } : {}),
         ...(source.year ? { year: source.year } : {}),
@@ -197,7 +201,7 @@ export function SourceCard({ entry, runId }: { entry: SourceCardEntry; runId?: s
           </p>
           {/* A work that no longer stands as published is the one thing on a
             * card a reader must not miss, so it is a strip of its own. */}
-          {entry.updates && entry.updates.length > 0 && <SourceUpdateBadges updates={entry.updates} />}
+          <SourceUpdateBadges updates={entry.updates} updateStatus={entry.updateStatus} />
           {entry.quote && (
             <blockquote className="border-l-2 border-strong pl-2 text-ui text-text">
               {verdict && <span className={cn("mr-1", verdict.className)} aria-label={verdict.label}>{verdict.mark}</span>}
@@ -206,7 +210,7 @@ export function SourceCard({ entry, runId }: { entry: SourceCardEntry; runId?: s
           )}
           {runId && entry.artifactPath && (
             <Link
-              to={preservedSourceHref(runId, entry.artifactPath, entry.quote)}
+              to={preservedSourceHref(runId, entry.artifactPath, entry.quote, entry.resultVersionId)}
               className="inline-flex items-center gap-1 text-caption text-link hover:underline"
             >
               <FileText size={16} aria-hidden="true" />定位原文

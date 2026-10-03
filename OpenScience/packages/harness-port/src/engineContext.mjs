@@ -1,7 +1,7 @@
-/** Per-invocation model policy for the six specialist MCP tool bodies. */
+/** Per-invocation model policy for specialist and deterministic MCP bodies. */
 export const ENGINE_EXECUTION_CONTEXT = '__evimed_execution_context'
 const ENGINE_TOOLS = Object.freeze(['meta_analysis', 'mendelian_randomization', 'bibliometric_analysis',
-  'research_topic_selection', 'peer_review', 'drug_safety_analysis'].map(name => `mcp__evimed__${name}`))
+  'research_topic_selection', 'peer_review', 'drug_safety_analysis', 'research_calculate'].map(name => `mcp__evimed__${name}`))
 
 /**
  * Decorate existing global definitions without registering scoped shadows or

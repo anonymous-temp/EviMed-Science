@@ -5,12 +5,14 @@ import { HttpError } from "./security.mjs";
 export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
 const TERMINAL = new Set(["autopilot_job_invalid", "autopilot_stopped", "autopilot_episode_state_conflict",
+  "result_impact_source_unavailable",
   "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected"]);
 // A verification that cannot be afforded, cannot be routed, or names a claim
 // that is no longer there will not become affordable, routable or present by
 // being tried again. Retrying it spends the little budget the claim had left on
 // the same refusal.
 const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", "autopilot_job_invalid", "autopilot_stopped",
+  "result_impact_source_unavailable",
   "autopilot_paused", "autopilot_claim_not_found", "autopilot_episode_not_found", "autopilot_payload_invalid",
   "autopilot_capability_unavailable", "runtime_prompt_rejected"]);
 
@@ -92,6 +94,7 @@ export class AutopilotWorker {
       if (!current.payload.enabled || current.payload.status !== "active") {
         throw new HttpError(409, current.payload.status === "stopped" ? "autopilot_stopped" : "autopilot_paused", "This research agenda is no longer active.");
       }
+      await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
       await holdsLease();
     };
     try {
@@ -104,12 +107,14 @@ export class AutopilotWorker {
           return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         }
         await holdsLease();
+        await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
         const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: autopilotAttemptDispatchId(job.payload.verificationId, job.attempts), assertDispatchAllowed });
         verificationDispatched = true;
         await this.service.recordVerificationDispatched(job.userId, job.payload.episodeId, {
           ...verification, verificationId: job.payload.verificationId,
           dispatchId: verification.dispatchId ?? autopilotAttemptDispatchId(job.payload.verificationId, job.attempts),
         });
+        await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
         await holdsLease();
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
           verificationId: job.payload?.verificationId, ...verification,
@@ -146,7 +151,9 @@ export class AutopilotWorker {
       if (leaseLost || !activityLeaseRenewed) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost during the activity check."), { code: "product_job_lease_lost" })); throw error;
       }
+      await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
       dispatched = await this.dispatchEpisode({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: autopilotAttemptDispatchId(episode.id, job.attempts), previousRunId: episode.payload.runId ?? null, assertDispatchAllowed });
+      await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId, dispatched);
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost after dispatch."), { code: "product_job_lease_lost" })); throw error;
       }
@@ -190,7 +197,7 @@ export class AutopilotWorker {
         // second opinion never promotes and never demotes; it is recorded so the
         // digest can say the re-check did not happen rather than imply it passed.
         const terminal = VERIFICATION_TERMINAL.has(code) || job.attempts >= Number(job.maxAttempts ?? 3);
-        if (terminal && !verificationDispatched && code !== "product_job_lease_lost") {
+        if (terminal && !verificationDispatched && !["product_job_lease_lost", "result_impact_source_unavailable"].includes(code)) {
           await this.service.recordVerification(job.userId, {
             episodeId: job.payload?.episodeId, verificationId: job.payload?.verificationId, errorCode: code,
           }).catch(() => {});
@@ -202,6 +209,9 @@ export class AutopilotWorker {
           }).catch((failure) => { if (failure?.code !== "product_job_lease_lost") throw failure; });
         }
         return null;
+      } else if (code === "result_impact_source_unavailable") {
+        // The continuation guard already recorded exact cancellation. Do not
+        // recast a completed main result as a failed scientific episode.
       } else if (dispatched && ["autopilot_stopped", "autopilot_paused", "autopilot_episode_state_conflict"].includes(code)) {
         try {
           await this.service.queueDispatchedCancellation(job.userId, job.payload.episodeId, dispatched);

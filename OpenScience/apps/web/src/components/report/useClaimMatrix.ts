@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ResultVersion } from "@/lib/resultProvenance";
 import type { FileRoot } from "@ai4s/shared";
 import { readArtifact, readClaimVerification } from "@/lib/artifactFile";
 import {
@@ -18,7 +19,7 @@ import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
  * Best effort on both counts: without the matrix the report still reads, and
  * a report nobody checked shows no marks rather than wrong ones.
  */
-export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled = true): {
+export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled = true, immutableVersion?: ResultVersion): {
   matrixPath: string | null;
   document: ClaimMatrixDocument | null;
   verification: ClaimVerification | null;
@@ -47,9 +48,22 @@ export function useClaimMatrix(path: string, root: FileRoot | undefined, enabled
     return () => { cancelled = true; };
   }, [matrixPath, root]);
 
+  const frozenDocument = useMemo(() => {
+    if (!immutableVersion?.review?.matrixText || immutableVersion.review.status !== "available") return null;
+    const parsed = parseClaimMatrixDocument(immutableVersion.review.matrixText);
+    const bindSource = (source: import("@/lib/claimCitations").ClaimSource) => {
+      const input = immutableVersion.inputs.find((value) => value.path === source.artifactPath && value.versionId && value.digest);
+      // A historical source must never fall through to current workspace bytes.
+      return { ...source, artifactPath: input ? source.artifactPath : undefined,
+        resultVersionId: input?.versionId, resultDigest: input?.digest };
+    };
+    return { ...parsed, claims: new Map([...parsed.claims].map(([id, claim]) => [id,
+      { ...claim, ...bindSource(claim), supportingSources: claim.supportingSources?.map(bindSource) }])) };
+  }, [immutableVersion]);
+  const selectedVerification = immutableVersion ? (immutableVersion.review?.status === "available" ? immutableVersion.review.verification ?? null : null) : verification;
   const verified = useMemo(
-    () => new Map((verification?.claims ?? []).map((claim) => [claim.claimId, claim] as const)),
-    [verification],
+    () => new Map((selectedVerification?.claims ?? []).map((claim) => [claim.claimId, claim] as const)),
+    [selectedVerification],
   );
-  return { matrixPath, document, verification, verified };
+  return { matrixPath, document: immutableVersion ? frozenDocument : document, verification: selectedVerification, verified };
 }

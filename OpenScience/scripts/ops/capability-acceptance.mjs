@@ -24,6 +24,11 @@
 //     --capability clinical-evidence-synthesis --brief review-001-empa-kidney-report-family \
 //     [--base https://host] [--insecure] [--project <id>] [--timeout-ms 7200000]
 //
+// Candidate-bound actual native revision cohort (no --capability/--brief needed):
+//   --result-revisions --candidate-manifest <release-manifest.json> --expected-revision <40hex>
+//   Requires OPEN_SCIENCE_PLAYWRIGHT_CORE, existing password-file auth and pdftotext.
+//   It refuses a different release before creating projects or submitting prompts.
+//
 // 「循证 GEO」 capabilities work on a GEO project's data, which a plain
 // acceptance project does not have (geo_read answers `geo_no_project`):
 //   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90] [--geo-paused]
@@ -479,7 +484,9 @@ async function main() {
   process.exit(observation.status === "pending" ? 3 : run.status === "succeeded" && !run.verification ? 0 : 1);
 }
 
-main().catch((error) => {
+(args["result-revisions"]
+  ? import("./result-revision-acceptance.mjs").then(module => module.runResultRevisionAcceptance(args)).then(() => say("three actual native revision journeys passed"))
+  : main()).catch((error) => {
   process.stderr.write(`${stamp()} acceptance failed: ${error?.message ?? error}\n`);
   process.exit(2);
 });

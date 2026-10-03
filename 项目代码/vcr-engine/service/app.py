@@ -8,7 +8,7 @@ The control plane's `vcrEngineClient.mjs` speaks exactly these routes
     POST   /jobs                -> 202 {jobId, accepted}
     GET    /jobs/{id}           -> {jobId, state, progress:{done,total}, cpuSeconds, cpuSecondsLimit, error}
     POST   /jobs/{id}/cancel    -> {canceled}
-    GET    /jobs/{id}/result    -> the full engine result, receipt signed
+    GET    /jobs/{id}/result    -> the full engine result, receipt signed when configured
     GET    /jobs/{id}/tables/{name} -> one table the finished result lists, as the bytes the job wrote
     DELETE /jobs/{id}           -> {discarded: true}
 
@@ -24,8 +24,9 @@ Python traceback: the stderr tail goes to this process's log.
 
 Configuration (environment; secrets only ever as files):
 
-    VCR_ENGINE_TOKEN_FILE, VCR_ENGINE_RECEIPT_KEY_FILE   required, >= 32 bytes, no symlink
-    VCR_ENGINE_INSECURE_DEV=1       lets either file be missing (open routes / unsigned results)
+    VCR_ENGINE_TOKEN_FILE          required, >= 32 bytes, no symlink
+    VCR_ENGINE_RECEIPT_KEY_FILE    optional; when named, >= 32 bytes, no symlink
+    VCR_ENGINE_INSECURE_DEV=1       lets the token be missing (open development routes)
     VCR_ENGINE_WORK_DIR=/jobs       VCR_ENGINE_DATA_ROOT=/data-plane (handed to R, read-only)
     VCR_ENGINE_ROOT, VCR_R_LIBS, VCR_RSCRIPT=Rscript, VCR_PYTHON (the parquet bridge's python)
     VCR_ENGINE_CPU_SECONDS=600      a job's default; VCR_ENGINE_MAX_CPU_SECONDS=3600 caps any job
@@ -261,20 +262,15 @@ def load_settings(environ: Mapping[str, str]) -> Settings:
         path = environ.get(name, "")
         if path:
             secrets[name] = read_secret_file(name, path)
-        elif insecure:
+        elif name == "VCR_ENGINE_RECEIPT_KEY_FILE" or insecure:
             secrets[name] = None
         else:
-            raise RuntimeError(f"{name} is not set: the engine refuses to start without its token and "
-                               "receipt key files (VCR_ENGINE_INSECURE_DEV=1 runs an open, unsigned "
-                               "development engine)")
+            raise RuntimeError(f"{name} is not set: the engine refuses to start without its request token "
+                               "file (VCR_ENGINE_INSECURE_DEV=1 runs an open development engine)")
     # A file that is named is read and enforced even in development mode;
-    # the flag only lets a missing one be missing.
-    relaxed = [what for what, missing in (("every route is open", secrets["VCR_ENGINE_TOKEN_FILE"] is None),
-                                          ("results are unsigned", secrets["VCR_ENGINE_RECEIPT_KEY_FILE"] is None))
-               if missing]
-    if relaxed:
-        LOG.warning("VCR_ENGINE_INSECURE_DEV=1: %s. This is a development engine, never a deployment.",
-                    " and ".join(relaxed))
+    # Optional receipt signing does not weaken request authentication.
+    if secrets["VCR_ENGINE_TOKEN_FILE"] is None:
+        LOG.warning("VCR_ENGINE_INSECURE_DEV=1: every route is open. This is a development engine, never a deployment.")
     return Settings(
         engine_root=Path(environ.get("VCR_ENGINE_ROOT") or Path(__file__).resolve().parent.parent),
         work_dir=Path(environ.get("VCR_ENGINE_WORK_DIR") or "/jobs"),

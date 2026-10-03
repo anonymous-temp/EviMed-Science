@@ -290,7 +290,7 @@ test("a child named only by the delegation's own receipts is followed, the retri
   });
   const project = { userId: "alice", id: "paper-4c" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
-  pump.noteRun(project, { id: "run-4c", sessionId: "s-root", status: "running" });
+  pump.noteRun(project, { id: "run-4c", sessionId: "s-root", status: "running", forkedFrom: "s-original" });
   await waitFor(() => muxes[0]?.follow("s-root"), "the root session's stream");
   const receipt = (seq, name, value) => sessionEvent({
     type: "tool/result",
@@ -314,12 +314,20 @@ test("a child named only by the delegation's own receipts is followed, the retri
     type: "tool/call", seq: 1, data: { callId: "r-1", name: "mcp__evimed__literature_search", arguments: "{\"query\":\"x\"}" },
   }));
   await waitFor(() => observed.some((entry) => entry.sessionId === "s-retry" && entry.child === true), "the retried child's call reaching the run's progress feed");
+  const childObservation = observed.find(entry => entry.sessionId === "s-retry");
+  assert.equal(childObservation.parentSessionId, "s-root");
+  assert.equal(childObservation.branchId, "s-root");
+  assert.deepEqual(pump.sessionOwner(project, "s-retry"), { runId: "run-4c", child: true, parentSessionId: "s-root", branchId: "s-root" });
+  assert.equal(pump.sessionOwner({ ...project, userId: "other" }, "s-retry"), null);
   // A failed receipt names nothing, and a tool that is not a delegation is not read.
   muxes[0].follow("s-root").push(sessionEvent({
     type: "tool/result", seq: 3, data: { message: { name: "evimed_delegate", callId: "c-3", content: [{ type: "text", text: "failed: dependency_unmet\n- (required) dependency_unmet wait for h-1" }] } },
   }));
   muxes[0].follow("s-root").push(receipt(4, "evimed_plan", { childSessionId: "s-not-a-child" }));
   await waitFor(() => observed.some((entry) => entry.sessionId === "s-root" && entry.event.seq === 4), "the last root event");
+  const rootObservation = observed.find(entry => entry.sessionId === "s-root");
+  assert.equal(rootObservation.parentSessionId, "s-original");
+  assert.equal(rootObservation.branchId, "s-root");
   assert.equal(muxes[0].follow("s-not-a-child"), null);
   pump.detach(project);
 });

@@ -100,6 +100,7 @@ export function FilePreviewInspector({
   /** What is known about the file, above its preview (a document's 摘要). */
   lead?: React.ReactNode;
 }) {
+  const reportRun = useReportRun();
   const kind = previewKindForName(data.filename);
   const tag = kindLabel === undefined ? labelFor(ARTIFACT_KIND_LABEL, data.artifact, "文件") : kindLabel;
   const needsUrl = kind === "pdf" || kind === "image" || kind === "html" || kind === "video";
@@ -247,7 +248,7 @@ export function FilePreviewInspector({
       {lead && <div className="shrink-0 border-b border-border px-4 py-3">{lead}</div>}
 
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto bg-surface-2">
-        {showHistory && <ProvenancePanel path={data.path} language={data.language} />}
+        {showHistory && <ProvenancePanel path={data.path} language={data.language} runId={reportRun?.runId} />}
         {!showHistory && loading && (
           <div className="flex items-center gap-2 p-4 text-ui text-muted">
             <Loader2 size={16} className="animate-spin" aria-hidden="true" /> 正在加载 {data.filename}

@@ -11,8 +11,8 @@
  * retraction published after the run still reaches the reader.
  *
  * Informational in every direction (principle 13): a lookup that fails,
- * times out or is switched off leaves the source card without a badge and the
- * verification exactly as it was. A DOI Crossref does not know (DataCite,
+ * times out or is switched off carries an explicit unavailable status and leaves
+ * the quotation verification exactly as it was. A DOI Crossref does not know (DataCite,
  * CNKI) is remembered as unknown so it is not asked again for a while.
  *
  * @module sourceUpdates
@@ -45,90 +45,156 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
  */
 export const SOURCE_UPDATES_DEFAULT_TIMEOUT_MS = 6_000;
 
+/** @typedef {{ state: "no_update" | "changed" | "unknown" | "unavailable", checkedAt: string | null, reason?: string, updates: SourceUpdate[] }} SourceUpdateStatus */
+
+/** Race both headers and streamed body consumption against the same deadline. */
+async function withinDeadline(operation, signal) {
+  signal.throwIfAborted();
+  let listener;
+  const aborted = new Promise((_, reject) => {
+    listener = () => reject(signal.reason);
+    signal.addEventListener("abort", listener, { once: true });
+  });
+  try { return await Promise.race([operation(), aborted]); }
+  finally { signal.removeEventListener("abort", listener); }
+}
+
+async function boundedResponse(response, signal) {
+  if (!response.body) throw new Error("invalid_response");
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const chunk = await withinDeadline(() => reader.read(), signal);
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) throw new Error("response_too_large");
+      chunks.push(Buffer.from(chunk.value));
+    }
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } finally { void reader.cancel().catch(() => {}); }
+}
+
 /**
- * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number, mailto?: string | null }} options
- *   `mailto`: the deployment's contact address, sent as Crossref asks a
- *   polite-pool client to (`mailto=` on the query); none, and the request is
- *   anonymous as before. A value that is not an address is not sent.
+ * `timeoutMs` covers the complete lookup, including all batches, attempts and bodies.
+ * Retries are optional read-only GET retries; failed checks are never cached clean.
+ * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number, mailto?: string | null, maxAttempts?: number }} options
  */
-export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, now = Date.now, mailto = null }) {
+export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, now = Date.now, mailto = null, maxAttempts = 1 }) {
   const contact = typeof mailto === "string" && /^[^@\s,&=?#]+@[^@\s,&=?#]+\.[^@\s,&=?#]+$/.test(mailto.trim()) ? mailto.trim() : null;
-  /** @type {Map<string, { at: number, updates: SourceUpdate[] | null }>} */
+  /** @type {Map<string, { at: number, status: SourceUpdateStatus }>} */
   const cache = new Map();
   const counts = { checked: 0, cached: 0, unknown: 0, failed: 0 };
+  const attempts = Math.min(2, Math.max(1, Math.floor(maxAttempts)));
 
-  /** @param {string} doi @param {SourceUpdate[] | null} updates */
-  const remember = (doi, updates) => {
+  /** @param {string} doi @param {SourceUpdateStatus} status */
+  const remember = (doi, status) => {
     cache.delete(doi);
-    cache.set(doi, { at: now(), updates });
+    cache.set(doi, { at: now(), status });
     while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value);
   };
 
-  /**
-   * @param {readonly string[]} dois @param {{ signal?: AbortSignal }} [options]
-   * @returns {Promise<Map<string, SourceUpdate[]>>} only the DOIs Crossref answered for
-   */
-  async function lookup(dois, { signal } = {}) {
-    /** @type {Map<string, SourceUpdate[]>} */
+  /** @param {readonly string[]} dois @param {{ signal?: AbortSignal }} [options] */
+  async function lookupStatuses(dois, { signal: callerSignal } = {}) {
+    /** @type {Map<string, SourceUpdateStatus>} */
     const found = new Map();
-    /** @type {string[]} */
     const wanted = [];
-    for (const raw of dois.slice(0, MAX_DOIS)) {
-      const doi = doiOf(raw);
-      // A comma separates Crossref filters; the rare DOI that contains one is
-      // not asked, rather than asked wrongly.
-      if (!doi || doi.includes(",") || wanted.includes(doi)) continue;
-      const hit = cache.get(doi);
-      if (hit && now() - hit.at < TTL_MS) {
-        counts.cached += 1;
-        if (hit.updates) found.set(doi, hit.updates);
-        continue;
+    const seen = new Set();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException("Source update deadline exceeded", "TimeoutError")), timeoutMs);
+    const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
+    try {
+      for (const raw of dois) {
+        const doi = doiOf(raw);
+        if (!doi || seen.has(doi)) continue;
+        seen.add(doi);
+        if (doi.includes(",") || seen.size > MAX_DOIS) {
+          found.set(doi, { state: "unknown", checkedAt: null, reason: doi.includes(",") ? "unsupported_identifier" : "lookup_limit", updates: [] });
+          continue;
+        }
+        const hit = cache.get(doi);
+        if (hit && now() - hit.at < TTL_MS) {
+          counts.cached += 1;
+          found.set(doi, structuredClone(hit.status));
+        } else wanted.push(doi);
       }
-      wanted.push(doi);
-    }
-    for (let start = 0; start < wanted.length; start += BATCH) {
-      const batch = wanted.slice(start, start + BATCH);
-      const url = new URL(CROSSREF_WORKS);
-      url.searchParams.set("filter", batch.map((doi) => `doi:${doi}`).join(","));
-      url.searchParams.set("select", "DOI,updated-by");
-      url.searchParams.set("rows", String(batch.length));
-      if (contact) url.searchParams.set("mailto", contact);
-      let items;
-      try {
-        const response = await fetchImpl(url, {
-          headers: { accept: "application/json", "user-agent": userAgent },
-          redirect: "error",
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
-        });
-        if (!response.ok) throw new Error(`crossref ${response.status}`);
-        const text = await response.text();
-        if (text.length > MAX_RESPONSE_BYTES) throw new Error("crossref answer too large");
-        const listed = JSON.parse(text)?.message?.items;
-        items = Array.isArray(listed) ? listed : [];
-      } catch {
-        counts.failed += batch.length;
-        continue;
+      for (let start = 0; start < wanted.length; start += BATCH) {
+        const batch = wanted.slice(start, start + BATCH);
+        const url = new URL(CROSSREF_WORKS);
+        url.searchParams.set("filter", batch.map(doi => `doi:${doi}`).join(","));
+        url.searchParams.set("select", "DOI,updated-by");
+        url.searchParams.set("rows", String(batch.length));
+        if (contact) url.searchParams.set("mailto", contact);
+        let items;
+        let reason = "lookup_failed";
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          let response;
+          try {
+            response = await withinDeadline(() => fetchImpl(url, {
+              headers: { accept: "application/json", "user-agent": userAgent }, redirect: "error", signal,
+            }), signal);
+            if (!response.ok) {
+              reason = `http_${response.status}`;
+              void response.body?.cancel().catch(() => {});
+              if (![429, 502, 503, 504].includes(response.status) || attempt + 1 >= attempts) break;
+              const retryAfter = response.headers.get("retry-after");
+              const delay = retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000
+                : retryAfter && Number.isFinite(Date.parse(retryAfter)) ? Math.max(0, Date.parse(retryAfter) - Date.now()) : 0;
+              if (delay) await withinDeadline(() => new Promise(resolve => {
+                const wait = setTimeout(resolve, delay);
+                signal.addEventListener("abort", () => clearTimeout(wait), { once: true });
+              }), signal);
+              continue;
+            }
+            const listed = (await boundedResponse(response, signal))?.message?.items;
+            if (!Array.isArray(listed)) throw new Error("invalid_response");
+            items = listed;
+            break;
+          } catch (error) {
+            reason = callerSignal?.aborted ? "canceled" : signal.aborted ? "timeout"
+              : ["invalid_response", "response_too_large"].includes(error?.message) ? error.message : "lookup_failed";
+            break;
+          }
+        }
+        const checkedAt = new Date(now()).toISOString();
+        if (!items) {
+          counts.failed += batch.length;
+          for (const doi of batch) found.set(doi, { state: "unavailable", checkedAt, reason, updates: [] });
+          continue;
+        }
+        const answered = new Set();
+        for (const item of items) {
+          const doi = doiOf(item?.DOI);
+          if (!doi || !batch.includes(doi) || answered.has(doi)) continue;
+          const updates = sourceUpdatesFromCrossref(item);
+          const status = { state: /** @type {"changed" | "no_update"} */ (updates.length ? "changed" : "no_update"), checkedAt, updates };
+          remember(doi, status); found.set(doi, structuredClone(status)); answered.add(doi); counts.checked += 1;
+        }
+        for (const doi of batch) {
+          if (answered.has(doi)) continue;
+          const status = { state: /** @type {const} */ ("unknown"), checkedAt, reason: "not_in_crossref", updates: [] };
+          remember(doi, status); found.set(doi, structuredClone(status)); counts.unknown += 1;
+        }
       }
-      const answered = new Set();
-      for (const item of items) {
-        const doi = doiOf(item?.DOI);
-        if (!doi || !batch.includes(doi)) continue;
-        const updates = sourceUpdatesFromCrossref(item);
-        remember(doi, updates);
-        found.set(doi, updates);
-        answered.add(doi);
-        counts.checked += 1;
-      }
-      for (const doi of batch) {
-        if (answered.has(doi)) continue;
-        remember(doi, null);
-        counts.unknown += 1;
-      }
-    }
-    return found;
+      return found;
+    } finally { clearTimeout(timer); }
   }
 
-  return { lookup, stats: () => ({ ...counts, cachedDois: cache.size }) };
+  /**
+   * Compatibility projection: only Crossref-answered DOIs appear as map entries.
+   * `statuses` additionally records every lookup outcome for readers and impact handling.
+   * @param {readonly string[]} dois @param {{ signal?: AbortSignal }} [options]
+   */
+  async function lookup(dois, options = {}) {
+    const statuses = await lookupStatuses(dois, options);
+    /** @type {Map<string, SourceUpdate[]> & { statuses?: Map<string, SourceUpdateStatus> }} */
+    const found = new Map();
+    for (const [doi, status] of statuses) if (["changed", "no_update"].includes(status.state)) found.set(doi, status.updates);
+    Object.defineProperty(found, "statuses", { value: statuses });
+    return found;
+  }
+  return { lookup, lookupStatuses, stats: () => ({ ...counts, cachedDois: cache.size }) };
 }
 
 /** The DOI line our own capture header carries (`open_access_full_text`). */
@@ -140,8 +206,9 @@ function doiFromCapture(text) {
 /**
  * Put each checked source's notices beside it in a `claim_verification`
  * verdict: `source.doi` and `source.updates` (empty when Crossref knows the
- * work and it has none). A source without a DOI, or one Crossref could not
- * answer for, is left as it was.
+ * work and it has none), plus `source.updateStatus` on every source. A missing
+ * DOI, mismatched capture, unknown work or failed check is explicitly distinguished
+ * without changing the claim quotation verdict.
  *
  * @param {{ claims: Array<{ claimId: string, claimType: string, sources: Array<Record<string, any>> }> }} verdict
  * @param {{ matrix: any, sourceArtifacts: Record<string, string>, lookup: ReturnType<typeof createSourceUpdateLookup>["lookup"], signal?: AbortSignal }} input
@@ -155,9 +222,18 @@ export async function attachSourceUpdates(verdict, { matrix, sourceArtifacts, lo
     const origins = claimEvidenceSources({ ...record, claimType: claim.claimType });
     claim.sources.forEach((source, index) => {
       const origin = origins[index];
-      const doi = doiOf(origin?.identifier) ?? doiOf(origin?.sourceUrl)
-        ?? doiFromCapture(source.artifactPath ? sourceArtifacts[source.artifactPath] : null);
-      if (doi) pending.push([source, doi]);
+      const declaredDoi = doiOf(origin?.identifier) ?? doiOf(origin?.sourceUrl);
+      const capturedDoi = doiFromCapture(source.artifactPath ? sourceArtifacts[source.artifactPath] : null);
+      const doi = declaredDoi ?? capturedDoi;
+      if (declaredDoi && capturedDoi && declaredDoi !== capturedDoi) {
+        source.updateStatus = { state: "unknown", checkedAt: null, reason: "identifier_mismatch", updates: [] };
+        return;
+      }
+      source.updateStatus = { state: "unknown", checkedAt: null, reason: "not_identified", updates: [] };
+      if (doi) {
+        source.doi = doi;
+        pending.push([source, doi]);
+      }
     });
   }
   if (!pending.length) return;
@@ -165,9 +241,14 @@ export async function attachSourceUpdates(verdict, { matrix, sourceArtifacts, lo
   try {
     found = await lookup([...new Set(pending.map(([, doi]) => doi))], { signal });
   } catch {
+    for (const [source] of pending) source.updateStatus = { state: "unavailable", checkedAt: new Date().toISOString(), reason: signal?.aborted ? "canceled" : "lookup_failed", updates: [] };
     return;
   }
   for (const [source, doi] of pending) {
+    source.updateStatus = found.statuses?.get(doi) ?? {
+      state: found.has(doi) ? found.get(doi).length ? "changed" : "no_update" : "unknown",
+      checkedAt: null, updates: found.get(doi) ?? [], ...(found.has(doi) ? {} : { reason: "not_in_crossref" }),
+    };
     if (!found.has(doi)) continue;
     source.doi = doi;
     source.updates = found.get(doi);
@@ -191,4 +272,11 @@ export function sourceUpdateMetricFamilies(stats) {
       { value: stats.failed, labels: { outcome: "failed" } },
     ],
   }];
+}
+
+/** A disabled checker is unavailable, never an implicit clean source. */
+export function attachUnavailableSourceUpdates(verdict, reason = "disabled") {
+  for (const claim of verdict.claims ?? []) for (const source of claim.sources ?? []) {
+    source.updateStatus = { state: "unavailable", checkedAt: null, reason, updates: [] };
+  }
 }

@@ -9,6 +9,8 @@ import { runTitle } from "@/lib/runPresentation";
 import { chatPath, openRunProject } from "@/lib/runLocation";
 import { artifactDisplayName } from "@/lib/artifactNames";
 import { parseFailureMessage } from "@/lib/errorText";
+import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
+import { Button } from "@/components/ui/Button";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { ReportReader } from "@/components/report/ReportReader";
@@ -45,6 +47,9 @@ export function RunFilePage() {
   const hashClaim = location.hash.replace(/^#/, "");
   const focusClaim = CLAIM_ID.test(hashClaim) ? hashClaim : CLAIM_ID.test(searchParams.get("claim") ?? "") ? searchParams.get("claim") : null;
   const quote = searchParams.get("quote");
+  const initialVersionId = searchParams.get("version") ?? undefined;
+  const [showVersions, setShowVersions] = useState(Boolean(initialVersionId));
+  const [reload, setReload] = useState(0);
   const filename = path ? path.slice(path.lastIndexOf("/") + 1) : "";
   const kind = filename ? previewKindForName(filename) : null;
 
@@ -81,7 +86,7 @@ export function RunFilePage() {
     let cancelled = false;
     setText(null);
     setError(null);
-    if (!path || !readsText) {
+    if (!path || !readsText || showVersions) {
       setLoading(false);
       return;
     }
@@ -95,7 +100,7 @@ export function RunFilePage() {
       .catch((caught) => { if (!cancelled) setError(parseFailureMessage(caught, "该文件")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [path, readsText]);
+  }, [path, readsText, showVersions, reload]);
 
   // Back into the conversation this file was written in. It used to be the run
   // ledger's row about it; that page was deleted on 2026-09-20, and a run with
@@ -117,8 +122,10 @@ export function RunFilePage() {
           <h1 className="min-w-0 truncate text-ui font-semibold text-text">
             {run ? `${runTitle(run)} · ` : ""}{path ? artifactDisplayName(path) : "文件"}
           </h1>
+          {path && <Button variant="text" onClick={() => setShowVersions((current) => !current)}>{showVersions ? "查看当前文件" : "结果版本"}</Button>}
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {showVersions && !locating && path && <ProvenancePanel key={`${path}:${initialVersionId ?? ""}`} path={path} runId={run?.id} initialVersionId={initialVersionId} />}
           {locating && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
               <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开
@@ -127,20 +134,20 @@ export function RunFilePage() {
           {!locating && !path && (
             <EmptyState icon={FileQuestion} title="这个地址没有指向文件" />
           )}
-          {!locating && path && readsText && loading && (
+          {!showVersions && !locating && path && readsText && loading && (
             <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
               <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}
             </p>
           )}
-          {!locating && path && readsText && !loading && error && (
-            <div role="alert" className="mx-auto mt-8 max-w-content rounded-card border border-border bg-surface p-5 text-ui text-text max-sm:mx-4">{error}</div>
+          {!showVersions && !locating && path && readsText && !loading && error && (
+            <div role="alert" className="mx-auto mt-8 max-w-content rounded-card border border-border bg-surface p-5 text-ui text-text max-sm:mx-4"><p>{error}</p><Button variant="secondary" className="mt-3" onClick={() => setReload((current) => current + 1)}>重试</Button></div>
           )}
-          {!locating && path && readsText && !loading && text !== null && (
+          {!showVersions && !locating && path && readsText && !loading && text !== null && (
             isClaimMatrixPath(path)
               ? <MatrixPage path={path} runId={run?.id ?? runId} />
               : <ReportReader path={path} root="workspace" text={text} run={run} runId={run?.id ?? runId} layout="page" focusClaim={focusClaim} highlight={quote} />
           )}
-          {!locating && path && !readsText && (
+          {!showVersions && !locating && path && !readsText && (
             <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览</p>}>
               <div className="h-full">
                 <FilePreviewInspector

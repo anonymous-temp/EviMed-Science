@@ -45,6 +45,7 @@ function send(peer, data) {
  * heartbeat?: { intervalMs: number, timeoutMs: number },
  * admit?: (endpoint:string,operation:()=>Promise<void>,payload?:any) => Promise<void>,
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
+ * prepare?: (endpoint: string, payload?: any) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
  * `observe` sees an admitted prompt immediately before it goes upstream; it
  * records, it never refuses.
@@ -52,6 +53,7 @@ function send(peer, data) {
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
   admit = async (_endpoint, operation) => operation(),
   observe = async () => {},
+  prepare = async () => {},
   heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -184,12 +186,19 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (frame.type === "open" && frame.endpoint === "session/prompt") {
       try {
         await admit(frame.endpoint, async () => {
+          // Target authorization is part of this operation, and a failure
+          // must not silently forward an untargeted or stale prompt.
+          await prepare(frame.endpoint, frame.payload);
           // An observer that fails is the observer's to report; the prompt
           // is forwarded all the same.
           await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
           const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
           const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
-          try { await send(upstream, raw); await accepted; }
+          try {
+            const prepared = Buffer.from(JSON.stringify(frame));
+            if (prepared.length > maxPayload) throw new HttpError(413, "runtime_ui_payload_limit", "The prepared native prompt is too large.");
+            await send(upstream, prepared); await accepted;
+          }
           finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
         }, frame.payload);
       } catch (error) {

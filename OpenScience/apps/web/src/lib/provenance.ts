@@ -35,11 +35,7 @@ export function provenanceInputFromEvent(event: ToolUpdatedEvent): ProvenanceInp
 /** All recorded versions of one artifact, oldest first ([] in browser dev). */
 export async function listProvenance(path: string): Promise<ProvenanceRecord[]> {
   if (!hasWebApi) return [];
-  try {
-    return await invokeCommand<ProvenanceRecord[]>("list_provenance", { path });
-  } catch {
-    return [];
-  }
+  return invokeCommand<ProvenanceRecord[]>("list_provenance", { path });
 }
 
 /** The captured `pip freeze` list for a package snapshot hash (null if unreadable). */

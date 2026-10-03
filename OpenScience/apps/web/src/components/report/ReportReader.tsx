@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
+import type { ResultVersion } from "@/lib/resultProvenance";
 import type { FileRoot } from "@ai4s/shared";
 import { ArrowUp, Download, ListTree, Printer, ShieldAlert } from "lucide-react";
 import type { WebAgentRun } from "@/lib/apiClient";
@@ -69,6 +70,7 @@ export function ReportReader({
   layout,
   focusClaim = null,
   highlight = null,
+  immutableVersion,
 }: {
   path: string;
   root?: FileRoot;
@@ -80,8 +82,10 @@ export function ReportReader({
   focusClaim?: string | null;
   /** A quotation to find and mark in this text — a preserved source opened from a claim. */
   highlight?: string | null;
+  /** Historical bytes may only read evidence captured for the same version. */
+  immutableVersion?: ResultVersion;
 }) {
-  const { document: matrix, verification, verified } = useClaimMatrix(path, root);
+  const { document: matrix, verification, verified } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -94,8 +98,8 @@ export function ReportReader({
 
   const safety = useMemo(() => safetyClaimIds(run?.qualityNotices), [run?.qualityNotices]);
   const reading: ClaimReading = useMemo(
-    () => ({ verified, runId: runId ?? run?.id ?? null, safety, pagesRead: run?.pagesRead }),
-    [verified, runId, run?.id, safety, run?.pagesRead],
+    () => ({ verified, runId: runId ?? run?.id ?? immutableVersion?.producer.runId ?? null, safety, pagesRead: run?.pagesRead }),
+    [verified, runId, run?.id, immutableVersion?.producer.runId, safety, run?.pagesRead],
   );
   const statuses = useMemo(() => claimStatuses(verification), [verification]);
   const summary = claimVerificationSummary(verification);
@@ -187,7 +191,10 @@ export function ReportReader({
 
   const download = async () => {
     try {
-      await downloadArtifact(path, root, filename);
+      if (immutableVersion) {
+        const { readResultBytes, saveResultBlob } = await import("@/lib/resultProvenance");
+        saveResultBlob(await readResultBytes(immutableVersion), filename);
+      } else await downloadArtifact(path, root, filename);
     } catch (error) {
       toast.error(`无法下载 ${filename}：${parseFailureMessage(error, "该文件")}`);
     }
@@ -251,6 +258,7 @@ export function ReportReader({
         </div>
       )}
       {isReport && <ReportFacts facts={facts} onJump={scrollTo} />}
+      {immutableVersion && !matrix && <p role="note" className="mb-6 text-ui text-verify-pending">此版本尚无可读取的逐句证据核对记录。</p>}
       {isReport && summary && (
         <p role="note" className="mb-6 text-ui font-medium text-verify-pending">{summary.text}</p>
       )}
@@ -262,7 +270,7 @@ export function ReportReader({
           <ClaimEvidenceList ids={safetyInMatrix} claims={matrix.claims} statuses={statuses} reading={reading} />
         </section>
       )}
-      <div ref={articleRef}>
+      <div ref={articleRef} data-result-rendered={immutableVersion ? "" : undefined}>
         <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={reading}>{text}</MarkdownViewer>
       </div>
       {/* The sources the report stands on, as cards (融合方案 §8.3): what kind

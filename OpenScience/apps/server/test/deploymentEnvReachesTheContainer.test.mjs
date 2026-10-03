@@ -39,6 +39,7 @@ const deployDir = path.join(repoRoot, "deploy/web");
  *  a container. The exemption names the script, and the test reads that script:
  *  an entry that stops being true stops protecting anything. */
 const hostSideOnly = {
+  OPEN_SCIENCE_RESULT_REPLAY_IMAGE_ID: "scripts/ops/result-replay-deployment.mjs",
   OPEN_SCIENCE_VCR_BACKUP_DIR: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_ENABLED: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_MAX_SETS: "scripts/ops/vcr-backup.mjs",

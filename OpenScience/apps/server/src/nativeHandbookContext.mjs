@@ -157,6 +157,7 @@ export class NativeHandbookContext {
   /** An entering pre-step confirms actual injection. Preparing or reading alone never counts as attachment. */
   async acknowledge(project, { sessionId, receipts }) {
     if (!validSession(sessionId) || !Array.isArray(receipts) || receipts.length > 16) throw new HttpError(400, "handbook_request_invalid", "Invalid context receipts.");
+    if (!await this.allowed(project, sessionId)) return { attached: [] };
     const attached = [];
     for (const input of receipts) {
       await withProjectStorageMutation(project, async () => {

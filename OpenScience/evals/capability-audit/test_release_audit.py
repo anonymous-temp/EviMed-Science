@@ -198,6 +198,25 @@ class IncompleteProbeRecording(unittest.TestCase):
     rather than only on stderr.
     """
 
+    def test_disabled_module_is_not_called_or_saved_as_an_execution(self):
+        import run_tool_audit as runner
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary).resolve()
+            workspace = repo / "owned"
+            workspace.mkdir()
+            called = []
+            server = SimpleNamespace(
+                disabled_tools=lambda: {"vcr_read"},
+                call_tool=lambda name, arguments: called.append(name) or {"status": "success"},
+            )
+            with patch.object(runner, "REPO", repo), patch.dict(
+                runner.TASK_FIXTURES, {"health": {}, "vcr_read": {"what": "study"}}, clear=True
+            ):
+                rows = runner.run_task_probes(server, workspace)
+            self.assertEqual(called, ["health"])
+            self.assertEqual([row["tool"] for row in rows], ["health"])
+            self.assertFalse((workspace / ".evimed-audit/tool-responses/vcr_read.json").exists())
+
     def _run(self, *extra):
         import run_tool_audit as runner
 

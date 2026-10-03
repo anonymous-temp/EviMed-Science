@@ -301,3 +301,34 @@ test('a response at the shared UTF-8 byte ceiling is accepted exactly', async ()
   assert.equal(sockets[0].readyState, 1);
   await stream.return(); hooks.dispose();
 });
+
+test('a staged immutable revision travels only on its actual submitted prompt, with HTTP and mux parity', async () => {
+  const { target, calls, sockets } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const referenceId = `rr_${'a'.repeat(64)}`;
+  const request = { sessionId: 'session-a', requestId: 'request-a', content: [{ type: 'text', text: 'Revise selected result:\nUse shorter paragraphs.' }] };
+  target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 'session-a', referenceId, draft: 'Revise selected result:\n' });
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { method: 'POST', body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request } } }) });
+  assert.deepEqual(JSON.parse(calls[0][1].body).payload.args.request.evimedResultRevision, { referenceId });
+  assert.equal(Reflect.get(request, 'evimedResultRevision'), undefined, 'upstream caller input remains unchanged');
+  const stream = hooks.openStream('session/prompt', { args: { request } }, new AbortController().signal)[Symbol.asyncIterator]();
+  const pending = stream.next(); sockets[0].open(); await settleTransport();
+  const open = sockets[0].sent[0]; assert.deepEqual(open.payload.args.request.evimedResultRevision, { referenceId }, 'retry of the same owned request retains its reference');
+  sockets[0].message({ type: 'end', streamId: open.streamId }); await pending;
+  await hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { ...request, requestId: 'request-b' } } } }) });
+  assert.equal(JSON.parse(calls[1][1].body).payload.args.request.evimedResultRevision, undefined, 'the next request never reuses consumed selection');
+  hooks.dispose();
+});
+
+test('draft replacement, another session, cancellation and navigation clearing cannot retarget a staged revision', async () => {
+  const { target, calls } = browser(); const hooks = installRuntimeUiTransport(frame, target);
+  const stage = () => target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 'session-a', referenceId: `rr_${'b'.repeat(64)}`, draft: 'Frozen selection:\n' });
+  const submit = async (/** @type {string} */ sessionId, /** @type {string} */ text) => hooks.fetch(new URL('https://app.example:8443/api/remote/session/prompt'), { body: JSON.stringify({ type: 'client-request', method: 'session/prompt', payload: { args: { request: { sessionId, requestId: Math.random().toString(), content: [{ type: 'text', text }] } } } }) });
+  stage(); await submit('session-a', 'Unrelated replacement');
+  stage(); await submit('session-b', 'Frozen selection:\nInstruction');
+  stage(); await hooks.fetch(new URL('https://app.example:8443/api/remote/session/cancel'), {}); await submit('session-a', 'Frozen selection:\nInstruction');
+  stage(); target.__EVIMED_RESULT_REVISION__.clear(); await submit('session-a', 'Frozen selection:\nInstruction');
+  for (const call of calls.filter(call => typeof call[1]?.body === 'string')) assert.equal(JSON.parse(call[1].body).payload.args.request.evimedResultRevision, undefined);
+  assert.throws(() => target.__EVIMED_RESULT_REVISION__.stage({ sessionId: 'session-a', referenceId: 'forged', draft: 'x' }), /Invalid result/);
+  hooks.dispose();
+});
+function settleTransport() { return new Promise(resolve => setImmediate(resolve)); }

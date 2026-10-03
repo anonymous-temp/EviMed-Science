@@ -42,6 +42,34 @@
 import { toSkillName } from "@evimed/harness-port";
 
 import { learnedMethodDirectoryName } from "./learnedMethodMount.mjs";
+import { runHistory } from "./agentRuns.mjs";
+
+/** Scope learning reads to the actual native input, without changing preserved history.
+ * The ledger's legacy fallback is useful for reading old conversations, but cannot
+ * establish a current method invocation. Only request/turn identity establishes that.
+ * Child reads belong only to the current projection's assigned deliverable sessions.
+ * @param {{run:any,projection:any,sessions:readonly any[]}} input
+ * @returns {any[]}
+ */
+export function methodObservationSessionsForRun({ run, projection, sessions }) {
+  const requestIds = new Set(Array.isArray(run.kernelRequestIds) ? run.kernelRequestIds : []);
+  const currentItems = new Set((projection?.plan?.items ?? []).map(item => item.id));
+  const children = new Set((projection?.subagents ?? [])
+    .filter(child => currentItems.has(child.deliverableId) && child.childSessionId !== run.sessionId)
+    .map(child => child.childSessionId).filter(Boolean));
+  return sessions.flatMap(session => {
+    if (session.sessionId !== run.sessionId) return children.has(session.sessionId) ? [session] : [];
+    const messages = session.transcript?.messages ?? [];
+    const requestProven = messages.some(message => message.role === "user" && message.source === "user"
+      && requestIds.has(message.sourceRequestId) && Number.isSafeInteger(message.turnStartSeq));
+    const turnProven = requestIds.size === 0 && Number.isSafeInteger(run.nativeTurn?.startSeq);
+    const owned = requestProven || turnProven ? runHistory(run, messages.map(message => ({
+      info: { role: message.role, source: message.source, sourceRequestId: message.sourceRequestId, turnStartSeq: message.turnStartSeq },
+      message,
+    }))).map(entry => entry.message) : [];
+    return [{ ...session, transcript: { ...session.transcript, messages: owned } }];
+  });
+}
 
 /** A mounted learned method's own file, as the `read` tool is handed it:
  *  absolute (`/runtime/capsule-methods/_lm…/SKILL.md`) or relative to the
@@ -385,6 +413,9 @@ export function runMethodObservations(input) {
  * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[]}} input */
 export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [] }) {
   if (!run.id) return;
+  // Attachment is preserved independently; a timestamp alone cannot prove
+  // that this native request or its assigned child actually read the context.
+  const observedSessions = methodObservationSessionsForRun({ run, projection, sessions });
   const started = Date.parse(String(run.startedAt ?? ""));
   const finished = Date.parse(String(run.finishedAt ?? ""));
   const inThisRun = (message) => typeof message?.time === "number" && Number.isFinite(message.time)
@@ -394,7 +425,7 @@ export async function recordHandbookRunObservations({ learning, userId, projectI
     const items = (projection?.plan?.items ?? []).filter((item) => item.capability === mounted.capabilityId);
     const sessionIds = new Set([run.sessionId, ...(projection?.subagents ?? [])
       .filter((child) => items.some((item) => item.id === child.deliverableId)).map((child) => child.childSessionId)].filter(Boolean));
-    const used = sessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
+    const used = observedSessions.filter((session) => sessionIds.has(session.sessionId)).some((session) =>
       (session.transcript?.messages ?? []).filter(inThisRun).some((message) => (message.parts ?? []).some((part) => {
         if (part?.type !== "tool" || part?.status !== "completed") return false;
         if (["read", "grep"].includes(part.tool)) {

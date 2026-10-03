@@ -66,7 +66,7 @@ export class ExtensionOperationService {
     if (!invocation || invocation.userId !== auth.userId || invocation.projectId !== auth.projectId || invocation.runtimeGeneration !== auth.runtimeGeneration || typeof invocation.invocationId !== 'string' || !invocation.allowedOperations?.includes(request.operation)) throw denied();
     const scope = await this.generations.operationIdentity({
       id: auth.userId
-    }, auth.projectId, descriptorId, auth.runtimeGeneration, request.operation);
+    }, auth.projectId, descriptorId, auth.runtimeGeneration);
     if (scope.userId !== auth.userId || scope.projectId !== auth.projectId || scope.runtimeGeneration !== auth.runtimeGeneration) throw denied();
     return {
       scope,
@@ -327,13 +327,17 @@ export class ExtensionOperationService {
   }
   /** @param {any} auth @param {string} jobId */
   async cancel(auth, jobId) {
-    const job = await this.owned(auth, jobId);
-    if (!['queued', 'running'].includes(job.status)) return this.public(job);
-    await this.database.query("UPDATE evimed_product.jobs SET payload=jsonb_set(payload,'{cancelRequested}','true') WHERE user_id=$1 AND id=$2 AND status IN ('queued','running')", [job.userId, job.id]);
-    const current = await this.jobs.get(job.userId, job.id);
+    // Releasing an existing owned attempt must survive loss of its execution grant.
+    // Incarnation locks cover the cancellation intent, never the external process join.
+    const current = await this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      const job = await this.cancellationJob(auth, jobId, client);
+      await client.query("UPDATE evimed_product.jobs SET payload=jsonb_set(payload,'{cancelRequested}','true') WHERE user_id=$1 AND id=$2 AND status IN ('queued','running')", [job.userId, job.id]);
+      return this.jobs.get(job.userId, job.id);
+    }));
+    if (!['queued', 'running'].includes(current.status)) return this.cancellationState(current);
     if (!current.payload.dispatch) {
-      await this.jobs.cancel(job.userId, job.id);
-      await this.grants.remove(job.payload.operationId);
+      await this.jobs.cancel(current.userId, current.id);
+      await this.grants.remove(current.payload.operationId);
     } else {
       let ack;
       try {
@@ -342,11 +346,39 @@ export class ExtensionOperationService {
         ack = null;
       }
       if (this.joined(ack, current.payload.dispatch)) {
-        await this.jobs.cancel(job.userId, job.id);
-        await this.grants.remove(job.payload.operationId);
+        await this.jobs.cancel(current.userId, current.id);
+        await this.grants.remove(current.payload.operationId);
       } else await this.retain(current, pending());
     }
-    return this.public(await this.jobs.get(job.userId, job.id));
+    return this.cancellationState(await this.jobs.get(current.userId, current.id));
+  }
+  /** Stable original caller and current account/project incarnations only; grants may be revoked.
+   * @param {any} auth @param {string} jobId @param {any} client */
+  async cancellationJob(auth, jobId, client) {
+    const located = (await client.query("SELECT user_id FROM evimed_product.jobs WHERE id=$1 AND kind='extension-execute' AND payload->'scope'->>'userId'=$2", [extensionIdentifier(jobId), auth.userId])).rows[0];
+    const job = located ? await this.jobs.get(located.user_id, jobId) : null;
+    if (!job || job.projectId !== auth.projectId || job.payload.scope.runtimeGeneration !== auth.runtimeGeneration
+      || job.payload.scope.userId !== auth.userId || job.payload.auth.userId !== auth.userId
+      || job.payload.auth.projectId !== auth.projectId || job.payload.auth.runtimeGeneration !== auth.runtimeGeneration
+      || !auth.invocation || canonicalJson(auth.invocation) !== canonicalJson(job.payload.auth.invocation)) throw new HttpError(404, 'not_found', 'The operation is unavailable.');
+    const scope = job.payload.scope;
+    const current = await client.query(`SELECT actor.id FROM evimed_control.users actor
+      JOIN evimed_control.users owner ON owner.id=$3 AND owner.created_at::text=$4
+      JOIN evimed_control.projects project ON project.user_id=owner.id AND project.id=$5 AND project.created_at::text=$6
+      WHERE actor.id=$1 AND actor.created_at::text=$2 FOR SHARE OF actor,owner,project`,
+    [scope.userId, scope.accountCreatedAt, scope.ownerId, scope.ownerAccountCreatedAt, scope.projectId, scope.projectCreatedAt]);
+    if (current.rows.length !== 1 || job.userId !== scope.ownerId) throw denied();
+    // Account/project locks precede the job lock, matching normal admission ordering.
+    await client.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND id=$2 AND kind='extension-execute' FOR UPDATE", [job.userId, job.id]);
+    const locked = await this.jobs.get(job.userId, job.id);
+    if (!locked || canonicalJson(locked.payload.scope) !== canonicalJson(scope)
+      || canonicalJson(locked.payload.auth) !== canonicalJson(job.payload.auth)) throw denied();
+    return locked;
+  }
+  /** Cancellation never hydrates a revoked result, including a fast completed attempt. @param {any} job */
+  cancellationState(job) {
+    return { jobId: job.id, status: job.status, cancelRequested: job.payload.cancelRequested === true,
+      recoveryRequired: job.payload.recoveryRequired === true };
   }
   /** Recovery never re-executes a dispatched operation. Optional extension failure leaves research intact. */
   async recover() {

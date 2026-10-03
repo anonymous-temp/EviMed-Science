@@ -38,8 +38,11 @@ test("consumption applies a supplement which the next authorized prepared turn c
   assert.match(context.system, /不代表已验证质量改善/);
   assert.match(await fs.readFile(path.join(project.workspaceDir, context.handbooks[0].path), "utf8"), /## Workflow/);
   const projection = { plan: { items: [{ id: "d1", capability: "geo-content", status: "accepted" }] } };
-  const run = { startedAt: "2026-09-30T00:00:00Z", finishedAt: "2026-09-30T01:00:00Z", id: "next-run", effectiveAgentId: "geo-content", status: "succeeded", sessionId: "session", capabilityHandbooks: context.handbooks };
-  const sessions = [{ sessionId: "session", transcript: { messages: [{ time: Date.parse("2026-09-30T00:30:00Z"), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: context.handbooks[0].path } }] }] } }];
+  const run = { startedAt: "2026-09-30T00:00:00Z", finishedAt: "2026-09-30T01:00:00Z", id: "next-run", effectiveAgentId: "geo-content", status: "succeeded", sessionId: "session", kernelRequestIds: ["current"], capabilityHandbooks: context.handbooks };
+  const sessions = [{ sessionId: "session", transcript: { messages: [
+    { role: "user", source: "user", sourceRequestId: "current", turnStartSeq: 10, parts: [] },
+    { turnStartSeq: 10, time: Date.parse("2026-09-30T00:30:00Z"), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: context.handbooks[0].path } }] },
+  ] } }];
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection, sessions });
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection, sessions });
   const row = await f.documents.get("alice", "method", applied.handbookId);
@@ -81,14 +84,16 @@ test("old-turn reads and unrelated sessions never count as this run using a supp
   const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
   const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
   const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
-  const run = { id: "later", sessionId: "root", startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z", effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items };
-  const read = (time) => ({ ...(time ? { time: Date.parse(time) } : {}), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } }] });
+  const run = { id: "later", sessionId: "root", kernelRequestIds: ["current"], startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z", effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items };
+  const read = (time, turnStartSeq = 0) => ({ turnStartSeq, ...(time ? { time: Date.parse(time) } : {}), parts: [{ type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } }] });
   const sessions = [{ sessionId: "root", transcript: { messages: [read("2026-09-30T00:30:00Z"), read(null)] } },
     { sessionId: "unrelated", transcript: { messages: [read("2026-09-30T01:30:00Z")] } }];
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run, projection: {}, sessions });
   assert.equal((await f.documents.get("alice", "method", applied.handbookId)).payload.observations[0].used, false);
   await recordHandbookRunObservations({ learning: f.learning, userId: "alice", run: { ...run, id: "current-read" }, projection: {},
-    sessions: [{ sessionId: "root", transcript: { messages: [read("2026-09-30T01:30:00Z")] } }] });
+    sessions: [{ sessionId: "root", transcript: { messages: [
+      { role: "user", source: "user", sourceRequestId: "current", turnStartSeq: 10, parts: [] }, read("2026-09-30T01:30:00Z", 10),
+    ] } }] });
   assert.equal((await f.documents.get("alice", "method", applied.handbookId)).payload.observations[1].used, true);
 }));
 
@@ -99,6 +104,57 @@ test("concurrent terminal observations keep both runs despite a telemetry CAS co
   await Promise.all(["one", "two"].map((id) => recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection: {},
     run: { id, effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items } })));
   assert.deepEqual((await f.documents.get("alice", "method", applied.handbookId)).payload.observations.map((item) => item.runId).sort(), ["one", "two"]);
+}));
+
+test("supplement use requires the current request or bound turn even when timestamps overlap", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  const input = (requestId, turnStartSeq, source = "user") => ({ role: "user", source, sourceRequestId: requestId, turnStartSeq, parts: [] });
+  const read = (turnStartSeq) => ({ turnStartSeq, time: Date.parse("2026-09-30T01:30:00Z"),
+    parts: [{ type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } }] });
+  const run = { sessionId: "root", kernelRequestIds: ["current"], startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z",
+    effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items };
+  const scenarios = [
+    { id: "unrelated-request", used: false, messages: [input("unrelated", 10), read(10)] },
+    { id: "previous-turn", used: false, messages: [input("previous", 0), read(0), input("current", 10)] },
+    { id: "missing-identity", used: false, messages: [read(undefined)] },
+    { id: "plugin-input", used: false, messages: [input("current", 10, "plugin"), read(10)] },
+    { id: "current-request", used: true, messages: [input("current", 10), read(10)] },
+    { id: "bound-turn", used: true, identity: { kernelRequestIds: [], nativeTurn: { startSeq: 10 } }, messages: [read(10)] },
+    { id: "conflicting-request", used: false, identity: { nativeTurn: { startSeq: 10 } }, messages: [input("unrelated", 10), read(10)] },
+  ];
+  for (const scenario of scenarios) {
+    await recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection: {}, run: { ...run, ...scenario.identity, id: scenario.id },
+      sessions: [{ sessionId: "root", transcript: { messages: scenario.messages } }] });
+    const row = await f.documents.get("alice", "method", applied.handbookId);
+    const observation = row.payload.observations.find(item => item.runId === scenario.id);
+    assert.equal(observation.used, scenario.used, scenario.id);
+    assert.equal(observation.attached, true, "attachment is distinct from actual reading");
+    assert.equal(observation.contentDigest, handbooks.items[0].contentDigest);
+  }
+}));
+
+test("supplement reads inherit only the current child's matching capability assignment", async () => workspace(async (project) => {
+  const f = fixture(); await f.learning.recordHandbookCandidate("alice", f.input());
+  const applied = await new HandbookConsolidation({ ...f, registry }).run({ job: f.queued[0] });
+  const handbooks = await prepareCapabilityHandbooks({ learning: f.learning, registry, project, capabilityId: "geo-content", config });
+  const projection = { plan: { items: [{ id: "current", capability: "geo-content", status: "accepted" },
+    { id: "other-capability", capability: "meta-analysis", status: "accepted" }] },
+    subagents: [{ deliverableId: "current", childSessionId: "current-child" },
+      { deliverableId: "previous", childSessionId: "old-child" }, { deliverableId: "other-capability", childSessionId: "other-child" }] };
+  for (const sessionId of ["current-child", "old-child", "unassigned-child", "other-child"]) {
+    await recordHandbookRunObservations({ learning: f.learning, userId: "alice", projection,
+      run: { id: sessionId, sessionId: "root", kernelRequestIds: ["current-request"], startedAt: "2026-09-30T01:00:00Z", finishedAt: "2026-09-30T02:00:00Z",
+        effectiveAgentId: "geo-content", capabilityHandbooks: handbooks.items },
+      sessions: [{ sessionId, transcript: { messages: [{ time: Date.parse("2026-09-30T01:30:00Z"),
+        parts: [{ type: "tool", status: "completed", tool: "read", input: { path: handbooks.items[0].path } }] }] } }] });
+    const row = await f.documents.get("alice", "method", applied.handbookId);
+    const observation = row.payload.observations.find(item => item.runId === sessionId);
+    assert.equal(observation.used, sessionId === "current-child", sessionId);
+    assert.equal(observation.attached, true);
+    assert.deepEqual(observation.outcomes, [{ deliverableId: "current", outcome: "accepted" }]);
+  }
 }));
 
 test("an invalid stored supplement is omitted without blocking the authorized research turn", async () => workspace(async (project) => {

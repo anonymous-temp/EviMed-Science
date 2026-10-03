@@ -762,7 +762,7 @@ export function vcrEngineStatus(config) {
   if (!String(config?.vcrEngineUrl ?? "").trim()) return { configured: false, reason: "not_configured" };
   const error = config.vcrEngineTokenError || config.vcrEngineReceiptKeyError || null;
   if (error) return { configured: false, reason: String(error) };
-  if (!config.vcrEngineToken || !config.vcrEngineReceiptKey) return { configured: false, reason: "vcr_engine_secret_missing" };
+  if (!config.vcrEngineToken) return { configured: false, reason: "vcr_engine_secret_missing" };
   return { configured: true, reason: null };
 }
 
@@ -990,7 +990,7 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("jobs", "Compute jobs waiting or running, by state; awaiting_budget is the second human stop.", "gauge",
       ["queued", "running", "awaiting_budget"].map((state) => ({ labels: { state }, value: snapshot.tables?.jobs[state] ?? 0 })));
   }
-  add("engine_configured", "Whether the compute engine is composed (URL set and both secrets readable).", "gauge",
+  add("engine_configured", "Whether the compute engine is composed (URL and request token set; any configured receipt key is valid).", "gauge",
     [{ value: snapshot.engine?.configured ? 1 : 0 }]);
   add("service_total", "What the service did since this process started.", "counter",
     ["studiesCreated", "reads", "writes", "writeIssues", "notFound", "tabs"].map((kind) => ({

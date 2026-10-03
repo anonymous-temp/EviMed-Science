@@ -142,7 +142,8 @@ test("each source's DOI comes from its identifier, its address, or the capture i
 
   const untouched = structuredClone(verdict);
   await attachSourceUpdates(untouched, { matrix, sourceArtifacts, lookup: async () => { throw new Error("down"); } });
-  assert.deepEqual(untouched, verdict);
+  assert.equal(untouched.claims[0].sources[0].status, verdict.claims[0].sources[0].status);
+  assert.equal(untouched.claims[0].sources[0].updateStatus.state, "unavailable");
 });
 
 test("the reader's verification carries the notices and keeps its verdicts; off, it carries none", async () => {
@@ -174,4 +175,85 @@ test("the reader's verification carries the notices and keeps its verdicts; off,
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test("lookup status distinguishes no update, a notice, unknown and an unavailable check with its actual timestamp", async () => {
+  const { fetchImpl } = crossref(recorded.batch);
+  const clock = Date.parse("2026-10-02T09:00:00Z");
+  const lookup = createSourceUpdateLookup({ fetchImpl, userAgent: "x", now: () => clock });
+  const statuses = await lookup.lookupStatuses(["10.1016/s0140-6736(97)11096-0", "10.1056/nejmoa2204233", "10.9999/unknown"]);
+  assert.equal(statuses.get("10.1016/s0140-6736(97)11096-0").state, "changed");
+  assert.equal(statuses.get("10.1056/nejmoa2204233").state, "no_update");
+  assert.equal(statuses.get("10.9999/unknown").state, "unknown");
+  assert.equal(statuses.get("10.9999/unknown").checkedAt, "2026-10-02T09:00:00.000Z");
+  assert.equal(statuses.get("10.9999/unknown").reason, "not_in_crossref");
+  const failed = createSourceUpdateLookup({ fetchImpl: crossref([], { fail: true }).fetchImpl, userAgent: "x", now: () => clock });
+  const compat = await failed.lookup(["10.9999/unknown"]);
+  assert.equal(compat.size, 0);
+  assert.equal(compat.statuses.get("10.9999/unknown").state, "unavailable");
+  assert.equal(compat.statuses.get("10.9999/unknown").reason, "http_503");
+});
+
+test("one deadline bounds all Crossref batches and a hanging streamed body", async () => {
+  let asked = 0;
+  let canceled = 0;
+  const lookup = createSourceUpdateLookup({ userAgent: "x", timeoutMs: 55, fetchImpl: async () => {
+    asked += 1;
+    if (asked === 1) { await new Promise(resolve => setTimeout(resolve, 30)); return Response.json({ message: { items: [] } }); }
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{"message":')); }, cancel() { canceled += 1; } }));
+  } });
+  const started = Date.now();
+  const statuses = await lookup.lookupStatuses(Array.from({ length: 48 }, (_, index) => `10.9999/source-${index}`));
+  assert.ok(Date.now() - started < 150);
+  assert.equal(asked, 2, "the remaining batch is marked unavailable without a new request after the deadline");
+  assert.equal(canceled, 1, "the blocked body is canceled");
+  assert.equal(statuses.get("10.9999/source-47").reason, "timeout");
+});
+
+test("read-only retry respects Retry-After inside the deadline and caller cancellation names the gap", async () => {
+  let requests = 0;
+  const lookup = createSourceUpdateLookup({ userAgent: "x", maxAttempts: 2, timeoutMs: 40, fetchImpl: async () => {
+    requests += 1;
+    return new Response("busy", { status: 429, headers: { "retry-after": "30" } });
+  } });
+  const statuses = await lookup.lookupStatuses(["10.9999/a"]);
+  assert.equal(requests, 1, "no retry starts once Retry-After consumes the remaining allowance");
+  assert.equal(statuses.get("10.9999/a").reason, "timeout");
+  const controller = new AbortController();
+  controller.abort();
+  const canceled = await lookup.lookupStatuses(["10.9999/a"], { signal: controller.signal });
+  assert.equal(canceled.get("10.9999/a").reason, "canceled");
+  assert.equal(requests, 1);
+  const retried = createSourceUpdateLookup({ userAgent: "x", maxAttempts: 2, fetchImpl: async () => ++requests === 2
+    ? new Response("busy", { status: 503 }) : Response.json({ message: { items: [{ DOI: "10.9999/a" }] } }) });
+  assert.equal((await retried.lookupStatuses(["10.9999/a"])).get("10.9999/a").state, "no_update");
+  assert.equal(requests, 3);
+});
+
+test("a response without a works list is unavailable, while a wrong DOI does not certify the requested source", async () => {
+  for (const [response, state] of [[{ message: {} }, "unavailable"], [{ message: { items: [{ DOI: "10.9999/wrong" }] } }, "unknown"]]) {
+    const lookup = createSourceUpdateLookup({ userAgent: "x", fetchImpl: async () => Response.json(response) });
+    assert.equal((await lookup.lookupStatuses(["10.9999/requested"])).get("10.9999/requested").state, state);
+  }
+});
+
+test("uploaded sources and abstract-only quotes retain access truth while mismatched DOI captures remain unknown", async () => {
+  const verdict = { claims: [
+    { claimId: "abstract", claimType: "direct", sources: [{ artifactPath: "abstract.md", status: "no_quote" }] },
+    { claimId: "upload", claimType: "direct", sources: [{ artifactPath: "uploaded.md", status: "verified" }] },
+    { claimId: "mismatch", claimType: "direct", sources: [{ artifactPath: "other.md", status: "verified" }] },
+  ] };
+  const matrix = { claims: [{ claimId: "abstract", identifier: "10.9999/abstract", accessLevel: "abstract_only" },
+    { claimId: "upload", artifactPath: "uploaded.md", accessLevel: "full_text" },
+    { claimId: "mismatch", identifier: "10.9999/requested" }] };
+  let asked;
+  await attachSourceUpdates(verdict, { matrix, sourceArtifacts: { "other.md": "- DOI: 10.9999/other" }, lookup: async dois => {
+    asked = dois; return new Map([["10.9999/abstract", []]]);
+  } });
+  assert.deepEqual(asked, ["10.9999/abstract"]);
+  assert.equal(verdict.claims[0].sources[0].status, "no_quote", "metadata update lookup does not turn an abstract into preserved full text");
+  assert.equal(verdict.claims[0].sources[0].updateStatus.state, "no_update");
+  assert.equal(verdict.claims[1].sources[0].updateStatus.reason, "not_identified");
+  assert.equal(verdict.claims[2].sources[0].updateStatus.reason, "identifier_mismatch");
 });

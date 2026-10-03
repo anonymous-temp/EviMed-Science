@@ -135,6 +135,7 @@ const PHRASES = Object.freeze({
   vcr_simulate: phrase('提交计算作业', ['kind']),
   trial_registry_record: phrase('取试验登记记录', ['registryId', 'nctId']),
   evidence_pool: phrase('合并证据参数', ['parameter']),
+  research_calculate: phrase('计算研究数据', ['method']),
   // the kernel's own
   bash: phrase('运行脚本'),
 })

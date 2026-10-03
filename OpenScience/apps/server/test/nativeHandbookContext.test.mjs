@@ -101,3 +101,28 @@ test("an unbound turn keeps its initial capability snapshot when a steer looks l
   await context.prepare(project, request("C", "An unrelated capability B question"));
   assert.deepEqual(calls, ["Initial capability A", "An unrelated capability B question"], "the next queued turn still resolves its own capability");
 }));
+
+test("a paused supplement cannot be acknowledged after it was offered to a pending native step", async () => fixture(async ({ context, project }) => {
+  await context.prepare(project, request("pending"));
+  const read = await context.read(project, { sessionId: "session", inputs: [{ requestId: "pending", textDigest: hash("pending") }] });
+  context.allowed = async () => false;
+  assert.deepEqual(await context.acknowledge(project, { sessionId: "session", receipts: [{ requestId: "pending", digest: read.contexts[0].digest }] }), { attached: [] });
+  assert.deepEqual(await context.receipts(project, { sessionId: "session", kernelRequestIds: ["pending"], effectiveAgentId: "geo-content" }), []);
+}));
+
+test("restart and subject supplements retain the exact acknowledged revision without duplicate selection", async () => fixture(async ({ context, project, calls }) => {
+  const first = await context.prepare(project, request("A", "Initial evidence"));
+  const offered = await context.read(project, { sessionId: "session", inputs: [{ requestId: "A", textDigest: hash("Initial evidence") }] });
+  await context.acknowledge(project, { sessionId: "session", receipts: [{ requestId: "A", digest: offered.contexts[0].digest }] });
+  const restarted = new NativeHandbookContext({ route: context.route, select: async () => { throw new Error("Restart must reuse captured context"); }, budget: context.budget, now: context.now });
+  assert.equal((await restarted.prepare(project, request("A", "Initial evidence"))).digest, first.digest);
+  await restarted.acknowledge(project, { sessionId: "session", receipts: [{ requestId: "A", digest: offered.contexts[0].digest }] });
+  const actual = await restarted.receipts(project, { sessionId: "session", kernelRequestIds: ["A", "A"], effectiveAgentId: "geo-content" });
+  assert.equal(actual.length, 1);
+  assert.equal(actual[0].contentDigest, first.items[0].contentDigest);
+  context.select = async () => ({ context: "New subject and revision", items: [{ ...first.items[0], version: 2, contentDigest: `sha256:${hash("new revision")}` }] });
+  const supplement = await context.prepare(project, request("B", "Add a study for the new subject"));
+  assert.notEqual(supplement.digest, first.digest);
+  assert.equal((await restarted.receipts(project, { sessionId: "session", kernelRequestIds: ["A"], effectiveAgentId: "geo-content" }))[0].contentDigest, first.items[0].contentDigest);
+  assert.deepEqual(calls, ["Initial evidence", "Add a study for the new subject"]);
+}));

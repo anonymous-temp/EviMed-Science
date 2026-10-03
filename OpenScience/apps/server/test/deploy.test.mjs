@@ -1315,7 +1315,9 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /docker-hosted:/);
   assert.match(workflow, /runs-on:\s+ubuntu-22\.04/);
   assert.match(workflow, /run:\s+pnpm audit:dependencies/);
-  assert.match(workflow, /--profile runtime-image build/);
+  assert.match(workflow, /--profile runtime-image --profile vcr build/);
+  assert.match(workflow, /docker-compose\.result-replay\.yml/);
+  assert.match(workflow, /Qualify isolated VCR candidate image without enabling the module/);
   assert.match(workflow, /pnpm release:manifest/);
   assert.match(workflow, /pnpm verify:release-manifest/);
   assert.match(workflow, /pnpm configure:monitoring/);

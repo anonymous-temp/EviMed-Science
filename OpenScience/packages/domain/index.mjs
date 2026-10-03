@@ -1240,3 +1240,6 @@ export {
 } from './src/vcrContracts.mjs'
 
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
+
+export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
+export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";

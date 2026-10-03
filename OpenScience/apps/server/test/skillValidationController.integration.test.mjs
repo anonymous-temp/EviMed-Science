@@ -3,15 +3,75 @@ import test from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
+import { createServer } from 'node:http'
+import { promisify } from 'node:util'
 import { canonicalJson } from '@evimed/domain'
-import { createSkillValidationController, skillValidationRoot } from '../src/skillValidationController.mjs'
+import { createSkillValidationController, skillValidationPlan, skillValidationRoot } from '../src/skillValidationController.mjs'
 import { RuntimeControllerClient } from '../src/runtimeControllerClient.mjs'
 import { createRuntimeController } from '../src/runtimeControllerServer.mjs'
 
 const sha = value => createHash('sha256').update(value).digest('hex')
 const nativeName = `personal-${'b'.repeat(16)}-${'c'.repeat(32)}`
 const selectedImage = process.env.EVIMED_SKILL_VALIDATION_TEST_IMAGE
+
+test('the fixed fixture transport negotiates Docker 1.48 and preserves the minimum subpath API and sandbox', async t => {
+  const directory = await fs.mkdtemp('/tmp/skill-docker-api-')
+  t.after(() => fs.rm(directory, { recursive: true, force: true }))
+  const socket = path.join(directory, 'docker.sock')
+  const helper = await fs.readFile(new URL('./helpers/skillValidationDockerHttp.mjs', import.meta.url), 'utf8')
+  const sourceSocket = "socketPath:'/docker.sock'"
+  assert.equal(helper.split(sourceSocket).length, 2, 'only the fixed socket is replaced in the isolated transport control')
+  const script = path.join(directory, 'proxy.mjs')
+  await fs.writeFile(script, helper.replace(sourceSocket, `socketPath:${JSON.stringify(socket)}`))
+  let apiVersion = '1.48'
+  const requests = []
+  const server = createServer(async (req, res) => {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    requests.push({ url: req.url, body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null })
+    res.setHeader('content-type', 'application/json')
+    if (req.url === '/version') res.end(JSON.stringify({ ApiVersion: apiVersion }))
+    else if (req.url === `/v${apiVersion}/containers/create?name=${plan.name}`) res.end(JSON.stringify({ Id: 'a'.repeat(64) }))
+    else { res.statusCode = 400; res.end(JSON.stringify({ message: 'client API exceeds this daemon' })) }
+  })
+  await new Promise(resolve => server.listen(socket, resolve))
+  t.after(() => new Promise(resolve => server.close(resolve)))
+  const config = { dataDir: '/data', runtimeDataVolume: 'owned' }
+  const reference = { ownerHash: sha('api-control-owner'), contentId: sha('api-control-source'), kind: 'imports', expectedName: null }
+  const imageId = `sha256:${'b'.repeat(64)}`
+  const jobId = '12345678-1234-4234-8234-123456789abc'
+  const plan = skillValidationPlan(config, reference, imageId, jobId)
+  const run = () => promisify(execFile)(process.execPath, [script, ...plan.args], { timeout: 5000 })
+  for (const supported of ['1.48', '1.45']) {
+    apiVersion = supported
+    requests.length = 0
+    const result = await run()
+    assert.equal(result.stdout.trim(), 'a'.repeat(64))
+    assert.deepEqual(requests.map(request => request.url), ['/version', `/v${supported}/containers/create?name=${plan.name}`])
+    const body = requests[1].body
+    assert.equal(body.Image, imageId)
+    assert.deepEqual(body.Entrypoint, ['node'])
+    assert.deepEqual(body.Cmd, ['/opt/evimed/socket/scripts/validate-personal-skill.mjs', ''])
+    assert.equal(body.User, '10001:10001')
+    assert.deepEqual(body.Env, ['HOME=/tmp', 'DSH_HOME=/tmp/dsh', 'DSH_AGENTS_HOME=/tmp/agents', 'DSH_TELEMETRY_DISABLED=1'])
+    assert.deepEqual(body.Labels, { 'open-science.skill-validation': 'true', 'open-science.skill-reference': plan.identity, 'open-science.skill-job': jobId })
+    assert.equal(body.HostConfig.NetworkMode, 'none')
+    assert.equal(body.HostConfig.ReadonlyRootfs, true)
+    assert.deepEqual(body.HostConfig.CapDrop, ['ALL'])
+    assert.deepEqual(body.HostConfig.SecurityOpt, ['no-new-privileges'])
+    assert.equal(body.HostConfig.Memory, 256 * 1024 * 1024)
+    assert.equal(body.HostConfig.MemorySwap, 256 * 1024 * 1024)
+    assert.equal(body.HostConfig.NanoCpus, 500000000)
+    assert.equal(body.HostConfig.PidsLimit, 32)
+    assert.deepEqual(body.HostConfig.Tmpfs, { '/tmp': 'rw,noexec,nosuid,nodev,size=16m', '/workspace': 'ro,noexec,nosuid,nodev,size=1m', '/runtime': 'ro,noexec,nosuid,nodev,size=1m' })
+    assert.deepEqual(body.HostConfig.Mounts, [{ Type: 'volume', Source: config.runtimeDataVolume, Target: '/input', ReadOnly: true, VolumeOptions: { Subpath: path.relative(config.dataDir, plan.projectionRoot) } }])
+  }
+  apiVersion = '1.44'
+  requests.length = 0
+  await assert.rejects(run(), error => error.code === 1 && /docker_subpath_api_unsupported/.test(error.stderr))
+  assert.deepEqual(requests.map(request => request.url), ['/version'])
+})
 
 /** An existing local fixture contains the actual pinned provider and this fixed helper.
  * These are Docker/native-parser tests, not research-kernel or SaaS qualification.

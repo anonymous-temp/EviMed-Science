@@ -365,6 +365,19 @@ describe("native frame identity and readiness", () => {
     expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
   });
 
+  it("passes a persisted revision reference to the existing native draft without submitting it", async () => {
+    const referenceId = `rr_${"a".repeat(64)}`;
+    const intent = { kind: "open", sessionId: "session-a", draft: "Frozen selection:\n", requestId: "request-revision", projectId: "default", resultRevision: { referenceId } };
+    const { container } = mount({ runtimeUiIntent: intent });
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", intent: { draft: intent.draft, resultRevision: { referenceId } } });
+    expect(post.mock.calls[0][0].type).not.toContain("prompt");
+  });
+
   it("keeps a capability intent pending until a matching success acknowledgement", async () => {
     const intent = { kind: "create", sessionId: "session-new", draft: "Evidence brief", requestId: "request-a", projectId: "default" };
     const { container } = mount({ runtimeUiIntent: intent });

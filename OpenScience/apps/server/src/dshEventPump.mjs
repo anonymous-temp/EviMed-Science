@@ -133,6 +133,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  * @property {{ userId: string, id: string }} project
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
+ * @property {Map<string, {parentSessionId:string|null,branchId:string|null}>} runLineage - fork identity from the owned run ledger
  * @property {Map<string, { runId: string, label: string, capability: string, parentSessionId?: string, mode?: string, modeLookups?: number }>} childSessions - kernel sessionId -> owning run, for a subagent's session; `parentSessionId` and `mode` make its durable follow address
  * @property {Set<string>} resolvingModes - children whose address mode is being read from the parent's catalogue
  * @property {Map<string, Map<string, string | null>>} callPhases - per session, the phase each open tool call was labelled with, so its result carries the same label
@@ -160,7 +161,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string, summary?: Record<string, any>) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void, onRunEvent?: (project: any, runId: string, observed: { sessionId: string, child: boolean, replay: boolean, event: import('@evimed/domain').RunEvent }) => void }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string, summary?: Record<string, any>) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void, onRunEvent?: (project: any, runId: string, observed: { sessionId: string, child: boolean, replay: boolean, parentSessionId:string|null, branchId:string|null, event: import('@evimed/domain').RunEvent }) => void }} options
    */
   constructor({
     runEvents,
@@ -231,7 +232,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), childOwners: new Map(), childAnnouncements: new Map(), sessionHeads: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map(), resolvingModes: new Set(), callPhases: new Map() };
+    const state = { project, controller, rootSessions: new Map(), runLineage: new Map(), childSessions: new Map(), childOwners: new Map(), childAnnouncements: new Map(), sessionHeads: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map(), resolvingModes: new Set(), callPhases: new Map() };
     this.projects.set(key, state);
     // On the project's own lifetime, not the mux's: a reconnect must not reset
     // the sweep's clock, and the kernel is reachable for `session/list` whether
@@ -243,6 +244,19 @@ export class RuntimeEventPump {
       // it exited some other way, and neither the run's own state stream nor
       // its request/response calls depend on this pump.
     });
+  }
+
+  /** Current ownership comes from the authenticated pump, never tool arguments.
+   * @param {{userId:string,id:string}} project @param {string} sessionId */
+  sessionOwner(project, sessionId) {
+    const state = this.projects.get(this.#key(project));
+    if (!state) return null;
+    const child = state.childSessions.get(sessionId);
+    const runId = state.rootSessions.get(sessionId) ?? child?.runId;
+    if (!runId) return null;
+    const lineage = state.runLineage.get(runId);
+    return { runId, child: Boolean(child), parentSessionId: child?.parentSessionId ?? lineage?.parentSessionId ?? null,
+      branchId: lineage?.branchId ?? null };
   }
 
   /**
@@ -284,7 +298,7 @@ export class RuntimeEventPump {
    * run's stops being routed rather than silently accepting a kernel session
    * id a later, unrelated run might reuse.
    * @param {{ userId: string, id: string }} project
-   * @param {{ id: string, sessionId?: string, status: string, nativeTurn?: { startSeq: number }, baselineCursor?: string|null, kernelRequestIds?: string[] }} run
+   * @param {{ id: string, sessionId?: string, status: string, forkedFrom?:string|null, nativeTurn?: { startSeq: number }, baselineCursor?: string|null, kernelRequestIds?: string[] }} run
    */
   noteRun(project, run) {
     const state = this.projects.get(this.#key(project));
@@ -321,9 +335,11 @@ export class RuntimeEventPump {
       }
       if (seq != null && seq !== state.rootTurnSeqs.get(run.sessionId)) state.rootTurnEnds.delete(run.sessionId);
       state.rootSessions.set(run.sessionId, run.id);
+      state.runLineage.set(run.id, { parentSessionId: run.forkedFrom ?? null, branchId: run.forkedFrom ? run.sessionId : null });
       if (seq != null) state.rootTurnSeqs.set(run.sessionId, seq);
     } else if (state.rootSessions.get(run.sessionId) === run.id) {
       state.rootSessions.delete(run.sessionId);
+      state.runLineage.delete(run.id);
       state.sessionHeads.delete(run.sessionId);
       state.callPhases.delete(run.sessionId);
       for (const [sessionId, child] of state.childSessions) {
@@ -974,8 +990,11 @@ export class RuntimeEventPump {
     // to enter (principle 12); a call that is none of them carries null.
     const labelled = this.#withPhase(state, sessionId, event);
     const fromChild = state.childSessions.has(sessionId);
+    const lineage = state.runLineage.get(runId);
     try {
-      this.onRunEvent(state.project, runId, { sessionId, child: fromChild, replay: options.replay === true, event: labelled });
+      this.onRunEvent(state.project, runId, { sessionId, child: fromChild, replay: options.replay === true,
+        parentSessionId: fromChild ? state.childSessions.get(sessionId)?.parentSessionId ?? null : lineage?.parentSessionId ?? null,
+        branchId: lineage?.branchId ?? null, event: labelled });
     } catch {
       // isolated: evimed_runtime_event_pump_progress_feed_failures_total — the
       // progress aggregate is a reader of this stream, never a reason to stop it.

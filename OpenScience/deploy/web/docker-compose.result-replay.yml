@@ -1,0 +1,37 @@
+# Optional aggregate-only executor. No model credentials or host-control socket.
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_RESULT_ENGINE_URL: http://result-replay:8031
+    networks:
+      - result-replay-internal
+  result-replay:
+    image: ${OPEN_SCIENCE_RESULT_REPLAY_IMAGE:?Set the exact result replay image}
+    build:
+      context: ../../..
+      dockerfile: OpenScience/deploy/specialist-adapter/Dockerfile.result-replay
+      args:
+        RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:?Set the release identity}
+        SOURCE_REVISION: ${OPEN_SCIENCE_SOURCE_REVISION:?Set the source revision}
+        BUILD_CREATED: ${OPEN_SCIENCE_BUILD_CREATED:?Set the build timestamp}
+    restart: unless-stopped
+    environment:
+      EVIMED_DATA_ROOT: /data
+      EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/workload-signing.secret
+    volumes:
+      - open-science-data:/data
+      - ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?Set the existing workload signing secret host file}:/run/secrets/workload-signing.secret:ro
+    networks:
+      - result-replay-internal
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 768m
+    cpus: 1
+    expose: ["8031"]
+networks:
+  result-replay-internal:
+    internal: true

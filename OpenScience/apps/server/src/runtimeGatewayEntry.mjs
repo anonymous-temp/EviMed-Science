@@ -48,7 +48,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr", "extensions"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr", "extensions", "results"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -76,6 +76,7 @@ export function publicRuntimeGatewayUrls(config) {
     webSearch: webSearchGatewayProviderUrl(config) ? `${base}/search/v1/query` : "",
     capsule: capsuleGatewayProviderUrl(config) ? `${base}/capsules/v1` : "",
     revision: revisionGatewayProviderUrl(config) ? `${base}/revisions/v1/authorize` : "",
+    results: config.resultsEnabled && config.stateStore === "postgres" ? `${base}/results/v1` : "",
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",

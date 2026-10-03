@@ -36,7 +36,7 @@ test('the pinned native registry dispatches concurrent decorated bodies without 
   root.provide('systemPrompt', { tools() {} })
   /** @type {any} */ const runtime = new ToolRuntime(root)
   const dispose = port.decorateEngineToolContext(root)
-  const name = 'mcp__evimed__meta_analysis'
+  const name = 'mcp__evimed__research_calculate'
   /** @type {any[]} */ const seen = []
   const unregister = runtime.register({ name, description: 'test',
     parameters: { type: 'object', properties: { action: { type: 'string' } }, additionalProperties: false },

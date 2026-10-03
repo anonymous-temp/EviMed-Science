@@ -27,6 +27,8 @@ export interface ClaimSource {
   artifactPath?: string;
   /** The matrix's original path, retained for bond enumeration only. File opening uses `artifactPath`. */
   declaredArtifactPath?: string;
+  resultVersionId?: string;
+  resultDigest?: string;
   /** What kind of evidence the source is, decided once by the domain (C8). */
   sourceType: EvidenceSourceType;
   /** The source's risk of bias by a named tool, as the run recorded it (read by `claimAppraisalDisplay`). */
@@ -93,6 +95,11 @@ export interface SourceUpdate {
   source: string | null;
 }
 
+export interface SourceUpdateStatus {
+  state: "no_update" | "changed" | "unknown" | "unavailable";
+  checkedAt: string | null; reason?: string; updates: SourceUpdate[];
+}
+
 export interface ClaimVerification {
   claims: {
     claimId: string;
@@ -103,7 +110,7 @@ export interface ClaimVerification {
      * added by the control plane; `doi` and `updates` are the work's Crossref
      * notices, present only when Crossref was asked and answered.
      */
-    sources: { artifactPath: string | null; status: string; sourceType?: string; doi?: string; updates?: SourceUpdate[] }[];
+    sources: { artifactPath: string | null; status: string; sourceType?: string; doi?: string; updates?: SourceUpdate[]; updateStatus?: SourceUpdateStatus }[];
   }[];
   counts: Record<string, number>;
 }

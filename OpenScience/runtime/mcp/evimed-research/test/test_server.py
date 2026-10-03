@@ -89,6 +89,7 @@ class ToolContractTests(unittest.TestCase):
             "comprehensive_drug_evaluation",
             "drug_selection_evaluation",
             "meta_analysis",
+            "research_calculate",
             "mendelian_randomization",
             "bibliometric_analysis",
             "research_topic_selection",
