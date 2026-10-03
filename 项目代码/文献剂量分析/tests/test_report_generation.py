@@ -188,10 +188,10 @@ def test_frontier_rank_does_not_default_to_rapid_growth_in_fallbacks(tmp_path):
             ctx["stats"]["frontiers"] = {"top_frontiers": [row], "frontier_topics": pd.DataFrame([
                 {"topic": "observed-topic", "frontier_score": .7, "growth_rate": growth or 0}])}
             ctx["stats"]["top_keywords"] = pd.DataFrame([{"keywords_merged": "observed-topic", "count": 8}])
-            for text in [generator._discussion(ctx), _smart_template_narratives(
+            for text in [generator._discussion(ctx), generator._conclusion(ctx), _smart_template_narratives(
                     "topic", ctx["articles"], ctx["stats"], {}, lang=lang)["discussion"]]:
                 assert "observed-topic" in text
-                for unsupported in ["rapid recent growth", "particularly strong recent growth", "近期增长迅速", "增长势头强劲"]:
+                for unsupported in ["rapid recent growth", "particularly strong recent growth", "近期增长迅速", "增长势头强劲", "rapid development", "快速发展"]:
                     assert unsupported not in text
                 assert "selected" in text.lower() if lang == "en" else "样本" in text
 
@@ -217,3 +217,14 @@ def test_real_narrative_prompt_contains_current_selection_and_actual_query(tmp_p
     assert "全领域增长" in captured[1]
     assert "analysis of growth drivers" not in captured[0]
     assert "分析增长阶段拐点的驱动因素" not in captured[1]
+
+
+def test_citation_limit_does_not_invent_modeled_counts(tmp_path):
+    for lang in ["en", "zh"]:
+        ctx = _selection_context(tmp_path, lang)
+        ctx["stats"].pop("ai_narratives")
+        ctx["stats"]["citation_coverage"] = {"total": 198, "observed": 198, "missing": 0,
+                                            "by_source": {"icite": 196, "semantic_scholar": 2}}
+        text = generator._discussion(ctx)
+        assert "modeled" not in text and "影响因子" not in text
+        assert "observation" in text if lang == "en" else "观测" in text
