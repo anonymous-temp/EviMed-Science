@@ -238,8 +238,8 @@ its switch is on; the rest are changes inside existing layers.
 - **「虚拟临研」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
   account): one row per study on top of an ordinary project, `/api/vcr/*` with abilities
   checked per operation; the seven-step programme runs the five vcr capabilities inside the
-  project, and every number comes from a job of the R engine `项目代码/vcr-engine` (28 methods,
-  one scenario schema each, validated identically by the control plane and the engine).
+  project, and every number comes from a job of the R engine `项目代码/vcr-engine` (the methods listed by `VCR_ENGINE_METHODS`
+  in `@evimed/domain`, one scenario schema each, validated identically by the control plane and the engine).
   Patient-level data lives in a data plane never mounted in a runtime: the control plane alone
   resolves a snapshot into engine inputs after an access decision, outcome columns stay sealed
   until the analysis plan is frozen, and what the runtime reads passes through small-cell
