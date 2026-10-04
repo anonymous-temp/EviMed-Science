@@ -70,6 +70,7 @@ import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice }
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
+import { MethodFeedbackService } from "./methodFeedback.mjs";
 import { LearningTriggers } from "./learningTriggers.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
@@ -1950,7 +1951,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
       authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
   const resultReplays = resultProvenance && productJobs ? new ResultReplayService({ results: resultProvenance,
-    documents: productDocuments, jobs: productJobs, engine: resultEngine, config }) : null;
+    documents: productDocuments, jobs: productJobs, engine: resultEngine, config,
+    // What a recalculation found, carried to the learned methods the original's run read (methodFeedback.mjs, N14).
+    compared: input => methodFeedback?.fromReplay(input) }) : null;
   if (resultProvenance && resultReplays) resultProvenance.deriveEligibility = (userId, version) => resultReplays.eligibility(userId, version);
   const resultReplayWorker = resultReplays ? new ResultReplayWorker({ service: resultReplays, jobs: productJobs,
     engine: resultEngine, config, admission: client => heavyWorkAdmission(client, "replay"),
@@ -1970,7 +1973,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     documents: productDocuments, feedback: feedbackEvents,
     runs: { list: project => agentRuns.list(project) },
     learning: () => (learningWorker ? learningTriggers : null),
+    // And the correction itself, carried to the learned methods the corrected result's run read (N14).
+    methods: () => methodFeedback,
     report: code => { void securityAudit(config, "result.correction", "failed", { code }).catch(() => {}); } }) : null;
+  // What later became of a result — a trusted recalculation reproduced it or did not, the researcher corrected it, the
+  // engine's own diagnostics flagged the data — joined by identifiers to the methods the producing run read, on the
+  // scientific axis of each method's record. Where the loop is on; the researcher's own 「停止学习」 and a capsule trial apply.
+  const methodFeedback = learningService && config.learningEnabled ? new MethodFeedbackService({
+    learning: learningService, runs: { list: project => agentRuns.list(project) },
+    enabled: async (project, run) => {
+      const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId).catch(() => ({ learning: false, trial: false }));
+      return !state.learning && !state.trial;
+    },
+    report: code => { void securityAudit(config, "method.feedback", "failed", { code }).catch(() => {}); } }) : null;
   const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage, corrections: resultCorrections });
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
@@ -3134,6 +3149,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
       learning: learningService, jobs: productJobs, notifications: notificationService,
+      // Which learned methods the run this lesson is about read, and what became of the results produced under each.
+      usedMethods: methodFeedback ? (project, run) => methodFeedback.usedForLesson(project, run) : null,
       // The correction memories a lesson names, in the researcher's own words
       // (quoted and checked when they were written), so they open the input.
       // A sensitive one stays out, as a sensitive message stays out of an excerpt.

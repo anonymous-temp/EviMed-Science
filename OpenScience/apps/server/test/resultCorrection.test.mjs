@@ -369,3 +369,30 @@ test("the corrections route answers for a version the caller may read, and for n
   await assert.rejects(ask(`/api/results/rv_${"9".repeat(64)}/corrections?projectId=p`), { status: 404 });
   await assert.rejects(ask(`/api/results/not-a-version/corrections?projectId=p`), { code: "result_identifier_invalid" });
 });
+
+test("a correction is carried to the methods the corrected result's run read once its event is written, and a join that fails costs the event nothing (N14)", async t => {
+  const f = await fixture(t);
+  const told = [];
+  f.corrections.methods = () => ({ fromCorrection: async (project, event) => { told.push([project.id, event.trigger, event.subject.id, event.detail.successor.versionId, event.runId]); } });
+  const original = await f.deliver();
+  const { directory } = await f.revise();
+  const successor = await f.capture(`${directory}/report.md`, REVISED_REPORT);
+  assert.deepEqual(told, [["p", "result-corrected", original.versionId, successor.versionId, "original-run"]], "the event, whole, with the run whose work was corrected");
+
+  const g = await fixture(t);
+  g.corrections.methods = () => ({ fromCorrection: async () => { throw Object.assign(new Error("the method ledger is down"), { code: "method_ledger_down" }); } });
+  await g.deliver();
+  const staged = await g.revise();
+  const kept = await g.capture(`${staged.directory}/report.md`, REVISED_REPORT);
+  assert.equal(kept.supersedesVersionId, g.original.versionId, "the version is captured");
+  assert.equal((await g.events()).length, 1, "the event is written");
+  assert.deepEqual(g.audit.filter(([kind]) => kind === "report"), [["report", "method_ledger_down"]], "and the failure is said, not swallowed");
+
+  // A deployment with no join is a deployment whose corrections are recorded as they were.
+  const h = await fixture(t);
+  h.corrections.methods = () => null;
+  await h.deliver();
+  const unjoined = await h.revise();
+  await h.capture(`${unjoined.directory}/report.md`, REVISED_REPORT);
+  assert.equal((await h.events()).length, 1);
+});

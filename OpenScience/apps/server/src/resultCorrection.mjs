@@ -44,13 +44,15 @@ const codeOf = (error) => (typeof error?.code === "string" && /^[a-z][a-z0-9_.-]
 
 export class ResultCorrectionService {
   /**
-   * @param {{ results: any, documents: any, feedback?: any, runs?: any, learning?: (() => any) | null,
+   * @param {{ results: any, documents: any, feedback?: any, runs?: any, learning?: (() => any) | null, methods?: (() => any) | null,
    *   report?: (code: string) => void, now?: () => Date }} dependencies
    *   `learning`: answers the learning triggers when this deployment has them (`LearningTriggers.afterCorrection`).
+   *   `methods`: answers the join from a correction to the methods the corrected result's run read, when this deployment
+   *   has it (`MethodFeedbackService.fromCorrection`, N14).
    */
-  constructor({ results, documents, feedback = null, runs = null, learning = null, report = () => {}, now = () => new Date() }) {
+  constructor({ results, documents, feedback = null, runs = null, learning = null, methods = null, report = () => {}, now = () => new Date() }) {
     this.results = results; this.documents = documents; this.feedback = feedback; this.runs = runs; this.learning = learning;
-    this.report = report; this.now = now;
+    this.methods = methods; this.report = report; this.now = now;
   }
 
   /** The decoded bytes of a version, or null when they are not text, are too large, may not be read or cannot be read.
@@ -84,14 +86,28 @@ export class ResultCorrectionService {
       const { kind, effects } = correctionEffects({ before: original, after: successor, beforeText, afterText });
       const originalRunId = original.producer?.runId ?? null;
       const originalRun = await this.#run(project, originalRunId);
-      return await this.feedback.recordResultCorrection(project.userId, {
+      const recorded = await this.feedback.recordResultCorrection(project.userId, {
         projectId: project.id, runId: originalRunId, occurredAt: this.now(),
         correction: { revisionId: correction.revisionId, original, successor, kind, effects, anchor: correction.anchor,
           instruction: correction.instruction, instructionDigest: correction.instructionDigest,
           capabilityId: originalRun?.effectiveAgentId ?? null, originalRunId, revisionRunId: correction.runId ?? successor.producer?.runId ?? null,
           originalMethod: original.method },
       });
+      await this.#carry(project, recorded?.event);
+      return recorded;
     } catch (error) { this.report(codeOf(error)); return null; }
+  }
+
+  /**
+   * The correction, carried to the learned methods the corrected result's run read (`MethodFeedbackService`). Idempotent
+   * by the pair, so a capture that replays and the settle that writes the event again add nothing twice; a join that
+   * cannot be made is skipped with its reason and never costs the event or the version its record.
+   * @param {any} project @param {any} event
+   */
+  async #carry(project, event) {
+    const methods = this.methods?.();
+    if (!methods?.fromCorrection || !event) return;
+    try { await methods.fromCorrection(project, event); } catch (error) { this.report(codeOf(error)); }
   }
 
   /** Every version a run captured under one directory, newest first, to a bound.
