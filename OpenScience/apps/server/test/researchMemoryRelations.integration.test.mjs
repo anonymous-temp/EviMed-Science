@@ -48,7 +48,6 @@ after(async () => {
   await database.close();
 });
 
-const NOW = Date.now();
 const day = (text) => Date.parse(`${text}T00:00:00Z`);
 const SOURCE_A = `src_${"a".repeat(32)}`;
 const SOURCE_B = `src_${"b".repeat(32)}`;
@@ -67,7 +66,7 @@ const proof = (quote = "stated in the conversation") => ({ sourceType: "conversa
 
 /** What a recall in one project hands the model, by memory id. */
 async function recalled(userId, query, scope = {}) {
-  return store.relevant(userId, query, { projectId: "prj_a", now: NOW, ...scope });
+  return store.relevant(userId, query, { projectId: "prj_a", ...scope });
 }
 const idsOf = (memos) => memos.map((memo) => memo.id.replace(/^record:/, ""));
 
@@ -231,6 +230,49 @@ test("a statement that is forgotten, replaced or deleted is no longer one side o
   await assert.rejects(() => store.markConflict(alpha, a.id, b.id), { status: 409, code: "memory_conflict_invalid" });
   await assert.rejects(() => store.markConflict(alpha, a.id, a.id), { status: 400, code: "memory_conflict_invalid" });
   await store.purgeRecords(alpha);
+});
+
+test("undoing the replacement that settled a disagreement puts the disagreement back with the fact it had retired", options, async () => {
+  const setup = async (suffix) => {
+    const a = await store.upsertRecord(alpha, fact({ key: `project.a${suffix}`, value: `rivaroxaban statement a${suffix}` }), proof());
+    const b = await store.upsertRecord(alpha, fact({ key: `project.b${suffix}`, value: `rivaroxaban statement b${suffix}` }), proof());
+    await store.markConflict(alpha, a.id, b.id);
+    const { record: replacement } = await store.supersede(alpha, a.id, fact({ key: `project.n${suffix}`, value: `rivaroxaban newer statement ${suffix}` }), proof("newer"));
+    return { a, b, replacement };
+  };
+  const labelOf = async (id, suffix) => (await recalled(alpha, `rivaroxaban statement ${suffix}`)).find((memo) => memo.id === `record:${id}`)?.caveats;
+
+  // 1. The replacement is undone as a creation: it is removed and the old statement is back.
+  const first = await setup("1");
+  assert.equal(await labelOf(first.b.id, "b1"), undefined, "while the replacement stands, the old statement is gone and so is its disagreement");
+  const removed = await store.undo(alpha, first.replacement.id);
+  assert.equal(removed.undone, "removed");
+  assert.equal(removed.restored[0].id, first.a.id);
+  assert.deepEqual(await labelOf(first.b.id, "b1"), ["conflict"], "the disagreement it had settled is open again");
+  assert.deepEqual(await labelOf(first.a.id, "a1"), ["conflict"]);
+
+  // 2. The retired statement itself is undone back into force while its replacement stays.
+  const second = await setup("2");
+  const retired = await store.getRecord(alpha, second.a.id);
+  assert.equal(retired.status, "superseded");
+  const restored = await store.undo(alpha, second.a.id);
+  assert.equal(restored.record.status, "active");
+  assert.deepEqual(await labelOf(second.b.id, "b2"), ["conflict"]);
+  // Only what that replacement settled is reopened: a pair settled by the researcher stays settled.
+  const third = await setup("3");
+  const c = await store.upsertRecord(alpha, fact({ key: "project.c3", value: "rivaroxaban statement c3" }), proof());
+  await store.markConflict(alpha, third.b.id, c.id);
+  await store.resolveConflict(alpha, c.id, third.b.id, { reason: "the researcher chose c" });
+  await store.undo(alpha, third.replacement.id);
+  assert.equal(await labelOf(c.id, "c3"), undefined, "a disagreement the researcher settled is not reopened by an unrelated undo");
+});
+
+test("an inference does not settle which of two statements is right", options, async () => {
+  const a = await store.upsertRecord(alpha, fact({ key: "project.a", value: "rivaroxaban a" }), proof());
+  const b = await store.upsertRecord(alpha, fact({ key: "project.b", value: "rivaroxaban b" }), proof());
+  await store.markConflict(alpha, a.id, b.id);
+  await assert.rejects(() => store.resolveConflict(alpha, a.id, b.id, { by: "extraction" }), { status: 400, code: "memory_conflict_invalid" });
+  assert.equal((await store.getRecord(alpha, b.id)).status, "active", "nothing was retired");
 });
 
 test("a conflict is one account's: another account's record cannot be named, and nothing crosses", options, async () => {

@@ -1112,12 +1112,25 @@ export class ResearchMemoryStore {
       changedAt: now, reason: boundedText(`superseded by ${replacement.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
       ...actor,
     }))]);
-    await client.query(`UPDATE evimed_memory.record_conflicts SET state='resolved',resolved_at=$3,resolution=$4
+    await client.query(`UPDATE evimed_memory.record_conflicts SET state='resolved',resolved_at=$3,resolution=$4,resolved_by=$5
       WHERE user_id=$1 AND state='open' AND (record_id=$2 OR other_id=$2)`,
-    [owner, replaced.id, now, boundedText(`${replaced.key} was replaced by ${replacement.key}`, MEMORY_REASON_LIMIT)]);
+    [owner, replaced.id, now, boundedText(`${replaced.key} was replaced by ${replacement.key}`, MEMORY_REASON_LIMIT), replacement.id]);
     const superseded = publicRecord(retired.rows[0]);
     await this.#enqueueRecordIndex(client, owner, superseded);
     return superseded;
+  }
+
+  /**
+   * Put back the disagreements a replacement had settled, when the replacement
+   * is undone: the statement it retired is in force again, and so is what it
+   * disagreed with. A disagreement is reopened, never invented — only rows that
+   * were settled by that replacement.
+   * @param {any} client @param {string} owner @param {string} resolvedBy @param {string | null} [recordId]
+   */
+  async #reopenConflicts(client, owner, resolvedBy, recordId = null) {
+    await client.query(`UPDATE evimed_memory.record_conflicts SET state='open',resolved_at=NULL,resolution='',resolved_by=NULL
+      WHERE user_id=$1 AND state='resolved' AND resolved_by=$2 AND ($3::text IS NULL OR record_id=$3 OR other_id=$3)`,
+    [owner, resolvedBy, recordId]);
   }
 
   /**
@@ -1204,6 +1217,8 @@ export class ResearchMemoryStore {
           await this.#enqueueRecordIndex(client, owner, record);
           restored.push(record);
         }
+        // What the removed record's replacing had settled is open again.
+        await this.#reopenConflicts(client, owner, current.id);
         return { undone: "removed", record: null, previous: current, restored };
       }
       const before = /** @type {any} */ (current.revisions.at(-1));
@@ -1225,6 +1240,9 @@ export class ResearchMemoryStore {
           ...revisionPointers(current),
         })), now, restoresStart, restoresStart ? memoryInstant(raw.validFrom) : null]);
       const record = publicRecord(updated.rows[0]);
+      if (current.status === "superseded" && current.supersededBy && record.status !== "superseded") {
+        await this.#reopenConflicts(client, owner, current.supersededBy, record.id);
+      }
       await this.#enqueueRecordIndex(client, owner, record);
       return { undone: "restored", record, previous: current, restored: [] };
     });
@@ -1413,6 +1431,9 @@ export class ResearchMemoryStore {
     const keep = assertRecordId(keepId);
     const loser = assertRecordId(otherId);
     if (keep === loser) throw new HttpError(400, "memory_conflict_invalid", "A memory cannot conflict with itself.");
+    // An inference does not settle which of two statements is right: the
+    // researcher does, or a platform step acting on their word (principle 18).
+    if (by === "extraction") throw new HttpError(400, "memory_conflict_invalid", "A disagreement is settled by the researcher, not by an extraction.");
     const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
     const actor = revisionActor(by, runId);
     return this.#transaction(async (client) => {

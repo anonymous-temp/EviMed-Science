@@ -91,6 +91,16 @@ test("a stated start is the start; an unknown one is when the platform recorded 
   assert.equal(validityOf(record({ createdAt: undefined })).start, -Infinity, "a record that carries no times is not refused");
 });
 
+test("a question about now never reads a clock the caller does not share: a record in force is in force", () => {
+  // The database stamped it a minute ahead of this process's clock.
+  const justWritten = record({ createdAt: new Date(NOW + 60_000).toISOString() });
+  assert.deepEqual(ids(versionsInForce([justWritten], context())), ["r1"]);
+  assert.deepEqual(versionsInForce([justWritten], context({ asOf: NOW - 1_000 })).map((entry) => entry.caveats), [["not_yet_valid"]],
+    "for an earlier time the recorded moment is the evidence, and it says nothing was known yet");
+  const stated = record({ validFrom: new Date(NOW + 60_000).toISOString() });
+  assert.deepEqual(versionsInForce([stated], context()).map((entry) => entry.caveats), [["not_yet_valid"]], "a stated future start is a stated start");
+});
+
 test("a fact with a stated end stops being the answer at that end, and an inverted interval is never held", () => {
   const ended = record({ invalidSince: "2026-08-01T00:00:00Z" });
   assert.deepEqual(ids(versionsInForce([ended], context())), []);

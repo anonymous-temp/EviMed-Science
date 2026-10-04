@@ -135,11 +135,15 @@ CREATE TABLE IF NOT EXISTS evimed_memory.record_conflicts (
   resolution text NOT NULL DEFAULT '' CHECK (char_length(resolution) <= 500),
   created_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
   resolved_at timestamptz(3),
+  -- The record whose replacing a statement settled this: undoing that
+  -- replacement puts the statement back in force, and the disagreement with it.
+  resolved_by text,
   PRIMARY KEY (user_id, record_id, other_id),
   CHECK (record_id < other_id),
   FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE,
   FOREIGN KEY (user_id, other_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE
 );
+ALTER TABLE evimed_memory.record_conflicts ADD COLUMN IF NOT EXISTS resolved_by text;
 CREATE INDEX IF NOT EXISTS memory_conflicts_other_idx ON evimed_memory.record_conflicts (user_id, other_id);
 -- What a memory rests on, by a recorded identifier — never by a name. A
 -- knowledge-base document is its \`src_\` id and a published work is its DOI;

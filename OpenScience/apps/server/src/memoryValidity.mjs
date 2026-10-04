@@ -64,12 +64,20 @@ function instant(value) {
 
 /**
  * A record's validity interval in epoch milliseconds.
- * @param {Record<string, any>} record
+ *
+ * `recorded`: whether an unknown start is read as the moment the platform
+ * recorded the fact. It is for a question about an earlier time, where "the
+ * platform knew nothing then" is the honest answer. For a question about now it
+ * is not: a record the platform holds in force is in force now, and reading its
+ * recording time against the caller's clock would make a memory written a
+ * second ago "not yet valid" whenever the database's clock runs ahead of the
+ * server's.
+ * @param {Record<string, any>} record @param {{ recorded?: boolean }} [options]
  * @returns {{ start: number, until: number }}
  */
-export function validityOf(record) {
+export function validityOf(record, { recorded = true } = {}) {
   return {
-    start: instant(record.validFrom) ?? instant(record.createdAt) ?? -Infinity,
+    start: instant(record.validFrom) ?? (recorded ? instant(record.createdAt) : null) ?? -Infinity,
     until: instant(record.invalidSince) ?? Infinity,
   };
 }
@@ -118,7 +126,7 @@ export function heldAt(record, context) {
   if (!mayRead(record, context)) return false;
   if (!(record.status === "active" || (past && record.status === "superseded"))) return false;
   if (!past && instant(record.expiresAt) != null && /** @type {number} */ (instant(record.expiresAt)) <= now) return false;
-  const { start, until } = validityOf(record);
+  const { start, until } = validityOf(record, { recorded: past });
   return start < until && start <= at && at < until;
 }
 
@@ -145,7 +153,7 @@ export function versionsInForce(records, context = {}) {
     if (!mayRead(record, context)) continue;
     if (!(record.status === "active" || (past && record.status === "superseded"))) continue;
     if (!past && instant(record.expiresAt) != null && /** @type {number} */ (instant(record.expiresAt)) <= now) continue;
-    const { start, until } = validityOf(record);
+    const { start, until } = validityOf(record, { recorded: past });
     if (start < until && start > at) upcoming.push(record);
   }
 
