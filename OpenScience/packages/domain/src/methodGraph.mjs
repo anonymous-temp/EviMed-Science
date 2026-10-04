@@ -391,7 +391,7 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * a sequential test keeps its false-alarm rate however often it is read.
  *
  * @param {MethodLearning} learning
- * @param {Partial<typeof METHOD_HARM_TEST>} [options]
+ * @param {Partial<Record<keyof typeof METHOD_HARM_TEST, number>>} [options] the test's bounds; any of them may be replaced
  * @returns {{state: 'harm'|'clear'|'watching', runs: number, bad: number, llr: number}}
  */
 export function methodHarmTest(learning, options = {}) {
@@ -433,7 +433,7 @@ export function methodHarmTest(learning, options = {}) {
  * digest), and stopped only when it has none (`retire`). It is a regression of this body against its predecessors, and
  * never a finding that the method caused anything: `methodFeedback.mjs` says why.
  *
- * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<typeof METHOD_SCIENTIFIC_HARM_TEST> }} input
+ * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<Record<keyof typeof METHOD_SCIENTIFIC_HARM_TEST, number>> }} input
  *   `revisions`: every body the method has held, newest first (the current one among them)
  * @returns {{ state: 'regression' | 'watching' | 'clear', harm: ReturnType<typeof methodHarmTest>, action: 'rollback' | 'retire' | null,
  *   rollbackToDigest: string | null, evidence: string[] }}
