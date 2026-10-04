@@ -4,8 +4,9 @@ import { HttpError, readJson, sendError, sendJson } from "./security.mjs";
 export const RESULT_GATEWAY_PATH = "/internal/results/v1";
 
 /** The pending native call, not a runtime-provided model/actor label, binds the
- * first calculation. Status reads still reauthorize the current project. */
-export function createResultGateway({ runtimeManager, store, service, agentRuns, resolveSession = (_project, _sessionId) => null }) {
+ * first calculation and the render of a report from calculations. Status reads
+ * still reauthorize the current project. `lineage` renders (`ResultLineageService`). */
+export function createResultGateway({ runtimeManager, store, service, agentRuns, lineage = null, resolveSession = (_project, _sessionId) => null }) {
   const identity = async token => {
     try { return runtimeManager.assertActiveModelGatewayToken(token); }
     catch {
@@ -17,7 +18,7 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
     try {
       const url = new URL(req.url ?? "/", "http://evimed.local");
       const operation = url.pathname.slice(RESULT_GATEWAY_PATH.length + 1);
-      if (req.method !== "POST" || !["start", "status", "cancel"].includes(operation) || url.search) throw new HttpError(404, "not_found", "Calculation operation not found.");
+      if (req.method !== "POST" || !["start", "status", "cancel", "render"].includes(operation) || url.search) throw new HttpError(404, "not_found", "Calculation operation not found.");
       const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
       const auth = await identity(token);
       const user = await store.userById(auth.userId);
@@ -25,10 +26,10 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
       const project = await store.requireProject(user, auth.projectId);
       if (!service) throw new HttpError(503, "result_calculation_unavailable", "Calculations are unavailable.");
       const input = await readJson(req, 16384);
-      const fields = operation === "start" ? ["method", "inputPath", "parameters", "requestId"] : ["jobId"];
+      const fields = operation === "start" ? ["method", "inputPath", "parameters", "requestId"] : operation === "render" ? ["templatePath", "outputPath", "calculations"] : ["jobId"];
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(key => !fields.includes(key))) throw new HttpError(400, "result_calculation_invalid", "Unsupported calculation fields.");
       let result;
-      if (operation === "start") {
+      if (operation === "start" || operation === "render") {
         let context;
         /** @type {any} */
         let ownedSession = null;
@@ -51,15 +52,21 @@ export function createResultGateway({ runtimeManager, store, service, agentRuns,
             throw new HttpError(403, "result_invocation_unavailable", "The native calculation call is unavailable.");
           }
           const actual = calls[0].part.input;
-          if (!actual || (actual.action ?? "start") !== "start" || actual.method !== input.method || actual.inputPath !== input.inputPath
-            || canonicalJson(actual.parameters ?? {}) !== canonicalJson(input.parameters ?? {})
-            || actual.requestId && actual.requestId !== input.requestId) throw new HttpError(403, "result_invocation_unavailable", "The calculation request differs from its native call.");
+          const same = operation === "render"
+            ? actual?.action === "render" && actual.templatePath === input.templatePath && actual.outputPath === input.outputPath
+              && canonicalJson(actual.calculations ?? {}) === canonicalJson(input.calculations ?? {})
+            : actual && (actual.action ?? "start") === "start" && actual.method === input.method && actual.inputPath === input.inputPath
+              && canonicalJson(actual.parameters ?? {}) === canonicalJson(input.parameters ?? {}) && !(actual.requestId && actual.requestId !== input.requestId);
+          if (!same) throw new HttpError(403, "result_invocation_unavailable", "The calculation request differs from its native call.");
         };
         await revalidate();
         const run = (await agentRuns.activeRuns(project)).find(item => item.id === ownedSession?.runId || item.sessionId === context.sessionId);
-        result = await service.calculate(user.id, project, input, { kind: "engine", sessionId: context.sessionId,
-          callId: context.callId, runId: run?.id ?? null, parentSessionId: ownedSession?.parentSessionId ?? null,
-          branchId: ownedSession?.branchId ?? null }, revalidate);
+        const origin = { sessionId: context.sessionId, callId: context.callId, runId: run?.id ?? null,
+          parentSessionId: ownedSession?.parentSessionId ?? null, branchId: ownedSession?.branchId ?? null };
+        if (operation === "render") {
+          if (!lineage) throw new HttpError(503, "result_calculation_unavailable", "Calculations are unavailable.");
+          result = await lineage.render(user.id, project, input, origin, revalidate);
+        } else result = await service.calculate(user.id, project, input, { kind: "engine", ...origin }, revalidate);
       } else {
         if (typeof input.jobId !== "string" || !/^replay_[a-f0-9]{64}$/.test(input.jobId)) throw new HttpError(400, "result_calculation_invalid", "Invalid calculation identity.");
         await identity(token);

@@ -64,6 +64,29 @@ export class DataSemanticsService {
     return page.items.map((/** @type {any} */ row) => ({ ...semanticsListing(row.payload), revision: row.revision }));
   }
 
+  /**
+   * The transformations a project recorded whose code is one of these files, by sha-256: how a result's producer
+   * snapshot names a dataset transformation without restating it (plan 2026-10-02 §11.3 N06). Identity only — the
+   * dataset, the transformation's name and its version.
+   * @param {string} userId @param {string} projectId @param {readonly string[]} digests
+   * @returns {Promise<Array<{ datasetId: string, name: string, version: number, codeDigest: string }>>}
+   */
+  async transformationsByCode(userId, projectId, digests) {
+    const wanted = new Set(digests);
+    const page = await this.documents.list(userId, DATA_SEMANTICS_KIND, { projectId, limit: 100 });
+    /** @type {Array<{ datasetId: string, name: string, version: number, codeDigest: string }>} */
+    const found = [];
+    for (const row of page.items) {
+      for (const transformation of Array.isArray(row.payload?.transformations) ? row.payload.transformations : []) {
+        const codeDigest = transformation?.code?.sha256;
+        if (typeof codeDigest === "string" && wanted.has(codeDigest)) {
+          found.push({ datasetId: String(row.payload.datasetId), name: String(transformation.name), version: Number(transformation.version), codeDigest });
+        }
+      }
+    }
+    return found.slice(0, 32);
+  }
+
   /** One dataset's asset with the digest of its interpretation, or null.
    * @param {string} userId @param {string} projectId @param {string} datasetId */
   async get(userId, projectId, datasetId) {

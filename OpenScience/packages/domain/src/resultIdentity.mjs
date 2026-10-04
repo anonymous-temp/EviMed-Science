@@ -37,7 +37,7 @@ export function projectResultInput(value) {
 
 /** Bounds, so a record always fits the ledger's document limit beside the rest of a version. */
 export const RESULT_LINEAGE_LIMITS = Object.freeze({
-  bindings: 300, unbound: 100, unresolved: 40, calculations: 8, machineValues: 5000, packages: 200, files: 64, inputs: 256,
+  bindings: 300, unbound: 100, unresolved: 40, calculations: 8, machineValues: 5000, packages: 400, files: 64, inputs: 256,
   transformations: 32, candidates: 4, textBytes: 1024 * 1024,
 });
 

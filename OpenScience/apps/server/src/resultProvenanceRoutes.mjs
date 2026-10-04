@@ -1,12 +1,14 @@
 import { HttpError, sendJson } from "./security.mjs";
 
 /** Read-only result inspection. Browser assertions never publish capture facts.
- * @param {{store:any,service:any}} dependencies */
-export function createResultProvenanceRoutes({ store, service }) {
+ * `lineage`: the numerical chain of a version (`ResultLineageService.describe`): the calculations its printed numbers are
+ * bound to, the versions bound to it when it is a calculation, and what a successor calculation would move.
+ * @param {{store:any,service:any,lineage?:any}} dependencies */
+export function createResultProvenanceRoutes({ store, service, lineage = null }) {
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (req.method !== "GET" || (url.pathname !== "/api/results" && !/^\/api\/results\/[^/]+(?:\/raw)?$/.test(url.pathname))) return false;
+    if (req.method !== "GET" || (url.pathname !== "/api/results" && !/^\/api\/results\/[^/]+(?:\/raw|\/lineage)?$/.test(url.pathname))) return false;
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     if (!service) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
     const projectId = url.searchParams.get("projectId");
@@ -25,6 +27,10 @@ export function createResultProvenanceRoutes({ store, service }) {
     try { versionId = decodeURIComponent(url.pathname.split("/")[3]); }
     catch { throw new HttpError(400, "result_identifier_invalid", "Invalid result identifier."); }
     if (!/^rv_[a-f0-9]{64}$/.test(versionId)) throw new HttpError(400, "result_identifier_invalid", "Invalid result identifier.");
+    if (url.pathname.endsWith("/lineage")) {
+      if (!lineage) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
+      sendJson(res, 200, { data: await lineage.describe(user.id, projectId, versionId) }); return true;
+    }
     if (url.pathname.endsWith("/raw")) {
       const { version, bytes } = await service.raw(user.id, projectId, versionId);
       res.writeHead(200, { "Content-Type": version.mimeType, "Content-Length": bytes.length,

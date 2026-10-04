@@ -60,8 +60,13 @@ export const SNAPSHOT_ORIGINS = Object.freeze(["platform_measured", "receipt_dec
  */
 export const SNAPSHOT_UNKNOWNS = Object.freeze(["script", "inputs", "environment", "undeclared_dependencies"]);
 
-/** Whether code ran, as a record rather than a hope. */
-export const REPRODUCTION_STATES = Object.freeze(["observed_execution", "generated_not_executed", "not_applicable"]);
+/**
+ * Whether code ran, as a record rather than a hope. `observed_execution`: an owned producer says it ran and the platform
+ * confirmed the code it names. `declared_execution`: a producer's own receipt says it ran and the platform could not
+ * confirm the bytes (the script changed afterwards, or is gone). `generated_not_executed`: code that was written and has
+ * no record of running.
+ */
+export const REPRODUCTION_STATES = Object.freeze(["observed_execution", "declared_execution", "generated_not_executed", "not_applicable"]);
 
 
 const CODE_EXTENSIONS = new Set([".py", ".r", ".rmd", ".qmd", ".ipynb", ".js", ".mjs", ".ts", ".sh", ".jl", ".sas", ".do"]);
@@ -139,17 +144,20 @@ function projectEnvironment(raw) {
     const value = text(facts[key], 200);
     if (value !== null) out[key] = value;
   }
+  let truncated = false;
   if (isObject(facts.packages)) {
     /** @type {Record<string, string>} */
     const packages = {};
-    for (const [name, version] of Object.entries(facts.packages).slice(0, RESULT_LINEAGE_LIMITS.packages)) {
+    const listed = Object.entries(facts.packages);
+    truncated = listed.length > RESULT_LINEAGE_LIMITS.packages;
+    for (const [name, version] of listed.slice(0, RESULT_LINEAGE_LIMITS.packages)) {
       if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(name) && text(version, 80) !== null) packages[name] = /** @type {string} */ (version);
     }
     if (Object.keys(packages).length) out.packages = packages;
   }
   const digest = digestOrNull(raw.digest);
   const reported = Object.keys(out).length > 0 || digest !== null;
-  return { status: reported ? "reported" : "unknown", digest, facts: Object.keys(out).length ? out : null };
+  return { status: reported ? "reported" : "unknown", digest, facts: Object.keys(out).length ? out : null, ...(truncated ? { truncated: true } : {}) };
 }
 
 /** @param {unknown} raw */
@@ -194,8 +202,10 @@ function snapshotFrom(raw) {
     try { return [projectResultInput(item)]; } catch { return []; }
   }) : [];
   const claimed = /** @type {string} */ (REPRODUCTION_STATES.includes(raw.reproduction) ? raw.reproduction : "not_applicable");
-  // Generated code is never promoted to an observed execution.
-  const reproduction = claimed === "observed_execution" && !(executes && script?.executed) ? (script ? "generated_not_executed" : "not_applicable") : claimed;
+  // Generated code is never promoted to an observed execution, and a receipt's claim that is not confirmed stays a declaration.
+  const entitled = claimed === "observed_execution" ? executes && script?.executed === true
+    : claimed === "declared_execution" ? kind === "skill_script" && origin !== "unknown" : true;
+  const reproduction = entitled ? claimed : script ? "generated_not_executed" : "not_applicable";
   const unknown = [...new Set(Array.isArray(raw.unknown) ? raw.unknown.filter((item) => SNAPSHOT_UNKNOWNS.includes(item)) : [])];
   return { schemaVersion: 1, kind, origin, method: projectMethod(raw.method), script, inputs, transformations: projectTransformations(raw.transformations),
     environment: projectEnvironment(raw.environment), execution: projectExecution(raw.execution), reproduction, unknown,
@@ -254,13 +264,15 @@ export function engineJobSnapshot({ recipe, capability = null, output = null, in
  */
 export function skillScriptSnapshot({ script, inputs, transformations = [], environment = null, execution = null, interpreter = null }) {
   const succeeded = execution?.exitCode === 0 && execution?.sourcesUnchanged !== false;
-  const everyChecked = Boolean(script?.verified) && inputs.length > 0 && inputs.every((input) => input?.digest);
+  const confirmed = succeeded && Boolean(script?.verified);
+  // Every input is a preserved, digest-confirmed version; otherwise what the script read is only partly known.
+  const everyChecked = Boolean(script?.verified) && inputs.length > 0 && inputs.every((input) => input?.versionId && input?.digest);
   return snapshotFrom({
     kind: "skill_script", origin: "receipt_declared",
     method: interpreter ? { id: interpreter } : null,
-    script: { path: script?.path, digest: script?.digest, executed: succeeded, verified: Boolean(script?.verified) },
+    script: { path: script?.path, digest: script?.digest, executed: confirmed, verified: Boolean(script?.verified) },
     inputs, transformations, environment, execution,
-    reproduction: succeeded ? "observed_execution" : "generated_not_executed",
+    reproduction: confirmed ? "observed_execution" : succeeded ? "declared_execution" : "generated_not_executed",
     // The script ran as a process: anything it read that its receipt does not list is unknown.
     unknown: ["undeclared_dependencies", ...(everyChecked ? [] : ["inputs"])],
   });

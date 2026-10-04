@@ -136,9 +136,10 @@ def tool_definitions():
         "engine does not read, fails the calculation. "
         + ". ".join(_method_text(method) for method in METHODS)
         + ". action=start/status/cancel; completed results preserve input/code/environment identities and original "
-        "bytes. No scripts, retrieval, fitted EBGM prior or patient rows."),
+        "bytes. No scripts, retrieval, fitted EBGM prior or patient rows. action=render fills a report template's "
+        "{{n:alias.key|f2}} references from machine values into a NEW file."),
         "inputSchema": {"type": "object", "additionalProperties": False, "required": ["action"], "properties": {
-            "action": {"type": "string", "enum": ["start", "status", "cancel"]},
+            "action": {"type": "string", "enum": ["start", "status", "cancel", "render"]},
             "method": {"type": "string", "enum": list(METHODS)},
             "inputPath": {"type": "string", "minLength": 1, "maxLength": 2048,
                           "description": "Workspace-relative frozen aggregate JSON in its method's shape (at most 8 MiB); never a patient-level file."},
@@ -150,6 +151,14 @@ def tool_definitions():
                                      "description": "faers.signals: add 0.5 to every cell of a table that has a zero (default true); false fails the calculation on such a table."}}},
             "requestId": {"type": "string", "minLength": 1, "maxLength": 160},
             "jobId": {"type": "string", "minLength": 1, "maxLength": 160},
+            "templatePath": {"type": "string", "minLength": 1, "maxLength": 2048,
+                             "description": "render: workspace-relative text template with {{n:alias.key|format}} references; key is a "
+                                            "machine value's key (values.pooled_effect); formats raw int f1 f2 f3 pct0 pct1 pct2 thousands months text."},
+            "outputPath": {"type": "string", "minLength": 1, "maxLength": 2048,
+                           "description": "render: workspace-relative NEW file for the report; an existing file is never overwritten."},
+            "calculations": {"type": "object", "maxProperties": 8, "description":
+                             "render: alias -> {jobId} of a finished calculation | {versionId} of a result | {resultsPath, receiptPath?} of a "
+                             "results JSON and its run_analysis.py receipt. An unresolved reference reads 未计算; typed numbers stay and are checked."},
         }}}]
 
 
@@ -190,11 +199,48 @@ def _read_response(response, deadline, limit):
     return b"".join(chunks)
 
 
+def _workspace_path(value, what):
+    if (not isinstance(value, str) or not value or len(value) > 2048 or value.startswith("/") or "\\" in value
+            or any(ord(char) < 32 for char in value) or any(part in {"", ".", ".."} for part in value.split("/"))):
+        raise ResearchCalculateError("result_input_invalid", "The %s must be a workspace-relative file." % what)
+    return value
+
+
+_ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}")
+_JOB = re.compile(r"replay_[a-f0-9]{64}")
+_VERSION = re.compile(r"rv_[a-f0-9]{64}")
+
+
+def _render_payload(payload):
+    """A render request as the gateway reads it: two paths and the calculations its references name."""
+    if set(payload) != {"templatePath", "outputPath", "calculations"}:
+        raise ResearchCalculateError("result_input_invalid", "Render takes templatePath, outputPath and calculations.")
+    templates = _workspace_path(payload["templatePath"], "template")
+    outputs = _workspace_path(payload["outputPath"], "output")
+    calculations = payload["calculations"]
+    if not isinstance(calculations, dict) or not 1 <= len(calculations) <= 8:
+        raise ResearchCalculateError("result_input_invalid", "Name one to eight calculations.")
+    checked = {}
+    for alias, source in calculations.items():
+        if not isinstance(alias, str) or not _ALIAS.fullmatch(alias) or not isinstance(source, dict):
+            raise ResearchCalculateError("result_input_invalid", "A calculation is an alias and one source.")
+        if set(source) == {"jobId"} and isinstance(source["jobId"], str) and _JOB.fullmatch(source["jobId"]):
+            checked[alias] = {"jobId": source["jobId"]}
+        elif set(source) == {"versionId"} and isinstance(source["versionId"], str) and _VERSION.fullmatch(source["versionId"]):
+            checked[alias] = {"versionId": source["versionId"]}
+        elif set(source) <= {"resultsPath", "receiptPath"} and "resultsPath" in source:
+            checked[alias] = {key: _workspace_path(value, key) for key, value in source.items()}
+        else:
+            raise ResearchCalculateError("result_input_invalid", "A calculation is a finished job, a result version or a results file.")
+    return {"templatePath": templates, "outputPath": outputs, "calculations": checked}
+
+
 def calculate(arguments, execution_context=None):
-    if not isinstance(arguments, dict) or set(arguments) - {"action", "method", "inputPath", "parameters", "requestId", "jobId"}:
+    if not isinstance(arguments, dict) or set(arguments) - {"action", "method", "inputPath", "parameters", "requestId", "jobId",
+                                                            "templatePath", "outputPath", "calculations"}:
         raise ResearchCalculateError("result_input_invalid", "Unsupported calculation request fields.")
     action = arguments.get("action")
-    if action not in {"start", "status", "cancel"}:
+    if action not in {"start", "status", "cancel", "render"}:
         raise ResearchCalculateError("result_input_invalid", "A calculation action is required.")
     context = None
     if execution_context is not None:
@@ -229,6 +275,10 @@ def calculate(arguments, execution_context=None):
         payload.setdefault("requestId", "calculate-" + hashlib.sha256((context["sessionId"] + ":" + context["callId"]).encode()).hexdigest())
         if not isinstance(payload["requestId"], str) or not _ID.fullmatch(payload["requestId"]):
             raise ResearchCalculateError("result_input_invalid", "Invalid calculation request identifier.")
+    elif action == "render":
+        if not context:
+            raise ResearchCalculateError("result_execution_context_unavailable", "Rendering needs an owned conversation turn.")
+        payload = _render_payload(payload)
     elif set(payload) != {"jobId"} or not isinstance(payload.get("jobId"), str) or not _ID.fullmatch(payload["jobId"]):
         raise ResearchCalculateError("result_input_invalid", "Supply the owned calculation job identifier.")
     base, token = _gateway()
@@ -262,6 +312,14 @@ def calculate(arguments, execution_context=None):
     except (ValueError, UnicodeDecodeError):
         raise ResearchCalculateError("result_response_invalid", "Calculation response did not identify an owned job.") from None
     state = data["state"]
+    if action == "render":
+        notes = []
+        if data.get("unresolved"):
+            notes.append("Some references named no value; the report reads 未计算 there. Check the alias and key against the calculation's machine values.")
+        if data.get("unbound"):
+            notes.append("Some numbers the template typed match no calculation value; they stay in the report and are listed as unverified.")
+        return {"status": "success", "summary": "The report was rendered from the calculations' values.", "data": data,
+                **({"warnings": notes} if notes else {})}
     next_actions = ["Read the named failure and continue from preserved work."]
     if state == "failed":
         # A wrong input shape arrives here as a bare failure; without this the

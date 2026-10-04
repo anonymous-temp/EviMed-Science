@@ -115,6 +115,12 @@ test("an admitted skill script's receipt is recorded as declared, with its undec
   assert.equal(failed.script.executed, false);
   assert.equal(failed.reproduction, "generated_not_executed");
   assert.ok(failed.unknown.includes("inputs"));
+  // The receipt says it ran, but the script on disk is no longer the bytes it names: declared, never observed.
+  const edited = skillScriptSnapshot({ script: { path: "analysis.py", digest: HASH("a"), verified: false }, inputs: [], execution: { exitCode: 0, sourcesUnchanged: true } });
+  assert.equal(edited.script.executed, false);
+  assert.equal(edited.reproduction, "declared_execution");
+  // Only an owned receipt may declare an execution.
+  assert.equal(projectProducerSnapshot({ kind: "authored", origin: "platform_measured", script: { path: "a.py" }, reproduction: "declared_execution" }).reproduction, "generated_not_executed");
 });
 
 test("the rendering snapshot is the platform's own and the version projection always carries a snapshot", () => {
