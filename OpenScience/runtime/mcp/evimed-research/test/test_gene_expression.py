@@ -519,6 +519,32 @@ class DifferentialTests(Workspace):
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(answer["answer"]["files"]["results"]["sha256"].__class__, str)
 
+    def test_the_capabilitys_independent_verifier_agrees_and_notices_an_edit(self):
+        """`capabilities/gene-expression-analysis/scripts/verify_result.py` recomputes every probe with scipy.stats.ttest_ind and statsmodels
+        and checks the receipt's hashes, needing nothing of this server; it is what a recipient runs."""
+        result = self.compute(self.capture)
+        verifier = ROOT.parents[2] / "capabilities" / "gene-expression-analysis" / "scripts" / "verify_result.py"
+        directory = self.workspace / "deliverables" / "hdac1"
+        command = [sys.executable, str(verifier), str(directory), "--workspace", str(self.workspace)]
+        completed = subprocess.run(command, capture_output=True, check=False)
+        report = json.loads(completed.stdout)
+        self.assertEqual((completed.returncode, report["ok"], report["findings"]), (0, True, []), report)
+        self.assertEqual(report["checked"]["probes"], 12488)
+        self.assertEqual(report["checked"]["statisticsDiffering"], 0)
+        self.assertEqual((report["checked"]["receiptHashes"]["differing"], report["checked"]["receiptHashes"]["missing"]), (0, 0))
+        self.assertIn("not limma", report["method"])
+        table = directory / "gene-expression-de-table.tsv"
+        lines = table.read_text(encoding="utf-8").splitlines()
+        parts = lines[1].split("\t")
+        parts[15] = repr(float(parts[15]) * 1.001)   # the p value of the top probe, edited
+        lines[1] = "\t".join(parts)
+        table.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        edited = subprocess.run(command, capture_output=True, check=False)
+        report = json.loads(edited.stdout)
+        self.assertEqual((edited.returncode, report["ok"]), (1, False))
+        self.assertTrue(any("p_value" in finding for finding in report["findings"]), report["findings"])
+        self.assertEqual(result["status"] in ("success", "warning"), True)
+
     def test_a_series_of_linear_and_of_log_values_is_judged_by_its_values(self):
         samples = ["GSM%d" % n for n in range(1, 9)]
         import random

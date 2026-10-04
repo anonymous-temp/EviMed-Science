@@ -623,6 +623,7 @@ function validatedWebReadRequest(value) {
  */
 const SMALL_DOWNLOAD_BYTES = 64 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** @type {Map<string, { params: Record<string, (value: unknown) => boolean>, url: (params: Record<string, any>) => URL, types: Map<string, string>, limit?: (config: any) => number }>} */
 const downloadKinds = new Map([
   ["epmc-supplements", {
     params: { pmcid: (/** @type {unknown} */ value) => typeof value === "string" && /^PMC\d{3,12}$/.test(value) },

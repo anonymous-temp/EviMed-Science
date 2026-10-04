@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { once } from "node:events";
+import fs from "node:fs";
 import http, { createServer } from "node:http";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import zlib from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, GENE_EXPRESSION_LIMIT_NAMES } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
 import { geneExpressionMetricFamilies, resetGeneExpressionMetrics } from "../src/geneExpressionMetrics.mjs";
@@ -218,4 +222,87 @@ test("the runtime's own defaults and variable names are the control plane's", ()
     assert.equal(python.units[spec.limit], spec.unit, spec.limit);
   }
   assert.deepEqual(Object.keys(python.defaults).sort(), [...GENE_EXPRESSION_LIMIT_NAMES].sort());
+});
+
+// ---------------------------------------------------------------- the runtime's tools through this gateway
+
+const run = promisify(execFile);
+const fixtures = path.join(mcpDirectory, "test", "fixtures", "gene_expression");
+const matrixFixture = fs.readFileSync(path.join(fixtures, "GSE5583_series_matrix.txt.gz"));
+const platformFixture = zlib.gunzipSync(fs.readFileSync(path.join(fixtures, "GPL81_reduced.txt.gz")));
+
+/** GEO as the gateway's fetch sees it: the recorded matrix (with its length) and the platform record (streamed, no length). */
+const geo = (seen) => async (url) => {
+  seen.push(String(url));
+  if (String(url).includes("series_matrix")) return new Response(matrixFixture, { status: 200, headers: { "content-type": "application/x-gzip", "content-length": String(matrixFixture.length) } });
+  if (String(url).includes("view=full")) {
+    let sent = false;
+    return new Response(new ReadableStream({ pull(controller) { if (sent) { controller.close(); return; } sent = true; controller.enqueue(platformFixture); } }), { status: 200, headers: { "content-type": "geo/text" } });
+  }
+  return new Response("not asked for", { status: 404 });
+};
+
+/** Runs the two tools in a child Python exactly as the MCP server calls them, with the gateway as its only way out. */
+async function runTools(t, gatewayBase, environment = {}) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "gene-expression-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(directory, "workspace"));
+  fs.writeFileSync(path.join(directory, "token"), "runtime-token\n", { mode: 0o600 });
+  const script = [
+    "import json, sys",
+    `sys.path.insert(0, ${JSON.stringify(mcpDirectory)})`,
+    "import gene_expression_tools as tools",
+    "first = tools.call('gene_expression_series', {'accession': 'GSE5583'})",
+    "second = None",
+    "if first.get('status') in ('success', 'warning'):",
+    "    groups = [{'label': 'wild type', 'samples': ['GSM130365', 'GSM130366', 'GSM130367']}, {'label': 'knock out', 'samples': ['GSM130368', 'GSM130369', 'GSM130370']}]",
+    "    second = tools.call('gene_expression_differential', {'captureDir': first['data']['captureDir'], 'outputDir': 'deliverables/hdac1', 'groups': groups, 'topN': 5})",
+    "print(json.dumps({'series': first, 'differential': second}))",
+  ].join("\n");
+  const { stdout } = await run("python3", ["-c", script], {
+    cwd: directory, maxBuffer: 64 * 1024 * 1024,
+    env: { PATH: process.env.PATH, HOME: process.env.HOME ?? directory, TMPDIR: directory, OPEN_SCIENCE_WORKSPACE_DIR: path.join(directory, "workspace"),
+      EVIMED_PUBLIC_SOURCE_GATEWAY_URL: `${gatewayBase}/internal/sources/v1/fetch`, EVIMED_MODEL_GATEWAY_TOKEN_FILE: path.join(directory, "token"), ...environment },
+  });
+  return { ...JSON.parse(stdout), workspace: path.join(directory, "workspace") };
+}
+
+test("the runtime's two tools work through the gateway: the kinds, their parameters and their content types agree", async (t) => {
+  resetGeneExpressionMetrics();
+  const seen = [];
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 20_000, publicSourceDownloadTimeoutMs: 60_000, geneExpressionMaxMatrixBytes: 64 * 1024 * 1024, geneExpressionMaxAnnotationBytes: 128 * 1024 * 1024 }, { fetchImpl: geo(seen) });
+  const result = await runTools(t, base);
+  assert.equal(result.series.status === "error", false, JSON.stringify(result.series).slice(0, 400));
+  assert.deepEqual(seen, [
+    "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz",
+    "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL81&targ=self&form=text&view=full",
+  ]);
+  assert.equal(result.series.data.computationReady, true);
+  assert.equal(result.series.data.matrix.sha256, "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220", "the hash is of the bytes the gateway relayed, which are GEO's");
+  assert.equal(result.differential.status === "error", false, JSON.stringify(result.differential).slice(0, 400));
+  const results = JSON.parse(fs.readFileSync(path.join(result.workspace, result.differential.data.resultsPath), "utf8"));
+  assert.equal(results.top[0].probe, "101451_at", "the top probe is the one base R finds");
+  assert.deepEqual(results.top[0].geneSymbols.length, 1);
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-series-matrix,outcome=served}"], 1);
+  assert.equal(counts()["open_science_gene_expression_downloads_total{kind=ncbi-gene-expression-platform-record,outcome=served}"], 1);
+});
+
+test("a byte limit the gateway enforces is refused for that computation, and counted once", async (t) => {
+  resetGeneExpressionMetrics();
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 20_000, publicSourceDownloadTimeoutMs: 60_000, geneExpressionMaxMatrixBytes: 100_000 }, { fetchImpl: geo([]) });
+  const result = await runTools(t, base);
+  assert.equal(result.series.error.code, "gene_expression_input_over_limit");
+  assert.equal(result.series.data.limit, "matrix_bytes");
+  assert.equal(result.differential, null, "nothing was computed");
+  assert.equal(counts()["open_science_gene_expression_limits_total{limit=matrix_bytes,action=refused}"], 1, "the gateway counted it and the runtime did not count it again");
+});
+
+test("a limit only the runtime can see is reported to the gateway's counter, and a refused series leaves nothing preserved", async (t) => {
+  resetGeneExpressionMetrics();
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 20_000, publicSourceDownloadTimeoutMs: 60_000 }, { fetchImpl: geo([]) });
+  const result = await runTools(t, base, { EVIMED_GENE_EXPRESSION_MAX_SAMPLES: "5" });
+  assert.equal(result.series.error.code, "gene_expression_input_over_limit");
+  assert.deepEqual([result.series.data.limit, result.series.data.observed, result.series.data.allowed], ["samples", 6, 5]);
+  assert.equal(counts()["open_science_gene_expression_limits_total{limit=samples,action=refused}"], 1);
+  assert.equal(fs.existsSync(path.join(result.workspace, ".evimed-sources")), false);
 });

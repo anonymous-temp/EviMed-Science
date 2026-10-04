@@ -156,7 +156,7 @@ export function geneExpressionFindings(input) {
       notice(issues, 'gene-expression-design', resultsPath, 'The results should name one GEO series accession and the one platform accession it was computed on.')
     }
     const groups = record(results.design) && Array.isArray(results.design.groups) ? results.design.groups : []
-    if (groups.length !== 2 || groups.some((group) => !record(group) || !Array.isArray(group.samples) || group.samples.length < 3 || group.n !== group.samples.length)) {
+    if (groups.length !== 2 || groups.some((/** @type {unknown} */ group) => !record(group) || !Array.isArray(group.samples) || group.samples.length < 3 || group.n !== group.samples.length)) {
       notice(issues, 'gene-expression-design', resultsPath, 'The design should declare two groups of at least three samples each, with their sample accessions.')
     } else {
       const seen = new Set(groups[0].samples)
