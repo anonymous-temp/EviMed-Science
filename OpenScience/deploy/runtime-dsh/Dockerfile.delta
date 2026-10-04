@@ -81,15 +81,24 @@ RUN set -eux; \
 # The research MCP server's Python sources, and nothing the full build
 # generated beside them.
 #
-# Admissible only while the change imports nothing outside the standard library
-# and this directory: the base installed everything the server depends on. The
+# Admissible only while every import in the change is the standard library, this
+# directory, or a package the base's pinned Python stack already installed
+# (`python_stack` in `install-runtime.sh`: numpy, scipy, pandas, Pillow, pypdf,
+# openpyxl, xlrd, matplotlib, scikit-learn, statsmodels, playwright and the
+# notebook pair): the base installed everything the server depends on, at the
+# versions that stack pins. A package that stack does not name is a full build,
+# because it has to be installed at a pin and verified with the others. The
 # full build also generated `data/sider-4.1.sqlite` into this same tree from
 # pinned upstream bytes, a step that needs the network, so the tree is not
 # replaced whole — the sources are copied over it and the generated index
 # stays. A module deleted from the source would linger, so a deletion, a
-# changed `build_sider_cache.py` or a new third-party import is a full build.
+# changed `build_sider_cache.py` or a package outside the base's stack is a
+# full build.
 # Importing every module is the acceptance: a source that needs something the
-# base does not have fails here, not in a run.
+# base does not have fails here, not in a run. It sees module-level imports
+# only: an import made inside a function (the record extractor imports `pypdf`
+# there, on purpose) passes it, so what keeps such a module honest is the
+# stack list above, not this loop.
 COPY runtime/mcp/evimed-research/*.py /opt/evimed/mcp/evimed-research/
 RUN set -eux; \
   test -s /opt/evimed/mcp/evimed-research/data/sider-4.1.sqlite; \
