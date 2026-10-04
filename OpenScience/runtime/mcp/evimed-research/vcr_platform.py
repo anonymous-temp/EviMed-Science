@@ -916,8 +916,9 @@ def _job_answer(data: dict, action: str) -> dict:
             "data": data,
             "warnings": [str(data.get("message") or "This computation is over the study's compute budget and stopped for one confirmation.")],
             "next_actions": [
+                "Only the researcher's confirmation releases this job: do not wait for it and do not poll its status again.",
                 "Tell the researcher what is waiting and what it costs; the study page has the one confirmation.",
-                "Go on with the steps that do not need this computation.",
+                "Go on with the results you have and the steps that do not need this computation, and say in the report which computation did not run.",
             ],
         }
     if state in ("queued", "running"):

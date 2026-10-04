@@ -345,20 +345,53 @@ test("submission identity is durable before the engine accepts, so a lost acknow
   assert.equal((await store.results(study.id, "trial_scenario")).length, 1);
 });
 
-test("concurrent distinct requests reserve one study compute budget atomically", options, async () => {
+test("concurrent jobs that each fit the budget alone are never both handed to the engine when together they could pass it: one runs, the other waits in the queue unannounced, and a person is asked only when the unspent budget has no room", options, async () => {
   const study = await makeStudy("budget-race");
-  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 60 }, engine: engineDouble() });
+  /** @type {any[]} */
+  const notices = [];
+  const engine = engineDouble();
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 60, vcrMaxConcurrentJobs: 2 }, engine,
+    notifier: { async budgetConfirm(target, job) { notices.push([target.id, job.id]); } } });
   await store.query("CREATE FUNCTION evimed_vcr.slow_budget_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.1); RETURN NEW; END $$");
   await store.query("CREATE TRIGGER budget_race BEFORE INSERT ON evimed_vcr.jobs FOR EACH ROW EXECUTE FUNCTION evimed_vcr.slow_budget_insert()");
   try {
     const outcomes = await Promise.all([0.6, 0.8].map(hazardRatio => jobs.enqueue({ studyId: study.id, userId: study.userId,
       kind: "design_simulation", cpuSecondsLimit: 60, scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio } } })));
-    assert.deepEqual(outcomes.map(outcome => outcome.job.state).sort(), ["awaiting_budget", "queued"]);
-    assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
+    assert.deepEqual(outcomes.map(outcome => outcome.job.state), ["queued", "queued"], "each fits the 60 s budget alone: neither needs a person");
+    const before = await jobs.budgetOf(study.id);
+    assert.equal(before.committedSeconds, 0, "a queued job reserves nothing");
+    assert.equal(before.remainingSeconds, 60);
   } finally {
     await store.query("DROP TRIGGER budget_race ON evimed_vcr.jobs");
     await store.query("DROP FUNCTION evimed_vcr.slow_budget_insert()");
   }
+  // Two workers lease both at once; the study's row serializes their admission, and only one may reach the engine.
+  const both = await jobs.claim({ limit: 2 });
+  assert.equal(both.length, 2);
+  const actions = (await Promise.all(both.map((job) => jobs.advance(job)))).map((outcome) => outcome.action).sort();
+  assert.deepEqual(actions, ["submitted", "waiting"]);
+  assert.equal(engine.submitted.length, 1, "60 s of ceiling in flight leaves no room for another 60 s ceiling");
+  const held = (await store.rows("SELECT * FROM evimed_vcr.jobs WHERE state = 'queued'"))[0];
+  assert.ok(held, "the one that did not fit beside the running one is back in the queue");
+  assert.equal(Number(held.attempts), 0, "waiting for the work in front of it uses no attempt");
+  assert.ok(new Date(held.run_after).getTime() > Date.now(), "and is looked at again after a moment");
+  assert.deepEqual(notices, [], "no notice: nothing here waits for a person");
+  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60, "what is running is what is committed");
+
+  // The running one finishes having spent 42.1 s; the other's 60 s ceiling no longer fits what is unspent, and only now is a person asked, once.
+  const running = both.find((job) => job.id !== held.id);
+  assert.ok(running);
+  assert.equal((await jobs.advance(running)).state, "succeeded");
+  await store.query("UPDATE evimed_vcr.jobs SET run_after = now() WHERE id = $1", [held.id]);
+  const [again] = await jobs.claim();
+  assert.equal(again.id, held.id);
+  assert.equal((await jobs.advance(again)).action, "awaiting_budget");
+  assert.deepEqual(notices, [[study.id, held.id]], "the person is asked exactly once");
+  assert.equal(engine.submitted.length, 1, "the second job never reached the engine: the budget could not cover its ceiling");
+  const after = await jobs.budgetOf(study.id);
+  assert.ok(after.usedSeconds <= after.limitSeconds, "actual use stays within the limit without a confirmation");
+  assert.deepEqual(await jobs.claim(), [], "nothing waiting for a person is claimed");
+  assert.equal((await jobs.budgetOf(study.id)).awaitingBudget, 1);
 });
 
 test("concurrent confirmations release waiting work once without losing or doubling the study grant", options, async () => {
@@ -368,7 +401,10 @@ test("concurrent confirmations release waiting work once without losing or doubl
   const confirmed = await Promise.all([1, 2].map(() => jobs.confirmBudget(study.id, { actor: study.userId })));
   assert.equal(confirmed.reduce((n, result) => n + result.released.length, 0), 1);
   assert.equal((await store.studyById(study.id)).budget.cpuSecondsConfirmed, 60);
-  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
+  const after = await jobs.budgetOf(study.id);
+  assert.equal(after.committedSeconds, 0, "the released job is queued and has spent nothing");
+  assert.equal(after.remainingSeconds, 60);
+  assert.equal(after.awaitingBudget, 0);
 });
 
 test("canceled physical work retains its compute reservation and stopped work without a partial report still settles observed CPU", options, async () => {
@@ -381,14 +417,17 @@ test("canceled physical work retains its compute reservation and stopped work wi
   await jobs.cancel(study.id, first.id, { actor: study.userId });
   const second = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,
     scenario: { ...scenario, truth: { ...scenario.truth, hazardRatio: 0.8 } } });
-  assert.equal(second.job.state, "awaiting_budget");
-  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60);
-  assert.deepEqual(await jobs.claim(), []);
+  assert.equal(second.job.state, "queued", "it fits the study's budget alone; whether it fits beside the work still running is asked when it is handed over");
+  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 60, "the cancelled work may still be running: its ceiling stays reserved");
+  assert.deepEqual(await jobs.claim(), [], "and nothing new starts beside physical work that is not known to have stopped");
   engine.setState("canceled");
   await jobs.recoverCanceled();
   assert.equal((await jobs.budgetOf(study.id)).usedSeconds, 42.1, "A stopped process with no scientific result is still actual compute use.");
-  assert.deepEqual(await jobs.claim(), []);
+  const [next] = await jobs.claim();
+  assert.equal(next.id, second.job.id);
+  assert.equal((await jobs.advance(next)).action, "awaiting_budget", "42.1 s are spent: the 60 s ceiling no longer fits the 60 s budget");
   assert.equal((await store.job(study.id, second.job.id)).state, "awaiting_budget");
+  assert.equal(engine.cancelled.length > 0, true);
 });
 
 test("usage settling after enqueue is rechecked before any new physical submission", options, async () => {
@@ -731,16 +770,23 @@ test("AC-38 compute over the study's budget stops at the confirmation, and one c
   assert.equal(first.job.state, "queued");
   const second = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation",
     scenario: { ...scenario, truth: { hazardRatio: 0.6, controlMedian: 6 } }, cpuSecondsLimit: 600, idempotencyKey: `vcr:${study.id}:b2` });
-  assert.equal(second.job.state, "awaiting_budget", "600 + 600 is past the study's 900");
-  assert.deepEqual(notices, [[study.id, second.job.id, 600]], "the second human stop reaches a person once");
-
+  assert.equal(second.job.state, "queued", "600 + 600 is past the study's 900 only if both spend everything: that is not yet a person's business");
+  assert.deepEqual(notices, []);
   const budget = await jobs.budgetOf(study.id);
   assert.equal(budget.limitSeconds, 900);
-  assert.equal(budget.committedSeconds, 600);
-  assert.equal(budget.awaitingBudget, 1);
+  assert.equal(budget.committedSeconds, 0);
+  assert.equal(budget.remainingSeconds, 900);
+  assert.equal(budget.awaitingBudget, 0);
+
   const claimed = await jobs.claim();
-  assert.deepEqual(claimed.map((job) => job.id), [first.job.id], "the job inside the budget runs");
-  await jobs.finish(first.job.id, { status: "succeeded", result: engineResult(await frozenJob(first.job.id)), cpuSeconds: 10 });
+  assert.deepEqual(claimed.map((job) => job.id), [first.job.id], "the first runs");
+  await jobs.finish(first.job.id, { status: "succeeded", result: engineResult(await frozenJob(first.job.id)), cpuSeconds: 400 });
+  // 400 s are spent: the second one's 600 s ceiling cannot be covered by the 500 s that are left, and the second human stop is reached.
+  const [next] = await jobs.claim();
+  assert.equal(next.id, second.job.id);
+  assert.equal((await jobs.advance(next)).action, "awaiting_budget");
+  assert.deepEqual(notices, [[study.id, second.job.id, 600]], "the second human stop reaches a person once");
+  assert.equal((await jobs.budgetOf(study.id)).awaitingBudget, 1);
   assert.deepEqual(await jobs.claim(), [], "nothing waiting on budget is ever claimed");
 
   const confirmed = await jobs.confirmBudget(study.id, { actor: study.userId });
@@ -750,6 +796,150 @@ test("AC-38 compute over the study's budget stops at the confirmation, and one c
   const after = await store.studyById(study.id);
   assert.equal(after.budget.cpuSecondsConfirmed, 600);
   assert.equal(after.budget.lastConfirmedBy, study.userId);
+  const [released] = await jobs.claim();
+  assert.equal(released.id, second.job.id);
+  assert.equal((await jobs.advance(released)).action, "submitted", "once confirmed it runs");
+  assert.equal(notices.length, 1, "and no second notice");
+
+  // A job whose ceiling alone is more than the study's budget waits at once, and notifies once.
+  const small = await makeStudy("budget-small");
+  const tight = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 500 }, engine: engineDouble(),
+    notifier: { async budgetConfirm(target, job) { notices.push([target.id, job.id, job.cpuSecondsLimit]); } } });
+  const over = await tight.enqueue({ studyId: small.id, userId: small.userId, kind: "design_simulation", scenario, cpuSecondsLimit: 600 });
+  assert.equal(over.job.state, "awaiting_budget");
+  assert.equal(notices.length, 2);
+  assert.deepEqual(notices[1], [small.id, over.job.id, 600]);
+  assert.deepEqual(await tight.claim(), []);
+  assert.equal(notices.length, 2, "claiming again does not ask again");
+});
+
+test("a burst of jobs whose ceilings add up to more than the budget while their real use does not never reaches a person: all of them run, in order", options, async () => {
+  // Live acceptance, 2026-10-04: 126.6 of 7,200 s used, twelve queued jobs each holding a 600 s ceiling, and the thirteenth was sent to a researcher.
+  const study = await makeStudy("burst");
+  /** @type {any[]} */
+  const notices = [];
+  const engine = engineDouble({ resultFor: (spec) => engineResult(spec, { manifest: { engineVersion: "1.0.0", rVersion: "R 4.3.3", packageLockHash: "b".repeat(64),
+    startedAt: "2026-09-28T10:00:00Z", finishedAt: "2026-09-28T10:00:05Z", cpuSeconds: 5 } }) });
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 7_200 }, engine,
+    notifier: { async budgetConfirm(target, job) { notices.push([target.id, job.id]); } } });
+  /** @type {string[]} */
+  const enqueued = [];
+  for (let index = 0; index < 20; index += 1) {
+    const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation",
+      scenario: { ...scenario, truth: { hazardRatio: 0.5 + index / 100, controlMedian: 6 } }, cpuSecondsLimit: 600, idempotencyKey: `vcr:${study.id}:burst${index}` });
+    assert.equal(job.state, "queued", `job ${index + 1} of the burst`);
+    enqueued.push(job.id);
+  }
+  assert.equal((await jobs.budgetOf(study.id)).committedSeconds, 0, "twenty queued ceilings are 12,000 s of what might be spent and none of what is");
+  /** @type {string[]} */
+  const finished = [];
+  for (let step = 0; step < 60; step += 1) {
+    const [claimed] = await jobs.claim();
+    if (!claimed) break;
+    assert.equal((await jobs.advance(claimed)).action, "submitted");
+    const ended = await jobs.advance(claimed);
+    assert.equal(ended.state, "succeeded");
+    finished.push(claimed.id);
+  }
+  assert.deepEqual(finished, enqueued, "every job ran, in the order it was asked");
+  assert.deepEqual(notices, [], "no person was asked");
+  const budget = await jobs.budgetOf(study.id);
+  assert.equal(budget.usedSeconds, 100);
+  assert.equal(budget.awaitingBudget, 0);
+});
+
+test("a wait for a person does not outlive its reason: a job written under the old rule is released when a sibling finishes, and a job that is over the study's limit stays", options, async () => {
+  const study = await makeStudy("release");
+  const engine = engineDouble();
+  const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 1_000 }, engine });
+  const enqueue = (/** @type {number} */ hazardRatio, /** @type {number} */ cpuSecondsLimit) => jobs.enqueue({ studyId: study.id, userId: study.userId,
+    kind: "design_simulation", scenario: { ...scenario, truth: { hazardRatio, controlMedian: 6 } }, cpuSecondsLimit });
+  const released = async () => (await store.rows("SELECT object FROM evimed_vcr.audit WHERE study_id = $1 AND action = 'vcr.job.budget_released'", [study.id])).map((row) => String(row.object));
+  const running = (await enqueue(0.6, 600)).job;
+  const legacy = (await enqueue(0.7, 100)).job;
+  // How the earlier rule wrote it: waiting for a person, because the queued ceilings summed past the budget.
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'awaiting_budget' WHERE id = $1", [legacy.id]);
+  assert.equal((await jobs.budgetOf(study.id)).awaitingBudget, 1);
+
+  const [claimed] = await jobs.claim();
+  assert.equal(claimed.id, running.id);
+  assert.equal((await store.job(study.id, legacy.id)).state, "queued", "the claim sweep gave it back: it fits what the study has not spent");
+  await jobs.advance(claimed);
+  await jobs.finish(running.id, { status: "succeeded", result: engineResult(await frozenJob(running.id)), cpuSeconds: 500 });
+
+  // 500 s are spent: a 600 s ceiling is more than the 500 s left, so a person is asked, and no sibling finishing changes that.
+  const over = (await enqueue(0.8, 600)).job;
+  assert.equal(over.state, "awaiting_budget");
+  const late = (await enqueue(0.9, 100)).job;
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'awaiting_budget' WHERE id = $1", [late.id]);
+  const [next] = await jobs.claim();
+  assert.equal(next.id, legacy.id, "the job that was given back runs, in its place in the queue");
+  assert.equal((await store.job(study.id, late.id)).state, "queued", "the other old-rule wait is given back too");
+  assert.equal((await store.job(study.id, over.id)).state, "awaiting_budget", "the one over the limit stays for its person");
+
+  // finish itself releases, in the same commit, a waiting job that now fits.
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'awaiting_budget' WHERE id = $1", [late.id]);
+  await jobs.finish(next.id, { status: "failed", error: { code: "vcr_job_failed", message: "x" }, cpuSeconds: 10 });
+  assert.equal((await store.job(study.id, late.id)).state, "queued", "a job that failed released it in the same commit");
+  assert.equal((await store.job(study.id, over.id)).state, "awaiting_budget");
+
+  // a cancel releases too
+  const another = (await enqueue(0.95, 100)).job;
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'awaiting_budget' WHERE id = $1", [another.id]);
+  await jobs.cancel(study.id, late.id, { actor: study.userId });
+  assert.equal((await store.job(study.id, another.id)).state, "queued", "so did a cancel");
+  assert.equal((await store.job(study.id, over.id)).state, "awaiting_budget");
+  const audited = await released();
+  for (const id of [legacy.id, late.id, another.id]) assert.ok(audited.includes(id), `the release of ${id} is audited`);
+  assert.ok(!audited.includes(over.id));
+});
+
+test("actual use never passes the limit without a confirmation: the outcomes walked, including a job that spends its whole ceiling", options, async () => {
+  for (const [spend, ceilings, expectedRun, expectedWaiting] of /** @type {Array<[number, number, number, number]>} */ ([
+    [0, 600, 4, 0], [1, 600, 4, 0], [300, 600, 4, 0], [450, 600, 3, 1], [599, 600, 2, 2], [600, 600, 2, 2],
+  ])) {
+    const study = await makeStudy(`walk-${spend}`);
+    /** @type {any[]} */
+    const notices = [];
+    const engine = engineDouble({ resultFor: (job) => engineResult(job, { manifest: { engineVersion: "1.0.0", rVersion: "R 4.3.3", packageLockHash: "b".repeat(64),
+      startedAt: "2026-09-28T10:00:00Z", finishedAt: "2026-09-28T10:00:05Z", cpuSeconds: spend } }) });
+    const jobs = new VcrJobs({ store, config: { ...config, vcrStudyCpuBudget: 1_500 }, engine,
+      notifier: { async budgetConfirm(target, job) { notices.push(job.id); } } });
+    for (let index = 0; index < 4; index += 1) {
+      await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: ceilings,
+        scenario: { ...scenario, truth: { hazardRatio: 0.5 + index / 10, controlMedian: 6 } }, idempotencyKey: `vcr:${study.id}:w${index}` });
+    }
+    let ran = 0;
+    for (let step = 0; step < 12; step += 1) {
+      const [claimed] = await jobs.claim();
+      if (!claimed) break;
+      const first = await jobs.advance(claimed);
+      let budget = await jobs.budgetOf(study.id);
+      assert.ok(budget.usedSeconds + budget.committedSeconds <= budget.limitSeconds, `spend ${spend}: what is spent and what is running never passes the limit`);
+      if (first.action === "submitted") { assert.equal((await jobs.advance(claimed)).state, "succeeded"); ran += 1; }
+      budget = await jobs.budgetOf(study.id);
+      assert.ok(budget.usedSeconds <= budget.limitSeconds, `spend ${spend}: actual use ${budget.usedSeconds} stays within ${budget.limitSeconds}`);
+    }
+    const budget = await jobs.budgetOf(study.id);
+    assert.equal(ran, expectedRun, `spend ${spend}`);
+    assert.equal(budget.awaitingBudget, expectedWaiting, `spend ${spend}`);
+    assert.equal(notices.length, expectedWaiting, `spend ${spend}: each job that waits for a person asks once`);
+    assert.equal(engine.submitted.length, expectedRun, `spend ${spend}: a job that waits for a person is never given to the engine`);
+    assert.equal(budget.usedSeconds, spend * expectedRun);
+    if (expectedWaiting) {
+      // and a confirmation lets them run, within the raised limit
+      await jobs.confirmBudget(study.id, { actor: study.userId });
+      for (let step = 0; step < 12; step += 1) {
+        const [claimed] = await jobs.claim();
+        if (!claimed) break;
+        if ((await jobs.advance(claimed)).action === "submitted") await jobs.advance(claimed);
+        const after = await jobs.budgetOf(study.id);
+        assert.ok(after.usedSeconds <= after.limitSeconds, `spend ${spend}: after the confirmation use ${after.usedSeconds} stays within ${after.limitSeconds}`);
+      }
+      assert.equal((await jobs.budgetOf(study.id)).awaitingBudget, 0);
+      assert.equal(engine.submitted.length, 4, `spend ${spend}: the confirmed jobs ran`);
+    }
+  }
 });
 
 test("a local executor runs a method the control plane computes itself, and finish hooks hear of it after it commits", options, async () => {

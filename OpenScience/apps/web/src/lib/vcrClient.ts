@@ -380,8 +380,11 @@ export interface VcrOverview {
 /** The compute budget, in the unit the platform meters: CPU seconds. */
 export interface VcrBudget {
   limitSeconds: number;
+  /** What finished jobs spent. */
   usedSeconds: number;
+  /** What work running now (or not yet known to have stopped) can still spend at most — never a queued job's ceiling, which is not spent. */
   committedSeconds: number;
+  /** The limit less what is used and what is reserved. */
   remainingSeconds: number;
   /** Jobs waiting on a budget confirmation — the second human stop. */
   awaitingBudget: number;

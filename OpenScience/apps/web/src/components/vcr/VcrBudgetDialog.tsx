@@ -79,7 +79,7 @@ export function VcrBudgetDialog({
         <dl className="divide-y divide-border rounded-card border border-border">
           {[
             { label: "已用", value: budget?.usedSeconds },
-            { label: "已承诺", value: budget?.committedSeconds },
+            { label: "运行中预留", value: budget?.committedSeconds },
             { label: "上限", value: budget?.limitSeconds },
           ].map((row) => (
             <div key={row.label} className="flex items-baseline justify-between gap-4 px-3 py-2">

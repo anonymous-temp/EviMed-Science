@@ -318,9 +318,9 @@ describe("the compute budget", () => {
     expect(cpuTimeText(null)).toBe("—");
   });
 
-  it("shows used, committed and the limit in time, and the job that waits with what it needs — never money", () => {
+  it("shows used, what running work has reserved and the limit in time, and the job that waits with what it needs — never money", () => {
     const panel = dialog();
-    for (const [label, value] of [["已用", "4 分钟"], ["已承诺", "10 分钟"], ["上限", "2 小时"]]) {
+    for (const [label, value] of [["已用", "4 分钟"], ["运行中预留", "0 秒"], ["上限", "2 小时"]]) {
       expect(within(panel).getByText(label).nextElementSibling).toHaveTextContent(value);
     }
     expect(panel.querySelector("[data-vcr-budget-job='job_seed_17']")).toHaveTextContent("设计网格需要 2.5 小时 CPU 时间");

@@ -466,6 +466,17 @@ class VcrSimulateTests(_GatewayCase):
         self.assertEqual(result["status"], "warning")
         self.assertIn("waiting for the study's compute budget", result["summary"])
         self.assertIn("这项计算超出研究的计算预算，已停在确认处。", result["warnings"])
+        # a run must not sit polling a job only a person can release
+        self.assertTrue(any("do not poll" in action and "researcher" in action for action in result["next_actions"]))
+        self.assertTrue(any("report" in action for action in result["next_actions"]))
+
+    def test_status_of_a_job_that_waits_for_a_person_says_the_same(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_2", "state": "awaiting_budget", "awaitingBudget": True,
+                                                       "message": "只有研究者确认后才会继续。"}})
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_2"})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("waiting for the study's compute budget", result["summary"])
+        self.assertTrue(any("do not poll" in action for action in result["next_actions"]))
 
     def test_a_failed_job_keeps_what_it_computed_and_never_a_zero(self):
         _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_3", "state": "failed",
