@@ -395,6 +395,7 @@ test("columnSources: only the control plane writes it, only on real people's row
 const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
   ["comparator.weighted_cox", "weighted_cox_comparator"],
   ["comparator.maic_time_to_event", "maic_time_to_event_comparator"],
+  ["comparator.aipw", "aipw_comparator"],
 ]);
 
 test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
@@ -459,6 +460,23 @@ test("a time-to-event MAIC job: the comparator's rows, or a published contrast f
   }
   assert.ok(VCR_PROTOCOL_ISSUE_CODES.every((code) => ALL_ERROR_CODES.includes(code)));
   assert.ok(ALL_ERROR_CODES.includes("input_source_not_reconstructed"), "the engine's own code for a comparator table that is not a reconstruction");
+});
+
+test("an AIPW job: one covariate set for both models or one for each, the weights and the truncation are the job's own", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const binary = () => job("aipw_comparator binary");
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = binary(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(binary()), []);
+  assert.deepEqual(validateEngineJob(job("aipw_comparator continuous with a covariate set per model")), []);
+  // each model needs covariates, from the shared list or its own
+  assert.deepEqual(bad((j) => { delete j.scenario.covariates; }), ["scenario_field_missing@scenario.covariates"]);
+  assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; delete j.scenario.covariates; }), ["scenario_field_missing@scenario.covariates"], "the outcome model has none");
+  assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; j.scenario.outcomeCovariates = ["age", "male"]; delete j.scenario.covariates; }), []);
+  assert.deepEqual(bad((j) => { delete j.scenario.endpoint; }), ["scenario_field_missing@scenario.endpoint"]);
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; }), ["endpoint_not_supported@scenario.endpoint.type"]);
+  assert.deepEqual(bad((j) => { j.scenario.estimand = "ATE"; }), ["scenario_value_invalid@scenario.estimand"], "the effect in the trial's own population");
+  assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"]);
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("nuisance_model_not_estimable"));
 });
 
 // --- results -----------------------------------------------------------------

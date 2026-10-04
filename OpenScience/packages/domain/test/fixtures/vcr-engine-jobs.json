@@ -2259,6 +2259,94 @@
           }
         ]
       }
+    },
+    {
+      "name": "aipw_comparator binary",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "aipw_comparator continuous with a covariate set per model",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "propensityCovariates": [
+            "age"
+          ],
+          "outcomeCovariates": [
+            "age",
+            "male",
+            "age_sq"
+          ],
+          "endpoint": {
+            "type": "continuous"
+          },
+          "estimand": "ATT",
+          "cohortRules": [
+            {
+              "name": "adult",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gte",
+                "value": 18
+              }
+            }
+          ],
+          "targetTrial": [
+            {
+              "item": "washout",
+              "emulation": "cannot"
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -14340,6 +14428,330 @@
             "location": "std_1/rec_1/reconstructed-ipd.csv",
             "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "an AIPW without an endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.endpoint"
+      ]
+    },
+    {
+      "name": "an AIPW without any covariate for the propensity model",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "outcomeCovariates": [
+            "age"
+          ],
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariates"
+      ]
+    },
+    {
+      "name": "an AIPW without any covariate for the outcome model",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "propensityCovariates": [
+            "age"
+          ],
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariates"
+      ]
+    },
+    {
+      "name": "an AIPW for a time-to-event endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "time_to_event"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "an AIPW for the ATE",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "estimand": "ATE"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.estimand"
+      ]
+    },
+    {
+      "name": "an AIPW with a repeated covariate",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "age"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.covariates"
+      ]
+    },
+    {
+      "name": "an AIPW with a weight column the job estimates itself",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "weightColumn": "w"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.weightColumn"
+      ]
+    },
+    {
+      "name": "an AIPW with a PS truncation key the sensitivity analysis owns",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "truncation": 0.99
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truncation"
+      ]
+    },
+    {
+      "name": "an AIPW on aggregate rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "aipw_comparator",
+        "method": "comparator.aipw",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "aggregate"
           }
         ]
       },

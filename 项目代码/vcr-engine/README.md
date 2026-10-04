@@ -29,7 +29,7 @@ language model never enters this path.
 | Every simulated number carries its Monte-Carlo standard error | `vcr_measure(simulated = TRUE)` refuses to construct without one | N03, N04, AC-28 |
 | Replicate counts follow from the target precision | `vcr_replicates_for_mcse` + the domain's floors (20,000 null / 5,000 alternative); a run held below its floor by `VCR_ENGINE_MAX_REPLICATES` is `limited` | N05, E10b |
 | Analytic first, simulation as the check | every simulated design carries `diagnostics.analyticCheck` with the difference in MCSE units | E07, N02, N04c |
-| "Not estimable" is a deterministic verdict, never a fabricated 0 | the named rules in `notEstimableRules` (seven at the first release, then `too_few_events` for a Cox model); `measures` stays empty | N09, N11, N17, N33 |
+| "Not estimable" is a deterministic verdict, never a fabricated 0 | the named rules in `notEstimableRules` (seven at the first release, then `too_few_events` for a Cox model and `nuisance_model_not_estimable` for the doubly robust one); `measures` stays empty | N09, N11, N17, N33, N35 |
 | The four counts stay apart | `vcr_counts()` + `vcr_validate_counts()`; `NULL` is the only stand-in for unknown; only `observed` rows are real patients | E04, C2-05, N17, E09 |
 | Reconstructed pseudo-patients are never real patients | `counts.reconstructedPseudoPatients`, source `reconstructed` | N16, N17 |
 | A rule is data, never code | no `eval`/`parse` anywhere in `R/` or `service/`; an `expression` key anywhere in a scenario is refused by name | N23 |
@@ -140,7 +140,7 @@ or a traceback.
 
 ## 5. Methods
 
-26 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
+27 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
 `VCR_ENGINE_METHODS` (the first release's 24, then the comparator-effect methods
 appended after them; section 11). The engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
@@ -165,6 +165,7 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.rmst` | weighted KM, RMST(τ), the τ rule | survRM2 |
 | `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
 | `comparator.weighted_cox` | weighted Cox hazard ratio, robust variance and whole-pipeline bootstrap, the proportional-hazards test, the RMST difference beside it | `survival::coxph` on WeightIt weights; `tt()` and hand-written Breslow score tests; a known hazard ratio |
+| `comparator.aipw` | doubly robust (AIPW) estimate of the ATT for a single-arm study against an external control (binary or continuous): influence-function and whole-pipeline bootstrap standard errors | the formula on WeightIt weights and `glm` (1e-10); a simulation with an exactly integrated truth, four model specifications |
 | `comparator.maic_time_to_event` | unanchored / anchored MAIC for hazard ratios (weighted Cox on the study's patients and the comparator's reconstructed patients; Bucher on the log scale), robust and bootstrap variance | the maicplus 0.1.2 vignettes (to 7 digits); a simulation with an oracle target |
 | `comparator.evalue` | E-values on every scale | EValue |
 | `comparator.map_prior` | MAP by quadrature, robustify, prior ESS (ELIR), conflict against the MAP alone, hybrid operating characteristics | RBesT, an independent joint grid |
@@ -244,6 +245,7 @@ R/maic.R             MAIC (anchored / unanchored) and STC
 R/comparison.R       what the comparator-effect methods share: the weighted frame, a bootstrap's own Monte-Carlo error
 R/weighted_cox.R     the weighted Cox hazard ratio, its robust variance, the proportional-hazards test
 R/maic_tte.R         the time-to-event MAIC, unanchored and anchored
+R/aipw.R             the doubly robust (AIPW) ATT estimator
 R/evidence_pool.R    DL / REML / HKSJ pooling and prediction intervals
 R/map_prior.R        MAP by quadrature, robustify, prior ESS, conflict, hybrid operating characteristics
 R/design_analytic.R  Lan-DeMets boundaries, Schoenfeld, asymptotic log-rank power, Simon
@@ -277,7 +279,7 @@ PASSED n/n
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -430,3 +432,34 @@ outside the study's range is `entropy_balance_infeasible`; a weighted effective 
 size below the domain's floor (10) is `effective_sample_size_below_floor`; an arm without
 an event is `too_few_events`. The vignette data under `tests/fixtures/maicplus-0.1.2` is
 Apache-2.0 (see its `NOTICE`); maicplus is a reference, never a dependency.
+
+### `comparator.aipw` (case N35)
+
+For a single-arm study against an external control (`arm` 1 is the trial, 0 the external
+source): the effect in the trial's own population (the ATT), binary or continuous.
+The propensity model (membership of the trial, logistic) and the outcome model (fitted on
+the **external controls only**, logistic or linear) may use different covariates
+(`propensityCovariates`, `outcomeCovariates`, each defaulting to `covariates`; main effects
+only, so a nonlinear term is a column of the table). The control mean of the trial's
+patients is `[sum over trial of m0(X) + sum over controls of e/(1-e) (Y - m0(X))] / n_trial`
+and the effect is the trial's mean minus it: consistent when **either** model is right, which
+N35 shows against a truth integrated exactly (either model wrong leaves no bias, both wrong
+leaves about two standard deviations). The odds weights are not rescaled (rescaling is a
+different, normalised estimator).
+
+Two standard errors, both reported: `aipw_difference_se_influence` (the efficient influence
+function of the ATT with the fitted models plugged in; it ignores their estimation, so it is
+not the headline) and `aipw_difference_se_bootstrap` (rows resampled within arm, **both models
+refitted in every resample**; a `simulated` measure with its `mcse`); `aipw_difference`
+carries the bootstrap interval, `aipw_difference_influence` the influence-function one. A
+binary outcome also gives `aipw_risk_ratio` and `aipw_odds_ratio` (not written when the
+adjusted control risk is not positive, or when it reaches one for the odds ratio), and the
+outcome-model-only and weighting-only estimates sit beside the augmented one in
+`diagnostics.components`. Overlap is the existing common-support rule and the weighted
+effective sample size the existing floor (both `not_estimable`); balance is a notice
+(`limitedBy: standardized_difference_above_floor`) because the outcome model carries the
+residual imbalance; weight truncation at the controls' 99th percentile is a sensitivity
+analysis only. A model that cannot be fitted (collinear covariates, fewer controls than the
+outcome model has coefficients, a control with a propensity score of 1) is
+`not_estimable` / `nuisance_model_not_estimable`; an outcome model that separates keeps the
+estimate and says `outcome_model_separation`.

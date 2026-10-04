@@ -271,6 +271,18 @@
         "simulated target-population hazard ratio"
       ],
       "modelTier": "data"
+    },
+    "comparator.aipw": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary"
+      ],
+      "crossChecks": [
+        "closed-form AIPW (Bang & Robins 2005) on WeightIt weights",
+        "simulation with a known ATT: double robustness"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -299,7 +311,8 @@
     "map_prior": "comparator.map_prior",
     "match_criteria": "matching.evaluate",
     "weighted_cox_comparator": "comparator.weighted_cox",
-    "maic_time_to_event_comparator": "comparator.maic_time_to_event"
+    "maic_time_to_event_comparator": "comparator.maic_time_to_event",
+    "aipw_comparator": "comparator.aipw"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -311,7 +324,8 @@
     "rmst",
     "match_criteria",
     "weighted_cox_comparator",
-    "maic_time_to_event_comparator"
+    "maic_time_to_event_comparator",
+    "aipw_comparator"
   ],
   "observedOnlyMethods": [
     "population.synthpop",
@@ -319,6 +333,7 @@
     "comparator.propensity_weight",
     "comparator.maic",
     "comparator.weighted_cox",
+    "comparator.aipw",
     "comparator.maic_time_to_event",
     "comparator.rmst"
   ],
@@ -363,6 +378,12 @@
       "imputed"
     ],
     "comparator.weighted_cox": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.aipw": [
       "observed",
       "extracted",
       "calculated",
@@ -2801,6 +2822,141 @@
           "max": 50
         }
       }
+    },
+    "comparator.aipw": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "propensityCovariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "outcomeCovariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT"
+          ],
+          "default": "ATT"
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "targetTrial": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "item": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "emulation": {
+                "t": "string",
+                "values": [
+                  "exact",
+                  "approximate",
+                  "cannot"
+                ],
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 50
+        }
+      },
+      "atLeastOne": [
+        [
+          "covariates",
+          "propensityCovariates"
+        ],
+        [
+          "covariates",
+          "outcomeCovariates"
+        ]
+      ]
     },
     "comparator.maic_time_to_event": {
       "t": "object",
@@ -6049,7 +6205,8 @@
     "map_prior",
     "match_criteria",
     "weighted_cox_comparator",
-    "maic_time_to_event_comparator"
+    "maic_time_to_event_comparator",
+    "aipw_comparator"
   ],
   "endpointTypes": [
     "continuous",
@@ -6085,6 +6242,7 @@
     "reconstruction_failed_qc",
     "map_prior_conflict",
     "too_few_events",
+    "nuisance_model_not_estimable",
     "data_tier_insufficient",
     "route_unavailable_in_version"
   ],

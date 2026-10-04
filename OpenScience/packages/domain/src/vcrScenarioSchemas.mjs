@@ -496,6 +496,24 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     targetTrial: TARGET_TRIAL,
   }),
 
+  // A doubly robust (AIPW) estimator of the effect in the trial's own population (ATT) for a single-arm study against an
+  // external control: arm 1 is the trial, arm 0 the external source. The propensity model (membership of the trial against the
+  // external source, logistic) and the outcome model (fitted on the external controls only, logistic for a binary outcome,
+  // linear for a continuous one) may use different covariates; main effects only, so a nonlinear term is a column of the table.
+  // The estimator is consistent when EITHER model is right. Everything is estimated inside the job: the bootstrap re-fits both
+  // models in every resample, and the influence-function standard error is reported beside it.
+  'comparator.aipw': object({
+    covariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    propensityCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    outcomeCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    outcomeColumn: { ...COLUMN, default: 'y' },
+    endpoint: req(ENDPOINT()),
+    estimand: string({ values: ['ATT'], default: 'ATT' }),
+    cohortRules: COHORT_STEPS,
+    targetTrial: TARGET_TRIAL,
+  }, { atLeastOne: [['covariates', 'propensityCovariates'], ['covariates', 'outcomeCovariates']] }),
+
   // A time-to-event MAIC (NICE DSU TSD 18, Signorovitch 2012). The study's patients are the subject table (and its events table);
   // the comparator's pseudo-individual rows come from a reconstruction (`evidence.reconstruct_km`) and are named by their input id.
   // Unanchored: the weighted patients against the comparator's rows in one Cox model. Anchored: the study has a common comparator

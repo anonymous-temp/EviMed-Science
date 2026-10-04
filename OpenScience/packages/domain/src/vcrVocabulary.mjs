@@ -455,6 +455,10 @@ export const VCR_NOT_ESTIMABLE_RULES = frozen([
   // A Cox model has no estimate when an arm has no event (the hazard ratio is infinite or zero) or the fit
   // does not converge; fewer events than `VCR_COX_FEW_EVENTS` is a notice, never a refusal.
   'too_few_events',
+  // A doubly robust estimate needs both of its working models: the propensity model of who is in the trial and the outcome
+  // model fitted on the external controls. When either cannot be fitted (collinear covariates, fewer controls than the
+  // model has coefficients) there is no estimate.
+  'nuisance_model_not_estimable',
   // Two the control plane derives before any job runs: the study's data tier
   // cannot reach the route (§3.2 table), or the route has no method in this
   // version (the model-predicted comparator) — a verdict in code, never a job.
@@ -469,6 +473,7 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   reconstruction_failed_qc: '重建 KM 未过质控',
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
   too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
+  nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
   route_unavailable_in_version: '这条对照路线在当前版本还没有可用的方法',
 })
@@ -588,7 +593,7 @@ export const VCR_JOB_KINDS = frozen([
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
   // appended (2026-10-04): the comparator-effect methods
-  'weighted_cox_comparator', 'maic_time_to_event_comparator',
+  'weighted_cox_comparator', 'maic_time_to_event_comparator', 'aipw_comparator',
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
