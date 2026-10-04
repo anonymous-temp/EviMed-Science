@@ -151,6 +151,7 @@ jobs:
           pnpm check:skill-vocabulary
           pnpm check:skill-digests
           pnpm check:skill-packages
+          pnpm check:vcr-scenario-help
           pnpm check:composition-references
           pnpm check:kernel-defaults
           pnpm check:pin-inventory
