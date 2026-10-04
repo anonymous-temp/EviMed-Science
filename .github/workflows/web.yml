@@ -170,6 +170,21 @@ jobs:
           pnpm check:community-skills
           pnpm audit:saas-alignment
 
+      # The CDISC pilot's ADTTE is the one real, SAS-written ADaM file the import is checked against,
+      # and CDISC's terms forbid modifying it, so it is downloaded here and never committed
+      # (`runtime/mcp/evimed-research/test/fixtures/vcr_imports/provenance.json`). The reference
+      # check names it through EVIMED_CDISC_PILOT_ADTTE and skips when the variable is unset, so a
+      # download that fails or does not match the pinned digest leaves the check skipped, not red.
+      - name: Fetch the CDISC pilot ADTTE for the ADaM import's reference check
+        continue-on-error: true
+        run: |
+          set -u
+          target="$RUNNER_TEMP/cdiscpilot-adtte.xpt"
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 --output "$target" \
+            "https://raw.githubusercontent.com/cdisc-org/sdtm-adam-pilot-project/master/updated-pilot-submission-package/900172/m5/datasets/cdiscpilot01/analysis/adam/datasets/adtte.xpt"
+          echo "68513fc4126744b6b2c7328eb70eb7b9683865d12c58b36539325f3c0c0ab93d  $target" | sha256sum --check --status
+          echo "EVIMED_CDISC_PILOT_ADTTE=$target" >> "$GITHUB_ENV"
+
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp

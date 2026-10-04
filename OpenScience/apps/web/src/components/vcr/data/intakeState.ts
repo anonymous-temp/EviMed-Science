@@ -242,6 +242,16 @@ const IMPORT_REASONS: Record<string, string> = {
   duplicate_person_id: "受试者编号重复",
   duplicate_death_row: "同一个人有多条死亡记录",
   death_date_unreadable: "死亡日期读不出来",
+  unsupported_dataset: "本版本只读 ADSL、ADTTE、ADAE",
+  not_an_xpt_file: "不是 SAS 传输文件（.xpt）",
+  not_xpt: "不是 SAS 传输文件",
+  xpt_version_unsupported: "不是 V5 版的 SAS 传输文件",
+  corrupt: "文件已损坏",
+  rows_not_placed: "没有放进任何参数表",
+  paramcd_not_usable: "参数代码不合规范",
+  paramcd_case_collision: "参数代码只差大小写",
+  duplicate_table: "同名的表已经生成过",
+  no_usable_parameter: "没有可用的参数代码",
 };
 /** The converter's notices: a count of something worth knowing about the data, never a value of a patient. */
 const IMPORT_NOTICES: Record<string, string> = {
@@ -272,6 +282,11 @@ const IMPORT_NOTICES: Record<string, string> = {
   death_before_index: "位受试者的死亡日期早于起点，随访时间留空",
   follow_up_before_index: "位受试者的观察期终点早于起点，随访时间留空",
   number_unreadable: "个数值读不出来，已留空",
+  special_missing_values: "个取值是 SAS 的特殊缺失（.A 到 .Z），按空白处理",
+  dtype_populated: "份数据集带有 DTYPE：其中有申办方推导或插补出的记录，取值列的来源标为「插补」",
+  duplicate_subject_rows: "位受试者在 ADSL 里出现了不止一行",
+  duplicate_subject_parameter_rows: "位受试者在同一个参数里不止一行",
+  cnsr_not_binary: "行的删失标志不是 0 或 1",
 };
 
 /** The word for a skipped reason or a notice code. */

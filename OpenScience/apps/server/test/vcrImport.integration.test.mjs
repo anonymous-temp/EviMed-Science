@@ -173,3 +173,27 @@ test("an OMOP CDM export is imported, confirmed, frozen and derived: twenty-eigh
     }
   }
 });
+
+test("ADaM transport files are imported, confirmed, frozen and derived: the subject table, three time-to-event parameters, nothing computed", options, async () => {
+  const study = await seedStudy();
+  const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "申办方 ADaM", ownerParty: "申办方", allowedUses: ["vcr"], valueSource: "observed" });
+  const bytes = await fixture("adam-pharmaverse.zip");
+  const imported = await vcr.dataPlane.importStandard({ actor: OWNER, studyId: study.id, sourceId: source.id, name: "adam.zip", format: "adam", stream: streamOf(bytes), declaredLength: bytes.length });
+  assert.deepEqual(imported.tables.map((table) => [table.name, table.rows]), [["adam_adsl", 306], ["adam_adae", 1191], ["adam_adtte_os", 254], ["adam_adtte_pfs", 254], ["adam_adtte_rsd", 4]]);
+  assert.deepEqual(imported.fieldMap.mapIssues, []);
+  await vcr.dataPlane.confirmFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, hash: imported.fieldMap.hash });
+  const frozen = await vcr.dataPlane.freezeSnapshot({ userId: OWNER, studyId: study.id, sourceId: source.id });
+  assert.deepEqual(frozen.tables.refused, []);
+  const shapes = Object.fromEntries(frozen.tables.registered.map((table) => [table.shape, tableView(table)]));
+  assert.equal(shapes.subject.rowCount, 306);
+  assert.equal(shapes.events.rowCount, 512);
+  // Every source of a column is as received; no column of this import is computed.
+  assert.equal(shapes.events.valueSource, "observed");
+  assert.ok(Object.values(shapes.subject.columnSources).every((value) => value === "observed"));
+  // The date of birth and the within-study subject number are flagged in the map and never reach an analysis table.
+  assert.ok(!shapes.subject.columns.includes("BRTHDTC") && !shapes.subject.columns.includes("SUBJID"));
+  assert.ok(["TRT01P", "AGE", "SEX"].every((name) => shapes.subject.columns.includes(name)), JSON.stringify(shapes.subject.columns));
+  // The dictionary the import generated (the datasets' own labels) is what the model reads of the columns.
+  const forModel = JSON.stringify(await vcr.dataPlane.sourceProfileForModel({ studyId: study.id, sourceId: source.id, principal: OWNER }));
+  assert.match(forModel, /adam_adsl\.TRT01P/);
+});

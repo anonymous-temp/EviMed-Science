@@ -64,10 +64,11 @@ import json
 import os
 import re
 import signal
+import struct
 import sys
 import zipfile
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -78,7 +79,7 @@ from vcr_record_extract import Refusal, read_verified  # noqa: E402  (the one ve
 NAME = "evimed-import-convert"
 VERSION = "1.0.0"
 PROTOCOL = 1
-FORMATS = ("fhir", "omop")
+FORMATS = ("fhir", "omop", "adam")
 
 OBSERVED = "observed"
 CALCULATED = "calculated"
@@ -370,6 +371,8 @@ def entry_of(table_file: str, spec: dict) -> dict:
         entry["outcome"] = True
     if spec["codes"]:
         entry["codes"] = spec["codes"]
+    if spec.get("identifier"):
+        entry["identifier"] = True
     return entry
 
 
@@ -1415,7 +1418,428 @@ def convert_omop(archive: Archive, directory: Path, limits: Limits, coverage: Co
     return [importer.tables[name] for name in order], standard
 
 
-CONVERTERS = {"fhir": convert_fhir, "omop": convert_omop}
+# ---------------------------------------------------------------------------
+# CDISC ADaM in SAS transport (XPORT v5) files
+# ---------------------------------------------------------------------------
+
+XPT_RECORD = 80
+XPT_NAMESTR = 140
+MAX_XPT_BYTES = 192 * 1024 * 1024
+XPT_LIBRARY = b"HEADER RECORD*******LIBRARY HEADER RECORD!!!!!!!"
+XPT_LIBRARY_V8 = (b"HEADER RECORD*******LIBV8   HEADER RECORD!!!!!!!", b"HEADER RECORD*******LIB8    HEADER RECORD!!!!!!!")
+XPT_MEMBER = b"HEADER RECORD*******MEMBER  HEADER RECORD!!!!!!!"
+XPT_NAMESTR_HEADER = b"HEADER RECORD*******NAMESTR HEADER RECORD!!!!!!!"
+XPT_OBS_HEADER = b"HEADER RECORD*******OBS     HEADER RECORD!!!!!!!"
+SAS_EPOCH = date(1960, 1, 1)
+# A missing numeric is one of these first bytes with every other byte zero: `.`, `._` and `.A` to `.Z`.
+XPT_MISSING_FIRST = frozenset(b"._ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+DATE_FORMATS = ("DATE", "DDMMYY", "MMDDYY", "YYMMDD", "E8601DA", "B8601DA", "MONYY", "WORDDATE", "WEEKDATE", "JULIAN")
+DATETIME_FORMATS = ("DATETIME", "E8601DT", "B8601DT", "DATEAMPM")
+TIME_FORMATS = ("TIME", "TIMEAMPM", "E8601TM", "B8601TM", "HHMM")
+ADAM_DATASETS = ("ADSL", "ADTTE", "ADAE")
+ADAM_REQUIRED = {"ADSL": ("USUBJID",), "ADTTE": ("USUBJID", "PARAMCD", "AVAL", "CNSR"), "ADAE": ("USUBJID",)}
+PARAMETER = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+# ADaM's direct identifiers by the standard's own names: carried as received, never used as data.
+ADAM_IDENTIFIERS = frozenset({"BRTHDTC", "BRTHDT", "SUBJID"})
+# Post-baseline outcome variables of ADSL by the standard's own names: the death flag and date are sealed with the outcome pair.
+ADAM_OUTCOME_COVARIATES = frozenset({"DTHFL", "DTHDT"})
+ADAM_COVARIATES = (("AGE", "Age"), ("SEX", "Sex"), ("RACE", "Race"), ("ETHNIC", "Ethnicity"))
+
+
+class XptVariable:
+    def __init__(self, ntype: int, length: int, number: int, name: str, label: str, fmt: str, position: int) -> None:
+        self.numeric = ntype == 1
+        self.length = length
+        self.number = number
+        self.name = name
+        self.label = label
+        self.format = fmt
+        self.position = position
+
+
+class XptDataset:
+    def __init__(self, name: str, label: str, variables: list[XptVariable], body: memoryview, row_length: int, rows: int) -> None:
+        self.name = name
+        self.label = label
+        self.variables = variables
+        self.body = body
+        self.row_length = row_length
+        self.rows = rows
+
+
+def ibm_to_float(raw: bytes) -> float | None | str:
+    """One IBM-370 floating point value of 2-8 bytes: a float, None for `.`, or the missing code (`A` for `.A`) for a special missing."""
+    padded = raw + b"\x00" * (8 - len(raw))
+    first = padded[0]
+    if first in XPT_MISSING_FIRST and not any(padded[1:]):
+        return None if first == 0x2E else chr(first)
+    if not any(padded):
+        return 0.0
+    sign = -1.0 if first & 0x80 else 1.0
+    exponent = (first & 0x7F) - 64
+    fraction = int.from_bytes(padded[1:], "big")
+    return sign * (fraction / float(1 << 56)) * (16.0 ** exponent)
+
+
+def _text(raw: bytes) -> str:
+    return raw.decode("ascii", "replace").strip()
+
+
+def parse_xpt(data: bytes) -> list[XptDataset]:
+    """The datasets of a SAS transport (V5) file, as views over its bytes; anything else is a named refusal."""
+    if len(data) < XPT_RECORD * 6:
+        raise Refusal("not_xpt")
+    if data.startswith(XPT_LIBRARY_V8):
+        raise Refusal("xpt_version_unsupported", "V8")
+    if not data.startswith(XPT_LIBRARY):
+        raise Refusal("not_xpt")
+    view = memoryview(data)
+    datasets: list[XptDataset] = []
+    at = XPT_RECORD * 3
+    while at + XPT_RECORD <= len(data):
+        record = data[at:at + XPT_RECORD]
+        if not record.startswith(XPT_MEMBER):
+            if not record.strip(b" \x00"):
+                break
+            raise Refusal("corrupt", "member header")
+        namestr_length = record[75:78]
+        if not namestr_length.isdigit() or int(namestr_length) != XPT_NAMESTR:
+            raise Refusal("xpt_version_unsupported", "namestr length")
+        # member header, descriptor header, the member's name record, its second record, then the NAMESTR header
+        at += XPT_RECORD * 2
+        name_record = data[at:at + XPT_RECORD]
+        second = data[at + XPT_RECORD:at + 2 * XPT_RECORD]
+        at += XPT_RECORD * 2
+        header = data[at:at + XPT_RECORD]
+        if not header.startswith(XPT_NAMESTR_HEADER) or len(second) < XPT_RECORD:
+            raise Refusal("corrupt", "namestr header")
+        count_text = header[54:58]
+        if not count_text.isdigit():
+            raise Refusal("corrupt", "variable count")
+        count = int(count_text)
+        at += XPT_RECORD
+        end = at + count * XPT_NAMESTR
+        if count < 1 or end > len(data):
+            raise Refusal("corrupt", "variables")
+        variables: list[XptVariable] = []
+        for index in range(count):
+            raw = data[at + index * XPT_NAMESTR:at + (index + 1) * XPT_NAMESTR]
+            ntype, _hfun, length, number = struct.unpack(">hhhh", raw[:8])
+            position = struct.unpack(">l", raw[84:88])[0]
+            if ntype not in (1, 2) or length < 1 or (ntype == 1 and not 2 <= length <= 8) or position < 0:
+                raise Refusal("corrupt", "variable")
+            variables.append(XptVariable(ntype, length, number, _text(raw[8:16]), _text(raw[16:56]), _text(raw[56:64]).upper(), position))
+        at = end + (-end) % XPT_RECORD
+        if not data[at:at + XPT_RECORD].startswith(XPT_OBS_HEADER):
+            raise Refusal("corrupt", "observation header")
+        at += XPT_RECORD
+        row_length = sum(variable.length for variable in variables)
+        if any(variable.position + variable.length > row_length for variable in variables):
+            raise Refusal("corrupt", "variable positions")
+        # The observations run to the next member header on a record boundary, or to the end.
+        stop = at
+        while True:
+            stop = data.find(XPT_MEMBER, stop)
+            if stop < 0:
+                stop = len(data)
+                break
+            if stop % XPT_RECORD == 0:
+                break
+            stop += 1
+        rows = (stop - at) // row_length
+        # Padding to a record boundary is blanks; a row of nothing but blanks at the end is padding, not an observation.
+        while rows and not data[at + (rows - 1) * row_length:at + rows * row_length].strip(b" "):
+            rows -= 1
+        datasets.append(XptDataset(_text(name_record[8:16]).upper(), _text(second[32:72]), variables, view[at:at + rows * row_length], row_length, rows))
+        at = stop
+    if not datasets:
+        raise Refusal("not_xpt")
+    return datasets
+
+
+class XptCleaner:
+    """How one dataset's cells become text: numbers, SAS dates and times, and characters in the encoding they decode as."""
+
+    def __init__(self, dataset: XptDataset, coverage: Coverage) -> None:
+        self.dataset = dataset
+        self.coverage = coverage
+        self.kinds: dict[str, str] = {}
+        self.basis: dict[str, str] = {}
+        for variable in dataset.variables:
+            self.kinds[variable.name], self.basis[variable.name] = self.kind_of(variable)
+
+    @staticmethod
+    def kind_of(variable: XptVariable) -> tuple[str, str]:
+        if not variable.numeric:
+            return "text", ""
+        fmt = variable.format
+        if fmt.startswith(DATETIME_FORMATS):
+            return "datetime", f"format {fmt}"
+        if fmt.startswith(TIME_FORMATS):
+            return "time", f"format {fmt}"
+        if fmt.startswith(DATE_FORMATS):
+            return "date", f"format {fmt}"
+        # With no date format on it, ADaM's own naming says what a numeric *DT, *DTM or *TM variable is.
+        if not fmt:
+            if re.search(r"DTM$", variable.name):
+                return "datetime", "ADaM name *DTM"
+            if re.search(r"DT$", variable.name):
+                return "date", "ADaM name *DT"
+            if re.search(r"TM$", variable.name):
+                return "time", "ADaM name *TM"
+        return "number", ""
+
+    def rows(self):
+        """Yield each observation as a list of text cells, in the variable order."""
+        dataset = self.dataset
+        specials = 0
+        for index in range(dataset.rows):
+            raw = dataset.body[index * dataset.row_length:(index + 1) * dataset.row_length]
+            cells = []
+            for variable in dataset.variables:
+                chunk = bytes(raw[variable.position:variable.position + variable.length])
+                if not variable.numeric:
+                    cells.append(self.character(chunk))
+                    continue
+                value = ibm_to_float(chunk)
+                if value is None or isinstance(value, str):
+                    specials += 1 if isinstance(value, str) else 0
+                    cells.append("")
+                    continue
+                cells.append(self.number(variable.name, value))
+            yield cells
+        if specials:
+            self.coverage.notice("special_missing_values", specials)
+
+    @staticmethod
+    def character(chunk: bytes) -> str:
+        trimmed = chunk.rstrip(b" \x00")
+        try:
+            return cell(trimmed.decode("utf-8"))
+        except UnicodeDecodeError:
+            try:
+                return cell(trimmed.decode("gb18030"))
+            except UnicodeDecodeError as error:
+                raise Refusal("text_encoding") from error
+
+    def number(self, name: str, value: float) -> str:
+        kind = self.kinds[name]
+        try:
+            if kind == "date":
+                return (SAS_EPOCH + timedelta(days=int(value // 1))).isoformat()
+            if kind == "datetime":
+                moment = datetime(1960, 1, 1) + timedelta(seconds=round(value))
+                return moment.isoformat(timespec="seconds")
+            if kind == "time":
+                seconds = int(round(value)) % 86400
+                return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
+        except (OverflowError, ValueError):
+            self.coverage.notice("date_unreadable")
+            return ""
+        return number_text(value)
+
+
+def _adam_label(variable: XptVariable, basis: str) -> str:
+    label = variable.label or variable.name
+    return f"{label} [{basis}]" if basis else label
+
+
+def _common_unit(values: set[str]) -> str | None:
+    values.discard("")
+    return values.pop().lower() if len(values) == 1 else None
+
+
+class AdamImport:
+    def __init__(self, directory: Path, limits: Limits, coverage: Coverage) -> None:
+        self.directory = directory
+        self.limits = limits
+        self.coverage = coverage
+        self.tables: list[TableOut] = []
+        self.standard = {"name": "CDISC ADaM", "release": "SAS transport V5"}
+        self.first_error: Refusal | None = None
+        self.names: set[str] = set()
+
+    def spec(self, variable: XptVariable, cleaner: XptCleaner, *, role: str = "other", concept: str = "", unit: str | None = None, parameter: str | None = None,
+             alias: str | None = None, outcome: bool = False, codes: dict | None = None, source: str = OBSERVED, identifier: bool = False) -> dict:
+        kind = cleaner.kinds[variable.name]
+        built = column(variable.name, source, _adam_label(variable, cleaner.basis[variable.name]), role=role, concept=(concept or variable.label or variable.name)[:80],
+                       unit=unit, time_kind="occurred_at" if kind in ("date", "datetime") else None, parameter=parameter, alias=alias, outcome=outcome, codes=codes,
+                       kind={"date": "date", "datetime": "date", "number": "number"}.get(kind))
+        built["identifier"] = identifier
+        return built
+
+    def claim(self, name: str) -> bool:
+        if name in self.names:
+            self.coverage.skipped_tables.append({"table": name, "reason": "duplicate_table"})
+            return False
+        self.names.add(name)
+        return True
+
+    def run(self, archive: Archive) -> dict:
+        members = [member for member in archive.members if member["name"].lower().endswith((".xpt", ".xport"))]
+        for member in archive.members:
+            if member not in members:
+                self.coverage.add_input(member["name"], None, 0, "skipped", "not_an_xpt_file")
+        if not members:
+            raise Refusal("not_xpt" if archive.members else "nothing_to_import")
+        for member in members:
+            try:
+                if member["size"] > MAX_XPT_BYTES:
+                    raise Refusal("too_large", member["name"])
+                datasets = parse_xpt(archive.read_all(member, MAX_XPT_BYTES))
+            except Refusal as refusal:
+                self.first_error = self.first_error or refusal
+                self.coverage.add_input(member["name"], None, 0, "skipped", refusal.reason)
+                continue
+            for dataset in datasets:
+                self.dataset(dataset)
+        if not self.tables:
+            raise self.first_error or Refusal("no_supported_dataset")
+        return dict(self.standard)
+
+    def dataset(self, dataset: XptDataset) -> None:
+        if dataset.name not in ADAM_DATASETS:
+            self.coverage.add_input(dataset.name or "(unnamed)", dataset.rows, 0, "skipped", "unsupported_dataset")
+            return
+        names = {variable.name for variable in dataset.variables}
+        missing = [name for name in ADAM_REQUIRED[dataset.name] if name not in names]
+        if missing:
+            self.coverage.add_input(dataset.name, dataset.rows, 0, "skipped", f"missing_required_column:{missing[0]}")
+            return
+        cleaner = XptCleaner(dataset, self.coverage)
+        try:
+            {"ADSL": self.adsl, "ADTTE": self.adtte, "ADAE": self.adae}[dataset.name](dataset, cleaner)
+        except Refusal as refusal:
+            self.first_error = self.first_error or refusal
+            self.coverage.add_input(dataset.name, dataset.rows, 0, "skipped", refusal.reason)
+
+    def columns_for(self, dataset: XptDataset, cleaner: XptCleaner, special: dict[str, dict]) -> list[dict]:
+        """One column spec per variable of the dataset, in file order; `special` gives the ones the module reads by role."""
+        dtype_used = False
+        if "DTYPE" in {variable.name for variable in dataset.variables}:
+            at = [variable.name for variable in dataset.variables].index("DTYPE")
+            dtype_used = any(row[at] for row in cleaner.rows())
+            if dtype_used:
+                self.coverage.notice("dtype_populated")
+        out = []
+        for variable in dataset.variables:
+            extra = dict(special.get(variable.name, {}))
+            if dtype_used and variable.name in ("AVAL", "AVALC") and "source" not in extra:
+                # A record the sponsor derived or imputed (DTYPE) is in this column: it is labelled with the least direct source.
+                extra["source"] = IMPUTED
+            if variable.name in ADAM_IDENTIFIERS:
+                extra["identifier"] = True
+            out.append(self.spec(variable, cleaner, **extra))
+        return out
+
+    def write_all(self, dataset: XptDataset, cleaner: XptCleaner, table: TableOut) -> int:
+        for cells in cleaner.rows():
+            table.write(cells)
+        return table.rows
+
+    def adsl(self, dataset: XptDataset, cleaner: XptCleaner) -> None:
+        present = {variable.name: variable for variable in dataset.variables}
+        at = {variable.name: index for index, variable in enumerate(dataset.variables)}
+        special: dict[str, dict] = {"USUBJID": {"role": "subject_key", "concept": "Unique subject identifier"}}
+        arm = "TRT01P" if "TRT01P" in present else "ARM" if "ARM" in present else None
+        if arm:
+            special[arm] = {"role": "arm", "alias": arm, "concept": "Planned treatment arm"}
+        units = set()
+        if "AGEU" in present:
+            for cells in cleaner.rows():
+                units.add(cells[at["AGEU"]])
+        for name, concept in ADAM_COVARIATES:
+            if name in present and name not in special:
+                special[name] = {"role": "covariate", "alias": name, "concept": concept, **({"unit": _common_unit(units)} if name == "AGE" else {})}
+        for name in ADAM_OUTCOME_COVARIATES:
+            if name in present:
+                special[name] = {"role": "covariate", "alias": name, "outcome": True}
+        table_name = "adam_adsl"
+        if not self.claim(table_name):
+            return
+        columns = self.columns_for(dataset, cleaner, special)
+        table = TableOut(self.directory, table_name, columns, self.limits)
+        seen: set[str] = set()
+        key = at["USUBJID"]
+        duplicate = 0
+        for cells in cleaner.rows():
+            if cells[key] in seen:
+                duplicate += 1
+            seen.add(cells[key])
+            table.write(cells)
+        self.tables.append(table)
+        if duplicate:
+            self.coverage.notice("duplicate_subject_rows", duplicate)
+        self.coverage.add_input("ADSL", dataset.rows, table.rows if table.overflow is None else 0, "imported" if table.overflow is None else "skipped", table.overflow, into=None)
+
+    def adae(self, dataset: XptDataset, cleaner: XptCleaner) -> None:
+        special = {"USUBJID": {"role": "subject_key", "concept": "Unique subject identifier"}}
+        if not self.claim("adam_adae"):
+            return
+        table = TableOut(self.directory, "adam_adae", self.columns_for(dataset, cleaner, special), self.limits)
+        self.write_all(dataset, cleaner, table)
+        self.tables.append(table)
+        self.coverage.add_input("ADAE", dataset.rows, table.rows if table.overflow is None else 0, "imported" if table.overflow is None else "skipped", table.overflow)
+
+    def adtte(self, dataset: XptDataset, cleaner: XptCleaner) -> None:
+        """One table per parameter: the module reads a time-to-event pair by column, so each PARAMCD is its own table, rows as received."""
+        names = [variable.name for variable in dataset.variables]
+        at = {name: index for index, name in enumerate(names)}
+        units = {cells[at["AVALU"]] for cells in cleaner.rows()} if "AVALU" in at else set()
+        unit = _common_unit(units)
+        outputs: dict[str, TableOut] = {}
+        spelled: dict[str, str] = {}
+        skipped: Counter = Counter()
+        per_subject: Counter = Counter()
+        not_binary = 0
+        for cells in cleaner.rows():
+            code = cells[at["PARAMCD"]]
+            if not PARAMETER.match(code):
+                skipped["paramcd_not_usable"] += 1
+                continue
+            key = code.lower()
+            if spelled.setdefault(key, code) != code:
+                skipped["paramcd_case_collision"] += 1
+                continue
+            if key not in outputs:
+                table_name = f"adam_adtte_{key}"
+                if not self.claim(table_name):
+                    skipped["duplicate_table"] += 1
+                    continue
+                special = {
+                    "USUBJID": {"role": "subject_key", "concept": "Unique subject identifier"},
+                    "AVAL": {"role": "outcome_time", "parameter": code, "concept": "Analysis value: time to event", "unit": unit},
+                    "CNSR": {"role": "outcome_event", "parameter": code, "concept": "Censor flag (1 = censored)", "codes": {"event": ["0"], "censored": ["1"]}},
+                }
+                if "STARTDT" in at:
+                    special["STARTDT"] = {"role": "time_zero", "concept": "Time-to-event origin date"}
+                outputs[key] = TableOut(self.directory, table_name, self.columns_for(dataset, cleaner, special), self.limits)
+                self.tables.append(outputs[key])
+            outputs[key].write(cells)
+            per_subject[(key, cells[at["USUBJID"]])] += 1
+            if cells[at["CNSR"]] not in ("0", "1", ""):
+                not_binary += 1
+        rows_in = sum(table.rows for table in outputs.values())
+        for key, table in outputs.items():
+            self.coverage.add_input(f"ADTTE {spelled[key]}", table.rows, table.rows if table.overflow is None else 0, "imported" if table.overflow is None else "skipped", table.overflow)
+        if not outputs:
+            self.coverage.add_input("ADTTE", dataset.rows, 0, "skipped", "no_usable_parameter", skipped)
+        elif skipped:
+            self.coverage.add_input("ADTTE (rows not placed)", dataset.rows - rows_in, 0, "skipped", "rows_not_placed", skipped)
+        repeated = sum(1 for count in per_subject.values() if count > 1)
+        if repeated:
+            self.coverage.notice("duplicate_subject_parameter_rows", repeated)
+        if not_binary:
+            self.coverage.notice("cnsr_not_binary", not_binary)
+
+
+def convert_adam(archive: Archive, directory: Path, limits: Limits, coverage: Coverage) -> tuple[list[TableOut], dict]:
+    importer = AdamImport(directory, limits, coverage)
+    standard = importer.run(archive)
+    return importer.tables, standard
+
+
+CONVERTERS = {"fhir": convert_fhir, "omop": convert_omop, "adam": convert_adam}
 
 
 # ---------------------------------------------------------------------------

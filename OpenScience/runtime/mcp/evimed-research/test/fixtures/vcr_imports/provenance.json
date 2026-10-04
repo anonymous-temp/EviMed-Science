@@ -28,6 +28,44 @@
     "sha256": "081b82e84c90e2904e02c26546e46412b01cce566071c77e0c4a355c2d0612f9",
     "script": "trim_gibleed.py"
    }
+  },
+  {
+   "file": "adam-pharmaverse.zip",
+   "format": "adam",
+   "source": "https://cran.r-project.org/src/contrib/pharmaverseadam_1.3.0.tar.gz (pharmaverseadam 1.3.0, CRAN 2026-02-20: ADSL 306 subjects x 55 variables, ADAE 1,191 records x 107, and adtte_onco 512 records x 20, which derive from the CDISC pilot study CDISCPILOT01 through the admiral templates)",
+   "licence": "Apache-2.0 (the package's DESCRIPTION: License: Apache License (>= 2)). The data were converted to SAS transport V5 by export_pharmaverseadam.R and make_adam_fixtures.py (dates as SAS day counts, adtte_onco written as ADTTE); reading the files back with R's foreign::read.xport gives the datasets' own row counts.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "ece3754460f459ea1ede13e87c69d748aff9f1c9a2179069c4ea3bfb21a73aa8",
+   "derivedFrom": {
+    "sha256": "see the tarball at the URL above (4,415,376 bytes)",
+    "script": "make_adam_fixtures.py"
+   }
+  },
+  {
+   "file": "adsl.xpt",
+   "format": "adam",
+   "source": "the ADSL member of adam-pharmaverse.zip, as a single transport file (same bytes)",
+   "licence": "Apache-2.0 (as adam-pharmaverse.zip)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "892b80849c76c35cba1d02265bf0efc6a6c1b29390b6ab0f7988ad0e081e0704"
+  },
+  {
+   "file": "adtte.xpt",
+   "format": "adam",
+   "source": "the ADTTE member of adam-pharmaverse.zip (pharmaverseadam's adtte_onco: OS, PFS and RSD records), as a single transport file (same bytes)",
+   "licence": "Apache-2.0 (as adam-pharmaverse.zip)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "906268a6cba95a76907d4f28b94ab1db7031c743c9aec6440f1d894870b6377a"
+  }
+ ],
+ "referenceNotCommitted": [
+  {
+   "file": "adtte.xpt (CDISC pilot, CDISCPILOT01)",
+   "source": "https://raw.githubusercontent.com/cdisc-org/sdtm-adam-pilot-project/master/updated-pilot-submission-package/900172/m5/datasets/cdiscpilot01/analysis/adam/datasets/adtte.xpt",
+   "licence": "CDISC's own terms (the repository README, \"Terms of Use\": no modification or alteration of the data; redistribution only unmodified and with attribution) -- so it is NOT committed. A CI step downloads it and sets EVIMED_CDISC_PILOT_ADTTE; test_vcr_import_convert.py checks it against R's foreign::read.xport values (254 subjects, 152 events, PARAMCD TTDE) and skips when the variable is unset.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "68513fc4126744b6b2c7328eb70eb7b9683865d12c58b36539325f3c0c0ab93d",
+   "bytes": 91840
   }
  ]
 }

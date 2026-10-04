@@ -31,10 +31,19 @@ sys.path.insert(0, str(ROOT))
 
 import vcr_import_convert as convert  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "test" / "fixtures" / "vcr_imports"))
+import make_adam_fixtures as xpt  # noqa: E402  (a SAS transport writer: R's foreign can read the format but not write it)
+
 FIXTURES = ROOT / "test" / "fixtures" / "vcr_imports"
 SMART = FIXTURES / "smart-10-patients.zip"
 NJ = FIXTURES / "synthea27nj-5.4.zip"
 GIBLEED = FIXTURES / "gibleed-5.3-first150.zip"
+ADAM_ZIP = FIXTURES / "adam-pharmaverse.zip"
+ADSL = FIXTURES / "adsl.xpt"
+ADTTE = FIXTURES / "adtte.xpt"
+# The CDISC pilot's ADTTE is under terms that forbid modifying it, so it is not committed: a CI step downloads it and names it here.
+PILOT = os.environ.get("EVIMED_CDISC_PILOT_ADTTE", "")
+PILOT_SHA256 = "68513fc4126744b6b2c7328eb70eb7b9683865d12c58b36539325f3c0c0ab93d"
 OWN_COLUMNS = {"observed", "calculated", "imputed", "extracted"}
 
 
@@ -107,9 +116,10 @@ class Fixtures(unittest.TestCase):
             for key in ("source", "licence", "fetchedAt"):
                 self.assertTrue(item.get(key), f"{item['file']} has no {key}")
         # The reduced sample is reproducible from its download by the script that made it.
-        reduced = [item for item in manifest["fixtures"] if item.get("derivedFrom")]
-        self.assertEqual([item["file"] for item in reduced], ["gibleed-5.3-first150.zip"])
-        self.assertTrue((FIXTURES / reduced[0]["derivedFrom"]["script"]).is_file())
+        derived = [item for item in manifest["fixtures"] if item.get("derivedFrom")]
+        self.assertEqual([item["file"] for item in derived], ["gibleed-5.3-first150.zip", "adam-pharmaverse.zip"])
+        for item in derived:
+            self.assertTrue((FIXTURES / item["derivedFrom"]["script"]).is_file(), item["file"])
         # A fixture under terms that forbid modification is never committed.
         self.assertFalse([item for item in manifest["fixtures"] if "cdisc-pilot" in item["file"].lower()])
 
@@ -557,6 +567,274 @@ class OmopRefusals(unittest.TestCase):
         skipped = {item["table"]: item["reason"] for item in result["coverage"]["skippedTables"]}
         self.assertEqual(skipped, {"omop_condition_occurrence": "too_many_rows", "omop_drug_exposure": "too_many_rows"})
         self.assertIn("omop_measurement", tables)
+
+
+def variable(name, numeric=True, length=None, label="", fmt=""):
+    return {"name": name, "label": label or name, "numeric": numeric, "length": length or (8 if numeric else 12), "format": fmt}
+
+
+def xpt_bytes(*datasets, **kwargs):
+    with tempfile.TemporaryDirectory() as scratch:
+        target = pathlib.Path(scratch) / "x.xpt"
+        xpt.write_xpt(target, list(datasets), **kwargs)
+        return target.read_bytes()
+
+
+def dataset(name, variables, rows, label=""):
+    return {"name": name, "label": label, "variables": variables, "rows": rows}
+
+
+def adsl_of(rows, extra=()):
+    """A small ADSL: the key, the arm, age, sex and what a case adds."""
+    variables = [variable("USUBJID", False, 12), variable("ARM", False, 10), variable("AGE"), variable("SEX", False, 1), *extra]
+    return dataset("ADSL", variables, rows)
+
+
+class AdamSample(unittest.TestCase):
+    """pharmaverseadam's ADSL, ADAE and ADTTE (CDISCPILOT01 through the admiral templates), as SAS transport files."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result, cls.tables = run_bytes(ADAM_ZIP.read_bytes(), "adam", "zip")
+        cls.adsl_only, cls.adsl_tables = run_bytes(ADSL.read_bytes(), "adam", "xpt")
+
+    def test_the_tables_have_the_rows_the_datasets_hold(self):
+        # R's foreign::read.xport over the same files: ADSL 306 x 55, ADAE 1,191 x 107, ADTTE 512 x 20 split by PARAMCD into OS 254, PFS 254, RSD 4.
+        self.assertEqual({name: len(rows) - 1 for name, rows in self.tables.items()}, {"adam_adsl": 306, "adam_adae": 1191, "adam_adtte_os": 254, "adam_adtte_pfs": 254, "adam_adtte_rsd": 4})
+        self.assertEqual({item["name"]: len(item["columns"]) for item in self.result["tables"]}, {"adam_adsl": 55, "adam_adae": 107, "adam_adtte_os": 20, "adam_adtte_pfs": 20, "adam_adtte_rsd": 20})
+        self.assertEqual(self.result["standard"], {"name": "CDISC ADaM", "release": "SAS transport V5"})
+        for kind, records in (("ADSL", 306), ("ADAE", 1191), ("ADTTE OS", 254), ("ADTTE PFS", 254), ("ADTTE RSD", 4)):
+            got = coverage_of(self.result, kind)
+            self.assertEqual((got["status"], got["records"], got["imported"]), ("imported", records, records), kind)
+        self.assertEqual(self.result["coverage"]["notices"], [])
+        # A single transport file is the same import.
+        self.assertEqual(len(self.adsl_tables["adam_adsl"]) - 1, 306)
+
+    def test_values_are_what_the_reference_reader_reads(self):
+        adsl = rows_of(self.tables["adam_adsl"])
+        # R: table(ARM) Placebo 86, Screen Failure 52, Xanomeline High Dose 84, Low Dose 84; table(SEX) F 179, M 127; sum(AGE) 22977; DTHDT 3 non-missing, DTHFL "Y" 3.
+        self.assertEqual(Counter(row["ARM"] for row in adsl), {"Placebo": 86, "Screen Failure": 52, "Xanomeline High Dose": 84, "Xanomeline Low Dose": 84})
+        self.assertEqual(Counter(row["SEX"] for row in adsl), {"F": 179, "M": 127})
+        self.assertEqual(sum(float(row["AGE"]) for row in adsl), 22977)
+        self.assertEqual(len([row for row in adsl if row["DTHDT"]]), 3)
+        self.assertEqual(Counter(row["DTHFL"] for row in adsl), {"": 303, "Y": 3})
+        adae = rows_of(self.tables["adam_adae"])
+        self.assertEqual(len({row["USUBJID"] for row in adae}), 225)
+        self.assertEqual(Counter(row["AESEV"] for row in adae), {"MILD": 770, "MODERATE": 378, "SEVERE": 43})
+        self.assertEqual(Counter(row["AESER"] for row in adae), {"N": 1188, "Y": 3})
+        # A SAS date is days since 1960-01-01 and is written as an ISO date; R's first OS row: STARTDT 19725, ADT 19906.
+        first = rows_of(self.tables["adam_adtte_os"])[0]
+        self.assertEqual((first["USUBJID"], first["PARAMCD"], first["AVAL"], first["STARTDT"], first["ADT"], first["CNSR"]), ("01-701-1015", "OS", "182", "2014-01-02", "2014-07-02", "1"))
+
+    def test_each_parameter_is_its_own_table_with_the_censoring_the_file_holds(self):
+        # R: table(PARAMCD, CNSR): OS 3 events and 251 censored, PFS 6 and 248, RSD 1 and 3; 254 distinct subjects; CNSR 0 is the event.
+        for code, events, censored in (("os", 3, 251), ("pfs", 6, 248), ("rsd", 1, 3)):
+            counts = Counter(row["CNSR"] for row in rows_of(self.tables[f"adam_adtte_{code}"]))
+            self.assertEqual((counts["0"], counts["1"]), (events, censored), code)
+        self.assertEqual(len({row["USUBJID"] for row in rows_of(self.tables["adam_adtte_os"])}), 254)
+        os_aval = entry(self.result, "adam_adtte_os", "AVAL")
+        os_cnsr = entry(self.result, "adam_adtte_os", "CNSR")
+        self.assertEqual((os_aval["role"], os_aval["parameter"]), ("outcome_time", "OS"))
+        self.assertEqual((os_cnsr["role"], os_cnsr["parameter"], os_cnsr["codes"]), ("outcome_event", "OS", {"event": ["0"], "censored": ["1"]}))
+        self.assertEqual(entry(self.result, "adam_adtte_os", "STARTDT")["role"], "time_zero")
+        self.assertEqual(entry(self.result, "adam_adtte_rsd", "AVAL")["parameter"], "RSD")
+        self.assertNotIn("unit", os_aval, "this ADTTE has no AVALU: the unit is not guessed")
+        # No arm is mapped in an events table: the subject table's arm is ADSL's.
+        self.assertFalse([item for item in self.result["fieldMap"] if item["table"].startswith("adam_adtte") and item["role"] in ("arm", "covariate")])
+
+    def test_the_subject_table_maps_the_arm_the_covariates_and_the_outcomes_and_flags_the_identifiers(self):
+        arm = entry(self.result, "adam_adsl", "TRT01P")
+        self.assertEqual((arm["role"], arm["alias"]), ("arm", "TRT01P"))
+        self.assertEqual(entry(self.result, "adam_adsl", "ARM")["role"], "other", "one arm: the planned treatment, not its SDTM twin")
+        age = entry(self.result, "adam_adsl", "AGE")
+        self.assertEqual((age["role"], age["alias"], age["unit"]), ("covariate", "AGE", "years"))
+        self.assertEqual([entry(self.result, "adam_adsl", name)["alias"] for name in ("SEX", "RACE", "ETHNIC")], ["SEX", "RACE", "ETHNIC"])
+        for name in ("DTHFL", "DTHDT"):
+            self.assertTrue(entry(self.result, "adam_adsl", name)["outcome"], name)
+        # The date of birth and the within-study subject number are carried as received and never used as data.
+        for name in ("BRTHDTC", "SUBJID"):
+            self.assertTrue(entry(self.result, "adam_adsl", name)["identifier"], name)
+        self.assertEqual(entry(self.result, "adam_adsl", "USUBJID")["role"], "subject_key")
+        self.assertEqual(entry(self.result, "adam_adsl", "TRTSDT")["timeKind"], "occurred_at")
+
+    def test_every_column_has_a_value_source_and_a_dictionary_row_from_the_datasets_own_labels(self):
+        for table in self.result["tables"]:
+            for column_ in table["columns"]:
+                self.assertEqual(column_["valueSource"], "observed", (table["name"], column_["name"]))
+        self.assertTrue(all(item["valueSource"] == "observed" for item in self.result["fieldMap"]))
+        self.assertEqual(len([item for item in self.result["fieldMap"] if item["table"] == "adam_adsl.csv"]), 55)
+        dictionary = {item["column"]: item for item in self.result["dictionary"]}
+        self.assertIn("ADaM name *DT", dictionary["adam_adsl.TRTSDT"]["label"])
+        self.assertEqual(len(self.result["fieldMap"]), 55 + 107 + 3 * 20)
+
+
+class AdamReader(unittest.TestCase):
+    """The transport reader, on files built byte by byte."""
+
+    def test_a_real_sas_file_reads_the_same_as_the_reference_reader(self):
+        if not PILOT:
+            self.skipTest("EVIMED_CDISC_PILOT_ADTTE is not set (the CDISC pilot's adtte.xpt is downloaded by CI and never committed)")
+        data = pathlib.Path(PILOT).read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), PILOT_SHA256)
+        result, tables = run_bytes(data, "adam", "xpt")
+        rows = rows_of(tables["adam_adtte_ttde"])
+        # R: foreign::read.xport -> 254 x 26, CNSR 0 = 152 and 1 = 102, PARAMCD TTDE only, sum(AVAL) 16853; STARTDT 19725 is 2014-01-02.
+        self.assertEqual((len(rows), len(rows[0])), (254, 26))
+        self.assertEqual(Counter(row["CNSR"] for row in rows), {"0": 152, "1": 102})
+        self.assertEqual(sum(float(row["AVAL"]) for row in rows), 16853)
+        self.assertEqual((rows[0]["USUBJID"], rows[0]["STARTDT"], rows[0]["ADT"], rows[0]["AVAL"]), ("01-701-1015", "2014-01-02", "2014-01-03", "2"))
+        self.assertEqual(result["tables"][0]["name"], "adam_adtte_ttde")
+        self.assertEqual(entry(result, "adam_adtte_ttde", "CNSR")["codes"], {"event": ["0"], "censored": ["1"]})
+
+    def test_ibm_floats_missing_values_and_short_numerics(self):
+        for value in (0.0, 1.0, -1.0, 0.5, 3.14159, 1e-9, 123456789.125, -0.001, 19725.0, 1.1):
+            self.assertAlmostEqual(convert.ibm_to_float(xpt.float_to_ibm(value)), value, delta=abs(value) * 1e-14 + 1e-300, msg=str(value))
+        self.assertIsNone(convert.ibm_to_float(xpt.missing(".")))
+        self.assertEqual(convert.ibm_to_float(xpt.missing("A")), "A")
+        self.assertEqual(convert.ibm_to_float(xpt.missing("_")), "_")
+        # A 3-byte numeric keeps three bytes of the fraction: 16 -> exact, 0.1 -> the truncation SAS itself stores.
+        self.assertEqual(convert.ibm_to_float(xpt.float_to_ibm(16.0, 3)), 16.0)
+        self.assertAlmostEqual(convert.ibm_to_float(xpt.float_to_ibm(0.1, 3)), 0.1, places=4)
+        # 0x41 with a non-zero rest is a number (1.0 is 41 10 00 ...), not the special missing `.A`.
+        self.assertEqual(convert.ibm_to_float(bytes([0x41, 0x10, 0, 0, 0, 0, 0, 0])), 1.0)
+        # What a decimal fraction prints as: 15 significant digits, the accuracy SAS itself shows, not 1.0999999999999999.
+        self.assertEqual(convert.number_text(convert.ibm_to_float(xpt.float_to_ibm(1.1))), "1.1")
+        self.assertEqual(convert.number_text(convert.ibm_to_float(xpt.float_to_ibm(0.3))), "0.3")
+
+    def test_formats_decide_what_a_date_a_datetime_and_a_time_are(self):
+        data = xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F", 19725.0, 1704067200.0, 3661.0, 19725.0, 3.0]], extra=(
+            variable("RFSTDT", fmt="DATE9"), variable("RFDTM", fmt="DATETIME20"), variable("RFTM", fmt="TIME8"), variable("ASTDT"), variable("OTHER", fmt="BEST12"))))
+        result, tables = run_bytes(data, "adam", "xpt")
+        row = rows_of(tables["adam_adsl"])[0]
+        # `date -d "1960-01-01 + 19725 days"` is 2014-01-02, and 1704067200 s is 19723 days (2013-12-31) exactly; 3661 s is 01:01:01.
+        self.assertEqual(row["RFSTDT"], "2014-01-02")
+        self.assertEqual(row["RFDTM"], "2013-12-31T00:00:00")
+        self.assertEqual(row["RFTM"], "01:01:01")
+        self.assertEqual(row["ASTDT"], "2014-01-02", "no format, but ADaM's own naming says *DT is a date")
+        self.assertEqual(row["OTHER"], "3")
+        self.assertEqual(entry(result, "adam_adsl", "RFSTDT")["timeKind"], "occurred_at")
+        self.assertIn("format DATE9", {item["column"]: item for item in result["dictionary"]}["adam_adsl.RFSTDT"]["label"])
+        self.assertNotIn("timeKind", entry(result, "adam_adsl", "OTHER"))
+
+    def test_missing_values_blank_and_special_missing_counted(self):
+        data = xpt_bytes(adsl_of([["S1", "TRT", None, "F"], ["S2", "TRT", "A", "M"], ["S3", "", 61.0, ""]]))
+        result, tables = run_bytes(data, "adam", "xpt")
+        rows = rows_of(tables["adam_adsl"])
+        self.assertEqual([row["AGE"] for row in rows], ["", "", "61"])
+        self.assertEqual([row["ARM"] for row in rows], ["TRT", "TRT", ""])
+        self.assertEqual(notices_of(result)["special_missing_values"], 1)
+
+    def test_character_text_is_utf8_or_gb18030_and_never_guessed_further(self):
+        def with_note(cell):
+            return xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F", cell]], extra=(variable("NOTE", False, 8),)))
+        self.assertEqual(rows_of(run_bytes(with_note("plain"), "adam", "xpt")[1]["adam_adsl"])[0]["NOTE"], "plain")
+        self.assertEqual(rows_of(run_bytes(with_note("中文".encode("utf-8")), "adam", "xpt")[1]["adam_adsl"])[0]["NOTE"], "中文")
+        self.assertEqual(rows_of(run_bytes(with_note("中文".encode("gb18030")), "adam", "xpt")[1]["adam_adsl"])[0]["NOTE"], "中文")
+        self.assertEqual(refusal_of(with_note(b"\xff\xfe"), "adam", "xpt"), "text_encoding")
+
+    def test_two_datasets_in_one_file_and_the_ones_that_are_not_read(self):
+        data = xpt_bytes(
+            adsl_of([["S1", "TRT", 40.0, "F"], ["S2", "CTL", 50.0, "M"]]),
+            dataset("ADLB", [variable("USUBJID", False, 12), variable("PARAMCD", False, 8), variable("AVAL")], [["S1", "ALT", 10.0]] * 5),
+            dataset("ADAE", [variable("USUBJID", False, 12), variable("AETERM", False, 20)], [["S1", "Headache"]]),
+        )
+        result, tables = run_bytes(data, "adam", "xpt")
+        self.assertEqual(sorted(tables), ["adam_adae", "adam_adsl"])
+        lab = coverage_of(result, "ADLB")
+        self.assertEqual((lab["status"], lab["reason"], lab["records"]), ("skipped", "unsupported_dataset", 5))
+
+    def test_a_dataset_without_what_it_needs_is_skipped_by_name_and_the_others_land(self):
+        data = xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F"]]), dataset("ADTTE", [variable("USUBJID", False, 12), variable("PARAMCD", False, 8), variable("AVAL")], [["S1", "OS", 3.0]]))
+        result, tables = run_bytes(data, "adam", "xpt")
+        self.assertEqual(sorted(tables), ["adam_adsl"])
+        self.assertEqual(coverage_of(result, "ADTTE")["reason"], "missing_required_column:CNSR")
+
+    def test_time_to_event_edge_cases_are_counted_not_dropped(self):
+        variables = [variable("USUBJID", False, 6), variable("PARAMCD", False, 8), variable("AVAL"), variable("CNSR"), variable("AVALU", False, 5), variable("STARTDT")]
+        rows = [["S1", "OS", 10.0, 0.0, "DAYS", 19725.0], ["S2", "OS", 20.0, 1.0, "DAYS", 19725.0], ["S2", "OS", 25.0, 1.0, "DAYS", 19725.0], ["S3", "PFS", 5.0, 2.0, "DAYS", 19725.0],
+                ["S4", "1BAD", 5.0, 0.0, "DAYS", 19725.0], ["S5", "os", 5.0, 0.0, "DAYS", 19725.0]]
+        result, tables = run_bytes(xpt_bytes(dataset("ADTTE", variables, rows)), "adam", "xpt")
+        self.assertEqual(sorted(tables), ["adam_adtte_os", "adam_adtte_pfs"])
+        self.assertEqual(entry(result, "adam_adtte_os", "AVAL")["unit"], "days", "one AVALU: that is the unit")
+        notices = notices_of(result)
+        self.assertEqual(notices["duplicate_subject_parameter_rows"], 1)
+        self.assertEqual(notices["cnsr_not_binary"], 1)
+        rest = coverage_of(result, "ADTTE (rows not placed)")
+        self.assertEqual((rest["reason"], rest["skipped"]), ("rows_not_placed", {"paramcd_not_usable": 1, "paramcd_case_collision": 1}))
+
+    def test_a_record_derived_or_imputed_by_dtype_labels_the_value_column_with_the_least_direct_source(self):
+        variables = [variable("USUBJID", False, 6), variable("PARAMCD", False, 8), variable("AVAL"), variable("CNSR"), variable("DTYPE", False, 8)]
+        rows = [["S1", "OS", 10.0, 0.0, ""], ["S2", "OS", 20.0, 1.0, "LOCF"]]
+        result, _ = run_bytes(xpt_bytes(dataset("ADTTE", variables, rows)), "adam", "xpt")
+        self.assertEqual(entry(result, "adam_adtte_os", "AVAL")["valueSource"], "imputed")
+        self.assertEqual(entry(result, "adam_adtte_os", "CNSR")["valueSource"], "observed")
+        self.assertEqual(notices_of(result)["dtype_populated"], 1)
+        quiet, _ = run_bytes(xpt_bytes(dataset("ADTTE", variables, [["S1", "OS", 10.0, 0.0, ""]])), "adam", "xpt")
+        self.assertEqual(entry(quiet, "adam_adtte_os", "AVAL")["valueSource"], "observed")
+
+    def test_the_arm_is_the_planned_treatment_and_an_arm_less_adsl_maps_none(self):
+        planned = adsl_of([["S1", "TRT", 40.0, "F", "Drug A"]], extra=(variable("TRT01P", False, 8),))
+        result, _ = run_bytes(xpt_bytes(planned), "adam", "xpt")
+        self.assertEqual(entry(result, "adam_adsl", "TRT01P")["role"], "arm")
+        self.assertEqual(entry(result, "adam_adsl", "ARM")["role"], "other")
+        only = dataset("ADSL", [variable("USUBJID", False, 6), variable("AGE")], [["S1", 40.0]])
+        result, _ = run_bytes(xpt_bytes(only), "adam", "xpt")
+        self.assertFalse([item for item in result["fieldMap"] if item["role"] == "arm"])
+
+    def test_age_units_are_taken_from_the_file_only_when_it_has_one(self):
+        mixed = adsl_of([["S1", "T", 40.0, "F", "YEARS"], ["S2", "T", 5.0, "F", "MONTHS"]], extra=(variable("AGEU", False, 6),))
+        result, _ = run_bytes(xpt_bytes(mixed), "adam", "xpt")
+        self.assertNotIn("unit", entry(result, "adam_adsl", "AGE"), "two units are not one unit")
+        single = adsl_of([["S1", "T", 40.0, "F", "YEARS"]], extra=(variable("AGEU", False, 6),))
+        result, _ = run_bytes(xpt_bytes(single), "adam", "xpt")
+        self.assertEqual(entry(result, "adam_adsl", "AGE")["unit"], "years")
+
+
+class AdamRefusals(unittest.TestCase):
+    def test_named_refusals(self):
+        good = xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F"]]))
+        self.assertEqual(refusal_of(b"not a transport file at all " * 40, "adam", "xpt"), "not_xpt")
+        self.assertEqual(refusal_of(b"USUBJID,AGE\n1,2\n" * 10, "adam", "xpt"), "not_xpt")
+        self.assertEqual(refusal_of(b"HEADER RECORD*******LIBRARY", "adam", "xpt"), "not_xpt")
+        # A V8 transport file (long variable names) is a named version, not a corrupt file.
+        v8 = good.replace(b"HEADER RECORD*******LIBRARY HEADER RECORD!!!!!!!", b"HEADER RECORD*******LIBV8   HEADER RECORD!!!!!!!", 1)
+        self.assertEqual(refusal_of(v8, "adam", "xpt"), "xpt_version_unsupported")
+        self.assertEqual(refusal_of(xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F"]]), namestr_length=136), "adam", "xpt"), "xpt_version_unsupported")
+        self.assertEqual(refusal_of(good[:80 * 8], "adam", "xpt"), "corrupt")
+        self.assertEqual(refusal_of(good[:300], "adam", "xpt"), "not_xpt")
+        self.assertEqual(refusal_of(zip_bytes({"adsl.csv": "USUBJID\n1\n"}), "adam", "zip"), "not_xpt")
+        self.assertEqual(refusal_of(zip_bytes({}), "adam", "zip"), "nothing_to_import")
+        self.assertEqual(refusal_of(xpt_bytes(dataset("ADLB", [variable("USUBJID", False, 6)], [["S1"]])), "adam", "xpt"), "no_supported_dataset")
+        self.assertEqual(refusal_of(xpt_bytes(dataset("ADSL", [variable("AGE")], [[40.0]])), "adam", "xpt"), "no_supported_dataset")
+
+    def test_a_bad_member_of_a_zip_is_skipped_and_the_good_one_lands(self):
+        good = xpt_bytes(adsl_of([["S1", "TRT", 40.0, "F"]]))
+        result, tables = run_bytes(zip_bytes({"adsl.xpt": good, "broken.xpt": b"x" * 600, "notes.txt": "hello"}), "adam", "zip")
+        self.assertEqual(sorted(tables), ["adam_adsl"])
+        self.assertEqual(coverage_of(result, "broken.xpt")["reason"], "not_xpt")
+        self.assertEqual(coverage_of(result, "notes.txt")["reason"], "not_an_xpt_file")
+
+    def test_a_dataset_past_the_planes_limits_is_skipped_by_name(self):
+        result, tables = run_bytes(ADAM_ZIP.read_bytes(), "adam", "zip", limits={"maxRows": 300})
+        self.assertEqual(sorted(tables), ["adam_adtte_os", "adam_adtte_pfs", "adam_adtte_rsd"])
+        skipped = {item["table"]: item["reason"] for item in result["coverage"]["skippedTables"]}
+        self.assertEqual(skipped, {"adam_adsl": "too_many_rows", "adam_adae": "too_many_rows"})
+        result, tables = run_bytes(ADAM_ZIP.read_bytes(), "adam", "zip", limits={"maxColumns": 50})
+        self.assertEqual({item["table"] for item in result["coverage"]["skippedTables"]}, {"adam_adsl", "adam_adae"})
+        self.assertEqual(sorted(tables), ["adam_adtte_os", "adam_adtte_pfs", "adam_adtte_rsd"])
+
+    def test_pandas_agrees_where_it_reads_a_transport_file_correctly(self):
+        try:
+            import pandas
+        except ImportError:  # pragma: no cover - CI and the image ship pandas
+            self.skipTest("pandas is not installed")
+        frame = pandas.read_sas(str(ADSL), format="xport", encoding="utf-8")
+        result, tables = run_bytes(ADSL.read_bytes(), "adam", "xpt")
+        mine = rows_of(tables["adam_adsl"])
+        self.assertEqual(len(frame), len(mine))
+        self.assertEqual(list(frame.columns), [column_["name"] for column_ in result["tables"][0]["columns"]])
+        self.assertEqual([str(value).strip() for value in frame["USUBJID"]], [row["USUBJID"] for row in mine])
+        self.assertAlmostEqual(float(frame["AGE"].sum()), sum(float(row["AGE"]) for row in mine), places=6)
 
 
 class CommandLine(unittest.TestCase):

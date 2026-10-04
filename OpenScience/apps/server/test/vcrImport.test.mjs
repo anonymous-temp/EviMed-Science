@@ -82,6 +82,9 @@ const attempts = async plane => (await fs.readdir(path.join(plane, 'studies')).c
 const smart = () => fs.readFile(path.join(FIXTURES, 'smart-10-patients.zip'));
 const synthea = () => fs.readFile(path.join(FIXTURES, 'synthea27nj-5.4.zip'));
 const gibleed = () => fs.readFile(path.join(FIXTURES, 'gibleed-5.3-first150.zip'));
+const adamZip = () => fs.readFile(path.join(FIXTURES, 'adam-pharmaverse.zip'));
+const adslXpt = () => fs.readFile(path.join(FIXTURES, 'adsl.xpt'));
+const adtteXpt = () => fs.readFile(path.join(FIXTURES, 'adtte.xpt'));
 const ndjson = (...rows) => Buffer.from(`${rows.map(row => JSON.stringify(row)).join('\n')}\n`);
 
 // --- the container's answer, decided here --------------------------------------
@@ -358,6 +361,58 @@ test('an OMOP export is refused by name when it is not one, and a zip of tables 
   await assert.rejects(w.upload('person.ndjson', ndjson({ resourceType: 'Patient' }), 'omop'), { status: 415, code: 'vcr_data_format_unsupported' });
   assert.equal(w.store.files.length, 0);
   assert.equal(w.counters.importRefused, 1);
+});
+
+
+test('ADaM transport files become the subject, events and adverse-event tables, and derive the analysis tables the engine reads', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  const bytes = await adamZip();
+  const answer = await w.upload('adam datasets.zip', bytes, 'adam');
+  // R's foreign::read.xport over the same files: ADSL 306 subjects, ADAE 1,191 records, ADTTE 512 records of three parameters.
+  assert.deepEqual(answer.tables.map(table => [table.name, table.rows, table.stored]), [
+    ['adam_adsl', 306, true], ['adam_adae', 1191, true], ['adam_adtte_os', 254, true], ['adam_adtte_pfs', 254, true], ['adam_adtte_rsd', 4, true],
+  ]);
+  assert.deepEqual(answer.standard, { name: 'CDISC ADaM', release: 'SAS transport V5' });
+  assert.deepEqual(answer.fieldMap.entryIssues, []);
+  assert.deepEqual(answer.fieldMap.mapIssues, []);
+  assert.equal(w.store.files.find(file => file.role === 'dictionary').name, 'adam-dictionary.csv');
+  assert.ok(w.store.source.fieldMap.columns.every(entry => entry.valueSource === 'observed'), 'every imported column carries a value source');
+  assert.equal(w.store.source.fieldMap.columns.length, 55 + 107 + 3 * 20);
+
+  const tables = [];
+  for (const file of w.store.files.filter(item => item.role === 'data')) {
+    const parsed = parseTable(await fs.readFile(path.join(w.planeDir, file.location), 'utf8'));
+    tables.push({ name: file.name, header: parsed.header, rows: parsed.rows });
+  }
+  const checked = validateFieldMap(normalizeFieldMap(w.store.source.fieldMap.columns).columns, tables.map(table => ({ name: table.name, header: table.header })));
+  assert.deepEqual(checked.issues, []);
+  const derived = deriveAnalysisShapes({ tables, entries: checked.columns, key: Buffer.alloc(32, 7), identifying: new Set(['SUBJID', 'BRTHDTC']), fileSource: 'observed' });
+  // 306 people (254 randomised, 52 screen failures): the subject table carries the planned arm and the covariates, and not the date of birth.
+  assert.equal(derived.shapes.subject.rows.length, 306);
+  assert.deepEqual(derived.shapes.subject.header, ['USUBJID', 'AGE', 'DTHDT', 'DTHFL', 'ETHNIC', 'RACE', 'SEX', 'TRT01P']);
+  // Three parameters of 254, 254 and 4 records: CNSR as received, 3 + 6 + 1 events.
+  const events = derived.shapes.events;
+  assert.deepEqual(events.header, ['USUBJID', 'PARAMCD', 'AVAL', 'CNSR', 'STARTDT']);
+  assert.equal(events.rows.length, 254 + 254 + 4);
+  const byParameter = Object.fromEntries(['OS', 'PFS', 'RSD'].map(code => [code, events.rows.filter(row => row[1] === code).map(row => row[3]).sort()]));
+  assert.deepEqual(Object.fromEntries(Object.entries(byParameter).map(([code, flags]) => [code, flags.filter(flag => flag === '0').length])), { OS: 3, PFS: 6, RSD: 1 });
+  assert.equal(events.valueSource, 'observed', 'nothing is computed from the file: every source is as received');
+  assert.deepEqual(analysisTableIssues('events', events.rows.map(row => Object.fromEntries(events.header.map((name, index) => [name, row[index]])))).filter(issue => issue.blocking), []);
+});
+
+test('a single ADSL transport file is an import, and a file that is not a transport file or is not V5 is refused by name', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  const answer = await w.upload('adsl.xpt', await adslXpt(), 'adam');
+  assert.deepEqual(answer.tables.map(table => [table.name, table.rows]), [['adam_adsl', 306]]);
+  assert.equal(w.store.source.fieldMap.columns.find(entry => entry.column === 'TRT01P').role, 'arm');
+  const v8 = Buffer.from(await adtteXpt());
+  v8.write('HEADER RECORD*******LIBV8   HEADER RECORD!!!!!!!', 0, 'latin1');
+  await assert.rejects(w.upload('v8.xpt', v8, 'adam'), { status: 422, code: 'vcr_import_version_unsupported' });
+  await assert.rejects(w.upload('adsl.xpt', Buffer.from('USUBJID,AGE\n1,40\n'.repeat(60)), 'adam'), { status: 422, code: 'vcr_import_not_this_format' });
+  await assert.rejects(w.upload('adsl.csv', Buffer.from('x'), 'adam'), { status: 415, code: 'vcr_data_format_unsupported' });
+  const error = await w.upload('v8.xpt', v8, 'adam').catch(caught => caught);
+  assert.equal(error.vcrDetail.reason, 'xpt_version_unsupported');
+  assert.equal(w.store.files.filter(file => file.name !== 'adam-dictionary.csv').length, 1, 'only the first, good import stored anything');
 });
 
 test('a synthetic source takes the import without per-column sources, which its freeze would refuse', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {

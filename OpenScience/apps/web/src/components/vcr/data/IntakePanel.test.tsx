@@ -297,7 +297,7 @@ describe("数据接入 — what the page sends", () => {
     const text = report.closest("[data-vcr-import-report]")?.textContent ?? "";
     expect(text).toContain("omop_person：28 行，11 列");
     expect(text).toContain("omop_measurement：没有保存（超过文件大小上限）");
-    expect(text).toContain("procedure_occurrence：读到 1649 条，导入 0 条（unsupported_table）");
+    expect(text).toContain("procedure_occurrence：读到 1649 条，导入 0 条（本版本不读这张表）");
     expect(text).toContain("2 位患者的随访时间为 0 天");
     expect(text).toContain("每一列都标明了值的来源");
     expect(toasts.success).toHaveBeenCalled();
