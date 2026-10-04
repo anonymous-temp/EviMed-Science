@@ -1032,3 +1032,202 @@ test("an open-access PDF is fetched over a socket pinned to the address checked 
   assert.deepEqual(answers, ["rebinding.example.org=93.184.216.34", "rebinding.example.org=127.0.0.1"],
     "checked once before, and again by the socket itself");
 });
+
+// --- a source nobody configured is the researcher's to configure (2026-10-04) ---
+
+/** A store that answers per user, and records who was asked for what. */
+function ownCredentials(held, asked = []) {
+  return {
+    async resolveOwn(userId, connector) {
+      asked.push([userId, connector]);
+      return held[`${userId}:${connector}`] ?? null;
+    },
+  };
+}
+
+const twoUsers = {
+  assertActiveModelGatewayToken(token) {
+    if (token === "alice-token") return { userId: "alice", projectId: "p" };
+    if (token === "bob-token") return { userId: "bob", projectId: "p" };
+    throw new Error("invalid token");
+  },
+};
+
+test("a refusal for an unconfigured source names it, says the researcher can add it, and says where", async (t) => {
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), { fetchImpl: async () => { throw new Error("must not be called"); } }));
+  const base = await listen(server);
+  t.after(() => close(server));
+  const cases = [
+    [{ url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", accept: ["application/json"], credentialProfile: "umls" }, "public_source_umls_credential_missing", /^UMLS is not configured/],
+    [{ url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature", accept: ["application/json"], method: "POST", credentialProfile: "evimed-evidence", body: { query: "aspirin" } }, "public_source_evimed_evidence_credential_missing", /^EviMed 证据库 is not configured/],
+    [{ openAccessPdfDoi: "10.1234/public" }, "public_source_unpaywall_credential_missing", /^Unpaywall is not configured/],
+  ];
+  for (const [body, code, sentence] of cases) {
+    const answer = await gatewayRequest(base, body);
+    assert.equal(answer.status, 503, code);
+    const { error } = await answer.json();
+    assert.equal(error.code, code);
+    assert.match(error.message, sentence);
+    assert.match(error.message, /the user can add their own credential under 设置 → 数据源/, code);
+  }
+});
+
+test("a rate-ceiling key the researcher saved is sent where the deployment has none, and only for them", async (t) => {
+  const seen = [];
+  const asked = [];
+  const held = { "alice:ncbi": "alice-ncbi-key", "alice:openfda": "alice-fda-key" };
+  const make = (credentials) => createServer(createPublicSourceGatewayHandler({ publicSourceCredentials: credentials }, twoUsers, {
+    fetchImpl: async (url) => { seen.push(new URL(url)); return Response.json({ ok: true }); },
+    connectorCredentials: ownCredentials(held, asked),
+  }));
+  const ncbiRequest = { url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=aspirin", accept: ["application/json"] };
+  const fdaRequest = { url: "https://api.fda.gov/drug/event.json?limit=1", accept: ["application/json"] };
+
+  const bare = make({});
+  const bareBase = await listen(bare);
+  t.after(() => close(bare));
+  for (const request of [ncbiRequest, fdaRequest]) {
+    assert.equal((await gatewayRequest(bareBase, request, "alice-token")).status, 200);
+  }
+  assert.equal(seen[0].searchParams.get("api_key"), "alice-ncbi-key", "NCBI: the value saved under 设置 → 数据源 is used");
+  assert.equal(seen[1].searchParams.get("api_key"), "alice-fda-key", "openFDA: the same");
+  // Bob saved nothing: anonymous, as before, and no empty key appended.
+  seen.length = 0;
+  assert.equal((await gatewayRequest(bareBase, ncbiRequest, "bob-token")).status, 200);
+  assert.equal(seen[0].searchParams.has("api_key"), false);
+  assert.ok(asked.some(([user, connector]) => user === "bob" && connector === "ncbi"));
+
+  // Deployment first: with the deployment's key set, the researcher's is never consulted.
+  const withKeys = make({ ncbi: "deployment-ncbi", openFda: "deployment-fda" });
+  const withKeysBase = await listen(withKeys);
+  t.after(() => close(withKeys));
+  seen.length = 0;
+  asked.length = 0;
+  assert.equal((await gatewayRequest(withKeysBase, ncbiRequest, "alice-token")).status, 200);
+  assert.equal((await gatewayRequest(withKeysBase, fdaRequest, "alice-token")).status, 200);
+  assert.deepEqual(seen.map((url) => url.searchParams.get("api_key")), ["deployment-ncbi", "deployment-fda"]);
+  assert.deepEqual(asked, []);
+});
+
+test("a store that cannot be read is the anonymous tier, never a failed request, for a rate-ceiling key", async (t) => {
+  const seen = [];
+  const server = createServer(createPublicSourceGatewayHandler({}, twoUsers, {
+    fetchImpl: async (url) => { seen.push(new URL(url)); return Response.json({ ok: true }); },
+    connectorCredentials: { async resolveOwn() { throw new Error("database down"); } },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+  const answer = await gatewayRequest(base, { url: "https://api.fda.gov/drug/event.json?limit=1", accept: ["application/json"] }, "alice-token");
+  assert.equal(answer.status, 200);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].searchParams.has("api_key"), false);
+});
+
+test("a researcher's mistyped rate-ceiling key is retried anonymously once; the deployment's own is not", async (t) => {
+  const seen = [];
+  const refuseKeyed = async (url) => {
+    const keyed = new URL(url).searchParams.has("api_key");
+    seen.push({ keyed });
+    return keyed ? new Response("{}", { status: 403, headers: { "content-type": "application/json" } }) : Response.json({ ok: true });
+  };
+  const fdaRequest = { url: "https://api.fda.gov/drug/event.json?limit=1", accept: ["application/json"] };
+  // Alice's own key is refused upstream: the request still works, anonymously.
+  const own = createServer(createPublicSourceGatewayHandler({}, twoUsers, {
+    fetchImpl: refuseKeyed, connectorCredentials: ownCredentials({ "alice:openfda": "typo-key" }),
+  }));
+  const ownBase = await listen(own);
+  t.after(() => close(own));
+  assert.equal((await gatewayRequest(ownBase, fdaRequest, "alice-token")).status, 200);
+  assert.deepEqual(seen, [{ keyed: true }, { keyed: false }]);
+  // The deployment's key refused is the operator's problem and surfaces as it always did.
+  seen.length = 0;
+  const deployment = createServer(createPublicSourceGatewayHandler({ publicSourceCredentials: { openFda: "deployment-key" } }, twoUsers, {
+    fetchImpl: refuseKeyed, connectorCredentials: ownCredentials({ "alice:openfda": "typo-key" }),
+  }));
+  const deploymentBase = await listen(deployment);
+  t.after(() => close(deployment));
+  const refused = await gatewayRequest(deploymentBase, fdaRequest, "alice-token");
+  assert.equal(refused.status, 400);
+  assert.deepEqual(seen, [{ keyed: true }]);
+  // A 404 or a 5xx is not a bad key: no second request.
+  seen.length = 0;
+  const unavailable = createServer(createPublicSourceGatewayHandler({}, twoUsers, {
+    fetchImpl: async (url) => { seen.push(new URL(url).searchParams.has("api_key")); return new Response("{}", { status: 503, headers: { "content-type": "application/json" } }); },
+    connectorCredentials: ownCredentials({ "alice:openfda": "good-key" }),
+  }));
+  const unavailableBase = await listen(unavailable);
+  t.after(() => close(unavailable));
+  assert.equal((await gatewayRequest(unavailableBase, fdaRequest, "alice-token")).status, 502);
+  assert.deepEqual(seen, [true]);
+});
+
+test("the Unpaywall PDF path uses the researcher's own address where the deployment has none", async (t) => {
+  const lookups = [];
+  const pdf = Buffer.from("%PDF-1.4\npublic fixture\n%%EOF");
+  const make = (credentials) => createServer(createPublicSourceGatewayHandler({ publicSourceCredentials: credentials }, twoUsers, {
+    fetchImpl: async (url) => {
+      lookups.push(new URL(url));
+      return Response.json({ best_oa_location: { url_for_pdf: "https://repo.example/public.pdf" } });
+    },
+    resolveImpl: async () => [{ address: "93.184.216.34", family: 4 }],
+    pdfTransport: fetchWebTransport(async () => new Response(pdf, { headers: { "content-type": "application/pdf" } })),
+    connectorCredentials: ownCredentials({ "alice:unpaywall": "alice@lab.example" }),
+  }));
+  const bare = make({});
+  const base = await listen(bare);
+  t.after(() => close(bare));
+  const own = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/public" }, "alice-token");
+  assert.equal(own.status, 200);
+  assert.deepEqual(Buffer.from(await own.arrayBuffer()), pdf);
+  assert.equal(lookups[0].searchParams.get("email"), "alice@lab.example", "the address she saved is the one Unpaywall is told");
+  // Bob saved none and the deployment has none: refused by name, nothing asked of Unpaywall.
+  lookups.length = 0;
+  const refused = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/public" }, "bob-token");
+  assert.equal(refused.status, 503);
+  assert.equal((await refused.json()).error.code, "public_source_unpaywall_credential_missing");
+  assert.deepEqual(lookups, []);
+  // Deployment first.
+  const configured = make({ unpaywall: "ops@evimed.example" });
+  const configuredBase = await listen(configured);
+  t.after(() => close(configured));
+  assert.equal((await gatewayRequest(configuredBase, { openAccessPdfDoi: "10.1234/public" }, "alice-token")).status, 200);
+  assert.equal(lookups[0].searchParams.get("email"), "ops@evimed.example");
+});
+
+test("the EviMed evidence API takes the researcher's own key where the deployment has none, and the deployment's first", async (t) => {
+  const seen = [];
+  const request = {
+    url: "https://www.evimed.com/api-evimed/medicine-api/ai-api/review/api/literature",
+    accept: ["application/json"], method: "POST", credentialProfile: "evimed-evidence", body: { query: "aspirin" },
+  };
+  const make = (credentials) => createServer(createPublicSourceGatewayHandler({ publicSourceCredentials: credentials }, twoUsers, {
+    fetchImpl: async (url, options) => { seen.push(options.headers.authorization ?? null); return Response.json({ code: 200, data: {} }); },
+    connectorCredentials: ownCredentials({ "alice:evimed-evidence": "alice-evimed-key" }),
+  }));
+  const bare = make({});
+  const base = await listen(bare);
+  t.after(() => close(bare));
+  assert.equal((await gatewayRequest(base, request, "alice-token")).status, 200);
+  assert.deepEqual(seen, ["Bearer alice-evimed-key"]);
+  const refused = await gatewayRequest(base, request, "bob-token");
+  assert.equal(refused.status, 503, "bob has none: the literature search can fall back by name, not by silence");
+  assert.equal((await refused.json()).error.code, "public_source_evimed_evidence_credential_missing");
+  seen.length = 0;
+  const configured = make({ evimedEvidence: "deployment-evimed-key" });
+  const configuredBase = await listen(configured);
+  t.after(() => close(configured));
+  assert.equal((await gatewayRequest(configuredBase, request, "alice-token")).status, 200);
+  assert.deepEqual(seen, ["Bearer deployment-evimed-key"]);
+});
+
+test("the gateway's profiles and the connector registry say the same thing", async () => {
+  const { CONNECTOR_CREDENTIALS } = await import("@evimed/domain");
+  const registry = new Set(CONNECTOR_CREDENTIALS.map((spec) => spec.id));
+  const profiles = new Set(PUBLIC_SOURCE_CREDENTIAL_PROFILES.keys());
+  // Every profile is a connector a researcher can hold a credential for...
+  assert.deepEqual([...profiles].filter((id) => !registry.has(id)), []);
+  // ...and the only connectors with no profile are the two rate-ceiling keys,
+  // which the gateway adds by host (an optional key must not make its host
+  // refuse every request that carries none).
+  assert.deepEqual([...registry].filter((id) => !profiles.has(id)).sort(), ["ncbi", "openfda"]);
+});

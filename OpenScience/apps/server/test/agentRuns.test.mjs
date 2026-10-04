@@ -26,7 +26,7 @@ import {
   runPhaseHistory,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
-import { runStateFileFor, workspaceLayout } from "@evimed/domain";
+import { CONNECTOR_MISSING_CODES, runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { HttpError } from "../src/security.mjs";
@@ -3856,6 +3856,13 @@ test("tolerated source error codes are real codes, not typos", async () => {
   for (const source of sources) {
     const text = await readFile(source, "utf8");
     for (const [, code] of text.matchAll(/"(public_source_[a-z_]+)"/g)) emitted.add(code);
+    // The gateway writes each connector's "not configured" code from the
+    // registry rather than as a literal, so reading it for literals cannot see
+    // them; reading that it does build them proves they are emitted.
+    if (source.pathname.endsWith("publicSourceGateway.mjs")) {
+      assert.match(text, /connectorMissingCode\(request\.credentialProfile\)/, "the gateway no longer builds the connector codes from the registry");
+      for (const code of CONNECTOR_MISSING_CODES.keys()) if (code.startsWith("public_source_")) emitted.add(code);
+    }
   }
   assert.ok(emitted.size > 20, `expected the real code set, found ${emitted.size}`);
 

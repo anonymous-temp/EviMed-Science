@@ -1070,9 +1070,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     // keeps a briefly unreachable source from becoming a failed delivery
     // therefore did not happen on any of the other three, and its absence
     // looks identical to a source that was really down.
-    const { classifyEvidenceSourceError, isMcpToolName } = await import('@evimed/domain')
+    const { classifyEvidenceSourceError, connectorForMissingCode, isMcpToolName } = await import('@evimed/domain')
     if (!code || !isMcpToolName(call.name)) return result
     if (classifyEvidenceSourceError(code) !== 'recoverable') return result
+    // A data source nobody configured for this researcher is recoverable — the
+    // run goes on without it — but it is not transient: a retry cannot change
+    // it, and the tool result already tells the model to go on and say what was
+    // left out. Retrying cost a second gateway call and 1.5 s for the same answer.
+    if (connectorForMissingCode(code)) return result
     const entry = sessionState(call.sessionId)
     const key = `${call.name}:${call.callId}`
     if (entry.redelegated.has(key)) return result

@@ -695,12 +695,15 @@ export {
   validateSourceUnderstanding,
 } from './src/sourceUnderstanding.mjs'
 
-// connectorCredentials — 5 exports
+// connectorCredentials — 8 exports
 export {
   CONNECTOR_CREDENTIALS,
   CONNECTOR_CREDENTIAL_IDS,
+  CONNECTOR_MISSING_CODES,
   connectorCredentialSpec,
   connectorDeploymentSource,
+  connectorForMissingCode,
+  connectorMissingCode,
   validateConnectorCredentialValue,
 } from './src/connectorCredentials.mjs'
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
-import { connectorCredentialSpec } from "@evimed/domain";
+import { connectorCredentialSpec, connectorMissingCode } from "@evimed/domain";
 import { headerValue, nodeWebTransport, privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
 
 const gatewayPath = "/internal/sources/v1/fetch";
@@ -140,6 +140,18 @@ function keylessProfile(profile) {
 }
 
 /**
+ * What a refused request tells the runtime, in the words the tool result will
+ * carry to the model: which source, that the researcher can add it themselves,
+ * and where. The title is the registry's, so the sentence is the same wherever
+ * a profile is named. 设置 → 数据源 is the page's own name.
+ * @param {string} profile
+ */
+function credentialMissingMessage(profile) {
+  const title = connectorCredentialSpec(profile)?.title ?? profile;
+  return `${title} is not configured for this deployment or this account; the user can add their own credential under 设置 → 数据源.`;
+}
+
+/**
  * Requests refused because a credential was missing, by source and why:
  * `absent` (the deployment and the account have none) or `unusable` (the
  * deployment configured one that could not be read — a file with the wrong
@@ -197,11 +209,15 @@ export function publicSourceCredentialMissingMetricFamily() {
  * Injected by host, only when configured, and never announced to the runtime —
  * which is what keeps a rate-limit key out of the container the same way an
  * authorizing one is.
- * @type {Map<string, { configKey: string, query: string }>}
+ * `connector` is the registry id the researcher saves their own key under: the
+ * deployment's key goes first, and where it has none the requesting
+ * researcher's own is sent — a value they saved that nothing used until
+ * 2026-10-04.
+ * @type {Map<string, { configKey: string, connector: string, query: string }>}
  */
 const optionalRateCredentials = new Map([
-  ["eutils.ncbi.nlm.nih.gov", { configKey: "ncbi", query: "api_key" }],
-  ["api.fda.gov", { configKey: "openFda", query: "api_key" }],
+  ["eutils.ncbi.nlm.nih.gov", { configKey: "ncbi", connector: "ncbi", query: "api_key" }],
+  ["api.fda.gov", { configKey: "openFda", connector: "openfda", query: "api_key" }],
 ]);
 
 
@@ -756,11 +772,19 @@ async function readBoundedBody(body, maxBytes) {
  * kept ending with more eligible records than readable ones. Unpaywall knows
  * where the rest are, but on the publisher's own domain, so the resolution has
  * to happen here rather than in the runtime. */
-async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, pdfTransport, signal, documentParser, capturePdf = null }) {
-  const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
+async function serveOpenAccessPdf(request, {
+  config, res, fetchImpl, resolveImpl, pdfTransport, signal, documentParser, capturePdf = null, userId = null, connectorCredentials = null,
+}) {
+  let email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
+  // The deployment's address first, like every other source; where it has none,
+  // the researcher's own — the one they saved under 设置 → 数据源, which this
+  // path never read.
+  if (!email && connectorCredentials && typeof userId === "string" && userId) {
+    email = String(await connectorCredentials.resolveOwn(userId, "unpaywall") ?? "").trim();
+  }
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
     recordCredentialMissing("unpaywall", config);
-    throw gatewayError(503, "public_source_unpaywall_credential_missing", "The server-managed unpaywall credential is unavailable.");
+    throw gatewayError(503, "public_source_unpaywall_credential_missing", credentialMissingMessage("unpaywall"));
   }
   const lookup = new URL(`https://api.unpaywall.org/v2/${encodeURIComponent(request.doi)}`);
   lookup.searchParams.set("email", email);
@@ -988,6 +1012,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         const captureContext = preparePdfCapture ? await preparePdfCapture(identity) : null;
         await serveOpenAccessPdf(request, {
           config, res, fetchImpl, resolveImpl, pdfTransport: openAccessTransport, signal: controller.signal, documentParser,
+          userId: typeof identity?.userId === "string" ? identity.userId : null, connectorCredentials,
           capturePdf: capturePdf ? (bytes, provenance) => {
             const current = runtimeManager.assertActiveModelGatewayToken(token);
             if (current.userId !== identity.userId || current.projectId !== identity.projectId) throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication changed.");
@@ -1059,8 +1084,8 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
             recordCredentialMissing(request.credentialProfile, config);
             throw gatewayError(
               503,
-              `public_source_${request.credentialProfile.replaceAll("-", "_")}_credential_missing`,
-              `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 设置 → 数据源.`,
+              connectorMissingCode(request.credentialProfile),
+              credentialMissingMessage(request.credentialProfile),
             );
           }
           credentialMode = anonymous ? "anonymous" : "managed";
@@ -1074,22 +1099,48 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
           }
         }
         const rateCredential = optionalRateCredentials.get(request.url.hostname.toLowerCase());
+        /** Whether the key on this request is the researcher's own, which the upstream may refuse. */
+        let ownRateKey = false;
         if (rateCredential) {
-          const value = String(config.publicSourceCredentials?.[rateCredential.configKey] ?? "").trim();
+          let value = String(config.publicSourceCredentials?.[rateCredential.configKey] ?? "").trim();
+          // The deployment has none: the researcher's own, if they saved one.
+          // The key only lifts a rate ceiling, so a store that cannot be read
+          // is the anonymous tier and never a failed request.
+          if (!value && connectorCredentials && typeof identity?.userId === "string") {
+            try {
+              value = String(await connectorCredentials.resolveOwn(identity.userId, rateCredential.connector) ?? "").trim();
+              ownRateKey = value !== "";
+            } catch {
+              value = "";
+            }
+          }
           // Absent is normal: these upstreams serve without a key, just slower.
           // A malformed one is not passed on -- a header-splitting value here
           // would travel to the upstream, and "we had no key" is the safe read.
           if (value && value.length <= 8 * 1024 && !/[\r\n\0]/.test(value)) {
             request.url.searchParams.set(rateCredential.query, value);
+          } else {
+            ownRateKey = false;
           }
         }
-        upstream = await fetchImpl(request.url, {
+        const send = () => fetchImpl(request.url, {
           method: request.method,
           headers: upstreamHeaders,
           body: request.body ? JSON.stringify(request.body) : undefined,
           redirect: "error",
           signal: controller.signal,
         });
+        upstream = await send();
+        // A rate-ceiling key is optional by the upstream's own design, so a
+        // researcher's mistyped one must not turn a request that works
+        // anonymously into a failure — which, now that their saved key is sent,
+        // it would. One retry without it; the deployment's own key is the
+        // operator's to get right and is never retried around.
+        if (ownRateKey && rateCredential && [400, 401, 403].includes(upstream.status)) {
+          await upstream.body?.cancel().catch(() => {});
+          request.url.searchParams.delete(rateCredential.query);
+          upstream = await send();
+        }
       } catch (error) {
         if (error instanceof PublicSourceGatewayError) throw error;
         if (controller.signal.reason?.name === "TimeoutError") {

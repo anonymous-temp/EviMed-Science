@@ -2,57 +2,66 @@ import { CONNECTOR_CREDENTIALS } from "@evimed/domain";
 import type { WebAgentRun, WebConnector } from "@/lib/apiClient";
 
 /**
- * Which one data source a failed run needed a credential for, if the ledger
- * can say.
+ * Which data sources a finished run went without, and what is true of each one
+ * now.
  *
- * The credentials banner used to greet every page with seven source names a
- * researcher mostly could not act on (review B §7). The one moment that
- * condition matters to them is when their own run stopped on it, and then the
- * useful thing is to name that one source on that run's row.
+ * A source nobody configured is no longer a failed run (2026-10-04): the run
+ * went on with the sources it had and the ledger recorded what it left out
+ * (`connectorNeeds`, registry ids) — on a run that finished, and on one that
+ * ended with nothing to hand over because its only path needed the source. The conversation then offers the researcher
+ * a form for each, and — once saved — a way to ask for the skipped part again.
+ * This reads that record against the account's own connector list:
  *
- * Two readings, both closed-vocabulary. The gateway names the profile in its
- * own code — `public_source_<profile>_credential_missing`
- * (`publicSourceGateway.mjs`) — so a run whose ledger recorded that code needed
- * exactly that source. Failing that, a capability that lists a connector as a
- * dependency (`CONNECTOR_CREDENTIALS[].capabilities`) and whose connector no
- * one has configured is stated as what it is: this capability needs it, and it
- * is not there. That second sentence claims a dependency, not a cause.
+ *  - `missing`: nothing serves the source for this researcher. 去配置.
+ *  - `configured`: something does now — they saved it, or the deployment did
+ *    since. The run still predates it. 继续.
+ *
+ * Closed-vocabulary on both sides: the ids come from the registry the ledger
+ * wrote them from, so a source this build does not know is not offered.
  */
 export interface RunCredentialNeed {
   connectorId: string;
   title: string;
-  /** `code`: the ledger recorded the gateway refusing for this source. */
-  cause: "code" | "capability";
+  state: "missing" | "configured";
 }
 
-type Spec = { id: string; title: string; capabilities: readonly string[] };
+type Spec = { id: string; title: string };
 const SPECS = CONNECTOR_CREDENTIALS as unknown as readonly Spec[];
 
-const MISSING = /^public_source_([a-z0-9_]+)_credential_missing$/;
-
-function specForCode(code: string | null | undefined): Spec | null {
-  const match = code ? MISSING.exec(code) : null;
-  if (!match) return null;
-  return SPECS.find((spec) => spec.id.replaceAll("-", "_") === match[1]) ?? null;
-}
-
-export function runCredentialNeed(
-  run: Pick<WebAgentRun, "status" | "errorCode" | "errorSubCode" | "effectiveAgentId" | "agentId">,
+/**
+ * The needs of one run, in the order the run met them. Empty for a run that is
+ * still going, was stopped, or left nothing out. With no connector list yet
+ * (not read, or unreadable) every need reads as missing: the form is offered, and
+ * saving is what finds out.
+ */
+export function runCredentialNeeds(
+  run: Pick<WebAgentRun, "status" | "connectorNeeds"> | null | undefined,
   connectors?: readonly WebConnector[] | null,
-): RunCredentialNeed | null {
-  if (run.status !== "failed") return null;
-  const named = specForCode(run.errorCode) ?? specForCode(run.errorSubCode ?? null);
-  if (named) return { connectorId: named.id, title: named.title, cause: "code" };
-  const capability = run.effectiveAgentId ?? run.agentId;
-  if (!capability || !connectors) return null;
-  const unmet = SPECS.filter((spec) => spec.capabilities.includes(capability)
-    && connectors.some((connector) => connector.id === spec.id && connector.needsAttention));
-  return unmet.length === 1 ? { connectorId: unmet[0].id, title: unmet[0].title, cause: "capability" } : null;
+): RunCredentialNeed[] {
+  if (!run || (run.status !== "succeeded" && run.status !== "failed") || !Array.isArray(run.connectorNeeds)) return [];
+  const needs: RunCredentialNeed[] = [];
+  for (const id of run.connectorNeeds) {
+    const spec = SPECS.find((candidate) => candidate.id === id);
+    if (!spec || needs.some((need) => need.connectorId === id)) continue;
+    const served = connectors?.find((connector) => connector.id === id)?.source;
+    needs.push({ connectorId: id, title: spec.title, state: served === "user" || served === "deployment" ? "configured" : "missing" });
+  }
+  return needs;
 }
 
-/** The sentence for the run's row. */
+/** The sentence for one need, in the notice's own words. */
 export function runCredentialSentence(need: RunCredentialNeed): string {
-  return need.cause === "code"
-    ? `这次运行因缺少 ${need.title} 的凭据没能继续。`
-    : `这项能力需要 ${need.title} 的凭据，你的账号和本部署都还没有配置。`;
+  return need.state === "missing"
+    ? `${need.title} 还没有配置，相关部分已跳过。`
+    : `${need.title} 已配置。`;
+}
+
+/**
+ * The follow-up a researcher sends with one click once a source is configured:
+ * what the model needs to redo the part it skipped, in the researcher's voice.
+ * It names the source and nothing about how it was skipped — the model has that
+ * in its own turn.
+ */
+export function continuationText(titles: readonly string[]): string {
+  return `我已经配置了 ${titles.join("、")}，请用${titles.length > 1 ? "它们" : "它"}补做刚才因为缺少${titles.length > 1 ? "它们" : "它"}而跳过的部分。`;
 }

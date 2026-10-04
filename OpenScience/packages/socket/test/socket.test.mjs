@@ -397,6 +397,26 @@ test("the retry recognises a research tool by every spelling the domain knows", 
   }
 });
 
+test("a data source nobody configured is recoverable but is not retried: waiting cannot configure it", async () => {
+  // 2026-10-04: every connector's "not configured" code is recoverable (the run
+  // goes on without it). The in-run retry exists for a source that is briefly
+  // unreachable; for this one it would wait 1.5 s to be told the same thing.
+  const { CONNECTOR_CREDENTIALS, classifyEvidenceSourceError, connectorForMissingCode, connectorMissingCode } = await import("@evimed/domain");
+  for (const spec of CONNECTOR_CREDENTIALS) {
+    const code = connectorMissingCode(spec.id);
+    assert.equal(classifyEvidenceSourceError(code), "recoverable", code);
+    assert.equal(connectorForMissingCode(code), spec.id, code);
+  }
+  // A transient code is still retried: it names no connector.
+  assert.equal(connectorForMissingCode("public_source_http_error"), null);
+  assert.equal(classifyEvidenceSourceError("public_source_http_error"), "recoverable");
+  const source = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  const retry = source.slice(source.indexOf("one retry for a recoverable source failure"));
+  const skip = retry.indexOf("connectorForMissingCode(code)");
+  assert.ok(skip > 0 && skip < retry.indexOf("setTimeout"), "the not-configured check comes before the wait");
+  assert.match(retry.slice(skip, skip + 80), /return result/, "and answers with the result as it was");
+});
+
 test("a recoverable source failure is recognized from where its code actually survives", () => {
   // Our MCP server JSON-encodes the whole `failure()` object into the text
   // block; the kernel's bridge throws `new Error(text)` before it reads

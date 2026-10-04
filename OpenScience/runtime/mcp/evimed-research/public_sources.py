@@ -52,6 +52,76 @@ class PublicSourceError(Exception):
         self.retryable = retryable
 
 
+class SourceNotConfigured(PublicSourceError):
+    """A data source nobody has configured for this researcher.
+
+    The deployment holds no credential for it and the researcher has not added
+    their own under 设置 → 数据源 (2026-10-04: a source with no credential is the
+    researcher's to configure when they use it). It is not an outage and not a
+    reason to retry — retrying cannot change it — so it is never retryable, and
+    it is told plainly: which source was left out, that the user can add it, and
+    that the rest of the request goes on with the sources it has. The run ledger
+    reads the connector from this error's code, or from `data.notConfigured` on a
+    result that carried on without it, and offers the researcher the form.
+    """
+
+    def __init__(self, connector, title=None):
+        self.connector = connector
+        self.title = title or connector
+        super().__init__(
+            "public_source_%s_credential_missing" % connector.replace("-", "_"),
+            "%s is not configured for this deployment or this account; "
+            "the user can add their own credential under 设置 → 数据源." % self.title,
+            False,
+        )
+
+    def next_actions(self):
+        """What the tool result tells the model to do: go on, and say what was left out."""
+        return [
+            "Do not retry %s; continue the request with the other sources that are available." % self.title,
+            "Tell the user that %s was left out because it is not configured, and that they can add it "
+            "under 设置 → 数据源; offer to redo that part once it is added." % self.title,
+        ]
+
+    STOP_REASON = "This source is not configured for this account, so retrying cannot change the result."
+
+
+_NOT_CONFIGURED_CODE = re.compile(r"^public_source_([a-z0-9]+(?:_[a-z0-9]+)*)_credential_missing$")
+_NOT_CONFIGURED_SENTENCE = re.compile(r"^(.{1,60}?) is not configured for this deployment or this account;")
+
+
+def _not_configured_from_failure(failure):
+    """The gateway's refusal for a source nobody configured, as a `SourceNotConfigured`; None for anything else.
+
+    Read from the refusal's code (a closed format the gateway writes from its
+    connector registry) and the one sentence it leads with, to learn the
+    source's display name. Nothing else of the gateway's answer is carried: the
+    message the tool reports is composed here.
+    """
+    if not isinstance(failure, dict):
+        return None
+    code = failure.get("code")
+    match = _NOT_CONFIGURED_CODE.match(code) if isinstance(code, str) else None
+    if not match:
+        return None
+    connector = match.group(1).replace("_", "-")
+    message = failure.get("message")
+    sentence = _NOT_CONFIGURED_SENTENCE.match(message) if isinstance(message, str) else None
+    title = sentence.group(1) if sentence and not re.search(r"[\x00-\x1f]", sentence.group(1)) else None
+    return SourceNotConfigured(connector, title)
+
+
+def _not_configured_from(http_error):
+    """The same, read from a gateway refusal still on the wire (HTTP 503 with the gateway's error envelope)."""
+    if getattr(http_error, "code", None) != 503:
+        return None
+    try:
+        body = json.loads(http_error.read(64 * 1024).decode("utf-8"))
+    except Exception:  # noqa: BLE001 - not the gateway's envelope; the status is the finding
+        return None
+    return _not_configured_from_failure(body.get("error") if isinstance(body, dict) else None)
+
+
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, _req, _fp, _code, _msg, _headers, _newurl):
         return None
@@ -326,8 +396,13 @@ def open_access_pdf_bytes(doi, max_bytes, timeout_seconds=60):
         detail = ""
         try:
             body = json.loads(error.read(64 * 1024).decode("utf-8"))
+            not_configured = _not_configured_from_failure(_dict(body.get("error")))
+            if not_configured is not None:
+                raise not_configured from error
             detail = str(_dict(body.get("error")).get("message") or "")
             code = str(_dict(body.get("error")).get("code") or "public_source_pdf_unavailable")
+        except SourceNotConfigured:
+            raise
         except Exception:
             code = "public_source_pdf_unavailable"
         raise PublicSourceError(code, detail or "No open-access PDF could be retrieved.") from error
@@ -374,6 +449,11 @@ def _get_json_value(
     except urllib.error.HTTPError as error:
         if allow_not_found and error.code == 404:
             return {"results": [], "meta": {"results": {"total": 0}}}
+        # A source nobody configured is told by name, not as "HTTP 503" with a
+        # retry: the gateway's refusal carries which source it was.
+        not_configured = _not_configured_from(error)
+        if not_configured is not None:
+            raise not_configured from error
         raise PublicSourceError(
             "public_source_http_error",
             "Public source returned HTTP %d." % error.code,
@@ -426,6 +506,9 @@ def _get_text(url, accepted=("application/atom+xml", "application/xml", "text/xm
                 raise PublicSourceError("public_source_response_too_large", "Public source response exceeded 4 MiB.")
             return raw.decode("utf-8")
     except urllib.error.HTTPError as error:
+        not_configured = _not_configured_from(error)
+        if not_configured is not None:
+            raise not_configured from error
         raise PublicSourceError(
             "public_source_http_error", "Public source returned HTTP %d." % error.code,
             error.code == 429 or error.code >= 500,
@@ -455,6 +538,9 @@ def _get_gzip_json(url):
                 raise PublicSourceError("public_source_invalid_response", "Public source returned an unsupported JSON value.")
             return value
     except urllib.error.HTTPError as error:
+        not_configured = _not_configured_from(error)
+        if not_configured is not None:
+            raise not_configured from error
         raise PublicSourceError(
             "public_source_http_error", "Public source returned HTTP %d." % error.code,
             error.code == 429 or error.code >= 500,
@@ -1413,7 +1499,38 @@ def _bibliographic_metadata_only(result):
     }
 
 
+def _note_left_out(result, left_out):
+    """A result that went on without a source nobody configured says so.
+
+    Every tool that falls back from the EviMed evidence API to a public source
+    used to report it as "EviMed evidence search was unavailable: Public source
+    returned HTTP 503", which names neither the source nor the cure. The
+    warning now carries the plain statement (`SourceNotConfigured`), and this
+    adds the two places that act on it: `data.notConfigured`, the closed list
+    of connector ids the run ledger reads to offer the researcher the form, and
+    the next actions that tell the model to go on and to say what was left out.
+    """
+    if not left_out or not isinstance(result, dict):
+        return result
+    by_connector = {}
+    for error in left_out:
+        by_connector.setdefault(error.connector, error)
+    data = result.get("data")
+    if isinstance(data, dict):
+        result["data"] = {**data, "notConfigured": list(by_connector)}
+    actions = list(result.get("next_actions") or [])
+    for error in by_connector.values():
+        actions.extend(action for action in error.next_actions() if action not in actions)
+    result["next_actions"] = actions
+    return result
+
+
 def literature(arguments):
+    left_out = []
+    return _note_left_out(_literature(arguments, left_out), left_out)
+
+
+def _literature(arguments, left_out):
     # Addressed by PMIDs: the abstracts of records a run has already found and
     # decided to keep. Answered from PubMed whatever else is configured, because
     # no keyword search can return a named set of records.
@@ -1452,21 +1569,28 @@ def literature(arguments):
             evimed_warning = _evimed_empty_warning("literature", result)
         except PublicSourceError as error:
             legacy_error = None
-            try:
-                legacy = _evimed_evidence_records(query, limit)
-                if legacy.get("data", {}).get("items"):
-                    legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
-                    return legacy
-            except PublicSourceError as fallback_error:
-                legacy_error = fallback_error
-            # Both rungs failed, and only the first one used to be reported. A
-            # run was told "EviMed was unavailable" and could not tell that the
-            # fallback had failed too, which is what decides whether the gap is
-            # worth retrying.
-            evimed_warning = "EviMed evidence search was unavailable: %s%s" % (
-                error,
-                (" The legacy endpoint also failed: %s" % legacy_error) if legacy_error is not None else "",
-            )
+            if isinstance(error, SourceNotConfigured):
+                # Nobody configured it. The legacy endpoint is the same API
+                # behind the same key, so it would only be refused the same way:
+                # go straight to what is available and say what was left out.
+                left_out.append(error)
+                evimed_warning = "%s PubMed records are returned instead." % error
+            else:
+                try:
+                    legacy = _evimed_evidence_records(query, limit)
+                    if legacy.get("data", {}).get("items"):
+                        legacy["warnings"].insert(0, "The documented EviMed literature endpoint was unavailable: %s" % error)
+                        return legacy
+                except PublicSourceError as fallback_error:
+                    legacy_error = fallback_error
+                # Both rungs failed, and only the first one used to be reported. A
+                # run was told "EviMed was unavailable" and could not tell that the
+                # fallback had failed too, which is what decides whether the gap is
+                # worth retrying.
+                evimed_warning = "EviMed evidence search was unavailable: %s%s" % (
+                    error,
+                    (" The legacy endpoint also failed: %s" % legacy_error) if legacy_error is not None else "",
+                )
         fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
         fallback = _bibliographic_metadata_only(fallback)
         fallback["warnings"].insert(0, evimed_warning)
@@ -1479,13 +1603,22 @@ def literature(arguments):
 
 
 def guideline(arguments):
+    left_out = []
+    return _note_left_out(_guideline(arguments, left_out), left_out)
+
+
+def _guideline(arguments, left_out):
     try:
         result = _evimed_guidelines(arguments)
         if result.get("data", {}).get("items"):
             return result
         evimed_warning = _evimed_empty_warning("guideline", result)
     except PublicSourceError as error:
-        evimed_warning = "EviMed guideline search was unavailable: %s" % error
+        if isinstance(error, SourceNotConfigured):
+            left_out.append(error)
+            evimed_warning = "%s PubMed guideline records are returned instead." % error
+        else:
+            evimed_warning = "EviMed guideline search was unavailable: %s" % error
     query = arguments["query"]
     if arguments.get("jurisdiction"):
         query = "%s AND %s" % (query, arguments["jurisdiction"])
@@ -1498,13 +1631,22 @@ def guideline(arguments):
 
 
 def trials(arguments):
+    left_out = []
+    return _note_left_out(_trials(arguments, left_out), left_out)
+
+
+def _trials(arguments, left_out):
     try:
         result = _evimed_trial_records(arguments)
         if result.get("data", {}).get("items"):
             return result
         evimed_warning = _evimed_empty_warning("clinical-trial", result)
     except PublicSourceError as error:
-        evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
+        if isinstance(error, SourceNotConfigured):
+            left_out.append(error)
+            evimed_warning = "%s ClinicalTrials.gov records are returned instead; ChiCTR and Cochrane CENTRAL are not searched." % error
+        else:
+            evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")
     limit = min(arguments.get("limit", 10), 100)
     candidate_limit = _evimed_candidate_limit(arguments, limit)
@@ -1560,13 +1702,22 @@ def _openfda_search(field, term):
 
 
 def labels(arguments):
+    left_out = []
+    return _note_left_out(_labels(arguments, left_out), left_out)
+
+
+def _labels(arguments, left_out):
     try:
         result = _evimed_instruction_records(arguments)
         if result.get("data", {}).get("items"):
             return result
         evimed_warning = "EviMed label search returned no records for the requested jurisdiction."
     except PublicSourceError as error:
-        evimed_warning = "EviMed label search was unavailable: %s" % error
+        if isinstance(error, SourceNotConfigured):
+            left_out.append(error)
+            evimed_warning = "%s Only US (FDA) labels from openFDA are returned instead." % error
+        else:
+            evimed_warning = "EviMed label search was unavailable: %s" % error
     requested_jurisdiction = str(arguments.get("jurisdiction") or "").strip()
     jurisdiction_key = requested_jurisdiction.casefold()
     normalized_jurisdiction = re.sub(r"[^a-z0-9]+", "", requested_jurisdiction.casefold())

@@ -14,6 +14,14 @@
  * configured a source has decided how that source is reached; a personal key
  * is the fallback, never an override.
  *
+ * Where a source has no credential for someone, that is theirs to fix when they
+ * use it (2026-10-04 ruling): a run that meets it goes on with the sources it
+ * has and says what it left out, and the conversation offers the form. So this
+ * store also answers one cheap question when a credential is saved — does the
+ * upstream accept it — and remembers the answer beside the value. The answer
+ * is advice: a credential is kept whatever it says, because an upstream that
+ * is down must not stop anyone saving, and one that says no may be wrong.
+ *
  * At rest: AES-256-GCM under a key derived from the model-gateway signing
  * secret with HKDF and a purpose string of its own, so no new secret has to
  * exist for this, and the derived key is useless for anything else. The AAD
@@ -43,6 +51,12 @@ CREATE TABLE IF NOT EXISTS ${SCHEMA}.user_connector_credentials (
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, connector)
 );
+-- What the upstream said when the value was saved (credentialCheck.mjs): one of
+-- verified / rejected / unreachable / unchecked, null before any check ran.
+ALTER TABLE ${SCHEMA}.user_connector_credentials
+  ADD COLUMN IF NOT EXISTS check_state text CHECK (check_state IN ('verified', 'rejected', 'unreachable', 'unchecked'));
+ALTER TABLE ${SCHEMA}.user_connector_credentials
+  ADD COLUMN IF NOT EXISTS checked_at timestamptz(3);
 `;
 
 /** @param {string} value */
@@ -55,14 +69,18 @@ function assertSafeId(value, label) {
 
 export class ConnectorCredentialStore {
   /**
+   * `check` asks the upstream whether a just-saved credential is accepted
+   * (`checkConnectorCredential`); without one every save is `unchecked`.
    * @param {{ database: { query(text: string, values?: unknown[]): Promise<{ rows: any[], rowCount: number | null }> },
-   *   secret: string, config: Record<string, any>, now?: () => Date }} input
+   *   secret: string, config: Record<string, any>, now?: () => Date,
+   *   check?: ((connector: string, value: string) => Promise<string>) | null }} input
    */
-  constructor({ database, secret, config, now = () => new Date() }) {
+  constructor({ database, secret, config, now = () => new Date(), check = null }) {
     if (typeof secret !== "string" || secret.length < 32) throw new TypeError("Connector credential store secret is invalid.");
     this.database = database;
     this.config = config;
     this.now = now;
+    this.check = check;
     this.key = Buffer.from(hkdfSync("sha256", Buffer.from(secret, "utf8"), Buffer.alloc(0), Buffer.from(HKDF_INFO, "utf8"), KEY_BYTES));
   }
 
@@ -92,7 +110,7 @@ export class ConnectorCredentialStore {
   async status(userId) {
     assertSafeId(userId, "user id");
     const { rows } = await this.database.query(
-      `SELECT connector, expires_at, updated_at FROM ${SCHEMA}.user_connector_credentials WHERE user_id = $1`,
+      `SELECT connector, expires_at, updated_at, check_state, checked_at FROM ${SCHEMA}.user_connector_credentials WHERE user_id = $1`,
       [userId],
     );
     const own = new Map(rows.map((row) => [String(row.connector), row]));
@@ -113,8 +131,14 @@ export class ConnectorCredentialStore {
         source,
         // The deployment's credential is the deployment's business; a
         // researcher's own row is reported whichever source wins, so they can
-        // see and remove it.
-        own: row ? { updatedAt: new Date(row.updated_at).toISOString(), expiresAt, expired } : null,
+        // see and remove it. `check` is what the upstream said when it was
+        // saved: shown beside the value as advice, never a reason to refuse it.
+        own: row ? {
+          updatedAt: new Date(row.updated_at).toISOString(),
+          expiresAt,
+          expired,
+          check: row.check_state ? { state: String(row.check_state), checkedAt: row.checked_at ? new Date(row.checked_at).toISOString() : null } : null,
+        } : null,
         // What the login prompt asks about: nothing serves this source for the
         // researcher, and it is not one that works without a key.
         needsAttention: source === "none" && !spec.keyless,
@@ -123,15 +147,41 @@ export class ConnectorCredentialStore {
   }
 
   /**
+   * Saves the credential, then asks the upstream about it once.
+   *
+   * Only a malformed value is refused (`validateConnectorCredentialValue`):
+   * every other outcome keeps it. The check runs after the write and cannot
+   * undo it — an upstream that is down is `unreachable`, one that says no is
+   * `rejected` and shown as a warning, a source with no cheap authenticated
+   * endpoint is `unchecked`. The check never throws and never carries the
+   * upstream's words: the state is the whole answer.
    * @param {string} userId @param {string} connector @param {unknown} value
-   * @returns {Promise<{ connector: string, expiresAt: string | null }>}
+   * @returns {Promise<{ connector: string, expiresAt: string | null, check: string }>}
    */
   async set(userId, connector, value) {
     assertSafeId(userId, "user id");
     const checked = validateConnectorCredentialValue(connector, value);
     if (checked.ok !== true) throw new HttpError(400, "connector_credential_invalid", `The credential was not accepted: ${checked.reason}.`);
-    await this.#store(userId, connector, String(value).trim(), checked.expiresAt);
-    return { connector, expiresAt: checked.expiresAt };
+    const trimmed = String(value).trim();
+    const nonce = await this.#store(userId, connector, trimmed, checked.expiresAt);
+    let state = "unchecked";
+    if (typeof this.check === "function") {
+      try {
+        const answer = await this.check(connector, trimmed);
+        if (["verified", "rejected", "unreachable", "unchecked"].includes(answer)) state = answer;
+        else state = "unreachable";
+      } catch {
+        state = "unreachable";
+      }
+    }
+    // Only the row this call wrote: a second save while the check was out is a
+    // different credential, and this answer is not about it.
+    await this.database.query(
+      `UPDATE ${SCHEMA}.user_connector_credentials SET check_state = $3, checked_at = clock_timestamp()
+         WHERE user_id = $1 AND connector = $2 AND nonce = $4`,
+      [userId, connector, state, nonce],
+    ).catch(() => undefined);
+    return { connector, expiresAt: checked.expiresAt, check: state };
   }
 
   /** @param {string} userId @param {string} connector @returns {Promise<boolean>} */
@@ -200,7 +250,8 @@ export class ConnectorCredentialStore {
     return (result.rowCount ?? 0) > 0;
   }
 
-  /** @param {string} userId @param {string} connector @param {string} value @param {string | null} expiresAt */
+  /** @param {string} userId @param {string} connector @param {string} value @param {string | null} expiresAt
+   *  @returns {Promise<Buffer>} the nonce this write used, which names it */
   async #store(userId, connector, value, expiresAt) {
     const nonce = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.key, nonce);
@@ -212,9 +263,11 @@ export class ConnectorCredentialStore {
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (user_id, connector) DO UPDATE
            SET ciphertext = EXCLUDED.ciphertext, nonce = EXCLUDED.nonce, tag = EXCLUDED.tag,
-               expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp()`,
+               expires_at = EXCLUDED.expires_at, updated_at = clock_timestamp(),
+               check_state = NULL, checked_at = NULL`,
       [userId, connector, ciphertext, nonce, tag, expiresAt],
     );
+    return nonce;
   }
 
   /** @param {string} userId @param {string} connector @returns {Promise<string | null>} */
@@ -282,26 +335,46 @@ export const CONNECTOR_CREDENTIAL_GATEWAY_PATH = "/internal/connectors/v1/creden
 /**
  * The connectors a specialist job may be handed a credential for: what the
  * adapters actually ask for (`_JOB_CONNECTOR_ENV` in the specialist adapter's
- * service.py — OpenGWAS for the MR engine, nothing else). Any other connector's
- * credential is injected by the public-source gateway server-side and never
- * leaves the control plane. Found 2026-09-20 in the release's security review:
- * answering every connector let any active runtime token read the deployment's
- * licensed keys (UMLS, OMIM, NCBI, …) — a runtime's token is a file the run
- * can print.
+ * service.py, which `connectorCredentials.test.mjs` holds to this list) —
+ * OpenGWAS for the MR engine, and the keys the engines read from their own
+ * environment: UMLS (MR), NCBI/PubMed (bibliometrics, topic selection) and
+ * openFDA (drug safety). Any other connector's credential is injected by the
+ * public-source gateway server-side and never leaves the control plane. Found
+ * 2026-09-20 in the release's security review: answering every connector let
+ * any active runtime token read the deployment's licensed keys (UMLS, OMIM,
+ * NCBI, …) — a runtime's token is a file the run can print.
  */
-export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas"]));
+export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas", "umls", "ncbi", "openfda"]));
+
+/**
+ * The job-scoped connectors whose answer is the researcher's own credential and
+ * never the deployment's.
+ *
+ * The 2026-09-20 rule stands for these: a deployment's UMLS, NCBI or openFDA key
+ * stays with the gateway and the engine's own environment, and a runtime token
+ * that can be printed must not be able to ask for it. What this route adds is
+ * the other half of the ruling — a key the researcher saved reaches the engine
+ * for their own job, as an environment variable of that job's process. The
+ * adapter asks only where its own container has none (deployment first), so an
+ * answer here is only ever the researcher's. OpenGWAS keeps its older shape: its
+ * token belongs to a person, and the deployment-held one is the same person's.
+ */
+export const JOB_OWN_CREDENTIAL_ONLY = Object.freeze(new Set(["umls", "ncbi", "openfda"]));
 
 /**
  * The credential a specialist adapter should use for one job, resolved for
  * the workload that asked.
  *
- * The MR adapter reads OpenGWAS itself, outside the public-source gateway, so
- * the gateway's fallback never reaches it. It asks here instead, with the
- * same workload token the runtime handed it — the token names the user, the
- * control plane holds their credential, and the adapter passes the value to
- * that one job's process environment and nowhere else. The answer carries the
- * deployment's credential when there is one, for the same precedence the
- * gateway applies; the adapter does not have to know which it got.
+ * The engines read some sources themselves (OpenGWAS, UMLS, NCBI, openFDA),
+ * outside the public-source gateway, so the gateway's fallback never reaches
+ * them. The adapter asks here instead, with the same workload token the
+ * runtime handed it — the token names the user, the control plane holds their
+ * credential, and the adapter passes the value to that one job's process
+ * environment and nowhere else (never its state file, never a log). For
+ * OpenGWAS the answer carries the deployment's credential when there is one,
+ * for the same precedence the gateway applies; for the rest it is the
+ * researcher's own or nothing (`JOB_OWN_CREDENTIAL_ONLY`). Authentication is the
+ * active workload token and nothing weaker: a missing or invalid one is 401.
  *
  * @param {{ runtimeManager: any, store: ConnectorCredentialStore | null }} input
  */
@@ -325,7 +398,15 @@ export function createConnectorCredentialGatewayHandler({ runtimeManager, store 
       try { identity = await runtimeManager.assertActiveEviMedWorkloadToken(token); }
       catch { throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable."); }
       if (!store) throw new HttpError(503, "connector_credentials_unavailable", "Connector credentials are not available on this deployment.");
-      const resolved = await store.resolve(identity.userId, connector);
+      // The caller is whoever the workload token names, and only they: the
+      // value is read for `identity.userId`, never for a user the request names.
+      let resolved;
+      if (JOB_OWN_CREDENTIAL_ONLY.has(connector)) {
+        const own = await store.resolveOwn(identity.userId, connector);
+        resolved = own ? { value: own, source: "user" } : null;
+      } else {
+        resolved = await store.resolve(identity.userId, connector);
+      }
       if (!resolved) throw new HttpError(404, "connector_credential_missing", "No credential is configured for this connector.");
       res.setHeader("cache-control", "no-store");
       sendJson(res, 200, { data: { connector, source: resolved.source, value: resolved.value } });

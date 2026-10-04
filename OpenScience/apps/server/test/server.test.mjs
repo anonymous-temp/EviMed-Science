@@ -6408,6 +6408,45 @@ test("an unreadable project directory is an error, not an empty account", async 
   });
 });
 
+test("saving a connector credential answers what the source said, keeps the value either way, and never echoes it", async () => {
+  // 2026-10-04: the route returns the store's check result (verified / rejected
+  // / unreachable / unchecked) beside the expiry, and the listing carries it
+  // per credential. The value goes in once and is not in any answer.
+  const saved = [];
+  const store = {
+    async migrate() {},
+    async set(userId, connector, value) {
+      saved.push({ userId, connector, value });
+      return { connector, expiresAt: null, check: connector === "umls" ? "rejected" : "verified" };
+    },
+    async status() {
+      return [{ id: "umls", title: "UMLS", source: "user", own: { updatedAt: "2026-10-04T00:00:00.000Z", expiresAt: null, expired: false, check: { state: "rejected", checkedAt: "2026-10-04T00:00:01.000Z" } }, needsAttention: false }];
+    },
+    async remove() { return true; },
+    deploymentConfigured() { return false; },
+  };
+  await withAuthApp(async ({ base }) => {
+    const loggedIn = await login(base);
+    const put = (connector) => fetch(`${base}/api/connectors/${connector}`, {
+      method: "PUT",
+      headers: { Cookie: loggedIn.cookie, "Content-Type": "application/json", "X-Open-Science-CSRF": loggedIn.csrfToken },
+      body: JSON.stringify({ value: "typed-secret-value-4711" }),
+    });
+    const rejected = await put("umls");
+    assert.equal(rejected.status, 200);
+    assert.deepEqual((await rejected.json()).data, { connector: "umls", source: "user", expiresAt: null, check: "rejected" });
+    const verified = await put("evimed-evidence");
+    assert.equal((await verified.json()).data.check, "verified", "the platform's own evidence API takes a researcher's key");
+    assert.deepEqual(saved.map((entry) => entry.connector), ["umls", "evimed-evidence"], "a refused value is still saved");
+    assert.ok(saved.every((entry) => entry.value === "typed-secret-value-4711" && typeof entry.userId === "string"));
+    const list = await fetch(`${base}/api/connectors`, { headers: { Cookie: loggedIn.cookie } });
+    const body = await list.text();
+    assert.equal(list.status, 200);
+    assert.equal(JSON.parse(body).data[0].own.check.state, "rejected");
+    assert.ok(!body.includes("typed-secret-value-4711"));
+  }, { connectorCredentials: store });
+});
+
 test("connector credentials are a named absence on a file-store deployment, and need a session", async () => {
   // The routes exist on every deployment; the store exists only where there is
   // a database to keep encrypted rows in and a gateway secret to key them
@@ -6427,11 +6466,20 @@ test("connector credentials are a named absence on a file-store deployment, and 
     assert.equal(put.status, 503);
     // An unknown connector is refused by name before the store is consulted,
     // on any deployment.
-    const unknown = await fetch(`${base}/api/connectors/evimed-evidence`, {
+    const unknown = await fetch(`${base}/api/connectors/not-a-connector`, {
       method: "DELETE",
       headers: { Cookie: loggedIn.cookie, "X-Open-Science-CSRF": loggedIn.csrfToken },
     });
     assert.equal(unknown.status, 404);
     assert.equal((await unknown.json()).code, "connector_unknown");
+    // The platform's own evidence API was the standing example of an unknown
+    // one until 2026-10-04; it is a connector now, so it reaches the store (and
+    // is told so by name where there is none).
+    const evidence = await fetch(`${base}/api/connectors/evimed-evidence`, {
+      method: "DELETE",
+      headers: { Cookie: loggedIn.cookie, "X-Open-Science-CSRF": loggedIn.csrfToken },
+    });
+    assert.equal(evidence.status, 503);
+    assert.equal((await evidence.json()).code, "connector_credentials_unavailable");
   });
 });

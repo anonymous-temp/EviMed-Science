@@ -143,7 +143,8 @@ def test_a_remote_request_without_a_token_is_blocked_before_any_job_exists(tmp_p
     assert body["error"]["code"] == "mr_input_remote_auth_required"
     assert body["error"]["message"].startswith("blocked: OpenGWAS token missing.")
     assert body["error"]["retryable"] is False
-    assert any("账户→连接器" in action for action in body["next_actions"])
+    assert any("设置 → 数据源" in action for action in body["next_actions"])
+    assert not any("账户→连接器" in action for action in body["next_actions"]), "the page's name is 设置 → 数据源 now"
     assert spawned == []
     assert not (workspace / "mendelian-randomization-runs").exists()
 

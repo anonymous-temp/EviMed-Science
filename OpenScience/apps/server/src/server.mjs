@@ -132,6 +132,7 @@ import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
+import { checkConnectorCredential } from "./connectorCredentialCheck.mjs";
 import { createEngineUsageHandler, ENGINE_USAGE_PATH } from "./engineUsage.mjs";
 import { createEngineExecutionContextResolver } from "./engineExecutionContext.mjs";
 import { createEngineModelTokenHandler, ENGINE_MODEL_TOKEN_PATH } from "./modelGatewayEngineTokens.mjs";
@@ -938,7 +939,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // nor a reason to hold personal keys, and answers 503 by name.
   const connectorCredentials = overrides.connectorCredentials
     ?? (productDatabase && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32
-      ? new ConnectorCredentialStore({ database: productDatabase, secret: config.modelGatewaySigningSecret, config })
+      ? new ConnectorCredentialStore({
+        database: productDatabase, secret: config.modelGatewaySigningSecret, config,
+        // One cheap question to the source when a credential is saved, over the
+        // same egress the gateway uses (the Tokyo node included). Resolved when
+        // a save happens, by which time `gatewayFetch` below exists.
+        check: (connector, value) => checkConnectorCredential(connector, value, { fetchImpl: gatewayFetch }),
+      })
       : null);
   let maintenanceService = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
@@ -1781,6 +1788,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
     report: (code) => process.stderr.write(`vcr: ${code}\n`),
     fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
+    // A researcher's own EviMed evidence key, where the deployment holds none:
+    // the ChiCTR listing is theirs to enable (2026-10-04).
+    connectorCredentials,
   });
 
   /**
@@ -5317,8 +5327,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (req.method === "PUT") {
           const body = await readJson(req, 16 * 1024);
           const saved = await connectorCredentials.set(user.id, connector, body?.value);
-          await securityAudit(config, "connector.credential.set", "completed", { userId: user.id, connector, expiresAt: saved.expiresAt });
-          sendJson(res, 200, { data: { connector, source: "user", expiresAt: saved.expiresAt } });
+          // What the source said about it (verified / rejected / unreachable /
+          // unchecked) is recorded; the value never is, and nor is anything the
+          // source's own answer carried.
+          await securityAudit(config, "connector.credential.set", "completed", { userId: user.id, connector, expiresAt: saved.expiresAt, check: saved.check ?? "unchecked" });
+          sendJson(res, 200, { data: { connector, source: "user", expiresAt: saved.expiresAt, check: saved.check ?? "unchecked" } });
           return;
         }
         const removed = await connectorCredentials.remove(user.id, connector);

@@ -32,10 +32,14 @@ USER_AGENT = "EviMed-Research/1.2 open-access-fulltext"
 
 
 class FullTextError(Exception):
-    def __init__(self, code: str, message: str, retryable: bool = False):
+    def __init__(self, code: str, message: str, retryable: bool = False, not_configured=None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        # Set when the gateway refused because a data source nobody configured
+        # for this researcher was needed (`SourceNotConfigured`): the result then
+        # says so plainly and tells the model to go on without it.
+        self.not_configured = not_configured
 
 
 def _request_bytes(url: str, accept: str) -> bytes:
@@ -181,7 +185,11 @@ def _open_access_pdf(doi: str) -> tuple[bytes, dict, dict | None, dict | None]:
             code = str(failure.get("code") or code)
             detail = str(failure.get("message") or "")
         except Exception:  # noqa: BLE001 - the status is the finding
-            pass
+            failure = {}
+        # Unpaywall nobody configured: told by name, with what to do about it.
+        not_configured = public_sources._not_configured_from_failure(failure)  # noqa: SLF001
+        if not_configured is not None:
+            raise FullTextError(not_configured.code, str(not_configured), False, not_configured) from error
         raise FullTextError(code, detail or "No open-access PDF could be retrieved.") from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from error
@@ -590,16 +598,22 @@ def fetch(arguments: dict) -> dict:
             "artifacts": [markdown_relative, xml_relative],
         }
     except FullTextError as error:
+        left_out = error.not_configured
         return {
             "status": "error",
             "summary": str(error),
-            "next_actions": [
+            "next_actions": left_out.next_actions() if left_out is not None else [
                 "Verify the identifier and open-access status, or stop rather than infer missing full-text facts."
             ],
             "error": {
                 "code": error.code,
                 "message": str(error),
                 "retryable": error.retryable,
-                "stopReason": "No verified open-access full text was written to the workspace.",
+                "stopReason": (
+                    "No open-access full text could be fetched because this source is not configured for this account; "
+                    "retrying cannot change that."
+                    if left_out is not None
+                    else "No verified open-access full text was written to the workspace."
+                ),
             },
         }

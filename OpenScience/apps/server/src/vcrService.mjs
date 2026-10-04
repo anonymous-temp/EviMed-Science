@@ -947,7 +947,8 @@ export class VcrService {
     }
     const limit = Math.min(200, Math.max(1, Number.parseInt(asked.limit ?? "", 10) || 100));
     const rows = await evidenceStore.listPrecedents({ userId: String(user.id), search: String(asked.q ?? ""), limit });
-    return presentPrecedents({ available: true, rows, registryCoverage: this.packages.evidence?.registryCoverage?.() ?? [], sources: rows.length ? `${rows.length} 项试验先例` : null });
+    const registryCoverage = await (this.packages.evidence?.registryCoverageFor?.(String(user.id)) ?? this.packages.evidence?.registryCoverage?.() ?? []);
+    return presentPrecedents({ available: true, rows, registryCoverage, sources: rows.length ? `${rows.length} 项试验先例` : null });
   }
 
   // --- the runtime's read (build contract §3.2, §4) ---------------------------------------

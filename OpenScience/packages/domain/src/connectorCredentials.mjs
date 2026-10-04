@@ -10,8 +10,17 @@
  * comes from — the shell's login prompt, the account card, the gateway and the
  * adapters all read it rather than keeping lists of their own.
  *
- * `evimed-evidence` is deliberately absent: it is the company's own API, and a
- * deployment either has it or does not.
+ * `evimed-evidence` is the company's own evidence API. It was left out until
+ * 2026-10-04 on the reasoning that a deployment either has it or does not; the
+ * owner ruled the other way — a source the deployment holds no credential for
+ * is configured by the researcher, when they use it — so it is a connector like
+ * the rest: the deployment's key first, the researcher's own where it has none.
+ *
+ * A connector with no credential is never a failed run. Its gateway refusal is
+ * `connectorMissingCode(id)`, the run ledger reads every such code as
+ * recoverable (`errorCodes.mjs` derives the set from this registry, so a
+ * connector added here is covered without a second edit), and the researcher is
+ * asked at the moment of use, in the conversation they are in.
  *
  * @typedef {object} ConnectorCredentialSpec
  * @property {string} id            the gateway credential profile id
@@ -26,6 +35,12 @@
 
 /** @type {readonly ConnectorCredentialSpec[]} */
 export const CONNECTOR_CREDENTIALS = Object.freeze([
+  Object.freeze({
+    id: 'evimed-evidence', title: 'EviMed 证据库', kind: 'api-key',
+    unlocks: '指南全文、药品说明书（NMPA / FDA / EMA / PMDA）与 ChiCTR 登记等 EviMed 医学证据库检索；没有时文献检索退回 PubMed。',
+    obtainUrl: 'https://www.evimed.com/',
+    capabilities: Object.freeze([]), keyless: false,
+  }),
   Object.freeze({
     id: 'opengwas', title: 'OpenGWAS', kind: 'jwt',
     unlocks: '孟德尔随机化所需的 GWAS 汇总数据（IEU OpenGWAS）。',
@@ -102,8 +117,42 @@ export function connectorCredentialSpec(id) {
   return CONNECTOR_CREDENTIALS.find((spec) => spec.id === id) ?? null
 }
 
+/**
+ * The code the public-source gateway answers a request with when its credential
+ * profile has no credential for the requester: `semantic-scholar` →
+ * `public_source_semantic_scholar_credential_missing`.
+ * @param {string} id @returns {string}
+ */
+export function connectorMissingCode(id) {
+  return `public_source_${String(id).replaceAll('-', '_')}_credential_missing`
+}
+
+/**
+ * Every code that means "this data source is not configured for the person
+ * asking", mapped to the connector it names: the gateway's own refusal for each
+ * registry entry, and the one adapter refusal that names the same need — the MR
+ * engine's `mr_input_remote_auth_required`, which is OpenGWAS having no token.
+ * Derived from the registry, so a connector added above is covered by the run
+ * ledger, the web notice and the recoverable set at once.
+ * @type {ReadonlyMap<string, string>}
+ */
+export const CONNECTOR_MISSING_CODES = Object.freeze(new Map([
+  ...CONNECTOR_CREDENTIALS.map((spec) => /** @type {[string, string]} */ ([connectorMissingCode(spec.id), spec.id])),
+  ['mr_input_remote_auth_required', 'opengwas'],
+]))
+
+/**
+ * The connector a "not configured" code names, or null for any other code. A
+ * format read against a closed list, not a reading of prose.
+ * @param {unknown} code @returns {string | null}
+ */
+export function connectorForMissingCode(code) {
+  return typeof code === 'string' ? CONNECTOR_MISSING_CODES.get(code) ?? null : null
+}
+
 /** The gateway's configKey for a profile: `semantic-scholar` → `semanticScholar`. */
 const CONFIG_KEYS = Object.freeze({
+  'evimed-evidence': 'evimedEvidence',
   opengwas: 'opengwas', 'semantic-scholar': 'semanticScholar', core: 'core', unpaywall: 'unpaywall', umls: 'umls',
   omim: 'omim', addgene: 'addgene', biogrid: 'biogrid', ncbi: 'ncbi', openfda: 'openFda', 'materials-project': null,
 })

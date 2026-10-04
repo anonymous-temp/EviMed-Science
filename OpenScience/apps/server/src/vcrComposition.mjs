@@ -811,9 +811,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   fetchImpl?: typeof fetch,
  *   report?: (code: string) => void,
+ *   connectorCredentials?: { resolveOwn(userId: string, connector: string): Promise<string | null> } | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {} }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   const store = new VcrStore({ database: productDatabase });
@@ -865,7 +866,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const registry = createTrialRegistryClient({
     fetchImpl: call,
     timeoutMs: Number(config.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : 20_000,
-    chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call }),
+    chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call, connectorCredentials }),
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
   const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, resolveProject: async study => {
@@ -909,19 +910,26 @@ const EVIMED_EVIDENCE_API = "https://www.evimed.com/api-evimed/medicine-api/ai-a
 /**
  * ChiCTR through EviMed's shared evidence API (`POST review/api/clinical-trial`,
  * `registry: 0`) — the only door, because ChiCTR's own site refuses direct
- * requests. With no evidence credential the seat stays empty and the registry
- * client answers `registry_not_configured`, as it always did; the credential is
- * the control plane's, and the runtime never holds it. What the API returns is a
- * listing (registration number, title, status, sample size), so a ChiCTR
- * precedent is a candidate and a stub, and its sample size is never a baseline
- * (the API does not say planned or actual).
- * @param {{ config: Record<string, any>, fetchImpl: typeof fetch }} input
+ * requests. The key is resolved like every other connector's: the deployment's
+ * first and, where it has none, the requesting researcher's own, saved under
+ * 设置 → 数据源 (`evimed-evidence`, a connector since 2026-10-04) — so a
+ * researcher who brought one gets the ChiCTR listing, and one who did not gets
+ * `registry_not_configured` by name for that read. With neither a deployment key
+ * nor a store to read the researcher's from, the seat stays empty and the
+ * registry client answers `registry_not_configured`, as it always did; the
+ * credential is the control plane's, and the runtime never holds it. What the API
+ * returns is a listing (registration number, title, status, sample size), so a
+ * ChiCTR precedent is a candidate and a stub, and its sample size is never a
+ * baseline (the API does not say planned or actual).
+ * @param {{ config: Record<string, any>, fetchImpl: typeof fetch,
+ *   connectorCredentials?: { resolveOwn(userId: string, connector: string): Promise<string | null> } | null }} input
  */
-export function vcrChictrAdapter({ config, fetchImpl }) {
-  const key = String(config?.publicSourceCredentials?.evimedEvidence ?? "").trim();
-  if (!key || typeof fetchImpl !== "function") return null;
+export function vcrChictrAdapter({ config, fetchImpl, connectorCredentials = null }) {
+  const deploymentKey = String(config?.publicSourceCredentials?.evimedEvidence ?? "").trim();
+  if (typeof fetchImpl !== "function" || (!deploymentKey && !connectorCredentials)) return null;
   const timeoutMs = Math.max(5_000, Math.min(60_000, Number(config?.vcrRegistryTimeoutMs) || 20_000));
-  return createChictrAdapter({
+  /** @param {string} key */
+  const searchWith = (key) => createChictrAdapter({
     search: async (body) => {
       const response = await fetchImpl(`${EVIMED_EVIDENCE_API}review/api/clinical-trial`, {
         method: "POST",
@@ -933,6 +941,24 @@ export function vcrChictrAdapter({ config, fetchImpl }) {
       return response.json();
     },
   });
+  /** @param {string} userId */
+  const keyFor = async (userId) => {
+    if (deploymentKey) return deploymentKey;
+    if (!connectorCredentials || !userId) return "";
+    // A store that cannot be read is "no key for this researcher", never a thrown fault.
+    return String(await connectorCredentials.resolveOwn(userId, "evimed-evidence").catch(() => null) ?? "").trim();
+  };
+  return Object.assign(
+    async (/** @type {{ query: string, limit: number, userId?: string }} */ { query, limit, userId = "" }) => {
+      const key = await keyFor(userId);
+      if (!key) throw Object.assign(new Error("No EviMed evidence credential is configured for this deployment or this researcher."), { code: "registry_not_configured" });
+      return searchWith(key)({ query, limit });
+    },
+    {
+      /** Whether this researcher can read ChiCTR at all: the coverage page says so (`coverageFor`). */
+      availableFor: async (/** @type {string} */ userId) => Boolean(await keyFor(userId)),
+    },
+  );
 }
 
 /**

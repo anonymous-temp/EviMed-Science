@@ -73,5 +73,9 @@ test("the checker runs as a program and says Semantic Scholar is keyless", async
   const report = JSON.parse(output);
   assert.equal(report.ok, true);
   assert.equal(report.connectors.find((row) => row.profile === "semantic-scholar").mode, "keyless-public");
-  assert.equal(report.connectors.length, CONNECTOR_CREDENTIALS.length + 1);
+  // One row per connector: the platform's own evidence API is a registry entry
+  // since 2026-10-04, so it is no longer listed beside the registry as well.
+  assert.equal(report.connectors.length, CONNECTOR_CREDENTIALS.length);
+  assert.equal(new Set(report.connectors.map((row) => row.profile)).size, report.connectors.length);
+  assert.ok(report.connectors.some((row) => row.profile === "evimed-evidence"));
 });

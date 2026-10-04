@@ -1,5 +1,6 @@
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
+import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 
 /**
  * The cross-boundary error-code registry.
@@ -61,12 +62,16 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // runtime is replaced, and a failed tool call with a code this registry does
   // not know fails the whole run (`agentRuns.mjs`).
   "official_page_upstream_unavailable",
-  // The deployment simply has no Unpaywall address configured, or no gateway to
-  // reach it through. That is host configuration, and failing the run for it
-  // punished an agent that had handled the gap exactly as instructed: it
-  // recorded the three unreadable sources, declared the limitation, and wrote
-  // every required deliverable.
-  "public_source_unpaywall_credential_missing",
+  // A data source nobody has configured for this researcher — the deployment
+  // holds no credential for it and they have not added their own. Failing the
+  // run for that punished an agent that had handled the gap exactly as
+  // instructed: it recorded the sources it could not read, declared the
+  // limitation and wrote every deliverable. It is now the researcher's to fix
+  // when they use the source (2026-10-04 ruling), so the run goes on with the
+  // sources it has and the ledger records what was left out
+  // (`connectorNeeds`). Derived from the connector registry, never listed by
+  // hand: a connector added there is covered by this set at once.
+  ...CONNECTOR_MISSING_CODES.keys(),
   "public_source_managed_gateway_required",
   "public_source_managed_credential_required",
   "public_source_pdf_not_open_access",
@@ -1435,7 +1440,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_number_unparsed: '报告里有读不成数字引用的 {{n:…}}；写成 {{n:路径|格式}}，格式用小写。',
   vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
   // The trial registry channel.
-  registry_not_configured: '本部署没有配置试验登记库，登记信息取不到；报告会写「不可得」，不会编造。',
+  registry_not_configured: '这个试验登记库没有可用的凭据，登记信息取不到；可以在「设置 → 数据源」添加 EviMed 证据库的凭据。报告会写「不可得」，不会编造。',
   registry_not_found: '登记库里没有这条记录；报告会写「不可得」，不会编造。',
   registry_id_invalid: '登记号的格式不对；核对后重查。',
   registry_record_unreadable: '这条登记记录读不出来；报告会写「不可得」。',
@@ -1852,6 +1857,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^web_render_/, '这个网页需要浏览器打开，云端浏览器这次没能打开它；运行会改用其他来源。'],
   [/^source_parser_/, '文档解析服务这次没能把这份文件转成文字。'],
   [/^source_format_/, '这种文件格式无法转成文字。'],
+  [/^public_source_[a-z0-9_]+_credential_missing$/, '这个数据源还没有配置凭据，相关部分已跳过；可以在「设置 → 数据源」添加后继续。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],
   [/^web_search_/, '网页检索这次没能完成。'],

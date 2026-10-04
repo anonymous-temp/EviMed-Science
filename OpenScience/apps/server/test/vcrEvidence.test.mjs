@@ -865,6 +865,36 @@ test("CS-27 a registry that has no such record is not found, and one that could 
   assert.equal(extracted.status, "registry_not_found");
 });
 
+test("the researcher's identity reaches the ChiCTR seat on every read, so their own EviMed key can be used", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const registry = {
+    configured: true,
+    async search() { return { status: "ok", items: [], total: 0 }; },
+    async record() { return { status: "registry_unavailable", reason: "x" }; },
+    async searchChictr(/** @type {any} */ request) { asked.push(request); return { status: "registry_unavailable", reason: "registry_not_configured", items: [] }; },
+  };
+  const evidence = createVcrEvidencePipeline({ store: storeDouble(), registry });
+  const found = await evidence.findPrecedents({ userId: "alice", target: { condition: "肺癌" } });
+  assert.equal(found.registries.find((entry) => entry.registry === "chictr").reason, "registry_not_configured");
+  const read = await evidence.readRegistryRecord({ userId: "alice", registry: "chictr", registryId: "ChiCTR2000030000" });
+  assert.equal(read.code, "registry_unavailable");
+  await evidence.extractPrecedent({ userId: "alice", studyId: "std_1", registry: "chictr", registryId: "ChiCTR2000030000" });
+  assert.deepEqual(asked.map((request) => request.userId), ["alice", "alice", "alice"]);
+});
+
+test("the evidence pipeline gives the page the coverage as this researcher meets it, and the shared one where the registry cannot say", async () => {
+  const shared = [{ key: "chictr", configured: true }];
+  const seen = [];
+  const asking = createVcrEvidencePipeline({ store: storeDouble(), registry: { configured: true, coverage: () => shared, async coverageFor(/** @type {string} */ userId) { seen.push(userId); return [{ key: "chictr", configured: false }]; } } });
+  assert.deepEqual(await asking.registryCoverageFor("u1"), [{ key: "chictr", configured: false }]);
+  assert.deepEqual(seen, ["u1"]);
+  assert.deepEqual(asking.registryCoverage(), shared, "the shared view is still there");
+  const plain = createVcrEvidencePipeline({ store: storeDouble(), registry: { configured: true, coverage: () => shared } });
+  assert.deepEqual(await plain.registryCoverageFor("u1"), shared);
+  assert.deepEqual(await createVcrEvidencePipeline({ store: storeDouble() }).registryCoverageFor("u1"), []);
+});
+
 test("ChiCTR: the record asked for is the one whose own registration number it is, and the nearest is never taken instead", async () => {
   const store = storeDouble();
   const hit = { precedent: { registry: "chictr", registryId: "ChiCTR2000030000", title: "试验", pico: { conditions: [], interventions: [] }, design: {}, enrollment: {}, sites: {}, endpoints: [], results: {}, sources: [] },

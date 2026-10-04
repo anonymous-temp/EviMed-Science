@@ -108,11 +108,16 @@ test("a run that did not finish says so in one word, and why in the body", () =>
   assert.equal(runFinishedNotice({ status: "failed" }).status, "未完成");
 });
 
-test("a missing credential names the source and where to add it", () => {
-  const notice = runFinishedNotice({ status: "failed", errorCode: "runtime_tool_error", missingCredential: "opengwas", title: "孟德尔随机化分析", qualityNotices: [], artifacts: [] });
-  assert.equal(notice.title, "孟德尔随机化分析 未完成");
-  assert.equal(notice.body, "缺少 OpenGWAS 的访问凭据。可在「设置 → 数据源」填入后重新发起。");
+test("a finished run that left a data source out names it and where to add it, and is not 未完成", () => {
+  // A source nobody configured is no longer a failed run (2026-10-04): the run
+  // finished with the sources it had, so the title says so, and the body says
+  // what was left out.
+  const notice = runFinishedNotice({ status: "succeeded", connectorNeeds: ["opengwas"], title: "孟德尔随机化分析", qualityNotices: [], artifacts: ["deliverables/report.md"] });
+  assert.equal(notice.title, "孟德尔随机化分析 已完成");
+  assert.equal(notice.body, "报告和 1 个文件已在对话里；OpenGWAS 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续");
   assert.equal(notice.severity, "attention");
+  // The need is read from the closed registry: an id it does not hold is dropped.
+  assert.equal(runFinishedNotice({ status: "succeeded", connectorNeeds: ["nope"], qualityNotices: [], artifacts: [] }).severity, "info");
 });
 
 test("every outcome class ends its title with one of the four words, and the walk proves it walked", () => {

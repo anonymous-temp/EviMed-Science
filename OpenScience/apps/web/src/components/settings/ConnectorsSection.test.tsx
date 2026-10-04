@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebConnector } from "@/lib/apiClient";
+import { useToastStore } from "@/lib/toast";
 import { ConnectorsSection } from "./ConnectorsSection";
 
 const mocks = vi.hoisted(() => ({
@@ -35,6 +36,10 @@ const connector = (overrides: Partial<WebConnector>): WebConnector => ({
   ...overrides,
 } as WebConnector);
 
+const own = (overrides: Partial<NonNullable<WebConnector["own"]>> = {}): NonNullable<WebConnector["own"]> => ({
+  updatedAt: "2026-09-09T00:00:00.000Z", expiresAt: null, expired: false, check: null, ...overrides,
+});
+
 const catalogue = () => [
   connector({}),
   connector({ id: "semantic-scholar", title: "Semantic Scholar", kind: "api-key", unlocks: "文献检索。", capabilities: [], keyless: true, needsAttention: false }),
@@ -47,24 +52,31 @@ const rowOf = (name: string) => screen.getByText(name).closest("div.px-4") as HT
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useToastStore.setState({ toasts: [] });
   mocks.fetchWebConnectors.mockResolvedValue(catalogue());
 });
 
 describe("数据源", () => {
-  it("shows each source's state, and a 「设置」 only where one is needed", async () => {
+  it("says for each source whether it is 已配置 or 未配置, with 「设置」 wherever nothing serves it", async () => {
     render(<ConnectorsSection />);
     expect(await screen.findByText("OpenGWAS")).toBeInTheDocument();
-    // Connected first, then what a capability needs, then what works without a key.
+    // Configured first, then what a capability needs, then what works without a key.
     const rows = screen.getAllByText(/^(Unpaywall|OpenGWAS|Semantic Scholar)$/).map((node) => node.textContent);
     expect(rows).toEqual(["Unpaywall", "OpenGWAS", "Semantic Scholar"]);
-    expect(within(rowOf("Unpaywall")).getByText("已连接")).toBeInTheDocument();
-    expect(within(rowOf("Semantic Scholar")).getByText("无需设置")).toBeInTheDocument();
+    expect(within(rowOf("Unpaywall")).getByText("已配置")).toBeInTheDocument();
+    expect(within(rowOf("Unpaywall")).queryByRole("button", { name: "设置" })).not.toBeInTheDocument();
+    expect(within(rowOf("OpenGWAS")).getByText("未配置")).toBeInTheDocument();
+    // The capabilities that depend on it are the row's one line.
     expect(within(rowOf("OpenGWAS")).getByText("孟德尔随机化需要")).toBeInTheDocument();
     expect(within(rowOf("OpenGWAS")).getByRole("button", { name: "设置" })).toBeInTheDocument();
-    // No field anywhere until one is asked for; none ever for a served or keyless source.
+    // A source that works without a key is 未配置 like the rest and takes one
+    // too: a saved NCBI, openFDA or Unpaywall credential is used now.
+    expect(within(rowOf("Semantic Scholar")).getByText("未配置")).toBeInTheDocument();
+    expect(within(rowOf("Semantic Scholar")).getByRole("button", { name: "设置" })).toBeInTheDocument();
+    // No field anywhere until one is asked for.
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(document.querySelector("input[type=password]")).toBeNull();
-    for (const gone of [/凭据加密保存/, /平台已配置/, /无需凭据/, /未配置/, /个数据源本部署没有配置凭据/]) {
+    for (const gone of [/凭据加密保存/, /平台已配置/, /无需凭据/, /已连接/, /无需设置/, /个数据源本部署没有配置凭据/]) {
       expect(screen.queryByText(gone)).not.toBeInTheDocument();
     }
   });
@@ -84,7 +96,7 @@ describe("数据源", () => {
 
   it("opens the field in the row, saves, and never shows the value again", async () => {
     const user = userEvent.setup();
-    mocks.saveWebConnectorCredential.mockResolvedValue({ expiresAt: "2026-10-07T00:00:00.000Z" });
+    mocks.saveWebConnectorCredential.mockResolvedValue({ expiresAt: "2026-10-07T00:00:00.000Z", check: "verified" });
     render(<ConnectorsSection />);
     await user.click(within(await screen.findByText("OpenGWAS").then(() => rowOf("OpenGWAS"))).getByRole("button", { name: "设置" }));
     const field = screen.getByLabelText("OpenGWAS 凭据");
@@ -98,21 +110,53 @@ describe("数据源", () => {
     expect(document.body.textContent).not.toContain("eyJ.abc.def");
   });
 
+  it("shows what the source said about the researcher's own credential beside 已配置, and warns when it refused it", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([
+      connector({ id: "umls", title: "UMLS", capabilities: [], source: "user", own: own({ check: { state: "verified", checkedAt: "2026-09-09T00:00:01.000Z" } }), needsAttention: false }),
+      connector({ id: "core", title: "CORE", capabilities: ["mendelian-randomization"], source: "user", own: own({ check: { state: "rejected", checkedAt: "2026-09-09T00:00:01.000Z" } }), needsAttention: false }),
+      connector({ id: "omim", title: "OMIM", capabilities: ["mendelian-randomization"], source: "user", own: own({ check: { state: "unreachable", checkedAt: null } }), needsAttention: false }),
+      connector({ id: "addgene", title: "Addgene", capabilities: ["mendelian-randomization"], source: "user", own: own({ check: { state: "unchecked", checkedAt: null } }), needsAttention: false }),
+      // The deployment's own credential is the deployment's business: no verdict shown.
+      connector({ id: "biogrid", title: "BioGRID", capabilities: ["mendelian-randomization"], source: "deployment", own: own({ check: { state: "rejected", checkedAt: null } }), needsAttention: false }),
+    ]);
+    render(<ConnectorsSection />);
+    await screen.findByText("UMLS");
+    expect(within(rowOf("UMLS")).getByText("已配置")).toBeInTheDocument();
+    expect(within(rowOf("UMLS")).getByText("已验证")).toBeInTheDocument();
+    expect(within(rowOf("CORE")).getByText("已配置")).toBeInTheDocument();
+    expect(within(rowOf("CORE")).getByText("数据源拒绝了这个凭据，请核对")).toBeInTheDocument();
+    expect(within(rowOf("OMIM")).getByText("暂时无法验证")).toBeInTheDocument();
+    expect(within(rowOf("Addgene")).queryByText(/验证|拒绝/)).not.toBeInTheDocument();
+    expect(within(rowOf("BioGRID")).queryByText(/验证|拒绝/)).not.toBeInTheDocument();
+  });
+
+  it("says in a toast when the source refused a saved credential, and still keeps the field closed", async () => {
+    const user = userEvent.setup();
+    mocks.saveWebConnectorCredential.mockResolvedValue({ expiresAt: null, check: "rejected" });
+    render(<ConnectorsSection />);
+    await user.click(within(await screen.findByText("OpenGWAS").then(() => rowOf("OpenGWAS"))).getByRole("button", { name: "设置" }));
+    await user.type(screen.getByLabelText("OpenGWAS 凭据"), "eyJ.abc.def");
+    await user.click(screen.getByRole("button", { name: "保存 OpenGWAS 凭据" }));
+    await waitFor(() => expect(useToastStore.getState().toasts.map((item) => item.message)).toContain("已保存，但 OpenGWAS 拒绝了这个凭据，请核对后重新填写"));
+    expect(useToastStore.getState().toasts.at(-1)?.tone).toBe("error");
+    await waitFor(() => expect(screen.queryByLabelText("OpenGWAS 凭据")).not.toBeInTheDocument());
+  });
+
   it("keeps replacing and removing the researcher's own credential in the row's 「⋯」, and asks before removing", async () => {
     const user = userEvent.setup();
     mocks.fetchWebConnectors.mockResolvedValue([
-      connector({ source: "user", own: { updatedAt: "2026-09-09T00:00:00.000Z", expiresAt: "2026-09-23T00:00:00.000Z", expired: false }, needsAttention: false }),
+      connector({ source: "user", own: own({ expiresAt: "2026-09-23T00:00:00.000Z" }), needsAttention: false }),
     ]);
     mocks.removeWebConnectorCredential.mockResolvedValue(undefined);
     render(<ConnectorsSection />);
     const row = await screen.findByText("OpenGWAS").then(() => rowOf("OpenGWAS"));
-    expect(within(row).getByText("已连接")).toBeInTheDocument();
+    expect(within(row).getByText("已配置")).toBeInTheDocument();
     expect(within(row).getByText(/有效期至/)).toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "OpenGWAS 凭据" }));
     expect(await screen.findByRole("menuitem", { name: "更换凭据" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "移除凭据" }));
     const dialog = await screen.findByRole("alertdialog", { name: "移除你的 OpenGWAS 凭据？" });
-    expect(dialog).toHaveTextContent("需要 OpenGWAS 的研究会报告缺少凭据");
+    expect(dialog).toHaveTextContent("需要 OpenGWAS 的研究会跳过这部分");
     expect(mocks.removeWebConnectorCredential).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "移除凭据" }));
     await waitFor(() => expect(mocks.removeWebConnectorCredential).toHaveBeenCalledWith("opengwas"));
