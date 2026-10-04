@@ -8,6 +8,16 @@ import { HttpError } from './security.mjs';
 
 /** @param {unknown} value */
 export const studyReviewDigest = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
+/**
+ * What a review id looks like, stated next to what mints it. A review started
+ * since reviews moved onto the durable queue is `rv_` + this module's digest
+ * (64 hex); one started before that is `rv_` + 24 hex and is still in the
+ * table. The gateway kept its own copy of the older shape, so from that change
+ * until 2026-10-04 every review it started answered `review_not_found` to the
+ * first poll and the run was told its review was unavailable — while the
+ * review itself ran to the end unread.
+ */
+export const REVIEW_ID_PATTERN = /^rv_(?:[a-f0-9]{24}|[a-f0-9]{64})$/;
 /** @param {any} config */
 export function studyReviewConfiguration(config) {
   return { revision: 'study-review-v1', providerRevision: studyReviewDigest(String(config.reviewApiBase ?? '')), model: String(config.reviewModel ?? ''), thinkingBudget: Number(config.reviewThinkingBudget ?? 8000),

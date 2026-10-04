@@ -32,11 +32,13 @@
  */
 
 import { CONTRACT_KINDS, isStudyType } from "@evimed/domain";
+import { REVIEW_ID_PATTERN } from "./studyReview.mjs";
 
 export const REVIEW_GATEWAY_PREFIX = "/internal/review/v1/";
 const START_PATH = "/internal/review/v1/deliverables";
 const RESPONSES_PATH = "/internal/review/v1/responses";
-const REVIEW_ID = /^rv_[a-f0-9]{24}$/;
+// The shape is the minting module's, never a copy of it (studyReview.mjs).
+const REVIEW_ID = REVIEW_ID_PATTERN;
 const DELIVERABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const CAPABILITY_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** Requests one project may make a minute: a review polled every three seconds is twenty. */

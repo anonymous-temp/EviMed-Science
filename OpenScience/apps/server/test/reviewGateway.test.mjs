@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { createReviewGatewayHandler } from "../src/reviewGateway.mjs";
+import { REVIEW_ID_PATTERN, studyReviewDigest } from "../src/studyReview.mjs";
 
 /** @param {{ enabled?: boolean, service?: any }} [options] */
 async function gateway({ enabled = true, service = null } = {}) {
@@ -59,6 +60,34 @@ test("a review is started, asked after and answered, all under the token's own p
     assert.equal(state.body.status, "done");
     const answered = await g.request("POST", "/internal/review/v1/responses", { reviewId: "rv_0123456789abcdef01234567", answers: [{ id: "F01", response: "fixed" }] });
     assert.deepEqual(answered.body, { recorded: 1, refused: [] });
+  } finally {
+    await g.close();
+  }
+});
+
+test("the id a review is started under is an id the gateway will answer for", async () => {
+  // The service mints `rv_` + studyReviewDigest(...); the stub above returns a
+  // hand-written id, which is how the gateway's own copy of the shape went
+  // stale without a test noticing. This drives the minted shape through.
+  const minted = `rv_${studyReviewDigest({ identity: { userId: "u1", projectId: "p1" }, socketRunId: "native_abc", sessionId: "s1", digest: "d", configuration: {} })}`;
+  assert.match(minted, REVIEW_ID_PATTERN);
+  /** @type {any[]} */
+  const asked = [];
+  const g = await gateway({ service: {
+    enabled: true,
+    async startDeliverableReview() { return { reviewId: minted, status: "running" }; },
+    async reviewStatus(/** @type {any} */ _owner, /** @type {string} */ id) { asked.push(id); return id === minted ? { reviewId: id, status: "done", findings: [] } : null; },
+    async recordResponses(/** @type {any} */ _owner, /** @type {any} */ body) { asked.push(body.reviewId); return { recorded: 1, refused: [] }; },
+  } });
+  try {
+    const started = await g.request("POST", "/internal/review/v1/deliverables", { deliverableId: "d1", contractKind: "clinical-evidence-report" });
+    assert.equal(started.body.reviewId, minted);
+    const state = await g.request("GET", `/internal/review/v1/deliverables/${started.body.reviewId}`);
+    assert.equal(state.status, 200, "the first poll of a started review is answered, not refused as unknown");
+    assert.equal(state.body.status, "done");
+    const answered = await g.request("POST", "/internal/review/v1/responses", { reviewId: minted, answers: [{ id: "F01", response: "fixed" }] });
+    assert.equal(answered.status, 200);
+    assert.deepEqual(asked, [minted, minted]);
   } finally {
     await g.close();
   }
