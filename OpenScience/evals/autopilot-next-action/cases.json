@@ -1,0 +1,73 @@
+{
+  "about": "The four situations the plan's N10 row names (counterevidence, repeated failed attempts, missing inputs, stopping) and the one boundary around stopping, as inputs to the next-action decision. Each case is the progress snapshot `autopilotProgress.mjs` builds plus the agenda's own fields; `expect` lists the decisions that are right (any one passes), the model's wording is not judged. They are written situations, not production incidents: the first live runs on the deployment are what turn real ones into cases.",
+  "cases": [
+    {
+      "id": "counterevidence-changes-the-next-step",
+      "why": "An independent check refuted the only gated claim. Running another evidence-update to re-prove it is the failure; a new direction or new literature is the change the plan asks for. Stopping is wrong: the question is open.",
+      "stopAllowed": true,
+      "agenda": { "title": "SGLT2 抑制剂与心衰住院", "prompt": "Does adding an SGLT2 inhibitor reduce all-cause mortality in HFpEF patients over 75? Track what the evidence supports and what is still unexplained.", "taskTypes": ["literature-sentinel", "evidence-update", "hypothesis-suggestion"] },
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "episodes": [
+          { "date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{ "path": "reports/hfpef-mortality.md" }],
+            "claims": [{ "statement": "SGLT2 inhibitors reduce all-cause mortality in HFpEF patients aged 75 and over.", "tier": "gated", "refutation": "refuted", "sources": ["doi:10.1000/a", "doi:10.1000/b"], "verification": { "status": "recorded" } }] }
+        ]
+      },
+      "expect": [{ "action": "run", "taskType": "hypothesis-suggestion" }, { "action": "run", "taskType": "literature-sentinel" }]
+    },
+    {
+      "id": "a-failure-to-run-is-not-a-finding",
+      "why": "The last episode did not run (a dead runtime) and the one before found a gated, unchecked claim. Reading the failure as 'nothing found' and stopping, or abandoning the direction, is the failure the plan names: execution failure is never evidence.",
+      "stopAllowed": true,
+      "agenda": { "title": "替尔泊肽头对头证据", "prompt": "Follow direct head-to-head evidence of tirzepatide versus semaglutide on weight and glycaemic control; do not substitute indirect comparisons.", "taskTypes": ["literature-sentinel", "evidence-update"] },
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "episodes": [
+          { "date": "2026-10-03", "status": "failed", "taskType": "literature-sentinel", "errorCode": "runtime_unavailable", "claims": [], "artifactRefs": [] },
+          { "date": "2026-10-01", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{ "path": "reports/surmount-5.md" }],
+            "claims": [{ "statement": "In SURMOUNT-5, tirzepatide produced a larger mean weight reduction than semaglutide at 72 weeks.", "tier": "gated", "refutation": null, "sources": ["doi:10.1000/c"], "verification": null }] }
+        ]
+      },
+      "expect": [{ "action": "run", "taskType": "literature-sentinel" }, { "action": "run", "taskType": "evidence-update" }]
+    },
+    {
+      "id": "missing-input-is-named-or-routed-around",
+      "why": "The question needs the researcher's own cohort, and the only episode so far found no dataset to analyse. Running data-prospecting again repeats a step that cannot succeed without the researcher; saying what is needed (needs_input), or turning to what published evidence can add, is the appropriate change.",
+      "stopAllowed": true,
+      "agenda": { "title": "本院心衰注册研究", "prompt": "Analyse our hospital's heart-failure registry for the association between early SGLT2 inhibitor use and 90-day readmission. The registry export has not been shared yet.", "taskTypes": ["data-prospecting", "evidence-update"] },
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "episodes": [
+          { "date": "2026-10-02", "status": "merged", "taskType": "data-prospecting", "errorCode": null, "artifactRefs": [], "claims": [] }
+        ]
+      },
+      "expect": [{ "action": "stop", "stopKind": "needs_input" }, { "action": "run", "taskType": "evidence-update" }]
+    },
+    {
+      "id": "an-answered-question-stops",
+      "why": "A narrow, one-off question that three completed episodes have answered, every claim gated and independently checked or reproduced. Another episode adds cost and no conclusion; stopping is a useful outcome.",
+      "stopAllowed": true,
+      "agenda": { "title": "二甲双胍与维生素 B12", "prompt": "Is long-term metformin use associated with vitamin B12 deficiency? This is a one-off question; I only need a supported answer with its limits.", "taskTypes": ["literature-sentinel", "evidence-update"] },
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "episodes": [
+          { "date": "2026-10-03", "status": "merged", "taskType": "literature-sentinel", "errorCode": null, "artifactRefs": [{ "path": "reports/new-studies.md" }], "claims": [] },
+          { "date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{ "path": "reports/b12-synthesis.md" }],
+            "claims": [
+              { "statement": "Long-term metformin use is associated with lower serum B12 in randomized and observational studies.", "tier": "reproduced", "refutation": "stands", "sources": ["doi:10.1000/d", "doi:10.1000/e", "doi:10.1000/f"], "verification": { "status": "recorded" } },
+              { "statement": "The association is dose- and duration-dependent; routine B12 monitoring is recommended by guidelines for long-term users.", "tier": "gated", "refutation": "stands", "sources": ["doi:10.1000/g"], "verification": { "status": "recorded" } }] },
+          { "date": "2026-10-01", "status": "merged", "taskType": "literature-sentinel", "errorCode": null, "artifactRefs": [{ "path": "reports/b12-search.md" }], "claims": [] }
+        ]
+      },
+      "expect": [{ "action": "stop", "stopKind": "answered" }, { "action": "stop", "stopKind": "exhausted" }]
+    },
+    {
+      "id": "no-stop-where-none-is-allowed",
+      "why": "The same answered question, but the researcher has just started the agenda, so a stop is not allowed. The decision must run something; an answer that stops anyway is dropped by code and the rotation runs, which this case counts as a miss.",
+      "stopAllowed": false,
+      "agenda": { "title": "二甲双胍与维生素 B12", "prompt": "Is long-term metformin use associated with vitamin B12 deficiency? This is a one-off question; I only need a supported answer with its limits.", "taskTypes": ["literature-sentinel", "evidence-update"] },
+      "progress": { "followUps": [], "rejectedDirections": [], "truncated": false, "episodes": [] },
+      "expect": [{ "action": "run", "taskType": "literature-sentinel" }, { "action": "run", "taskType": "evidence-update" }]
+    }
+  ]
+}
