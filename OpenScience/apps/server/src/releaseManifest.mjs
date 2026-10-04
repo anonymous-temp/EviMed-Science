@@ -254,7 +254,12 @@ export async function sha256File(file, { maxBytes = 64 * 1024 * 1024 } = {}) {
   }
 }
 
-const DEFAULT_SKIP_DIRS = Object.freeze(["node_modules"]);
+// `__pycache__` and `*.pyc` are written by whoever last ran the scripts, not
+// shipped: the image-side check (`scripts/ops/check-runtime-skill-digests.mjs`)
+// has always skipped them, and a digest taken on a tree where a test had run
+// differed from the one a clean checkout takes (2026-10-04: the skill package
+// table generated on a developer's tree failed its own `--check` in CI).
+const DEFAULT_SKIP_DIRS = Object.freeze(["node_modules", "__pycache__"]);
 
 export async function digestDirectory(root, { maxFiles = 100_000, errorPrefix = "release_skill", skipDirs = DEFAULT_SKIP_DIRS } = {}) {
   const rootStat = await fsp.lstat(root);
@@ -277,7 +282,7 @@ export async function digestDirectory(root, { maxFiles = 100_000, errorPrefix = 
       // is what pnpm actually creates) is not followed either. Every other
       // symlink still throws: the guard is what keeps a link from binding a
       // digest to something outside the tree.
-      if (skipDirs.includes(entry.name)) continue;
+      if (skipDirs.includes(entry.name) || entry.name.endsWith(".pyc")) continue;
       const full = path.join(dir, entry.name);
       const stat = await fsp.lstat(full);
       if (stat.isSymbolicLink()) throw failure(`${errorPrefix}_symlink`);

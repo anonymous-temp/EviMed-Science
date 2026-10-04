@@ -231,7 +231,7 @@
       "origin": "capability",
       "version": "2.16.0",
       "source": {"kind":"release"},
-      "digest": "sha256:df6c8f990d37c8112ec09d7bc2e50e2465e689c8b88e03f6ac1c3967cfad3e26",
+      "digest": "sha256:91b2be050a458fbd8cfdd0291997eb8e95803508c395c21af0c4655988ef3fb0",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"d1e839f162e49f4680da6be4e45f3b106f40bba1cf50af8f36e9053c8eae1fa2"}],
       "dependencies": [
@@ -325,7 +325,7 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:a53c557b95478e50120adfc880b0d81fc878f14175b120280d8d81021257bb68",
+      "digest": "sha256:0975517f560a07a070c5b715d4ee3519f64728123419a0c407fdea58131e5986",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
@@ -851,7 +851,7 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:c34113e6222dc6d1d2c2f488aec5a0e5b2c31a72d5550bd75e212e9d252d53cb",
+      "digest": "sha256:0cdb23b550c6cb6464a5eeb3ec491af048979d4dccbc1c72a909629204fb78c7",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
@@ -910,7 +910,7 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:d5e502e92b0a34c4b3a3b357060f20ddbba322dc32b9d42ee9a09ec67ddf9d0f",
+      "digest": "sha256:95ab86a50258d53cede520c02fc24727471f84c59b8d0d21a861effcaaf702fe",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_methods.py","sha256":"e71ff10c840b7fb96003b341da4dd56d3d77ac9ea0d6023cdc712783fe5fd0c2"},
