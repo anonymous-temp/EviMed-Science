@@ -58,7 +58,7 @@ await fs.writeFile(profile+'/cordis.patch.yml',`
               revision: ${legacy.configRevision}
               timeoutMs: ${legacy.settings.timeoutMs}
           - id: cowork
-            name: /fixture/platform/cowork.mjs
+            name: /fixture/platform/socket/extensions/cowork/bridge.mjs
             config:
               projectionFile: /opt/evimed/extensions/projection.json
               gatewayUrl: http://127.0.0.1:19092/internal/extensions/v1
