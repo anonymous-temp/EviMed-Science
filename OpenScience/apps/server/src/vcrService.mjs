@@ -369,6 +369,27 @@ export function vcrRouteOptions(dataTier) {
   });
 }
 
+/**
+ * The accounts the matching page names: whoever countersigned the assessment on
+ * show, and whoever moved the referral. The platform's own hand is not an account.
+ * @param {any} match
+ */
+function matchingPeopleOf(match) {
+  return [match?.selected?.reviewedBy, ...list(match?.referralEvents).map((event) => object(event).actor)].filter(Boolean);
+}
+
+/**
+ * The accounts the data page names: whoever confirmed a source's field map, and
+ * each account a source is granted to (a role or the whole study is not one).
+ * @param {any} dataPlane
+ */
+function dataPeopleOf(dataPlane) {
+  return list(dataPlane?.sources).flatMap((source) => [
+    object(source.fieldMap).confirmedBy,
+    ...list(source.grants).map((grant) => object(grant).grantee).filter((grantee) => typeof grantee === "string" && !/^(role|study):/.test(grantee)),
+  ]).filter(Boolean);
+}
+
 export class VcrService {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
@@ -807,9 +828,23 @@ export class VcrService {
     if (tab === "data" || tab === "overview") bundle.evidence = await this.#evidence(study);
     if (tab === "data") bundle.dataPlane = await this.#dataPlane(study, user);
     if (tab === "matching") bundle.match = await this.#match(study, query);
+    // The people a page names are shown by name: resolved once for the page, through the one join the module has.
+    if (tab === "data") bundle.people = await this.#people(dataPeopleOf(bundle.dataPlane));
+    if (tab === "matching") bundle.people = await this.#people(matchingPeopleOf(bundle.match));
     // The header's one offer, read for the page that has a header (the overview is the study's own payload).
     if (tab === "overview") bundle.tierOffer = await this.#tierOffer(study, roles);
     return bundle;
+  }
+
+  /**
+   * The names of the accounts a page mentions, or null where this service has no
+   * way to resolve them (a double without the join): the presenters then say
+   * nothing of a person rather than their id.
+   * @param {Iterable<unknown>} ids @returns {Promise<Map<string, string> | null>}
+   */
+  async #people(ids) {
+    if (typeof this.store.personNames !== "function") return null;
+    return this.store.personNames(ids).catch(() => null);
   }
 
   /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */

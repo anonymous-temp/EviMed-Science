@@ -268,8 +268,8 @@ describe("匹配与招募 — the referral's own trail", () => {
   it("lists every move made on the person's referral, oldest first, with who and what was said", async () => {
     const payload = fixture("ev201/matching-p0192.json");
     payload.selected.trace = [
-      { state: "candidate", at: "9 月 27 日 17:40", by: "control-plane", note: null },
-      { state: "needs_evidence", at: "今天 14:32", by: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
+      { state: "candidate", at: "9 月 27 日 17:40", by: "平台", note: null },
+      { state: "needs_evidence", at: "今天 14:32", by: "王协调", note: "E1 申请近 4 周头颅 MRI" },
     ];
     server = installVcrServer(network.productRequest, { [`GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`]: payload });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
@@ -279,8 +279,8 @@ describe("匹配与招募 — the referral's own trail", () => {
     const trail = await screen.findByRole("list", { name: "转诊记录" });
     const steps = within(trail).getAllByRole("listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
-      "9 月 27 日 17:40候选control-plane",
-      "今天 14:32待补证u_coordE1 申请近 4 周头颅 MRI",
+      "9 月 27 日 17:40候选平台",
+      "今天 14:32待补证王协调E1 申请近 4 周头颅 MRI",
     ]);
   });
 
@@ -465,8 +465,16 @@ describe("匹配与招募 — 复核这份评估, a reviewer's countersignature"
   });
 
   it("says who signed an assessment that is reviewed, and offers no second signature", async () => {
-    await open((payload) => { payload.selected.reviewedBy = "reviewer-1"; });
-    expect(document.querySelector("[data-vcr-reviewed-by]")).toHaveTextContent("已复核 · reviewer-1");
+    await open((payload) => { payload.selected.reviewedBy = "reviewer-1"; payload.selected.reviewedByName = "赵复核"; });
+    expect(document.querySelector("[data-vcr-reviewed-by]")).toHaveTextContent("已复核 · 赵复核");
+    expect(document.querySelector("[data-vcr-reviewed-by]")).not.toHaveTextContent("reviewer-1");
+    expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
+  });
+
+  it("never prints the account id of whoever signed: with no name it says nothing of them", async () => {
+    await open((payload) => { payload.selected.reviewedBy = "usr_3f9a"; payload.selected.reviewedByName = null; });
+    expect(document.querySelector("[data-vcr-reviewed-by]")).toHaveTextContent("已复核");
+    expect(document.querySelector("[data-vcr-reviewed-by]")).not.toHaveTextContent("usr_3f9a");
     expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
   });
 
@@ -499,7 +507,8 @@ describe("匹配与招募 — the other three views", () => {
     const contacted = document.querySelector("[data-vcr-referral='ref_seed_2']") as HTMLElement;
     expect(contacted).toHaveTextContent("P-0201");
     expect(contacted).toHaveTextContent("已联系");
-    expect(contacted).toHaveTextContent("coordinator-1");
+    expect(contacted).toHaveTextContent("周协调员");
+    expect(contacted).not.toHaveTextContent("coordinator-1");
     expect(contacted).toHaveTextContent("中心 01");
     expect(document.querySelector("[data-vcr-referral='ref_seed_4']")).toHaveTextContent("入组 2026-09-18");
     expect(document.querySelectorAll("[data-vcr-referral]")).toHaveLength(4);

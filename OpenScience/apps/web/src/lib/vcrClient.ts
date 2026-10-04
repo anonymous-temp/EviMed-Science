@@ -816,8 +816,11 @@ export interface VcrMatchingTab {
     referralId?: string | null;
     referralState?: VcrReferralState | null;
     priority?: VcrCandidate["priority"];
+    /** Whether somebody countersigned — the page offers the countersignature only where nobody has. Never shown: see `reviewedByName`. */
     reviewedBy?: string | null;
-    /** Every move on this person's referral, oldest first: to where, when, by whom (plan §7.2). */
+    /** Who countersigned, by name (a neutral label when the account is gone). */
+    reviewedByName?: string | null;
+    /** Every move on this person's referral, oldest first: to where, when, by whom — a name, never an account id (plan §7.2). */
     trace?: Array<{ state: VcrReferralState; at: string | null; by: string | null; note: string | null }>;
   } | null;
   /** The main gaps across the undecidable ones. */
@@ -1534,6 +1537,8 @@ export interface VcrMember {
   owner: boolean;
   roles: VcrMemberRole[];
   roleLabels: string[];
+  /** The member's name — what the page shows. The account id is for the remove call, never for a reader. */
+  name?: string | null;
   invitedBy?: string | null;
   createdAt?: string | null;
 }
@@ -1541,6 +1546,7 @@ export interface VcrMember {
 export function readVcrMembers(raw: unknown): VcrMember[] {
   return arr(obj(raw).members).map((item) => ({
     userId: text(item.userId) ?? "",
+    name: text(item.name),
     owner: item.owner === true,
     roles: strings(item.roles) as VcrMemberRole[],
     roleLabels: strings(item.roleLabels),
@@ -1593,8 +1599,10 @@ export interface VcrReferral {
   state: VcrReferralState;
   siteId: string | null;
   assessmentId: string | null;
-  /** The account that confirmed the contact, once one did (the first human stop). */
+  /** The account that confirmed the contact, once one did (the first human stop): whether one did. Shown as `contactApprovedByName`. */
   contactApprovedBy: string | null;
+  /** The coordinator who confirmed, by name (a neutral label when the account is gone). */
+  contactApprovedByName: string | null;
   contactApprovedAt: string | null;
   screenFailReason: string | null;
   enrolledOn: string | null;
@@ -1607,7 +1615,7 @@ export function readVcrReferrals(raw: unknown): VcrReferral[] {
     return {
       id: String(row.id ?? ""), subjectKey: String(row.subjectKey ?? ""), state: String(row.state ?? "candidate") as VcrReferralState,
       siteId: text(row.siteId), assessmentId: text(row.assessmentId), contactApprovedBy: text(row.contactApprovedBy),
-      contactApprovedAt: text(row.contactApprovedAt), screenFailReason: text(row.screenFailReason), enrolledOn: text(row.enrolledOn),
+      contactApprovedByName: text(row.contactApprovedByName), contactApprovedAt: text(row.contactApprovedAt), screenFailReason: text(row.screenFailReason), enrolledOn: text(row.enrolledOn),
       updatedAt: text(row.updatedAt),
     };
   }).filter((row) => row.id !== "");
@@ -1756,6 +1764,8 @@ export interface VcrIntakeSource {
     hash: string | null;
     by: string | null;
     confirmedBy: string | null;
+    /** Who confirmed the map, by name (a neutral label when the account is gone). */
+    confirmedByName: string | null;
     confirmedAt: string | null;
     columns: VcrFieldMapEntry[];
     issues: VcrIntakeIssue[];
@@ -1851,12 +1861,12 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
     files: arr(raw.files).map(readIntakeFile),
     fieldMap: {
       state: state === "proposed" || state === "confirmed" ? state : "none", stateLabel: text(map.stateLabel) ?? "", hash: text(map.hash),
-      by: text(map.by), confirmedBy: text(map.confirmedBy), confirmedAt: text(map.confirmedAt),
+      by: text(map.by), confirmedBy: text(map.confirmedBy), confirmedByName: text(map.confirmedByName), confirmedAt: text(map.confirmedAt),
       columns: arr(map.columns) as unknown as VcrFieldMapEntry[],
       issues: arr(map.issues).map((issue) => ({ code: text(issue.code) ?? "", message: text(issue.message) ?? "", table: text(issue.table), column: text(issue.column) })),
     },
     grants: arr(raw.grants).map((grant) => ({
-      id: text(grant.id) ?? "", grantee: text(grant.grantee) ?? "", granteeLabel: text(grant.granteeLabel) ?? text(grant.grantee) ?? "", role: text(grant.role),
+      id: text(grant.id) ?? "", grantee: text(grant.grantee) ?? "", granteeLabel: text(grant.granteeLabel) ?? "", role: text(grant.role),
       fields: strings(grant.fields), fieldMode: grant.fieldMode === "deny" ? "deny" : "allow", window: text(grant.window), purposes: strings(grant.purposes),
       revoked: grant.revoked === true, revokedAt: text(grant.revokedAt), createdAt: text(grant.createdAt),
     })),

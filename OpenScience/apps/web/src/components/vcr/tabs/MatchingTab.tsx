@@ -33,7 +33,7 @@ import { SourceTag } from "../VcrMarks";
 import { VcrStat, VcrStatNote } from "../VcrNumber";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
-import { criterionStateLabel, intervalLabel, numberText, referralStateLabel } from "../vcrText";
+import { criterionStateLabel, intervalLabel, NO_VALUE, numberText, referralStateLabel } from "../vcrText";
 
 type View = "matching" | "referral" | "sites" | "followup";
 type Direction = NonNullable<MatchingData["direction"]>;
@@ -425,7 +425,7 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
               {mayReview && (
                 <Button variant="secondary" loading={busy === "review"} disabled={busy !== null} onClick={review}>复核这份评估</Button>
               )}
-              {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedBy}`}</Tag></span>}
+              {selected.reviewedBy && <span data-vcr-reviewed-by=""><Tag>{`已复核 · ${selected.reviewedByName ?? NO_VALUE}`}</Tag></span>}
               <Button
                 variant="secondary"
                 loading={busy === "evidence"}
@@ -556,7 +556,7 @@ function ReferralLedger({ studyId, sites }: { studyId: string; sites: NonNullabl
             header: "联系确认",
             isEmpty: (row) => !row.contactApprovedBy,
             cell: (row) => row.contactApprovedBy
-              ? <span className="block">{row.contactApprovedBy}{row.contactApprovedAt && <span className="block text-caption text-text-3">{row.contactApprovedAt.slice(0, 10)}</span>}</span>
+              ? <span className="block">{row.contactApprovedByName ?? NO_VALUE}{row.contactApprovedAt && <span className="block text-caption text-text-3">{row.contactApprovedAt.slice(0, 10)}</span>}</span>
               : <span className="text-text-3">—</span>,
           },
           {

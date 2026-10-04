@@ -89,13 +89,13 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
 /** The referral ledger as `GET …/referrals` answers it: the four persons the fixture's counts name. */
 export function referralsAnswer() {
   const row = (id: string, subjectKey: string, state: string, extra: Record<string, unknown> = {}) => ({
-    id, studyId: STUDY_ID, assessmentId: `asm_${subjectKey}`, siteId: "ste_01", subjectKey, state, contactApprovedBy: null, contactApprovedAt: null,
+    id, studyId: STUDY_ID, assessmentId: `asm_${subjectKey}`, siteId: "ste_01", subjectKey, state, contactApprovedBy: null, contactApprovedByName: null, contactApprovedAt: null,
     screenFailCriterionId: null, screenFailReason: null, enrolledOn: null, createdAt: "2026-09-20T08:00:00.000Z", updatedAt: "2026-09-25T08:00:00.000Z", ...extra,
   });
   return {
     referrals: [
       row("ref_seed_1", "P-0192", "contactable"),
-      row("ref_seed_2", "P-0201", "contacted", { contactApprovedBy: "coordinator-1", contactApprovedAt: "2026-09-26T09:30:00.000Z" }),
+      row("ref_seed_2", "P-0201", "contacted", { contactApprovedBy: "coordinator-1", contactApprovedByName: "周协调员", contactApprovedAt: "2026-09-26T09:30:00.000Z" }),
       row("ref_seed_3", "P-0177", "needs_evidence"),
       row("ref_seed_4", "P-0150", "enrolled", { enrolledOn: "2026-09-18T00:00:00.000Z" }),
     ],

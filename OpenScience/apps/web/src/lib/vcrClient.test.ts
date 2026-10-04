@@ -202,6 +202,9 @@ describe("members and the referral ledger", () => {
     });
     const members = await getVcrMembers(STUDY_ID);
     expect(members.map((member) => [member.userId, member.owner, member.roles])).toEqual([["owner_1", true, ["lead"]], ["u_stat", false, ["statistical_reviewer"]]]);
+    // A person is read by name; a name the server did not send is null, and the reader never fills it with the id.
+    expect(members.map((member) => member.name)).toEqual([null, null]);
+    expect(readVcrMembers({ members: [{ userId: "u_stat", name: "陈统计", roles: [] }] })[0].name).toBe("陈统计");
     expect(readVcrMembers(null)).toEqual([]);
     expect(readVcrMembers({ members: "nope" })).toEqual([]);
   });
@@ -228,6 +231,8 @@ describe("members and the referral ledger", () => {
       ["ref_seed_3", "P-0177", "needs_evidence", "asm_P-0177"], ["ref_seed_4", "P-0150", "enrolled", "asm_P-0150"],
     ]);
     expect(referrals[1].contactApprovedBy).toBe("coordinator-1");
+    expect(referrals[1].contactApprovedByName).toBe("周协调员");
+    expect(referrals[0].contactApprovedByName).toBeNull();
     expect(readVcrReferrals(null)).toEqual([]);
     expect(readVcrReferrals({ referrals: [{ subjectKey: "x" }, "no", { id: "r", subjectKey: "y" }] }).map((row) => row.id)).toEqual(["r"]);
     await getVcrReferrals(STUDY_ID, { state: "contactable" });

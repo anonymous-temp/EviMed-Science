@@ -430,6 +430,8 @@ test("CW-3 members: added and removed through the routes, the owner cannot be re
   const list = members.body.data.members;
   assert.equal(list.find((/** @type {any} */ member) => member.userId === accounts.owner).owner, true, "the owner is listed, marked, first");
   assert.deepEqual(list.find((/** @type {any} */ member) => member.userId === accounts.statistician).roles, ["statistical_reviewer"]);
+  // A person is listed by name, resolved from the account itself — never by the account id.
+  for (const member of list) assert.equal(typeof member.name === "string" && member.name.length > 0, true, `${member.userId} has a name`);
   assert.equal((await call("viewer", "POST", `${S}/members`, { userId: accounts.stranger, role: "viewer" })).status, 403);
   assert.equal((await call("owner", "POST", `${S}/members`, { userId: accounts.owner, role: "viewer" })).body.code, "vcr_member_owner_fixed");
   assert.equal((await call("owner", "DELETE", `${S}/members/${accounts.owner}?role=lead`)).status, 409, "the owner stays");

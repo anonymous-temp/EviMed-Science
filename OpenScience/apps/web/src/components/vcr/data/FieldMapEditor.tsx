@@ -82,7 +82,7 @@ export function FieldMapEditor({ studyId, source, options, canManage, onChanged 
       <p className="flex flex-wrap items-center gap-2 text-caption text-text-3">
         <Tag tone={state === "confirmed" ? "accent" : "neutral"}>{source.fieldMap.stateLabel || "尚未提出"}</Tag>
         {source.fieldMap.by && <span>{source.fieldMap.by}</span>}
-        {state === "confirmed" && source.fieldMap.confirmedAt && <span>{`${source.fieldMap.confirmedBy ?? ""} 于 ${source.fieldMap.confirmedAt} 确认`.trim()}</span>}
+        {state === "confirmed" && source.fieldMap.confirmedAt && <span>{`${source.fieldMap.confirmedByName ?? ""} 于 ${source.fieldMap.confirmedAt} 确认`.trim()}</span>}
       </p>
 
       <div className="overflow-x-auto">

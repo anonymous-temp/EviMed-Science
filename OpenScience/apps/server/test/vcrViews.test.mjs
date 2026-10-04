@@ -16,7 +16,7 @@ import {
   presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import {
-  presentComparatorTab, presentDataTab, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
+  presentComparatorTab, presentDataTab, presentIntake, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
   seriesView, criterionCodes,
 } from "../src/vcrViewsTabs.mjs";
 import {
@@ -348,12 +348,12 @@ test("a study with nothing in it gives every tab its empty state, and none of th
 
 // --- 匹配与招募: the referral's own trail ---------------------------------------------------------------------
 
-/** A matching bundle with one person, one referral and the moves made on it. */
-function matchingBundle(events) {
+/** A matching bundle with one person, one referral and the moves made on it. @param {any} events @param {{ reviewedBy?: string | null, people?: Map<string, string> | null }} [options] */
+function matchingBundle(events, { reviewedBy = null, people } = {}) {
   const criteria = [{ id: "crit_1", kind: "inclusion", ordinal: 1, sourceText: "ECOG 0–1", criterionType: "performance_status" }];
-  const subject = { id: "asm_1", subjectKey: "P-0192", summary: "insufficient_evidence", counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, priority: null, direction: "trial_to_patient", asOf: "2026-09-28T01:00:00.000Z", reviewedBy: null };
+  const subject = { id: "asm_1", subjectKey: "P-0192", summary: "insufficient_evidence", counts: { satisfied: 0, unknown: 1, pending_recheck: 0 }, priority: null, direction: "trial_to_patient", asOf: "2026-09-28T01:00:00.000Z", reviewedBy };
   return {
-    study: { dataTier: "T2" }, now: NOW, roles: ["lead"],
+    study: { dataTier: "T2" }, now: NOW, roles: ["lead"], ...(people === undefined ? {} : { people }),
     match: {
       criteria, referrals: [{ id: "ref_1", subjectKey: "P-0192", state: "needs_evidence", siteId: null }], sites: [], siteFunnel: [], followups: [],
       tallies: { insufficient_evidence: 1 }, openByAssessment: new Map(), gapsByCriterion: new Map(), pendingReview: [], subjects: [subject],
@@ -363,15 +363,63 @@ function matchingBundle(events) {
   };
 }
 
-test("the selected person's referral carries every move made on it: to where, when, by whom, and what was said", () => {
-  const view = presentMatchingTab(matchingBundle([
+test("the selected person's referral carries every move made on it: to where, when, by whom (by name), and what was said", () => {
+  const events = [
     { toState: "candidate", occurredAt: "2026-09-27T09:40:00.000Z", actor: "control-plane", note: "" },
     { toState: "needs_evidence", occurredAt: "2026-09-28T06:32:00.000Z", actor: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
-  ]));
+  ];
+  const view = presentMatchingTab(matchingBundle(events, { people: new Map([["u_coord", "王协调"]]) }));
   assert.deepEqual(view.selected.trace, [
-    { state: "candidate", at: "昨天 17:40", by: "control-plane", note: null },
-    { state: "needs_evidence", at: "今天 14:32", by: "u_coord", note: "E1 申请近 4 周头颅 MRI" },
+    { state: "candidate", at: "昨天 17:40", by: "平台", note: null },
+    { state: "needs_evidence", at: "今天 14:32", by: "王协调", note: "E1 申请近 4 周头颅 MRI" },
   ]);
+});
+
+test("a person is shown by name and never by account id: the name when the account is there, a neutral label when it is gone, the platform's own label for its own hand, and nothing where no name was resolved", () => {
+  const events = [
+    { toState: "candidate", occurredAt: "2026-09-27T09:40:00.000Z", actor: "control-plane", note: "" },
+    { toState: "contactable", occurredAt: "2026-09-28T06:32:00.000Z", actor: "usr_9f2c41e7d0b3", note: null },
+    { toState: "contacted", occurredAt: "2026-09-28T07:00:00.000Z", actor: "wang.coordinator", note: null },
+  ];
+  // The account that moved the referral is gone: its id does not reach the page, what it did stays.
+  const gone = presentMatchingTab(matchingBundle(events, { reviewedBy: "usr_deleted_1", people: new Map([["wang.coordinator", "王协调"]]) })).selected;
+  assert.deepEqual(gone.trace.map((step) => step.by), ["平台", "已注销的账号", "王协调"]);
+  assert.equal(gone.reviewedByName, "已注销的账号");
+  assert.equal(gone.reviewedBy, "usr_deleted_1", "the id stays for the page's own logic: somebody countersigned, so the offer to countersign is not made");
+  const named = presentMatchingTab(matchingBundle(events, { reviewedBy: "wang.coordinator", people: new Map([["wang.coordinator", "王协调"]]) })).selected;
+  assert.equal(named.reviewedByName, "王协调");
+  // A presenter given a bundle with no names says nothing of a person; it never says the id.
+  const unresolved = presentMatchingTab(matchingBundle(events, { reviewedBy: "wang.coordinator" })).selected;
+  assert.deepEqual(unresolved.trace.map((step) => step.by), ["平台", null, null]);
+  assert.equal(unresolved.reviewedByName, null);
+  for (const view of [gone, named, unresolved]) {
+    const printed = JSON.stringify(view.trace) + String(view.reviewedByName);
+    assert.equal(/usr_9f2c41e7d0b3|wang\.coordinator|control-plane|usr_deleted_1/.test(printed), false, "no account id in anything a reader is shown");
+  }
+  assert.equal(presentMatchingTab(matchingBundle([], { reviewedBy: null, people: new Map() })).selected.reviewedByName, null, "nobody countersigned: no name");
+});
+
+test("the intake page names whoever confirmed a field map and each account a source is granted to, by name and never by id", () => {
+  const source = (/** @type {Record<string, any>} */ fieldMap, /** @type {string[]} */ grantees) => ({
+    id: "src_1", name: "合作方基线", mine: true, readable: true, status: "frozen", valueSource: "observed", files: [], upload: { formats: ["csv"] },
+    fieldMap: { state: "confirmed", columns: [], issues: [], ...fieldMap },
+    grants: grantees.map((grantee, index) => ({ id: `grt_${index}`, grantee, fieldMode: "allow", fields: [], purposes: [] })),
+  });
+  const bundle = (/** @type {any} */ sources, /** @type {Map<string, string> | undefined} */ people) => ({
+    study: { dataTier: "T1" }, now: NOW, roles: ["lead"], seal: {}, ...(people ? { people } : {}),
+    dataPlane: { available: true, sources, snapshots: [] },
+  });
+  const sources = [source({ confirmedBy: "manager.li", by: "run" }, ["role:viewer", "study:std_1", "manager.li", "usr_gone_77"])];
+  const view = presentIntake(bundle(sources, new Map([["manager.li", "李数据管理"]]))).sources[0];
+  assert.deepEqual([view.fieldMap.confirmedBy, view.fieldMap.confirmedByName], ["manager.li", "李数据管理"], "the id stays for logic; the name is what is shown");
+  assert.deepEqual(view.grants.map((grant) => grant.granteeLabel), ["角色：只读查看者", "本研究的所有成员", "李数据管理", "已注销的账号"]);
+  // Nobody confirmed it: no name. No names resolved: the label is empty and never the id.
+  assert.equal(presentIntake(bundle([source({ confirmedBy: null }, [])], new Map())).sources[0].fieldMap.confirmedByName, null);
+  const bare = presentIntake(bundle(sources, undefined)).sources[0];
+  assert.deepEqual([bare.fieldMap.confirmedByName, ...bare.grants.slice(2).map((grant) => grant.granteeLabel)], [null, "", ""]);
+  for (const shown of [view.grants.map((grant) => grant.granteeLabel), [view.fieldMap.confirmedByName], bare.grants.map((grant) => grant.granteeLabel)]) {
+    assert.equal(/manager\.li|usr_gone_77/.test(JSON.stringify(shown)), false, "no account id in what a reader is shown");
+  }
 });
 
 test("a person with no recorded moves has an empty trail, not a made-up one", () => {

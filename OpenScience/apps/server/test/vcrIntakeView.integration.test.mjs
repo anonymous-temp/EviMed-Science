@@ -49,6 +49,9 @@ before(async () => {
   const config = { vcrEnabled: true, vcrDataPlaneDir: plane, vcrAudience: "all" };
   vcr = composeVcr({ config, productDatabase: database });
   await vcr.store.ready();
+  // The people the page names are shown by name, from the control plane's users: three accounts, so the page can be read the way a person reads it.
+  await database.query(`INSERT INTO evimed_control.users(id, name, auth_type) VALUES ($1, '视图负责人', 'development'), ($2, '视图数据管理', 'development'), ($3, '视图查看者', 'development')`,
+    [OWNER, MANAGER, VIEWER]);
   service = new VcrService({
     store: vcr.store, config, jobs: vcr.jobs, access: vcr.access, dataPlane: vcr.dataPlaneSeam, seal: vcr.seal,
     matchStore: vcr.matchStore, evidenceStore: vcr.evidenceStore, now: () => NOW,

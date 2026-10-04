@@ -40,6 +40,7 @@ import { VCR_MEMBER_ROLES, VCR_MEMBER_ROLE_LABELS_ZH, VCR_ROLE_ABILITIES, roleAl
 
 import { VcrAccess, VCR_ACCESS_CODES } from "./vcrAccess.mjs";
 import { HttpError } from "./security.mjs";
+import { personName } from "./vcrViewsKit.mjs";
 
 /** Refusals this service adds to the judge's. */
 export const VCR_MEMBER_CODES = Object.freeze({
@@ -94,8 +95,11 @@ export class VcrMembers {
       if (!entry.roles.includes(row.role)) entry.roles.push(row.role);
       people.set(row.userId, entry);
     }
+    // Each person is shown by name; the id stays beside it for the remove call and the page's own logic.
+    const names = typeof this.store.personNames === "function" ? await this.store.personNames(people.keys()).catch(() => null) : null;
     return [...people.values()].map((entry) => ({
       ...entry,
+      name: personName(names, entry.userId),
       roles: [...entry.roles].sort(),
       roleLabels: [...entry.roles].sort().map((role) => /** @type {any} */ (VCR_MEMBER_ROLE_LABELS_ZH)[role] ?? role),
       abilities: abilitiesOfRoles(entry.roles),
