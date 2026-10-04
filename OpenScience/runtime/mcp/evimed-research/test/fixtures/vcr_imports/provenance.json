@@ -8,6 +8,26 @@
    "licence": "CC0 1.0 (the repository README, section License: \"datasets themselves can be treated as CC0\"; scripts Apache-2.0)",
    "fetchedAt": "2026-10-04",
    "sha256": "a9eba7c2b15ab2e027b633584669fc0ae08808056c1caddb3825e04764006bd7"
+  },
+  {
+   "file": "synthea27nj-5.4.zip",
+   "format": "omop",
+   "source": "https://raw.githubusercontent.com/OHDSI/EunomiaDatasets/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip (OHDSI EunomiaDatasets, Synthea27Nj, OMOP CDM 5.4, CSV tables with lowercase headers: 28 persons, 3 deaths)",
+   "licence": "Apache-2.0 (the OHDSI/EunomiaDatasets repository LICENSE; GitHub licence API, 2026-10-04)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "cdd3971be325e17b0e872bf4560711ab4c346917ecb079e2faf32badb55cb693"
+  },
+  {
+   "file": "gibleed-5.3-first150.zip",
+   "format": "omop",
+   "source": "https://raw.githubusercontent.com/OHDSI/EunomiaDatasets/main/datasets/GiBleed/GiBleed_5.3.zip (OHDSI EunomiaDatasets, GiBleed, OMOP CDM 5.3.1, uppercase headers: 2,694 persons, empty DEATH), reduced",
+   "licence": "Apache-2.0 (the OHDSI/EunomiaDatasets repository LICENSE; GitHub licence API, 2026-10-04). Modified: reduced to the first 150 persons by trim_gibleed.py (rows kept byte for byte), as that licence permits.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "cf815e0839bcbd3726556e970a9cd05fdd979628b6373722bbae9be5a2aab046",
+   "derivedFrom": {
+    "sha256": "081b82e84c90e2904e02c26546e46412b01cce566071c77e0c4a355c2d0612f9",
+    "script": "trim_gibleed.py"
+   }
   }
  ]
 }

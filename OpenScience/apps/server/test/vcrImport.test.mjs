@@ -80,6 +80,8 @@ async function world(t, { valueSource = 'observed', controller = 'real', config 
 }
 const attempts = async plane => (await fs.readdir(path.join(plane, 'studies')).catch(() => []).then(names => Promise.all(names.map(name => fs.readdir(path.join(plane, 'studies', name, '.intake')).catch(() => []))))).flat();
 const smart = () => fs.readFile(path.join(FIXTURES, 'smart-10-patients.zip'));
+const synthea = () => fs.readFile(path.join(FIXTURES, 'synthea27nj-5.4.zip'));
+const gibleed = () => fs.readFile(path.join(FIXTURES, 'gibleed-5.3-first150.zip'));
 const ndjson = (...rows) => Buffer.from(`${rows.map(row => JSON.stringify(row)).join('\n')}\n`);
 
 // --- the container's answer, decided here --------------------------------------
@@ -144,12 +146,12 @@ test('every reason the converter names is one refusal with a registered code, an
 
 test('the coverage that travels is rebuilt from a closed shape: counts are counts, words are clipped, nothing else passes', () => {
   const rebuilt = normalizeCoverage({
-    inputs: [{ kind: 'Patient', records: 3, imported: 2, status: 'imported', skipped: { duplicate_patient_id: 1, 'bad key with spaces': 4, evil: 'x' }, secret: 'no' }, { kind: '' }, { kind: 'Device', records: -1, status: 'skipped', reason: 'unsupported_resource_type' }],
+    inputs: [{ kind: 'Patient', records: 3, imported: 2, status: 'imported', into: 'fhir_patient', skipped: { duplicate_patient_id: 1, 'bad key with spaces': 4, evil: 'x' }, secret: 'no' }, { kind: '' }, { kind: 'Device', records: -1, status: 'skipped', reason: 'unsupported_resource_type' }],
     skippedTables: [{ table: 'fhir_observation', reason: 'too_many_rows' }, { table: '' }],
     notices: [{ code: 'mixed_units', count: 2, examples: ['http://loinc.org|1|', 'x'.repeat(500)] }, { code: 'not a code', count: 1 }],
     other: 'ignored',
   });
-  assert.deepEqual(rebuilt.inputs[0], { kind: 'Patient', records: 3, imported: 2, status: 'imported', reason: null, skipped: { duplicate_patient_id: 1 } });
+  assert.deepEqual(rebuilt.inputs[0], { kind: 'Patient', records: 3, imported: 2, status: 'imported', reason: null, into: 'fhir_patient', skipped: { duplicate_patient_id: 1 } });
   assert.deepEqual(rebuilt.inputs[1], { kind: 'Device', records: null, imported: 0, status: 'skipped', reason: 'unsupported_resource_type', skipped: {} });
   assert.equal(rebuilt.inputs.length, 2);
   assert.deepEqual(rebuilt.skippedTables, [{ table: 'fhir_observation', reason: 'too_many_rows' }]);
@@ -295,6 +297,67 @@ test('the imported tables and the proposed map derive the analysis tables the en
   assert.equal(derived.shapes.subject.valueSource, 'calculated');
   // The death columns are outcomes: flagged, so a confirmatory study's seal holds them with the pair.
   assert.equal(derived.shapes.subject.outcomeBearing, true);
+});
+
+
+test('an OMOP CDM export becomes seven tables, a dictionary and a proposed map, and derives the subject and events tables', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  const bytes = await synthea();
+  const answer = await w.upload('Synthea27Nj_5.4.zip', bytes, 'omop');
+  assert.deepEqual(answer.tables.map(table => [table.name, table.rows, table.stored]), [
+    ['omop_person', 28, true], ['omop_observation_period', 28, true], ['omop_visit_occurrence', 1791, true], ['omop_condition_occurrence', 470, true],
+    ['omop_drug_exposure', 883, true], ['omop_measurement', 10040, true], ['omop_concept', 306, true],
+  ]);
+  assert.deepEqual(answer.standard, { name: 'OMOP CDM', release: '5.4', vocabulary: 'v5.0 09-APR-22*' });
+  assert.deepEqual(answer.fieldMap.entryIssues, []);
+  assert.deepEqual(answer.fieldMap.mapIssues, []);
+  const data = w.store.files.filter(file => file.role === 'data');
+  assert.deepEqual(data.map(file => file.rowCount), [28, 28, 1791, 470, 883, 10040, 306]);
+  assert.ok(data.every(file => file.detail.import.format === 'omop'));
+  assert.equal(w.store.files.find(file => file.role === 'dictionary').name, 'omop-dictionary.csv');
+  const unread = answer.coverage.inputs.find(input => input.kind === 'procedure_occurrence');
+  assert.deepEqual([unread.status, unread.reason, unread.records], ['skipped', 'unsupported_table', 1649]);
+  assert.deepEqual(answer.coverage.inputs.find(input => input.kind === 'death').into, 'omop_person');
+  assert.equal(answer.coverage.inputs.some(input => input.kind === 'care_site'), false, 'an empty table has nothing to skip');
+
+  const tables = [];
+  for (const file of data) {
+    const parsed = parseTable(await fs.readFile(path.join(w.planeDir, file.location), 'utf8'));
+    tables.push({ name: file.name, header: parsed.header, rows: parsed.rows });
+  }
+  const checked = validateFieldMap(normalizeFieldMap(w.store.source.fieldMap.columns).columns, tables.map(table => ({ name: table.name, header: table.header })));
+  assert.deepEqual(checked.issues, []);
+  const derived = deriveAnalysisShapes({ tables, entries: checked.columns, key: Buffer.alloc(32, 7), fileSource: 'observed' });
+  // Twenty-eight people, three deaths among them (persons 7, 11 and 23): three events and twenty-five censored.
+  assert.equal(derived.shapes.subject.rows.length, 28);
+  assert.equal(derived.shapes.events.rows.length, 28);
+  assert.deepEqual(derived.shapes.events.rows.map(row => row[3]).sort(), [...Array(3).fill('0'), ...Array(25).fill('1')]);
+  assert.deepEqual(derived.shapes.events.rows.filter(row => row[3] === '0').map(row => row[2]).sort(), ['1190', '19915', '23051']);
+  assert.deepEqual(derived.shapes.subject.columnSources, { SEX: 'observed', BRTHYR: 'observed', RACE: 'observed', ETHNIC: 'observed', AGE: 'calculated', DTHFL: 'observed' });
+  assert.equal(derived.shapes.events.valueSource, 'calculated');
+  assert.deepEqual(derived.excluded, []);
+  assert.deepEqual(analysisTableIssues('events', derived.shapes.events.rows.map(row => Object.fromEntries(derived.shapes.events.header.map((name, index) => [name, row[index]])))).filter(issue => issue.blocking), []);
+});
+
+test('a GiBleed export with an empty death table is imported, says so, and calls nobody dead or alive', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  const answer = await w.upload('GiBleed_5.3.zip', await gibleed(), 'omop');
+  assert.deepEqual(answer.tables.map(table => table.rows), [150, 150, 53, 3536, 3722, 2503, 191]);
+  assert.equal(answer.standard.release, 'v5.3.1');
+  assert.equal(answer.coverage.notices.find(notice => notice.code === 'death_table_empty').count, 1);
+  assert.deepEqual(answer.coverage.inputs.find(input => input.kind === 'death').reason, 'empty_table');
+  const person = parseTable(await fs.readFile(path.join(w.planeDir, w.store.files.find(file => file.name === 'omop_person.csv').location), 'utf8'));
+  const deceased = person.header.indexOf('deceased');
+  const event = person.header.indexOf('os_event');
+  assert.ok(person.rows.every(row => row[deceased] === '' && row[event] === '0'));
+});
+
+test('an OMOP export is refused by name when it is not one, and a zip of tables this import does not read stores nothing', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  await assert.rejects(w.upload('a.zip', await smart(), 'omop'), { status: 422, code: 'vcr_import_not_this_format' });
+  await assert.rejects(w.upload('person.ndjson', ndjson({ resourceType: 'Patient' }), 'omop'), { status: 415, code: 'vcr_data_format_unsupported' });
+  assert.equal(w.store.files.length, 0);
+  assert.equal(w.counters.importRefused, 1);
 });
 
 test('a synthetic source takes the import without per-column sources, which its freeze would refuse', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {

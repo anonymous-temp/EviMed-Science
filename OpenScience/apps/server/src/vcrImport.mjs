@@ -105,6 +105,8 @@ export function normalizeCoverage(raw) {
   const inputs = (Array.isArray(raw?.inputs) ? raw.inputs : []).slice(0, COVERAGE_ITEMS).map((/** @type {any} */ item) => ({
     kind: word(item?.kind, 80), records: count(item?.records), imported: count(item?.imported) ?? 0,
     status: item?.status === 'imported' ? 'imported' : 'skipped', reason: word(item?.reason, 60) || null,
+    // A table folded into another (OMOP's death into the person table) says which.
+    ...(TABLE_NAME.test(String(item?.into ?? '')) ? { into: String(item.into) } : {}),
     skipped: Object.fromEntries(Object.entries(item?.skipped && typeof item.skipped === 'object' ? item.skipped : {})
       .filter(([reason, n]) => CODE_WORD.test(reason) && count(n) !== null).slice(0, 20)),
   })).filter((/** @type {{ kind: string }} */ item) => item.kind);

@@ -47,7 +47,8 @@ after(async () => {
   if (plane) await fs.rm(plane, { recursive: true, force: true });
 });
 
-const smart = () => fs.readFile(path.join(MCP_DIR, "test", "fixtures", "vcr_imports", "smart-10-patients.zip"));
+const fixture = (name) => fs.readFile(path.join(MCP_DIR, "test", "fixtures", "vcr_imports", name));
+const smart = () => fixture("smart-10-patients.zip");
 
 async function seedStudy() {
   counter += 1;
@@ -136,4 +137,39 @@ test("a person's edit of the imported map keeps every column's source, and a re-
   // A person's edit saved through the route's own normalisation keeps the sources too: they are one of the keys an entry may have.
   const resaved = await vcr.dataPlane.proposeFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, columns: held });
   assert.equal(resaved.hash, again.fieldMap.hash, "saving the same map again is the same map");
+});
+
+test("an OMOP CDM export is imported, confirmed, frozen and derived: twenty-eight people, three deaths, every column's source kept", options, async () => {
+  const study = await seedStudy();
+  const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "OMOP 导出", ownerParty: "合作医院", allowedUses: ["vcr"], valueSource: "observed" });
+  const bytes = await fixture("synthea27nj-5.4.zip");
+  const imported = await vcr.dataPlane.importStandard({ actor: OWNER, studyId: study.id, sourceId: source.id, name: "Synthea27Nj_5.4.zip", format: "omop", stream: streamOf(bytes), declaredLength: bytes.length });
+  assert.deepEqual(imported.tables.map((table) => [table.name, table.rows]), [
+    ["omop_person", 28], ["omop_observation_period", 28], ["omop_visit_occurrence", 1791], ["omop_condition_occurrence", 470], ["omop_drug_exposure", 883], ["omop_measurement", 10040], ["omop_concept", 306],
+  ]);
+  assert.deepEqual(imported.fieldMap.mapIssues, []);
+  await vcr.dataPlane.confirmFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, hash: imported.fieldMap.hash });
+  const frozen = await vcr.dataPlane.freezeSnapshot({ userId: OWNER, studyId: study.id, sourceId: source.id });
+  assert.deepEqual(frozen.tables.refused, []);
+  const shapes = Object.fromEntries(frozen.tables.registered.map((table) => [table.shape, tableView(table)]));
+  assert.equal(shapes.subject.rowCount, 28);
+  assert.equal(shapes.events.rowCount, 28);
+  assert.equal(shapes.events.valueSource, "calculated");
+  // Whatever the subject table carries says where each column comes from. The profiler's value-overlap rule masks a small-integer column when the subject
+  // ids are small sequential integers too (here person_id is 1..28, so age and the death flag are taken out of the subject table and named in `excluded`):
+  // that is the plane's own rule over any upload, and what the import must never do is carry a column under a source it does not have.
+  const expectedSources = { SEX: "observed", BRTHYR: "observed", RACE: "observed", ETHNIC: "observed", AGE: "calculated", DTHFL: "observed" };
+  for (const [name, source] of Object.entries(shapes.subject.columnSources)) assert.equal(source, expectedSources[name], name);
+  assert.ok(["SEX", "BRTHYR", "RACE", "ETHNIC"].every((name) => name in shapes.subject.columnSources));
+  assert.ok(frozen.tables.excluded.every((/** @type {any} */ item) => ["age_at_index", "deceased"].includes(item.column) && item.reason === "identifying"), JSON.stringify(frozen.tables.excluded));
+  // The source's own person identifier (a GUID per person, in a column the import never carries) is nowhere in the control plane.
+  const ids = ["1007c05b-8d20-8fe6-6790-44622f8316df", "13025201-4834-d1ca-c3ca-38d6614438f1"];
+  const columns = (await database.query(
+    `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'evimed_vcr' AND data_type IN ('text', 'jsonb', 'character varying')`)).rows;
+  for (const { table_name: table, column_name: column } of columns) {
+    for (const id of ids) {
+      const found = (await database.query(`SELECT count(*)::int AS n FROM evimed_vcr."${table}" WHERE "${column}"::text LIKE $1`, [`%${id}%`])).rows[0].n;
+      assert.equal(found, 0, `${id} is in evimed_vcr.${table}.${column}`);
+    }
+  }
 });

@@ -234,6 +234,14 @@ const IMPORT_REASONS: Record<string, string> = {
   table_too_large: "超过文件大小上限",
   too_many_columns: "列数超过上限",
   not_kept: "没有保存",
+  unsupported_table: "本版本不读这张表",
+  empty_table: "表里没有数据",
+  text_encoding: "不是 UTF-8 文本",
+  not_an_omop_table: "不是 OMOP CDM 的表",
+  missing_person_id: "没有受试者编号",
+  duplicate_person_id: "受试者编号重复",
+  duplicate_death_row: "同一个人有多条死亡记录",
+  death_date_unreadable: "死亡日期读不出来",
 };
 /** The converter's notices: a count of something worth knowing about the data, never a value of a patient. */
 const IMPORT_NOTICES: Record<string, string> = {
@@ -250,10 +258,25 @@ const IMPORT_NOTICES: Record<string, string> = {
   date_unreadable: "个日期读不出来，已留空",
   observation_without_value: "条观察没有取值，只保留了项目和日期",
   archive_metadata_ignored: "个压缩包附带的系统文件，已忽略",
+  death_table_empty: "张死亡表是空的：没有记录不等于都还活着，随访按观察期结束截尾",
+  death_table_absent: "份导出里没有死亡表：随访按观察期结束截尾",
+  person_table_absent: "份导出里没有人员表：只导入了按受试者编号关联的记录",
+  person_not_in_person_table: "个受试者编号出现在记录里，但人员表里没有",
+  follow_up_from_records: "位受试者没有观察期，起点和终点取自他们第一条和最后一条有日期的记录",
+  concept_table_absent: "份导出里没有词表（CONCEPT）：概念编号没有名称可查",
+  concept_ids_not_in_vocabulary: "个概念编号不在这份导出的词表里",
+  concept_table_unreadable: "张词表读不出来，概念编号没有名称可查",
+  cdm_source_unreadable: "张 CDM 版本表读不出来",
+  cdm_version_undeclared: "份导出没有声明 CDM 版本",
+  cdm_version_not_tested: "份导出的 CDM 版本不是 5.3 或 5.4，按 5.3 / 5.4 的列读取",
+  death_before_index: "位受试者的死亡日期早于起点，随访时间留空",
+  follow_up_before_index: "位受试者的观察期终点早于起点，随访时间留空",
+  number_unreadable: "个数值读不出来，已留空",
 };
 
 /** The word for a skipped reason or a notice code. */
 function importWord(table: Record<string, string>, code: string): string {
+  if (code.startsWith("missing_required_column:")) return `缺少必需的列 ${code.slice("missing_required_column:".length)}`;
   return table[code] ?? (code.startsWith("value_not_carried:") ? `类型为 ${code.slice("value_not_carried:".length)} 的取值本版本不读，已留空` : code);
 }
 

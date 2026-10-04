@@ -78,7 +78,7 @@ from vcr_record_extract import Refusal, read_verified  # noqa: E402  (the one ve
 NAME = "evimed-import-convert"
 VERSION = "1.0.0"
 PROTOCOL = 1
-FORMATS = ("fhir",)
+FORMATS = ("fhir", "omop")
 
 OBSERVED = "observed"
 CALCULATED = "calculated"
@@ -226,7 +226,8 @@ class Archive:
         self.ignored = 0
         self.members: list[dict] = []
         if self.extension == "zip":
-            if data[:4] != b"PK\x03\x04":
+            # A zip is a local file header, or the end record alone (an archive with nothing in it).
+            if data[:4] not in (b"PK\x03\x04", b"PK\x05\x06"):
                 raise Refusal("not_zip")
             try:
                 archive = zipfile.ZipFile(io.BytesIO(data))
@@ -324,10 +325,13 @@ class Coverage:
         self.notices: Counter = Counter()
         self.notice_detail: dict[str, list[str]] = defaultdict(list)
 
-    def add_input(self, kind: str, records: int | None, imported: int, status: str, reason: str | None = None, skipped: Counter | None = None) -> None:
+    def add_input(self, kind: str, records: int | None, imported: int, status: str, reason: str | None = None, skipped: Counter | None = None,
+                  into: str | None = None) -> None:
         entry: dict = {"kind": kind, "records": records, "imported": imported, "status": status}
         if reason:
             entry["reason"] = reason
+        if into:
+            entry["into"] = into
         if skipped:
             entry["skipped"] = dict(sorted(skipped.items()))
         self.inputs.append(entry)
@@ -877,7 +881,541 @@ def convert_fhir(archive: Archive, directory: Path, limits: Limits, coverage: Co
     return [importer.tables[name] for name in order], dict(STANDARDS["fhir"])
 
 
-CONVERTERS = {"fhir": convert_fhir}
+# ---------------------------------------------------------------------------
+# OHDSI OMOP CDM 5.3 / 5.4
+# ---------------------------------------------------------------------------
+
+OMOP_SUPPORTED = ("person", "observation_period", "visit_occurrence", "condition_occurrence", "drug_exposure", "measurement", "death")
+# The other tables of the CDM (5.3 and 5.4): known by name, so a zip of them is an OMOP export that this import does not read in full,
+# and a zip of nothing else is not an OMOP export at all.
+OMOP_OTHER_TABLES = frozenset({
+    "attribute_definition", "care_site", "cdm_source", "cohort", "cohort_attribute", "cohort_definition", "concept", "concept_ancestor", "concept_class",
+    "concept_relationship", "concept_synonym", "condition_era", "cost", "device_exposure", "domain", "dose_era", "drug_era", "drug_strength", "episode",
+    "episode_event", "fact_relationship", "location", "metadata", "note", "note_nlp", "observation", "payer_plan_period", "procedure_occurrence",
+    "provider", "relationship", "source_to_concept_map", "specimen", "visit_detail", "vocabulary",
+})
+OMOP_REQUIRED = {
+    "person": ("person_id", "gender_concept_id", "year_of_birth"),
+    "observation_period": ("person_id", "observation_period_start_date", "observation_period_end_date"),
+    "death": ("person_id", "death_date"),
+    "visit_occurrence": ("person_id", "visit_concept_id", "visit_start_date"),
+    "condition_occurrence": ("person_id", "condition_concept_id", "condition_start_date"),
+    "drug_exposure": ("person_id", "drug_concept_id", "drug_exposure_start_date"),
+    "measurement": ("person_id", "measurement_concept_id", "measurement_date"),
+}
+OMOP_CODING = "OMOP concept_id"
+OMOP_TYPE = "OMOP Type Concept"
+CONCEPT_COLUMNS = ("concept_id", "concept_name", "domain_id", "vocabulary_id", "concept_class_id", "standard_concept", "concept_code")
+
+
+def _concept(name: str, label: str, concept: str, *, coding: str = OMOP_CODING, **extra) -> dict:
+    return column(name, OBSERVED, label, concept=concept, coding=coding, **extra)
+
+
+OMOP_COLUMNS = {
+    "omop_person": [
+        column("person_id", OBSERVED, "person.person_id, as the source system issued it", role="subject_key", concept="Subject identifier"),
+        column("gender_concept_id", OBSERVED, "person.gender_concept_id", role="covariate", concept="Sex (gender concept)", coding="OMOP Gender concept", alias="SEX"),
+        column("year_of_birth", OBSERVED, "person.year_of_birth (month, day and birth_datetime are not carried)", role="covariate", concept="Year of birth", unit="year",
+               alias="BRTHYR", kind="integer"),
+        column("race_concept_id", OBSERVED, "person.race_concept_id", role="covariate", concept="Race (concept)", coding="OMOP Race concept", alias="RACE"),
+        column("ethnicity_concept_id", OBSERVED, "person.ethnicity_concept_id", role="covariate", concept="Ethnicity (concept)", coding="OMOP Ethnicity concept", alias="ETHNIC"),
+        column("age_at_index", CALCULATED, "Completed years from the birth date to the index date; the year difference when the birth date is incomplete", role="covariate",
+               concept="Age at index date", unit="years", alias="AGE", kind="number"),
+        column("index_date", CALCULATED, "The start of the earliest observation period (else the earliest dated record) of the person", role="time_zero",
+               concept="Index date", time_kind="occurred_at", kind="date"),
+        column("deceased", OBSERVED, "1 when the person has a row in the death table, blank when not (no death row is not a statement of being alive)", role="covariate",
+               concept="Death recorded", alias="DTHFL", outcome=True),
+        column("os_days", CALCULATED, "Days from the index date to death, or to the end of the last observation period when no death is recorded", role="outcome_time",
+               concept="All-cause follow-up time", unit="days", parameter="OS", kind="integer"),
+        column("os_event", CALCULATED, "1 when a death is recorded, 0 when follow-up ends at the observation period's end; that end is not a verified vital status",
+               role="outcome_event", concept="All-cause death", parameter="OS", codes={"event": ["1"], "censored": ["0"]}),
+    ],
+    "omop_observation_period": [
+        column("observation_period_id", OBSERVED, "observation_period.observation_period_id", concept="Observation period identifier", mapped=False),
+        column("person_id", OBSERVED, "observation_period.person_id", role="subject_key", concept="Subject identifier"),
+        column("observation_period_start_date", OBSERVED, "observation_period.observation_period_start_date", concept="Observation period start", time_kind="occurred_at", kind="date"),
+        column("observation_period_end_date", OBSERVED, "observation_period.observation_period_end_date", concept="Observation period end", time_kind="occurred_at", kind="date"),
+        _concept("period_type_concept_id", "observation_period.period_type_concept_id: where the period was derived from", "Period provenance", coding=OMOP_TYPE),
+    ],
+    "omop_visit_occurrence": [
+        column("visit_occurrence_id", OBSERVED, "visit_occurrence.visit_occurrence_id", concept="Visit identifier", mapped=False),
+        column("person_id", OBSERVED, "visit_occurrence.person_id", role="subject_key", concept="Subject identifier"),
+        _concept("visit_concept_id", "visit_occurrence.visit_concept_id", "Visit type"),
+        column("visit_start_date", OBSERVED, "visit_occurrence.visit_start_date", concept="Visit start", time_kind="occurred_at", kind="date"),
+        column("visit_end_date", OBSERVED, "visit_occurrence.visit_end_date", concept="Visit end", time_kind="occurred_at", kind="date"),
+        _concept("visit_type_concept_id", "visit_occurrence.visit_type_concept_id: where the visit was recorded", "Visit provenance", coding=OMOP_TYPE),
+    ],
+    "omop_condition_occurrence": [
+        column("condition_occurrence_id", OBSERVED, "condition_occurrence.condition_occurrence_id", concept="Condition record identifier", mapped=False),
+        column("person_id", OBSERVED, "condition_occurrence.person_id", role="subject_key", concept="Subject identifier"),
+        _concept("condition_concept_id", "condition_occurrence.condition_concept_id", "Condition"),
+        column("condition_start_date", OBSERVED, "condition_occurrence.condition_start_date", concept="Condition start", time_kind="occurred_at", kind="date"),
+        column("condition_end_date", OBSERVED, "condition_occurrence.condition_end_date", concept="Condition end", time_kind="occurred_at", kind="date"),
+        _concept("condition_type_concept_id", "condition_occurrence.condition_type_concept_id: where the condition was recorded", "Condition provenance", coding=OMOP_TYPE),
+        _concept("condition_status_concept_id", "condition_occurrence.condition_status_concept_id (5.3 and later)", "Condition status"),
+        column("visit_occurrence_id", OBSERVED, "condition_occurrence.visit_occurrence_id", concept="Visit identifier", mapped=False),
+    ],
+    "omop_drug_exposure": [
+        column("drug_exposure_id", OBSERVED, "drug_exposure.drug_exposure_id", concept="Drug exposure identifier", mapped=False),
+        column("person_id", OBSERVED, "drug_exposure.person_id", role="subject_key", concept="Subject identifier"),
+        _concept("drug_concept_id", "drug_exposure.drug_concept_id", "Drug"),
+        column("drug_exposure_start_date", OBSERVED, "drug_exposure.drug_exposure_start_date", concept="Exposure start", time_kind="occurred_at", kind="date"),
+        column("drug_exposure_end_date", OBSERVED, "drug_exposure.drug_exposure_end_date", concept="Exposure end", time_kind="occurred_at", kind="date"),
+        _concept("drug_type_concept_id", "drug_exposure.drug_type_concept_id: where the exposure was recorded", "Drug provenance", coding=OMOP_TYPE),
+        column("quantity", OBSERVED, "drug_exposure.quantity", concept="Quantity", kind="number"),
+        column("days_supply", OBSERVED, "drug_exposure.days_supply", concept="Days supply", unit="days", kind="number"),
+        _concept("route_concept_id", "drug_exposure.route_concept_id", "Route"),
+        column("visit_occurrence_id", OBSERVED, "drug_exposure.visit_occurrence_id", concept="Visit identifier", mapped=False),
+    ],
+    "omop_measurement": [
+        column("measurement_id", OBSERVED, "measurement.measurement_id", concept="Measurement identifier", mapped=False),
+        column("person_id", OBSERVED, "measurement.person_id", role="subject_key", concept="Subject identifier"),
+        _concept("measurement_concept_id", "measurement.measurement_concept_id", "Measurement"),
+        column("measurement_date", OBSERVED, "measurement.measurement_date", concept="Measurement date", time_kind="occurred_at", kind="date"),
+        _concept("measurement_type_concept_id", "measurement.measurement_type_concept_id: where the measurement was recorded", "Measurement provenance", coding=OMOP_TYPE),
+        _concept("operator_concept_id", "measurement.operator_concept_id (<, <=, =, >=, >)", "Value operator"),
+        column("value_as_number", OBSERVED, "measurement.value_as_number, as stated (no unit conversion)", concept="Numeric value", kind="number"),
+        _concept("value_as_concept_id", "measurement.value_as_concept_id", "Coded value"),
+        _concept("unit_concept_id", "measurement.unit_concept_id", "Unit", coding="OMOP Unit concept"),
+        column("unit_source_value", OBSERVED, "measurement.unit_source_value: the unit as the source wrote it", concept="Unit text", coding="UCUM"),
+        column("range_low", OBSERVED, "measurement.range_low", concept="Reference range, low", kind="number"),
+        column("range_high", OBSERVED, "measurement.range_high", concept="Reference range, high", kind="number"),
+        column("visit_occurrence_id", OBSERVED, "measurement.visit_occurrence_id", concept="Visit identifier", mapped=False),
+    ],
+    "omop_concept": [
+        column("concept_id", OBSERVED, "concept.concept_id", concept="Concept identifier", mapped=False),
+        column("concept_name", OBSERVED, "concept.concept_name", concept="Concept name", mapped=False),
+        column("domain_id", OBSERVED, "concept.domain_id", concept="Domain", mapped=False),
+        column("vocabulary_id", OBSERVED, "concept.vocabulary_id", concept="Vocabulary", mapped=False),
+        column("concept_class_id", OBSERVED, "concept.concept_class_id", concept="Concept class", mapped=False),
+        column("standard_concept", OBSERVED, "concept.standard_concept", concept="Standard concept flag", mapped=False),
+        column("concept_code", OBSERVED, "concept.concept_code, the code in its vocabulary", concept="Concept code", mapped=False),
+    ],
+}
+# Which carried columns hold a concept_id the lookup table explains.
+OMOP_CONCEPT_COLUMNS = {
+    "omop_person": ("gender_concept_id", "race_concept_id", "ethnicity_concept_id"),
+    "omop_observation_period": ("period_type_concept_id",),
+    "omop_visit_occurrence": ("visit_concept_id", "visit_type_concept_id"),
+    "omop_condition_occurrence": ("condition_concept_id", "condition_type_concept_id", "condition_status_concept_id"),
+    "omop_drug_exposure": ("drug_concept_id", "drug_type_concept_id", "route_concept_id"),
+    "omop_measurement": ("measurement_concept_id", "measurement_type_concept_id", "operator_concept_id", "value_as_concept_id", "unit_concept_id"),
+}
+# The columns of the long tables read from the source, and which of them are dates and numbers (normalised, not interpreted).
+OMOP_DATE_COLUMNS = frozenset({"observation_period_start_date", "observation_period_end_date", "visit_start_date", "visit_end_date", "condition_start_date",
+                               "condition_end_date", "drug_exposure_start_date", "drug_exposure_end_date", "measurement_date"})
+OMOP_NUMBER_COLUMNS = frozenset({"quantity", "days_supply", "value_as_number", "range_low", "range_high"})
+OMOP_TABLE_OF = {name[len("omop_"):]: name for name in OMOP_COLUMNS if name != "omop_concept"}
+_OMOP_DATE = re.compile(r"^(\d{4})-?(\d{2})-?(\d{2})(?!\d)")
+
+
+def omop_date(value: object, notices: Counter) -> str:
+    """An OMOP date as ISO: `2020-01-31`, a datetime's date part, or the `YYYYMMDD` an older export writes. Anything else is blank and counted."""
+    text_value = value.strip() if isinstance(value, str) else ""
+    if not text_value:
+        return ""
+    found = _OMOP_DATE.match(text_value)
+    if found:
+        try:
+            return date(int(found.group(1)), int(found.group(2)), int(found.group(3))).isoformat()
+        except ValueError:
+            pass
+    notices["date_unreadable"] += 1
+    return ""
+
+
+def omop_number(value: object, notices: Counter) -> str:
+    text_value = value.strip() if isinstance(value, str) else ""
+    if not text_value:
+        return ""
+    parsed = as_float(text_value)
+    if parsed != parsed:
+        notices["number_unreadable"] += 1
+        return ""
+    return number_text(parsed) if abs(parsed) < 1e15 else text_value
+
+
+class CsvTable:
+    """One CSV member of a zip as rows keyed by lower-cased header names."""
+
+    def __init__(self, archive: Archive, member: dict) -> None:
+        self.archive = archive
+        self.member = member
+
+    def rows(self):
+        """Yield (header, row) pairs; raise `Refusal("text_encoding")` on bytes that are not UTF-8."""
+        csv.field_size_limit(MAX_CELL_CHARS * 64)
+        with self.archive.open(self.member) as stream:
+            wrapper = io.TextIOWrapper(stream, encoding="utf-8-sig", newline="")
+            reader = csv.reader(wrapper)
+            try:
+                header = next(reader, None)
+                if header is None:
+                    return
+                names = [name.strip().lower() for name in header]
+                for row in reader:
+                    if not row:
+                        continue
+                    yield names, row
+            except UnicodeDecodeError as error:
+                raise Refusal("text_encoding", self.member["name"]) from error
+            except csv.Error as error:
+                raise Refusal("corrupt", "csv") from error
+
+    def header(self) -> list[str]:
+        for names, _ in self.rows():
+            return names
+        # An empty table still has a header line.
+        with self.archive.open(self.member) as stream:
+            first = stream.readline(MAX_LINE_BYTES).decode("utf-8-sig", "replace")
+        return [name.strip().lower() for name in next(csv.reader([first]), [])]
+
+
+class OmopImport:
+    def __init__(self, directory: Path, limits: Limits, coverage: Coverage) -> None:
+        self.directory = directory
+        self.limits = limits
+        self.coverage = coverage
+        self.tables: dict[str, TableOut] = {}
+        self.dates: Counter = Counter()
+        self.persons: dict[str, dict] = {}
+        self.periods: dict[str, list[date | None]] = {}
+        self.deaths: dict[str, str] = {}
+        self.span: dict[str, list[date]] = {}
+        self.referenced: set[str] = set()
+        self.concepts: set[str] = set()
+        self.skipped: dict[str, Counter] = defaultdict(Counter)
+        self.read: Counter = Counter()
+        self.kept: Counter = Counter()
+        self.failed: set[str] = set()
+        self.from_records = 0
+        self.version = ""
+        self.vocabulary = ""
+
+    def table(self, name: str) -> TableOut:
+        if name not in self.tables:
+            self.tables[name] = TableOut(self.directory, name, OMOP_COLUMNS[name], self.limits)
+        return self.tables[name]
+
+    def seen(self, person_id: str, *dates: date | None) -> None:
+        self.referenced.add(person_id)
+        stamps = [stamp for stamp in dates if stamp is not None]
+        if not stamps:
+            return
+        span = self.span.get(person_id)
+        if span is None:
+            self.span[person_id] = [min(stamps), max(stamps)]
+        else:
+            span[0] = min(span[0], *stamps)
+            span[1] = max(span[1], *stamps)
+
+    def usable(self, name: str, csv_table: CsvTable) -> list[str] | None:
+        """The table's header when it carries what the module needs of it; else None, with the missing column named."""
+        try:
+            header = csv_table.header()
+        except Refusal as refusal:
+            if refusal.reason != "text_encoding":
+                raise
+            self.coverage.add_input(name, None, 0, "skipped", "text_encoding")
+            return None
+        missing = [column_name for column_name in OMOP_REQUIRED[name] if column_name not in header]
+        if missing:
+            self.coverage.add_input(name, None, 0, "skipped", f"missing_required_column:{missing[0]}")
+            return None
+        return header
+
+    # -- one table ---------------------------------------------------------
+
+    def read_person(self, csv_table: CsvTable) -> None:
+        counter = self.skipped["person"]
+        for names, row in csv_table.rows():
+            self.read["person"] += 1
+            get = lambda key: row[names.index(key)].strip() if key in names and names.index(key) < len(row) else ""  # noqa: E731
+            person_id = cell(get("person_id"))
+            if not person_id:
+                counter["missing_person_id"] += 1
+                continue
+            if person_id in self.persons:
+                counter["duplicate_person_id"] += 1
+                continue
+            self.persons[person_id] = {
+                "gender": cell(get("gender_concept_id")), "year": get("year_of_birth"), "month": get("month_of_birth"), "day": get("day_of_birth"),
+                "datetime": get("birth_datetime"), "race": cell(get("race_concept_id")), "ethnicity": cell(get("ethnicity_concept_id")),
+            }
+            self.kept["person"] += 1
+            for key in ("gender_concept_id", "race_concept_id", "ethnicity_concept_id"):
+                if get(key):
+                    self.concepts.add(cell(get(key)))
+
+    def read_period(self, csv_table: CsvTable) -> None:
+        counter = self.skipped["observation_period"]
+        out = self.table("omop_observation_period")
+        for names, row in csv_table.rows():
+            self.read["observation_period"] += 1
+            get = lambda key: row[names.index(key)].strip() if key in names and names.index(key) < len(row) else ""  # noqa: E731
+            person_id = cell(get("person_id"))
+            if not person_id:
+                counter["missing_person_id"] += 1
+                continue
+            begins, ends = omop_date(get("observation_period_start_date"), self.dates), omop_date(get("observation_period_end_date"), self.dates)
+            out.write([cell(get("observation_period_id")), person_id, begins, ends, cell(get("period_type_concept_id"))])
+            self.kept["observation_period"] += 1
+            self.referenced.add(person_id)
+            # The index is the earliest readable start and the end of follow-up the latest readable end, each on its own.
+            start, end = day(begins), day(ends)
+            held = self.periods.setdefault(person_id, [None, None])
+            if start is not None:
+                held[0] = start if held[0] is None else min(held[0], start)
+            if end is not None:
+                held[1] = end if held[1] is None else max(held[1], end)
+            if get("period_type_concept_id"):
+                self.concepts.add(cell(get("period_type_concept_id")))
+
+    def read_death(self, csv_table: CsvTable) -> None:
+        counter = self.skipped["death"]
+        for names, row in csv_table.rows():
+            self.read["death"] += 1
+            get = lambda key: row[names.index(key)].strip() if key in names and names.index(key) < len(row) else ""  # noqa: E731
+            person_id = cell(get("person_id"))
+            if not person_id:
+                counter["missing_person_id"] += 1
+                continue
+            if person_id in self.deaths:
+                counter["duplicate_death_row"] += 1
+                continue
+            when = omop_date(get("death_date"), self.dates)
+            if not when:
+                counter["death_date_unreadable"] += 1
+                continue
+            self.deaths[person_id] = when
+            self.kept["death"] += 1
+
+    def read_long(self, name: str, csv_table: CsvTable) -> None:
+        """A condition, drug, measurement or visit table, row by row: the carried columns, dates and numbers normalised."""
+        output = OMOP_TABLE_OF[name]
+        out = self.table(output)
+        wanted = [spec["name"] for spec in OMOP_COLUMNS[output]]
+        counter = self.skipped[name]
+        concept_columns = OMOP_CONCEPT_COLUMNS.get(output, ())
+        for names, row in csv_table.rows():
+            self.read[name] += 1
+            at = {key: names.index(key) for key in wanted if key in names}
+            person_id = cell(row[at["person_id"]]) if at["person_id"] < len(row) else ""
+            if not person_id:
+                counter["missing_person_id"] += 1
+                continue
+            cells = []
+            stamps = []
+            for key in wanted:
+                raw = row[at[key]] if key in at and at[key] < len(row) else ""
+                if key in OMOP_DATE_COLUMNS:
+                    value = omop_date(raw, self.dates)
+                    stamps.append(day(value))
+                elif key in OMOP_NUMBER_COLUMNS:
+                    value = omop_number(raw, self.dates)
+                else:
+                    value = cell(raw)
+                if key in concept_columns and value:
+                    self.concepts.add(value)
+                cells.append(value)
+            out.write(cells)
+            self.kept[name] += 1
+            self.seen(person_id, *stamps)
+
+    # -- the roll-up -------------------------------------------------------
+
+    def finish_persons(self) -> None:
+        out = self.table("omop_person")
+        for person_id, info in self.persons.items():
+            period = self.periods.get(person_id) or [None, None]
+            span = self.span.get(person_id) or [None, None]
+            index = period[0] if period[0] is not None else span[0]
+            end = period[1] if period[1] is not None else span[1]
+            if (period[0] is None or period[1] is None) and span[0] is not None:
+                self.from_records += 1
+            born = None
+            year = re.match(r"^\d{4}$", info["year"])
+            if year and info["month"].isdigit() and info["day"].isdigit():
+                try:
+                    born = date(int(info["year"]), int(info["month"]), int(info["day"]))
+                except ValueError:
+                    born = None
+            if born is None and info["datetime"]:
+                born = day(info["datetime"])
+            age = ""
+            if index is not None:
+                if born is not None:
+                    age = str(completed_years(born, index))
+                elif year:
+                    age = str(index.year - int(info["year"]))
+                    self.coverage.notice("age_by_year_difference")
+            death = day(self.deaths.get(person_id, ""))
+            os_days = event = ""
+            if index is None:
+                self.coverage.notice("no_dated_record")
+            elif death is not None:
+                if death < index:
+                    self.coverage.notice("death_before_index")
+                else:
+                    os_days, event = str((death - index).days), "1"
+            elif end is not None and end >= index:
+                os_days, event = str((end - index).days), "0"
+                if os_days == "0":
+                    self.coverage.notice("zero_follow_up")
+            else:
+                self.coverage.notice("follow_up_before_index")
+            out.write([person_id, info["gender"], info["year"] if year else "", info["race"], info["ethnicity"], age, index.isoformat() if index else "",
+                       "1" if person_id in self.deaths else "", os_days, event])
+
+    def write_concepts(self, archive: Archive, member: dict | None) -> None:
+        if member is None:
+            self.coverage.notice("concept_table_absent")
+            return
+        used = {value for value in self.concepts if value and value != "0"}
+        out = self.table("omop_concept")
+        found: set[str] = set()
+        try:
+            for names, row in CsvTable(archive, member).rows():
+                at = {key: names.index(key) for key in CONCEPT_COLUMNS if key in names}
+                if "concept_id" not in at or at["concept_id"] >= len(row):
+                    break
+                concept_id = row[at["concept_id"]].strip()
+                if concept_id in used and concept_id not in found:
+                    found.add(concept_id)
+                    out.write([cell(row[at[key]]) if key in at and at[key] < len(row) else "" for key in CONCEPT_COLUMNS])
+        except Refusal as refusal:
+            if refusal.reason != "text_encoding":
+                raise
+            out.overflow = "text_encoding"
+            self.coverage.notice("concept_table_unreadable")
+            return
+        missing = used - found
+        if missing:
+            self.coverage.notice("concept_ids_not_in_vocabulary", len(missing))
+
+    # -- the members of the upload -----------------------------------------
+
+    def version_of(self, archive: Archive, member: dict) -> None:
+        try:
+            for names, row in CsvTable(archive, member).rows():
+                get = lambda key: row[names.index(key)].strip() if key in names and names.index(key) < len(row) else ""  # noqa: E731
+                self.version = cell(get("cdm_version"))[:30]
+                self.vocabulary = cell(get("vocabulary_version"))[:40]
+                break
+        except Refusal as refusal:
+            if refusal.reason != "text_encoding":
+                raise
+            self.coverage.notice("cdm_source_unreadable")
+
+    def run(self, archive: Archive) -> dict:
+        by_name: dict[str, dict] = {}
+        other: list[dict] = []
+        for member in archive.members:
+            base = member["name"].lower()
+            if base.endswith(".csv") and base[:-4] in OMOP_SUPPORTED + tuple(OMOP_OTHER_TABLES):
+                by_name[base[:-4]] = member
+            else:
+                other.append(member)
+        if not by_name:
+            raise Refusal("not_omop" if other or archive.members else "nothing_to_import")
+        if not any(name in by_name for name in OMOP_SUPPORTED):
+            for name, member in sorted(by_name.items()):
+                self.coverage.add_input(name, self.count_rows(archive, member), 0, "skipped", "unsupported_table")
+            raise Refusal("no_supported_table")
+        if "cdm_source" in by_name:
+            self.version_of(archive, by_name["cdm_source"])
+        usable: dict[str, list[str]] = {}
+        for name in OMOP_SUPPORTED:
+            if name in by_name:
+                header = self.usable(name, CsvTable(archive, by_name[name]))
+                if header is not None:
+                    usable[name] = header
+        reads = {"person": self.read_person, "observation_period": self.read_period, "death": self.read_death}
+        for name in ("person", "observation_period", "death"):
+            if name in usable:
+                self.guarded(name, lambda csv_table, fn=reads[name]: fn(csv_table), archive, by_name[name])
+        for name in ("visit_occurrence", "condition_occurrence", "drug_exposure", "measurement"):
+            if name in usable:
+                self.guarded(name, lambda csv_table, key=name: self.read_long(key, csv_table), archive, by_name[name])
+        if "person" in by_name and "person" in usable and self.persons:
+            self.finish_persons()
+        elif "person" not in usable:
+            self.coverage.notice("person_table_absent")
+        outside = self.referenced - set(self.persons)
+        if self.persons and outside:
+            self.coverage.notice("person_not_in_person_table", len(outside))
+        if self.from_records:
+            self.coverage.notice("follow_up_from_records", self.from_records)
+        if "death" not in by_name:
+            self.coverage.notice("death_table_absent")
+        elif not self.read["death"]:
+            self.coverage.notice("death_table_empty")
+        self.write_concepts(archive, by_name.get("concept"))
+        for name in OMOP_SUPPORTED:
+            if name not in by_name:
+                continue
+            if name not in usable or name in self.failed:
+                continue
+            into = "omop_person" if name == "death" else None
+            produced = self.kept[name]
+            reason = None if produced else ("empty_table" if not self.read[name] else "all_rows_skipped")
+            self.coverage.add_input(name, self.read[name], produced, "imported" if produced else "skipped", reason, self.skipped.get(name), into=into)
+        for name, member in sorted(by_name.items()):
+            if name in OMOP_SUPPORTED or name == "concept" or name == "cdm_source":
+                continue
+            rows = self.count_rows(archive, member)
+            # An empty table has nothing in it to skip: it is not listed.
+            if rows != 0:
+                self.coverage.add_input(name, rows, 0, "skipped", "unsupported_table")
+        for member in other:
+            self.coverage.add_input(member["name"], None, 0, "skipped", "not_an_omop_table")
+        for key, count in sorted(self.dates.items()):
+            self.coverage.notice(key, count)
+        if self.version and not re.match(r"^v?5\.[34]", self.version):
+            self.coverage.notice("cdm_version_not_tested", 1, self.version)
+        elif not self.version:
+            self.coverage.notice("cdm_version_undeclared")
+        return {"name": "OMOP CDM", "release": self.version or "undeclared", **({"vocabulary": self.vocabulary} if self.vocabulary else {})}
+
+    def guarded(self, name: str, work, archive: Archive, member: dict) -> None:
+        """Read one table; bytes that are not UTF-8 skip that table by name and leave the others."""
+        try:
+            work(CsvTable(archive, member))
+        except Refusal as refusal:
+            if refusal.reason != "text_encoding":
+                raise
+            self.coverage.add_input(name, None, 0, "skipped", "text_encoding")
+            target = self.tables.get(OMOP_TABLE_OF.get(name, f"omop_{name}"))
+            if target is not None:
+                target.overflow = "text_encoding"
+            # What a half-read table contributed to the roll-up goes with it.
+            {"person": self.persons, "observation_period": self.periods, "death": self.deaths}.get(name, {}).clear()
+            self.read[name] = 0
+            self.kept[name] = 0
+            self.failed.add(name)
+
+    def count_rows(self, archive: Archive, member: dict) -> int | None:
+        """Data rows of a table this import does not read: counted, so the coverage can say how much was left."""
+        if member["size"] > 300 * 1024 * 1024:
+            return None
+        try:
+            total = 0
+            for _ in CsvTable(archive, member).rows():
+                total += 1
+            return total
+        except Refusal:
+            return None
+
+
+def convert_omop(archive: Archive, directory: Path, limits: Limits, coverage: Coverage) -> tuple[list[TableOut], dict]:
+    importer = OmopImport(directory, limits, coverage)
+    standard = importer.run(archive)
+    order = [name for name in OMOP_COLUMNS if name in importer.tables]
+    return [importer.tables[name] for name in order], standard
+
+
+CONVERTERS = {"fhir": convert_fhir, "omop": convert_omop}
 
 
 # ---------------------------------------------------------------------------

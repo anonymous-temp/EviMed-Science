@@ -193,6 +193,27 @@ describe("a source held in a standard format", () => {
     expect(summary.notices[2]).toBe("1 brand_new");
   });
 
+  it("says OMOP's own words: a table folded into another, a table that lacks a column, an empty death table", () => {
+    const summary = importSummary({
+      format: "omop", standard: { name: "OMOP CDM" }, fieldMap: { hash: "h", entries: 3, trimmed: 0, columnSourcesDeclared: true },
+      tables: [{ name: "omop_person", file: "omop_person.csv", rows: 150, columns: 10, stored: true }],
+      coverage: {
+        inputs: [
+          { kind: "death", records: 0, imported: 0, status: "skipped", reason: "empty_table", skipped: {} },
+          { kind: "measurement", records: 9, imported: 0, status: "skipped", reason: "missing_required_column:measurement_date", skipped: {} },
+          { kind: "procedure_occurrence", records: 1807, imported: 0, status: "skipped", reason: "unsupported_table", skipped: {} },
+        ],
+        skippedTables: [], notices: [{ code: "death_table_empty", count: 1 }, { code: "concept_ids_not_in_vocabulary", count: 10 }],
+      },
+    });
+    expect(summary.skipped).toEqual([
+      "death：读到 0 条，导入 0 条（表里没有数据）",
+      "measurement：读到 9 条，导入 0 条（缺少必需的列 measurement_date）",
+      "procedure_occurrence：读到 1807 条，导入 0 条（本版本不读这张表）",
+    ]);
+    expect(summary.notices).toEqual(["1 张死亡表是空的：没有记录不等于都还活着，随访按观察期结束截尾", "10 个概念编号不在这份导出的词表里"]);
+  });
+
   it("keeps each column's value source through the editor, so a person's edit does not lose what the import said", () => {
     const held = (columns: VcrIntakeSource["fieldMap"]["columns"]) => {
       const found = structuredClone(readVcrIntake(fixture("intake/data-sealed.json").intake).sources[0]);

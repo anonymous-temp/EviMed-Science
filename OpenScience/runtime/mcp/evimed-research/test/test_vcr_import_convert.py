@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -32,6 +33,8 @@ import vcr_import_convert as convert  # noqa: E402
 
 FIXTURES = ROOT / "test" / "fixtures" / "vcr_imports"
 SMART = FIXTURES / "smart-10-patients.zip"
+NJ = FIXTURES / "synthea27nj-5.4.zip"
+GIBLEED = FIXTURES / "gibleed-5.3-first150.zip"
 OWN_COLUMNS = {"observed", "calculated", "imputed", "extracted"}
 
 
@@ -103,6 +106,10 @@ class Fixtures(unittest.TestCase):
             self.assertEqual(hashlib.sha256(body).hexdigest(), item["sha256"], item["file"])
             for key in ("source", "licence", "fetchedAt"):
                 self.assertTrue(item.get(key), f"{item['file']} has no {key}")
+        # The reduced sample is reproducible from its download by the script that made it.
+        reduced = [item for item in manifest["fixtures"] if item.get("derivedFrom")]
+        self.assertEqual([item["file"] for item in reduced], ["gibleed-5.3-first150.zip"])
+        self.assertTrue((FIXTURES / reduced[0]["derivedFrom"]["script"]).is_file())
         # A fixture under terms that forbid modification is never committed.
         self.assertFalse([item for item in manifest["fixtures"] if "cdisc-pilot" in item["file"].lower()])
 
@@ -183,7 +190,6 @@ class FhirSample(unittest.TestCase):
             convert.run({"format": "fhir", "extension": "zip", "file": {"sha256": hashlib.sha256(SMART.read_bytes()).hexdigest(), "bytes": SMART.stat().st_size}}, source, out)
             everything = "".join(path.read_text(encoding="utf-8") for path in out.iterdir())
         # The first patient's name, her social-security and driver's-licence numbers, her birth date, her address town.
-        # ... and the one recorded death's date, 2009-02-06, appears nowhere as a column value (only the days to it do).
         for identifying in ("Hyatt152", "Brandon214", "999-59-5908", "S99990168", "1978-05-12", "Parsons", "555-352-7285", "Nelida367"):
             self.assertNotIn(identifying, everything)
 
@@ -349,6 +355,208 @@ class FhirRefusals(unittest.TestCase):
         self.assertEqual(sorted(tables), ["fhir_encounter", "fhir_patient", "fhir_procedure"])
         self.assertEqual({item["table"]: item["reason"] for item in result["coverage"]["skippedTables"]},
                          {name: "too_many_columns" for name in ("fhir_condition", "fhir_observation", "fhir_medication")})
+
+
+def csv_zip(tables, *, newline="\n"):
+    """A zip of CSV tables from {name: [header, row, ...]} (each row a list), as an OMOP export is."""
+    members = {}
+    for name, rows in tables.items():
+        buffer = io.StringIO()
+        csv.writer(buffer, lineterminator=newline).writerows(rows)
+        members[name] = buffer.getvalue()
+    return zip_bytes(members)
+
+
+class OmopSynthea(unittest.TestCase):
+    """OHDSI Eunomia's Synthea27Nj, CDM 5.4, lowercase headers: 28 persons, 3 deaths, 38 tables."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result, cls.tables = run_bytes(NJ.read_bytes(), "omop", "zip")
+
+    def test_the_tables_have_the_row_counts_the_files_hold(self):
+        # awk over each CSV (lines less the header): the seven tables the import reads, and the vocabulary rows they use.
+        counts = {name: len(rows) - 1 for name, rows in self.tables.items()}
+        self.assertEqual(counts, {"omop_person": 28, "omop_observation_period": 28, "omop_visit_occurrence": 1791, "omop_condition_occurrence": 470,
+                                  "omop_drug_exposure": 883, "omop_measurement": 10040, "omop_concept": 306})
+        self.assertEqual(self.result["standard"], {"name": "OMOP CDM", "release": "5.4", "vocabulary": "v5.0 09-APR-22*"})
+        # 316 distinct concept_ids are used by the carried columns (0 is "no matching concept" and is not looked up); 306 are in the shard.
+        self.assertEqual(notices_of(self.result)["concept_ids_not_in_vocabulary"], 10)
+
+    def test_what_the_import_does_not_read_is_named_with_the_rows_it_left(self):
+        for name, rows in (("observation", 8099), ("procedure_occurrence", 1649), ("condition_era", 469), ("visit_detail", 1791), ("provider", 67),
+                           ("concept_relationship", 266588), ("device_exposure", 1), ("vocabulary", 1)):
+            got = coverage_of(self.result, name)
+            self.assertEqual((got["status"], got["reason"], got["records"], got["imported"]), ("skipped", "unsupported_table", rows, 0), name)
+        listed = {item["kind"] for item in self.result["coverage"]["inputs"]}
+        self.assertNotIn("care_site", listed, "an empty table has nothing in it to skip")
+        death = coverage_of(self.result, "death")
+        self.assertEqual((death["status"], death["records"], death["imported"], death["into"]), ("imported", 3, 3, "omop_person"))
+        self.assertEqual(coverage_of(self.result, "measurement")["imported"], 10040)
+
+    def test_follow_up_runs_from_the_observation_period_to_death_or_to_its_end(self):
+        persons = {row["person_id"]: row for row in rows_of(self.tables["omop_person"])}
+        # awk over PERSON, OBSERVATION_PERIOD and DEATH, and `date` for the day counts.
+        self.assertEqual((persons["1"]["year_of_birth"], persons["1"]["age_at_index"], persons["1"]["index_date"], persons["1"]["os_days"], persons["1"]["os_event"], persons["1"]["deceased"]),
+                         ("1998", "2", "2000-12-27", "7947", "0", ""))
+        self.assertEqual((persons["7"]["age_at_index"], persons["7"]["index_date"], persons["7"]["os_days"], persons["7"]["os_event"], persons["7"]["deceased"]), ("18", "1956-04-17", "23051", "1", "1"))
+        self.assertEqual((persons["11"]["age_at_index"], persons["11"]["os_days"], persons["11"]["os_event"]), ("1", "19915", "1"))
+        self.assertEqual((persons["23"]["age_at_index"], persons["23"]["os_days"], persons["23"]["os_event"]), ("0", "1190", "1"))
+        self.assertEqual(sorted(pid for pid, row in persons.items() if row["os_event"] == "1"), ["11", "23", "7"])
+        self.assertEqual(sum(1 for row in persons.values() if row["os_event"] == "0"), 25)
+        self.assertEqual(notices_of(self.result).get("follow_up_from_records"), None, "every person has an observation period")
+
+    def test_values_are_carried_as_stated(self):
+        measurements = rows_of(self.tables["omop_measurement"])
+        weights = [float(row["value_as_number"]) for row in measurements if row["measurement_concept_id"] == "3025315" and row["value_as_number"]]
+        self.assertEqual(len(weights), 511)
+        self.assertAlmostEqual(sum(weights), 31672.7, places=6)
+        self.assertEqual(len([row for row in measurements if not row["value_as_number"]]), 933)
+        self.assertEqual(len([row for row in measurements if row["unit_concept_id"] == "9529"]), 511)
+        self.assertEqual(rows_of(self.tables["omop_person"])[0]["gender_concept_id"], "8507")
+        # The shard's own rows for the concepts the tables use: grep over CONCEPT.csv.
+        concept = {row["concept_id"]: row for row in rows_of(self.tables["omop_concept"])}
+        self.assertEqual(len(concept), 306)
+        self.assertEqual((concept["372328"]["concept_name"], concept["372328"]["vocabulary_id"], concept["372328"]["concept_code"]), ("Otitis media", "SNOMED", "65363002"))
+        self.assertEqual((concept["38003564"]["concept_name"], concept["38003564"]["domain_id"]), ("Not Hispanic or Latino", "Ethnicity"))
+
+    def test_nothing_that_identifies_a_person_is_carried(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            source = pathlib.Path(scratch) / "import.zip"
+            source.write_bytes(NJ.read_bytes())
+            out = pathlib.Path(scratch) / "out"
+            out.mkdir()
+            convert.run({"format": "omop", "extension": "zip", "file": {"sha256": hashlib.sha256(NJ.read_bytes()).hexdigest(), "bytes": NJ.stat().st_size}}, source, out)
+            everything = "".join(path.read_text(encoding="utf-8") for path in out.iterdir() if path.suffix == ".csv")
+            header = (out / "omop_person.csv").read_text(encoding="utf-8").splitlines()[0]
+        # The source's own identifier of each person (a GUID in person_source_value), her birth date and the columns that carry them are in nothing it produced,
+        # nor is the date of death a column (a date can coincide with another record's, so the columns are what is checked).
+        for identifying in ("1007c05b-8d20-8fe6-6790-44622f8316df", "13025201-4834-d1ca-c3ca-38d6614438f1", "birth_datetime", "person_source_value", "month_of_birth", "death_date", "cause_source_value"):
+            self.assertNotIn(identifying, everything)
+        self.assertNotIn("1998-04-09 00:00:00", everything)
+        self.assertEqual(header, "person_id,gender_concept_id,year_of_birth,race_concept_id,ethnicity_concept_id,age_at_index,index_date,deceased,os_days,os_event")
+
+    def test_every_column_states_its_value_source_and_the_map_names_the_subject_and_the_outcome(self):
+        for table in self.result["tables"]:
+            for column_ in table["columns"]:
+                self.assertIn(column_["valueSource"], OWN_COLUMNS)
+        calculated = {(item["table"], item["column"]) for item in self.result["fieldMap"] if item["valueSource"] == "calculated"}
+        self.assertEqual(calculated, {("omop_person.csv", name) for name in ("age_at_index", "index_date", "os_days", "os_event")})
+        keys = sorted(item["table"] for item in self.result["fieldMap"] if item["role"] == "subject_key")
+        self.assertEqual(keys, sorted(f"omop_{name}.csv" for name in ("condition_occurrence", "drug_exposure", "measurement", "observation_period", "person", "visit_occurrence")))
+        self.assertEqual(entry(self.result, "omop_person", "os_days")["role"], "outcome_time")
+        event = entry(self.result, "omop_person", "os_event")
+        self.assertEqual((event["parameter"], event["codes"]), ("OS", {"event": ["1"], "censored": ["0"]}))
+        self.assertTrue(entry(self.result, "omop_person", "deceased")["outcome"])
+        self.assertEqual(entry(self.result, "omop_person", "index_date")["role"], "time_zero")
+        # The vocabulary table explains the concept ids; it is not a person's table and has no map entry.
+        self.assertFalse([item for item in self.result["fieldMap"] if item["table"] == "omop_concept.csv"])
+        self.assertEqual(entry(self.result, "omop_measurement", "unit_concept_id")["codingSystem"], "OMOP Unit concept")
+        self.assertEqual({item["column"].split(".")[0] for item in self.result["dictionary"]}, {table["name"] for table in self.result["tables"]})
+
+
+class OmopGiBleed(unittest.TestCase):
+    """GiBleed 5.3.1 reduced to its first 150 persons: uppercase headers, an empty DEATH, observation periods that do not all name a person."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result, cls.tables = run_bytes(GIBLEED.read_bytes(), "omop", "zip")
+
+    def test_counts_and_the_empty_death_table(self):
+        counts = {name: len(rows) - 1 for name, rows in self.tables.items()}
+        # wc -l and a separate csv reading over the 8 kept tables: 3,536 condition rows, 3,722 drug exposures, 2,503 measurements, 53 visits.
+        self.assertEqual(counts, {"omop_person": 150, "omop_observation_period": 150, "omop_visit_occurrence": 53, "omop_condition_occurrence": 3536,
+                                  "omop_drug_exposure": 3722, "omop_measurement": 2503, "omop_concept": 191})
+        self.assertEqual(self.result["standard"]["release"], "v5.3.1")
+        death = coverage_of(self.result, "death")
+        self.assertEqual((death["status"], death["reason"], death["records"]), ("skipped", "empty_table", 0))
+        persons = rows_of(self.tables["omop_person"])
+        self.assertTrue(all(row["deceased"] == "" and row["os_event"] == "0" for row in persons), "no death recorded: every person is censored, and none is called dead or alive")
+        self.assertEqual(notices_of(self.result)["death_table_empty"], 1)
+        self.assertEqual(notices_of(self.result)["concept_ids_not_in_vocabulary"], 10)
+        self.assertEqual(coverage_of(self.result, "procedure_occurrence")["records"], 1807)
+        self.assertEqual(coverage_of(self.result, "drug_era")["records"], 2847)
+
+    def test_the_first_person_and_the_uppercase_headers(self):
+        first = rows_of(self.tables["omop_person"])[0]
+        # PERSON.csv: 6, born 1963-12-31, observation period 1963-12-31 to 2007-02-06 -> age 0, 15,743 days (python's date arithmetic and `date`).
+        self.assertEqual((first["person_id"], first["gender_concept_id"], first["year_of_birth"], first["age_at_index"], first["index_date"], first["os_days"], first["os_event"]),
+                         ("6", "8532", "1963", "0", "1963-12-31", "15743", "0"))
+        counts = Counter(row["gender_concept_id"] for row in rows_of(self.tables["omop_person"]))
+        self.assertEqual(dict(counts), {"8532": 78, "8507": 72})
+
+
+class OmopShapes(unittest.TestCase):
+    def test_an_older_export_and_its_quirks_are_read_and_counted(self):
+        data = csv_zip({
+            "PERSON.csv": [["PERSON_ID", "GENDER_CONCEPT_ID", "YEAR_OF_BIRTH", "RACE_CONCEPT_ID", "TIME_OF_BIRTH"], ["1", "8507", "1970", "8527", "0000"], ["2", "8532", "1980", "", ""],
+                           ["1", "8507", "1971", "8527", ""], ["", "8507", "1990", "", ""]],
+            "OBSERVATION_PERIOD.csv": [["person_id", "observation_period_start_date", "observation_period_end_date"], ["1", "20100101", "20150101"], ["1", "2016-02-03", "2019-12-31"], ["2", "20100101", "not-a-date"]],
+            "DEATH.csv": [["PERSON_ID", "DEATH_DATE"], ["2", "20120505"]],
+            "CONDITION_OCCURRENCE.csv": [["person_id", "condition_concept_id", "condition_start_date"], ["1", "201826", "20120101"], ["", "201826", "20120101"], ["9", "201826", "2012-06-07"]],
+            "README.txt": ["see the data users guide"],
+        })
+        result, tables = run_bytes(data, "omop", "zip")
+        self.assertEqual(result["outcome"], "converted")
+        persons = {row["person_id"]: row for row in rows_of(tables["omop_person"])}
+        # Person 1 has two periods: follow-up runs from the first start to the last end. The birth month and day are missing, so age is a year difference.
+        self.assertEqual((persons["1"]["index_date"], persons["1"]["age_at_index"], persons["1"]["os_days"], persons["1"]["os_event"]), ("2010-01-01", "40", "3651", "0"))
+        # Person 2 died 2012-05-05, 855 days after the start of the period (its end was unreadable, and a death does not need it).
+        self.assertEqual((persons["2"]["os_days"], persons["2"]["os_event"], persons["2"]["deceased"]), ("855", "1", "1"))
+        self.assertEqual(coverage_of(result, "person")["skipped"], {"duplicate_person_id": 1, "missing_person_id": 1})
+        self.assertEqual(coverage_of(result, "condition_occurrence")["skipped"], {"missing_person_id": 1})
+        notices = notices_of(result)
+        self.assertEqual(notices["date_unreadable"], 1)
+        self.assertEqual(notices["age_by_year_difference"], 2)
+        self.assertEqual(notices["person_not_in_person_table"], 1)
+        self.assertEqual(notices["concept_table_absent"], 1)
+        self.assertEqual(notices["cdm_version_undeclared"], 1)
+        self.assertEqual(result["standard"]["release"], "undeclared")
+        self.assertEqual(coverage_of(result, "README.txt")["reason"], "not_an_omop_table")
+        self.assertEqual(rows_of(tables["omop_observation_period"])[2]["observation_period_end_date"], "")
+        self.assertEqual(rows_of(tables["omop_condition_occurrence"])[0]["condition_start_date"], "2012-01-01", "YYYYMMDD is the same date")
+
+    def test_a_table_without_what_the_module_needs_of_it_is_skipped_by_name(self):
+        data = csv_zip({
+            "person.csv": [["person_id", "gender_concept_id", "year_of_birth"], ["1", "8507", "1970"]],
+            # The malformed header of a real public export: a column named with its own timestamp.
+            "death.csv": [["person_id", "death_date 00:00:00"], ["1", "20120505"]],
+            "measurement.csv": [["person_id", "measurement_concept_id", "measurement_date"], ["1", "3025315", "2012-01-01"]],
+        })
+        result, tables = run_bytes(data, "omop", "zip")
+        self.assertEqual(coverage_of(result, "death")["reason"], "missing_required_column:death_date")
+        self.assertEqual(rows_of(tables["omop_person"])[0]["deceased"], "", "an unread death table says nothing about death")
+        self.assertNotIn("death_table_absent", notices_of(result), "the table is there; it could not be read")
+        # No period at all: the index and the end come from the one measurement there is, which is a follow-up of no days, and says so.
+        self.assertEqual((notices_of(result)["follow_up_from_records"], notices_of(result)["zero_follow_up"]), (1, 1))
+
+    def test_a_table_of_another_encoding_is_skipped_and_the_others_still_land(self):
+        data = zip_bytes({
+            "person.csv": "person_id,gender_concept_id,year_of_birth\n1,8507,1970\n",
+            "condition_occurrence.csv": "person_id,condition_concept_id,condition_start_date\n1,201826,2012-01-01\n".encode("utf-8") + "\n1,\xe9,2012-01-01\n".encode("latin-1"),
+        })
+        result, tables = run_bytes(data, "omop", "zip")
+        self.assertEqual(sorted(tables), ["omop_person"])
+        self.assertEqual(coverage_of(result, "condition_occurrence")["reason"], "text_encoding")
+        self.assertEqual(result["tables"][0]["name"], "omop_person")
+
+
+class OmopRefusals(unittest.TestCase):
+    def test_named_refusals(self):
+        self.assertEqual(refusal_of(zip_bytes({"patients.csv": "a,b\n1,2\n"}), "omop", "zip"), "not_omop")
+        self.assertEqual(refusal_of(zip_bytes({"notes.txt": "hello"}), "omop", "zip"), "not_omop")
+        self.assertEqual(refusal_of(zip_bytes({}), "omop", "zip"), "nothing_to_import")
+        self.assertEqual(refusal_of(csv_zip({"concept.csv": [["concept_id", "concept_name"], ["1", "x"]], "provider.csv": [["provider_id"], ["1"]]}), "omop", "zip"), "no_supported_table")
+        self.assertEqual(refusal_of(csv_zip({"person.csv": [["id", "sex"], ["1", "m"]]}), "omop", "zip"), "nothing_to_import")
+        self.assertEqual(refusal_of(b"person_id\n1\n", "omop", "zip"), "not_zip")
+        self.assertEqual(refusal_of(b"PK\x03\x04 broken", "omop", "zip"), "corrupt")
+
+    def test_a_table_past_the_planes_limits_is_skipped_by_name_and_the_others_still_land(self):
+        result, tables = run_bytes(GIBLEED.read_bytes(), "omop", "zip", limits={"maxRows": 3000})
+        self.assertEqual(sorted(tables), ["omop_concept", "omop_measurement", "omop_observation_period", "omop_person", "omop_visit_occurrence"])
+        skipped = {item["table"]: item["reason"] for item in result["coverage"]["skippedTables"]}
+        self.assertEqual(skipped, {"omop_condition_occurrence": "too_many_rows", "omop_drug_exposure": "too_many_rows"})
+        self.assertIn("omop_measurement", tables)
 
 
 class CommandLine(unittest.TestCase):
