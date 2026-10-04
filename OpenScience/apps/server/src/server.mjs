@@ -164,7 +164,12 @@ import { createVcrReviewAdapter } from "./vcrReview.mjs";
 import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
-import { EvimedCreditsService } from "./evimedCreditsService.mjs";
+import { EvimedCreditsService, creditsReadiness } from "./evimedCreditsService.mjs";
+import {
+  SIMULATED_WALLET_BALANCE_URL, SIMULATED_WALLET_DEDUCT_URL, SIMULATED_WALLET_KEY,
+  SimulatedWallet, createSimulatedWalletFetch, evimedCreditsRefusal,
+} from "./evimedCreditsSimulator.mjs";
+import { createSimulatedWalletRoutes, simulatedWalletRoutePattern } from "./simulatedWalletRoutes.mjs";
 import { prepareResearchBillingAccountDeletion } from "./evimedCreditsPersistence.mjs";
 import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
 import { createEvimedCreditsRoutes, evimedCreditsRoutePattern } from "./evimedCreditsRoutes.mjs";
@@ -626,6 +631,7 @@ function routePattern(pathname) {
   if (pathname === "/api/review" || pathname.startsWith("/api/review/")) return reviewRoutePattern(pathname);
   if (pathname === "/api/geo" || pathname.startsWith("/api/geo/")) return geoRoutePattern(pathname);
   if (pathname === "/api/credits" || pathname.startsWith("/api/credits/")) return evimedCreditsRoutePattern(pathname);
+  if (pathname === "/api/simulated-wallet" || pathname.startsWith("/api/simulated-wallet/")) return simulatedWalletRoutePattern(pathname);
   if (pathname.startsWith("/api/")) return "/api/:route";
   // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
@@ -2353,12 +2359,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ service: EvimedCreditsService, worker: EvimedCreditsWorker } | null} */
   let credits = null;
   if (config.evimedCreditsEnabled && productDatabase) {
+    // A configuration the billing module will not run under (a simulated wallet
+    // beside a real wallet's address, a bad starting allowance) is named here
+    // and the module comes up refusing: the platform boots either way.
+    const refusal = evimedCreditsRefusal(config);
+    // The simulated wallet (evimedCreditsSimulator.mjs): in the control plane,
+    // in PostgreSQL, behind the same client — only the wallet is replaced.
+    const simulator = config.evimedCreditsSimulated && !refusal
+      ? new SimulatedWallet({ database: productDatabase, startCredits: config.evimedCreditsSimulatedStartCredits }) : null;
     const service = new EvimedCreditsService({
-      config, database: productDatabase, usageLedger,
+      config, database: productDatabase, usageLedger, refusal, simulator,
       // Whom EviMed charges: the EviMed user id the account row keeps, since
       // our account id is a hash EviMed cannot resolve (§14).
       evimedUserIdOf: (/** @type {string} */ userId) => store.evimedUserIdOf(userId),
-      client: createEvimedCreditsClient({
+      client: refusal ? null : createEvimedCreditsClient(simulator ? {
+        deductUrl: SIMULATED_WALLET_DEDUCT_URL,
+        balanceUrl: SIMULATED_WALLET_BALANCE_URL,
+        apiKey: SIMULATED_WALLET_KEY,
+        simulated: true,
+        timeoutMs: config.evimedCreditsTimeoutMs,
+        // `simulatedWalletFaults` is for tests that need an unknown outcome;
+        // nothing in configuration reaches it.
+        fetchImpl: createSimulatedWalletFetch(simulator, overrides.simulatedWalletFaults),
+      } : {
         deductUrl: config.evimedCreditsUrl,
         balanceUrl: config.evimedCreditsBalanceUrl,
         // The key EviMed already issued this deployment: the file is read per
@@ -2382,6 +2405,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const allowanceRoutes = createResearchAllowanceRoutes({
     store, service: credits?.service ?? null, config, commerce: createResearchCommerce(config),
   });
+  const simulatedWalletRoutes = createSimulatedWalletRoutes({ store, service: credits?.service ?? null, config });
   // What one question would do, answered before it is sent (fusion plan §9.5).
   // Advice, not a gate: it runs the same router the dispatch runs and decides
   // nothing. Composed after the credits service because the price half of the
@@ -3854,6 +3878,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临研 capability is not installed on this deployment.");
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "vcr", invalidCode: "vcr_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
+    // A programme step is researcher-owned work and is charged when it ends, so
+    // it asks the same allowance question a chat run does. A refusal is not a
+    // terminal dispatch code: the orchestrator leaves the step pending and asks
+    // again on its next tick, so a top-up releases it.
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -3933,6 +3962,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (!selected) throw new HttpError(503, "geo_unavailable", "This GEO capability is not installed on this deployment.");
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "geo", invalidCode: "geo_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
+    // The same allowance question as a chat run's, for the same reason as the
+    // 虚拟临研 step's: charged at its end, and a refusal leaves the step pending.
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -4161,6 +4193,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (!(await researchSessions.get(project, sessionId))) await researchSessions.put(project, sessionId, { mode: "open-domain" });
     const registry = await agentRegistry;
     const route = await routeAdoptedInput(project, sessionId, text);
+    // The same allowance question the page's own dispatch asks (§9.6), after
+    // routing so the estimate is the capability's own and before a run exists.
+    // A refusal reaches the channel as 「没有开始」 in the domain's sentence.
+    if (credits) await credits.service.assertBalanceForStart(user.id, route.effectiveAgentId ?? null);
     const routed = route.effectiveAgentId && route.effectiveAgentId !== OPEN_DOMAIN_ANSWER_AGENT_ID
       ? registry.get(route.effectiveAgentId) : null;
     const answerAgent = routed ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
@@ -4435,6 +4471,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await reviewRoutes(req, res)) return;
       if (await creditsRoutes(req, res)) return;
       if (await allowanceRoutes(req, res)) return;
+      if (await simulatedWalletRoutes(req, res)) return;
       if (await geoRoutes(req, res)) return;
       if (await documentExportRoutes(req, res)) return;
       if (await resultRoutes(req, res)) return;
@@ -4462,7 +4499,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -4492,6 +4529,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           review,
           geo,
           vcr,
+          credits,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
           alertReceiver,
         });
@@ -6037,6 +6075,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     managedBrowser,
     authorizeOpenSession: authorizeOwnedNativeSession,
     authorizePrompt: assertPublicSessionPrompt,
+    // A turn begun in the kernel's own application never passes through the
+    // dispatch route, so the allowance is asked here too (§9.6). The capability
+    // is the one the conversation is bound to; a free conversation asks only
+    // whether anything is left.
+    balanceGate: credits ? async (project, payload) => {
+      const sessionId = payload?.args?.request?.sessionId;
+      const binding = typeof sessionId === "string" ? await researchSessions.get(project, sessionId).catch(() => null) : null;
+      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null);
+    } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,
     preparePrompt: nativeHandbookContext ? (project, request) => nativeHandbookContext.prepare(project, request) : null,
@@ -6400,7 +6447,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (productDatabase) await migrateProductStore(productDatabase);
       // Activate the immutable charging policy before any research can start.
       // A first completion must never establish its own retrospective cutoff.
-      if (credits) await credits.service.ready();
+      // Billing failing never stops research: a module that cannot migrate or
+      // activate goes quiet — nothing is charged, no start is refused, the
+      // allowance reads as unavailable — and readiness carries the named code.
+      if (credits) {
+        const failure = await credits.service.ensureReady();
+        if (failure) process.stderr.write(`research billing is unavailable (${failure}); research continues and nothing is charged\n`);
+      }
       if (skillArtifacts) {
         try {
           const directory = await openScopedDirectoryNoFollow(config.dataDir, skillRoot, { create: true });
@@ -7261,8 +7314,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, learning = null, alertReceiver = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -7682,7 +7735,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null, frontier = null, review = null, geo = null, vcr = null, credits = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -7721,6 +7774,11 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
       : { required: false, enabled: false })),
     // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
+    // The research allowance's wallet: red only for its own invariants (the
+    // schema, the policy's activation, a configuration it refused —
+    // evimedCreditsService.mjs `creditsReadiness`); a wallet not answering is a
+    // warning. Asking is also how a module that came up broken recovers.
+    credits: await readinessCheck(async () => creditsReadiness({ config, credits, database: productDatabase })),
     // 虚拟临研: red only for its own invariants (vcrService.mjs `vcrReadiness`).
     // A missing engine or data plane is a warning, not a failure — the module
     // runs the T0 journey end to end without either (plan §3.2).

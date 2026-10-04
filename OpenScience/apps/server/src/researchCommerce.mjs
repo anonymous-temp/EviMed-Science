@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
 /** @typedef {"recharge" | "membership" | "orders" | "refunds"} CommerceAction */
 /** @typedef {"disabled" | "unconfigured" | "invalid_configuration" | "configured"} CommerceStatus */
@@ -47,11 +48,40 @@ function trustedOrigins(value) {
 }
 
 /**
+ * The commerce of a deployment whose wallet is simulated (2026-10-04): the four
+ * destinations are pages of this platform (`SIMULATED_WALLET_PAGES`), not anyone's
+ * checkout, so there is no origin to trust and nothing to configure — and the
+ * configured commerce settings are not consulted, because a real checkout beside
+ * a simulated wallet is exactly the mix-up the simulation must make impossible.
+ * Every feature reports `simulated`, which is never `configured`: a release check
+ * that requires a real handoff is not satisfied by a page that moves no money.
+ */
+function createSimulatedCommerce() {
+  const links = Object.freeze({
+    rechargeUrl: SIMULATED_WALLET_PAGES.recharge,
+    membershipUrl: SIMULATED_WALLET_PAGES.membership,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders,
+    refundsUrl: SIMULATED_WALLET_PAGES.refunds,
+  });
+  return Object.freeze({
+    links() { return links; },
+    status() {
+      return { enabled: true, currency: "CNY", creditsPerCny: 1, walletAuthority: "simulated", simulated: true,
+        mode: "simulated", features: Object.fromEntries(RESEARCH_COMMERCE_ACTIONS.map((action) =>
+          [action, { status: "simulated", method: "simulated", verified: false }])),
+        upstreamContracts: { checkout: "simulated", membershipEntitlements: "simulated",
+          orderStatus: "simulated", refunds: "simulated", holds: "simulated", monetaryPrecision: "simulated" } };
+    },
+  });
+}
+
+/**
  * Resolve deployment-owned links once. This service never calls a provider or
  * creates a local wallet, payment, order, membership, or refund record.
  * @param {Record<string, unknown>} [config]
  */
 export function createResearchCommerce(config = {}) {
+  if (config.evimedCreditsSimulated === true && config.evimedCreditsEnabled === true) return createSimulatedCommerce();
   const enabled = config.researchCommerceEnabled === true;
   const origins = trustedOrigins(config.researchCommerceTrustedOrigins);
   const features = Object.fromEntries(RESEARCH_COMMERCE_ACTIONS.map((action) => {
