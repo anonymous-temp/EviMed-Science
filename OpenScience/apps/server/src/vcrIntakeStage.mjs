@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { HttpError, assertNoSymlinkPath, openScopedFileNoFollow, readStableFileHandle } from './security.mjs';
 import { VCR_INTAKE_VOLUME_KINDS, vcrIntakeDirectory, vcrIntakeRoot } from './vcrIntakeController.mjs';
-import { VCR_INTAKE_SCRATCH, vcrIntakeScratchPaths } from './vcrIntakeLayout.mjs';
+import { VCR_INTAKE_SCRATCH, vcrIntakeImportPaths, vcrIntakeScratchPaths } from './vcrIntakeLayout.mjs';
 
 /**
  * The API's half of an intake conversion: stage one file, ask the runtime
@@ -27,6 +27,12 @@ import { VCR_INTAKE_SCRATCH, vcrIntakeScratchPaths } from './vcrIntakeLayout.mjs
  *   directory the API and the controller both see, with its request beside it. A
  *   knowledge-base source's PDF or spreadsheet is staged the same way under
  *   `.../materials/<attempt>/` (`sourceMaterials.mjs`).
+ *
+ * - **A standard-format import is staged in the plane too** (`runPlaneImport`):
+ *   the uploaded FHIR, OMOP or ADaM file is streamed straight into the attempt's
+ *   `in/import.<ext>` (0400, hashed on the way in, cut off at the cap) and the
+ *   converted tables are read back out of `out/`, each under a bound and never
+ *   through a link. Nothing of it is under the data volume either.
  *
  * Either way everything staged is a copy: the original stays where it was (the
  * plane's incoming directory for a record, the project workspace for a figure).
@@ -224,6 +230,108 @@ export async function runPlaneExtraction({ root, studyId, controller, source, fo
   try {
     await controller.runVcrIntake('extract', { path: staged.relative, sha256: staged.sha256, bytes: staged.bytes }, { signal });
     return await consume({ read: (file, limit) => readIntakeOutput(staged.outputDir, file, limit), fileSha256: staged.sha256, bytes: staged.bytes });
+  } finally {
+    await fs.rm(staged.attemptDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * One import's attempt inside the plane: the uploaded bytes streamed into the
+ * attempt's one input file (0400) under `cap`, hashed as they go, and an empty
+ * 0700 output directory — in the scratch area only the web user can enter.
+ * @param {string} root @param {string} studyId @param {string} extension
+ * @param {AsyncIterable<Buffer | Uint8Array>} stream @param {number} cap
+ */
+async function stagePlaneImport(root, studyId, extension, stream, cap) {
+  const paths = vcrIntakeImportPaths(studyId, randomUUID(), extension);
+  const attemptDir = path.join(root, paths.attempt);
+  try {
+    await fs.mkdir(path.join(root, paths.scratch), { recursive: true, mode: 0o700 });
+    await assertNoSymlinkPath(root, path.join(root, paths.scratch));
+    await fs.mkdir(attemptDir, { mode: 0o700 });
+    await fs.mkdir(path.join(root, paths.inputDirectory), { mode: 0o700 });
+    await fs.mkdir(path.join(root, paths.output), { mode: 0o700 });
+    const target = path.join(root, paths.input);
+    const handle = await fs.open(target, 'wx', 0o600);
+    const digest = createHash('sha256');
+    let total = 0;
+    try {
+      for await (const chunk of stream) {
+        total += chunk.length;
+        if (total > cap) throw new HttpError(413, 'vcr_data_file_too_large', `An import file is at most ${cap} bytes.`);
+        digest.update(chunk);
+        await handle.write(chunk);
+      }
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(400, 'vcr_data_file_unreadable', 'The upload was interrupted before it finished.');
+    } finally {
+      await handle.close();
+    }
+    if (!total) throw new HttpError(422, 'vcr_data_file_unreadable', 'The file is empty.');
+    await fs.chmod(target, 0o400);
+    return { attemptDir, outputDir: path.join(root, paths.output), relative: paths.input, sha256: digest.digest('hex'), bytes: total };
+  } catch (error) {
+    await fs.rm(attemptDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+/**
+ * A regular file of an import's output directory, opened without following a
+ * link and held to the size it was reported to have: its SHA-256 (read once) and
+ * a fresh stream over it, so the same bytes that were verified are the bytes the
+ * plane stores. `close` releases it.
+ * @param {string} outputDir @param {string} name @param {number} expectedBytes
+ */
+async function openIntakeOutputFile(outputDir, name, expectedBytes) {
+  let opened;
+  try {
+    opened = await openScopedFileNoFollow(outputDir, path.join(outputDir, name));
+  } catch {
+    throw new HttpError(502, 'vcr_intake_failed', 'The conversion left an unreadable result.');
+  }
+  const { handle, stat } = opened;
+  if (!stat.isFile() || stat.size !== expectedBytes) {
+    await handle.close().catch(() => {});
+    throw new HttpError(502, 'vcr_intake_failed', 'The conversion result is outside its bound.');
+  }
+  return {
+    bytes: stat.size,
+    async sha256() {
+      const hash = createHash('sha256');
+      for await (const block of handle.createReadStream({ start: 0, autoClose: false, emitClose: false })) hash.update(block);
+      return hash.digest('hex');
+    },
+    stream() { return handle.createReadStream({ start: 0, autoClose: false, emitClose: false }); },
+    close: () => handle.close().catch(() => {}),
+  };
+}
+
+/**
+ * Stage an import in the plane, run the converter, hand the answer over, remove
+ * the attempt. The controller is told the path of the staged file inside the
+ * plane, its SHA-256 and size and the standard it is claimed to be, and nothing
+ * else; the script holds the file to the first two before it reads it. `consume`
+ * receives a reader for the small files (the result) and an opener for a table;
+ * the attempt is gone when this returns or throws.
+ * @template T
+ * @param {{ root: string, studyId: string, controller: { runVcrIntake: Function }, format: string, extension: string,
+ *   stream: AsyncIterable<Buffer | Uint8Array>, cap: number, signal?: AbortSignal }} options
+ * @param {(attempt: { read: (name: string, limit: number) => Promise<Buffer | null>,
+ *   openTable: (name: string, bytes: number) => ReturnType<typeof openIntakeOutputFile>, fileSha256: string, bytes: number }) => Promise<T>} consume
+ * @returns {Promise<T>}
+ */
+export async function runPlaneImport({ root, studyId, controller, format, extension, stream, cap, signal }, consume) {
+  void sweepStalePlaneScratch(root);
+  const staged = await stagePlaneImport(root, studyId, extension, stream, cap);
+  try {
+    await controller.runVcrIntake('convert', { path: staged.relative, sha256: staged.sha256, bytes: staged.bytes, format }, { signal });
+    return await consume({
+      read: (file, limit) => readIntakeOutput(staged.outputDir, file, limit),
+      openTable: (name, bytes) => openIntakeOutputFile(staged.outputDir, name, bytes),
+      fileSha256: staged.sha256, bytes: staged.bytes,
+    });
   } finally {
     await fs.rm(staged.attemptDir, { recursive: true, force: true }).catch(() => {});
   }

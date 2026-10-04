@@ -234,6 +234,12 @@
             "maxBytes": null,
             "maxText": null,
             "converter": false
+          },
+          "imports": {
+            "available": false,
+            "formats": [],
+            "maxBytes": null,
+            "maxText": null
           }
         },
         "files": [
@@ -313,7 +319,8 @@
             "visibleAt": null,
             "sourceFormat": null,
             "pages": null,
-            "blankPages": null
+            "blankPages": null,
+            "importFormat": null
           },
           {
             "id": "sfl_2",
@@ -356,7 +363,8 @@
             "visibleAt": null,
             "sourceFormat": null,
             "pages": null,
-            "blankPages": null
+            "blankPages": null,
+            "importFormat": null
           },
           {
             "id": "sfl_3",
@@ -377,7 +385,8 @@
             "visibleAt": null,
             "sourceFormat": null,
             "pages": null,
-            "blankPages": null
+            "blankPages": null,
+            "importFormat": null
           }
         ],
         "fieldMap": {
@@ -673,6 +682,12 @@
             "maxBytes": null,
             "maxText": null,
             "converter": false
+          },
+          "imports": {
+            "available": false,
+            "formats": [],
+            "maxBytes": null,
+            "maxText": null
           }
         },
         "files": [
@@ -717,7 +732,8 @@
             "visibleAt": null,
             "sourceFormat": null,
             "pages": null,
-            "blankPages": null
+            "blankPages": null,
+            "importFormat": null
           }
         ],
         "fieldMap": {

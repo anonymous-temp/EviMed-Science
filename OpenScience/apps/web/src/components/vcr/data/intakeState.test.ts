@@ -3,7 +3,7 @@ import { WebApiError } from "@/lib/apiClient";
 import { fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "@/lib/vcrIntakeBodies";
 import { readVcrIntake, type VcrIntakeSource } from "@/lib/vcrClient";
 import { fixture } from "../__fixtures__/serverFixtures";
-import { documentAccept, editorRows, entriesOf, intakeErrorMessage, mapProblem, rowProblem, uploadProblem } from "./intakeState";
+import { IMPORT_FORMATS, documentAccept, editorRows, entriesOf, importAccept, importProblem, importSummary, intakeErrorMessage, mapProblem, rowProblem, uploadProblem } from "./intakeState";
 import { knownErrorCodeMessage } from "@evimed/domain";
 
 /** The second source of the sealed page: one file, a map with problems. */
@@ -136,5 +136,78 @@ describe("the bodies are exactly the routes' allow-lists", () => {
     expect(grantBody({ grantee: " a ", fields: [], purposes: ["vcr"] })).toEqual({ grantee: "a", purposes: ["vcr"] });
     expect(uploadQuery({ name: "队列.csv" })).toBe("name=%E9%98%9F%E5%88%97.csv");
     expect(uploadQuery({ name: "d.csv", role: "dictionary", sheet: "病例" })).toBe("name=d.csv&role=dictionary&sheet=%E7%97%85%E4%BE%8B");
+  });
+});
+
+describe("a source held in a standard format", () => {
+  const imports = {
+    available: true, maxBytes: 25 * 1024 * 1024, maxText: "25 MB",
+    formats: [{ value: "fhir" as const, extensions: ["ndjson", "json", "zip"] }, { value: "omop" as const, extensions: ["zip"] }, { value: "adam" as const, extensions: ["xpt", "zip"] }],
+  };
+
+  it("says what each standard is uploaded as, and refuses on the page what the plane would refuse", () => {
+    expect(IMPORT_FORMATS.map((entry) => entry.value)).toEqual(["fhir", "omop", "adam"]);
+    expect(importAccept("fhir", imports)).toBe(".ndjson,.json,.zip");
+    expect(importAccept("adam", imports)).toBe(".xpt,.zip");
+    expect(importAccept("omop", null)).toBe("");
+    expect(importProblem({ name: "export.zip", size: 10 }, "omop", imports)).toBeNull();
+    expect(importProblem({ name: "adsl.xpt", size: 10 }, "adam", imports)).toBeNull();
+    expect(importProblem({ name: "person.csv", size: 10 }, "omop", imports)).toBe("这一种格式支持：zip。");
+    expect(importProblem({ name: "adsl.xpt", size: 10 }, "fhir", imports)).toBe("这一种格式支持：ndjson、json、zip。");
+    expect(importProblem({ name: "noextension", size: 10 }, "fhir", imports)).toMatch(/扩展名/);
+    expect(importProblem({ name: "export.zip", size: 0 }, "fhir", imports)).toBe("文件是空的。");
+    expect(importProblem({ name: "export.zip", size: 26 * 1024 * 1024 }, "fhir", imports)).toBe("文件超过 25 MB 的上限。");
+    expect(importProblem({ name: "export.zip", size: 10 }, "fhir", null)).toMatch(/本部署暂未开通/);
+  });
+
+  it("says the registry's words for each way an import is refused", () => {
+    for (const code of ["vcr_import_not_this_format", "vcr_import_nothing_to_import", "vcr_import_unreadable", "vcr_import_version_unsupported", "vcr_import_converter_unavailable"]) {
+      const sentence = intakeErrorMessage(new WebApiError("x", { status: 422, code }), "f");
+      expect(sentence).toBe(knownErrorCodeMessage(code));
+      expect(sentence).not.toBe("f");
+    }
+  });
+
+  it("reads what an import took and left as sentences, a word it does not know as it is, and never a value", () => {
+    const summary = importSummary({
+      format: "fhir", standard: { name: "HL7 FHIR" }, fieldMap: { hash: "h", entries: 3, trimmed: 0, columnSourcesDeclared: true },
+      tables: [{ name: "fhir_patient", file: "fhir_patient.csv", rows: 11, columns: 11, stored: true }, { name: "fhir_observation", file: "fhir_observation.csv", rows: 4188, columns: 16, stored: false, reason: "too_many_rows" }],
+      coverage: {
+        inputs: [
+          { kind: "Patient", records: 12, imported: 11, status: "imported", reason: null, skipped: { duplicate_patient_id: 1 } },
+          { kind: "Device", records: 39, imported: 0, status: "skipped", reason: "unsupported_resource_type", skipped: {} },
+          { kind: "Condition", records: 5, imported: 5, status: "imported", reason: null, skipped: {} },
+        ],
+        skippedTables: [{ table: "fhir_encounter", reason: "something_new" }],
+        notices: [{ code: "mixed_units", count: 2 }, { code: "value_not_carried:Range", count: 3 }, { code: "brand_new", count: 1 }],
+      },
+    });
+    expect(summary.tables).toEqual(["fhir_patient：11 行，11 列", "fhir_observation：没有保存（行数超过上限）"]);
+    expect(summary.skipped).toEqual([
+      "Patient：读到 12 条，导入 11 条；患者编号重复 1",
+      "Device：读到 39 条，导入 0 条（本版本不读这类资源）",
+      "fhir_encounter：没有生成（something_new）",
+    ]);
+    expect(summary.notices[0]).toMatch(/^2 个检查项目在不同行里用了不同单位/);
+    expect(summary.notices[1]).toBe("3 类型为 Range 的取值本版本不读，已留空");
+    expect(summary.notices[2]).toBe("1 brand_new");
+  });
+
+  it("keeps each column's value source through the editor, so a person's edit does not lose what the import said", () => {
+    const held = (columns: VcrIntakeSource["fieldMap"]["columns"]) => {
+      const found = structuredClone(readVcrIntake(fixture("intake/data-sealed.json").intake).sources[0]);
+      found.fieldMap.columns = columns;
+      return found;
+    };
+    const rows = editorRows(held([{ table: "cohort.csv", column: "PATIENT_NO", role: "subject_key", valueSource: "observed" }, { table: "cohort.csv", column: "AGE", role: "covariate", alias: "AGE", valueSource: "calculated", concept: "Age" }]));
+    expect(rows.find((row) => row.column === "AGE")).toMatchObject({ valueSource: "calculated" });
+    const entries = entriesOf(rows);
+    expect(entries.find((entry) => entry.column === "AGE")).toMatchObject({ valueSource: "calculated", concept: "Age" });
+    expect(entries.find((entry) => entry.column === "PATIENT_NO")).toMatchObject({ valueSource: "observed" });
+    // The route's body carries it too: it is one of the keys a field-map entry may have.
+    expect(fieldMapBody(entries).columns).toContainEqual(expect.objectContaining({ column: "AGE", valueSource: "calculated" }));
+    // A column that says only where it came from is still said, and a column that says nothing is not sent.
+    const only = editorRows(held([{ table: "cohort.csv", column: "SEX", role: "other", valueSource: "imputed" }]));
+    expect(entriesOf(only).find((entry) => entry.column === "SEX")).toMatchObject({ role: "other", valueSource: "imputed" });
   });
 });

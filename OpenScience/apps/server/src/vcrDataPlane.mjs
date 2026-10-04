@@ -117,7 +117,7 @@ import {
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
-import { VCR_INTAKE_SCRATCH, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
+import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { vcrEffectiveSeal, vcrOutcomeColumns, vcrSealRequired } from "./vcrSeal.mjs";
 
@@ -982,6 +982,67 @@ export function profilerFieldMap(columns) {
 // Pseudonyms: the study's own key for every person
 // ---------------------------------------------------------------------------
 
+/**
+ * The extension an import is staged under, from the name the uploader gave: one
+ * the claimed standard is uploaded as. The name itself is never kept.
+ * @param {unknown} raw @param {string} format
+ * @returns {string}
+ */
+export function importExtensionOf(raw, format) {
+  const base = String(raw ?? "").split(/[\\/]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  const extension = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+  if (!base || !extension) throw refuse(400, VCR_DATA_PLANE_CODES.fileNameInvalid, "A file name is a name with an extension, like export.zip.");
+  const allowed = /** @type {readonly string[]} */ (/** @type {any} */ (VCR_IMPORT_FORMATS)[format] ?? []);
+  if (!allowed.includes(extension)) {
+    throw refuse(415, VCR_DATA_PLANE_CODES.formatUnsupported, `A ${format} import is uploaded as one of: ${allowed.join(", ")}.`, { ext: extension });
+  }
+  return extension;
+}
+
+/**
+ * The map a source holds after an import: what it already held for other files,
+ * and the import's entries for its own. Pure.
+ *
+ * - **A re-import replaces its own tables' entries**, never another file's.
+ * - **Analysis names stay unique across the source**: the map is refused when two
+ *   tables carry the same covariate name, so an incoming `SEX` that meets a held
+ *   `SEX` becomes `SEX_2`.
+ * - **Column sources are declared only where the plane takes them**: a source of
+ *   real people's rows takes per-column sources, a synthetic or aggregate source
+ *   is what it is as a whole and would have them refused at freeze, so there the
+ *   import's entries leave them out (`sourcesDeclared` says which).
+ * - **The map has a ceiling** (`VCR_FIELD_MAP_LIMITS.entries`): what does not fit
+ *   is the entries that say least — a column left as 「其他」 with nothing but its
+ *   source — and the count is returned, never silent.
+ * @param {{ existing: readonly any[], incoming: readonly any[], sourceValueSource: string }} input
+ * @returns {{ columns: any[], trimmed: number, sourcesDeclared: boolean }}
+ */
+export function mergeImportedFieldMap({ existing, incoming, sourceValueSource }) {
+  const sourcesDeclared = VCR_REAL_PATIENT_SOURCES.includes(sourceValueSource);
+  const tables = new Set(incoming.map((entry) => String(entry.table)));
+  const kept = existing.filter((entry) => !tables.has(String(entry.table)));
+  const used = new Set(kept.filter((entry) => entry.role === "arm" || entry.role === "covariate").map((entry) => analysisNameOf(entry)));
+  const prepared = incoming.map((entry) => {
+    const { valueSource, ...rest } = entry;
+    const out = sourcesDeclared ? { ...rest, valueSource } : rest;
+    if (out.role === "arm" || out.role === "covariate") {
+      const base = analysisNameOf(out);
+      let name = base;
+      for (let n = 2; used.has(name); n += 1) name = `${base.slice(0, 60)}_${n}`;
+      used.add(name);
+      if (name !== base) out.alias = name;
+    }
+    return out;
+  });
+  // A column that says only that it is source data: the first to go when the map is full.
+  const says = (/** @type {any} */ entry) => entry.role !== "other" || entry.concept || entry.unit || entry.parameter || entry.alias
+    || (entry.valueSource && entry.valueSource !== "observed") || entry.outcome === true;
+  const room = Math.max(0, VCR_FIELD_MAP_LIMITS.entries - kept.length);
+  const ordered = prepared.length > room ? [...prepared.filter(says), ...prepared.filter((entry) => !says(entry))].slice(0, room) : prepared;
+  return { columns: [...kept, ...ordered], trimmed: prepared.length - ordered.length, sourcesDeclared };
+}
+
 /** A study's directory inside the plane, relative to the root. @param {string} studyId */
 export const studyRelative = (studyId) => path.posix.join("studies", studyId);
 
@@ -1056,8 +1117,8 @@ export const VCR_UNSUPPORTED_FORMAT_HINTS = Object.freeze({
 export const VCR_UPLOAD_ROLE_CAPS = Object.freeze({ dictionary: 2 * 1024 * 1024, document: 1024 * 1024 });
 /** The default ceiling for a data file; a deployment lowers or raises it with `vcrDataMaxBytes`. */
 export const VCR_UPLOAD_DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
-/** Columns and rows a data file may have. */
-export const VCR_UPLOAD_LIMITS = Object.freeze({ columns: 500, rows: 2_000_000 });
+/** Columns and rows a data file may have (one definition, shared with the import container's table ceilings). */
+export const VCR_UPLOAD_LIMITS = VCR_TABLE_LIMITS;
 
 /**
  * The name an uploader gave a file, as display text: no path, no control
@@ -1763,14 +1824,17 @@ export class VcrDataPlane {
    * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig, profiler?: VcrProfiler | null,
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
    *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { root: string, studyId: string, path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
+   *   importer?: { available: boolean, counters?: Record<string, number>, describe?: () => any, run: (input: any, consume: (done: any) => Promise<any>) => Promise<any> } | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
    *   given); `seal` records the first outcome read — it is composed after the
    *   plane, so `attach` also takes it. `extractor` turns a PDF or Word record
    *   into text inside the deployment; without one those two formats are refused
-   *   by name and plain text is unaffected.
+   *   by name and plain text is unaffected. `importer` does the same for a source
+   *   held in FHIR, OMOP or ADaM (`importStandard`); without one the import is
+   *   refused by name and ordinary uploads are unaffected.
    */
-  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
@@ -1782,6 +1846,7 @@ export class VcrDataPlane {
     this.pageAccess = new VcrAccess({ store, now, audit: false });
     this.seal = seal;
     this.extractor = extractor;
+    this.importer = importer;
   }
 
   /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
@@ -1813,6 +1878,20 @@ export class VcrDataPlane {
       textMaxBytes: Math.min(this.maxBytes, VCR_UPLOAD_ROLE_CAPS.document),
       convertedMaxBytes: converter ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
       converter,
+    };
+  }
+
+  /**
+   * What a source may be imported from on this deployment: the three standards
+   * when a converter is composed, and what each is uploaded as. The page offers
+   * only what would be taken.
+   */
+  importUpload() {
+    const described = this.importer?.available ? this.importer.describe?.() : null;
+    return {
+      available: Boolean(described?.available),
+      formats: described?.available ? described.formats : [],
+      maxBytes: described?.available ? described.maxBytes : null,
     };
   }
 
@@ -1931,13 +2010,24 @@ export class VcrDataPlane {
    *
    * @param {{ actor: string, studyId: string, sourceId: string, name: string, role?: string,
    *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null,
-   *   visibleAt?: string | null, sheet?: string | null }} entry
+   *   visibleAt?: string | null, sheet?: string | null, importedFrom?: Record<string, any> | null }} entry
    */
   async storeUpload(entry) {
-    const root = this.root();
+    this.root();
     await this.#manager(entry.studyId, entry.actor);
     const source = await this.#source(entry.studyId, entry.sourceId);
     this.#assertOpen(source);
+    return this.#storeChecked(entry, source);
+  }
+
+  /**
+   * The body of `storeUpload`, after the caller has been judged and the source
+   * found: a standard-format import stores each converted table through it, one
+   * judgment for the import and not one per table.
+   * @param {Parameters<VcrDataPlane["storeUpload"]>[0]} entry @param {any} source
+   */
+  async #storeChecked(entry, source) {
+    const root = this.root();
     const role = entry.role == null ? "data" : entry.role;
     if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
     const named = safeUploadName(entry.name, role);
@@ -1982,6 +2072,8 @@ export class VcrDataPlane {
 
       /** @type {Record<string, any>} */
       const detail = { originalName: named.name, originalSha256, originalBytes: total };
+      // A table a standard-format import produced says so, and of what: the standard, the converter and the upload's hash.
+      if (entry.importedFrom) detail.import = entry.importedFrom;
       /** @type {Buffer} */
       let bytes;
       let extension = "csv";
@@ -2120,6 +2212,102 @@ export class VcrDataPlane {
     return { removed: true, fileId: removed.id };
   }
 
+  // -------------------------------------------------------------------------
+  // Step 2, from a standard: a FHIR, OMOP or ADaM source
+  // -------------------------------------------------------------------------
+
+  /**
+   * Import a source held in a standard format. The upload is staged in the
+   * plane's scratch area, converted in the intake container (no network, no
+   * model, no workspace; `vcrImport.mjs`), and what comes back — flat tables,
+   * a dictionary generated from the standard and a field map that names each
+   * column's concept, unit, code system and VALUE SOURCE — is stored the way a
+   * person's own files are: every table goes through the same checks, profile and
+   * ledger row as an upload, the field map is a proposal a person confirms, and
+   * the original bytes are not kept.
+   *
+   * A table the plane cannot take is named and the others still land (principle
+   * 19): the answer carries, per table, whether it was stored and why not. An
+   * import that stores nothing refuses with the first table's own refusal.
+   *
+   * @param {{ actor: string, studyId: string, sourceId: string, name: string, format: string,
+   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, signal?: AbortSignal }} entry
+   */
+  async importStandard(entry) {
+    const root = this.root();
+    await this.#manager(entry.studyId, entry.actor);
+    const source = await this.#source(entry.studyId, entry.sourceId);
+    this.#assertOpen(source);
+    const format = String(entry.format ?? "");
+    if (!Object.hasOwn(VCR_IMPORT_FORMATS, format)) {
+      throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `format is one of: ${Object.keys(VCR_IMPORT_FORMATS).join(", ")}.`);
+    }
+    if (!this.importer?.available) {
+      throw refuse(503, "vcr_import_converter_unavailable", "This deployment cannot convert this format; export it as CSV and upload it as a data file.");
+    }
+    const extension = importExtensionOf(entry.name, format);
+    const ceiling = Number(this.importer.describe?.()?.maxBytes);
+    if (entry.declaredLength != null && Number.isFinite(ceiling) && ceiling > 0 && entry.declaredLength > ceiling) {
+      throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `An import file is at most ${ceiling} bytes.`, { cap: ceiling });
+    }
+    return this.importer.run({ root, studyId: entry.studyId, format, extension, stream: entry.stream, signal: entry.signal }, async (done) => {
+      const actor = String(entry.actor);
+      // What every table and the dictionary say of where they came from: the standard, the converter and the upload's hash.
+      const importedFrom = { format, standard: done.standard, converter: `${done.converter.name} ${done.converter.version}`.trim(), uploadSha256: done.input.sha256 };
+      /** @type {{ name: string, file: string, rows: number, bytes: number, columns: number, stored: boolean, created?: boolean, fileId?: string, reason?: string }[]} */
+      const tables = [];
+      /** @type {any[]} */
+      const stored = [];
+      for (const table of done.tables) {
+        const shown = { name: table.name, file: table.file, rows: table.rows, bytes: table.bytes, columns: table.columns.length };
+        const opened = await done.table(table.name);
+        try {
+          const result = await this.#storeChecked({
+            actor, studyId: entry.studyId, sourceId: entry.sourceId, name: table.file, role: "data", stream: opened.stream(), declaredLength: table.bytes,
+            importedFrom,
+          }, source);
+          stored.push(result);
+          tables.push({ ...shown, stored: true, created: result.created, fileId: result.file.id });
+        } catch (error) {
+          if (!(error instanceof HttpError) || error.status >= 500) throw error;
+          tables.push({ ...shown, stored: false, reason: String(error.code) });
+        } finally {
+          await opened.close();
+        }
+      }
+      if (!stored.length) {
+        const first = tables.find((table) => !table.stored);
+        throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, "No table of the import could be taken into the data plane.", { tables, reason: first?.reason ?? null });
+      }
+      const keptFiles = new Set(tables.filter((table) => table.stored).map((table) => table.file));
+      const keptNames = [...keptFiles].map((file) => `${file.replace(/\.csv$/, "")}.`);
+      /** The dictionary's rows of the tables that were taken: a row names `table.column`. */
+      const described = done.dictionary.filter((/** @type {any} */ item) => keptNames.some((prefix) => String(item.column).startsWith(prefix)));
+      if (described.length) {
+        const csv = toCsv(["column", "label", "unit"], described.map((/** @type {any} */ item) => [item.column, item.label, item.unit]));
+        await this.#storeChecked({
+          actor, studyId: entry.studyId, sourceId: entry.sourceId, name: `${format}-dictionary.csv`, role: "dictionary",
+          stream: (async function* () { yield Buffer.from(csv, "utf8"); })(), importedFrom,
+        }, source);
+      }
+      const merged = mergeImportedFieldMap({
+        existing: source.fieldMap?.columns ?? [], incoming: done.fieldMap.filter((/** @type {any} */ item) => keptFiles.has(String(item.table))),
+        sourceValueSource: source.valueSource,
+      });
+      const proposed = await this.proposeFieldMap({
+        actor, studyId: entry.studyId, sourceId: entry.sourceId, columns: merged.columns, by: "import",
+        reason: `Generated from ${done.standard.name ?? format} ${done.standard.release ?? done.standard.version ?? ""}`.trim(),
+      });
+      return {
+        format, standard: done.standard, converter: done.converter, input: { ...done.input, format },
+        tables, files: stored.map((result) => result.file), created: stored.filter((result) => result.created).length,
+        fieldMap: { hash: proposed.hash, state: proposed.source.fieldMapState, entries: merged.columns.length, trimmed: merged.trimmed,
+          columnSourcesDeclared: merged.sourcesDeclared, entryIssues: proposed.entryIssues, mapIssues: proposed.mapIssues },
+        coverage: done.coverage,
+      };
+    });
+  }
+
   /**
    * Remove a converted record's original bytes when no file of the study names them.
    * @param {string} studyId @param {string} location
@@ -2154,6 +2342,7 @@ export class VcrDataPlane {
    * fixes them. Nothing is confirmed by being proposed, and an edit withdraws an
    * earlier confirmation.
    * @param {{ actor: string, studyId: string, sourceId: string, columns: unknown, by?: string, reason?: string }} entry
+   *   `by` is `run` for the run's proposal, `import` for the map a standard-format import generated, else the person.
    */
   async proposeFieldMap(entry) {
     this.root();
@@ -2166,7 +2355,7 @@ export class VcrDataPlane {
     const hash = fieldMapHash(whole.columns.length ? whole.columns : columns);
     const saved = await this.store.saveFieldMapDraft({
       sourceId: source.id, columns: whole.columns.length ? whole.columns : columns, hash,
-      by: entry.by === "run" ? "run" : String(entry.actor), actor: String(entry.actor), reason: entry.reason ?? "",
+      by: entry.by === "run" ? "run" : entry.by === "import" ? "import" : String(entry.actor), actor: String(entry.actor), reason: entry.reason ?? "",
     });
     return { source: saved, hash, entryIssues: issues, mapIssues: whole.issues };
   }
@@ -2946,7 +3135,7 @@ export class VcrDataPlane {
           id: source.id, name: source.name, ownerParty: source.ownerParty, registeredBy: source.userId, mine: source.userId === String(viewer.id),
           readable, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
-          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload() },
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
           files: readable ? own.map((file) => fileView(file)) : [],
           fieldMap: {
@@ -3068,6 +3257,35 @@ export function uploadAttemptAuditDetail(role, declaredLength) {
   ].filter(Boolean).join(" ");
 }
 
+/**
+ * What an audit line may say of an import: the standard, how many tables came
+ * back and were taken, and the SHA-256 of the upload — never its name, and never
+ * a row. Every part is checked against its own closed shape.
+ * @param {{ format?: unknown, input?: { sha256?: unknown, bytes?: unknown }, tables?: { stored?: unknown }[] } | null | undefined} imported
+ */
+export function importAuditDetail(imported) {
+  const format = Object.hasOwn(VCR_IMPORT_FORMATS, String(imported?.format)) ? String(imported?.format) : null;
+  const tables = Array.isArray(imported?.tables) ? imported.tables : [];
+  const sha256 = imported?.input?.sha256;
+  return [
+    format, tables.length ? `${tables.filter((table) => table?.stored === true).length}/${tables.length} tables` : null,
+    Number.isSafeInteger(imported?.input?.bytes) ? `${imported?.input?.bytes}B` : null,
+    typeof sha256 === "string" && /^[a-f0-9]{64}$/.test(sha256) ? `sha256:${sha256}` : null,
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * What an audit line may say of an import that did not complete: the standard,
+ * when it is one of the three, and the length the client declared.
+ * @param {unknown} format @param {unknown} declaredLength
+ */
+export function importAttemptAuditDetail(format, declaredLength) {
+  return [
+    Object.hasOwn(VCR_IMPORT_FORMATS, String(format)) ? String(format) : "other",
+    Number.isSafeInteger(declaredLength) && /** @type {number} */ (declaredLength) >= 0 ? `${declaredLength}B declared` : null,
+  ].filter(Boolean).join(" ");
+}
+
 /** A stored file as a route answers it. @param {any} file @param {boolean} [withColumns] */
 export function fileView(file, withColumns = true) {
   return {
@@ -3084,6 +3302,8 @@ export function fileView(file, withColumns = true) {
       // A converted record says what it was converted from and how much of it had no text layer.
       ...(file.detail?.extraction ? { sourceFormat: file.detail.extraction.sourceFormat ?? null, pages: file.detail.extraction.pages ?? null, blankPages: file.detail.extraction.blankPages ?? 0 } : {}) } : {}),
     ...(file.detail?.sheets ? { sheets: file.detail.sheets, sheetUsed: file.detail.sheetUsed ?? null } : {}),
+    // A table (or a dictionary) a standard-format import produced: which standard it was imported from.
+    ...(file.detail?.import?.format ? { importFormat: String(file.detail.import.format) } : {}),
   };
 }
 

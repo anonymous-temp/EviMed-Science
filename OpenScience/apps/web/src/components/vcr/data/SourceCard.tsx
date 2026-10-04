@@ -1,8 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import {
-  createVcrGrant, freezeVcrSnapshot, removeVcrFile, revokeVcrGrant, uploadVcrFile,
-  type VcrIntake, type VcrIntakeFile, type VcrIntakeGrant, type VcrIntakeSnapshot, type VcrIntakeSource,
+  createVcrGrant, freezeVcrSnapshot, importVcrSource, removeVcrFile, revokeVcrGrant, uploadVcrFile,
+  type VcrImportFormat, type VcrImportResult, type VcrIntake, type VcrIntakeFile, type VcrIntakeGrant, type VcrIntakeSnapshot, type VcrIntakeSource,
 } from "@/lib/vcrClient";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { FieldMapEditor } from "./FieldMapEditor";
-import { documentAccept, intakeErrorMessage, uploadProblem } from "./intakeState";
+import { IMPORT_FORMATS, documentAccept, importAccept, importProblem, importSummary, intakeErrorMessage, uploadProblem } from "./intakeState";
 
 /** One step of a source's way from a file to an engine input: a number, a name and what it holds. */
 function Step({ number, title, meta, children }: { number: number; title: string; meta?: ReactNode; children: ReactNode }) {
@@ -37,6 +37,8 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
     file.size, file.at,
     file.subjectKey ? `受试者 ${file.subjectKey}` : null, file.visibleAt ? `可见于 ${file.visibleAt.slice(0, 10)}` : null,
     file.sheetUsed ? `工作表“${file.sheetUsed}”` : null,
+    // A table a FHIR, OMOP or ADaM import produced.
+    file.importFormat ? `来自 ${IMPORT_FORMATS.find((entry) => entry.value === file.importFormat)?.label ?? file.importFormat} 导入` : null,
     // A record converted from PDF or Word: what it was, and what part of it had no text to read.
     file.sourceFormat ? `来自 ${file.sourceFormat === "docx" ? "Word" : file.sourceFormat.toUpperCase()}${file.pages ? `，${file.pages} 页` : ""}${file.blankPages ? `，其中 ${file.blankPages} 页没有文字` : ""}` : null,
   ].filter(Boolean).join(" · ");
@@ -55,27 +57,70 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
   );
 }
 
+/** What an import read, took and left: sentences and counts, never a value of a patient. */
+function ImportReport({ result }: { result: VcrImportResult }) {
+  const summary = importSummary(result);
+  return (
+    <div data-vcr-import-report="" className="rounded-card border border-border bg-surface-1 p-3">
+      <p className="text-ui font-medium text-text">{`已按 ${IMPORT_FORMATS.find((entry) => entry.value === result.format)?.label ?? result.format} 导入 ${result.tables.filter((table) => table.stored).length} 张表，并提出了字段映射。`}</p>
+      <ul className="mt-1 flex flex-col gap-0.5 text-caption text-text-2">{summary.tables.map((line) => <li key={line}>{line}</li>)}</ul>
+      {summary.skipped.length > 0 && (
+        <>
+          <p className="mt-2 text-caption font-medium text-text">没有导入的部分</p>
+          <ul className="mt-1 flex flex-col gap-0.5 text-caption text-text-3">{summary.skipped.map((line) => <li key={line}>{line}</li>)}</ul>
+        </>
+      )}
+      {summary.notices.length > 0 && <ul className="mt-2 flex flex-col gap-0.5 text-caption text-text-3">{summary.notices.map((line) => <li key={line}>{line}</li>)}</ul>}
+      <p className="mt-2 text-caption text-text-3">
+        {result.fieldMap.columnSourcesDeclared
+          ? "每一列都标明了值的来源：源系统记录的是「观察」，由导入计算出来的（年龄、随访时间）是「计算」。"
+          : "这个数据源整体标为非真实个体数据，各列不单独声明来源。"}
+        {result.fieldMap.trimmed > 0 ? ` 映射条目已达上限，${result.fieldMap.trimmed} 个只说明来源的列没有写入。` : ""}
+        请在下面的字段映射里核对后确认。
+      </p>
+    </div>
+  );
+}
+
 /** The upload control: pick a file, say what it is, send it. Refuses on the page what the plane would refuse. */
 function UploadForm({ studyId, source, onChanged }: { studyId: string; source: VcrIntakeSource; onChanged: () => void }) {
-  const [role, setRole] = useState<"data" | "dictionary" | "document">("data");
+  const [role, setRole] = useState<"data" | "dictionary" | "document" | "import">("data");
+  const [format, setFormat] = useState<VcrImportFormat>("fhir");
   const [subject, setSubject] = useState("");
   const [visibleAt, setVisibleAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [report, setReport] = useState<VcrImportResult | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const holding = useRef(false);
+  const imports = source.upload.imports;
+  const importable = imports.available ? IMPORT_FORMATS.filter((entry) => imports.formats.some((offered) => offered.value === entry.value)) : [];
 
   const send = (files: FileList | null) => {
     const file = files?.[0];
     if (!file || holding.current) return;
-    const refusal = uploadProblem({ name: file.name, size: file.size }, role, source.upload.maxBytes, source.upload.documents)
-      ?? (role === "document" && !subject.trim() ? "患者文档要写明它属于哪位受试者（源数据里的编号）。" : null);
+    if (role === "import") {
+      const refusal = importProblem({ name: file.name, size: file.size }, format, imports);
+      setProblem(refusal);
+      if (refusal) return;
+      holding.current = true;
+      setBusy(true);
+      setReport(null);
+      importVcrSource(studyId, source.id, file, { name: file.name, format })
+        .then((answer) => { setReport(answer); toast.success("已导入，请核对字段映射。"); onChanged(); })
+        .catch((error: unknown) => { const message = intakeErrorMessage(error, "文件暂时无法导入，请稍后重试。"); setProblem(message); toast.error(message); })
+        .finally(() => { holding.current = false; setBusy(false); if (input.current) input.current.value = ""; });
+      return;
+    }
+    const kind = role;
+    const refusal = uploadProblem({ name: file.name, size: file.size }, kind, source.upload.maxBytes, source.upload.documents)
+      ?? (kind === "document" && !subject.trim() ? "患者文档要写明它属于哪位受试者（源数据里的编号）。" : null);
     setProblem(refusal);
     if (refusal) return;
     holding.current = true;
     setBusy(true);
     uploadVcrFile(studyId, source.id, file, {
-      name: file.name, role, ...(role === "document" ? { subject: subject.trim(), ...(visibleAt ? { visibleAt } : {}) } : {}),
+      name: file.name, role: kind, ...(kind === "document" ? { subject: subject.trim(), ...(visibleAt ? { visibleAt } : {}) } : {}),
     })
       .then((answer) => { toast.success(answer.created ? `已上传 ${file.name}。` : `${file.name} 已在这个数据源里。`); onChanged(); })
       .catch((error: unknown) => { const message = intakeErrorMessage(error, "文件暂时无法上传，请稍后重试。"); setProblem(message); toast.error(message); })
@@ -85,17 +130,25 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
   return (
     <div className="mt-2 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="文件类型" value={role} onChange={(event) => setRole(event.target.value as "data" | "dictionary" | "document")} className={inputClasses({ size: "sm", className: "w-auto" })}>
+        <select aria-label="文件类型" value={role} onChange={(event) => { setRole(event.target.value as typeof role); setProblem(null); }} className={inputClasses({ size: "sm", className: "w-auto" })}>
           <option value="data">数据文件</option>
           <option value="dictionary">数据字典</option>
           <option value="document">患者文档</option>
+          {importable.length > 0 && <option value="import">标准格式导入</option>}
         </select>
+        {role === "import" && (
+          <select aria-label="标准格式" value={format} onChange={(event) => { setFormat(event.target.value as VcrImportFormat); setProblem(null); }} className={inputClasses({ size: "sm", className: "w-auto" })}>
+            {importable.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
+          </select>
+        )}
         <input
           ref={input} type="file" aria-label="选择要上传的文件" disabled={busy}
-          accept={role === "document" ? documentAccept(source.upload.documents) : source.upload.formats.map((format) => `.${format}`).join(",") || undefined}
+          accept={role === "document" ? documentAccept(source.upload.documents)
+            : role === "import" ? importAccept(format, imports) || undefined
+              : source.upload.formats.map((entry) => `.${entry}`).join(",") || undefined}
           onChange={(event) => send(event.target.files)} className="text-ui text-text-2"
         />
-        {busy && <span className="text-caption text-text-3">正在上传</span>}
+        {busy && <span className="text-caption text-text-3">{role === "import" ? "正在转换" : "正在上传"}</span>}
       </div>
       {role === "document" && (
         <div className="grid gap-2 sm:grid-cols-2">
@@ -108,9 +161,12 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
           ? source.upload.documents.converter
             ? "病历文件（.txt、.md、PDF、.docx）只用于匹配：PDF 和 Word 在平台内转成文字，不会发给外部服务；扫描件和图片没有文字，请提供文字版。平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
             : "病历文本（.txt、.md）只用于匹配：平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
-          : `支持 ${(source.upload.formats.length ? source.upload.formats : ["csv", "tsv", "json", "xlsx"]).join("、")}${source.upload.maxText ? `，单个文件不超过 ${source.upload.maxText}` : ""}。Excel 取第一张有数据的工作表；文件按内容存放，不进入对话的工作区。`}
+          : role === "import"
+            ? `${IMPORT_FORMATS.find((entry) => entry.value === format)?.hint ?? ""}在平台内转成数据表，不会发给外部服务；每张表、每一列的含义和值的来源（观察或计算）会写进字段映射和数据字典，没有导入的部分会一一列出。${imports.maxText ? `单个文件不超过 ${imports.maxText}。` : ""}`
+            : `支持 ${(source.upload.formats.length ? source.upload.formats : ["csv", "tsv", "json", "xlsx"]).join("、")}${source.upload.maxText ? `，单个文件不超过 ${source.upload.maxText}` : ""}。Excel 取第一张有数据的工作表；文件按内容存放，不进入对话的工作区。`}
       </p>
       {problem && <p role="alert" className="text-ui text-error">{problem}</p>}
+      {report && <ImportReport result={report} />}
     </div>
   );
 }

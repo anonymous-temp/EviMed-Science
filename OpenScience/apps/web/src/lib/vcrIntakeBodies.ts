@@ -35,6 +35,8 @@ export interface VcrFieldMapEntry {
   required?: boolean;
   outcome?: boolean;
   codes?: { event?: string[]; censored?: string[]; treated?: string[]; control?: string[] };
+  /** Where this column's values come from: a fact the source recorded, a transcription, a computation or an imputation. */
+  valueSource?: "observed" | "extracted" | "calculated" | "imputed";
 }
 
 export interface VcrSourceBody {
@@ -59,7 +61,7 @@ export interface VcrGrantBody {
 /** The keys a field-map entry may carry: an unknown one is refused whole, so it is never sent. */
 const ENTRY_KEYS = [
   "table", "column", "role", "concept", "unit", "codingSystem", "timeKind", "missingReason", "identifier", "parameter", "alias",
-  "type", "range", "required", "outcome", "codes",
+  "type", "range", "required", "outcome", "codes", "valueSource",
 ] as const;
 
 /** `null` and empty text are left out: the route reads an absent key as 「没有」. */
@@ -120,6 +122,14 @@ export function grantBody(input: VcrGrantBody): Record<string, unknown> {
     ...(present(input.purposes) ? { purposes: input.purposes } : {}),
   };
 }
+
+/** The query a standard-format import carries: the file's name and the standard it is declared to be. */
+export function importQuery(input: { name: string; format: VcrImportFormat }): string {
+  return new URLSearchParams({ name: input.name, format: input.format }).toString();
+}
+
+/** The standards a source may be imported from. */
+export type VcrImportFormat = "fhir" | "omop" | "adam";
 
 /** The query an upload carries: the file's name, its role and the options that role takes. */
 export function uploadQuery(input: { name: string; role?: "data" | "dictionary" | "document"; subject?: string; visibleAt?: string; sheet?: string }): string {

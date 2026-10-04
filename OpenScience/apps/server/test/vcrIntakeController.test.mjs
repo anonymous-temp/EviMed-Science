@@ -7,10 +7,10 @@ import test from 'node:test';
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION, RuntimeControllerClient } from '../src/runtimeControllerClient.mjs';
 import { createRuntimeController } from '../src/runtimeControllerServer.mjs';
 import {
-  VCR_INTAKE_SCRIPT_DIR, VCR_INTAKE_VOLUME_KINDS, createVcrIntakeController, dockerMemoryBytes, vcrIntakeDirectory, vcrIntakeHostRoot, vcrIntakePlan, vcrIntakeRoot,
+  VCR_INTAKE_KINDS, VCR_INTAKE_SCRIPT_DIR, VCR_INTAKE_VOLUME_KINDS, createVcrIntakeController, dockerMemoryBytes, vcrIntakeDirectory, vcrIntakeHostRoot, vcrIntakePlan, vcrIntakeRoot,
   vcrIntakeTimeoutOf,
 } from '../src/vcrIntakeController.mjs';
-import { VCR_INTAKE_LIMITS } from '../src/vcrIntakeLayout.mjs';
+import { VCR_INTAKE_LIMITS, VCR_TABLE_LIMITS } from '../src/vcrIntakeLayout.mjs';
 
 const ATTEMPT = 'a1b2c3d4-0000-4000-8000-000000000001';
 const DIGEST = 'f'.repeat(64);
@@ -29,6 +29,11 @@ function planConfig(extra = {}) {
 /** A record's reference as the API sends it: the staged file's path inside the plane, its digest and size. */
 function recordReference(attemptId = ATTEMPT, format = 'pdf', extra = {}) {
   return { path: `studies/${STUDY}/.intake/${attemptId}/in/document.${format}`, sha256: DIGEST, bytes: 4096, ...extra };
+}
+
+/** An import's reference as the API sends it: the staged file's path inside the plane, its digest and size, and the standard it is claimed to be. */
+function importReference(attemptId = ATTEMPT, extension = 'zip', format = 'omop', extra = {}) {
+  return { path: `studies/${STUDY}/.intake/${attemptId}/in/import.${extension}`, sha256: DIGEST, bytes: 4096, format, ...extra };
 }
 
 /** The `--flag value` pairs of a Docker argument list, in order. @param {string[]} args @param {string} flag */
@@ -61,7 +66,7 @@ function assertHardening(args, kind) {
   // A fixed operation: the image's own interpreter and one script.
   const image = args.indexOf('python3') + 1;
   assert.equal(args[image], 'open-science-runtime:test');
-  assert.equal(args[image + 1], `${VCR_INTAKE_SCRIPT_DIR}/${{ extract: 'vcr_record_extract.py', digitize: 'vcr_curve_digitize.py', materials: 'source_material_extract.py' }[kind]}`);
+  assert.equal(args[image + 1], `${VCR_INTAKE_SCRIPT_DIR}/${{ extract: 'vcr_record_extract.py', digitize: 'vcr_curve_digitize.py', materials: 'source_material_extract.py', convert: 'vcr_import_convert.py' }[kind]}`);
   return args.slice(image + 2);
 }
 
@@ -109,6 +114,77 @@ test('a record is bound out of the plane by host path: every source is under the
       assert.ok(!/volume-subpath|type=volume|src=open-science-data/.test(arg), `${arg} names the data volume`);
     }
   }
+});
+
+test('an import: the container sees one read-only file and one output directory of the plane, and the plane\'s own table ceilings', () => {
+  const config = planConfig({ vcrDataMaxBytes: 40 * 1024 * 1024 });
+  const plan = vcrIntakePlan(config, 'convert', importReference());
+  assert.ok(plan.name.startsWith('evimed-vcr-intake-convert-'));
+  assert.equal(plan.dir, null, 'an import has no directory on the data volume');
+  const command = assertHardening(plan.args, 'convert');
+  const attempt = `${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}`;
+  // Exactly two mounts, as a record has: the one staged file, read-only, and the attempt's own empty output, by host path in the plane.
+  assert.deepEqual(valuesOf(plan.args, '--mount'), [
+    `type=bind,src=${attempt}/in/import.zip,dst=/input/import.zip,readonly`,
+    `type=bind,src=${attempt}/out,dst=/output`,
+  ]);
+  for (const arg of plan.args) assert.ok(!arg.includes(DATA), `${arg} names the data directory`);
+  // The script is told what to hold the file to and the plane's own ceilings; the controller read nothing.
+  assert.deepEqual(command, ['--file', '/input/import.zip', '--format', 'omop', '--extension', 'zip', '--expect-sha256', DIGEST, '--expect-bytes', '4096',
+    '--max-table-bytes', String(40 * 1024 * 1024), '--max-rows', String(VCR_TABLE_LIMITS.rows), '--max-columns', String(VCR_TABLE_LIMITS.columns),
+    '--output-dir', '/output', '--deadline', '118']);
+  assert.equal(vcrIntakeTimeoutOf(config, 'convert'), 120_000, 'a whole export is read: twice a conversion\'s time');
+  // Without a configured ceiling the default is the plane's default upload size.
+  assert.equal(valuesOf(vcrIntakePlan(planConfig(), 'convert', importReference()).args, '--max-table-bytes')[0], String(50 * 1024 * 1024));
+  // Each standard is staged under its own extensions.
+  for (const [format, extension] of [['fhir', 'ndjson'], ['fhir', 'json'], ['fhir', 'zip'], ['omop', 'zip'], ['adam', 'xpt'], ['adam', 'zip']]) {
+    const built = vcrIntakePlan(config, 'convert', importReference(ATTEMPT, extension, format));
+    assert.deepEqual([valuesOf(built.args, '--format')[0], valuesOf(built.args, '--extension')[0], valuesOf(built.args, '--file')[0]], [format, extension, `/input/import.${extension}`]);
+  }
+});
+
+test('an import is bound out of the plane by host path, volume configured or not', () => {
+  for (const runtimeDataVolume of ['', 'open-science-data']) {
+    const { args } = vcrIntakePlan(planConfig({ runtimeDataVolume }), 'convert', importReference(ATTEMPT, 'xpt', 'adam'));
+    const mounts = valuesOf(args, '--mount');
+    assert.equal(mounts.length, 2);
+    for (const mount of mounts) {
+      assert.match(mount, /^type=bind,/, 'a bind of a host path, never a volume');
+      const source = /src=([^,]+)/.exec(mount)?.[1] ?? '';
+      assert.ok(source.startsWith(`${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}/`), `${source} is in the plane's scratch area`);
+      assert.ok(!source.startsWith(DATA) && !source.includes('vcr-intake'), `${source} is not under the data volume`);
+    }
+    assert.ok(args.includes('--network=none') && args.includes('--read-only'));
+  }
+});
+
+test('a caller names a staged import and a standard, and cannot steer a path, a command, a mount or an image', () => {
+  const config = planConfig();
+  const bad = [
+    importReference(ATTEMPT, 'zip', 'omop', { image: 'attacker/image' }), importReference(ATTEMPT, 'zip', 'omop', { command: 'sh' }),
+    importReference(ATTEMPT, 'zip', 'omop', { mounts: ['/:/host'] }), importReference(ATTEMPT, 'zip', 'omop', { sha256: 'not-a-digest' }),
+    importReference(ATTEMPT, 'zip', 'omop', { bytes: 0 }), importReference(ATTEMPT, 'zip', 'omop', { bytes: 1.5 }),
+    importReference(ATTEMPT, 'zip', 'omop', { bytes: 26 * 1024 * 1024 }),
+    // The standard is one of three words, and each is uploaded as its own extensions.
+    importReference(ATTEMPT, 'zip', 'hl7'), importReference(ATTEMPT, 'zip', ''), { ...importReference(), format: undefined },
+    importReference(ATTEMPT, 'xpt', 'omop'), importReference(ATTEMPT, 'ndjson', 'adam'), importReference(ATTEMPT, 'json', 'omop'),
+    // Only the layout's own path: an import file name, and never a record's.
+    { ...importReference(), path: `studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf` },
+    { ...importReference(), path: `studies/${STUDY}/.intake/${ATTEMPT}/in/import.exe` },
+    { ...importReference(), path: `studies/${STUDY}/.intake/${ATTEMPT}/in/import.zip,readonly` },
+    { ...importReference(), path: `studies/${STUDY}/.intake/${ATTEMPT}/in/../in/import.zip` },
+    { ...importReference(), path: `studies/${STUDY}/.intake/${ATTEMPT}/out/import.zip` },
+    { ...importReference(), path: `${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}/in/import.zip` },
+    { path: importReference().path, sha256: DIGEST, bytes: 10 }, { sha256: DIGEST, bytes: 10, format: 'omop' }, null, 'text', [],
+  ];
+  for (const reference of bad) assert.throws(() => vcrIntakePlan(config, 'convert', reference), { code: 'vcr_intake_input_invalid' }, JSON.stringify(reference));
+  // The two operations refuse each other's file: a record is not an import and an import is not a record.
+  assert.throws(() => vcrIntakePlan(config, 'extract', recordReference(ATTEMPT, 'pdf', { path: importReference().path })), { code: 'vcr_intake_input_invalid' });
+  assert.throws(() => vcrIntakePlan(config, 'convert', { ...recordReference(), format: 'fhir' }), { code: 'vcr_intake_input_invalid' });
+  assert.throws(() => vcrIntakePlan(config, 'extract', importReference()), { code: 'vcr_intake_input_invalid' });
+  // No plane host path: the import says so, as a record does.
+  assert.throws(() => vcrIntakePlan(planConfig({ vcrDataPlaneHostDir: '' }), 'convert', importReference()), { status: 503, code: 'vcr_document_converter_unavailable' });
+  assert.deepEqual([...VCR_INTAKE_KINDS], ['extract', 'digitize', 'materials', 'convert']);
 });
 
 test('a figure: the container sees one read-only input and one empty output under the data volume, and nothing else', () => {
@@ -474,7 +550,7 @@ test('a record whose reference is malformed, or a controller with no host path f
 
 // --- the route, through the controller's own socket ---------------------------
 
-test('the controller serves the two operations at protocol 9 and refuses anything else', async t => {
+test('the controller serves the intake operations at protocol 11 and refuses anything else', async t => {
   const f = await fixture(t);
   const shortRoot = await fs.realpath(await fs.mkdtemp(path.join('/tmp', 'vi-')));
   t.after(() => fs.rm(shortRoot, { recursive: true, force: true }));
@@ -486,8 +562,8 @@ test('the controller serves the two operations at protocol 9 and refuses anythin
   t.after(() => server.close());
   await server.listen();
   const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 5_000, vcrIntakeTimeoutMs: 20_000 });
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 10);
-  assert.equal((await client.health()).protocolVersion, 10);
+  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 11);
+  assert.equal((await client.health()).protocolVersion, 11);
 
   const record = recordReference();
   assert.deepEqual(await client.runVcrIntake('extract', record), { finished: true });
@@ -500,6 +576,16 @@ test('the controller serves the two operations at protocol 9 and refuses anythin
   assert.deepEqual(await client.runVcrIntake('materials', document.reference), { finished: true });
   await assert.rejects(client.request('POST', '/v1/vcr/materials', { ...document.reference, image: 'x' }), { code: 'runtime_controller_payload_invalid' });
   await assert.rejects(client.request('POST', '/v1/vcr/materials', record), { code: 'runtime_controller_payload_invalid' });
+
+  // A source held in a standard format is the fourth (protocol 11): named like a record, plus the standard it is claimed to be.
+  const imported = importReference();
+  assert.deepEqual(await client.runVcrIntake('convert', imported), { finished: true });
+  const converted = (await f.calls()).filter(call => call[0] === 'create').at(-1);
+  assert.ok(converted.includes('/opt/evimed/mcp/evimed-research/vcr_import_convert.py') && converted.includes('--expect-sha256'), 'the import reached its own script by its digest');
+  await assert.rejects(client.request('POST', '/v1/vcr/convert', { ...imported, image: 'x' }), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/convert', record), { status: 400, code: 'vcr_intake_input_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/convert', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/extract', imported), { code: 'runtime_controller_payload_invalid' });
 
   // Each operation takes exactly its own reference, and nothing else.
   await assert.rejects(client.request('POST', '/v1/vcr/extract', { ...record, image: 'x' }), { code: 'runtime_controller_payload_invalid' });

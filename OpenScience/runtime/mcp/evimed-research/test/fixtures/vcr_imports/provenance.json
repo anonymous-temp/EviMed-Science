@@ -1,0 +1,13 @@
+{
+ "note": "Public samples the import converters are tested against. Each fixture is committed byte for byte as downloaded (no trimming, no re-encoding) unless its entry says otherwise; the SHA-256 is checked by test_vcr_import_convert.py. Fetched from this host on the date given.",
+ "fixtures": [
+  {
+   "file": "smart-10-patients.zip",
+   "format": "fhir",
+   "source": "https://github.com/smart-on-fhir/sample-bulk-fhir-datasets/archive/refs/heads/10-patients.zip (SMART on FHIR sample-bulk-fhir-datasets, branch 10-patients, 11 Patient rows, 18 resource types as bulk-export NDJSON, generated with Synthea and US Core, FHIR R4)",
+   "licence": "CC0 1.0 (the repository README, section License: \"datasets themselves can be treated as CC0\"; scripts Apache-2.0)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "a9eba7c2b15ab2e027b633584669fc0ae08808056c1caddb3825e04764006bd7"
+  }
+ ]
+}

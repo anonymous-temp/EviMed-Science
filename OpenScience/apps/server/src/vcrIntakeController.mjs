@@ -5,10 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { dockerRuntimeMount } from './dockerMounts.mjs';
 import { HttpError, safeId, assertNoSymlinkPath } from './security.mjs';
-import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
+import {
+  VCR_IMPORT_FORMATS, VCR_INTAKE_LIMITS, VCR_INTAKE_LONG_KINDS, VCR_TABLE_LIMITS, parseVcrIntakeImportInput, parseVcrIntakeInput,
+} from './vcrIntakeLayout.mjs';
 
 /**
- * The disposable container behind 「虚拟临研」's two intake conversions: a
+ * The disposable container behind 「虚拟临研」's intake conversions: a
  * patient record as PDF or Word becomes text (`extract`), and a published
  * figure becomes curve points (`digitize`) — and, since controller protocol 10,
  * behind a third that is not 「虚拟临研」's: a knowledge-base source's PDF becomes
@@ -18,6 +20,15 @@ import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
  * document is staged on the data volume exactly as a figure is (it is not
  * patient data; the external parser is sent the same bytes), and the answer is
  * read from its output directory.
+ *
+ * Since protocol 11 a fourth is 「虚拟临研」's again and is patient data from the
+ * first byte: `convert` turns a source held in a standard format — FHIR
+ * resources, OMOP CDM tables, CDISC ADaM transport files — into the module's own
+ * tables, a field map and a dictionary (`vcrImport.mjs`, `vcr_import_convert.py`).
+ * It is staged exactly as a patient record is: one file, read-only, and one empty
+ * directory, both in the data plane's scratch area, bound by host path, with the
+ * file's digest and size for the script to hold it to — never under the data
+ * volume, never through the external parser, never in a research runtime.
  *
  * It is the document-export renderer's mechanism (`documentRenderController.mjs`)
  * and deliberately not a second framework: the runtime controller starts a
@@ -78,15 +89,16 @@ import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
  *   process running; the stopped container is pruned by label and age.
  */
 
-export const VCR_INTAKE_KINDS = Object.freeze(['extract', 'digitize', 'materials']);
+export const VCR_INTAKE_KINDS = Object.freeze(['extract', 'digitize', 'materials', 'convert']);
 /** The kinds whose scratch lives on the data volume, staged by the API: not a patient record. */
 export const VCR_INTAKE_VOLUME_KINDS = Object.freeze(['digitize', 'materials']);
-/** Where the image keeps the two scripts: the research MCP server's own sources, which a delta release ships. */
+/** Where the image keeps the scripts: the research MCP server's own sources, which a delta release ships. */
 export const VCR_INTAKE_SCRIPT_DIR = '/opt/evimed/mcp/evimed-research';
 const SCRIPTS = Object.freeze({
   extract: `${VCR_INTAKE_SCRIPT_DIR}/vcr_record_extract.py`,
   digitize: `${VCR_INTAKE_SCRIPT_DIR}/vcr_curve_digitize.py`,
   materials: `${VCR_INTAKE_SCRIPT_DIR}/source_material_extract.py`,
+  convert: `${VCR_INTAKE_SCRIPT_DIR}/vcr_import_convert.py`,
 });
 const LABEL = 'open-science.vcr-intake';
 /** A stopped intake container older than this is a leftover; one prune per interval is enough. */
@@ -152,6 +164,29 @@ function checkedRecordReference(config, reference) {
   return { scratch: parseVcrIntakeInput(value.path), sha256: String(value.sha256), bytes: Number(value.bytes) };
 }
 
+/**
+ * An import's reference: where the API staged the one file inside the plane, the
+ * file's SHA-256 and size, and which standard it is claimed to be. As for a
+ * record, nothing is read from disk; what is refused is what shape alone refuses —
+ * including a file extension the claimed format is not uploaded as.
+ * @param {any} config @param {unknown} reference
+ */
+function checkedImportReference(config, reference) {
+  const value = /** @type {Record<string, any>} */ (reference ?? {});
+  if (typeof reference !== 'object' || reference === null || Array.isArray(reference)
+    || Object.keys(value).some(key => !['path', 'sha256', 'bytes', 'format'].includes(key))
+    || !/^[a-f0-9]{64}$/.test(String(value.sha256 ?? ''))
+    || !Number.isSafeInteger(value.bytes) || value.bytes < 1
+    || !Object.hasOwn(VCR_IMPORT_FORMATS, String(value.format ?? ''))) {
+    throw new HttpError(400, 'vcr_intake_input_invalid', 'Invalid intake reference.');
+  }
+  if (value.bytes > fileCeiling(config)) throw new HttpError(413, 'vcr_intake_input_invalid', 'The intake file is too large.');
+  const scratch = parseVcrIntakeImportInput(value.path);
+  const format = /** @type {keyof typeof VCR_IMPORT_FORMATS} */ (String(value.format));
+  if (!VCR_IMPORT_FORMATS[format].includes(scratch.extension)) throw new HttpError(400, 'vcr_intake_input_invalid', 'The file is not one this standard is imported from.');
+  return { scratch, format, sha256: String(value.sha256), bytes: Number(value.bytes) };
+}
+
 const HOST_ROOT = /^\/[A-Za-z0-9._@+-]+(?:\/[A-Za-z0-9._@+-]+)*$/;
 
 /**
@@ -177,10 +212,11 @@ export function vcrIntakeHostRoot(config) {
 /**
  * One container's ceiling in milliseconds: the configured intake timeout, and
  * twice that for a source document, which is read whole (a few hundred pages of
- * text) where a record conversion reads a few. Every other limit is shared.
+ * text) where a record conversion reads a few, and for a standard-format import,
+ * which reads every resource or row of an export. Every other limit is shared.
  * @param {any} config @param {string} kind
  */
-export const vcrIntakeTimeoutOf = (config, kind) => Math.max(5_000, Number(config.vcrIntakeTimeoutMs) || 60_000) * (kind === 'materials' ? 2 : 1);
+export const vcrIntakeTimeoutOf = (config, kind) => Math.max(5_000, Number(config.vcrIntakeTimeoutMs) || 60_000) * (VCR_INTAKE_LONG_KINDS.includes(kind) ? 2 : 1);
 
 /** The seconds the script may run: the controller's timeout less two, so the script ends before it is killed. @param {any} config @param {string} kind */
 const deadlineSecondsOf = (config, kind) => Math.max(5, Math.ceil(vcrIntakeTimeoutOf(config, kind) / 1000) - 2);
@@ -236,6 +272,30 @@ function extractPlan(config, reference) {
 }
 
 /**
+ * A standard-format import: the same two mounts as a record — the one staged
+ * file, read-only, and the attempt's own empty output directory, both by host
+ * path in the plane — and the plane's own table ceilings as the script's flags,
+ * so a table the plane would refuse is reported skipped by name before it is written.
+ * @param {any} config @param {unknown} reference
+ */
+function convertPlan(config, reference) {
+  const { scratch, format, sha256, bytes } = checkedImportReference(config, reference);
+  const host = vcrIntakeHostRoot(config);
+  const hostInput = `${host}/${scratch.input}`;
+  const hostOutput = `${host}/${scratch.output}`;
+  const target = `/input/import.${scratch.extension}`;
+  const label = createHash('sha256').update(`convert\0${scratch.attemptId}\0${sha256}`).digest('hex');
+  const { name, args } = containerArgs(config, 'convert', label, [
+    '--mount', `type=bind,src=${hostInput},dst=${target},readonly`,
+    '--mount', `type=bind,src=${hostOutput},dst=/output`,
+  ], ['--file', target, '--format', format, '--extension', scratch.extension, '--expect-sha256', sha256, '--expect-bytes', String(bytes),
+    '--max-table-bytes', String(Math.max(MIB, Number(config.vcrDataMaxBytes) || 50 * MIB)),
+    '--max-rows', String(VCR_TABLE_LIMITS.rows), '--max-columns', String(VCR_TABLE_LIMITS.columns),
+    '--output-dir', '/output', '--deadline', String(deadlineSecondsOf(config, 'convert'))]);
+  return { args, dir: null, label, name, kind: 'convert', mounts: { input: hostInput, output: hostOutput } };
+}
+
+/**
  * A figure or a source document: its attempt directory under the data volume,
  * the request and the one file in a read-only input and an empty output.
  * @param {any} config @param {'digitize' | 'materials'} kind @param {unknown} reference
@@ -260,7 +320,9 @@ function stagedPlan(config, kind, reference) {
  */
 export function vcrIntakePlan(config, kind, reference) {
   if (!VCR_INTAKE_KINDS.includes(kind)) throw new HttpError(400, 'vcr_intake_input_invalid', 'Unknown intake operation.');
-  return kind === 'extract' ? extractPlan(config, reference) : stagedPlan(config, /** @type {'digitize' | 'materials'} */ (kind), reference);
+  if (kind === 'extract') return extractPlan(config, reference);
+  if (kind === 'convert') return convertPlan(config, reference);
+  return stagedPlan(config, /** @type {'digitize' | 'materials'} */ (kind), reference);
 }
 
 /** A small counting semaphore whose waiters leave the queue when their caller does. @param {number} limit */

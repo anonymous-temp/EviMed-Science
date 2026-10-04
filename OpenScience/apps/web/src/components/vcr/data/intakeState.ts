@@ -1,6 +1,6 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
-import type { VcrFieldMapEntry, VcrFieldRole, VcrIntakeSource } from "@/lib/vcrClient";
+import type { VcrFieldMapEntry, VcrFieldRole, VcrImportFormat, VcrImportResult, VcrIntakeSource } from "@/lib/vcrClient";
 
 /**
  * What the data-intake flow decides on the page rather than on the server:
@@ -23,7 +23,7 @@ const ANALYSIS_NAME = /^[A-Za-z_][A-Za-z0-9_.]{0,63}$/;
 const KEY_NAME = /^(usubjid|subjid|subject_?id|patient_?id|patient_?no|pid|受试者编号|患者编号)$/i;
 
 /** The keys of an entry the editor shows and rewrites itself. */
-const SHOWN_KEYS = ["table", "column", "role", "parameter", "alias", "unit", "timeKind", "missingReason", "identifier", "outcome", "codes"] as const;
+const SHOWN_KEYS = ["table", "column", "role", "parameter", "alias", "unit", "timeKind", "missingReason", "identifier", "outcome", "codes", "valueSource"] as const;
 
 /** One column of one file, as the editor holds it. Words, not codes: `treated` is what a person types. */
 export interface EditorRow {
@@ -39,6 +39,8 @@ export interface EditorRow {
   identifier: boolean;
   /** A baseline or measurement column that is itself an outcome (a response, a change): sealed like the outcome pair. */
   outcome: boolean;
+  /** Where the column's values come from (observed, extracted, calculated, imputed); empty is the file's own source. */
+  valueSource: string;
   treated: string;
   control: string;
   event: string;
@@ -61,7 +63,7 @@ export function editorRows(source: VcrIntakeSource): EditorRow[] {
     if (file.role !== "data" || file.latest === false) continue;
     for (const column of file.columns) {
       const entry = saved.get(`${file.name}\u0000${column.name}`);
-      const { role, parameter, alias, unit, timeKind, missingReason, identifier, outcome, codes } = entry ?? ({} as VcrFieldMapEntry);
+      const { role, parameter, alias, unit, timeKind, missingReason, identifier, outcome, codes, valueSource } = entry ?? ({} as VcrFieldMapEntry);
       // What the editor does not show travels as it was (concept, range, type, coding system…).
       const extra: Record<string, unknown> = { ...entry };
       for (const key of SHOWN_KEYS) delete extra[key];
@@ -78,6 +80,7 @@ export function editorRows(source: VcrIntakeSource): EditorRow[] {
         missingReason: missingReason ?? "",
         identifier: identifier === true || (!entry && column.identifying && suggested !== "subject_key"),
         outcome: outcome === true,
+        valueSource: valueSource ?? "",
         treated: joined(codes?.treated), control: joined(codes?.control), event: joined(codes?.event), censored: joined(codes?.censored),
         extra: extra as Partial<VcrFieldMapEntry>,
         identifying: column.identifying,
@@ -89,7 +92,7 @@ export function editorRows(source: VcrIntakeSource): EditorRow[] {
 
 /** Whether a row says anything at all: an untouched 「其他」 column is not sent. */
 function isDefault(row: EditorRow): boolean {
-  return row.role === "other" && !row.identifier && !row.unit && !row.timeKind && !row.missingReason && Object.keys(row.extra).length === 0;
+  return row.role === "other" && !row.identifier && !row.unit && !row.timeKind && !row.missingReason && !row.valueSource && Object.keys(row.extra).length === 0;
 }
 
 /** The entries the routes take, from the editor's rows: only what the person said. */
@@ -103,6 +106,7 @@ export function entriesOf(rows: readonly EditorRow[]): VcrFieldMapEntry[] {
     if (row.missingReason) entry.missingReason = row.missingReason;
     if (row.identifier) entry.identifier = true;
     if (row.outcome && (row.role === "covariate" || row.role === "measurement")) entry.outcome = true;
+    if (row.valueSource) entry.valueSource = row.valueSource as VcrFieldMapEntry["valueSource"];
     if (row.role === "arm" && (words(row.treated).length || words(row.control).length)) {
       entry.codes = { ...(words(row.treated).length ? { treated: words(row.treated) } : {}), ...(words(row.control).length ? { control: words(row.control) } : {}) };
     }
@@ -186,6 +190,87 @@ export function uploadProblem(
   const cap = role === "data" ? maxBytes : Math.min(maxBytes ?? Number.POSITIVE_INFINITY, ROLE_CAPS[role]);
   if (cap !== null && Number.isFinite(cap) && file.size > cap) return `文件超过 ${Math.round(cap / 1024 / 1024)} MB 的上限。`;
   return null;
+}
+
+/** The standards a source may be imported from, with what each is uploaded as. The server lists which of them this deployment converts. */
+export const IMPORT_FORMATS: ReadonlyArray<{ value: VcrImportFormat; label: string; hint: string }> = [
+  { value: "fhir", label: "FHIR", hint: "FHIR R4 的 NDJSON 批量导出、Bundle（JSON），或把它们打成 .zip。" },
+  { value: "omop", label: "OMOP CDM", hint: "OMOP CDM 5.3 / 5.4 的 CSV 表，打包成一个 .zip。" },
+  { value: "adam", label: "CDISC ADaM", hint: "ADSL、ADTTE、ADAE 的 SAS 传输文件（.xpt，V5），可单个上传，也可打成 .zip。" },
+];
+
+/** What a source's file chooser accepts for an import of this standard: what the deployment says it is uploaded as. */
+export function importAccept(format: VcrImportFormat, imports: VcrIntakeSource["upload"]["imports"] | null): string {
+  return (imports?.formats.find((entry) => entry.value === format)?.extensions ?? []).map((extension) => `.${extension}`).join(",");
+}
+
+/** A sentence when an import file would be refused, `null` when it would not. */
+export function importProblem(
+  file: { name: string; size: number }, format: VcrImportFormat, imports: VcrIntakeSource["upload"]["imports"] | null,
+): string | null {
+  const dot = file.name.lastIndexOf(".");
+  const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
+  if (!extension) return "文件名需要带扩展名，例如 export.zip。";
+  const allowed = imports?.formats.find((entry) => entry.value === format)?.extensions ?? [];
+  if (!allowed.includes(extension)) return `这一种格式支持：${allowed.join("、") || "（本部署暂未开通）"}。`;
+  if (file.size === 0) return "文件是空的。";
+  if (imports?.maxBytes != null && file.size > imports.maxBytes) return `文件超过 ${Math.round(imports.maxBytes / 1024 / 1024)} MB 的上限。`;
+  return null;
+}
+
+/** The converter's closed words for what it skipped, in the reader's language; a word it does not know is shown as it is. */
+const IMPORT_REASONS: Record<string, string> = {
+  unsupported_resource_type: "本版本不读这类资源",
+  not_fhir_resources: "没有一行是 FHIR 资源",
+  not_a_fhir_file: "不是 FHIR 文件",
+  not_json: "不是 JSON",
+  bundle_too_large: "Bundle 太大，请改用 NDJSON",
+  all_rows_skipped: "没有一行能导入",
+  no_patient_reference: "没有指向患者的引用",
+  no_id: "没有编号",
+  duplicate_patient_id: "患者编号重复",
+  medication_not_coded: "药物没有编码（按引用或其他形式给出）",
+  too_many_rows: "行数超过上限",
+  table_too_large: "超过文件大小上限",
+  too_many_columns: "列数超过上限",
+  not_kept: "没有保存",
+};
+/** The converter's notices: a count of something worth knowing about the data, never a value of a patient. */
+const IMPORT_NOTICES: Record<string, string> = {
+  lines_not_resources: "行不是 FHIR 资源，已略过",
+  mixed_units: "个检查项目在不同行里用了不同单位（数值未做换算，请按单位列区分）",
+  records_after_death: "位患者在死亡日期之后仍有记录",
+  death_before_first_record: "位患者的死亡日期早于第一条记录，随访时间留空",
+  death_date_unknown: "位患者标为已故但没有死亡日期，随访时间留空",
+  zero_follow_up: "位患者的随访时间为 0 天",
+  no_dated_record: "位患者没有带日期的记录，年龄与随访时间留空",
+  age_by_year_difference: "位患者的出生日期不完整，年龄按出生年份相减",
+  patient_not_in_file: "位患者出现在记录里，但文件中没有他们的患者信息",
+  partial_date: "个日期只有年或年月，按原样保留",
+  date_unreadable: "个日期读不出来，已留空",
+  observation_without_value: "条观察没有取值，只保留了项目和日期",
+  archive_metadata_ignored: "个压缩包附带的系统文件，已忽略",
+};
+
+/** The word for a skipped reason or a notice code. */
+function importWord(table: Record<string, string>, code: string): string {
+  return table[code] ?? (code.startsWith("value_not_carried:") ? `类型为 ${code.slice("value_not_carried:".length)} 的取值本版本不读，已留空` : code);
+}
+
+/** What an import read, took and left, as sentences a data manager can read: no patient value is in them. */
+export function importSummary(result: VcrImportResult): { tables: string[]; skipped: string[]; notices: string[] } {
+  const tables = result.tables.map((table) => (table.stored
+    ? `${table.name}：${table.rows} 行，${table.columns} 列`
+    : `${table.name}：没有保存（${importWord(IMPORT_REASONS, table.reason ?? "not_kept")}）`));
+  const skipped = [
+    ...result.coverage.inputs.filter((input) => input.status === "skipped" || Object.keys(input.skipped).length > 0).map((input) => {
+      const detail = Object.entries(input.skipped).map(([reason, n]) => `${importWord(IMPORT_REASONS, reason)} ${n}`).join("；");
+      return `${input.kind}：读到 ${input.records ?? "—"} 条，导入 ${input.imported} 条${input.reason ? `（${importWord(IMPORT_REASONS, input.reason)}）` : ""}${detail ? `；${detail}` : ""}`;
+    }),
+    ...result.coverage.skippedTables.map((entry) => `${entry.table}：没有生成（${importWord(IMPORT_REASONS, entry.reason)}）`),
+  ];
+  const notices = result.coverage.notices.map((notice) => `${notice.count} ${importWord(IMPORT_NOTICES, notice.code)}`);
+  return { tables, skipped, notices };
 }
 
 /** The plane's refusals, in words a data manager can act on. */

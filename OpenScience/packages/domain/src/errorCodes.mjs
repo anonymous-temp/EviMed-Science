@@ -1192,6 +1192,9 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // disposable container that does it (vcrRecordExtract.mjs, vcrIntakeController.mjs)
   'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable',
   'vcr_intake_busy', 'vcr_intake_timeout', 'vcr_intake_failed', 'vcr_intake_input_invalid',
+  // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
+  'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
+  'vcr_import_converter_unavailable',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
@@ -1645,6 +1648,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intake_timeout: '文件转换用时过长，已经停止。请拆小文件，或另存为文字版后再试。',
   vcr_intake_failed: '文件转换没有完成。请另存为 .txt 或可复制文字的 PDF 后再试。',
   vcr_intake_input_invalid: '待转换的文件不完整或已发生变化，请重新上传。',
+  vcr_import_not_this_format: '这个文件不是你选的那种标准格式：FHIR 要是 NDJSON 或 Bundle（JSON），OMOP 要是 CSV 表的 .zip，ADaM 要是 SAS 传输文件（.xpt）。请确认格式后再上传。',
+  vcr_import_nothing_to_import: '这个文件里没有可导入的内容：没有受支持的资源类型、数据表或数据集。支持的范围见导入面板的说明。',
+  vcr_import_unreadable: '这个文件打不开：可能已损坏或加密。请重新导出后再上传。',
+  vcr_import_version_unsupported: '这个文件的格式版本暂不支持（SAS 传输文件需为 V5 版）。请重新导出为 V5 的 .xpt 后再上传。',
+  vcr_import_converter_unavailable: '本部署暂时不能转换这种标准格式。请先导出为 CSV 后按普通数据文件上传。',
   vcr_source_file_not_found: '这个数据文件不存在或已删除。',
   vcr_source_file_frozen: '这个文件已被冻结进快照，不能删除。',
   vcr_source_file_changed: '文件内容与上传时记录的哈希不一致，已拒绝使用。',
