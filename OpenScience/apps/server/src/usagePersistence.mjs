@@ -63,6 +63,15 @@ CREATE INDEX IF NOT EXISTS usage_model_requests_project_fk_idx
 ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS run_id text;
 CREATE INDEX IF NOT EXISTS usage_model_requests_run_idx
   ON evimed_usage.model_requests(user_id,run_id,created_at,id) WHERE run_id IS NOT NULL;
+-- The kernel session a runtime's call was made from. A conversation typed into
+-- the kernel's own window has no run until the control plane adopts its turn,
+-- and a subagent's session is unknown until the progress tracker hears of it,
+-- so the first calls of each were booked with no run and a run's cost read below
+-- the ledger's sum for its session (2026-10-04). With the session on the row
+-- they are attributed once the run is known (UsageLedger.attributeSession).
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS session_id text;
+CREATE INDEX IF NOT EXISTS usage_model_requests_unattributed_session_idx
+  ON evimed_usage.model_requests(user_id,project_id,session_id,created_at) WHERE run_id IS NULL AND session_id IS NOT NULL;
 DO $foreign_keys$
 DECLARE stale record;
 BEGIN

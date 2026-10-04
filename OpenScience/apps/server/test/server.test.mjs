@@ -594,6 +594,13 @@ test("operator metrics endpoint requires a bearer token and exposes only low-car
       assert.match(body, /^open_science_runtime_quota_monitor_interval_seconds 30$/m);
       assert.match(body, /^open_science_runtime_limit\{scope="global"\} 8$/m);
       assert.match(body, /^open_science_runtime_limit\{scope="user"\} 4$/m);
+      // The image-upload probes the kernel's adapter makes and the gateway refuses by design.
+      assert.match(body, /^open_science_model_gateway_files_refused_total \d+$/m);
+      // Background work's share (8 - 4) and what it holds and gave back (2026-10-04).
+      assert.match(body, /^open_science_runtime_background 0$/m);
+      assert.match(body, /^open_science_runtime_background_limit 4$/m);
+      assert.match(body, /^open_science_runtime_background_yielded_total 0$/m);
+      assert.match(body, /^open_science_runtime_background_yield_failures_total 0$/m);
       assert.match(body, /^open_science_runtime_proxy_active \d+$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="global"\} 64$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="project"\} 8$/m);

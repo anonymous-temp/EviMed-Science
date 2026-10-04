@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
-import { SOURCES_PROJECT_ID, SOURCES_PROJECT_NAME } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, SOURCES_PROJECT_ID, SOURCES_PROJECT_NAME } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import { sourceAttemptId } from "./sourceFiles.mjs";
 import { HttpError, assertProjectCapacity, normalizeWorkspaceRelativePath, openScopedDirectoryNoFollow, openScopedFileNoFollow,
@@ -376,15 +376,26 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
       } catch (error) {
         // A stale attempt may clean its own copy, but account replacement must
         // not turn its old project path into authority over a new account.
-        return sources.withAttemptCleanup(job, async () => {
+        const settled = await sources.withAttemptCleanup(job, async () => {
           const recorded = (await agentRuns.list(home)).find(run => run.dispatchId === dispatchId);
           if (recorded?.status === "running") return identityOf(recorded);
           if (reserved) await runtimeManager.endBoundedRuntime(scoped, dispatchId);
           await cleanup(project, binding);
           if (!recorded) await removeRunWorkspace(home, binding);
           if (recorded) return identityOf(recorded);
-          throw error;
+          return null;
         });
+        if (settled) return settled;
+        // The launch failed before its run was recorded because a researcher's
+        // start took the runtime back. The protected launch intent is released
+        // with it, or the next claim would read an unrecorded launch as the
+        // terminal failure it is for anything else. Outside the cleanup above,
+        // which holds share locks on the source row this writes.
+        if (runtimeManager.wasYielded?.(scoped) && sources.releaseYieldedUnderstanding) {
+          await sources.releaseYieldedUnderstanding(job, { dispatchId });
+          throw new HttpError(409, RUNTIME_YIELDED_CODE, "A researcher needed the runtime; this document's understanding runs again when there is room.");
+        }
+        throw error;
       }
     },
 
@@ -404,7 +415,10 @@ export function createSourceUnderstandingRuntime({ config, store, sources, agent
         agentRuns.scheduleMonitor(project, run.id);
         return { status: "pending" };
       }
-      if (run.status !== "succeeded") return { status: run.status };
+      // The platform stopped it for a researcher's start (`RUNTIME_YIELDED_CODE`):
+      // the caller releases the run and the job waits, whatever status the run
+      // was closed with.
+      if (run.status !== "succeeded") return { status: run.status, ...(run.errorCode === RUNTIME_YIELDED_CODE ? { yielded: true } : {}) };
       const { output, verified } = await readUnderstanding(project, run);
       const usage = await usageLedger.summaryRun(identity.userId, identity.dispatchId);
       // Wait only for a request still in flight. An `uncertain` one is a request

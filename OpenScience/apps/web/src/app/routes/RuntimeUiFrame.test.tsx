@@ -322,6 +322,67 @@ describe("native frame identity and readiness", () => {
     window.removeEventListener(SHORTCUT_HELP_TOGGLE_EVENT, help);
   });
 
+  describe("a conversation opened while the project's runtime settings are being applied", () => {
+    // 2026-10-04: the first conversation after a release met 423
+    // `plugin_apply_in_progress` for the ten to forty seconds an apply took, and
+    // the notice page said 「对话暂时打不开」. The control plane waits for the
+    // apply itself; what is left is said quietly and opened again by itself.
+    const notice = (frame: HTMLIFrameElement, code: string) => emit(frame, { type: "evimed.runtime-ui.notice", code,
+      title: "对话暂时打不开", detail: "正在为这个项目准备运行环境，通常半分钟内完成。完成后再试一次即可。" });
+
+    it("says it is preparing, shows no alert, and opens the conversation again by itself", async () => {
+      vi.useFakeTimers();
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      notice(container.querySelector("iframe")!, "plugin_apply_in_progress");
+      expect(screen.getByText("正在准备运行环境")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(mocks.create).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_100); });
+      expect(mocks.create).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("alert")).toBeNull();
+      // Once the conversation opens the line is gone with the cover.
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+      expect(screen.queryByText("正在准备运行环境")).toBeNull();
+    });
+
+    it("gives up after five tries and says so with the retry, never the usage page", async () => {
+      vi.useFakeTimers();
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      for (let tried = 1; tried <= 5; tried++) {
+        notice(container.querySelector("iframe")!, "plugin_apply_in_progress");
+        expect(screen.queryByRole("alert")).toBeNull();
+        await act(async () => { await vi.advanceTimersByTimeAsync(2_100); });
+        expect(mocks.create).toHaveBeenCalledTimes(tried + 1);
+      }
+      notice(container.querySelector("iframe")!, "plugin_apply_in_progress");
+      expect(screen.getByRole("alert")).toHaveTextContent("正在为这个项目准备运行环境");
+      expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /用量|额度/ })).toBeNull();
+    });
+
+    it("leaves every other notice as the alert it was", async () => {
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      notice(container.querySelector("iframe")!, "runtime_limit_exceeded");
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(screen.queryByText("正在准备运行环境")).toBeNull();
+    });
+
+    it("does not fail the opening when its own start is refused for an apply under way", async () => {
+      mocks.start.mockRejectedValue(new WebApiError("Plugin settings are being applied; retry shortly.", { status: 423, code: "plugin_apply_in_progress" }));
+      const { container } = mount(null, "/app/chat/session-a");
+      await waitFor(() => expect(mocks.start).toHaveBeenCalled());
+      await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
   it("offers retry on frame failure without silently switching dispatchers", async () => {
     mocks.create.mockRejectedValueOnce(new Error("Unavailable")); mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时无法连接");

@@ -56,8 +56,26 @@ const messagesGatewayPath = "/internal/model/v1/messages";
  * file lives under the deployment's one provider key, where every tenant's
  * requests could name it. The adapter treats any upload failure as a reason to
  * send the images inline, which is what the chat route has always carried.
+ *
+ * Not a failure, so not ledgered as one. The pinned kernel's DeepSeek adapter
+ * (0.1.7-rc.2) tries `POST <base>/files` before every model request whose
+ * history holds an image, and has no setting that turns the attempt off — the
+ * only keys near it are byte and count budgets, and a budget small enough to
+ * skip the upload makes the image-offload plugin replace the image with
+ * placeholder text, which would end vision. So the refusal is the protocol
+ * working: 166 of them in the error ledger since 2026-09-28 read as a gateway
+ * failing and were one image-bearing step each, with the image delivered
+ * inline. They are counted on their own (`modelGatewayFilesRefusals`,
+ * `open_science_model_gateway_files_refused_total`) so an operator can still
+ * see how often images travel.
  */
 const filesGatewayPrefix = "/internal/model/v1/files";
+let filesRefusals = 0;
+
+/** How many provider-side image uploads the gateway has refused since this process started. */
+export function modelGatewayFilesRefusals() {
+  return filesRefusals;
+}
 const budgetMarkerPattern = /<evimed-budget-scope>([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)<\/evimed-budget-scope>/g;
 const autopilotIntentPattern = /<evimed-autopilot-episode>[a-zA-Z0-9_-]{1,160}<\/evimed-autopilot-episode>/g;
 const allowedRequestFields = new Set([
@@ -884,8 +902,11 @@ export function createModelGatewayHandler(config, runtimeManager, {
     if (requestPath === filesGatewayPrefix || requestPath.startsWith(`${filesGatewayPrefix}/`)) {
       // Before authentication, and without reading the body: nothing on this
       // path is ever served, and the adapter falls back to inline images on
-      // any failure here.
-      sendError(res, gatewayError(404, "model_gateway_files_unsupported", "Uploaded files are not supported; send images inline."), onFailure);
+      // any failure here. Answered without `onFailure`: this is the adapter's
+      // upload probe getting the answer it is built to handle, not a gateway
+      // fault (see `filesGatewayPrefix`).
+      filesRefusals += 1;
+      sendError(res, gatewayError(404, "model_gateway_files_unsupported", "Uploaded files are not supported; send images inline."), null);
       return;
     }
     const route = Object.hasOwn(GATEWAY_ROUTES, requestPath) ? GATEWAY_ROUTES[requestPath] : null;
@@ -1012,6 +1033,11 @@ export function createModelGatewayHandler(config, runtimeManager, {
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
         const runId = caller.runId ?? attributed ?? null;
+        // A call with no run yet keeps its session, so the run can be named once
+        // it is known (`UsageLedger.attributeSession`): the first calls of a
+        // conversation typed into the kernel's own window, a subagent's first
+        // calls. An engine job's calls never need it.
+        const sessionId = runId == null && !caller.engine ? kernelSessionId(req) : null;
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
@@ -1020,7 +1046,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           : "kernel";
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
-          runId, purpose,
+          runId, sessionId, purpose,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
           dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),

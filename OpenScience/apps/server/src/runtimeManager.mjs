@@ -1,5 +1,5 @@
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { backgroundRuntimeLimit, isInternalProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -30,7 +30,7 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
-import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
+import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 // So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
@@ -793,6 +793,17 @@ export const RUNTIME_START_STAGES = Object.freeze(["environment", "sync", "kerne
  *  for a frame that is still waiting to read it; short enough that a refusal
  *  from an earlier visit is not reported against a later one. */
 const START_FAILURE_VISIBLE_MS = 60_000;
+
+/** How long a researcher's start waits for a background runtime that is still
+ *  coming up or going down before it retires what is there
+ *  (`yieldBackgroundRuntimes`): a runtime start is seconds, and a stop that
+ *  takes longer than this is the stop's own problem, not a reason to wait on. */
+const DEFAULT_BACKGROUND_YIELD_WAIT_MS = 30_000;
+
+/** How long after a background runtime was retired a missing runtime is still
+ *  read as that retirement (`recentlyYielded`): the window between the
+ *  runtime coming up for a bounded run and the run's prompt reaching it. */
+const YIELD_MARK_MS = 120_000;
 
 function publicRuntimeStatus(runtime, fields = {}) {
   return {
@@ -3325,7 +3336,7 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
-    /** @type {(project: any, status: any) => any} */
+    /** @type {(project: any, status: any, errorCode?: string) => any} */
     this.onRuntimeStop = onRuntimeStop;
     /** @type {(project: Record<string, any>) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;
@@ -3356,6 +3367,18 @@ export class RuntimeManager {
     /** The last start of each project that was refused, by project key, for
      *  the status the waiting shell polls: `{ code, status, at }`. */
     this.startFailures = new Map();
+    /** Background runtimes retired because a researcher's start found the
+     *  deployment at its ceiling (`makeRoomFor`): how many, and the last time
+     *  (`open_science_runtime_background_yielded_total`). */
+    this.backgroundYields = { total: 0, failed: 0, lastAt: /** @type {string | null} */ (null) };
+    /** Workload tokens this process refused, by what the check was doing when it did
+     *  (`noteWorkloadTokenRefusal`). */
+    this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
+    /** When each retired background runtime was retired, by project key: what
+     *  names a prompt refused behind that stop (`dispatchAdmittedPrompt`) as the
+     *  platform's own doing rather than a fault. Dropped when the project's next
+     *  runtime comes up, and ignored once it is old (`YIELD_MARK_MS`). */
+    this.yieldedRuntimes = new Map();
   }
 
   /** The runtime provider this deployment runs (`OPEN_SCIENCE_RUNTIME_PROVIDER`). */
@@ -3475,9 +3498,27 @@ export class RuntimeManager {
     return payload;
   }
 
+  /**
+   * Why a workload token was refused, counted by reason
+   * (`open_science_workload_token_refusals_total`). The refusal itself is one
+   * code and one 401 whatever the reason — what a caller can learn about the
+   * check is exactly what it could — but the 53 refusals of the first week of
+   * 0.1.7 could not be told apart afterwards: a token superseded by a rewrite
+   * while its request was in flight, a runtime that was already going down, a
+   * forged one. Counts only; never the token.
+   * @param {"token" | "runtime" | "superseded" | "unreadable"} reason
+   */
+  noteWorkloadTokenRefusal(reason) {
+    this.workloadTokenRefusals[reason] = (this.workloadTokenRefusals[reason] ?? 0) + 1;
+  }
+
   /** Verify the current bounded token file and recheck liveness after I/O.
    * @param {unknown} token */
   async assertActiveEviMedWorkloadToken(token) {
+    /** What the check was doing when it refused: the token itself, the runtime it names,
+     *  whether it is the token the file holds, or reading that file.
+     *  @type {"token" | "runtime" | "superseded" | "unreadable"} */
+    let reason = "token";
     try {
       if (typeof token !== "string" || token.length > 8192) throw workloadTokenError();
       const claims = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
@@ -3486,8 +3527,10 @@ export class RuntimeManager {
         userId: claims.userId, projectId: claims.projectId });
       const key = this.key({ userId: payload.userId, id: payload.projectId });
       const runtime = this.runtimes.get(key);
+      reason = "runtime";
       if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
       if (typeof this.provider.acceptedWorkloadTokens === "function") {
+        reason = "superseded";
         // A remote runtime's token file is in its session, not on this host:
         // the provider holds what it installed there (and the one it is
         // installing, and the one that one replaces until it expires).
@@ -3503,6 +3546,7 @@ export class RuntimeManager {
           runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
         };
       }
+      reason = "unreadable";
       const handle = await fs.open(runtime.workloadTokenFile, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
       let current;
       try {
@@ -3513,13 +3557,22 @@ export class RuntimeManager {
       } finally { await handle.close(); }
       const actual = Buffer.from(token);
       const expected = Buffer.from(current);
-      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)
-        || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      // A valid, signed, unexpired token that is not the one the file holds now:
+      // superseded by a rewrite (every half lifetime) while its request was in flight.
+      // The presenters ask once more with a fresh read (`workloadRequest.mjs`);
+      // the rule here is unchanged.
+      reason = "superseded";
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw workloadTokenError();
+      reason = "runtime";
+      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
       return {
         ...payload,
         runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
       };
-    } catch { throw workloadTokenError(); }
+    } catch {
+      this.noteWorkloadTokenRefusal(reason);
+      throw workloadTokenError();
+    }
   }
 
   assertDockerControlBoundary() {
@@ -3819,6 +3872,7 @@ export class RuntimeManager {
       if (this.config.runtimeMode === "kernel") {
         const runtime = await this.startKernel(project, modelGatewayScope);
         this.runtimes.set(key, runtime);
+        this.yieldedRuntimes.delete(key);
         this.pendingModelGatewayScopes.delete(key);
         this.scheduleEviMedWorkloadRefresh(project, runtime);
         this.scheduleIdleStop(project);
@@ -3857,6 +3911,7 @@ export class RuntimeManager {
         modelGatewayScope,
       };
       this.runtimes.set(key, runtime);
+      this.yieldedRuntimes.delete(key);
       this.pendingModelGatewayScopes.delete(key);
       this.scheduleIdleStop(project);
       await appendRuntimeEvent(project, "started", {
@@ -3952,8 +4007,14 @@ export class RuntimeManager {
       catch { extensionGeneration = null; }
     }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
-      && canonicalJson(extensionGeneration.projection.personal.reference ?? null) !== canonicalJson(personalSkillGeneration?.reference ?? null)) {
-      // A fresh personal apply/removal must never be overwritten by an older composite stamp.
+      && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
+      // A fresh personal apply/removal must never be overwritten by an older
+      // composite stamp. "Fresh" is a change of the skills themselves: a
+      // generation's reference embeds the runtime image, so after a release the
+      // reference of every project's personal skills differs from the one the
+      // composite was stamped with while the skills are what they were — and
+      // comparing references unmounted the installed extension of every project
+      // that also has personal skills (2026-10-04).
       extensionGeneration = null;
     }
     if (extensionGeneration) {
@@ -4826,14 +4887,22 @@ export class RuntimeManager {
   }
 
   async dispatchAdmittedPrompt(project, sessionId, { text, system = null, memoryContext = null, residentProfile = false, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue", recordPromptActor = null }) {
+    // Background work whose runtime a researcher's start just took says so, so
+    // its owner waits and asks again instead of counting a failed attempt
+    // (`RUNTIME_YIELDED_CODE`). Nothing was sent: the prompt is refused whole.
+    const yielded = this.recentlyYielded(this.key(project));
     if (this.runtimeStops.has(this.key(project))) {
-      const error = new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
+      const error = yielded
+        ? new HttpError(409, RUNTIME_YIELDED_CODE, "The runtime was released to a researcher's start; this work resumes later.")
+        : new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
       error.definitivelyRejected = true;
       throw error;
     }
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
-      const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
+      const error = yielded
+        ? new HttpError(409, RUNTIME_YIELDED_CODE, "The runtime was released to a researcher's start; this work resumes later.")
+        : new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
       error.definitivelyRejected = true;
       throw error;
     }
@@ -5083,10 +5152,16 @@ export class RuntimeManager {
     }
   }
 
-  notifyRuntimeStop(project, runtime, status) {
+  /**
+   * @param {Record<string, any>} project @param {Record<string, any>} runtime
+   * @param {string} status
+   * @param {string} [errorCode] why the runs it held end, when it is not the
+   *   plain cancel (`RUNTIME_YIELDED_CODE`)
+   */
+  notifyRuntimeStop(project, runtime, status, errorCode) {
     if (!runtime.stopNotification) {
       runtime.stopNotification = Promise.resolve()
-        .then(() => this.onRuntimeStop(project, status))
+        .then(() => this.onRuntimeStop(project, status, errorCode))
         .catch(() => {});
     }
     return runtime.stopNotification;
@@ -5111,6 +5186,17 @@ export class RuntimeManager {
       limits: {
         maxGlobal: positiveLimit(this.config.maxRunningRuntimes),
         maxPerUser: positiveLimit(this.config.maxRunningRuntimesPerUser),
+      },
+      // The platform's own work among the runtimes above, as the ceiling counts
+      // it (running and starting), the share it may hold while nobody needs
+      // the room, and how often a researcher's start took one back.
+      workloadTokenRefusals: { ...this.workloadTokenRefusals },
+      background: {
+        active: this.backgroundRuntimeCount(),
+        limit: backgroundRuntimeLimit(positiveLimit(this.config.maxRunningRuntimes), positiveLimit(this.config.maxRunningRuntimesPerUser)),
+        yielded: this.backgroundYields.total,
+        yieldFailures: this.backgroundYields.failed,
+        lastYieldedAt: this.backgroundYields.lastAt,
       },
       methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
       unverifiedReleaseLaunches: [...this.unverifiedReleaseLaunches].map(([code, launches]) => ({ code, launches })),
@@ -5189,6 +5275,12 @@ export class RuntimeManager {
    * may also take their own idle runtime that a tab still holds open; see
    * the second pass below. A `speculative` start takes free room only and
    * retires nothing (see `start`).
+   *
+   * Before any of that, a deployment at its global ceiling retires the
+   * platform's own background runtimes (`yieldBackgroundRuntimes`): they are
+   * the one thing nobody is waiting on, and with one slot the learning loop
+   * held it for ten minutes while a researcher's start was refused
+   * (2026-10-04). Never the other way round.
    * @param {Record<string, any>} project
    * @param {{ opening?: boolean, speculative?: boolean }} [options]
    */
@@ -5205,6 +5297,8 @@ export class RuntimeManager {
     const userFull = () => maxPerUser != null && this.runtimeCountForUser(project.userId) - self() >= maxPerUser;
     const full = () => globalFull() || userFull();
     if (!full() || speculative) return;
+    if (globalFull()) await this.yieldBackgroundRuntimes(own, globalFull);
+    if (!full()) return;
     const prefix = `${project.userId}:`;
     const lastUse = (/** @type {string} */ key) => Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0);
     // Unset, the thirty minutes `loadConfig` defaults to: a manager built from
@@ -5280,6 +5374,106 @@ export class RuntimeManager {
       await yieldIfIdle(entry, true);
       if (!full()) return;
     }
+  }
+
+  /**
+   * Retire the platform's own background runtimes until the deployment is under
+   * its global ceiling again, for a researcher's start that found it reached.
+   *
+   * Newest first: the runtime that has been up the shortest has done the least
+   * work. One still coming up or already going down is waited for (at most
+   * `runtimeBackgroundYieldWaitMs`) rather than skipped, because it holds its
+   * slot all the same and refusing the researcher for the seconds it takes is
+   * the failure this exists to remove. A retired runtime's runs end as
+   * `runtime_yielded` and are never counted as the work's failure: the learning
+   * job and the source job wait and resume, the paired evaluation excludes the
+   * cell (`RUNTIME_YIELDED_CODE`). A researcher's runtime is never retired here,
+   * whatever the background work needs.
+   * @param {string} own the starting project's key, which is not one of the others
+   * @param {() => boolean} stillFull whether the global ceiling is still reached
+   * @returns {Promise<void>}
+   */
+  async yieldBackgroundRuntimes(own, stillFull) {
+    const background = (/** @type {string} */ key) => key !== own && isInternalProject(key.slice(key.indexOf(":") + 1));
+    const settling = [...this.starts, ...this.runtimeStops].filter(([key]) => background(key)).map(([, work]) => work);
+    if (settling.length) {
+      const configured = Number(this.config.runtimeBackgroundYieldWaitMs);
+      const waitMs = this.config.runtimeBackgroundYieldWaitMs != null && Number.isFinite(configured)
+        ? Math.max(0, configured) : DEFAULT_BACKGROUND_YIELD_WAIT_MS;
+      /** @type {ReturnType<typeof setTimeout> | undefined} */
+      let timer;
+      try {
+        await Promise.race([Promise.allSettled(settling), new Promise((resolve) => { timer = setTimeout(resolve, waitMs); })]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    const startedAt = (/** @type {any} */ runtime) => {
+      const at = Date.parse(String(runtime?.startedAt ?? ""));
+      return Number.isFinite(at) ? at : 0;
+    };
+    const retiring = [...this.runtimes.entries()]
+      .filter(([key, runtime]) => background(key) && Boolean(runtime.project))
+      .sort(([, left], [, right]) => startedAt(right) - startedAt(left));
+    for (const [key, runtime] of retiring) {
+      if (!stillFull()) return;
+      if (this.runtimes.get(key) !== runtime) continue;
+      await this.retireBackgroundRuntime(runtime.project);
+    }
+  }
+
+  /**
+   * Stop one background runtime for a researcher's start, even with a run in it
+   * and a connection open: those are the work being asked to wait.
+   * @param {Record<string, any>} project
+   * @returns {Promise<boolean>} whether this call retired it
+   */
+  async retireBackgroundRuntime(project) {
+    const key = this.key(project);
+    this.yieldedRuntimes.set(key, Date.now());
+    let stopped = false;
+    try {
+      stopped = await this.stopIdleRuntime(project, { event: "yielded_to_researcher", evenIfConnected: true, errorCode: RUNTIME_YIELDED_CODE });
+    } catch {
+      // isolated: a stop that could not be confirmed leaves the runtime in
+      // `failedRuntimeStops`, which still counts against the ceiling, and the
+      // researcher's start is refused with that runtime's own code.
+      this.backgroundYields.failed += 1;
+    }
+    if (!stopped) {
+      this.yieldedRuntimes.delete(key);
+      return false;
+    }
+    this.backgroundYields.total += 1;
+    this.backgroundYields.lastAt = new Date().toISOString();
+    return true;
+  }
+
+  /**
+   * Whether this project's runtime was retired for a researcher's start a
+   * moment ago, so that what a caller then finds missing is the platform's
+   * doing and not a fault (`dispatchAdmittedPrompt`).
+   * @param {string} key
+   */
+  recentlyYielded(key) {
+    const at = this.yieldedRuntimes.get(key);
+    if (at == null) return false;
+    if (Date.now() - at > YIELD_MARK_MS) {
+      this.yieldedRuntimes.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * The same question asked by the owner of bounded work whose launch failed:
+   * was this project's runtime taken back for a researcher's start just now?
+   * Then what went wrong is the wait, and the work asks again instead of
+   * counting a failure (`RUNTIME_YIELDED_CODE`).
+   * @param {Record<string, any>} project
+   */
+  wasYielded(project) {
+    return this.recentlyYielded(this.key(project));
   }
 
   runtimeKeys() { return new Set([...this.runtimes.keys(), ...this.starts.keys(), ...this.runtimeStops.keys(), ...this.failedRuntimeStops.keys()]); }
@@ -5538,14 +5732,15 @@ export class RuntimeManager {
   /** Close the captured provider, remembering an unconfirmed close for retry.
    * Failure records become visible only after the terminal callback, so that
    * callback cannot recursively wait for this very shutdown.
-   * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation */
-  async closeCapturedRuntime(project, runtime, status, generation) {
+   * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation
+   * @param {string} [errorCode] */
+  async closeCapturedRuntime(project, runtime, status, generation, errorCode) {
     const key = this.key(project);
     if (this.failedRuntimeStops.get(key)?.runtime === runtime) this.failedRuntimeStops.delete(key);
     let failure = null;
     try { await runtime.close(); await this.pluginService?.clearPromptAdmissions(project); }
     catch (error) { failure = error; }
-    await this.notifyRuntimeStop(project, runtime, status);
+    await this.notifyRuntimeStop(project, runtime, status, errorCode);
     if (failure) {
       if (!this.runtimes.has(key)) this.failedRuntimeStops.set(key, { runtime, generation });
       await appendRuntimeEvent(project, "cleanup_failed", { kind: runtime.kind, error: "runtime_cleanup_required" }, this.config);
@@ -6477,13 +6672,16 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ event?: string, evenIfConnected?: boolean }} [options] `event`
+   * @param {{ event?: string, evenIfConnected?: boolean, errorCode?: string }} [options] `event`
    *   is what the ledger calls this stop: `idle_timeout` from the idle sweep,
    *   `yielded` when the same user's next project needed the slot
    *   (`makeRoomFor`). `evenIfConnected` stops it with a tab's connection
    *   still open — an opening's yield — instead of waiting for it to close.
+   *   `errorCode` is what the runs it still holds end with: `runtime_canceled`
+   *   unless the platform's own background work gave way
+   *   (`RUNTIME_YIELDED_CODE`).
    */
-  async stopIdleRuntime(project, { event = "idle_timeout", evenIfConnected = false } = {}) {
+  async stopIdleRuntime(project, { event = "idle_timeout", evenIfConnected = false, errorCode = undefined } = {}) {
     const key = this.key(project);
     const openConnections = this.runtimeActivity.get(key)?.activeProxies ?? 0;
     if (openConnections > 0 && !evenIfConnected) { this.scheduleIdleStop(project); return false; }
@@ -6502,7 +6700,7 @@ export class RuntimeManager {
       this.clearEviMedWorkloadRefresh(key);
       this.runtimeActivity.delete(key);
       runtime.closedByManager = true;
-      await this.closeCapturedRuntime(project, runtime, "canceled", generation);
+      await this.closeCapturedRuntime(project, runtime, "canceled", generation, errorCode);
       await appendRuntimeEvent(project, event, {
         kind: runtime.kind, sandboxMode: runtime.sandboxMode ?? "mock", networkMode: runtime.networkMode ?? null,
         pid: runtime.pid, containerName: runtime.containerName ?? null, idleTimeoutMs: Number(this.config.runtimeIdleTimeoutMs),

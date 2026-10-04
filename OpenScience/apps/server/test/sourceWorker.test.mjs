@@ -217,7 +217,9 @@ test("an unconfigured folder connector is retried, not written off", async () =>
 test("a document waits for a runtime or budget instead of failing when none is free", async () => {
   // 2026-09-21: a knowledge-base upload was marked failed in 21 s because the
   // account's background work held every runtime slot.
-  for (const [code, delayMs] of [["runtime_limit_exceeded", 60_000], ["runtime_proxy_limit_exceeded", 60_000], ["usage_budget_exceeded", 3_600_000]]) {
+  // `runtime_yielded`: the document's run had a runtime and a researcher's start
+  // took it back; the run is released first (`SourceUnderstandingRuns`).
+  for (const [code, delayMs] of [["runtime_limit_exceeded", 60_000], ["runtime_proxy_limit_exceeded", 60_000], ["runtime_yielded", 60_000], ["usage_budget_exceeded", 3_600_000]]) {
     const { calls, source, sources, worker } = fixture();
     source.payload.depth = "structured";
     sources.deferIngestion = async (...args) => { calls.push({ method: "deferIngestion", args }); return { deferred: true }; };

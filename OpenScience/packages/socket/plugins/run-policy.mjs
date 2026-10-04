@@ -111,6 +111,7 @@ import {
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { collectSubagentRun } from '../src/subagentRun.mjs'
 import { answerReview, reviewIssues, reviewSummary, runReview } from '../src/review.mjs'
+import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 import { capSkillBodies } from '../src/skillBodies.mjs'
 import { proseShape } from '../src/proseShape.mjs'
 import {
@@ -2616,13 +2617,19 @@ function owedAnswersReminder(entry, items, prefix) {
 async function requestRevisionAuthorization(ctx, config, body) {
   if (!config.revisionAuthorizeUrl || !config.tokenFile) return false
   const token = await readFileAt(ctx, '/', config.tokenFile.replace(/^\/+/, ''))
-  if (!token) return false
+  if (!token?.trim()) return false
   try {
-    const response = await fetch(config.revisionAuthorizeUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token.trim()}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(config.revisionAuthorizeTimeoutMs ?? 3000),
+    // A token the control plane replaced while the request was in flight is
+    // asked once more with the one the file holds now (`workloadRequest.mjs`).
+    const response = await sendWithFreshWorkloadToken({
+      token: token.trim(),
+      readToken: () => readFileAt(ctx, '/', String(config.tokenFile).replace(/^\/+/, '')),
+      send: (current) => fetch(String(config.revisionAuthorizeUrl), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${current}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(config.revisionAuthorizeTimeoutMs ?? 3000),
+      }),
     })
     if (!response.ok) {
       await response.body?.cancel().catch(() => {})

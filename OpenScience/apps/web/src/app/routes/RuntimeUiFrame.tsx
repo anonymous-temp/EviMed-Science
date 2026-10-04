@@ -63,6 +63,8 @@ function frameFailure(text: string): FrameFailure {
 function refusedFrame(error: unknown): FrameFailure {
   const text = webErrorMessage(error, { fallback: "对话暂时无法连接，请重试。" });
   if (!(error instanceof WebApiError)) return frameFailure(text);
+  // A 423 that is only an apply under way: say so and offer the retry, not the usage page.
+  if (error.code === PREPARING_CODE) return { text, retryable: true, capped: false };
   const capped = errorCodeOutcome(error.code ?? "") === "capped" || [402, 423, 429].includes(error.status);
   // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
   // ended session and the shell moves to the login route — so a retry here
@@ -88,6 +90,21 @@ function refusedFrame(error: unknown): FrameFailure {
  *  words (`runtimeUiServer.mjs`). */
 const RUNTIME_SLOT_CAP_TEXT = "同时进行的研究已达上限，先结束一个再试。";
 
+/**
+ * A start refused because the project's runtime settings are being applied.
+ *
+ * The control plane waits for an apply itself before it refuses (20 s,
+ * `PluginService.withAdmission`), so this is what is left when the wait ran
+ * out. It is not a failure and not a ceiling: the first conversation after a
+ * release met it for the ten to forty seconds the apply took, and the page
+ * said 「对话暂时打不开」 (2026-10-04). The shell says what is happening and
+ * opens the conversation again by itself, a few times, before it calls it one.
+ */
+const PREPARING_CODE = "plugin_apply_in_progress";
+const PREPARING_LINE = "正在准备运行环境";
+const PREPARING_RETRY_MS = 2_000;
+const PREPARING_RETRY_LIMIT = 5;
+
 function noticedFrame(code: string, detail: string, title: string): FrameFailure {
   // A notice whose title says it all sends no detail (「项目正忙，请稍后再试」).
   const text = detail || title || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
@@ -103,6 +120,9 @@ function noticedFrame(code: string, detail: string, title: string): FrameFailure
  * the reader pressed after freeing a slot.
  */
 function refusedStart(error: unknown): FrameFailure | null {
+  // The opening goes on: the frame's own start waits for the apply (and the
+  // notice page retries the opening if it does not end in time).
+  if (error instanceof WebApiError && error.code === PREPARING_CODE) return null;
   if (!(error instanceof WebApiError) || errorCodeOutcome(error.code ?? "") !== "capped") return null;
   if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, concurrency: true };
   return refusedFrame(error);
@@ -264,6 +284,12 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // The runtime's settings are being applied, so the opening is tried again by
+  // itself (`PREPARING_CODE`): said on the cover instead of an alert, until the
+  // conversation opens or the tries run out.
+  const [preparing, setPreparing] = useState(false);
+  const preparingRetries = useRef(0);
+  const preparingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The control plane's account of the runtime start this opening waits on.
   const [startStatus, setStartStatus] = useState<WebRuntimeStartStatus | null>(null);
   const incoming = useRef(0);
@@ -291,6 +317,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return { kind: sessionId ? "open" : "create", projectId, requestId: crypto.randomUUID(),
       sessionId: sessionId ?? crypto.randomUUID() } satisfies RuntimeUiIntent;
   }, [active, suspended, location.state, projectId, sessionId, attempt]);
+
+  // Another project is another opening: nothing of the last one's preparing carries over.
+  useEffect(() => {
+    preparingRetries.current = 0;
+    setPreparing(false);
+    return () => clearTimeout(preparingTimer.current);
+  }, [projectId]);
 
   const navigationKey = `${location.pathname}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
   const previousNavigation = useRef(navigationKey);
@@ -507,6 +540,14 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       // then blamed a slow cold start for a ceiling the server had already
       // named (2026-09-15 walk, A8).
       if (message?.type === "evimed.runtime-ui.notice" && message.version === 1 && typeof message.code === "string") {
+        if (message.code === PREPARING_CODE && preparingRetries.current < PREPARING_RETRY_LIMIT) {
+          // An apply under way: open the conversation again once it has had a moment.
+          preparingRetries.current += 1;
+          setPreparing(true);
+          clearTimeout(preparingTimer.current);
+          preparingTimer.current = setTimeout(() => setAttempt(value => value + 1), PREPARING_RETRY_MS);
+          return;
+        }
         setError(noticedFrame(message.code, typeof message.detail === "string" ? message.detail.slice(0, 200) : "",
           typeof message.title === "string" ? message.title.slice(0, 200) : ""));
         return;
@@ -519,6 +560,8 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
       } else if (message.type === "evimed.runtime-ui.ready") {
         nativeReady.current = true;
         recoveryAttempted.current = false;
+        preparingRetries.current = 0;
+        setPreparing(false);
         setNativeError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
         setReadyGeneration(value => value + 1);
@@ -829,7 +872,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // it has, switching to another shows nothing — the kernel is on screen and
   // keeps its own composer (a switch inside a live runtime used to read as a
   // cold start: walk of 2026-09-20, 「每次点会话都要冷启动」).
-  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} />;
+  const cover = navigated ? null : <FrameSkeleton title={active ? conversationTitle(sessionId) : null} line={preparing ? PREPARING_LINE : undefined} />;
   // A renewal that failed is only worth saying once the lease it renews has
   // actually run out — or when it is an expired login, which no retry fixes.
   const leaseAlert = leaseFailure && (leaseFailure.final || leaseExpired) ? leaseFailure.text : null;

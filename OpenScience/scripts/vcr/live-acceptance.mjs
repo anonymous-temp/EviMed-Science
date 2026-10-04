@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { VCR_EXPORT_KINDS, VCR_STEPS } from '../../packages/domain/src/vcrVocabulary.mjs';
+import { patientFetch } from '../ops/transient-refusal.mjs';
 
 const COMMANDS = ['intake', 'observe', 'run-step', 'engine-job', 'vcr-exports', 'artifact-export'];
 const id = value => { if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value)) throw new Error('invalid_id'); return value; };
@@ -132,7 +133,8 @@ export async function runAcceptance(config) {
     const attemptName = attempt ? `${String(++attemptSequence).padStart(4, '0')}-attempt.json` : null;
     // Durable intent exists before the network can perform any mutation.
     if (attempt) { receipt.attempts ??= []; receipt.attempts.push(attempt); await save(attemptName, JSON.stringify(attempt, null, 2)); }
-    const response = await fetch(c.baseUrl + route, { method, redirect: 'error', signal: AbortSignal.timeout(Math.max(1, Math.min(30000, until - Date.now()))), headers: { Cookie: auth.cookie, 'X-Open-Science-CSRF': auth.csrf, Origin: c.baseUrl, ...(body !== undefined ? { 'Content-Type': Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json' } : {}) }, ...(body !== undefined ? { body: Buffer.isBuffer(body) ? body : JSON.stringify(body) } : {}) });
+    // Patient with a runtime apply under way (423 `plugin_apply_in_progress`): the refusal comes before the control plane does anything, so asking again is not a second attempt.
+    const response = await patientFetch(c.baseUrl + route, { method, redirect: 'error', signal: AbortSignal.timeout(Math.max(1, Math.min(30000, until - Date.now()))), headers: { Cookie: auth.cookie, 'X-Open-Science-CSRF': auth.csrf, Origin: c.baseUrl, ...(body !== undefined ? { 'Content-Type': Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json' } : {}) }, ...(body !== undefined ? { body: Buffer.isBuffer(body) ? body : JSON.stringify(body) } : {}) });
     const bytes = await boundedBytes(response, c.responseBytes);
     let data;
     if (!binary) { try { data = JSON.parse(bytes.toString()); } catch { throw new Error(`non_json_response_${response.status}`); } }

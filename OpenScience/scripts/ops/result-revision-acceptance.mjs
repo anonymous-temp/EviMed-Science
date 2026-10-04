@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { sendThroughApply } from "./transient-refusal.mjs";
 /* global sessionStorage, localStorage, HTMLTextAreaElement, document, window */
 
 const execute = promisify(execFile);
@@ -109,7 +110,8 @@ export async function runResultRevisionAcceptance(args) {
     const projectId = String(args.project ?? `acceptance-result-revision-${Date.now().toString(36)}`);
     const headers = { "x-open-science-csrf": csrf, "x-open-science-project": projectId };
     const api = async (route, data) => {
-      const response = data === undefined ? await context.request.get(`${base}${route}`, { headers, timeout: 30_000 }) : await context.request.post(`${base}${route}`, { headers, data, timeout: 30_000 });
+      // Patient with a runtime apply under way (423 `plugin_apply_in_progress`), as the product's own client is.
+      const response = await sendThroughApply(() => data === undefined ? context.request.get(`${base}${route}`, { headers, timeout: 30_000 }) : context.request.post(`${base}${route}`, { headers, data, timeout: 30_000 }));
       if (!response.ok()) throw Object.assign(new Error(`${route.split("?")[0]} returned ${response.status()}`), { status: response.status() });
       return (await response.json()).data;
     }

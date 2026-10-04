@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 // Host-importable on purpose: this script runs from a release directory that
 // has no `node_modules`, and `modelGateway.mjs` imports nothing outside Node.
 import { supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
+import { patientFetch } from "./transient-refusal.mjs";
 
 function failure(code, message) {
   const error = new Error(message);
@@ -49,7 +50,9 @@ function baseUrl() {
 }
 
 async function jsonFetch(url, options = {}, expected = null) {
-  const response = await fetch(url, options);
+  // The first start after a release can answer 423 `plugin_apply_in_progress`
+  // for a few seconds; the product's own client waits, so this does.
+  const response = await patientFetch(url, options);
   const text = await response.text();
   let body = null;
   if (text) {

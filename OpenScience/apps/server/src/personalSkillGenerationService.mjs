@@ -139,6 +139,57 @@ export async function verifyPersonalSkillGeneration(config, project, reference, 
 }
 
 /** Product documents/jobs remain the only durable state. Identity callbacks are trusted deployment authority. */
+/**
+ * The package identity of a personal generation: which skills, at which
+ * revision and digest, and nothing about the image the bytes were published
+ * for. A generation's own identity (its reference) embeds the runtime image, so
+ * a release changes it for every project while the skills in it stay what they
+ * were; "did the selection change" is asked of this, never of the reference.
+ * @param {any} generation @returns {string[]}
+ */
+export function personalPackageIdentity(generation) {
+  return (generation?.pins ?? []).map((/** @type {any} */ pin) => `${pin.skillId}\0${pin.revision}\0${pin.digest}`).sort()
+}
+
+/** Whether two personal generations hold the same skills, whatever image each was published for.
+ *  @param {any} left @param {any} right */
+export function samePersonalPackages(left, right) {
+  return canonicalJson(personalPackageIdentity(left)) === canonicalJson(personalPackageIdentity(right))
+}
+
+/** Whether a stored generation was published for the identity this deployment runs now.
+ *  @param {any} identity @param {any} candidate */
+export function personalGenerationCompatible(identity, candidate) {
+  return !!identity && !!candidate?.reference
+    && ['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].every(key => identity[key] === candidate.identity?.[key])
+}
+
+/**
+ * Which stored generation a cold start mounts, or null for no personal skills.
+ *
+ * What is already installed and still wanted comes first. After a release the
+ * installed generation was published for the old image, so the generation the
+ * reconcile published for the new one is what remains — and it is the same
+ * skills (`samePersonalPackages`), republished. That one is mounted even while
+ * the ledger is busy: the ledger guard exists so a *changed* selection is not
+ * mounted under work in flight, and a republish of the installed skills changes
+ * nothing a run could notice. Used to drop them, so a release unmounted a
+ * project's personal skills whenever a stale `running` row sat in its ledger.
+ * @param {{ state: any, identity: any, busy: () => Promise<boolean> }} input
+ * @returns {Promise<any | null>}
+ */
+export async function personalGenerationForStart({ state, identity, busy }) {
+  const desired = state?.payload.desired
+  const installed = [state?.payload.effective, state?.payload.lastGood]
+  const permitted = (/** @type {any} */ candidate) => personalGenerationCompatible(identity, candidate) && (candidate.pins ?? []).every((/** @type {any} */ pin) =>
+    (desired?.pins ?? []).some((/** @type {any} */ wanted) => wanted.skillId === pin.skillId && wanted.revision === pin.revision && wanted.digest === pin.digest))
+  const found = installed.find(permitted)
+  if (found) return found
+  if (!personalGenerationCompatible(identity, desired)) return null
+  const republish = installed.some(old => old?.reference && samePersonalPackages(old, desired))
+  return !republish && await busy() ? null : desired
+}
+
 export class PersonalSkillGenerationService {
   /** @param {any} database @param {{config:any,skillService:any,pluginService:any,resolveUser:(project:any)=>Promise<any>,identities:(project:any)=>Promise<any>,ledgerBusy?:(project:any)=>Promise<boolean>,documents?:any,jobs?:any}} options */
   constructor(database, { config, skillService, pluginService, resolveUser, identities, ledgerBusy = async () => true,
@@ -306,8 +357,7 @@ export class PersonalSkillGenerationService {
     const selection = await this.skills.projectSelections(user, project)
     const identity = await this.identities(project).catch(() => null)
     const baseline = () => ({ reference: null, pins: [], selectionRevision: selection.revision, findings: [] })
-    const compatible = candidate => !!identity && !!candidate?.reference
-      && ['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].every(key => identity[key] === candidate.identity?.[key])
+    const compatible = candidate => personalGenerationCompatible(identity, candidate)
     if (!identity || !state || state.payload.desired?.selectionRevision !== selection.revision
       || !compatible(state.payload.desired)) {
       try { await this.reconcile(user, project); state = await this.current(project) }
@@ -316,10 +366,7 @@ export class PersonalSkillGenerationService {
     // Cold recovery must not depend on a retired image. Existing active runtime
     // entries keep their captured pins; this only selects bytes for a new start.
     if (!identity) return baseline()
-    const permitted = candidate => compatible(candidate) && (candidate.pins ?? []).every(pin =>
-      (state.payload.desired?.pins ?? []).some(wanted => wanted.skillId === pin.skillId && wanted.revision === pin.revision && wanted.digest === pin.digest))
-    const candidate = [state.payload.effective, state.payload.lastGood].find(permitted)
-      ?? (await this.ledgerBusy(project) || !compatible(state.payload.desired) ? null : state.payload.desired)
+    const candidate = await personalGenerationForStart({ state, identity, busy: () => this.ledgerBusy(project) })
     if (!candidate) return baseline()
     try { await verifyPersonalSkillGeneration(this.config, project, candidate.reference, identity.baseRuntimeImageDigest) }
     catch { return baseline() }

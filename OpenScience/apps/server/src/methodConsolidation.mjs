@@ -47,6 +47,7 @@ import {
   validateMethodGraph,
 } from "@evimed/domain";
 import { methodRecordFrom, methodStepsOf } from "./learningService.mjs";
+import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 
 /** What `consolidate` can be asked to do. There is no new job kind: the kinds
@@ -68,6 +69,10 @@ export const DEFERRED_LEARNING_ERRORS = new Map([
   ["runtime_busy", 60_000],
   ["runtime_limit_exceeded", 120_000],
   ["runtime_proxy_limit_exceeded", 120_000],
+  // A researcher's start took the runtime back mid-step (`RuntimeManager.
+  // makeRoomFor`). The step starts again under the next attempt id once there is
+  // room; with one slot that is when the researcher's runtime has gone idle.
+  [RUNTIME_YIELDED_CODE, 60_000],
   ["usage_budget_exceeded", 3_600_000],
   // One paired evaluation at a time (`LearningWorker`); the next asks again.
   ["learning_evaluation_busy", 300_000],

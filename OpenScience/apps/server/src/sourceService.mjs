@@ -254,6 +254,28 @@ function timestamp(value, field) {
 /** @param {string} value */
 function digest(value) { return createHash("sha256").update(value).digest("hex"); }
 
+/**
+ * The dispatch id of one source generation's understanding run.
+ *
+ * Fixed by the source and its generation, so a crash between the run ledger's
+ * append and the source's binding finds the same run again instead of paying for
+ * a second. It moves on only by `releaseYieldedUnderstanding`: a run the platform
+ * stopped for a researcher's start is spent, and the next one is a new dispatch
+ * of the same frozen capture, `-r<n>` after the first.
+ * @param {string} sourceId @param {number | string} generation @param {number} [relaunches]
+ */
+export function understandingDispatchId(sourceId, generation, relaunches = 0) {
+  const base = `source-understanding-${digest(`${sourceId}\0${generation}`).slice(0, 32)}`;
+  return Number.isSafeInteger(relaunches) && relaunches > 0 ? `${base}-r${relaunches}` : base;
+}
+
+/** What a dispatch id of this generation may look like, whatever its relaunch
+ *  count: the shape check made before the record is read, where the exact id
+ *  is then compared. @param {string} sourceId @param {number | string} generation */
+function understandingDispatchPattern(sourceId, generation) {
+  return new RegExp(`^${understandingDispatchId(sourceId, generation)}(?:-r[1-9][0-9]*)?$`);
+}
+
 /** @param {unknown} value */
 function sourcePath(value) {
   const result = text(value, "source path", 2048).replaceAll("\\", "/").replace(/^\.\//, "");
@@ -724,11 +746,31 @@ export class SourceService {
     });
   }
 
+  /**
+   * A researcher's start took the runtime this source's understanding run was
+   * using (`RUNTIME_YIELDED_CODE`). The run is spent: it is never adopted and
+   * never read, its binding is released, and the next claim launches a new run
+   * for the same frozen capture under the next dispatch id
+   * (`understandingDispatchId`). Not a failed attempt, and not the second paid
+   * request the launch protocol forbids — the first one never finished, and the
+   * platform is what stopped it. Releasing an already released run is a no-op.
+   * @param {any} job @param {{ dispatchId: string }} run
+   */
+  async releaseYieldedUnderstanding(job, run) {
+    return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
+      const analysis = current.payload.analysis;
+      if (!analysis || (analysis.run?.dispatchId ?? analysis.launch?.dispatchId) !== run.dispatchId) return current.payload;
+      const { run: _run, launch: _launch, ...rest } = analysis;
+      return { ...current.payload, analysis: { ...rest, relaunches: (Number(analysis.relaunches) || 0) + 1 } };
+    });
+  }
+
   /** Persist reservation scope before the run ledger can append or prompt.
    * Recovery may bind the same ledger entry; it must not infer a new scope. */
   async bindUnderstandingLaunch(job, launch) {
-    const expected = `source-understanding-${digest(`${job.payload.sourceId}\0${job.payload.sourceGeneration ?? job.payload.sourceRevision}`).slice(0, 32)}`;
-    if (!launch || launch.dispatchId !== expected || typeof launch.sessionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(launch.sessionId)) {
+    const generation = job.payload.sourceGeneration ?? job.payload.sourceRevision;
+    if (!launch || !understandingDispatchPattern(job.payload.sourceId, generation).test(String(launch.dispatchId))
+      || typeof launch.sessionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(launch.sessionId)) {
       throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding launch identity.");
     }
     const identity = { sessionId: launch.sessionId, dispatchId: launch.dispatchId,
@@ -736,6 +778,9 @@ export class SourceService {
       artifactDirectory: sourcePath(launch.artifactDirectory) };
     return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
       if (current.payload.analysis?.generation !== current.payload.generation) throw new HttpError(409, "source_capture_invalid", "A source launch requires its frozen capture.");
+      if (launch.dispatchId !== understandingDispatchId(job.payload.sourceId, generation, Number(current.payload.analysis.relaunches) || 0)) {
+        throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding launch identity.");
+      }
       const previous = current.payload.analysis.launch ?? current.payload.analysis.run;
       if (previous && Object.keys(identity).some(key => identity[key] !== previous[key])) {
         throw new HttpError(409, "source_run_binding_conflict", "This source generation already owns another launch scope.");
@@ -746,10 +791,13 @@ export class SourceService {
   }
 
   async bindUnderstandingRun(job, run) {
-    const expected = `source-understanding-${digest(`${job.payload.sourceId}\0${job.payload.sourceGeneration ?? job.payload.sourceRevision}`).slice(0, 32)}`;
-    if (!run || run.dispatchId !== expected || typeof run.runId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.runId)
+    const generation = job.payload.sourceGeneration ?? job.payload.sourceRevision;
+    if (!run || !understandingDispatchPattern(job.payload.sourceId, generation).test(String(run.dispatchId)) || typeof run.runId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.runId)
       || typeof run.sessionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.sessionId)) throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding run binding.");
     return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
+      if (run.dispatchId !== understandingDispatchId(job.payload.sourceId, generation, Number(current.payload.analysis?.relaunches) || 0)) {
+        throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding run binding.");
+      }
       const bound = current.payload.analysis?.run;
       if (bound && (bound.id !== run.runId || bound.sessionId !== run.sessionId || bound.dispatchId !== run.dispatchId)) {
         throw new HttpError(409, "source_run_binding_conflict", "This source generation is already bound to a run.");

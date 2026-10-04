@@ -18,7 +18,8 @@ before(async () => {
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Plugin','development'),($2,'Other','development')",[owner,other]);
   project = {id:'one',userId:owner}; second = {id:'two',userId:owner};
   for (const p of [project,second,{id:'one',userId:other}]) await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Project',1000000)",[p.userId,p.id]);
-  service = new PluginService(db);
+  // A short wait: the tests that hold the project's lock expect the refusal, not a minute's patience.
+  service = new PluginService(db, { admissionWaitMs: 50 });
 });
 after(async()=>{if(db){await db.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])',[[owner,other]]);await db.close();}});
 

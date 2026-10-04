@@ -95,10 +95,11 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
+import { createLateUsageAttribution } from "./lateUsageAttribution.mjs";
 import { accountUsageRuns } from "./accountUsageRuns.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
@@ -1473,6 +1474,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     understandingRuns: new SourceUnderstandingRuns({
       dispatch: request => sourceUnderstandingRuntime.dispatch(request),
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
+      releaseYielded: ({ job, dispatchId }) => sourceService.releaseYieldedUnderstanding(job, { dispatchId }),
     }),
     cancelUnderstanding: identity => sourceUnderstandingRuntime.cancel(identity),
     verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
@@ -2056,6 +2058,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // hint from inside the container.
     return agentRuns.runIdForSession(sessionId, running) ?? (running.length === 1 ? running[0].id : null);
   };
+  // The model calls a native conversation made before its run was known
+  // (`lateUsageAttribution.mjs`): named for the run when it is adopted and again
+  // when it ends.
+  const attributeLateCalls = createLateUsageAttribution({ usageLedger, get agentRuns() { return agentRuns; } });
   // Run outcomes for /api/ops/metrics (plan §3.8): counted in memory as each
   // run ends, never read back from a project's run ledger, which can be wiped.
   const runMetrics = new RunMetrics();
@@ -2154,6 +2160,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
       await recordNativeSessionHandbooks(full, sessionId);
+      // The calls this conversation made before its run existed (see `attributeLateCalls`).
+      for (const running of (await agentRuns.list(full).catch(() => [])).filter((/** @type {any} */ item) => item.sessionId === sessionId && item.status === "running")) {
+        await attributeLateCalls(full, running);
+      }
       return run;
 
     },
@@ -2254,14 +2264,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         clearTimeout(timer);
       }
     },
-    onRuntimeStop: (project, status) => {
+    onRuntimeStop: (project, status, errorCode) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
       // wraps this call in its own `.catch()`, and returning the promise is
       // what keeps a rejection — a project whose ledger cannot be read,
       // oversized or corrupted — flowing through that existing handling
       // instead of becoming a second, unguarded unhandled rejection.
-      return agentRuns?.closeProject(project, status);
+      return agentRuns?.closeProject(project, status, errorCode);
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
@@ -2509,6 +2519,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             runId: run.id, code: error?.code ?? "result_capture_failed" });
         }
       }
+      await attributeLateCalls(project, run);
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       runEvents.publish(run.id, "run/state", {
         state: run.status,
@@ -7450,6 +7461,27 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   addMetric(lines, "open_science_runtime_running", "Runtime instances attached to the current Web API process.", "gauge", {
     value: runtimeStats.running,
   });
+  addMetric(
+    lines,
+    "open_science_workload_token_refusals_total",
+    "Workload tokens the control plane refused, by what the check was doing: the token itself, the runtime it names, whether it was the token the file holds now (superseded by a rewrite while in flight), or reading that file.",
+    "counter",
+    Object.entries(runtimeStats.workloadTokenRefusals ?? {}).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+  );
+  addMetric(
+    lines,
+    "open_science_model_gateway_files_refused_total",
+    "Provider-side image uploads the kernel's adapter tried and the model gateway refused by design (images travel inline); not a gateway failure.",
+    "counter",
+    { value: modelGatewayFilesRefusals() },
+  );
+  addMetric(
+    lines,
+    "open_science_usage_late_attributed_calls_total",
+    "Model calls a native run's own session made before the run was known, attributed to it afterwards.",
+    "counter",
+    { value: usageLedger?.lateAttribution?.calls ?? 0 },
+  );
   addMetric(lines, "open_science_runtime_starting", "Runtime start operations currently in flight.", "gauge", {
     value: runtimeStats.starting,
   });
@@ -7476,6 +7508,38 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       { value: runtimeStats.limits.maxGlobal ?? 0, labels: { scope: "global" } },
       { value: runtimeStats.limits.maxPerUser ?? 0, labels: { scope: "user" } },
     ],
+  );
+  // The platform's own work among those runtimes (learning, document
+  // understanding, evaluation, acceptance): what it holds, what it may hold
+  // while nobody needs the room, and how often a researcher's start took one
+  // back (`RuntimeManager.makeRoomFor`).
+  addMetric(
+    lines,
+    "open_science_runtime_background",
+    "Runtime instances held by the platform's own background work, running or starting.",
+    "gauge",
+    { value: runtimeStats.background?.active ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_limit",
+    "How many runtimes background work may hold while no researcher needs the room. Zero means no ceiling.",
+    "gauge",
+    { value: runtimeStats.background?.limit ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_yielded_total",
+    "Background runtimes retired because a researcher's start found the deployment at its ceiling.",
+    "counter",
+    { value: runtimeStats.background?.yielded ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_yield_failures_total",
+    "Background runtimes a researcher's start tried to retire and could not.",
+    "counter",
+    { value: runtimeStats.background?.yieldFailures ?? 0 },
   );
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {
     value: runtimeStats.proxy?.active ?? 0,

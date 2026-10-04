@@ -1,4 +1,17 @@
-/** Trusted assessment measurements only. No route/config selector installs these observers. */
+/**
+ * Trusted assessment measurements only. No route/config selector installs these observers.
+ *
+ * A library, not a command: nothing in package.json runs it, by design — the private
+ * assessment composition installs it (`createPrivateAssessmentFactories` in
+ * extension-saas-acceptance-composition.mjs, where `runtimeManagerFactory` first holds
+ * the assessment config this asserts on). Its measurements are what two cases of the
+ * acceptance journey are declared to still lack (extension-saas-acceptance-completion.mjs):
+ * SAAS-14 "retries, rolling caps and cancellation" (`runFinancialCapRefusal`,
+ * `runFiniteConcurrentRefusal`) and SAAS-21 "actual owned-network HTTP/DNS observation"
+ * (`finishOutboundObservation`). Until the journey (extension-saas-acceptance-journey.mjs,
+ * the SAAS-14 and SAAS-21 steps) calls them, only extensionAssessmentRuntimeProbes.test.mjs
+ * reaches it; deleting it would delete the measurement those two cases are waiting for.
+ */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';

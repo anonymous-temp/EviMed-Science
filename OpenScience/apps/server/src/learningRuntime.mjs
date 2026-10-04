@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { validateDeliveryReceipt, workspaceLayout } from "@evimed/domain";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
-import { LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, LEARNING_PROJECT_NAME, RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { issueModelGatewayBudgetMarker } from "./modelGateway.mjs";
 import {
   HttpError,
@@ -405,6 +405,11 @@ export function createLearningRuntime({
         if (reserved) await runtimeManager.endBoundedRuntime(scoped, dispatchId).catch(() => {});
         await cleanup(project, directory).catch(() => {});
         if (recorded) return identityOf(recorded);
+        // The launch failed before its run was recorded because a researcher's
+        // start took the runtime back: the step waits (`DEFERRED_LEARNING_ERRORS`).
+        if (runtimeManager.wasYielded?.(scoped)) {
+          throw new HttpError(409, RUNTIME_YIELDED_CODE, "A researcher needed the runtime; the learning step runs again when there is room.");
+        }
         throw error;
       }
     },
@@ -425,6 +430,13 @@ export function createLearningRuntime({
         await agentRuns.existingDispatch(project, run);
         agentRuns.scheduleMonitor(project, run.id);
         return { status: "pending" };
+      }
+      // A researcher's start took the runtime back (`RuntimeManager.makeRoomFor`).
+      // Neither a result nor a failure of the step: the caller's job defers
+      // without spending an attempt (`DEFERRED_LEARNING_ERRORS`), and the step
+      // runs again under the next attempt id — this one is spent, above.
+      if (run.errorCode === RUNTIME_YIELDED_CODE) {
+        throw new HttpError(409, RUNTIME_YIELDED_CODE, "A researcher needed the runtime; the learning step runs again when there is room.");
       }
       if (run.status !== "succeeded") return { status: run.status };
 

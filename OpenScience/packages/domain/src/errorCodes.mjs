@@ -899,6 +899,10 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'runtime_busy',
   'runtime_cleanup_required',
   'runtime_limit_exceeded',
+  // 2026-10-04: a start or a prompt that met a plugin apply on its project
+  // after the control plane's own wait ran out — the first conversation after a
+  // release, while the runtime is restarted and verified.
+  'plugin_apply_in_progress',
   'agent_run_active',
   'agent_run_limit_reached',
   // 2026-09-18 (C4): the per-account project ceiling, said with its reason,
@@ -1774,6 +1778,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
   runtime_cleanup_required: '上一次任务的运行环境尚未关闭，清理完成后可继续研究。',
   runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
+  plugin_apply_in_progress: '正在为这个项目准备运行环境，通常半分钟内完成。完成后再试一次即可。',
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
@@ -2025,6 +2030,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   runtime_busy: 'capped',
   runtime_cleanup_required: 'capped',
   runtime_limit_exceeded: 'capped',
+  plugin_apply_in_progress: 'capped',
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
