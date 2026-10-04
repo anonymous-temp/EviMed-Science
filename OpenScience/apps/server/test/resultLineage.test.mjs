@@ -6,6 +6,7 @@ import test from "node:test";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 import { ResultLineageService } from "../src/resultLineage.mjs";
 import { createResultProducerCapture } from "../src/resultProducerCapture.mjs";
+import { ResultRevisionService } from "../src/resultRevision.mjs";
 import { captureResultDelivery } from "../src/resultDeliveryCapture.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -192,4 +193,27 @@ test("a version captured before any of this was recorded is not retroactively gi
   assert.equal(read.snapshot.kind, "unobserved");
   assert.equal(read.bindings.status, "not_checked");
   assert.equal(read.bindings.items.length, 0);
+});
+
+test("a revision of one printed number is told which calculation is behind it and which other versions print from it, so only those are rebuilt", async t => {
+  const f = await fixture(t);
+  const calc = await f.calculation("analysis/pooled.json", POOLED);
+  const selected = await f.capture("report.md", report("0.71"));
+  const table = await f.capture("table.csv", "measure,value\nOR,0.7134\n");
+  const figure = await f.capture("forest.svg", '<svg><text>OR 0.71 [0.52, 0.91]</text></svg>');
+  const unrelated = await f.capture("methods.md", "纳入 3 项随机对照试验。");
+  const revisions = new ResultRevisionService({ results: f.results, documents: f.documents, lineage: f.lineage });
+  const reach = await revisions.reach(OWNER, "p", selected.versionId);
+  assert.deepEqual(reach.calculations, [{ versionId: calc.versionId, path: "analysis/pooled.json" }]);
+  assert.deepEqual(reach.alsoPrintedFrom.map(item => item.path).sort(), ["forest.svg", "table.csv"], "the other dependents, not the selection itself and not what prints nothing of it");
+  assert.ok(![selected.versionId, unrelated.versionId, calc.versionId].some(id => reach.alsoPrintedFrom.some(item => item.versionId === id)));
+  assert.equal(reach.alsoPrintedFrom.find(item => item.path === "table.csv").versionId, table.versionId);
+  assert.ok(figure.bindings.items.length >= 3, "a vector figure's labels are bound like prose");
+  // Selecting the calculation itself reaches everything printed from it.
+  const fromCalc = await revisions.reach(OWNER, "p", calc.versionId);
+  assert.deepEqual(fromCalc.alsoPrintedFrom.map(item => item.path).sort(), ["forest.svg", "report.md", "table.csv"]);
+  // A selection with no numerical chain, and a lineage that cannot be read, leave the selection as it was.
+  assert.equal(await revisions.reach(OWNER, "p", unrelated.versionId), null);
+  assert.equal(await new ResultRevisionService({ results: f.results, documents: f.documents }).reach(OWNER, "p", selected.versionId), null);
+  assert.equal(await new ResultRevisionService({ results: f.results, documents: f.documents, lineage: { describe: async () => { throw new Error("down"); } } }).reach(OWNER, "p", selected.versionId), null);
 });

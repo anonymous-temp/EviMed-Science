@@ -4,7 +4,8 @@ import { HttpError } from "./security.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const authorizationProjection = version => JSON.stringify({ inputs: version.inputs, code: version.code,
-  environment: version.environment, sourceRefs: version.findings?.map(finding => finding.sourceRefs), review: version.review });
+  environment: version.environment, sourceRefs: version.findings?.map(finding => finding.sourceRefs), review: version.review,
+  snapshotInputs: version.snapshot?.inputs });
 const verificationScript = `import hashlib, json, pathlib, sys
 root = pathlib.Path(__file__).resolve().parent
 manifest = json.loads((root / "manifest.json").read_text())

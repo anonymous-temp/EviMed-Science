@@ -159,7 +159,7 @@ test("a results file and the receipt of the script that wrote it are captured as
   assert.equal((await f.results.get(OWNER, "p", again.versionId)).bindings.calculations[0].versionId, calc.versionId);
 });
 
-test("the gateway renders only for the native call that asked, with the paths and calculations that call named", async t => {
+test("the gateway renders only for the native call that asked, with the paths and calculations that call named", async () => {
   const project = { id: "p", userId: "owner" };
   const request = { templatePath: "t.md", outputPath: "r.md", calculations: { pool: { versionId: `rv_${"a".repeat(64)}` } } };
   const context = { v: 1, sessionId: "session-1", callId: "call-1" };

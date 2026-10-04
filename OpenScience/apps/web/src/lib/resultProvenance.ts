@@ -306,13 +306,18 @@ export function bindingLocatorLabel(locator: BindingLocator): string {
   return `第 ${locator.line} 行`;
 }
 /**
- * The bindings a selected number could be: those whose printed words are exactly the selection. One calculation value is
- * a definite answer; several are listed rather than guessed between. A selection that is not a bound number answers none.
+ * The bindings a selection could be: those whose printed words are the selection, or one of the numbers inside it ("OR 0.71"
+ * selects the number 0.71). One calculation value is a definite answer; several are listed rather than guessed between. A
+ * selection that holds no bound number answers none.
  */
 export function bindingsForSelection(version: ResultVersion, selectedText: string): { bound: ValueBinding[]; unbound: UnboundNumber[] } {
   const wanted = selectedText.trim();
   if (!wanted || !version.bindings) return { bound: [], unbound: [] };
-  return { bound: version.bindings.items.filter(item => item.printed === wanted), unbound: version.bindings.unbound.filter(item => item.printed === wanted) };
+  const exact = { bound: version.bindings.items.filter(item => item.printed === wanted), unbound: version.bindings.unbound.filter(item => item.printed === wanted) };
+  if (exact.bound.length || exact.unbound.length || wanted.length > 200) return exact;
+  const tokens = new Set((wanted.match(/[-−]?\d[\d,]*(?:\.\d+)?%?/g) ?? []).map(token => token.replace("−", "-")).slice(0, 8));
+  const known = (printed: string) => tokens.has(printed.replace("−", "-"));
+  return { bound: version.bindings.items.filter(item => known(item.printed)), unbound: version.bindings.unbound.filter(item => known(item.printed)) };
 }
 /** The words a changed printed value would now read, for the dependents of a calculation that has a successor. */
 export function lineageChangeLabel(row: LineageChangeRow["affected"][number]): string {

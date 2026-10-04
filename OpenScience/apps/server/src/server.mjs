@@ -1932,6 +1932,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
     transformationsFor: dataSemantics ? (project, digests) => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null }) : null;
+  if (resultRevisions) resultRevisions.lineage = resultLineage;
   const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage });
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });

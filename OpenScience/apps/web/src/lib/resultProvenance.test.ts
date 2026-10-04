@@ -83,6 +83,7 @@ describe("the numerical chain in words", () => {
     const version = { bindings: { ...bindings("partly_bound"), items: [item("a"), item("b")], unbound: [{ locator: { kind: "text" as const, line: 2, column: 0 }, printed: "9.9", reason: "no_matching_value" as const, candidates: [] }] } } as unknown as ResultVersion;
     expect(bindingsForSelection(version, " 0.71 ").bound.map((entry) => entry.calculation.key)).toEqual(["a", "b"]);
     expect(bindingsForSelection(version, "9.9").unbound).toHaveLength(1);
+    expect(bindingsForSelection(version, "OR 0.71（95% CI）").bound.map((entry) => entry.calculation.key)).toEqual(["a", "b"]);
     expect(bindingsForSelection(version, "unrelated")).toEqual({ bound: [], unbound: [] });
     expect(bindingsForSelection({} as ResultVersion, "0.71")).toEqual({ bound: [], unbound: [] });
   });

@@ -41,6 +41,10 @@ const MAX_SCRIPT_BYTES = 1024 * 1024;
 const MAX_RESULTS_BYTES = 8 * 1024 * 1024;
 /** Files one execution names that are looked at: a receipt that lists more is read for the first of each kind. */
 const MAX_FILES = 24;
+/** What one execution record may make the platform read and preserve: a runtime-written record names its own files. */
+const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
+/** JSON files of a delivery looked at for an execution record. */
+const MAX_RECEIPT_CANDIDATES = 64;
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const record = (value) => value != null && typeof value === "object" && !Array.isArray(value);
@@ -79,13 +83,15 @@ export async function readSkillExecution({ results, project, userId, receiptPath
     && workspacePath(candidate.output.after.path) === resultsPath && candidate.output.after.sha256 === resultsDigest);
   if (!execution) return unavailable("no_execution_produced_these_bytes");
 
+  let budget = MAX_TOTAL_BYTES;
   /** What the receipt names, confirmed against the bytes readable now. @param {unknown} entry @param {number} limit */
   const check = async (entry, limit) => {
     const path = record(entry) ? workspacePath(entry.path) : null;
     const declared = record(entry) && HASH.test(String(entry.sha256)) ? String(entry.sha256) : null;
     if (!path || !declared) return null;
     try {
-      const bytes = await readBytes(path, limit);
+      const bytes = await readBytes(path, Math.min(limit, budget));
+      budget -= bytes.length;
       return { path, digest: declared, bytes, verified: sha(bytes) === declared };
     } catch { return { path, digest: declared, bytes: null, verified: false }; }
   };
@@ -171,7 +177,7 @@ export async function captureSkillResults({ results, project, userId, receiptPat
 export async function findSkillExecutions({ paths, readBytes }) {
   const pairs = [];
   const present = new Set(paths);
-  for (const path of paths.filter((candidate) => candidate.toLowerCase().endsWith(".json"))) {
+  for (const path of paths.filter((candidate) => candidate.toLowerCase().endsWith(".json")).slice(0, MAX_RECEIPT_CANDIDATES)) {
     let receipt;
     try { receipt = JSON.parse((await readBytes(path, MAX_RECEIPT_BYTES)).toString("utf8")); } catch { continue; }
     if (!record(receipt) || receipt.schemaVersion !== 1 || !Array.isArray(receipt.executions) || !receipt.executions.length) continue;

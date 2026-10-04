@@ -32,7 +32,9 @@ export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
     ?? lineage?.calculations.find((item) => item.versionId === versionId)?.path ?? "计算结果";
   const selected = selectedText && bindings ? bindingsForSelection(version, selectedText) : null;
   const reproduction = snapshot ? reproductionLabel(snapshot.reproduction) : null;
-  return <Disclosure summary="数值与计算来源" defaultOpen>
+  // Open where there is a chain to read: a calculation, or a version whose numbers were checked. A version with no numbers stays folded.
+  const hasChain = Boolean(snapshot && ["engine_job", "skill_script", "render"].includes(snapshot.kind)) || Boolean(bindings && ["bound", "partly_bound", "unbound"].includes(bindings.status));
+  return <Disclosure summary="数值与计算来源" defaultOpen={hasChain}>
     <div className="space-y-4 py-2">
       {snapshot && <section aria-label="生成方式" className="space-y-1">
         <p>生成方式：{snapshotKindLabel(snapshot.kind)}{snapshot.method ? ` · ${snapshot.method.id}${snapshot.method.version ? ` 第 ${snapshot.method.version} 版` : ""}` : ""}</p>

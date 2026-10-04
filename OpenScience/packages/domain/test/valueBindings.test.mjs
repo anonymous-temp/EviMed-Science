@@ -187,3 +187,27 @@ test("stored bindings are a closed projection: unknown keys, bad versions and pr
   assert.equal(projected.unbound[0].reason, "no_matching_value");
   assert.equal(projected.secret, undefined);
 });
+
+test("signs, ranges and line endings are read as a reader reads them", () => {
+  const calc = calculation(CALC, [{ key: "values.log_or", value: -0.3376 }, { key: "values.upper", value: 0.9087 }, { key: "values.lower", value: 0.5201 }]);
+  const crlf = "对数 OR −0.34，区间 0.52-0.91，列表\r\n- 0.91 是上限\r\n";
+  const { items, unbound } = bindPrintedNumbers({ body: crlf, path: "r.md", calculations: [calc] });
+  const byPrinted = Object.fromEntries(items.map((item) => [item.printed, item.calculation.key]));
+  assert.equal(byPrinted["-0.34"], "values.log_or", "a unicode minus is a sign");
+  assert.equal(byPrinted["0.52"], "values.lower", "the hyphen between two numbers is a range, not a sign");
+  assert.equal(byPrinted["0.91"], "values.upper");
+  assert.deepEqual(unbound, []);
+  assert.deepEqual(items.map((item) => item.locator.line), [1, 1, 1, 2], "line numbers survive CRLF");
+});
+
+test("a report with more numbers than the record holds says so and still labels what it kept", () => {
+  const values = Array.from({ length: 400 }, (_, index) => ({ key: `values.v${index}`, value: 1000.5 + index }));
+  const body = values.map((value) => `${value.value.toFixed(1)}`).join(" ; ");
+  const found = bindPrintedNumbers({ body, path: "r.md", calculations: [calculation(CALC, values)] });
+  assert.equal(found.items.length, 300);
+  assert.equal(found.truncated, true);
+  const record = valueBindingRecord({ ...found, calculations: [calculation(CALC, values)] });
+  assert.equal(record.truncated, true);
+  assert.equal(record.items.length, 300);
+  assert.equal(record.status, "bound");
+});

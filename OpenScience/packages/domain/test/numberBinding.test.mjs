@@ -42,3 +42,11 @@ test("a finished report's own citations, code spans and addresses are not typed 
   assert.deepEqual(typedNumberSpans(prose, { report: true }).map((span) => span.raw), ["0.71", "1,284"]);
   assert.deepEqual(typedNumbersOf("功效为 {{n:pooled.value|f2}}，2026 年第 3 页。"), []);
 });
+
+test("a finished report's sentence may end with a full stop right after its number; a template's behaviour is unchanged", () => {
+  const english = "The pooled OR was 0.71. The p value was 0.034, n = 1,284.5 and version 1.2.3 of 3.14.";
+  assert.deepEqual(typedNumberSpans(english, { report: true }).map((span) => span.raw), ["0.71", "0.034", "1,284.5", "3.14"]);
+  assert.deepEqual(typedNumberSpans("功效为 71.2。第 40 例.", { report: true }).map((span) => span.raw), ["71.2", "40"]);
+  // The study package's template reads exactly what it always did.
+  assert.deepEqual(typedNumberSpans("The pooled OR was 0.71. and 0.034,").map((span) => span.raw), ["0.034"]);
+});

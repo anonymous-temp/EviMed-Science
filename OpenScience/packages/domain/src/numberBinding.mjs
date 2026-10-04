@@ -285,7 +285,9 @@ export function typedNumberSpans(text, { report = false } = {}) {
   }
   /** @type {Array<{ raw: string, start: number, end: number }>} */
   const found = [];
-  const pattern = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g;
+  // A template is written in prose that ends its sentences with 「。」; a finished report may end one with an ASCII full stop
+  // right after its number ("the pooled OR was 0.71."), which is still the number and not part of it.
+  const pattern = report ? /(?<![\w.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(?!\w)(?!\.\d)/g : /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g;
   let match;
   while ((match = pattern.exec(text))) {
     const raw = match[1];
