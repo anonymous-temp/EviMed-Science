@@ -265,7 +265,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */

@@ -11,6 +11,7 @@ import { VcrTradeoffScatter } from "../VcrDiagrams";
 import { ReviewChip, SeriesLegend } from "../VcrMarks";
 import { VcrStat, VcrStatNote, VcrWordStat } from "../VcrNumber";
 import { StaleBar, VcrStepPending } from "../VcrStates";
+import { VcrKnowledgeSection } from "../VcrKnowledge";
 import { VcrHeadline, VcrSection } from "../vcrTabKit";
 import { vcrTabPath } from "../vcrTabs";
 
@@ -29,7 +30,7 @@ import { vcrTabPath } from "../vcrTabs";
  * been defined it is that step's one sentence and 「让 AI 做」, like every
  * other step that has not run (plan §9.4).
  */
-export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
+export function OverviewTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { headline, metrics, counts, designs, attention, changes, deliverables } = study.overview;
   const columns = metrics.length >= 6 ? 6 : metrics.length >= 5 ? 5 : 4;
   const defined = DEFINED.has(study.steps.definition?.status ?? "none");
@@ -160,6 +161,13 @@ export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStu
             )}
         </VcrSection>
       </div>
+
+      <VcrKnowledgeSection
+        studyId={studyId}
+        knowledge={study.knowledge}
+        canWrite={study.abilities.includes("write")}
+        onChanged={() => onStudyChanged?.()}
+      />
     </div>
   );
 }

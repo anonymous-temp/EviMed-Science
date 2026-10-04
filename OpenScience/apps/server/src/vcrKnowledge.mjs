@@ -75,7 +75,7 @@ class PackIssues extends HttpError {
 
 /**
  * One pack as a page and a tool read it, apart from its sections: where it lives, who stands behind it and what it holds.
- * @param {"shipped" | "stored"} origin @param {Record<string, any>} pack @param {Record<string, any> | null} [row]
+ * @param {string} origin `shipped` or `stored` @param {Record<string, any>} pack @param {Record<string, any> | null} [row]
  */
 export function presentPackSummary(origin, pack, row = null) {
   const summary = vcrPackSummary(pack);
@@ -98,7 +98,7 @@ function sourceUse(pack, id) {
  * A pack in full: its summary and every section. An entry names its sources by id
  * and the pack's source table (each with its licence's name and kind of use) is
  * given once, so a section is its own content and not a copy of the citations.
- * @param {"shipped" | "stored"} origin @param {Record<string, any>} pack @param {Record<string, any> | null} [row]
+ * @param {string} origin `shipped` or `stored` @param {Record<string, any>} pack @param {Record<string, any> | null} [row]
  */
 export function presentPack(origin, pack, row = null) {
   const sections = Object.fromEntries(VCR_PACK_SECTIONS.map((section) => [section, list(pack[section])]));
@@ -368,7 +368,7 @@ export class VcrKnowledge {
    * The runtime's pack write: bind a study to a pack (`{ use }`) or draft one
    * (`{ disease, … }`).
    * @param {any} study @param {Record<string, any>} row @param {string} actor
-   * @returns {Promise<{ ok: true, id: string, bound: Record<string, any> } | { ok: false, issues: readonly { code: string, field: string, detail: string }[] }>}
+   * @returns {Promise<{ ok: true, id: string, bound?: Record<string, any>, pack?: Record<string, any> } | { ok: false, issues: readonly { code: string, field: string, detail: string }[] }>}
    */
   async writePack(study, row, actor) {
     if (row.use !== undefined) {

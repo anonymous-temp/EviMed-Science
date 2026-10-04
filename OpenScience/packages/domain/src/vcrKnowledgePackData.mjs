@@ -45,5 +45,5 @@ export const VCR_SHIPPED_PACKS = Object.freeze(Object.fromEntries(FILES.map((pac
   if (issues.length) {
     throw new Error(`The shipped knowledge pack ${JSON.stringify(pack?.id)} does not meet its contract: ${issues.slice(0, 3).map((issue) => `${issue.field} ${issue.code}`).join('; ')}`)
   }
-  return [pack.id, deepFreeze(structuredClone(pack))]
+  return [pack.id, deepFreeze(JSON.parse(JSON.stringify(pack)))]
 })))

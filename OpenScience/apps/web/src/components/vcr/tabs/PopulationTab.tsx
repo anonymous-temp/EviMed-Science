@@ -7,6 +7,7 @@ import { VcrAttritionChart, VcrFunnelBar, VcrSmdDot } from "../VcrDiagrams";
 import { ReviewChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
+import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
 import { countLabel, countText, numberText } from "../vcrText";
 
@@ -27,7 +28,7 @@ import { countLabel, countText, numberText } from "../vcrText";
  * difference between the versions: a standardized difference is the
  * engine's number to send, not the browser's to make up.
  */
-export function PopulationTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
+export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:population`, () => getVcrPopulation(studyId));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
@@ -127,6 +128,14 @@ export function PopulationTab({ studyId, study }: { studyId: string; study: VcrS
           <VcrCountsBand counts={data.counts} />
         </div>
       </Stale>
+
+      <VcrDefinitionsSection
+        studyId={studyId}
+        knowledge={data.knowledge}
+        canWrite={study.abilities.includes("write")}
+        canRun={study.abilities.includes("run")}
+        onChanged={() => { reload(); onStudyChanged?.(); }}
+      />
     </div>
   );
 }

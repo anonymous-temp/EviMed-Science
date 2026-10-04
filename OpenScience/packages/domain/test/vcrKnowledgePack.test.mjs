@@ -22,7 +22,7 @@ import {
 
 /** A small pack that meets the `complete` level; each test breaks one thing. */
 function sample() {
-  return structuredClone({
+  return JSON.parse(JSON.stringify({
     schema: "evimed.vcr.knowledge-pack/1", id: "demo", version: 1, status: "curated", updated: "2026-10-04",
     disease: { key: "demo", name: "Demo disease", nameZh: "示例疾病", aliases: ["demo"], aliasesZh: ["示例"] },
     sources: [
@@ -43,7 +43,7 @@ function sample() {
       { id: "m_disease", concept: "demo_disease", label: "Disease", labelZh: "疾病", type: "flag", fieldNames: ["DEMO"], sources: ["own"] },
     ],
     background: [{ id: "b_1", text: "A short background.", textZh: "一段背景。", sources: ["guide"] }],
-  });
+  }));
 }
 
 /** @param {readonly { code: string, field: string }[]} issues */
@@ -171,7 +171,7 @@ test("ids are unique across the pack and every term reference resolves", () => {
 
 test("a complete pack maps every variable its rules name, and says which are missing", () => {
   const pack = sample();
-  pack.mappings = pack.mappings.filter((mapping) => mapping.concept !== "age");
+  pack.mappings = pack.mappings.filter((/** @type {any} */ mapping) => mapping.concept !== "age");
   assert.deepEqual(codes(validateKnowledgePack(pack, { level: "complete" })), ["pack_variable_unmapped@criteria[0].requirement"]);
   assert.deepEqual(validateKnowledgePack(pack, { level: "draft" }), [], "a draft is not held to it");
   assert.deepEqual(vcrRequirementVariables({ op: "all", operands: [{ op: "present", variable: "a" }, { op: "not", operand: { op: "absent", variable: "b" } }, { op: "present", variable: "a" }] }), ["a", "b"]);
@@ -322,11 +322,11 @@ test("ClinicalTrials.gov content is attributed with its processing date and a st
 
 test("no shipped pack carries a restricted or licensed code system, and every code is in the format of its system beside a source that publishes it", () => {
   const allowed = Object.keys(VCR_PACK_CODE_SYSTEMS);
-  let codes = 0;
+  let walked = 0;
   for (const [id, pack] of SHIPPED) {
     for (const term of pack.terms) {
       for (const code of term.codes ?? []) {
-        codes += 1;
+        walked += 1;
         assert.ok(allowed.includes(code.system), `${id}/${term.id}: ${code.system}`);
         assert.ok(!VCR_PACK_REFUSED_CODE_SYSTEMS.some((refused) => refused.toLowerCase() === String(code.system).toLowerCase()), `${id}/${term.id}`);
       }
@@ -334,7 +334,7 @@ test("no shipped pack carries a restricted or licensed code system, and every co
       if (term.definition) assert.ok(term.sources.includes("ncit") && (term.codes ?? []).some((/** @type {any} */ code) => code.system === "NCIt"), `${id}/${term.id}`);
     }
   }
-  assert.ok(codes >= 80, `the walk found the codes (${codes})`);
+  assert.ok(walked >= 80, `the walk found the codes (${walked})`);
 });
 
 test("a pack holds definitions, never a number a calculation uses: no entry carries a key outside the contract, and every endpoint names the standard it is assessed by", () => {

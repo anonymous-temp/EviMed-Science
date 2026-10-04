@@ -364,13 +364,13 @@ export function validateKnowledgePack(pack, { level = 'draft' } = {}) {
   /** @type {Array<{ where: string, ids: string[] }>} resolved after every section is read */
   const termChecks = []
 
-  /** @param {string} section */
-  const section = (section) => {
-    const list = pack[section]
-    const max = /** @type {Record<string, number>} */ (limits)[section]
+  /** The entries of one section, or none when it is absent or not a list within its limit. @param {string} name */
+  const section = (name) => {
+    const list = pack[name]
+    const max = /** @type {Record<string, number>} */ (limits)[name]
     if (list === undefined) return []
     if (!Array.isArray(list) || list.length > max) {
-      raise('pack_shape_invalid', section, `${section} is a list of at most ${max} entries.`)
+      raise('pack_shape_invalid', name, `${name} is a list of at most ${max} entries.`)
       return []
     }
     return list
