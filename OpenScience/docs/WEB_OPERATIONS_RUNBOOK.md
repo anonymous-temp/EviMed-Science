@@ -734,6 +734,27 @@ activation records belong to the trusted control plane and bind exact package,
 adapter, runtime image, permission and test identities. Never install a package
 in the web process or treat a package-written health file as a SaaS proof.
 
+Those records are evidence about a package, not a switch on it (owner ruling
+2026-10-04). A missing, stale, incomplete or unreadable qualification record, and
+an `extensions-deployment.json` whose `policy` digest was written for other
+source (`policyState: "stale"`, which every release causes until the operator
+re-measures), change only the label the extension centre shows (已验证, 验证已过期,
+验证未完成, 尚未验证); an unreadable record is also written to `security.jsonl` as
+`extension.qualification.record`. They never hide, disable or fail an installed,
+admitted package. What still refuses is the allow-list and the integrity checks:
+the deployment file's shape, kernel version, artifact and descriptor digests; the
+owned successful preparation job; the base runtime image a generation was
+prepared against; and the live probe after apply, which rolls back. A missing
+`extensions-deployment.json` is nothing configured.
+
+A production release manifest that disagrees with the deployment configuration
+(or a controller started without one) no longer refuses a runtime launch either.
+It fails readiness (`release`, or `runtime` for the controller's own manifest);
+each launch that proceeds writes one `release_provenance_unverified` event to the
+project's `runtime.jsonl` and `open_science_runtime_release_unverified_launches_total`
+counts it. `host-release-switch.sh` still stops on the failed readiness, which is
+where the mismatch is meant to bite.
+
 ## Aliyun plain-Node controlled pilot
 
 This variant uses systemd and the existing Nginx routes rather than the Compose
