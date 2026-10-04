@@ -543,6 +543,35 @@ test("TypeSafe's key reaches the web API from an optional mount, and nothing els
   assert.equal(unset.reviewJevEnabled, false);
 });
 
+test("the EviMed evidence key is an optional mount on every service that has it, and /dev/null is no key", async () => {
+  // The drug-safety adapter refused to serve without the deployment's key file,
+  // so on a deployment without one the web service waited on a container that
+  // never became healthy. Owner ruling 2026-10-04: a source nobody configured
+  // is the researcher's to configure where they use it. Every mount defaults to
+  // /dev/null, which config.mjs reads as no key rather than as a broken secret;
+  // a path that cannot be read is still named.
+  const files = await composeFiles();
+  const base = files.find(({ name }) => name === "docker-compose.yml");
+  assert.ok(base, "the base compose file was not read");
+  const services = YAML.parse(base.text).services;
+  const holders = Object.entries(services)
+    .filter(([, definition]) => definition?.volumes?.some((/** @type {any} */ volume) => volume?.target === "/run/secrets/evimed-api-key"))
+    .map(([name]) => name).sort();
+  assert.deepEqual(holders, ["evimed-drug-evidence-adapter", "evimed-drug-safety-agent", "evimed-meta-agent", "open-science-web"]);
+  for (const name of holders) {
+    const mount = services[name].volumes.find((/** @type {any} */ volume) => volume?.target === "/run/secrets/evimed-api-key");
+    assert.deepEqual(mount, { type: "bind", source: "${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}", target: "/run/secrets/evimed-api-key", read_only: true }, name);
+  }
+  const none = loadConfig({ rootDir: repoRoot, evimedApiKeyFile: "/dev/null" });
+  assert.equal(none.publicSourceCredentials.evimedEvidence, "");
+  assert.equal(none.publicSourceCredentialErrors.evimedEvidence, null, "/dev/null is no key, not a broken one");
+  assert.equal(
+    loadConfig({ rootDir: repoRoot, evimedApiKeyFile: "/nonexistent/evimed-api-key" }).publicSourceCredentialErrors.evimedEvidence,
+    "public_source_evimed_evidence_file_unavailable",
+    "a key that is named and cannot be read is still a fault",
+  );
+});
+
 test("the MR engine reads EBI through the web API's node, with its credentials, and only three services hold them", async () => {
   // The token-free GWAS Catalog path read ftp.ebi.ac.uk at ~19 KB/s from the
   // Beijing host and ~358 KB/s through the Tokyo node (2026-09-28). The engine

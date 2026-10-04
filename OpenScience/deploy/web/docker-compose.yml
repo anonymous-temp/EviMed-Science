@@ -927,8 +927,12 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # The deployment's EviMed evidence key is optional (owner ruling
+      # 2026-10-04): a deployment without one binds /dev/null, which config.mjs
+      # reads as none, and each researcher saves their own under 设置 → 数据源
+      # where they use it. The engines below mount the same file the same way.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
       - type: bind
@@ -1099,8 +1103,10 @@ services:
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
     volumes:
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. MetaAgent's evidence tool then says it was not used.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
       - open-science-data:/data
@@ -1655,8 +1661,10 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. The engine's evidence layer then says it was not used.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
     healthcheck:
@@ -1700,8 +1708,11 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. Its EviMed calls then answer that the credential is
+      # missing, which the run reads as the researcher's to configure.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
     healthcheck:

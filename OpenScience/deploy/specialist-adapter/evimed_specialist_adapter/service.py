@@ -649,11 +649,25 @@ def _model_ready() -> bool:
         ):
             raise RuntimeError("Managed MR input support is unavailable.")
         _signing_secret()
-        if _kind() == "drug-safety-analysis":
-            _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
     except (OSError, UnicodeDecodeError, RuntimeError):
         return False
     return os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
+
+
+def _evidence_source_state() -> dict[str, bool]:
+    """Whether this deployment holds an EviMed evidence key. Reported, never required.
+
+    The drug-safety engine's evidence layer is optional (it says in its result
+    when it was not used), and a source nobody configured is the researcher's to
+    configure where they use it (owner ruling 2026-10-04). This container used to
+    refuse to serve without the deployment's key file, so a deployment without
+    one left the web service waiting on an adapter that would never be healthy.
+    """
+    try:
+        _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
+    except (OSError, UnicodeDecodeError, RuntimeError):
+        return {"configured": False}
+    return {"configured": True}
 
 
 # The connectors each engine reads directly from its own environment, outside the
@@ -1808,6 +1822,7 @@ def _create_app() -> FastAPI:
             "modelRoute": "gateway" if engine_model.enabled() else "direct",
             **({"opengwas": opengwas} if opengwas is not None else {}),
             **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
+            **({"evidenceSource": _evidence_source_state()} if _kind() == "drug-safety-analysis" else {}),
             "auditReceiptsReady": audit_receipt.ready(fixture=_kind() == "mendelian-randomization"),
             **_evidence_health(),
             # Deployment-wide, from the one directory every engine container

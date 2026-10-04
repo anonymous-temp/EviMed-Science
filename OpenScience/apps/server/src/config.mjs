@@ -1093,9 +1093,8 @@ export function loadConfig(overrides = {}) {
     openFda: ["openFdaApiKey", "OPEN_SCIENCE_OPENFDA_API_KEY", "openfda.api-key"],
   };
   const publicSourceCredentialSecrets = Object.fromEntries(
-    Object.entries(publicSourceCredentialSpecs).map(([profile, [overrideValue, valueEnv, localFile]]) => [
-      profile,
-      preferredFileSecret(overrides, {
+    Object.entries(publicSourceCredentialSpecs).map(([profile, [overrideValue, valueEnv, localFile]]) => {
+      const loaded = preferredFileSecret(overrides, {
         overrideValue,
         overrideFile: `${overrideValue}File`,
         valueEnv,
@@ -1106,8 +1105,14 @@ export function loadConfig(overrides = {}) {
         // 2026-09-22 (its evimed-api exit); refusing its group bit silently
         // turned every EviMed evidence call into `credential_missing`.
         allowGroupRead: profile === "evimedEvidence",
-      }),
-    ]),
+      });
+      // The deployment's EviMed evidence key is optional (owner ruling
+      // 2026-10-04: a researcher configures a source nobody configured where they
+      // use it). Compose binds /dev/null where a deployment has none, which reads
+      // as none rather than as a broken secret, like the edge proxy's below.
+      const none = profile === "evimedEvidence" && loaded.error === "public_source_evimed_evidence_file_not_regular";
+      return [profile, none ? { value: "", source: "none", error: null } : loaded];
+    }),
   );
   // The reranker's credential. It is the same host file the recall index's own
   // configuration is rendered from: the control plane already holds every
