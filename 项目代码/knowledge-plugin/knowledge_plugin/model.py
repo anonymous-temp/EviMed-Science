@@ -130,6 +130,24 @@ FACT_TYPES: dict[str, type] = {
 }
 UPDATE_TO_KEYS = ("type", "doi", "date")
 
+# Crossref ``update-to`` types by what the record that carries them is. The first four kinds make it a
+# NOTICE about another work (``is_correction_notice``): a correction, a retraction, an expression of
+# concern, a withdrawal — four states of their own, which the platform tells apart by this same type. Any
+# other relation (``new_version``, ``new_edition``, ``addendum``, ``clarification``, a type not met yet) is
+# an update of a work and says nothing against it: that record is an item like any other and was flagged a
+# correction notice for carrying one, which dropped ordinary new versions from the feed.
+NOTICE_UPDATE_KINDS: dict[str, str] = {
+    "correction": "correction", "corrigendum": "correction", "erratum": "correction",
+    "retraction": "retraction", "partial_retraction": "retraction",
+    "expression_of_concern": "expression-of-concern",
+    "withdrawal": "withdrawal", "removal": "withdrawal",
+}
+
+
+def update_to_notice_kind(update_type: object) -> str | None:
+    """The notice kind one ``update_to`` relation's type names, or ``None`` for an update that is no notice."""
+    return NOTICE_UPDATE_KINDS.get(str(update_type or "").strip().lower().replace("-", "_").replace(" ", "_"))
+
 # EntryText.enrichment keys and their JSON types (the contract leaves the object open for additive
 # growth, but rule 4 applies to it as much as to facts, so the plugin whitelists it too).
 ENRICHMENT_TYPES: dict[str, type] = {

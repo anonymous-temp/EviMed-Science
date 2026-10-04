@@ -60,6 +60,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   FRONTIER_ITEM_FLAGS,
   FRONTIER_LANES,
+  FRONTIER_NOTICE_KINDS,
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
@@ -67,6 +68,7 @@ import {
   FRONTIER_MENTION_SOURCE_TYPES,
   frontierEvidenceFromPublicationTypes,
   frontierSourceDisplayName,
+  frontierUpdateKind,
   isFrontierMastheadTitle,
   isPeak,
 } from "@evimed/domain";
@@ -160,7 +162,12 @@ const TITLE_DUPLICATE_SIMILARITY = 0.85;
 const TITLE_DUPLICATE_MIN_CHARS = 24;
 const SELECT_LOCK = "evimed-frontier-select";
 
-/** Crossref `update-to` types → the link kind and the flag it puts on the work. */
+/**
+ * Crossref `update-to` types → the link kind and the flag it puts on the work
+ * they name. Which of them make the record carrying them a notice is the
+ * domain's table (`frontierUpdateKind`), not this one: a new version is linked
+ * and flags nothing, and is no notice.
+ */
 const UPDATE_KINDS = Object.freeze({
   retraction: { kind: "retraction", flag: "retracted", reason: "retracted" },
   partial_retraction: { kind: "retraction", flag: "retracted", reason: "retracted" },
@@ -171,7 +178,10 @@ const UPDATE_KINDS = Object.freeze({
   corrigendum: { kind: "correction", flag: "corrected", reason: "corrected" },
   erratum: { kind: "correction", flag: "corrected", reason: "corrected" },
   new_version: { kind: "new-version", flag: null, reason: null },
+  new_edition: { kind: "new-version", flag: null, reason: null },
 });
+/** The type of an `update_to` relation, as the tables spell it. @param {any} update */
+const updateKey = (update) => String(update?.type ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
 /** What a link to an item says about it. */
 const LINK_FLAGS = Object.freeze({ retraction: "retracted", withdrawal: "retracted", correction: "corrected", "expression-of-concern": "expression-of-concern" });
 
@@ -303,9 +313,43 @@ export function frontierDropReason(entry) {
   return null;
 }
 
-/** Whether an entry is a correction, retraction or concern notice about another work. @param {any} entry */
+/**
+ * What kind of notice an entry is about another work, or null when it is no
+ * notice: `retraction`, `withdrawal`, `expression-of-concern` or `correction`,
+ * the most serious its relations name (`FRONTIER_NOTICE_KINDS` is in that order).
+ *
+ * Decided by the relation's type. Any `update_to` used to make an entry a
+ * correction notice, so an ordinary new version of a work — a preprint's second
+ * version, a new edition — was flagged 更正 and dropped from the feed, and a
+ * retraction notice was called a correction. A record whose relations are all
+ * updates (a new version, an addendum, a clarification) is an item like any
+ * other. The plugin's own flag still decides when no relation can speak: a title
+ * in a notice form ("Correction: …") arrives with no relation to read, and is a
+ * correction notice.
+ * @param {any} entry @returns {'retraction' | 'withdrawal' | 'expression-of-concern' | 'correction' | null}
+ */
+export function frontierNoticeKind(entry) {
+  const relations = Array.isArray(entry?.facts?.update_to) ? entry.facts.update_to : [];
+  const kinds = new Set(relations.map((update) => frontierUpdateKind(update?.type)));
+  const serious = FRONTIER_NOTICE_KINDS.find((kind) => kinds.has(kind));
+  if (serious) return /** @type {any} */ (serious);
+  return entry?.facts?.is_correction_notice === true ? "correction" : null;
+}
+
+/** Whether an entry is a correction, retraction, concern or withdrawal notice about another work. @param {any} entry */
 export function isCorrectionNotice(entry) {
-  return entry?.facts?.is_correction_notice === true || (Array.isArray(entry?.facts?.update_to) && entry.facts.update_to.length > 0);
+  return frontierNoticeKind(entry) !== null;
+}
+
+/**
+ * The relations of an entry that updates another work without being a notice
+ * about it, as links: a new version says which work it is the new version of.
+ * @param {any} entry @returns {{ update: { kind: string }, doi: string }[]}
+ */
+export function frontierUpdateLinks(entry) {
+  return (Array.isArray(entry?.facts?.update_to) ? entry.facts.update_to : [])
+    .map((/** @type {any} */ update) => ({ update: /** @type {Record<string, any>} */ (UPDATE_KINDS)[updateKey(update)], doi: doiOf(update?.doi) }))
+    .filter((/** @type {any} */ target) => target.update?.kind === "new-version" && target.doi);
 }
 
 /**
@@ -684,6 +728,9 @@ export class FrontierPipeline {
           summary.dropped += 1;
           continue;
         }
+        // An update is an item: a new version of a work goes on to screening like
+        // any other entry, and says which work it is the new version of.
+        await this.#linkNewVersion(entry);
         fresh.push(entry);
       } catch (error) {
         await this.#failEntry(entry, error, summary);
@@ -810,12 +857,15 @@ export class FrontierPipeline {
    */
   async #notice(entry) {
     const noticeDoi = doiOf(entry.doi);
+    const noticeKind = frontierNoticeKind(entry) ?? "correction";
+    // Only the relations that are notices: a new version listed beside a
+    // correction is not a correction of anything.
     const targets = (Array.isArray(entry.facts?.update_to) ? entry.facts.update_to : [])
       .map((/** @type {any} */ update) => ({
-        update: /** @type {Record<string, any>} */ (UPDATE_KINDS)[String(update?.type ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_")],
+        update: /** @type {Record<string, any>} */ (UPDATE_KINDS)[updateKey(update)],
         doi: doiOf(update?.doi),
       }))
-      .filter((/** @type {any} */ target) => target.update && target.doi);
+      .filter((/** @type {any} */ target) => target.update && target.doi && target.update.kind !== "new-version");
     this.counters.notices += 1;
     await this.database.transaction(async (/** @type {any} */ client) => {
       let changed = false;
@@ -835,8 +885,29 @@ export class FrontierPipeline {
         }
       }
       if (changed) await bumpFrontierVersion(client);
-      await this.#finishEntry(entry, "dropped", noticeDoi && targets.length ? "correction-notice" : "correction-notice-unlinked", { client });
+      // The kind is the entry's own state: a retraction notice is not recorded as a correction.
+      await this.#finishEntry(entry, "dropped", `${noticeKind}-notice${noticeDoi && targets.length ? "" : "-unlinked"}`, { client });
     });
+  }
+
+  /**
+   * A record that is a new version of another work (a preprint's second
+   * version, a new edition) is an item like any other. What it says about the
+   * earlier version is kept as a `new-version` link, with nothing flagged on that
+   * work, so its event can read as superseding the older one; the link waits in
+   * `item_links` for the item to be published, as a notice's does.
+   * @param {any} entry
+   */
+  async #linkNewVersion(entry) {
+    const from = doiOf(entry.doi);
+    if (!from) return;
+    for (const { doi } of frontierUpdateLinks(entry)) {
+      if (doi === from) continue;
+      const target = await this.database.query("SELECT id FROM evimed_frontier.items WHERE lower(doi) = $1 LIMIT 1", [doi]);
+      await this.database.query(`INSERT INTO evimed_frontier.item_links (kind, from_doi, to_doi, to_item_id, asserted_by)
+        VALUES ('new-version', $1, $2, $3, 'crossref') ON CONFLICT (kind, from_doi, to_doi) DO UPDATE SET to_item_id = coalesce(evimed_frontier.item_links.to_item_id, excluded.to_item_id)`,
+      [from, doi, target.rows[0]?.id ?? null]);
+    }
   }
 
   /**

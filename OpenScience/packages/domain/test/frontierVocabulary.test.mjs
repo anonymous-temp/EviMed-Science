@@ -26,6 +26,7 @@ import {
   FRONTIER_HOT_TREND,
   FRONTIER_HOT_WINDOW_HOURS,
   FRONTIER_ITEM_FLAGS,
+  FRONTIER_NOTICE_KINDS,
   FRONTIER_ITEM_FLAG_LABELS_ZH,
   FRONTIER_LANES,
   FRONTIER_LANE_LABELS_ZH,
@@ -47,6 +48,7 @@ import {
   frontierLabel,
   frontierScoreLevel,
   frontierValue,
+  frontierUpdateKind,
   isFrontierMastheadTitle,
   isFrontierValue,
   mastheadTitleKey,
@@ -302,4 +304,21 @@ test("「热度怎么算」 states the numbers the hot list is computed with, ev
   // It explains attention, not evidence: the one misreading a heat number invites.
   assert.match(text, /不衡量证据强弱/);
   assert.doesNotMatch(text, /爆|AI 评分|推荐/, "the words the plan keeps out of the medical version");
+});
+
+test("an update_to relation is classified by its type: four notice kinds of their own, and updates that are not notices", () => {
+  assert.deepEqual([...FRONTIER_NOTICE_KINDS], ["retraction", "withdrawal", "expression-of-concern", "correction"], "most serious first");
+  const kinds = Object.fromEntries(["correction", "Corrigendum", "erratum", "retraction", "partial_retraction", "withdrawal", "removal",
+    "expression_of_concern", "expression-of-concern", "new_version", "new-edition", "addendum", "clarification", "unheard_of", "", undefined, null]
+    .map((type) => [String(type), frontierUpdateKind(type)]));
+  assert.deepEqual(kinds, {
+    correction: "correction", Corrigendum: "correction", erratum: "correction",
+    retraction: "retraction", partial_retraction: "retraction", withdrawal: "withdrawal", removal: "withdrawal",
+    expression_of_concern: "expression-of-concern", "expression-of-concern": "expression-of-concern",
+    new_version: "new-version", "new-edition": "new-version", addendum: "update", clarification: "update", unheard_of: "update",
+    "": "update", undefined: "update", null: "update",
+  });
+  // Nothing that is not on the table can be a notice, whatever it is called.
+  for (const odd of ["constructor", "__proto__", "toString", "hasOwnProperty"]) assert.equal(frontierUpdateKind(odd), "update", odd);
+  assert.ok(Object.values(kinds).every((kind) => kind === "update" || kind === "new-version" || FRONTIER_NOTICE_KINDS.includes(kind)));
 });
