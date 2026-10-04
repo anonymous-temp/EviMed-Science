@@ -273,6 +273,13 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "vcr_evidence_unavailable",
   "vcr_matching_unavailable",
   "vcr_access_unavailable",
+  // The figure digitizer could not run: not composed here, busy, past its deadline, or its
+  // container did not finish. The run records that the curve was not read and goes on with the
+  // other work; it never writes a coordinate itself.
+  "vcr_curve_digitizer_unavailable",
+  "vcr_intake_busy",
+  "vcr_intake_timeout",
+  "vcr_intake_failed",
   // Host configuration the run cannot do anything about.
   "public_source_gateway_unconfigured",
   "public_source_dataset_unconfigured",
@@ -576,6 +583,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_method_validation_untrusted",
   "vcr_curve_provenance_invalid",
   "vcr_curve_source_changed",
+  // The calibration a run stated for a figure is impossible (an axis that runs backwards, a survival
+  // axis past its scale, a negative start time): the run reads the axis labels again and states them right.
+  "vcr_curve_calibration_invalid",
   "vcr_number_format_unknown",
   "vcr_number_mcse_missing",
   "vcr_number_typed",
@@ -1060,6 +1070,8 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_method_validation_untrusted',
   'vcr_curve_provenance_invalid',
   'vcr_curve_source_changed',
+  'vcr_curve_calibration_invalid',
+  'vcr_curve_digitizer_unavailable',
   'vcr_number_format_unknown',
   'vcr_number_mcse_missing',
   'vcr_number_typed',
@@ -1409,6 +1421,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_method_validation_untrusted: '当前方法验证来源无法核对，暂不显示验证通过；其他研究继续。',
   vcr_curve_provenance_invalid: '曲线输入没有对上已记录的来源，这项重建没有执行；其他成果保留。',
   vcr_curve_source_changed: '曲线图像在记录点位后发生变化，请提供与点位一致的来源；其他成果保留。',
+  vcr_curve_calibration_invalid: '给出的坐标轴标定不可能成立（比如终点不大于起点、时间为负、生存率轴超出所选刻度）。请重新读图上的坐标轴刻度，再写一遍。',
+  vcr_curve_digitizer_unavailable: '本部署暂时不能把曲线图数字化；这条曲线先不重建，其他研究继续。',
   vcr_evaluation_input_restricted: '当前来源授权或封存状态不允许整份文档重放；其他研究继续。',
   vcr_evaluation_input_changed: '纠正案例的输入与冻结记录不一致，本次没有重放；已有成果保留。',
   vcr_evaluation_input_unavailable: '这个案例缺少可重放的已授权输入或版本，其他研究继续。',

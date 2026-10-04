@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:adb61c38f5da92d41406d88a1f30e14923d128050e885078263c367c93425198",
+  "version": "sha256:8f7244d2a77d281e694141682592d89bd0ba92c47a948904a545b7f50e332a6b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 30,
+    "nodes": 31,
     "edges": 13,
     "byVia": {
       "schema": 13,
@@ -549,6 +549,197 @@
         "nct_id",
         "pmid"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__curve_digitize",
+      "source": "mcp",
+      "description": "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a coordinate: points are measured from the pixels and come back recorded with the algorithm version, the calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "imageArtifactId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "imageSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "calibration": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "max": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "unit": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20
+                  }
+                },
+                "required": [
+                  "min",
+                  "max",
+                  "unit"
+                ],
+                "additionalProperties": false
+              },
+              "y": {
+                "type": "object",
+                "properties": {
+                  "min": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "max": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 110
+                  },
+                  "scale": {
+                    "type": "string",
+                    "enum": [
+                      "fraction",
+                      "percent"
+                    ]
+                  }
+                },
+                "required": [
+                  "min",
+                  "max",
+                  "scale"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "plotArea": {
+            "type": "object",
+            "properties": {
+              "left": {
+                "type": "number",
+                "minimum": 0
+              },
+              "top": {
+                "type": "number",
+                "minimum": 0
+              },
+              "right": {
+                "type": "number",
+                "minimum": 0
+              },
+              "bottom": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "left",
+              "top",
+              "right",
+              "bottom"
+            ],
+            "additionalProperties": false
+          },
+          "arms": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                "curve": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "pattern": "^#?[0-9a-fA-F]{6}$"
+                    },
+                    "legendOrder": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "riskTable": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 200,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "atRisk": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "time",
+                      "atRisk"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "totalEvents": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "reportedMedian": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "riskTable"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "reportedLogHazardRatio": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "imageArtifactId",
+          "calibration",
+          "arms"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

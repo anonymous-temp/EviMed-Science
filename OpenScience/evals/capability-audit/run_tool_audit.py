@@ -89,6 +89,12 @@ TASK_FIXTURES = {
     "vcr_write": {"what": "step", "data": {"step": "definition", "status": "none"}},
     "vcr_simulate": {"action": "status", "jobId": "job_release_audit_probe"},
     "trial_registry_record": {"registryId": "NCT04280705"},
+    # Added 2026-10-04: the digitizer's own refusal of a figure that is not there. The probe's
+    # project carries no study, so the answer is the warning `vcr_no_study`: the route and the
+    # token are certified and nothing is digitized or recorded.
+    "curve_digitize": {"imageArtifactId": "release-audit-probe.png",
+                       "calibration": {"x": {"min": 0, "max": 60, "unit": "months"}, "y": {"min": 0, "max": 1, "scale": "fraction"}},
+                       "arms": [{"riskTable": [{"time": 0, "atRisk": 100}, {"time": 60, "atRisk": 10}]}]},
     "evidence_pool": {"action": "status", "jobId": "job_release_audit_probe"},
     # This route probe reads an existing owned job. Engine qualification is
     # separately proved by completed numerical receipts; an absent job must

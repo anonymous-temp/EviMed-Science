@@ -1350,5 +1350,5 @@ test("a capability built on a module's tools is not offered where the module is 
   // An optional tool switched off keeps its capability; the module's own tools do not.
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("frontier_search")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight", "vcr-protocol"]);
   assert.deepEqual(offeredCapabilities(manifests, disabledTools("web_read, geo_read,geo_write,social_posts_search")).map((item) => item.id), ["clinical-evidence-synthesis", "vcr-protocol"]);
-  assert.deepEqual(offeredCapabilities(manifests, disabledTools("vcr_read,vcr_write,vcr_simulate,trial_registry_record,evidence_pool")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
+  assert.deepEqual(offeredCapabilities(manifests, disabledTools("vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool")).map((item) => item.id), ["clinical-evidence-synthesis", "geo-insight"]);
 });

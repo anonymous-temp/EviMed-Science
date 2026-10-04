@@ -100,6 +100,10 @@ PARAMETERS = {
 MAX_PIXELS_DEFAULT = 24_000_000
 
 
+class Deadline(Exception):
+    """The container's own deadline arrived (the controller's timer is the second line, this the first)."""
+
+
 class Refusal(Exception):
     """A figure or a calibration this digitizer will not turn into points, with the reason."""
 
@@ -946,7 +950,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     def on_alarm(_signal: int, _frame: object) -> None:
-        raise TimeoutError("deadline")
+        raise Deadline()
 
     if args.deadline > 0 and hasattr(signal, "SIGALRM"):
         signal.signal(signal.SIGALRM, on_alarm)
@@ -954,7 +958,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         request = json.loads(Path(args.request).read_text(encoding="utf-8"))
         result = run(request, Path(args.input_dir))
-    except TimeoutError:
+    except Deadline:
         result = {"protocol": PROTOCOL, "outcome": "refused", "reason": "deadline", "message": "the digitization ran past its deadline."}
     except MemoryError:
         result = {"protocol": PROTOCOL, "outcome": "refused", "reason": "memory", "message": "the figure needs more memory than this container has."}

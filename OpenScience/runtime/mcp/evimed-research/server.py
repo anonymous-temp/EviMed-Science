@@ -983,13 +983,13 @@ def disabled_tools():
 # may not run at all (`OPEN_SCIENCE_GEO_ENABLED`, off by default), and the
 # social channel is a separate host a deployment may not have; every research
 # question is answered without them (2026-09-25).
-# vcr_read, vcr_write, vcr_simulate, trial_registry_record, evidence_pool:
+# vcr_read, vcr_write, vcr_simulate, trial_registry_record, curve_digitize, evidence_pool:
 # 「虚拟临研」 is a module a deployment may not run at all
-# (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its five tools answer
+# (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its six tools answer
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool", "research_calculate"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate"})
 
 
 def list_tools():
@@ -2054,7 +2054,7 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
-    if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"):
+    if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"):
         try:
             if name == "vcr_read":
                 result = vcr_platform.read(arguments)
@@ -2064,6 +2064,8 @@ def _dispatch(name, arguments, execution_context=None):
                 result = vcr_platform.simulate(arguments)
             elif name == "trial_registry_record":
                 result = vcr_platform.registry_record(arguments)
+            elif name == "curve_digitize":
+                result = vcr_platform.digitize(arguments)
             else:
                 result = vcr_platform.evidence_pool(arguments)
         except vcr_platform.VcrPlatformError as error:

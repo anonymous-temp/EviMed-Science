@@ -682,8 +682,9 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   // where it is true: the anchor defines both with these defaults, and the
   // controller merges it. Scanning its block for the literals would have made
   // sharing one definition look like deleting the check.
-  assert.match(controllerService, /<<: \*runtime-caps/, "the controller must take the shared caps");
-  assert.match(webService, /<<: \*runtime-caps/, "and so must the web service, or they can disagree again");
+  // (Merged alone or in a list with the intake limits' anchor, `<<: [*runtime-caps, *vcr-intake]`.)
+  assert.match(controllerService, /<<: (?:\*runtime-caps|\[[^\]]*\*runtime-caps[^\]]*\])/, "the controller must take the shared caps");
+  assert.match(webService, /<<: (?:\*runtime-caps|\[[^\]]*\*runtime-caps[^\]]*\])/, "and so must the web service, or they can disagree again");
   const capAnchor = compose.slice(compose.indexOf("x-runtime-caps: &runtime-caps"), compose.indexOf("\nservices:"));
   assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
   assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/);

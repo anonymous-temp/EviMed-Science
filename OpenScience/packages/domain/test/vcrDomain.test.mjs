@@ -128,8 +128,8 @@ test("every check id the contracts raise is registered", () => {
   for (const id of VCR_CHECK_IDS) assert.ok(GATE_CHECK_IDS.includes(id), `${id} is not registered`);
 });
 
-test("the module's five tools and its usage purpose are in the platform's lists", () => {
-  for (const tool of ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]) {
+test("the module's six tools and its usage purpose are in the platform's lists", () => {
+  for (const tool of ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]) {
     assert.ok(MCP_TOOL_BASE_NAMES.includes(tool), `${tool} is not a tool name`);
   }
   assert.ok(/** @type {readonly string[]} */ (USAGE_PURPOSES).includes("vcr"));

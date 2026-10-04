@@ -10,6 +10,7 @@
 //   POST /internal/vcr/v1/read      {what, filter?}                 → aggregates and structure only
 //   POST /internal/vcr/v1/write     {what, items? | data?}          → {ok, ids, issues[]}
 //   POST /internal/vcr/v1/simulate  {action, kind?, scenario?, …}   → {jobId, state, progress}
+//   POST /internal/vcr/v1/digitize  {imageArtifactId, calibration, arms, …} → {state, receiptId?, …}
 //
 // Hidden knowledge:
 //
@@ -71,10 +72,11 @@ import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
-const operations = Object.freeze(["read", "write", "simulate"]);
+const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
 /** Calls one study may make per minute, per operation: the ceiling of a loop, not of a run. */
-const windowLimits = Object.freeze({ read: 120, write: 60, simulate: 60 });
-const requestLimits = Object.freeze({ read: 16 * 1024, write: 512 * 1024, simulate: 256 * 1024 });
+const windowLimits = Object.freeze({ read: 120, write: 60, simulate: 60, digitize: 12 });
+/** `digitize` carries a figure's path and a calibration, never the figure: it is read from the study's own workspace. */
+const requestLimits = Object.freeze({ read: 16 * 1024, write: 512 * 1024, simulate: 256 * 1024, digitize: 64 * 1024 });
 /** Reads, writes and job submissions answer within ten seconds; the engine runs elsewhere. */
 const answerBudgetMs = 10_000;
 /**
@@ -106,6 +108,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
   "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
+  "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_job_not_found", "registry_unavailable",
 ]);
 
@@ -1537,6 +1540,18 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         };
         // A write that fetches a registry record waits on the registry too.
         if (request.what === "precedent") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+      } else if (operation === "digitize") {
+        // The caller states a calibration, which curve and the published risk table; every coordinate is measured by
+        // the deterministic digitizer from a figure the study already holds. The container is bounded by its own
+        // timeout, and the gateway's budget is that plus a margin, never less.
+        budget = Math.max(budgetMs, (Number(config?.vcrIntakeTimeoutMs) > 0 ? Number(config.vcrIntakeTimeoutMs) : 60_000) + 15_000);
+        work = async () => {
+          const curves = vcr.evidence?.curves;
+          if (!curves?.recordDigitization) throw gatewayError(503, "vcr_curve_digitizer_unavailable", "本部署不能数字化曲线图：这一步暂不可用，其他分析照常。");
+          const done = await curves.recordDigitization({ studyId: study.id, principal: study.userId, request: body });
+          if (done.refused) return { state: "refused", ...done.refused };
+          return { state: "digitized", receiptId: done.id, origin: done.origin, createdAt: done.createdAt, digitization: done.digitization };
+        };
       } else {
         const request = simulateRequest(body);
         work = async () => {

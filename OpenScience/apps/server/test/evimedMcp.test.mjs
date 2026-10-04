@@ -397,9 +397,9 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
     assert.deepEqual(mcpEnvironment(patch), {
       // The frontier, GEO and 虚拟临研 modules are off here, so their tools are
       // not offered; nor is patent search, which has no adapter here. 虚拟临研
-      // withholds all five, gateway address and engine alike: a tool that can
+      // withholds all six, gateway address and engine alike: a tool that can
       // only answer 「未接入」 is not offered.
-      EVIMED_DISABLED_TOOLS: "research_calculate,frontier_search,geo_read,geo_write,social_posts_search,vcr_read,vcr_write,vcr_simulate,trial_registry_record,evidence_pool,patent_search",
+      EVIMED_DISABLED_TOOLS: "research_calculate,frontier_search,geo_read,geo_write,social_posts_search,vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool,patent_search",
       EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
       EVIMED_MODEL_GATEWAY_REASONING_EFFORT: "high",
       EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,

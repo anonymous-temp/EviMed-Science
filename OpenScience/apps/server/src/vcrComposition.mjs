@@ -70,6 +70,7 @@ import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
 import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
+import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
@@ -874,7 +875,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call }),
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
-  const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, resolveProject: async study => {
+  const digitizer = createVcrCurveDigitizer({ config, controller: intakeController, counters: intakeCounters, report });
+  const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, digitizer, resolveProject: async study => {
     if (!projectStore) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source image access is unavailable.');
     const owner = await projectStore.userById(study.userId);
     return projectStore.requireProject(owner, study.projectId);
@@ -902,7 +904,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   composed = {
     store, dataStore, matchStore, evidenceStore, corrections,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
-    intake: { counters: intakeCounters, extractor },
+    intake: { counters: intakeCounters, extractor, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
     audit,
