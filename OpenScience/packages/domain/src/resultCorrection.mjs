@@ -93,6 +93,13 @@ const IDENTIFIER_SPANS = /10\.\d{4,9}\/[^\s\]，。；、)]+|PMID:?\s*\d{5,9}|PM
 /** @param {string} text */
 const withoutIdentifiers = (text) => text.replace(IDENTIFIER_SPANS, " ");
 
+/**
+ * The normalised identifiers a text names. A DOI written in running Chinese prose runs on into the sentence's full-width stop
+ * and the words after it, none of which is part of it: an identifier ends where printable ASCII does.
+ * @param {string} text @returns {Set<string>}
+ */
+const identifierSet = (text) => new Set([...referenceIdentifiers(text)].map((key) => key.replace(/[^\u0021-\u007e].*$/su, "")));
+
 /** @param {Set<string>} before @param {Set<string>} after */
 function setDifference(before, after) {
   return { added: [...after].filter((item) => !before.has(item)), removed: [...before].filter((item) => !after.has(item)) };
@@ -127,7 +134,7 @@ export function correctionEffects({ before, after, beforeText = null, afterText 
   const machineValues = !hasValues ? "none" : difference.machineValues;
 
   const identifiers = readable
-    ? setDifference(referenceIdentifiers(/** @type {string} */ (beforeText)), referenceIdentifiers(/** @type {string} */ (afterText)))
+    ? setDifference(identifierSet(/** @type {string} */ (beforeText)), identifierSet(/** @type {string} */ (afterText)))
     : { added: [], removed: [] };
   const claims = readable
     ? setDifference(new Set(markedClaimIds(/** @type {string} */ (beforeText))), new Set(markedClaimIds(/** @type {string} */ (afterText))))
@@ -283,8 +290,8 @@ export function fitResultCorrection(record, maxBytes = RESULT_CORRECTION_DETAIL_
  * What a settled revision says about what the run produced, in the shape the revision record keeps: the successor the
  * run ended on, every output it left in the revision's directory, the calculations recomputed, and what the run was told
  * the change could reach. Renderings (Word, PDF, HTML) the run wrote are named as such with their consistency with the
- * successor unchecked: this is an honest label, and a rendering made by the platform from the successor's own bytes
- * (a version-bound conversion) is consistent by construction.
+ * successor unchecked. A rendering the platform makes from a version's own bytes (the version-bound conversion in
+ * `documentExport.mjs`) is consistent by construction and is not among these: it is not something the run left.
  * @param {unknown} raw
  */
 export function projectCorrectionOutcome(raw) {
@@ -295,7 +302,10 @@ export function projectCorrectionOutcome(raw) {
     const path = bounded(item?.path, 300);
     if (!versionId || !path) return [];
     return [{ versionId, path, role: ["successor", "rendering", "other"].includes(item.role) ? /** @type {string} */ (item.role) : "other",
-      format: bounded(item.format, 8) || null, consistency: item.consistency === "from_successor" ? "from_successor" : "not_checked" }];
+      format: bounded(item.format, 8) || null,
+      // Nothing reads a Word, a PDF or a figure's bytes here, so a rendering's consistency with the successor is not checked.
+      // That is a value of its own, and it is never read as consistent.
+      consistency: "not_checked" }];
   }) : [];
   const calculations = Array.isArray(source.calculations) ? source.calculations.slice(0, LIST_LIMIT * 2).flatMap((/** @type {any} */ item) => {
     const key = bounded(item?.key, 300);

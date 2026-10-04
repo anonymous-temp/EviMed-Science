@@ -304,6 +304,38 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
   return lessons;
 }
 
+/**
+ * The lesson one correction is evidence for, or null. Pure, so the rules can be read and tested without a queue.
+ *
+ * A correction is the researcher asking, in their own words, for a change to a result the run delivered
+ * (`result-corrected`, `feedbackEvents.mjs`). It is `correction` evidence: the explicit rule the researcher spelled out,
+ * about the run whose result was corrected. The run is the ORIGINAL's, so a method the lesson amends is tied to the work
+ * it was learnt from, and each correction is its own dispatch (`dispatchKey` is the event's id): two corrections of one
+ * run are two lessons, and neither adopts the other's bounded run.
+ *
+ * The gates are the ones every other lesson passes (`learningTriggersFor`): the researcher's own work, never the
+ * platform's, never an internal capability, never a transcript the distillation cannot read. Nothing here treats the
+ * successor as adopted: the event says it is not.
+ *
+ * @param {{ run: any, runs: readonly any[], project?: { id?: string | null } | null, event: any,
+ *   internalAgent?: (agentId: string) => boolean }} input
+ * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
+ */
+export function correctionLessonFor({ run, runs, project = null, event, internalAgent = () => false }) {
+  if (!run || !event?.id || event.trigger !== "result-corrected") return null;
+  if (!["succeeded", "failed"].includes(run.status) || !researcherRun(run)) return null;
+  if (project && isInternalProject(project.id)) return null;
+  const agentId = String(run.effectiveAgentId ?? "");
+  if (agentId && internalAgent(agentId)) return null;
+  const ledgerRun = runs.find((item) => item?.id === run.id) ?? run;
+  if (ledgerRun.transcript?.completeness !== "complete") return null;
+  return {
+    trigger: "correction",
+    idempotencyKey: `distill:${run.id}:correction:${event.id}`,
+    payload: { runId: run.id, trigger: "correction", dispatchKey: event.id, feedbackEventIds: [event.id], feedback: [event] },
+  };
+}
+
 export class LearningTriggers {
   /**
    * `projects` lists one account's projects, each as the store resolves it
@@ -415,5 +447,40 @@ export class LearningTriggers {
       }
     }
     return { queued, skipped: null };
+  }
+
+  /**
+   * Queue the lesson one correction is evidence for (`correctionLessonFor`). Best effort, and under the same switches as
+   * every other lesson: the researcher's "stop learning", someone else's capsule being tried, the platform's own work.
+   *
+   * @param {any} project @param {{ event: any, runId: string }} correction
+   * @returns {Promise<{ queued: string[], skipped: string | null }>}
+   */
+  async afterCorrection(project, { event, runId }) {
+    if ((await memoryPausedFor(this.memory, project.userId, project.id).catch(() => ({ learning: false }))).learning) {
+      return { queued: [], skipped: "paused" };
+    }
+    const runs = await this.agentRuns.list(project).catch(() => []);
+    const run = runs.find((/** @type {any} */ item) => item?.id === runId);
+    if (!run) return { queued: [], skipped: "run_unavailable" };
+    if (this.sessionState && run.sessionId) {
+      const state = await this.sessionState(project.userId, project.id, run.sessionId).catch(() => null);
+      if (state?.trialCapsuleId) return { queued: [], skipped: "trial" };
+    }
+    const agentId = String(run.effectiveAgentId ?? "");
+    const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
+    const lesson = correctionLessonFor({ run, runs, project, event, internalAgent: () => internal });
+    if (!lesson) return { queued: [], skipped: "not_eligible" };
+    try {
+      await this.jobs.enqueue(project.userId, "distill", lesson.payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
+      return { queued: [lesson.trigger], skipped: null };
+    } catch (error) {
+      await this.audit("learning.distill.enqueue", {
+        userId: project.userId, projectId: project.id, runId: run.id,
+        code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
+        detail: lesson.trigger,
+      }).catch(() => {});
+      return { queued: [], skipped: "enqueue_failed" };
+    }
   }
 }

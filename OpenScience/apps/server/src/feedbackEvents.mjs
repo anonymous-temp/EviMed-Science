@@ -40,10 +40,27 @@
  * and writes no learned-method candidate. Saying so here is the difference
  * between a deliberate first half and a loop someone believes is closed.
  *
+ * The producer that needs no page (N12, 2026-10-04): `result-corrected`. The
+ * researcher selects something in a delivered result and says what to change in
+ * the native composer (`resultRevision.mjs`); when the run's revised form is
+ * captured, the platform itself records the correction with the immutable
+ * original/successor version pair it produced — a subject that is the original
+ * version's id and an identity that is the successor's, so a path overwritten
+ * later cannot change what it was about, and one pair is one event however often
+ * the capture replays. The detail says what differs between the two versions, in
+ * a closed vocabulary decided from their bytes (`resultCorrection.mjs` in the
+ * domain), and carries the researcher's words as theirs and the successor as the
+ * platform run's: no `deliverable-adopted` is ever written for it, because
+ * asking for a change is not approving what was produced. This is the evidence
+ * the learning loop reads for a correction (`LearningTriggers.afterCorrection`),
+ * and it is the join key for N14: the original version, the successor version,
+ * the original's run (the event's `run_id`) and its method digest.
+ *
  * @module
  */
 
 import { createHash } from "node:crypto";
+import { fitResultCorrection, projectResultCorrection } from "@evimed/domain";
 import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HttpError } from "./security.mjs";
 import {
@@ -319,6 +336,43 @@ export class FeedbackEvents {
       },
       projectId,
     });
+  }
+
+  /**
+   * A correction made through the anchored revision, with the pair of immutable versions it produced.
+   *
+   * The subject is the original version and the identity is the successor, so the same pair is the same event however
+   * often the capture replays, and every correction of one version is found by that version's id. `detail` is the
+   * domain's closed record (`projectResultCorrection`), cut to the ledger's allowance; the event's run is the run that
+   * produced the ORIGINAL (the run whose work was corrected), and the run that made the successor is in the detail.
+   *
+   * @param {string} userId
+   * @param {{correction:Record<string, any>,projectId?:string|null,runId?:string|null,occurredAt?:any}} input
+   */
+  async recordResultCorrection(userId, { correction, projectId = null, runId = null, occurredAt = undefined }) {
+    const detail = fitResultCorrection(projectResultCorrection(correction));
+    return this.record(userId, {
+      trigger: "result-corrected",
+      subject: { type: "result-version", id: String(detail.original.versionId) },
+      identity: [String(detail.successor.versionId)],
+      projectId, runId: typeof runId === "string" && runId && runId.length <= 200 ? runId : null,
+      detail, occurredAt,
+    });
+  }
+
+  /**
+   * Every correction one version is the original or the successor of, newest first: the join N14 reads by identifier.
+   * @param {string} userId @param {string} versionId @param {number} [limit]
+   */
+  async listResultCorrections(userId, versionId, limit = 50) {
+    productInteger(limit, 1, 200);
+    const subject = feedbackSubject({ type: "result-version", id: versionId });
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`SELECT * FROM evimed_product.feedback_events
+      WHERE user_id=$1 AND trigger_kind='result-corrected'
+      AND ((subject_type='result-version' AND subject_id=$2) OR detail->'successor'->>'versionId'=$2)
+      ORDER BY occurred_at DESC,id DESC LIMIT $3`, [productId(userId, "user"), subject.id, limit]);
+    return result.rows.map(event);
   }
 
   /**

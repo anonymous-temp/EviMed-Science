@@ -42,6 +42,11 @@ test("a study added moves the sources and the numbers together, and the successo
   assert.equal(effects.evidence, "changed");
 });
 
+test("a DOI written in running Chinese prose does not carry the sentence's full-width stop", () => {
+  const { effects } = correctionEffects({ before: version(), after: version({ digest: hex("2") }), beforeText: "见研究。\n", afterText: "见研究 doi:10.1000/beta。另见 NCT01234567，以及 PMID: 12345678）。\n" });
+  assert.deepEqual(effects.identifiersAdded.sort(), ["doi:10.1000/beta", "nct:NCT01234567", "pmid:12345678"]);
+});
+
 test("sources alone, and a restyle alone, are told apart from numbers", () => {
   const evidence = correctionEffects({ before: version(), after: version({ digest: hex("2") }),
     beforeText: "疗效见研究 [1]。\n", afterText: "疗效见研究 [1]，另见 PMID: 12345678。\n" });

@@ -11,9 +11,9 @@ import test from "node:test";
 import { METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
-  LearningTriggers, ROUTINE_PERIOD_DAYS, learningTriggersFor, lessonPeers, routinePeriodMs,
+  LearningTriggers, ROUTINE_PERIOD_DAYS, correctionLessonFor, learningTriggersFor, lessonPeers, routinePeriodMs,
 } from "../src/learningTriggers.mjs";
-import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
+import { DISTILLATION_TRIGGERS, buildDistillationInput, distillationDispatchId, lessonSignal } from "../src/methodDistillationRuns.mjs";
 
 const HOUR = 3_600_000;
 const PERIOD = routinePeriodMs(ROUTINE_PERIOD_DAYS);
@@ -375,4 +375,45 @@ test("the distiller sees which related methods were retired, and why", () => {
     ["method:learned:a", "approved", null],
     ["method:learned:b", "retired", "writes bookkeeping into reports"],
   ]);
+});
+
+// A correction the researcher made to a delivered result (`result-corrected`, N12) is `correction` evidence about the run
+// whose result it was, and each one is its own dispatch.
+const correctionEvent = (id = "feedback:result-corrected:aaaa") => ({ id, trigger: "result-corrected", runId: "run_orig",
+  subject: { type: "result-version", id: `rv_${"a".repeat(64)}` }, detail: { kind: "analytic", successorOrigin: "system_generated", adoption: "not_recorded" } });
+
+test("a correction is a lesson about the run whose result was corrected, evidence of the researcher and never an adoption", () => {
+  const original = run({ id: "run_orig" });
+  const lesson = correctionLessonFor({ run: original, runs: [original], project: { id: "p1" }, event: correctionEvent() });
+  assert.equal(lesson?.trigger, "correction");
+  assert.ok(DISTILLATION_TRIGGERS.includes(lesson?.trigger ?? ""));
+  assert.equal(lesson?.payload.runId, "run_orig");
+  assert.equal(lesson?.payload.dispatchKey, "feedback:result-corrected:aaaa");
+  assert.deepEqual(lesson?.payload.feedbackEventIds, ["feedback:result-corrected:aaaa"]);
+  assert.equal(lesson?.idempotencyKey, "distill:run_orig:correction:feedback:result-corrected:aaaa");
+  // The distillation reads the event as the researcher's: it is their request, and the signal says so.
+  assert.equal(lessonSignal({ trigger: "correction", feedback: lesson?.payload.feedback }), "researcher");
+  const input = buildDistillationInput({ run: original, trigger: "correction", transcript: null, feedback: lesson?.payload.feedback });
+  assert.equal(input.signal, "researcher");
+  assert.equal(input.feedback[0].detail.adoption, "not_recorded");
+});
+
+test("a correction passes the gates every other lesson passes", () => {
+  const original = run({ id: "run_orig" });
+  const event = correctionEvent();
+  assert.equal(correctionLessonFor({ run: run({ id: "run_orig", automated: true }), runs: [], event }), null, "the platform's own work");
+  assert.equal(correctionLessonFor({ run: original, runs: [original], project: { id: LEARNING_PROJECT_ID }, event }), null, "an internal project");
+  assert.equal(correctionLessonFor({ run: original, runs: [original], event, internalAgent: () => true }), null, "an internal capability");
+  const unread = run({ id: "run_unread", transcript: { completeness: "partial" } });
+  assert.equal(correctionLessonFor({ run: unread, runs: [unread], event }), null, "a transcript that cannot be read");
+  assert.equal(correctionLessonFor({ run: run({ id: "r", status: "running" }), runs: [], event }), null);
+  assert.equal(correctionLessonFor({ run: original, runs: [original], event: { ...event, trigger: "deliverable-edited" } }), null, "only a correction is this lesson");
+});
+
+test("two corrections of one run are two dispatches, and a lesson with no discriminator keeps the identity it always had", () => {
+  const first = distillationDispatchId("run_1", "correction", "feedback:result-corrected:aaaa");
+  const second = distillationDispatchId("run_1", "correction", "feedback:result-corrected:bbbb");
+  assert.notEqual(first, second, "the second correction does not adopt the first one's bounded run");
+  assert.equal(distillationDispatchId("run_1", "correction"), distillationDispatchId("run_1", "correction", ""));
+  assert.match(first, /^method-distillation-[a-f0-9]{32}$/);
 });

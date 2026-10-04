@@ -652,6 +652,24 @@ test("a document conversion leaves as what was converted and what came out, each
   // A conversion of a study report names the study, not a workspace file.
   assert.deepEqual(exportDocumentRow({ id: "dex_study", kind: "document-export", payload: { source: { studyId: "study-one", exportId: "export-one", token: "private" }, formats: { html: { state: "queued" }, exe: { state: "ready" } } } }).payload,
     { source: { studyId: "study-one", exportId: "export-one" }, formats: { html: { state: "queued" } }, findings: [] });
+  // A conversion of a result version names the version and its digest, never a path that may hold other bytes by now.
+  const versionId = `rv_${"a".repeat(64)}`;
+  assert.deepEqual(exportDocumentRow({ id: "dex_version", kind: "document-export", payload: { source: { versionId, digest: "d".repeat(64), token: "private" }, formats: {} } }).payload.source,
+    { versionId, digest: "d".repeat(64) });
+});
+
+test("a settled revision leaves with what the run left, in the domain's own closed shape, and a staged one is unchanged", () => {
+  const base = { recordType: "result-revision", id: `rr_${"b".repeat(64)}`, projectId: "p", versionId: `rv_${"a".repeat(64)}`, digest: "d".repeat(64), sessionId: "s", state: "bound",
+    instruction: "Check the denominator.", anchor: { kind: "text", elementId: "paragraph-1", selectedText: "n = 12", token: "private" }, reach: { calculations: [], alsoPrintedFrom: [] } };
+  const staged = exportDocumentRow({ id: base.id, kind: "result-revision", payload: base }).payload;
+  assert.equal(Object.hasOwn(staged, "outcome"), false);
+  assert.equal(Object.hasOwn(staged, "reach"), false, "what the run was told is the platform's working record, not the researcher's");
+  const settled = exportDocumentRow({ id: base.id, kind: "result-revision", payload: { ...base, outcome: { status: "settled", successorVersionId: `rv_${"c".repeat(64)}`, settledAt: "2026-10-04T10:00:00.000Z",
+    outputs: [{ versionId: `rv_${"c".repeat(64)}`, path: "o/report.md", role: "successor", secret: "x" }, { versionId: "bad", path: "x" }], calculations: [], reach: { calculations: [], alsoPrintedFrom: [] }, token: "private" } } }).payload;
+  assert.equal(settled.outcome.status, "settled");
+  assert.deepEqual(settled.outcome.outputs.map((item) => [item.path, item.role, item.consistency]), [["o/report.md", "successor", "not_checked"]]);
+  assert.equal(JSON.stringify(settled).includes("private"), false);
+  assert.equal(JSON.stringify(settled).includes("secret"), false);
 });
 
 /** One stored document for a kind whose own export rule refuses a plain

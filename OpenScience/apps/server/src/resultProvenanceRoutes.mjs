@@ -3,12 +3,14 @@ import { HttpError, sendJson } from "./security.mjs";
 /** Read-only result inspection. Browser assertions never publish capture facts.
  * `lineage`: the numerical chain of a version (`ResultLineageService.describe`): the calculations its printed numbers are
  * bound to, the versions bound to it when it is a calculation, and what a successor calculation would move.
- * @param {{store:any,service:any,lineage?:any}} dependencies */
-export function createResultProvenanceRoutes({ store, service, lineage = null }) {
+ * `corrections`: what the researcher's corrections of a version, or of which it is the successor, were and left
+ * (`ResultCorrectionService.read`).
+ * @param {{store:any,service:any,lineage?:any,corrections?:any}} dependencies */
+export function createResultProvenanceRoutes({ store, service, lineage = null, corrections = null }) {
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (req.method !== "GET" || (url.pathname !== "/api/results" && !/^\/api\/results\/[^/]+(?:\/raw|\/lineage)?$/.test(url.pathname))) return false;
+    if (req.method !== "GET" || (url.pathname !== "/api/results" && !/^\/api\/results\/[^/]+(?:\/raw|\/lineage|\/corrections)?$/.test(url.pathname))) return false;
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     if (!service) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
     const projectId = url.searchParams.get("projectId");
@@ -30,6 +32,10 @@ export function createResultProvenanceRoutes({ store, service, lineage = null })
     if (url.pathname.endsWith("/lineage")) {
       if (!lineage) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
       sendJson(res, 200, { data: await lineage.describe(user.id, projectId, versionId) }); return true;
+    }
+    if (url.pathname.endsWith("/corrections")) {
+      if (!corrections) throw new HttpError(503, "result_storage_unavailable", "Result storage is temporarily unavailable.");
+      sendJson(res, 200, { data: await corrections.read(user.id, projectId, versionId) }); return true;
     }
     if (url.pathname.endsWith("/raw")) {
       const { version, bytes } = await service.raw(user.id, projectId, versionId);

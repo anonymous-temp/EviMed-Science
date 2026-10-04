@@ -163,7 +163,7 @@ export function methodEvents(document) {
 
 /**
  * What the researcher did that the records themselves no longer show: a
- * deleted memory (its record is gone), a delivery adopted or edited.
+ * deleted memory (its record is gone), a delivery adopted, edited or corrected.
  * @param {any} event a feedback ledger event
  */
 export function feedbackTimelineEvents(event) {
@@ -172,7 +172,7 @@ export function feedbackTimelineEvents(event) {
   if (event.trigger === "memory-rejected" && ["deleted", "undone"].includes(event.detail?.reason)) {
     return [{ type: "feedback", id: `feedback:${event.id}`, at, change: `memory-${event.detail.reason}`, kind: event.detail?.kind ?? null }];
   }
-  if (event.trigger === "deliverable-adopted" || event.trigger === "deliverable-edited") {
+  if (event.trigger === "deliverable-adopted" || event.trigger === "deliverable-edited" || event.trigger === "result-corrected") {
     return [{ type: "feedback", id: `feedback:${event.id}`, at, change: event.trigger, runId: event.runId ?? null }];
   }
   return [];
