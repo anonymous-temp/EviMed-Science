@@ -154,7 +154,7 @@
 | 两者性质 | **均为轮次计数，不是墙钟**；每轮 = 500ms + 1 次账本读 + 最多 3 次**无超时**的运行时 HTTP | `agentRuns.mjs:1889-1912` |
 | 重试 | 仅 clinical-evidence-synthesis 的修复回环，最多 2 次 | `agentRuns.mjs:1439`、`:1774-1779` |
 | 幂等 | `dispatchId` 去重，重复派发返回既有 run | `agentRuns.mjs:1517-1520`、`:1583-1584` |
-| 错误码 | `runtime_monitor_stalled` / `runtime_monitor_timeout` / `runtime_stopped` / `runtime_canceled` / `runtime_tool_error` / `runtime_session_error` / `specialist_*` | `agentRuns.mjs:1904/1917/1715/1696/800/776` |
+| 错误码 | `runtime_monitor_stalled` / `runtime_monitor_timeout` / `runtime_stopped` / `runtime_canceled` / `runtime_session_error` / `specialist_*`。**工具失败不再决定一次运行的结论**（2026-10-04）：自然结束的一轮只按它写出了什么判定，没被后续同名工具成功纠正的研究工具失败，按工具各记一条提示（`run_tool_failed` / `run_tool_unavailable`）；`runtime_tool_error` 不再写入，只用来解释此前的旧记录 | `agentRuns.mjs:1904/1917/1715/1696/800/776` |
 | 谁会知道 | 账本 `runs.jsonl`（started/dispatch/progress/finished）+ `GET /api/agent-runs` | `agentRuns.mjs:1455-1471` |
 
 ### [F] 运行时生命周期
