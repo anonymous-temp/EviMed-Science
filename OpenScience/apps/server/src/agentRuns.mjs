@@ -50,12 +50,12 @@ import {
 // its tests have always imported them from this module, and because a second
 // definition is exactly the drift the move was made to stop.
 import {
-  CONNECTOR_CREDENTIALS,
   CONNECTOR_CREDENTIAL_IDS,
   PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
   capabilityBriefTask,
   capabilityTitle,
+  connectorForMissingCode,
   gateIssueSeverity,
   isContractKind,
   isMcpToolName,
@@ -534,11 +534,13 @@ function foldEvents(events) {
         // Who stopped a cancelled run: the researcher, or the platform
         // shutting down. Absent when the kernel reported the stop itself.
         ...(event.canceledBy === "user" || event.canceledBy === "platform" ? { canceledBy: event.canceledBy } : {}),
-        // The kernel's finer reason, or the connector a failed research call
-        // had no credential for — written since the sub-code existed and read
+        // The kernel's finer reason, written since the sub-code existed and read
         // back only now, so a reader can say what to do about it.
         ...(typeof event.errorSubCode === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(event.errorSubCode) ? { errorSubCode: event.errorSubCode } : {}),
-        ...(typeof event.missingCredential === "string" && CONNECTOR_CREDENTIAL_IDS.has(event.missingCredential) ? { missingCredential: event.missingCredential } : {}),
+        // The data sources the run went without — nobody had configured them
+        // for this researcher. The run went on with the sources it had, so this
+        // is not a failure: it is what the conversation offers a form for.
+        ...(normalizeConnectorNeeds(event.connectorNeeds).length ? { connectorNeeds: normalizeConnectorNeeds(event.connectorNeeds) } : {}),
         status: event.status,
         finishedAt: storedTimestamp(event.finishedAt, "finishedAt"),
         durationMs: event.durationMs,
@@ -859,6 +861,17 @@ function normalizeClaimSummary(value) {
   const total = read(value.total);
   if (!total) return undefined;
   return { total, verified: Math.min(total, read(value.verified)), unverified: Math.min(total, read(value.unverified)) };
+}
+
+/**
+ * The data sources a run went without, from the ledger's `finished` event: a
+ * closed list of registry ids, deduplicated, in the order they were met.
+ * Anything else a stored row carries is dropped rather than trusted.
+ * @param {unknown} value @returns {string[]}
+ */
+function normalizeConnectorNeeds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id) => typeof id === "string" && CONNECTOR_CREDENTIAL_IDS.has(id)))].slice(0, 16);
 }
 
 /** @param {any} value @returns {{content: number, structural: number} | undefined} */
@@ -1598,27 +1611,39 @@ function successfulToolPart(part) {
 }
 
 /**
- * The connector a failed research call was missing a credential for: the
- * public-source gateway refuses with `public_source_<connector>_credential_missing`
- * (hyphens as underscores), and a connector is one of the closed list a
- * researcher can hold a credential for (`CONNECTOR_CREDENTIALS`). Null for any
- * other code. A format, not a reading of prose.
- * @type {ReadonlyMap<string, string>}
+ * The data sources a run's research calls went without: the connectors whose
+ * "not configured" code a tool answered with (`connectorForMissingCode` — the
+ * gateway's `public_source_<connector>_credential_missing`, or the MR engine's
+ * refusal naming OpenGWAS), and any a tool says it left out and carried on
+ * without (`data.notConfigured`, as a literature search that fell back to
+ * PubMed does). A closed list of registry ids read from structured results,
+ * never from prose.
+ *
+ * A source nobody configured is not a reason for a run to fail
+ * (`recoverableEvidenceSourceErrorCodes`); it is what the conversation then
+ * offers the researcher a form for, so the ledger keeps it.
+ * @param {any[]} messages @returns {string[]}
  */
-const missingCredentialCodes = new Map(CONNECTOR_CREDENTIALS.map((spec) => [
-  `public_source_${spec.id.replaceAll("-", "_")}_credential_missing`, spec.id,
-]));
-
-/** @param {string | null} errorCode @returns {string | null} */
-function missingCredentialConnector(errorCode) {
-  return (errorCode && missingCredentialCodes.get(errorCode)) ?? null;
+function connectorNeedsFromMessages(messages) {
+  /** @type {Set<string>} */
+  const needs = new Set();
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type !== "tool" || typeof part.tool !== "string" || !isMcpToolName(part.tool)) continue;
+      const named = connectorForMissingCode(parsedToolErrorCode(part));
+      if (named) needs.add(named);
+      const carriedOn = parsedToolResult(part)?.data?.notConfigured;
+      if (Array.isArray(carriedOn)) for (const id of carriedOn) if (typeof id === "string" && CONNECTOR_CREDENTIAL_IDS.has(id)) needs.add(id);
+    }
+  }
+  return [...needs].slice(0, 16);
 }
 
 /**
  * The terminal outcome a turn's messages decide. Callers go on to add the
  * delivery verdict to it (`verification`, `qualityNotices`, …), hence open.
  * @param {any[]} messages
- * @returns {{ status: string, errorCode: string | null, errorSubCode: string | null, missingCredential?: string } & Record<string, any>}
+ * @returns {{ status: string, errorCode: string | null, errorSubCode: string | null } & Record<string, any>}
  */
 function terminalFromMessages(messages) {
   for (const message of messages) {
@@ -1669,12 +1694,9 @@ function terminalFromMessages(messages) {
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
     if (!correctedByLaterSuccess) {
-      // A source the researcher can open themselves: the account page takes
-      // their own credential (connectorCredentials.mjs). Named as the sub-code
-      // and as its own field, so the reader is told what to add rather than
-      // that a tool failed.
-      const missingCredential = missingCredentialConnector(errorCode);
-      return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: missingCredential, ...(missingCredential ? { missingCredential } : {}) };
+      // A data source nobody configured never lands here: its code is
+      // recoverable above, and the ledger records it as a need instead.
+      return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: null };
     }
   }
   return { status: "succeeded", errorCode: null, errorSubCode: null };
@@ -4864,7 +4886,10 @@ export class AgentRunStore {
       // other things key on, and a context overflow is a different remedy from
       // a session fault -- which the ledger could not distinguish at all.
       ...(sanitizeErrorCode(terminal.errorSubCode) ? { errorSubCode: sanitizeErrorCode(terminal.errorSubCode) } : {}),
-      ...(CONNECTOR_CREDENTIAL_IDS.has(terminal.missingCredential) ? { missingCredential: terminal.missingCredential } : {}),
+      // Recorded only for a run that finished: on one that did not, the failure
+      // is the news, and a form for a source it left out would be a second one.
+      ...(terminal.status === "succeeded" && normalizeConnectorNeeds(terminal.connectorNeeds).length
+        ? { connectorNeeds: normalizeConnectorNeeds(terminal.connectorNeeds) } : {}),
       artifacts: normalizeArtifacts(terminal.artifacts),
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
@@ -5151,6 +5176,11 @@ export class AgentRunStore {
     const terminal = terminalFromMessages(ownEnd?.code
       ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...assistants]
       : assistants);
+    // The sources this run went without — including those a delegated child
+    // met, which the verdict above does not read — kept on the record so the
+    // conversation can offer the researcher a form for them.
+    const connectorNeeds = connectorNeedsFromMessages(allRunAssistants);
+    if (connectorNeeds.length > 0) terminal.connectorNeeds = connectorNeeds;
     let runtimeWorkspaceRoot;
     try {
       runtimeWorkspaceRoot = await this.runtimeWorkspaceRoot(project);

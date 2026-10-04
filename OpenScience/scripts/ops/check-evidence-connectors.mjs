@@ -23,9 +23,10 @@ const repoRoot = path.resolve(path.dirname(scriptFile), "../..");
 /**
  * The environment variable that holds each connector's deployment credential
  * (apps/server/src/config.mjs `publicSourceCredentialSpecs` and the Materials
- * Project secret; each also takes `<NAME>_FILE`). `evimed-evidence` is the
- * platform's own API and has no entry in the connector registry: a researcher
- * cannot bring a key for it.
+ * Project secret; each also takes `<NAME>_FILE`). `evimed-evidence`, the
+ * platform's own API, is a connector like the rest since 2026-10-04: a
+ * deployment may hold the key for everyone, and a researcher may bring their own
+ * where it does not.
  */
 export const CONNECTOR_ENV = Object.freeze({
   "evimed-evidence": "OPEN_SCIENCE_EVIMED_API_KEY",
@@ -85,7 +86,7 @@ function keyState(name, env) {
  */
 export function connectorPosture(registry, env) {
   const gatewayConfigured = Boolean((env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL ?? "").trim());
-  const profiles = ["evimed-evidence", ...registry.map((spec) => spec.id)];
+  const profiles = registry.map((spec) => spec.id);
   return profiles.map((profile) => {
     const variable = CONNECTOR_ENV[profile];
     if (!variable) throw new Error(`no credential variable is known for the connector ${profile}; add it to CONNECTOR_ENV`);
