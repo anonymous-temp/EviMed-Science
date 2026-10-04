@@ -297,6 +297,45 @@
         "comparator.aipw"
       ],
       "modelTier": "data"
+    },
+    "comparator.negative_control": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "EmpiricalCalibration 3.1.4 (sccs example)",
+        "Lipsitch 2010",
+        "Schuemie 2014"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.tipping_point": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "stats::fisher.test and stats::binom.test",
+        "closed-form worst case (censoring as event)",
+        "Jackson et al. 2014"
+      ],
+      "modelTier": "data"
+    },
+    "comparator.prognostic_adjustment": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "FDA 2023 covariate-adjustment guidance, Table 1",
+        "M-estimation sandwich by numerical Jacobians",
+        "survival::coxph and survfit(newdata)"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -327,7 +366,10 @@
     "weighted_cox_comparator": "comparator.weighted_cox",
     "maic_time_to_event_comparator": "comparator.maic_time_to_event",
     "aipw_comparator": "comparator.aipw",
-    "covariate_set_comparator": "comparator.covariate_sets"
+    "covariate_set_comparator": "comparator.covariate_sets",
+    "negative_control_comparator": "comparator.negative_control",
+    "tipping_point": "comparator.tipping_point",
+    "prognostic_adjustment_comparator": "comparator.prognostic_adjustment"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -341,7 +383,8 @@
     "weighted_cox_comparator",
     "maic_time_to_event_comparator",
     "aipw_comparator",
-    "covariate_set_comparator"
+    "covariate_set_comparator",
+    "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
     "population.synthpop",
@@ -352,6 +395,9 @@
     "comparator.aipw",
     "comparator.covariate_sets",
     "comparator.maic_time_to_event",
+    "comparator.negative_control",
+    "comparator.tipping_point",
+    "comparator.prognostic_adjustment",
     "comparator.rmst"
   ],
   "engineTableInputKeys": [
@@ -418,6 +464,24 @@
       "calculated",
       "imputed",
       "reconstructed"
+    ],
+    "comparator.negative_control": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.tipping_point": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.prognostic_adjustment": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
     ],
     "comparator.rmst": [
       "observed",
@@ -6259,6 +6323,619 @@
           "req": true
         }
       }
+    },
+    "comparator.negative_control": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "weighting": {
+          "t": "string",
+          "values": [
+            "entropy_balance",
+            "propensity"
+          ],
+          "default": "entropy_balance"
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT",
+            "ATE",
+            "ATO"
+          ],
+          "default": "ATT"
+        },
+        "moments": {
+          "t": "integer",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "effectScale": {
+          "t": "string",
+          "values": [
+            "log_risk_ratio",
+            "log_odds_ratio",
+            "log_hazard_ratio"
+          ],
+          "default": "log_risk_ratio"
+        },
+        "controls": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "column": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "estimate": {
+                "t": "number"
+              },
+              "se": {
+                "t": "number",
+                "gt": 0
+              }
+            },
+            "exactlyOne": [
+              [
+                "column",
+                "estimate"
+              ]
+            ],
+            "requires": {
+              "estimate": [
+                "se"
+              ],
+              "se": [
+                "estimate"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 500,
+          "req": true
+        },
+        "primary": {
+          "t": "object",
+          "fields": {
+            "name": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "column": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64
+            },
+            "estimate": {
+              "t": "number"
+            },
+            "se": {
+              "t": "number",
+              "gt": 0
+            }
+          },
+          "exactlyOne": [
+            [
+              "column",
+              "estimate"
+            ]
+          ],
+          "requires": {
+            "estimate": [
+              "se"
+            ],
+            "se": [
+              "estimate"
+            ]
+          }
+        }
+      }
+    },
+    "comparator.tipping_point": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "direction": {
+          "t": "string",
+          "values": [
+            "against_treatment",
+            "in_favour"
+          ]
+        },
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "two_arm",
+                "single_arm"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          },
+          "req": true
+        },
+        "counts": {
+          "t": "object",
+          "fields": {
+            "treatment": {
+              "t": "object",
+              "fields": {
+                "n": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 10000000,
+                  "req": true
+                },
+                "responders": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                },
+                "missing": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                }
+              },
+              "req": true
+            },
+            "control": {
+              "t": "object",
+              "fields": {
+                "n": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 10000000,
+                  "req": true
+                },
+                "responders": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                },
+                "missing": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                }
+              },
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm"
+                ]
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm"
+                ]
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "missingHandling": {
+          "t": "string",
+          "values": [
+            "non_responders",
+            "complete_cases"
+          ],
+          "default": "non_responders",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "horizon": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "deltas": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "min": 1,
+            "max": 1000000000
+          },
+          "min": 2,
+          "max": 60,
+          "increasing": true,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "deltaApplies": {
+          "t": "string",
+          "values": [
+            "treatment",
+            "both_opposite"
+          ],
+          "default": "treatment",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "method": {
+              "t": "string",
+              "valuesBy": {
+                "path": "design.kind",
+                "map": {
+                  "two_arm": [
+                    "fisher_exact",
+                    "risk_difference"
+                  ],
+                  "single_arm": [
+                    "exact_binomial"
+                  ]
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "nullRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            }
+          },
+          "reqWhen": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        }
+      },
+      "exactlyOne": [
+        {
+          "keys": [
+            "counts",
+            "outcomeColumn"
+          ],
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        }
+      ]
+    },
+    "comparator.prognostic_adjustment": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "prognosticScoreColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "req": true
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        }
+      }
     }
   },
   "designSupport": {
@@ -6396,7 +7073,10 @@
     "weighted_cox_comparator",
     "maic_time_to_event_comparator",
     "aipw_comparator",
-    "covariate_set_comparator"
+    "covariate_set_comparator",
+    "negative_control_comparator",
+    "tipping_point",
+    "prognostic_adjustment_comparator"
   ],
   "endpointTypes": [
     "continuous",
@@ -6433,6 +7113,8 @@
     "map_prior_conflict",
     "too_few_events",
     "nuisance_model_not_estimable",
+    "negative_controls_not_estimable",
+    "primary_analysis_not_estimable",
     "data_tier_insufficient",
     "route_unavailable_in_version"
   ],
@@ -6478,6 +7160,12 @@
     "synthetic",
     "predicted"
   ],
+  "negativeControlVerdicts": [
+    "signals_bias",
+    "consistent_with_null",
+    "uninformative"
+  ],
+  "prognosticQualification": "none_beyond_continuous",
   "populationKinds": [
     "real",
     "scenario",
@@ -6589,6 +7277,7 @@
     "smdFloor": 0.1,
     "essFloor": 10,
     "coxFewEvents": 10,
+    "negativeControlCalibrationMin": 30,
     "supportCeiling": 0.1,
     "conflictBound": 0.01,
     "tolerance": {

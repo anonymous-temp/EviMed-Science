@@ -15,7 +15,7 @@ vcr_case("Z99", c("AC-04", "AC-30"), function() {
   # A method that only the structural cases touch (E05 asks that a job of every
   # method answers with a valid result, E10 breaks them) has no number that could
   # be wrong: every method is also run by at least one case that asserts one.
-  structural <- c("E05", "E10a", "E10b")
+  structural <- c("E05", "E10a", "E10b", "N40b")
   by_case <- vcr_test_methods_by_case()
   numeric_run <- unique(unlist(by_case[setdiff(names(by_case), structural)]))
   only_structural <- setdiff(declared, numeric_run)

@@ -104,6 +104,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.maic_time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
   'comparator.aipw': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
   'comparator.covariate_sets': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
+  // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
+  'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
+  'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
+  'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
+  // --- end robustness methods ---
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -143,6 +148,11 @@ export const VCR_JOB_METHODS = Object.freeze({
   maic_time_to_event_comparator: 'comparator.maic_time_to_event',
   aipw_comparator: 'comparator.aipw',
   covariate_set_comparator: 'comparator.covariate_sets',
+  // --- robustness methods ---
+  negative_control_comparator: 'comparator.negative_control',
+  tipping_point: 'comparator.tipping_point',
+  prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
+  // --- end robustness methods ---
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
@@ -150,6 +160,8 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
   'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
+  // robustness methods
+  'prognostic_adjustment_comparator',
 ])
 
 /**
@@ -174,6 +186,10 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   // The study's own patients (real) and the comparator's pseudo-individual rows from a Guyot reconstruction (reconstructed)
   // are both tables of this job; the engine holds each to its role and counts the pseudo-patients apart.
   'comparator.maic_time_to_event': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
+  // robustness methods
+  'comparator.negative_control': VCR_REAL_PATIENT_SOURCES,
+  'comparator.tipping_point': VCR_REAL_PATIENT_SOURCES,
+  'comparator.prognostic_adjustment': VCR_REAL_PATIENT_SOURCES,
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */

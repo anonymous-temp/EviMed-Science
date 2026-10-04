@@ -190,6 +190,8 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
             </div>
           </div>
 
+          {data.robustness && <RobustnessCard robustness={data.robustness} />}
+
           {data.gaps && (
             <NotEstimableCard
               title={data.gaps.title ?? "真实外部对照：不可估计"}
@@ -213,6 +215,31 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
         </div>
       </Stale>
     </div>
+  );
+}
+
+/**
+ * 稳健性与预后校正: what the study's robustness analyses found beside the comparison, and — for a prognostic adjustment of a binary or
+ * time-to-event endpoint — the plain statement that no regulator has qualified it. The statement sits with the numbers it is about.
+ */
+function RobustnessCard({ robustness }: { robustness: NonNullable<ComparatorData["robustness"]> }) {
+  return (
+    <Card title="稳健性与预后校正分析">
+      {robustness.rows.length > 0 && (
+        <dl data-vcr-robustness="" className="flex flex-col gap-2">
+          {robustness.rows.map((row) => (
+            <div key={row.key} className="flex items-baseline justify-between gap-3">
+              <dt className="min-w-0 text-ui text-text-2">{row.label}</dt>
+              <dd className="shrink-0 text-ui tabular-nums text-text"><VcrNumber value={row.value} label={row.label} /></dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {robustness.qualification && (
+        <p data-vcr-qualification="" className="mt-3 rounded bg-surface-1 px-3 py-2 text-caption text-text-2">{robustness.qualification}</p>
+      )}
+      {robustness.notes.map((note) => <p key={note} className="mt-2 text-caption text-text-3">{note}</p>)}
+    </Card>
   );
 }
 

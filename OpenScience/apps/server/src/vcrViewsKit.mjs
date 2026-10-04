@@ -167,6 +167,55 @@ export function defaultSourceOf(kind, measure, context = {}) {
 
 // --- measures ------------------------------------------------------------------------------
 
+// --- robustness methods ---
+/**
+ * The measures the three robustness methods emit, said in Chinese: a negative-control screen, a tipping-point analysis (binary and
+ * time to event) and a prognostic-adjusted marginal effect. One table, so the page's list of what it shows beside the comparison and
+ * the labels cannot drift apart; a test walks the engine's own measure names against it.
+ * @type {Readonly<Record<string, { label: string, unit?: string, percent?: boolean }>>}
+ */
+const ROBUSTNESS_MEASURE_META = Object.freeze({
+  negative_controls_analysed: { label: "能分析的阴性对照个数", unit: "个" },
+  negative_controls_signalling_bias: { label: "提示残余偏倚的阴性对照个数", unit: "个" },
+  empirical_null_mean: { label: "经验零分布的均值" },
+  empirical_null_sd: { label: "经验零分布的标准差" },
+  primary_log_effect: { label: "主要结局的效应（对数尺度）" },
+  uncalibrated_p_value: { label: "主要结局的 P 值（未校准）" },
+  calibrated_p_value: { label: "主要结局的 P 值（经阴性对照校准）" },
+  primary_p_value: { label: "按已观察到的数据得出的 P 值" },
+  grid_cells: { label: "检验过的缺失结局组合数", unit: "种" },
+  cells_changing_conclusion: { label: "改变结论的组合数", unit: "种" },
+  share_changing_conclusion: { label: "改变结论的组合占比", unit: "%", percent: true },
+  worst_case_p_value: { label: "最不利组合的 P 值" },
+  tipping_distance: { label: "最近的临界点需要改变的缺失结局数", unit: "例" },
+  tipping_treatment_responders: { label: "临界点处试验组的有效例数", unit: "例" },
+  tipping_control_responders: { label: "临界点处对照组的有效例数", unit: "例" },
+  tipping_treatment_rate: { label: "临界点处试验组缺失者的有效比例", unit: "%", percent: true },
+  tipping_control_rate: { label: "临界点处对照组缺失者的有效比例", unit: "%", percent: true },
+  primary_log_hazard_ratio: { label: "主要分析的风险比对数" },
+  primary_hazard_ratio: { label: "主要分析的风险比" },
+  delta_one_log_hazard_ratio: { label: "偏移为 1（无附加惩罚）时的风险比对数" },
+  imputed_early_censored_people: { label: "被插补的提前删失人数", unit: "人" },
+  worst_case_log_hazard_ratio: { label: "极端情形（偏移趋于无穷）的风险比对数" },
+  tipping_delta: { label: "改变结论的临界偏移倍数" },
+  marginal_risk_difference: { label: "边际风险差" },
+  marginal_risk_ratio: { label: "边际风险比（RR）" },
+  marginal_odds_ratio: { label: "边际比值比（OR）" },
+  conditional_odds_ratio: { label: "条件比值比（模型系数）" },
+  risk_treatment_standardised: { label: "标准化后的试验组风险", unit: "%", percent: true },
+  risk_control_standardised: { label: "标准化后的对照组风险", unit: "%", percent: true },
+  unadjusted_risk_difference: { label: "未校正的风险差" },
+  empirical_variance_ratio: { label: "校正后与未校正的方差比" },
+  conditional_hazard_ratio: { label: "条件风险比（Cox 模型）" },
+  marginal_rmst_difference: { label: "边际 RMST 差" },
+  rmst_treatment_standardised: { label: "标准化后的试验组 RMST" },
+  rmst_control_standardised: { label: "标准化后的对照组 RMST" },
+  unadjusted_rmst_difference: { label: "未校正的 RMST 差" },
+});
+/** The measure names of the robustness methods, which the comparator page lists beside the comparison. */
+export const VCR_ROBUSTNESS_MEASURES = Object.freeze(Object.keys(ROBUSTNESS_MEASURE_META));
+// --- end robustness methods ---
+
 /**
  * What a measure name means on a page: its label, its unit, and whether the
  * engine's fraction is shown as a percentage. The domain owns the names it
@@ -262,6 +311,7 @@ export const MEASURE_META = Object.freeze({
   map_effective_sample_size_moment: { label: "MAP 先验有效样本量（矩法）", unit: "例" },
   map_effective_sample_size_elir: { label: "MAP 先验有效样本量（ELIR）", unit: "例" },
   tau_posterior_median: { label: "研究间异质性 τ（后验中位数）" },
+  ...ROBUSTNESS_MEASURE_META,
 });
 
 /** The unit words the engine writes, said in Chinese. */
@@ -581,6 +631,7 @@ export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */
   "comparator.aipw": "双重稳健估计（AIPW）", "comparator.covariate_sets": "协变量集敏感性分析",
   "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": "成功把握",
   "design.procova": "预后协变量调整", "accrual.poisson_gamma": "Poisson–Gamma 入组预测", "matching.evaluate": "逐条匹配",
+  "comparator.negative_control": "阴性对照结局", "comparator.tipping_point": "缺失数据的临界点分析", "comparator.prognostic_adjustment": "预后评分校正（二分类/事件时间）",
 }));
 
 /** The parameters a precedent is used for, said in words. A key with no word is not printed. */

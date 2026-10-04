@@ -53,6 +53,8 @@ import {
 /** JSON-safe deep copy: the fixture is JSON, and a job is never anything else. @template T @param {T} value @returns {T} */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs.json", import.meta.url), "utf8"));
+// the robustness methods keep their parity jobs in a file of their own (read by vcrRobustness.test.mjs and the engine case N40a)
+const robustnessFixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs-robustness.json", import.meta.url), "utf8"));
 /** @param {readonly { code: string, field: string }[]} issues */
 const keys = (issues) => issues.map((issue) => `${issue.code}@${issue.field}`).sort();
 const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "design.simulate").job);
@@ -61,7 +63,7 @@ const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => ite
 
 test("every valid job of the fixture validates clean, and the walk proves it walked", () => {
   assert.ok(fixture.valid.length >= 30, `only ${fixture.valid.length} valid jobs`);
-  const methods = new Set(fixture.valid.map((/** @type {any} */ item) => item.job.method));
+  const methods = new Set([...fixture.valid, ...robustnessFixture.valid].map((/** @type {any} */ item) => item.job.method));
   assert.deepEqual([...methods].sort(), [...VCR_ENGINE_METHOD_IDS].sort(), "every method has at least one valid job");
   for (const item of fixture.valid) assert.deepEqual(validateEngineJob(item.job), [], item.name);
 });
@@ -405,7 +407,10 @@ test("the comparator-effect methods are appended, read patients, and every rule 
     "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "reconstruct_km", "pool_evidence", "weight_comparator",
     "propensity_weight_comparator", "maic_comparator", "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria"]);
-  assert.deepEqual([...VCR_JOB_KINDS].slice(24), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
+  // The kinds appended after the first 24 are this stream's four in the order they were added, then whatever other streams appended
+  // (the robustness methods): derived from the domain, so a stream that appends a kind does not edit this line.
+  assert.deepEqual([...VCR_JOB_KINDS].slice(24, 24 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
+  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length, "and every kind after them has its method");
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);

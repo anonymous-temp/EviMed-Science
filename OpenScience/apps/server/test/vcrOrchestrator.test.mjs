@@ -1095,3 +1095,122 @@ test("above T0 the matching step is done by patients judged against the latest p
   await t0.orchestrator.advance("std_live");
   assert.equal(t0.steps().matching.status, "done");
 });
+
+// --- robustness methods ---
+
+const CMP_BINARY = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
+/** The prognostic-score route needs the randomized trial's individual data (T3). */
+const CMP_BINARY_T3 = { ...CMP_BINARY, study: { ...seedStudy, dataTier: "T3" } };
+const COUNTS = { treatment: { n: 60, responders: 30, missing: 8 }, control: { n: 60, responders: 18, missing: 6 } };
+const BINARY_TIPPING = { direction: "against_treatment", design: { kind: "two_arm" }, counts: COUNTS, analysis: { method: "fisher_exact" } };
+
+test("a study's declared design reaches the robustness methods: negative controls, a tipping point and a prognostic score, never by a word", () => {
+  // the declared score and the declared endpoint choose the prognostic job; a continuous endpoint stays with PROCOVA
+  const prognostic = (/** @type {Record<string, any>} */ configuration, /** @type {Record<string, any>} */ ctx = {}) =>
+    vcrJobKindFor("comparator", { route: "prognostic_adjustment", configuration }, { definition, ...ctx });
+  assert.equal(prognostic({ endpoint: { type: "binary" }, prognosticScoreColumn: "score" }), "prognostic_adjustment_comparator");
+  assert.equal(prognostic({ prognosticScoreColumn: "score" }), "prognostic_adjustment_comparator", "the study's own endpoint is time to event");
+  assert.equal(prognostic({ endpoint: { type: "continuous" }, prognosticScoreColumn: "score" }), "procova");
+  assert.equal(prognostic({ endpoint: { type: "binary" } }), "procova", "no declared score, no marginal-effect analysis");
+  assert.equal(vcrJobKindFor("comparator", { route: "prognostic_adjustment" }), "procova", "the old default is untouched");
+
+  // external control with negative controls: the comparison runs as it always did, and the screen is a second stage on the same adjustment
+  const controls = [{ name: "骨折", column: "nc_fracture" }, { name: "白内障", column: "nc_cataract" }];
+  const nc = planComparator({ covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1", negativeControls: controls });
+  assert.equal(nc.ok, true, JSON.stringify(nc));
+  assert.deepEqual(nc.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind]), [["primary", "weight_comparator"], ["negative_control", "negative_control_comparator"]]);
+  assert.equal(nc.stages[0].scenario.negativeControls, undefined, "the primary reads only what it reads");
+  assert.equal(nc.stages[1].snapshot, true, "controls are columns of the study's patients");
+  assert.equal(nc.stages[1].scenario.endpoint, undefined, "the controls are 0/1 indicators whatever the primary's endpoint is");
+  assert.equal(nc.stages[1].scenario.primary, undefined, "a time-to-event primary is not a column the screen can analyse");
+  assert.deepEqual(nc.stages[1].scenario.controls, controls);
+  assert.equal(nc.stages[1].scenario.weighting, "entropy_balance");
+  assert.equal(nc.stages[1].scenario.estimand, "ATT");
+  assert.deepEqual(nc.stages[1].scenario.covariates, ["age", "ecog"], "the same adjustment is the same covariates");
+  for (const entry of nc.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+  // the adjustment the design names is the one the screen uses
+  const ncPropensity = planComparator({ covariates: ["age"], method: "propensity", negativeControls: controls }, { estimand: "ATE" });
+  assert.equal(ncPropensity.stages[1].scenario.weighting, "propensity");
+  assert.equal(ncPropensity.stages[1].scenario.estimand, "ATE");
+  assert.deepEqual(stageIssues(ncPropensity.stages[1]), []);
+  // a binary primary's own outcome column is the effect of interest, analysed by the same adjustment, so the calibrated p-value is possible
+  const ncBinary = planComparator({ covariates: ["age"], outcomeColumn: "response", method: "aipw", effectScale: "log_odds_ratio", negativeControls: controls }, {}, CMP_BINARY);
+  assert.equal(ncBinary.ok, true, JSON.stringify(ncBinary));
+  assert.deepEqual(ncBinary.stages[1].scenario.primary, { column: "response" });
+  assert.equal(ncBinary.stages[1].scenario.effectScale, "log_odds_ratio");
+  assert.deepEqual(stageIssues(ncBinary.stages[1]), []);
+  // an empty list declares no controls, and nothing else is planned
+  const none = planComparator({ covariates: ["age"], tau: 12, negativeControls: [] });
+  assert.equal(none.ok, true, JSON.stringify(none));
+  assert.deepEqual(none.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind]), [[null, "weight_comparator"]]);
+
+  // a tipping point: counts need no patients, a time-to-event analysis always does
+  const tipBinary = planComparator({ covariates: ["age"], outcomeColumn: "response", method: "aipw", snapshotId: "snp_1", tippingPoint: BINARY_TIPPING }, {}, CMP_BINARY);
+  assert.equal(tipBinary.ok, true, JSON.stringify(tipBinary));
+  assert.deepEqual(tipBinary.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind, entry.snapshot]),
+    [["primary", "aipw_comparator", true], ["tipping_point", "tipping_point", false]]);
+  assert.deepEqual(tipBinary.stages[1].scenario.endpoint, { type: "binary" });
+  for (const entry of tipBinary.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+  const tipColumn = planComparator({ covariates: ["age"], snapshotId: "snp_1", tippingPoint: { direction: "against_treatment", design: { kind: "two_arm" }, outcomeColumn: "response",
+    analysis: { method: "risk_difference", alpha: 0.05, sided: 2 } } }, {}, CMP_BINARY);
+  assert.equal(tipColumn.stages[1].snapshot, true, "an outcome column is read from the study's patients");
+  assert.deepEqual(stageIssues(tipColumn.stages[1]), []);
+  const tipSurvival = planComparator({ covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1", method: "weighted_cox",
+    tippingPoint: { horizon: 24, deltas: [1, 2, 4, 8], direction: "against_treatment" } });
+  assert.equal(tipSurvival.ok, true, JSON.stringify(tipSurvival));
+  assert.deepEqual(tipSurvival.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind, entry.snapshot]),
+    [["primary", "weighted_cox_comparator", true], ["tipping_point", "tipping_point", true]]);
+  assert.deepEqual(stageIssues(tipSurvival.stages[1]), []);
+
+  // everything declared at once: the comparison, then each analysis, each named
+  const all = planComparator({ covariates: ["age"], tau: 12, parameterCode: "OS", snapshotId: "snp_1", negativeControls: controls,
+    tippingPoint: { horizon: 24, deltas: [1, 2, 4] } });
+  assert.deepEqual(all.stages.map((/** @type {any} */ entry) => entry.stage), ["primary", "negative_control", "tipping_point"]);
+
+  // the prognostic-score route: a binary and a time-to-event endpoint, optionally with the other analyses beside it
+  const binary = planComparator({ endpoint: { type: "binary" }, prognosticScoreColumn: "score", covariates: ["age"], outcomeColumn: "y", snapshotId: "snp_1" },
+    { route: "prognostic_adjustment" }, CMP_BINARY_T3);
+  assert.equal(binary.ok, true, JSON.stringify(binary));
+  assert.deepEqual(binary.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind, entry.snapshot]), [[null, "prognostic_adjustment_comparator", true]]);
+  assert.deepEqual(stageIssues(binary.stages[0]), []);
+  const survival = planComparator({ prognosticScoreColumn: "score", tau: 12, parameterCode: "OS", snapshotId: "snp_1", tippingPoint: { horizon: 24, deltas: [1, 2, 4] } },
+    { route: "prognostic_adjustment" }, { ...CMP_T2, study: { ...seedStudy, dataTier: "T3" } });
+  assert.equal(survival.ok, true, JSON.stringify(survival));
+  assert.deepEqual(survival.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind]), [["primary", "prognostic_adjustment_comparator"], ["tipping_point", "tipping_point"]]);
+  for (const entry of survival.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+});
+
+test("a robustness declaration the endpoint or the design cannot support is refused in a sentence, and a key nobody reads is refused by name", () => {
+  const refused = (/** @type {any} */ plan, /** @type {string} */ code, /** @type {RegExp} */ words) => {
+    assert.equal(plan.ok, false, JSON.stringify(plan));
+    assert.equal(plan.refused.code, code);
+    assert.match(plan.refused.message, words);
+    return plan.refused;
+  };
+  const continuous = { ...CMP_T2, definition: { ...definition, endpointType: "continuous" } };
+  refused(planComparator({ covariates: ["age"], tippingPoint: BINARY_TIPPING }, {}, continuous), "vcr_job_scenario_invalid", /二分类和事件时间终点/);
+  refused(planComparator({ covariates: ["age"], tippingPoint: true }, {}, CMP_BINARY), "vcr_job_scenario_invalid", /tippingPoint 要写成一个对象/);
+  refused(planComparator({ covariates: ["age"], tippingPoint: BINARY_TIPPING }, {}, { ...CMP_T2, definition: null }), "vcr_scenario_endpoint_missing", /终点类型/);
+  // a binary prognostic route with no declared score says what to declare instead of reaching the engine's refusal
+  refused(planComparator({ endpoint: { type: "binary" }, outcomeColumn: "y" }, { route: "prognostic_adjustment" }, CMP_BINARY_T3), "vcr_job_scenario_invalid", /prognosticScoreColumn/);
+  // a number the design states in place of a column would be a result nobody computed: refused, and the sentence says what to write
+  refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ name: "a", estimate: 0.05, se: 0.1 }] }), "vcr_job_scenario_invalid", /column/);
+  refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ column: "nc_a" }] }), "vcr_job_scenario_invalid", /name 和 column/);
+  // a key the declaration wrote and its method does not read is the declaration's own: refused, not dropped
+  const typo = refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ name: "a", column: "nc_a", scale: "log" }] }), "vcr_scenario_unknown_fields", /引擎不读的字段/);
+  assert.ok(typo.paths.some((/** @type {string} */ path) => path.includes("scale")), JSON.stringify(typo.paths));
+  const tipTypo = refused(planComparator({ covariates: ["age"], tippingPoint: { ...BINARY_TIPPING, horizon: 24 } }, {}, CMP_BINARY), "vcr_scenario_unknown_fields", /引擎不读的字段/);
+  assert.ok(tipTypo.paths.includes("horizon"), "a time-to-event key on a binary tipping point");
+  // a design-level typo is still found when robustness stages are planned beside the comparison
+  const design = refused(planComparator({ covarites: ["age"], covariates: ["age"], tau: 12, negativeControls: [{ name: "a", column: "nc_a" }] }), "vcr_scenario_unknown_fields", /covarites/);
+  assert.ok(design.paths.includes("covarites"));
+  // `effectScale` belongs to the negative-control job, and a typed primary effect belongs to no job: nobody reads them
+  refused(planComparator({ covariates: ["age"], tau: 12, effectScale: "log_risk_ratio" }), "vcr_scenario_unknown_fields", /effectScale/);
+  refused(planComparator({ covariates: ["age"], tau: 12, primary: { estimate: 0.1, se: 0.1 }, negativeControls: [{ name: "a", column: "nc_a" }] }), "vcr_scenario_unknown_fields", /primary/);
+  // a literature or hybrid control reads neither declaration
+  refused(planComparator({ method: "maic", endpoint: { type: "binary" }, covariates: ["age"], targets: { age: 60 }, negativeControls: [{ name: "a", column: "nc_a" }] },
+    { route: "literature_control" }, { ...CMP_T2, study: { ...seedStudy, dataTier: "T1" } }),
+    "vcr_scenario_unknown_fields", /negativeControls/);
+});
+
+// --- end robustness methods ---

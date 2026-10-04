@@ -23,6 +23,9 @@ import { fileURLToPath } from 'node:url';
 import { canonicalScenarioJson } from '../../packages/domain/src/vcrEngineJob.mjs';
 import { parseMethodValidation, bindMethodValidation, assertMethodValidationFile } from '../../apps/server/src/vcrMethodValidation.mjs';
 import { openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle } from '../../apps/server/src/security.mjs';
+import { NUMERIC_REFERENCES, methodsWithoutReference, sourceCases } from './vcr-method-references.mjs';
+
+export { NUMERIC_REFERENCES, methodsWithoutReference, sourceCases };
 
 const MAX_EVIDENCE_BYTES = 1024 * 1024;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
@@ -44,26 +47,8 @@ const scopeFor = file => {
   return path.join(root, path.relative(root, file).split(path.sep)[0]);
 };
 
-// Each entry was reviewed against a numerical comparison in the case body.
-// General protocol, refusal, smoke and coverage cases are deliberately absent.
-// These are source anchors, not new numerical baselines or invented references.
-const NUMERIC_REFERENCES = {
-  N01b: { methods: ['design.analytic'], anchors: ['rpact::getDesignGroupSequential(', 'd_rp < 1e-4 && d_g4 < 1e-4'] },
-  N06b: { methods: ['design.analytic'], anchors: ['Required patients (Lachin-Foulkes) against rpact', 'rpact::getSampleSizeSurvival(', 'abs(r$events - r$want_events) < 1e-3'] },
-  N06c: { methods: ['design.analytic'], anchors: ["Simon (1989)'s published designs", 'all(a$opt == c(1, 10, 5, 29))'] },
-  N09c: { methods: ['comparator.entropy_balance', 'comparator.propensity_weight'], anchors: ['against WeightIt and', 'abs(est$value - att_wi) / abs(att_wi) < 1e-6', 'abs(est_p$value - att_pw) / abs(att_pw) < 1e-6'] },
-  N11b: { methods: ['comparator.rmst'], anchors: ['against survRM2', 'abs(est$value - ref_est) < 1e-9'] },
-  N12: { methods: ['comparator.evalue'], anchors: ['against the EValue package', 'g$d < 1e-6'] },
-  N14b: { methods: ['comparator.maic'], anchors: ['one binary covariate at', 'abs(ess - 450^2 / 787.5) < 1e-6'] },
-  N17b: { methods: ['evidence.reconstruct_km'], anchors: ['Cox on the original rows', 'abs(lhr_rec - lhr_true) <= 0.05'] },
-  N21b: { methods: ['comparator.map_prior'], anchors: ['against independent references', 'abs(vcr_measure_value(r, "map_mean") - pm) < 1e-4', 'abs(vcr_measure_value(r, "map_effective_sample_size_elir") - rb_elir) < 1e-3'] },
-  N22b: { methods: ['design.procova'], anchors: ['N = (z_a + z_b)^2 (s1^2/p + s0^2/(1-p)) / delta^2', 'abs(g(full, "variance_ratio") - want_full / want_unadj) < 1e-12'] },
-  N27a: { methods: ['accrual.poisson_gamma'], anchors: ['10/50/90% = 16.20 / 20.13 / 25.30 months', 'abs(m$value - 20.13) < 0.01'] },
-  N27b: { methods: ['accrual.poisson_gamma'], anchors: ['INDEPENDENT constructions that use no accrual code', 'all(abs(z1[c("median")]) <= 3)'] },
-  N27c: { methods: ['accrual.poisson_gamma'], anchors: ['an independent gamma construction', 'abs(z_med) <= 3 && abs(z_ev) <= 3.5'] },
-  N27d: { methods: ['evidence.pool'], anchors: ['Against metafor to 1e-8', 'r$d < r$tol'] },
-  N31b: { methods: ['design.simulate'], anchors: ['Independent full joint binomial table', 'abs(m$value-ref[i]) <= 3*m$mcse'] },
-};
+// Which cases hold which method to a reference that is not its own code lives in `vcr-method-references.mjs`
+// (reviewed entries, each with source anchors), and the methods that must have one are the engine's dispatch.
 
 /** Match the shipped Python health digest: only installed R/*.R and R/*.json. */
 export function numericalSourceDigest(files) {
@@ -84,28 +69,6 @@ export function packageLockHash(bytes) {
   }).sort((a, b) => a.package < b.package ? -1 : a.package > b.package ? 1 : 0);
   requireValue(new Set(packages.map(entry => entry.package)).size === packages.length, 'package_lock_invalid');
   return sha256(canonicalScenarioJson({ rVersion: lock.rVersion, packages }));
-}
-
-/** Extract literal case declarations and their source lines, without running R. */
-export function sourceCases(files) {
-  const cases = new Map();
-  for (const file of files) {
-    const lines = file.bytes.toString('utf8').split(/\r?\n/);
-    const starts = [];
-    for (let index = 0; index < lines.length; index += 1) {
-      if (!/^vcr_case\(/.test(lines[index])) continue;
-      const id = /^vcr_case\("([A-Za-z0-9-]+)"\s*,/.exec(lines[index])?.[1];
-      requireValue(id && !cases.has(id), 'case_source_invalid');
-      starts.push({ id, index });
-    }
-    for (let n = 0; n < starts.length; n += 1) {
-      const { id, index } = starts[n];
-      requireValue(!cases.has(id), 'case_source_duplicate');
-      cases.set(id, { path: file.path, line: index + 1, lines: lines.slice(index, starts[n + 1]?.index ?? lines.length) });
-    }
-  }
-  requireValue(cases.size > 0, 'case_source_missing');
-  return cases;
 }
 
 function referenceFor(id, definition) {
@@ -220,6 +183,11 @@ export function produceMethodValidation({ reportBytes, logBytes, sourceRevision,
     }
   }
   requireValue(methods.size > 0, 'numeric_reference_missing');
+  // Every method the engine dispatches (the registry of its own domain snapshot, never a list written here) has at least one
+  // reference case this run executed. A method that has none is not left out of the evidence quietly: the evidence is refused,
+  // naming the methods, because "unmeasured" in the module must mean a deployment's choice and not a table nobody updated.
+  const unreferenced = Object.keys(source.methods).filter(method => !methods.has(method));
+  if (unreferenced.length) throw Object.assign(new Error('method_reference_missing'), { methods: unreferenced });
   const evidence = parseMethodValidation({ schemaVersion: 1, sourceRevision, numericalSourceDigest: digest, rVersion: report.rVersion,
     packageLockHash: lockHash, ci: { ...ci, reportSha256: sha256(reportBytes) }, methods: [...methods.values()].sort((a, b) => a.method.localeCompare(b.method)) });
   requireValue(bindMethodValidation(evidence, health).status === 'verified', 'runtime_identity_mismatch');
@@ -373,6 +341,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   main(process.argv.slice(2)).then(result => process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error => {
     // gh or unzip errors can contain diagnostic output; expose a fixed code.
     const code = /^[a-z_]+$/.test(error.message) ? error.message : 'method_validation_import_failed';
-    process.stderr.write(`${code}\n`); process.exitCode = 1;
+    process.stderr.write(`${code}\n`);
+    // method names are the engine's own registry, never gh or unzip output
+    if (code === 'method_reference_missing' && Array.isArray(error.methods)) process.stderr.write(`methods without a reference case: ${error.methods.join(', ')}\n`);
+    process.exitCode = 1;
   });
 }

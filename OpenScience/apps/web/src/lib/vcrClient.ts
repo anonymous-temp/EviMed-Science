@@ -690,6 +690,11 @@ export interface VcrComparatorTab {
   dimensions: VcrDimension[];
   /** Weight and overlap diagnostics of a weighted comparison. */
   diagnostics: Array<{ key: string; label: string; value: VcrValue }>;
+  /**
+   * The numbers of the robustness methods (negative controls, tipping point, prognostic adjustment), a sentence for each analysis that
+   * could not be computed, and the sentence that no regulator has qualified prognostic adjustment for the endpoint. Null when none.
+   */
+  robustness?: { rows: Array<{ key: string; label: string; value: VcrValue }>; notes: string[]; qualification: string | null } | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;

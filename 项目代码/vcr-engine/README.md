@@ -36,6 +36,7 @@ language model never enters this path.
 | The engine reads only what the job names, hash-verified, under the data root | `R/inputs.R` (section 3) | E06, N24, N25 |
 | A job never raises | every malformation ends as a named refusal in a protocol-valid result | E10a |
 | A result is labelled with the weakest source of the columns it used, not of its whole table | `columnSources` on a table input; `vcr_used_sources` (`R/inputs.R`) | N32 |
+| Every dispatched method has a reference case the validation evidence records | the methods are the engine's own registry; `scripts/ops/vcr-method-references.mjs` names the case that holds each to something outside it, the evidence generator refuses a method with none, and a CI step checks it before the numeric run (section 12) | N41, `check-method-references.mjs` |
 
 ## 2. Running it
 
@@ -149,9 +150,10 @@ or a traceback.
 
 ## 5. Methods
 
-28 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
-`VCR_ENGINE_METHODS` (the first release's 24, then the comparator-effect methods
-appended after them; section 11). The engine refuses to start if the lists differ
+The methods of the domain's `VCR_ENGINE_METHODS`, all at `1.0.0` (the first release's 24
+and, appended after them, the comparator-effect methods of section 11 and the
+robustness methods below), one job kind each, keyed exactly as that registry. The
+engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
 the live domain by `tests/helpers/emit-domain-snapshot.mjs` (never edit by
 hand); N00a regenerates it and fails on drift. The engine reads the domain's
@@ -186,6 +188,84 @@ that snapshot and validates every job against them before a handler runs.
 | `design.procova` | prognostic-adjustment sample size, three paths | the closed form, EMA 2022 |
 | `accrual.poisson_gamma` | per-site Poisson-Gamma accrual, staggered starts, screen failure, event target | closed form vs simulation, metafor-style REML for the pool (N27) |
 | `matching.evaluate` | Kleene three-valued eligibility; a criterion that does not apply cannot exclude | the truth table (N29) |
+
+### Robustness methods (2026-10-04)
+
+Three methods for the question "how far can this comparison be wrong". Each takes
+named inputs, refuses by name, reports `not_estimable` with an empty `measures`
+under a named rule, carries a Monte-Carlo standard error on anything simulated,
+and is seeded and reproducible (same seed, same bytes). None reads an `eval` or a
+`parse`.
+
+| Method (job kind) | Does | Held to |
+|---|---|---|
+| `comparator.negative_control` (`negative_control_comparator`) | outcomes the treatment cannot affect, analysed with the primary's adjustment: per control an estimate, an interval and a bias-screen verdict; with at least 30 estimable controls an empirical null N(mu, tau^2 + se_i^2) fitted by maximum likelihood (`stats::optim`, L-BFGS-B, tau^2 >= 0) and a calibrated p-value for the effect of interest | EmpiricalCalibration 3.1.4's `sccs` example (vendored under `tests/fixtures`, Apache-2.0), metafor's ML fit, WeightIt, a known-bias simulation (N37) |
+| `comparator.tipping_point` (`tipping_point`) | missing outcomes. Binary: exact enumeration of how many of the missing responded in each arm, the analysis's own test at each grid point (Fisher exact, the pooled risk-difference test, or the exact binomial for a single arm), the region where the conclusion changes and the nearest tipping point. Time to event: a delta-adjusted hazard after censoring (Jackson et al. 2014) by seeded multiple imputation, the smallest delta that overturns the result with its Monte-Carlo error | a table counted by hand, `fisher.test` / `prop.test` / `binom.test` cell by cell, `survival::coxph` for the kernel and for the worst-case limit, replication over seeds (N38) |
+| `comparator.prognostic_adjustment` (`prognostic_adjustment_comparator`) | a pre-specified prognostic score (a column) in a logistic or a Cox model, reported as a marginal effect: binary, the standardised risk difference, risk ratio and odds ratio with an influence-function (sandwich) standard error beside a stratified bootstrap; time to event, the conditional hazard ratio and the standardised RMST difference. Every result carries `diagnostics.regulatoryStatus` | FDA 2023 guidance Table 1, an M-estimation sandwich from numerical Jacobians, `sandwich::sandwich`, `survival::coxph` and `survfit(newdata)`, simulations against integrals (N39) |
+
+**Negative controls.** A control is a 0/1 column of the subject table (analysed
+here: the weights are the primary's, entropy balance or propensity, re-estimated in
+every bootstrap resample, and the effect is the weighted log risk ratio or log odds
+ratio) or an estimate and standard error on the log scale that was analysed
+elsewhere (the way a hazard ratio enters). The verdict of a control is a function of
+its interval: `signals_bias` (the interval excludes 0), `uninformative` (it contains
+0 and also the effect of interest, so a bias that large is compatible), else
+`consistent_with_null`. **The calibration floor is 30 estimable controls** (a domain
+preset, `negativeControlCalibrationMin`, never a scenario key): the null's spread is
+estimated from the controls themselves, a standard deviation from k independent
+values has a relative standard error of about 1 / sqrt(2 (k - 1)) (13% at 30, 20% at
+13), and the literature's guidance for empirical calibration is 30 to 50 controls
+(Schuemie 2014, 2018). Below it the result lists each control with its verdict and
+says the set is too small, `conclusion: limited`, no null, no calibrated p-value.
+**No calibrated interval is ever reported**: that needs positive controls with a known
+true effect, which one comparison does not have. A control with an arm without
+events has no risk ratio: it is listed with its reason and left out of the screen and
+the null; none estimable is `negative_controls_not_estimable`. Only a 0/1 column is
+analysed in the engine; a time-to-event control comes in as an estimate. A result
+computed only from estimates, or from tipping-point counts, that a caller typed
+labels its measures `aggregate` (a summary, not patients); one that analysed a column
+says `calculated`.
+
+**Tipping point.** Binary: the reference cell is how the primary analysis treated the
+missing (`non_responders`, the corner (0, 0), or `complete_cases`, the missing
+responding at their own arm's observed rate, rounded); the nearest tipping point is
+searched in the direction that threatens the conclusion (against the treatment when
+the primary is significant, in its favour when it is not, `direction` overrides) by
+L1 distance in patients, and the nearest in any direction is reported beside it. The
+grid is at most 40,000 scenarios (a limit on work, refused by name above it). Time to
+event: `horizon` is the end of the analysis window; the primary Cox model, the
+imputation and the analysis all use data administratively censored there. People
+censored before it, in the arms the delta applies to (`treatment`, or `both_opposite`
+with the control's delta the reciprocal), are imputed at every delta, delta = 1
+included, from a Cox model with a piecewise-linear Breslow baseline refitted on a
+stratified bootstrap in every imputation; the other arm keeps its censoring. The
+job's `replicates` is the number of imputations (at least 40). Rubin's rules combine;
+the tipping delta is interpolated on common random numbers and its Monte-Carlo error
+is a delete-one jackknife. The worst case (delta without bound: the threatened arm's
+early-censored fail at the moment of censoring) is reported beside the grid and is
+exact. A delta of 1 reproduces the primary analysis within Monte-Carlo error plus a
+finite-sample difference of up to about 7% of the primary's standard error
+(measured over 20 data sets; N38c allows 10%), which `diagnostics` shows.
+
+**Prognostic adjustment.** The score is a pre-specified covariate, taken on trust: in
+a randomized trial it buys precision and not a different answer, in a non-randomized
+comparison it is one more covariate and corrects no confounding. The headline is
+marginal because the conditional odds ratio and hazard ratio are not collapsible
+(FDA 2023, Table 1: conditional 8.0, marginal 4.8; N39a reproduces it). **No
+regulator has qualified this beyond continuous outcomes**: the EMA qualification
+opinion on PROCOVA (CHMP, adopted 15 September 2022) leaves binary and time-to-event
+as future work, and FDA's 2023 guidance calls nonlinear adjustment "potentially
+acceptable" and asks sponsors to discuss it with the review division. That statement
+is `diagnostics.regulatoryStatus` (`qualification: none_beyond_continuous`, the
+domain's `VCR_PROGNOSTIC_QUALIFICATION`) on every result, refusals included, so the
+page can say it. A continuous endpoint is refused by the protocol (`design.procova`
+sizes the EMA-qualified method). A missing score, covariate or outcome value is
+refused (`missing_covariate`), never dropped.
+
+Two not-estimable rules are new: `negative_controls_not_estimable` and
+`primary_analysis_not_estimable` (an arm with no event or no person, a model without
+a maximum, a score with no spread). `tau_beyond_followup` is the prognostic method's
+RMST horizon rule, as in `comparator.rmst`.
 
 ## 6. The result
 
@@ -264,14 +344,16 @@ R/design_simulate.R  the ADEMP runner: batches, checkpoints, cancel, budget, MCS
 R/assurance.R        power averaged over a design prior
 R/procova.R          prognostic-adjustment sample size
 R/accrual.R          Poisson-Gamma accrual, event target, online update, back-test
-R/engine.R           job dispatch, the handlers of the first 24 methods, the manifest, the self-check, the engine's own issue codes
+R/negative_control.R, R/tipping_point.R, R/prognostic_adjustment.R   the three robustness methods (sourced after the core list)
+R/engine.R           job dispatch, the handlers (one per method), the manifest, the self-check, the engine's own issue codes
 R/domain-snapshot.json   generated from @evimed/domain (never edit by hand)
 R/package-lock.json      the runtime library the Dockerfile verifies (62 packages)
 service/app.py           FastAPI: queue of one, process group, rlimits, cancel, receipt signature
 service/run_job.R        one job, one process (A1's)
 service/parquet_bridge.py  Parquet -> CSV, converts only
 tests/numeric/           the numeric acceptance cases (one file per family)
-tests/helpers/           harness, canonical fixtures, the schema-additions overlay
+tests/helpers/           harness, canonical fixtures, the schema-additions overlay, the robustness methods' handler jobs
+tests/fixtures/          third-party data a case is held to (EmpiricalCalibration's sccs example, with its license)
 tests/service/           the service tests (fake engine, no R)
 tests/package-lock.crosscheck.json   the cross-check library (96 packages) of the test image
 tests/run_all.sh         one command, one line per case
@@ -291,7 +373,10 @@ Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N31` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching, a column
 name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `N36` (covariate sets), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `N36` (covariate sets), `N37-N39` (the
+robustness methods: negative controls, tipping point, prognostic adjustment), `N40`
+(their protocol parity and breaking battery), `N41` (reference cases for
+`profile.snapshot` and `population.synthpop`), `E01-E10`
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -504,3 +589,27 @@ in sign and whether every interval excludes the null: a description of how far t
 estimate moves with the adjustment set, never a rule for choosing among them. A cancel
 returns no measures; a spent CPU budget keeps the sets that finished and says that the rest
 were not run.
+
+## 12. Numerical-validation evidence: one reference case per method
+
+The module shows, per method, whether its numerical validation is measured. The
+file it reads (`OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE`) is produced by CI, never
+written by hand: the `vcr-engine` job runs every numeric case with
+`VCR_NUMERICAL_EVIDENCE_FILE` set (`tests/run_all.R` writes the cases, the methods
+each one ran, the lock hash and R's version) and `check-numeric-log.sh` proves the run
+was whole; the artifact `vcr-numerical-evidence-<sha>` is turned into the evidence
+by `OpenScience/scripts/ops/import-vcr-method-validation.mjs`, which binds it to the
+run, the engine's numerical-source digest and the lock.
+
+A method is "measured" only if a case holds it to a reference that is not its own
+code. `OpenScience/scripts/ops/vcr-method-references.mjs` names, per case, the
+methods it holds and the literal lines of the case that show the comparison (an
+anchor that is no longer in the case fails the generator). The deployed file covered
+12 of 24 methods because that table named 15 cases and nothing noticed the rest.
+Now **the method list is the engine's dispatch** (the methods of
+`R/domain-snapshot.json`, which the start-up check holds equal to the handler table),
+the generator refuses evidence (`method_reference_missing`, naming the methods) when
+a dispatched method has no reference case that ran, and `scripts/vcr/check-method-references.mjs`
+says the same in seconds at the top of the CI job. A method added to the engine has
+to bring a case.
+

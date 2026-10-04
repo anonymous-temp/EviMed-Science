@@ -324,5 +324,8 @@ vcr_test_handler_jobs <- function() {
       list(id = "inc2", kind = "inclusion", type = "lab", state = "unknown"),
       list(id = "exc1", kind = "exclusion", type = "pregnancy", state = "not_satisfied", notApplicable = TRUE))), list(in_file))
   )
+  # --- robustness methods (2026-10-04): their jobs are in tests/helpers/robustness.R ---
+  cases <- c(cases, vcr_test_robustness_handler_jobs())
+  # --- end robustness methods ---
   cases
 }

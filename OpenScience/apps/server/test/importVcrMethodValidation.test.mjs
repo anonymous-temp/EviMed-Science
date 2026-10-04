@@ -7,8 +7,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VCR_ENGINE_METHODS } from '@evimed/domain';
-import { assertProtectedDirectory, fetchGitHubEvidence, numericalSourceDigest, packageLockHash, parseArguments, produceMethodValidation,
-  readValidationSource, sourceCases, verifyGitHubIdentity, writeMethodValidation } from '../../../scripts/ops/import-vcr-method-validation.mjs';
+import { NUMERIC_REFERENCES, assertProtectedDirectory, fetchGitHubEvidence, methodsWithoutReference, numericalSourceDigest, packageLockHash, parseArguments,
+  produceMethodValidation, readValidationSource, sourceCases, verifyGitHubIdentity, writeMethodValidation } from '../../../scripts/ops/import-vcr-method-validation.mjs';
+import { referenceProblems } from '../../../scripts/ops/vcr-method-references.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const engine = path.join(root, '项目代码/vcr-engine');
@@ -48,10 +49,10 @@ async function fixture() {
   const report = { schemaVersion: 1, sourceRevision: revision, numericalSourceDigest: numericalSourceDigest(testedSource.runtimeFiles), rVersion: '4.3.3',
     packageLockHash: packageLockHash(testedSource.runtimeFiles.find(file => file.path === 'R/package-lock.json').bytes), methods: testedSource.methods,
     cases: [...definitions.keys()].map(id => ({ id, ac: ['AC-30'], pass: true, detail: 'unit-test fixture: numerical comparison passed', seconds: 1 })),
-    // E05 exercised every handler, but its structural smoke checks qualify none.
-    methodsByCase: { E05: Object.keys(testedSource.methods), N01b: 'design.analytic', N09c: ['comparator.entropy_balance', 'comparator.propensity_weight'],
-      N11b: 'comparator.rmst', N12: 'comparator.evalue', N14b: 'comparator.maic', N17b: 'evidence.reconstruct_km', N21b: 'comparator.map_prior', N22b: 'design.procova',
-      N27a: 'accrual.poisson_gamma', N27b: 'accrual.poisson_gamma', N27c: 'accrual.poisson_gamma', N27d: 'evidence.pool', N31b: 'design.simulate' },
+    // E05 exercised every handler, but its structural smoke checks qualify none. Every reference case that exists in this source ran
+    // the methods it names (what a passing full run records), and nothing else is listed here by hand.
+    methodsByCase: { E05: Object.keys(testedSource.methods),
+      ...Object.fromEntries(Object.entries(NUMERIC_REFERENCES).filter(([id]) => definitions.has(id)).map(([id, spec]) => [id, spec.methods.length === 1 ? spec.methods[0] : spec.methods])) },
     complete: true, testOnly: '', skippedCaseIds: [] };
   const logBytes = Buffer.from(`${report.cases.map(item => `${item.id} PASS AC-30 | ${item.detail} [1.0s]`).join('\n')}\n\nPASSED ${definitions.size}/${definitions.size}\n`);
   const ci = verifyGitHubIdentity(github());
@@ -66,14 +67,20 @@ test('a whole source-bound run qualifies only methods with executed explicit num
   const evidence = generate(input);
   assert.equal(evidence.ci.reportSha256, hash(Buffer.from(JSON.stringify(input.report))));
   assert.equal(evidence.ci.headSha, evidence.sourceRevision);
-  assert.equal(evidence.methods.length, 12);
+  // every method the engine dispatches has a row, and the list is the registry's, not a number written here
+  assert.deepEqual(evidence.methods.map(entry => entry.method).sort(), Object.keys(input.source.methods).sort());
+  assert.ok(evidence.methods.length >= 27, 'the 24 methods of the first release and the robustness methods');
+  assert.ok(evidence.methods.every(entry => entry.numericTests.caseIds.length >= 1 && entry.numericTests.referenceCases.length >= 1));
   const analytic = evidence.methods.find(entry => entry.method === 'design.analytic');
-  assert.deepEqual(analytic.numericTests.caseIds, ['N01b']);
+  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c']);
   assert.match(analytic.numericTests.referenceCases[0].reference, /rpact::getDesignGroupSequential/);
   assert.match(analytic.numericTests.referenceCases[0].reference, /d_rp < 1e-4 && d_g4 < 1e-4/);
   assert.equal(analytic.version, VCR_ENGINE_METHODS['design.analytic'].version);
-  assert.ok(!evidence.methods.some(entry => entry.method === 'matching.evaluate'));
-  assert.ok(!evidence.methods.some(entry => entry.method === 'design.grid'));
+  // the twelve methods the deployed file used to leave out now have the case that compares each with something outside it
+  for (const [method, caseId] of [['matching.evaluate', 'N29'], ['design.grid', 'N06d'], ['profile.snapshot', 'N41a'], ['population.synthpop', 'N41b'],
+    ['comparator.negative_control', 'N37a'], ['comparator.tipping_point', 'N38a'], ['comparator.prognostic_adjustment', 'N39a']]) {
+    assert.ok(evidence.methods.find(entry => entry.method === method).numericTests.caseIds.includes(caseId), `${method} is held by ${caseId}`);
+  }
   for (const entry of evidence.methods) {
     for (const assumption of entry.assumptions) {
       const [, file, number] = /^(.*):(\d+)$/.exec(assumption.source);
@@ -100,7 +107,7 @@ test('R machine metadata singleton arrays preserve exact method identity when au
   assert.equal(unboxed, singletons, 'The real R report unboxes these registry fields');
   const original = JSON.stringify(input.report);
   const evidence = generate(input);
-  assert.equal(evidence.methods.length, 12);
+  assert.equal(evidence.methods.length, Object.keys(input.source.methods).length);
   assert.equal(evidence.ci.reportSha256, hash(Buffer.from(original)));
   assert.equal(JSON.stringify(input.report), original, 'Raw immutable evidence is never rewritten');
   assert.deepEqual(input.source.methods['comparator.evalue'].crossChecks, ['EValue']);
@@ -120,7 +127,7 @@ test('structural unknown-method refusal attempts never qualify numerical evidenc
   input.report = structuredClone(input.report);
   input.report.methodsByCase.E10a = ['design.analytic', 'nope.nope'];
   const evidence = generate(input);
-  assert.equal(evidence.methods.length, 12);
+  assert.equal(evidence.methods.length, Object.keys(input.source.methods).length);
   assert.ok(!evidence.methods.some(method => method.method === 'nope.nope'));
   assert.ok(evidence.methods.every(method => !method.numericTests.caseIds.includes('E10a')));
   input.report.methodsByCase.N01b = ['design.analytic', 'nope.nope'];
@@ -167,6 +174,32 @@ test('missing source references and structural-only method coverage cannot fabri
   assert.throws(() => generate(structural), /numeric_reference_missing/);
   const unmapped = await fixture(); unmapped.report.methodsByCase = { N01b: 'design.simulate' };
   assert.throws(() => generate(unmapped), /numeric_reference_missing/);
+});
+
+test('a dispatched method with no reference case fails the evidence and names itself; nothing is left "unmeasured" quietly', async () => {
+  // the only case that holds matching.evaluate did not run its method: the evidence is refused, naming it
+  const input = await fixture();
+  input.report = structuredClone(input.report);
+  delete input.report.methodsByCase.N29;
+  assert.throws(() => generate(input), error => error.message === 'method_reference_missing' && JSON.stringify(error.methods) === JSON.stringify(['matching.evaluate']));
+  // a method added to the registry (the domain snapshot, which the engine's start-up check holds equal to its handler table) has no
+  // entry yet: the generator fails until it has a reference case, whatever the report says about the cases that did run
+  const added = await fixture();
+  added.source = { ...added.source, methods: { ...added.source.methods, 'comparator.added_later': structuredClone(added.source.methods['comparator.evalue']) } };
+  added.report = structuredClone(added.report);
+  added.report.methods = structuredClone(added.source.methods);
+  assert.throws(() => generate(added), error => error.message === 'method_reference_missing' && JSON.stringify(error.methods) === JSON.stringify(['comparator.added_later']));
+});
+
+test('the real source: every method the engine dispatches has a reference case that is in the source, and every anchor is still in its case', async () => {
+  const testedSource = await actualSource();
+  const definitions = sourceCases(testedSource.caseFiles);
+  const methods = Object.keys(testedSource.methods);
+  assert.deepEqual(methodsWithoutReference(methods, definitions), []);
+  assert.deepEqual(referenceProblems(methods, definitions), []);
+  // the check is not vacuous: a registry with one method more fails it
+  assert.deepEqual(methodsWithoutReference([...methods, 'comparator.added_later'], definitions), ['comparator.added_later']);
+  assert.deepEqual([...new Set(referenceProblems(methods, new Map([['N29', { lines: ['an edited case'] }]])).map(problem => problem.caseId))], ['N29']);
 });
 
 test('GitHub success must belong to the same completed job, run, revision and immutable artifact', () => {

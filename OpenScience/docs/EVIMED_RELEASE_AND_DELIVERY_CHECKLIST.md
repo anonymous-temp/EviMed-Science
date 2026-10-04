@@ -169,7 +169,7 @@ pnpm smoke:deployment
    `ARG CRAN_SNAPSHOT_DATE`）——版本来自日期，日期不同就是另一组数字。
    - 构建：`docker compose --profile vcr build evimed-vcr-engine`。构建日志里要有
      `package lock verified: <N> packages`（构建自己的锁核对：缺包、版本不符、多出没列的包都会让构建失败）
-     和 `engine <版本> R 4.3.3 with <N> methods`（N 等于 `@evimed/domain` 里 `VCR_ENGINE_METHODS` 的个数，目前 28；方法注册表与 `@evimed/domain` 的快照一致）。
+     和 `engine <版本> R 4.3.3 with <N> methods`（N 等于 `@evimed/domain` 里 `VCR_ENGINE_METHODS` 的个数，数字不写死在这里；方法注册表与 `@evimed/domain` 的快照一致）。
    - 起来后带令牌请求 `/health`：`ok: true`、`rVersion` 为 4.3.3，`packageLockHash` 的前 12 位等于该 commit
      的 CI `vcr-engine` 作业里数值用例头一行 `vcr-engine … | lock <12 位>`——生产跑的就是 CI 测过的那组包。
    - **通过：** 三条都成立，且该 commit 的 `vcr-r-library`、`vcr-engine`、`vcr-seam` 三个作业是绿的。

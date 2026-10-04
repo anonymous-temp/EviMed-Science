@@ -93,7 +93,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES,
+  VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
   canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
 } from "@evimed/domain";
 
@@ -247,7 +247,9 @@ export function vcrReplicatesForJob(kind, scenario, asked) {
  */
 export function vcrScenarioColumns(scenario) {
   const out = new Set();
-  const COLUMN_KEYS = new Set(["treatmentColumn", "outcomeColumn", "weightColumn", "idColumn", "tstrOutcome", "column", "outcome", "target"]);
+  const COLUMN_KEYS = new Set(["treatmentColumn", "outcomeColumn", "weightColumn", "idColumn", "tstrOutcome", "column", "outcome", "target",
+    // robustness methods: the prognostic score is a column the engine reads, so it is judged and sealed like any other
+    "prognosticScoreColumn"]);
   const LIST_KEYS = new Set(["covariates", "propensityCovariates", "outcomeCovariates", "predictors", "on"]);
   /** @param {unknown} node @param {number} depth */
   const walk = (node, depth) => {
@@ -296,10 +298,20 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  *   `planned`: the stages the recomputation runs (null: not known — carried, never dropped).
  */
 export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null, planned = null } = {}) {
-  const entry = { ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)) };
+  const entry = { ...stage, conclusion: incoming.conclusion, measures: incoming.measures.map((measure) => String(object(measure).name)),
+    ...(incoming.notEstimableRule ? { notEstimableRule: incoming.notEstimableRule } : {}) };
   const stageResult = { ...stage, stale: false, conclusion: incoming.conclusion, counts: incoming.counts,
-    measures: incoming.measures, diagnostics: incoming.diagnostics, tables: incoming.tables };
-  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages: [entry], stageResults: { [stage.stage]: stageResult } } };
+    measures: incoming.measures, diagnostics: incoming.diagnostics, tables: incoming.tables,
+    ...(incoming.notEstimableRule ? { notEstimableRule: incoming.notEstimableRule } : {}) };
+  // --- robustness methods ---
+  // A robustness stage alone is not the comparison: estimable stress tests with nothing beside them read as limited until the stage that
+  // makes the comparison lands (or is said to be missing by the step that skipped it).
+  const robustness = new Set(VCR_ROBUSTNESS_STAGES);
+  if (!prior) {
+    const alone = robustness.has(stage.stage) && incoming.conclusion === "estimable";
+    return { ...incoming, ...(alone ? { conclusion: "limited" } : {}), diagnostics: { ...incoming.diagnostics, stages: [entry], stageResults: { [stage.stage]: stageResult } } };
+  }
+  // --- end robustness methods ---
 
   const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
@@ -335,6 +347,21 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const conclusions = kept.length ? [incoming.conclusion, ...kept.map((each) => each.conclusion)] : [prior.conclusion, incoming.conclusion];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
+  // --- robustness methods ---
+  // A robustness stage that is not estimable counts as limited once a stage that makes the comparison has landed; the comparison's own
+  // conclusion and its rule are the ones the object states. Without any such stage the object is what the robustness stages say, and
+  // never more than limited: the comparison itself has not been computed.
+  const making = [...kept, entry].filter((each) => !robustness.has(String(each.stage)));
+  let verdict = { conclusion: worst ?? null, notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null };
+  if (robustness.has(stage.stage) || kept.some((each) => robustness.has(String(each.stage)))) {
+    const counted = (/** @type {Record<string, any>} */ each) => (making.length && robustness.has(String(each.stage)) && each.conclusion === "not_estimable" ? "limited" : each.conclusion);
+    const settled = [...kept, entry].map(counted).filter(Boolean)
+      .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
+    const conclusion = !making.length && settled === "estimable" ? "limited" : settled;
+    const ruled = (making.length ? making : [...kept, entry]).find((each) => each.conclusion === "not_estimable" && each.notEstimableRule);
+    verdict = { conclusion, notEstimableRule: conclusion === "not_estimable" ? (ruled?.notEstimableRule ?? incoming.notEstimableRule ?? prior.notEstimableRule ?? null) : null };
+  }
+  // --- end robustness methods ---
   const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));
   for (const table of incoming.tables) tables.set(String(object(table).name), table);
   // What an earlier merge of this cycle dropped stays said, until the stage itself runs again.
@@ -345,8 +372,8 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {
-    conclusion: worst ?? null,
-    notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null,
+    conclusion: verdict.conclusion,
+    notEstimableRule: verdict.notEstimableRule,
     counts,
     measures: [...byName.values()],
     diagnostics,

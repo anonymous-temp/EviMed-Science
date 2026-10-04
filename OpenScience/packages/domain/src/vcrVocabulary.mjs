@@ -536,6 +536,13 @@ export const VCR_NOT_ESTIMABLE_RULES = frozen([
   // model fitted on the external controls. When either cannot be fitted (collinear covariates, fewer controls than the
   // model has coefficients) there is no estimate.
   'nuisance_model_not_estimable',
+  // --- robustness methods (2026-10-04): negative controls, tipping point, prognostic adjustment ---
+  // No negative control produced an estimate (every one has an arm with no event, or none was supplied in a usable form).
+  'negative_controls_not_estimable',
+  // The analysis's own primary estimate does not exist: an arm with no event or no person, a model that does not converge,
+  // a score with no spread. Nothing downstream of it (a tipping point, a marginal effect) is reported.
+  'primary_analysis_not_estimable',
+  // --- end robustness methods ---
   // Two the control plane derives before any job runs: the study's data tier
   // cannot reach the route (§3.2 table), or the route has no method in this
   // version (the model-predicted comparator) — a verdict in code, never a job.
@@ -551,6 +558,8 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
   too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
   nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
+  negative_controls_not_estimable: '没有一个阴性对照结局能得出估计（每个都有一组没有事件，或没有提供可用的数据）',
+  primary_analysis_not_estimable: '这项分析本身的主要估计不存在（某一组没有事件或没有人、模型没有收敛、预后评分没有变异）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
   route_unavailable_in_version: '这条对照路线在当前版本还没有可用的方法',
 })
@@ -671,6 +680,9 @@ export const VCR_JOB_KINDS = frozen([
   'accrual_forecast', 'map_prior', 'match_criteria',
   // appended (2026-10-04): the comparator-effect methods
   'weighted_cox_comparator', 'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
+  // --- appended (2026-10-04): the robustness methods ---
+  'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
+  // --- end robustness methods ---
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
@@ -786,6 +798,43 @@ export const VCR_ESS_FLOOR = 10
  */
 export const VCR_COX_FEW_EVENTS = 10
 export const VCR_SUPPORT_CEILING = 0.1
+// --- robustness methods (2026-10-04) ---
+/**
+ * The fewest estimable negative-control outcomes an empirical null is fitted on.
+ * The null has two parameters (a mean and a spread) and the spread is estimated
+ * from the controls themselves: the relative standard error of a standard
+ * deviation from k independent values is about 1 / sqrt(2 (k - 1)), 13% at 30
+ * and 20% at 13, and the literature's own guidance for empirical calibration is
+ * about 30 to 50 controls (Schuemie et al. 2014, 2018). Below this the result
+ * reports each control and a bias screen and says the set is too small to
+ * calibrate; it never reports a calibrated interval, which needs positive
+ * controls the engine does not have.
+ */
+export const VCR_NEGATIVE_CONTROL_CALIBRATION_MIN = 30
+/** What the bias screen says about one negative-control outcome (deterministic, from its interval). */
+export const VCR_NEGATIVE_CONTROL_VERDICTS = frozen(['signals_bias', 'consistent_with_null', 'uninformative'])
+export const VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH = Object.freeze({
+  signals_bias: '提示残余偏倚（区间不含无效值）',
+  consistent_with_null: '与无效值一致',
+  uninformative: '信息不足（区间宽到容得下主要结局的效应大小）',
+})
+/**
+ * What regulators have qualified of prognostic covariate adjustment: continuous
+ * outcomes only (the EMA qualification opinion on PROCOVA, CHMP 15 September 2022).
+ * Every result of `comparator.prognostic_adjustment` carries this word in
+ * `diagnostics.regulatoryStatus.qualification` so the page can say it; the engine
+ * reads it from its snapshot, and a test holds the two equal.
+ */
+export const VCR_PROGNOSTIC_QUALIFICATION = 'none_beyond_continuous'
+export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '二分类和事件时间终点的预后协变量调整，目前没有监管机构认可：EMA 2022 年的资格认定意见只覆盖连续终点。'
+/**
+ * The stages of a comparison that stress it rather than make it: a bias screen with negative controls and a tipping-point analysis of
+ * the missing outcomes. A stress test that cannot be computed (no control has an estimate) leaves the comparison as estimable as it was
+ * but limited, and says which analysis is missing; the stage's own result stays whole under `diagnostics.stageResults`.
+ */
+export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point'])
+export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析' })
+// --- end robustness methods ---
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
   atRiskAbsolute: 2, atRiskRelative: 0.05, events: 0.05, median: 0.05, logHazardRatio: 0.05,

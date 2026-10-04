@@ -392,6 +392,33 @@ describe("对照", () => {
     expect(within(diagnostics).getByText("最大权重").closest("div")).toHaveTextContent("1.04");
   });
 
+  it("lists the robustness numbers and says beside them that no regulator has qualified a prognostic adjustment, and that an analysis could not be computed", async () => {
+    const raw = fixture("ev201/comparator.json");
+    const value = (n: number) => ({ ...raw.diagnostics[1].value, value: n, interval: null, mcse: null, unit: null });
+    raw.robustness = {
+      rows: [{ key: "marginal_risk_difference", label: "边际风险差", value: value(0.11) }, { key: "marginal_odds_ratio", label: "边际比值比（OR）", value: value(1.9) }],
+      notes: ["阴性对照结局没有算出：没有一个阴性对照结局能得出估计"],
+      qualification: "二分类和事件时间终点的预后协变量调整，目前没有监管机构认可：EMA 2022 年的资格认定意见只覆盖连续终点。",
+    };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    const rows = await found(container, "[data-vcr-robustness]");
+    expect(within(rows.closest("section") as HTMLElement).getByText("稳健性与预后校正分析")).toBeInTheDocument();
+    expect(within(rows).getByText("边际风险差").closest("div")).toHaveTextContent("0.11");
+    expect(within(rows).getByText("边际比值比（OR）").closest("div")).toHaveTextContent("1.9");
+    const sentence = within(rows.closest("section") as HTMLElement).getByText(/目前没有监管机构认可/);
+    expect(sentence).toHaveAttribute("data-vcr-qualification");
+    expect(sentence.closest("section")).toBe(rows.closest("section"));
+    expect(screen.getByText("阴性对照结局没有算出：没有一个阴性对照结局能得出估计")).toBeInTheDocument();
+  });
+
+  it("has no robustness section when the study declared none", async () => {
+    const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-robustness]")).toBeNull();
+    expect(screen.queryByText("稳健性与预后校正分析")).toBeNull();
+  });
+
   it("is the step's waiting line on an empty study, not a rail of routes nobody ran", async () => {
     const { container } = draw(<ComparatorTab studyId={EMPTY_STUDY_ID} study={emptyStudy()} />);
     expect(await screen.findByText(VCR_STEP_WAITING.comparator)).toBeInTheDocument();
