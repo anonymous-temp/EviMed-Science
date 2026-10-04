@@ -1476,7 +1476,11 @@ test("buildRuntimeLaunchPlan allows production network egress with opt-in and po
   assert.ok(plan.args.includes("bridge"));
 });
 
-test("buildRuntimeLaunchPlan requires matching release provenance in production", () => {
+test("buildRuntimeLaunchPlan never refuses a production launch over release provenance, it carries the finding", () => {
+  // Owner ruling 2026-10-04: the release manifest is our own evidence about the
+  // deployment, so a missing or disagreeing one may fail readiness and be
+  // logged, and may not stop a researcher from starting a runtime. This used to
+  // throw 503 `release_manifest_missing` / `release_manifest_mismatch`.
   const base = {
     production: true,
     runtimeSandboxMode: "docker",
@@ -1488,19 +1492,57 @@ test("buildRuntimeLaunchPlan requires matching release provenance in production"
     runtimePidsLimit: 64,
     allowRuntimeHostNetwork: false,
   };
-  assert.throws(
-    () => buildRuntimeLaunchPlan(base, project, 49152),
-    (err) => err?.code === "release_manifest_missing",
+  const missing = buildRuntimeLaunchPlan(base, project, 49152);
+  assert.deepEqual(missing.releaseProvenance, { code: "release_manifest_missing" });
+  assert.equal(missing.args[0], "run", "the launch is built as usual");
+  assert.ok(missing.args.includes("evimed-runtime-dsh:test"), "the configured image is the one launched");
+
+  const mismatched = buildRuntimeLaunchPlan(
+    { ...base, ...dshReleaseConfig, runtimeContainerImage: "evimed-runtime-dsh:mismatch" },
+    project,
+    49152,
   );
-  assert.throws(
-    () =>
-      buildRuntimeLaunchPlan(
-        { ...base, ...dshReleaseConfig, runtimeContainerImage: "evimed-runtime-dsh:mismatch" },
-        project,
-        49152,
-      ),
-    (err) => err?.code === "release_manifest_mismatch",
-  );
+  assert.deepEqual(mismatched.releaseProvenance, { code: "release_manifest_mismatch", field: "runtimeContainerImage" });
+  assert.ok(mismatched.args.includes("evimed-runtime-dsh:mismatch"), "the operator's image is launched, not the manifest's");
+
+  // Every row the manifest check compares is still compared; only what happens
+  // next changed. A drifting kernel version names the field.
+  const drifted = buildRuntimeLaunchPlan({ ...base, ...dshReleaseConfig, dshVersion: "9.9.9-alpha.1" }, project, 49152);
+  assert.deepEqual(drifted.releaseProvenance, { code: "release_manifest_mismatch", field: "dshVersion" });
+
+  // A deployment that agrees with its manifest has nothing to report, and a
+  // non-production one is never held to a manifest at all.
+  assert.equal(buildRuntimeLaunchPlan({ ...base, ...dshReleaseConfig }, project, 49152).releaseProvenance, null);
+  assert.equal(buildRuntimeLaunchPlan({ ...base, production: false }, project, 49152).releaseProvenance, null);
+});
+
+test("a launch that went ahead without a verified release is logged once and counted, and nothing can fail it", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "os-release-unverified-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const ledgerProject = { ...project, rootDir: root, metaDir: path.join(root, ".openscience") };
+  await mkdir(ledgerProject.metaDir, { recursive: true });
+  const manager = new RuntimeManager({ runtimeIdleTimeoutMs: 0, releaseId: "release-under-test" });
+  assert.deepEqual(manager.statsAll().unverifiedReleaseLaunches, []);
+  await manager.recordUnverifiedRelease(ledgerProject, { code: "release_manifest_mismatch", field: "dshVersion" });
+  await manager.recordUnverifiedRelease(ledgerProject, { code: "release_manifest_mismatch", field: "uvVersion" });
+  await manager.recordUnverifiedRelease(ledgerProject, { code: "release_manifest_missing" });
+  assert.deepEqual(manager.statsAll().unverifiedReleaseLaunches, [
+    { code: "release_manifest_mismatch", launches: 2 },
+    { code: "release_manifest_missing", launches: 1 },
+  ]);
+  const events = (await readFile(path.join(ledgerProject.metaDir, "runtime.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(events.length, 3, "one structured event per launch");
+  assert.deepEqual(events.map((event) => [event.event, event.code, event.field ?? null]), [
+    ["release_provenance_unverified", "release_manifest_mismatch", "dshVersion"],
+    ["release_provenance_unverified", "release_manifest_mismatch", "uvVersion"],
+    ["release_provenance_unverified", "release_manifest_missing", null],
+  ]);
+  assert.equal(events[0].releaseId, "release-under-test");
+  assert.equal(events[0].userId, "alice");
+  // The ledger is unwritable (a project directory that is gone): the launch
+  // still proceeds, because a log line is never a reason to refuse one.
+  await rm(root, { recursive: true, force: true });
+  await assert.doesNotReject(manager.recordUnverifiedRelease(ledgerProject, { code: "release_manifest_missing" }));
 });
 
 test("buildRuntimeLaunchPlan refuses a host runtime in production despite the opt-in", () => {

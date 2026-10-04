@@ -355,6 +355,25 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   const socketPath = config.runtimeControllerSocket;
   let ownedSocket = null;
 
+  /** One line per launch that went ahead although this controller's release
+   *  manifest disagrees with its configuration. The control plane records the
+   *  same fact on the project's runtime ledger; the controller has no ledger of
+   *  its own, so this line is its record. The finding names a field, never a
+   *  value, and it cannot fail the launch it describes. */
+  function logUnverifiedRelease(project, finding) {
+    try {
+      process.stderr.write(`${JSON.stringify({
+        at: new Date().toISOString(),
+        event: "runtime.release_provenance_unverified",
+        code: finding.code,
+        ...(finding.field ? { field: finding.field } : {}),
+        releaseId: String(config.releaseId ?? ""),
+        userId: project.userId,
+        projectId: project.id,
+      })}\n`);
+    } catch { /* a log line is never a reason to refuse a launch */ }
+  }
+
   function withProjectOperation(project, operation) {
     const key = `${project.userId}:${project.id}`;
     const previous = projectOperations.get(key) ?? Promise.resolve();
@@ -502,6 +521,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     }
     const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig,
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
+    if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -635,16 +655,23 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       if (req.method === "GET" && url.pathname === "/v1/health") {
         const docker = dockerInfo(config);
         const limits = runtimeCapacityLimits(config);
-        if (config.releaseManifestError) {
-          throw controllerFailure(503, config.releaseManifestError, "Runtime controller release manifest is invalid.");
-        }
-        if (config.production && !config.releaseManifest) {
-          throw controllerFailure(503, "release_manifest_missing", "Runtime controller release manifest is required.");
-        }
+        // The manifest this controller was started with is our own evidence
+        // about the release, not a condition of serving it. A missing or
+        // unreadable one used to answer 503 here, and the control plane asks
+        // this route before every launch, so it stopped every runtime start
+        // (owner ruling 2026-10-04). It is reported instead: the control
+        // plane's readiness fails on it (`readinessRuntime`), which is what
+        // holds a release switch, and the launches go on.
+        const releaseManifest = config.releaseManifestError
+          ? { ok: false, code: config.releaseManifestError }
+          : config.production && !config.releaseManifest
+            ? { ok: false, code: "release_manifest_missing" }
+            : { ok: true };
         sendJson(res, 200, {
           data: {
             protocolVersion: RUNTIME_CONTROLLER_PROTOCOL_VERSION,
             releaseId: config.releaseId,
+            releaseManifest,
             dockerMajor: docker.major,
             maxRunningRuntimes: limits.maxGlobal,
             maxRunningRuntimesPerUser: limits.maxPerUser,

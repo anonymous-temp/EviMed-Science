@@ -121,6 +121,8 @@ test('valid fixed deployment binds immutable catalogue and artifact identities t
       dataDir: f.root
     });
     assert.equal(loaded.status, 'configured');
+    assert.equal(loaded.policyState, 'current');
+    assert.deepEqual(loaded.recordedPolicy, manifest.policy);
     assert.equal(loaded.sourceDigest, sha(await fs.readFile(f.file)));
     assert.equal(loaded.qualificationRoot, path.join(f.root, '.openscience', 'extension-qualification'));
     assert.equal(loaded.surfaces.get('cowork-portable').browser, false);
@@ -142,10 +144,10 @@ test('valid fixed deployment binds immutable catalogue and artifact identities t
     await f.close();
   }
 });
-test('descriptor drift, stale source policy, duplicate entries, authority fields and broad file modes refuse the whole extension manifest', async () => {
+test('descriptor drift, malformed policy, duplicate entries, authority fields and broad file modes refuse the whole extension manifest', async () => {
   const f = await fixture();
   try {
-    for (const change of [m => m.admittedArtifacts[0].artifactDigest = 'sha256:' + '0'.repeat(64), m => m.policy.permissionProfileRevision = 'sha256:' + '0'.repeat(64), m => m.catalogue.push({
+    for (const change of [m => m.admittedArtifacts[0].artifactDigest = 'sha256:' + '0'.repeat(64), m => m.policy.permissionProfileRevision = 'not-a-digest', m => delete m.policy.adapterRevision, m => m.catalogue.push({
       ...m.catalogue[0]
     }), m => m.catalogue.push({...m.catalogue[0],id:'alias-pin'}), m => m.catalogue[0].qualified = true, m => m.admittedDescriptors[0].env = {
       secret: 'must-not-load'
@@ -204,12 +206,56 @@ test('native HTML asset routing changes invalidate the permission profile identi
   assert.notEqual(after.permissionProfileRevision,before.permissionProfileRevision);
 });
 
-test('owner-only project and real study role boundaries invalidate previously admitted deployment policy', async t => {
+test('a deployment written under other source is usable and labelled stale, never unavailable', async () => {
+  // Owner ruling 2026-10-04. The policy digest covers ~90 source files (server.mjs and config.mjs among them), so a
+  // file written for one release was refused by the next: the catalogue went empty, selections stopped reconciling and
+  // the tool gateway answered 503. The digests, bonds and allow-list still refuse a bad file; the policy only labels.
+  const f = await fixture();
+  try {
+    const manifest = fixtureManifest();
+    manifest.policy = { adapterRevision: 'sha256:' + '3'.repeat(64), permissionProfileRevision: 'sha256:' + '4'.repeat(64) };
+    await f.write(manifest);
+    const loaded = loadExtensionDeployment({ dataDir: f.root });
+    assert.equal(loaded.status, 'configured');
+    assert.equal(loaded.errorCode, null);
+    assert.equal(loaded.policyState, 'stale');
+    assert.deepEqual(loaded.recordedPolicy, manifest.policy, 'the file keeps saying which source it was written under');
+    assert.deepEqual(loaded.policy, currentExtensionSourcePolicy(), 'and the deployed source is reported beside it');
+    assert.equal(loaded.catalogue.length, 1, 'the catalogue is the file\'s, whole');
+    assert.equal(loaded.admittedDescriptors.length, 1);
+    assert.equal(loaded.admittedArtifacts.length, 1);
+    // A generation can still be built, from the code that is deployed now.
+    const image = 'sha256:' + '9'.repeat(64), identity = deploymentGenerationIdentities(loaded, image);
+    assert.equal(identity.baseRuntimeImageDigest, image);
+    assert.deepEqual({ adapterRevision: identity.adapterRevision, permissionProfileRevision: identity.permissionProfileRevision }, currentExtensionSourcePolicy());
+    assert.equal(deploymentProofIdentity(loaded, loaded.catalogue[0], image).runtimeImageDigest, image);
+    // What still refuses: a file that is not a deployment, whatever its policy says.
+    for (const change of [m => m.admittedArtifacts[0].artifactDigest = 'sha256:' + '0'.repeat(64), m => m.dshVersion = '0.2.0']) {
+      const broken = fixtureManifest();
+      broken.policy = manifest.policy;
+      change(broken);
+      await f.write(broken);
+      assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable');
+    }
+    // And no file at all is still nothing configured: there is no allow-list to admit anything from.
+    await fs.unlink(f.file);
+    const missing = loadExtensionDeployment({ dataDir: f.root });
+    assert.equal(missing.status, 'unconfigured');
+    assert.equal(missing.policyState, null);
+    assert.deepEqual(missing.catalogue, []);
+    assert.throws(() => deploymentGenerationIdentities(missing, image), { code: 'product_state_unavailable' });
+  } finally {
+    await f.close();
+  }
+});
+
+test('changes to the owner-only project and real study role boundaries re-label the deployment, they do not take it away', async t => {
   const f = await fixture();
   try {
     await f.write(fixtureManifest());
     const loaded = loadExtensionDeployment({ dataDir: f.root });
     assert.equal(loaded.status, 'configured');
+    assert.equal(loaded.policyState, 'current');
     const before = currentExtensionSourcePolicy();
     const read = syncFs.readFileSync;
     let changed = '';
@@ -223,13 +269,19 @@ test('owner-only project and real study role boundaries invalidate previously ad
       'apps/server/src/vcrRoutes.mjs', 'apps/server/src/vcrStoreBase.mjs', 'apps/server/src/vcrStore.mjs',
       'apps/server/src/vcrMembers.mjs', 'apps/server/src/vcrAccess.mjs', 'packages/domain/src/vcrVocabulary.mjs']) {
       changed = source;
+      // The digest still sees the change, which is what makes the label true.
       assert.notEqual(currentExtensionSourcePolicy().permissionProfileRevision, before.permissionProfileRevision, source);
-      assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable', source);
-      assert.throws(() => deploymentGenerationIdentities(loaded, 'sha256:' + '9'.repeat(64)),
-        { code: 'product_state_unavailable' }, source);
+      const reloaded = loadExtensionDeployment({ dataDir: f.root });
+      assert.equal(reloaded.status, 'configured', source);
+      assert.equal(reloaded.policyState, 'stale', source);
+      assert.deepEqual(reloaded.recordedPolicy, before, source);
+      assert.equal(reloaded.catalogue.length, 1, source);
+      const identity = deploymentGenerationIdentities(loaded, 'sha256:' + '9'.repeat(64));
+      assert.equal(identity.permissionProfileRevision, currentExtensionSourcePolicy().permissionProfileRevision, source);
+      assert.notEqual(identity.permissionProfileRevision, before.permissionProfileRevision, source);
     }
     changed = '';
     assert.equal(currentExtensionSourcePolicy().permissionProfileRevision, before.permissionProfileRevision);
-    assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'configured');
+    assert.equal(loadExtensionDeployment({ dataDir: f.root }).policyState, 'current');
   } finally { await f.close(); }
 });

@@ -119,7 +119,8 @@ export async function createDisposableNativeExtensionPreparer(options, policy) {
   if (root !== path.resolve(options.profileRoot) || (await readdir(root)).length !== 0) throw new Error('extension_preparer_profile_not_empty')
   const installationAnchor = await realpath(options.installationAnchor)
   const installation = JSON.parse(await readFile(installationAnchor, 'utf8'))
-  if (installation.version !== '0.1.7-rc.2') throw new Error('extension_preparer_kernel_version_invalid')
+  // The seam manifest names the kernel its contents were verified against, and a test holds it equal to the pin.
+  if (installation.version !== SEAMS.dsh) throw new Error('extension_preparer_kernel_version_invalid')
   const home = path.join(root, 'home')
   const profile = path.join(root, 'profile')
   await mkdir(home, { mode: 0o700 }); await mkdir(profile, { mode: 0o700 })

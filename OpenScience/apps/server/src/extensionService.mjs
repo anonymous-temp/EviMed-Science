@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson, canonicalExtensionCoordinate, validateExtensionInstallRequest, qualifyExtensionProof, EXTENSION_EXECUTION_CLASSES, ALL_ERROR_CODES } from '@evimed/domain';
+import { canonicalJson, canonicalExtensionCoordinate, validateExtensionInstallRequest, extensionEvidenceState, EXTENSION_EXECUTION_CLASSES, ALL_ERROR_CODES } from '@evimed/domain';
 import { ProductDocuments, ProductJobs } from './productStore.mjs';
 import { migrateProductStore, productInteger } from './productPersistence.mjs';
 import { HttpError } from './security.mjs';
 import { ExtensionAccess, extensionRequestObject, extensionIdentifier, extensionArray } from './extensionAccess.mjs';
+import { readQualificationLabel } from './extensionQualification.mjs';
 
 const hash=text=>createHash('sha256').update(text).digest('hex');
 const missing=()=>new HttpError(404,'not_found','Extension record not found.');
@@ -11,11 +12,14 @@ const digest=value=>`sha256:${hash(canonicalJson(value))}`;
 const RESERVED=/^(?:ownerid|userid|role|qualified|proof|apikey|token|secret|password|credentials|hostpath|env|cmd|command|url|baseurl|endpoint|path)$/i;
 /** Persistent metadata only. Native installation, qualification authority and activation are separate trusted workers. */
 export class ExtensionService {
-  /** @param {any} database @param {{catalogue?:any[],access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,connectionList?:any,catalogueGeneratedAt?:string}} options */
-  constructor(database,{catalogue=[],access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,connectionList=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z'}={}) {
+  /** `policyState` is the deployment file's own label ('current' | 'stale' | null); `report` hears a qualification record that could not be read as a record, never the caller's concern.
+   * @param {any} database @param {{catalogue?:any[],access?:ExtensionAccess,proofAuthority?:any,cancelPreparation?:any,connectionList?:any,catalogueGeneratedAt?:string,policyState?:string|null,report?:((finding:{catalogueId:string,code:string})=>void)|null}} options */
+  constructor(database,{catalogue=[],access=new ExtensionAccess(),proofAuthority=null,cancelPreparation=null,connectionList=null,catalogueGeneratedAt='1970-01-01T00:00:00.000Z',policyState=null,report=null}={}) {
     this.database=database;this.documents=new ProductDocuments(database);this.jobs=new ProductJobs(database);this.access=access;
     this.proofAuthority=proofAuthority;this.cancelPreparation=cancelPreparation;this.catalogueGeneratedAt=catalogueGeneratedAt;
-    this.connectionList=connectionList;
+    this.connectionList=connectionList;this.policyState=policyState;this.report=report;
+    /** Last time each unreadable record was reported: a polled page must not write one line per request. @type {Map<string,number>} */
+    this.reported=new Map();
     this.entries=new Map();
     for(const source of catalogue) {
       const row=structuredClone(source);extensionIdentifier(row.id);canonicalExtensionCoordinate(row.coordinate);
@@ -31,14 +35,24 @@ export class ExtensionService {
     const entry=[...this.entries.values()].find(row=>canonicalExtensionCoordinate(row.coordinate)===pin);
     if(!entry)throw missing();return entry;
   }
-  /** Never infer qualification from a catalogue flag or installation outcome. @param {any} entry */
+  /** Never infer qualification from a catalogue flag or installation outcome. The record is a LABEL, so reading it never
+   * fails the caller (owner ruling 2026-10-04): an unreadable, unsigned or malformed record is shown as no record, a
+   * record for an earlier identity as stale, one with unmet cases as incomplete, and a deployment file written under
+   * other source (`policyState` 'stale') cannot out-rank its own staleness. It used to throw 503 for a bad record and
+   * 500 for a stale one, on every route that lists extensions. @param {any} entry */
   async evidence(entry) {
-    if(!this.proofAuthority)return{evidenceState:'source-assessed',qualification:null};
-    const trusted=await this.proofAuthority(entry);
-    if(!trusted?.currentIdentity||trusted.currentIdentity.packageIntegrity!==entry.integrity||trusted.currentIdentity.executionClass!==entry.executionClass)return{evidenceState:'source-assessed',qualification:null};
-    try { const result=qualifyExtensionProof(trusted.receipt,trusted.currentIdentity,{...trusted.authority,sha256Hex:hash});
-      return{evidenceState:'saas-qualified',qualification:{receiptDigest:result.receiptDigest}};
-    } catch(error) { if(error?.code?.startsWith('extension_'))return{evidenceState:'source-assessed',qualification:null};throw error; }
+    const outcome=await readQualificationLabel(this.proofAuthority?()=>this.proofAuthority(entry):null,{
+      accepts:trusted=>Boolean(trusted.currentIdentity)&&trusted.currentIdentity.packageIntegrity===entry.integrity&&trusted.currentIdentity.executionClass===entry.executionClass,
+      onFailure:error=>this.reportUnreadable(entry,error)});
+    const state=outcome.state==='qualified'&&this.policyState==='stale'?'stale':outcome.state;
+    return{evidenceState:extensionEvidenceState(state),qualification:state==='qualified'?{receiptDigest:outcome.receiptDigest}:null};
+  }
+  /** Once a minute per record and code at most. @param {any} entry @param {any} error */
+  reportUnreadable(entry,error) {
+    if(!this.report)return;
+    const code=typeof error?.code==='string'?error.code:'qualification_unreadable',key=`${entry.id}\0${code}`,now=Date.now();
+    if(now-(this.reported.get(key)??0)<60000)return;
+    this.reported.set(key,now);this.report({catalogueId:entry.id,code});
   }
   /** @param {{query?:string}} options */
   async catalogue({query=''}={}) {
@@ -46,7 +60,7 @@ export class ExtensionService {
     const items=[];
     for(const entry of this.entries.values())if(`${entry.title} ${entry.id}`.toLowerCase().includes(query.toLowerCase()))items.push({id:entry.id,title:entry.title,
       coordinate:entry.coordinate,executionClass:entry.executionClass,integrity:entry.integrity,settingsSchema:entry.settingsSchema,...await this.evidence(entry)});
-    return{items,generatedAt:this.catalogueGeneratedAt};
+    return{items,generatedAt:this.catalogueGeneratedAt,...(this.policyState?{policyState:this.policyState}:{})};
   }
   /** Only current actor/project references are listed; never credential values. @param {any} user @param {any} input */
   async connections(user,input) {

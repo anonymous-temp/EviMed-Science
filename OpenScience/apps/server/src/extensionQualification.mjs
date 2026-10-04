@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import path from "node:path";
-import { canonicalJson, extensionProofDigest, qualifyExtensionProof, validateExtensionProofIdentity } from "@evimed/domain";
+import { canonicalJson, extensionProofDigest, extensionQualificationStateOf, qualifyExtensionProof, validateExtensionProofIdentity } from "@evimed/domain";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 
 const domain = "evimed-extension-qualification-v1\0";
@@ -57,5 +57,37 @@ export class ExtensionQualification {
     const authority = { sha256Hex: hash, trustedReceiptDigests: new Set([receiptDigest]), trustedSurfaces };
     qualifyExtensionProof(receipt, currentIdentity, authority);
     return { receipt, currentIdentity, authority };
+  }
+}
+
+/**
+ * One reading of the protected qualification record as a LABEL. Our own evidence about the product may label, be
+ * logged, or fail a readiness check; it never refuses, hides or 500s a user's operation (owner ruling 2026-10-04).
+ * So this never throws: a record that is absent, unreadable, unsigned, malformed or another package's is `unqualified`,
+ * exactly as if there were none; a genuine record for an earlier identity is `stale`, and one whose cases are unmet is
+ * `incomplete`. `onFailure` hears only the first kind -- the record could not be read as a record -- and a failing
+ * `onFailure` is ignored.
+ *
+ * `load` is the trusted proof reader (`proofAuthority`, or null when the deployment has none). `identity` is the
+ * identity the record must be for, or null to take the one the reader observed. `accepts` is a pre-check on what the
+ * reader returned (a record for another package is not this package's record).
+ *
+ * @param {null | (() => Promise<any>)} load
+ * @param {{ identity?: any, accepts?: (trusted: any) => boolean, onFailure?: (error: unknown) => void }} [options]
+ * @returns {Promise<{ state: "qualified" | "unqualified" | "stale" | "incomplete", receiptDigest?: string }>}
+ */
+export async function readQualificationLabel(load, { identity = null, accepts = () => true, onFailure = () => {} } = {}) {
+  if (!load) return { state: "unqualified" };
+  try {
+    const trusted = await load();
+    if (!trusted || !accepts(trusted)) return { state: "unqualified" };
+    const result = qualifyExtensionProof(trusted.receipt, identity ?? trusted.currentIdentity, { ...trusted.authority, sha256Hex: hash });
+    return { state: "qualified", receiptDigest: result.receiptDigest };
+  } catch (error) {
+    const state = extensionQualificationStateOf(error);
+    if (state === "unqualified") {
+      try { onFailure(error); } catch { /* a log line is never a reason to fail the reader's caller */ }
+    }
+    return { state };
   }
 }

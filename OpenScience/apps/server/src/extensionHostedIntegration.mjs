@@ -3,7 +3,7 @@ import { canonicalJson } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { deploymentGenerationIdentities, deploymentProofIdentity } from './extensionDeployment.mjs';
 import { ExtensionQualification } from './extensionQualification.mjs';
-import { ExtensionGenerationService } from './extensionGenerationService.mjs';
+import { ExtensionGenerationService, extensionMountIdentity } from './extensionGenerationService.mjs';
 import { ExtensionGenerationWorker } from './extensionGenerationWorker.mjs';
 import { ExtensionPreparationWorker } from './extensionPreparationWorker.mjs';
 import { ExtensionOperationService } from './extensionOperationService.mjs';
@@ -52,7 +52,10 @@ export function composeExtensionExecution({config,database,store,agentRuns,runti
       if (state.payload.phase !== 'rolled-back' && !terminalKnownRuntime) {
         const actual = await database.transaction(client => database.withTransactionClient(client,
           () => generations.snapshot({ id: candidate.scope.actorId, accountCreatedAt: candidate.scope.actorAccountCreatedAt }, project.id, client)));
-        return actual.manifest.reference.generationHash === candidate.reference.generationHash ? candidate : null;
+        // What is mounted is compared, not the evidence it was assembled under: a release that moves the adapter or
+        // permission source revisions, or a re-measured qualification, must not unmount an extension that is still
+        // exactly what the project selected (owner ruling 2026-10-04).
+        return extensionMountIdentity(actual.manifest) === extensionMountIdentity(candidate) ? candidate : null;
       }
       // A terminal rollback keeps the observed last-good runtime usable for
       // ordinary research. This is availability, never operation authority:
@@ -66,7 +69,7 @@ export function composeExtensionExecution({config,database,store,agentRuns,runti
         () => generations.ordinaryRuntimeBaseline(project, client)));
       if (candidate.scope.ownerId !== project.userId || candidate.scope.projectId !== project.id
         || candidate.scope.ownerAccountCreatedAt !== baseline.owner.accountCreatedAt || candidate.scope.projectCreatedAt !== baseline.owner.projectCreatedAt
-        || ['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => baseline.identity[key] !== candidate.identity[key])
+        || baseline.identity.baseRuntimeImageDigest !== candidate.identity.baseRuntimeImageDigest
         || canonicalJson(baseline.personal) !== canonicalJson(candidate.projection.personal)
         || canonicalJson([baseline.legacy]) !== canonicalJson(candidate.projection.plugins.filter(plugin => plugin.compatibility === 'legacy-citation-v1'))) return null;
       await generations.verifyManifest(project, candidate.reference);

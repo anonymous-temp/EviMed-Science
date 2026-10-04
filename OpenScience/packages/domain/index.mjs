@@ -33,6 +33,8 @@ export const DOMAIN_VERSION = '0.1.0'
 
 export {
   EXTENSION_EXECUTION_CLASSES,
+  EXTENSION_SUPPORTED_DSH_VERSION,
+  EXTENSION_QUALIFICATION_STATES,
   EXTENSION_EVIDENCE_STATES,
   EXTENSION_APPLY_PHASES,
   EXTENSION_PRODUCT_KINDS,
@@ -49,6 +51,8 @@ export {
   extensionProofDigest,
   extensionProofAdapterRevision,
   qualifyExtensionProof,
+  extensionQualificationStateOf,
+  extensionEvidenceState,
 } from './src/extensions.mjs'
 
 export { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from './src/accountPolicy.mjs'

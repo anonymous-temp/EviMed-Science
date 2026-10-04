@@ -200,6 +200,11 @@ host code uses an admitted isolated tool/viewer boundary or stays unsupported.
 Only independently measured artifact/adapter/runtime/permission combinations
 may be offered as SaaS qualified. Personal imports cannot grant permissions,
 shadow required methods, supply qualification flags or export connection secrets.
+"SaaS qualified" is a label the extension centre shows, never a gate (owner ruling
+2026-10-04): a missing, stale or unreadable qualification record, or a deployment
+manifest written under other source, may not hide, disable or fail an installed,
+admitted extension. The allow-list, package and artifact digests, the owned
+preparation job and the live probe with rollback are what still refuse.
 
 ## Working conventions
 

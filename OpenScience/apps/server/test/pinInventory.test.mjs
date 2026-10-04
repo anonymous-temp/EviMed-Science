@@ -19,14 +19,35 @@ import test from "node:test";
 
 import { RULES, checkPinInventory, classify } from "../../../scripts/ops/check-pin-inventory.mjs";
 
-test("extension proof contracts and preparation anchors are pins, not historical evidence", () => {
+test("the extension contracts state the kernel they are written for once, and everything else derives it", async () => {
   for (const file of [
-    "OpenScience/apps/server/src/extensionDeployment.mjs", "OpenScience/apps/server/src/extensionGenerationService.mjs",
-    "OpenScience/packages/domain/src/extensions.mjs", "OpenScience/packages/domain/test/extensions.test.mjs",
-    "OpenScience/packages/harness-port/src/extensionPreparation.mjs",
+    "OpenScience/packages/domain/src/extensions.mjs",
     "OpenScience/scripts/ops/test/prepareExtensionAcceptance.test.mjs",
   ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.1.7-rc.2'" }, { pin: "0.1.7-rc.2" })?.kind, "pin", file);
+  // The three modules that used to carry their own copy no longer have a rule that would classify one.
+  for (const file of [
+    "OpenScience/apps/server/src/extensionDeployment.mjs", "OpenScience/apps/server/src/extensionGenerationService.mjs",
+    "OpenScience/packages/harness-port/src/extensionPreparation.mjs",
+  ]) assert.equal(classify({ file, line: 1, text: "dshVersion: '0.1.7-rc.2'" }, { pin: "0.1.7-rc.2" }), null, file);
   assert.equal(classify({ file: "OpenScience/packages/harness-port/src/unreviewedPreparation.mjs", line: 1, text: "0.1.7-rc.2" }), null);
+
+  // And they really do derive it: no prerelease literal, and a read of the one definition.
+  const root = new URL("../../../", import.meta.url);
+  const read = (file) => readFile(new URL(file, root), "utf8");
+  for (const [file, definition] of [
+    ["apps/server/src/extensionDeployment.mjs", "EXTENSION_SUPPORTED_DSH_VERSION"],
+    ["apps/server/src/extensionGenerationService.mjs", "EXTENSION_SUPPORTED_DSH_VERSION"],
+    ["packages/harness-port/src/extensionPreparation.mjs", "SEAMS.dsh"],
+  ]) {
+    const source = await read(file);
+    assert.ok(source.includes(definition), `${file} no longer reads ${definition}`);
+    assert.doesNotMatch(source, /\d+\.\d+\.\d+-(?:rc|alpha|beta)\.\d+/, `${file} restates a kernel version instead of deriving it`);
+  }
+  // The two definitions are the pin: the domain constant (held by its own test as well) and the seam manifest.
+  const pin = JSON.parse(await read("deps-version.json")).dsh.version;
+  const { EXTENSION_SUPPORTED_DSH_VERSION } = await import("@evimed/domain");
+  assert.equal(EXTENSION_SUPPORTED_DSH_VERSION, pin);
+  assert.equal(JSON.parse(await read("packages/harness-port/seam-manifest.json")).dsh, pin);
 });
 
 test("every occurrence of the pin is classified", async () => {

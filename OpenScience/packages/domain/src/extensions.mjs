@@ -7,13 +7,28 @@ import { canonicalJson } from './capsule.mjs'
 /** @typedef {{packageIntegrity:string,sourceCommit:string|null,adapterRevision:string,dshVersion:string,runtimeImageDigest:string,executionClass:string,permissionProfileRevision:string,suiteRevision:string}} ExtensionProofIdentity */
 
 export const EXTENSION_EXECUTION_CLASSES = Object.freeze(['isolated-tool', 'restricted-viewer', 'personal-skill', 'managed-native', 'local-only'])
-export const EXTENSION_EVIDENCE_STATES = Object.freeze(['discovered', 'source-assessed', 'runtime-verified', 'saas-qualified'])
+/** The kernel version the extension contracts are written for. The pin is written once, in `deps-version.json`
+ * (`dsh.version`); every other source file that needs it imports this name instead of restating it, and a test holds
+ * this equal to the pin, so moving the pin fails here first. A package a deployment admitted was measured on that
+ * kernel, not on the next one -- that is why the version is checked at all. */
+export const EXTENSION_SUPPORTED_DSH_VERSION = '0.1.7-rc.2'
+/** What the platform's own record says about an extension. A LABEL: no state here gates enabling, running or
+ * listing an admitted extension (owner ruling 2026-10-04). `qualified` is a signed, complete record for exactly the
+ * current identity; `stale` a signed record for an earlier identity (the code, image, kernel or permission profile
+ * has moved since); `incomplete` a record whose cases are missing or unmet; `unqualified` no usable record at all,
+ * including one that cannot be read. */
+export const EXTENSION_QUALIFICATION_STATES = Object.freeze(['qualified', 'unqualified', 'stale', 'incomplete'])
+/** The ladder the extension centre shows. `source-assessed` is `unqualified` and `saas-qualified` is `qualified`;
+ * the two `qualification-*` rows are the same record seen after its identity moved or with its cases unmet. */
+export const EXTENSION_EVIDENCE_STATES = Object.freeze(['discovered', 'source-assessed', 'runtime-verified', 'saas-qualified', 'qualification-stale', 'qualification-incomplete'])
 export const EXTENSION_APPLY_PHASES = Object.freeze(['saved', 'preparing', 'waiting', 'applying', 'effective', 'connection-needed', 'unsupported', 'failed', 'rolled-back'])
 export const EXTENSION_PRODUCT_KINDS = Object.freeze(['extension-installation', 'extension-generation', 'extension-proof', 'extension-resource', 'skill', 'extension-defaults'])
 export const EXTENSION_JOB_KINDS = Object.freeze(['extension-prepare', 'extension-execute', 'personal-skill-apply'])
 export const EXTENSION_SAAS_CASE_IDS = Object.freeze(Array.from({ length: 22 }, (_, i) => `SAAS-${String(i + 1).padStart(2, '0')}`))
 const DIGEST = /^sha256:[a-f0-9]{64}$/u
 const SHA = /^[a-f0-9]{64}$/u
+/** @type {Readonly<Record<string,string>>} */
+const EVIDENCE_STATE_OF_QUALIFICATION = Object.freeze({ qualified: 'saas-qualified', unqualified: 'source-assessed', stale: 'qualification-stale', incomplete: 'qualification-incomplete' })
 const ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/u
 const IDENTITY_KEYS = ['packageIntegrity', 'sourceCommit', 'adapterRevision', 'dshVersion', 'runtimeImageDigest', 'executionClass', 'permissionProfileRevision', 'suiteRevision']
 
@@ -174,7 +189,7 @@ export function extensionGenerationIdentity(value, expectedScope, sha256Hex) {
 export function validateExtensionProofIdentity(value) {
   const item = record(value, IDENTITY_KEYS)
   for (const key of ['packageIntegrity', 'adapterRevision', 'runtimeImageDigest', 'permissionProfileRevision', 'suiteRevision']) digest(item[key], key)
-  if ((item.sourceCommit !== null && (typeof item.sourceCommit !== 'string' || !/^[a-f0-9]{40}$/u.test(item.sourceCommit))) || item.dshVersion !== '0.1.7-rc.2'
+  if ((item.sourceCommit !== null && (typeof item.sourceCommit !== 'string' || !/^[a-f0-9]{40}$/u.test(item.sourceCommit))) || item.dshVersion !== EXTENSION_SUPPORTED_DSH_VERSION
     || !EXTENSION_EXECUTION_CLASSES.includes(item.executionClass)) reject('proof_identity')
   return { packageIntegrity: item.packageIntegrity, sourceCommit: item.sourceCommit, adapterRevision: item.adapterRevision,
     dshVersion: item.dshVersion, runtimeImageDigest: item.runtimeImageDigest, executionClass: item.executionClass,
@@ -233,4 +248,20 @@ export function qualifyExtensionProof(value, currentIdentity, authority) {
   }
   if (seen.size !== EXTENSION_SAAS_CASE_IDS.length) reject('missing_cases', 'extension_proof_incomplete')
   return { qualified: true, receiptDigest: received, identity: current }
+}
+
+/** How a failed reading of the qualification record is labelled (owner ruling 2026-10-04: the record labels, it never
+ * refuses). Only the two failures that prove a genuine record exists are named: its identity has moved since
+ * (`stale`) or its cases are unmet (`incomplete`). Anything else -- unreadable, unsigned, malformed, another package's,
+ * or no record at all -- is `unqualified`, exactly as if there were none.
+ * @param {unknown} error @returns {'unqualified'|'stale'|'incomplete'} */
+export function extensionQualificationStateOf(error) {
+  const code = error && typeof error === 'object' ? /** @type {any} */ (error).code : undefined
+  return code === 'extension_proof_stale' ? 'stale' : code === 'extension_proof_incomplete' ? 'incomplete' : 'unqualified'
+}
+
+/** The label the extension centre shows for a qualification state; the same record read the same way everywhere.
+ * @param {string} state one of EXTENSION_QUALIFICATION_STATES @returns {string} one of EXTENSION_EVIDENCE_STATES */
+export function extensionEvidenceState(state) {
+  return EVIDENCE_STATE_OF_QUALIFICATION[state] ?? 'source-assessed'
 }

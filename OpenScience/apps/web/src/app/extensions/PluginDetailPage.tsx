@@ -9,7 +9,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { getWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { productErrorMessage } from "@/lib/productClient";
-import { extensionCatalogue, extensionConnections, extensionHistory, extensionInstallation, extensionSourceUrl, extensionStatus, extensionVersion, installExtension, projectExtensions, removeExtension, retryExtension, sameExtensionCoordinate, saveProjectExtensions, updateExtension, type CatalogueExtension, type ExtensionConnection, type ExtensionInstallation, type ExtensionRevision, type ProjectExtensions } from "@/lib/extensionsClient";
+import { extensionCatalogue, extensionConnections, extensionEvidenceLabel, extensionHistory, extensionInstallation, extensionSourceUrl, extensionStatus, extensionVersion, installExtension, projectExtensions, removeExtension, retryExtension, sameExtensionCoordinate, saveProjectExtensions, updateExtension, type CatalogueExtension, type ExtensionConnection, type ExtensionInstallation, type ExtensionRevision, type ProjectExtensions } from "@/lib/extensionsClient";
 
 export function PluginDetailPage() {
   const { extensionId = "" } = useParams(); useProjectStore(state => state.currentId);
@@ -91,7 +91,7 @@ function PluginDetail({ extensionId, projectId }: { extensionId: string; project
   return <PageShell title={entry?.title ?? "插件"} actions={<Button variant="text" onClick={() => navigate("/app/extensions/plugins")}>返回</Button>}>
     {error && <p role="alert" className="mb-4 text-ui text-error">{error}<Button variant="text" disabled={busy} onClick={() => void load()}>刷新</Button></p>}
     {!loaded ? !error && <FilesSkeleton /> : coordinate && <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-3 text-ui text-text-2"><span>版本 {extensionVersion(coordinate)}</span><span>{evidenceState === "saas-qualified" ? "兼容核验通过" : "尚未完成兼容核验"}</span>{installation && <span>{extensionStatus(installation)}</span>}</div>
+      <div className="flex flex-wrap items-center gap-3 text-ui text-text-2"><span>版本 {extensionVersion(coordinate)}</span><span>{extensionEvidenceLabel(evidenceState, "long")}</span>{installation && <span>{extensionStatus(installation)}</span>}</div>
       <a className="text-ui text-accent" href={extensionSourceUrl(coordinate)} target="_blank" rel="noopener noreferrer">查看来源</a>
       {!installation ? <div><Button loading={busy} onClick={() => void add()}>添加到我的插件</Button></div> : <>
         {!exactDescriptor && <p className="text-ui text-text-2">当前安装版本的配置暂不可编辑。</p>}

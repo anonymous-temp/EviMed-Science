@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, validateExtensionProofIdentity, extensionProofAdapterRevision } from '@evimed/domain';
+import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, EXTENSION_SUPPORTED_DSH_VERSION, validateExtensionProofIdentity, extensionProofAdapterRevision } from '@evimed/domain';
 import { extensionRequestObject, extensionArray, extensionIdentifier } from './extensionAccess.mjs';
 import { extensionToolArtifactDigest } from './extensionToolController.mjs';
 import { HttpError } from './security.mjs';
@@ -75,6 +75,7 @@ function empty(config, status, errorCode = null) {
   return Object.freeze({
     status,
     errorCode,
+    policyState: null,
     catalogue: Object.freeze([]),
     admittedArtifacts: Object.freeze([]),
     admittedDescriptors: Object.freeze([]),
@@ -82,6 +83,7 @@ function empty(config, status, errorCode = null) {
     surfaces: immutableMap([]),
     qualificationRoot: path.join(path.resolve(config.dataDir), '.openscience', 'extension-qualification'),
     policy: null,
+    recordedPolicy: null,
     sourceDigest: null
   });
 }
@@ -108,10 +110,18 @@ export function loadExtensionDeployment(config) {
       fatal: true
     }).decode(bytes.subarray(0, read)));
     extensionRequestObject(manifest, ['schemaVersion', 'generatedAt', 'dshVersion', 'policy', 'catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']);
-    if (manifest.schemaVersion !== 1 || manifest.dshVersion !== '0.1.7-rc.2' || typeof manifest.generatedAt !== 'string' || !Number.isFinite(Date.parse(manifest.generatedAt))) throw failure();
+    if (manifest.schemaVersion !== 1 || manifest.dshVersion !== EXTENSION_SUPPORTED_DSH_VERSION || typeof manifest.generatedAt !== 'string' || !Number.isFinite(Date.parse(manifest.generatedAt))) throw failure();
     extensionRequestObject(manifest.policy, ['adapterRevision', 'permissionProfileRevision']);
+    if (![manifest.policy.adapterRevision, manifest.policy.permissionProfileRevision].every(value => typeof value === 'string' && DIGEST.test(value))) throw failure();
     const policy = currentExtensionSourcePolicy();
-    if (canonicalJson(policy) !== canonicalJson(manifest.policy)) throw failure();
+    // The source policy the file was assessed under says WHEN its qualification evidence was gathered; it is not part
+    // of what the file admits (owner ruling 2026-10-04: a record may label, log or fail readiness, never hide a user's
+    // extensions). It used to be an equality, and because it hashes ~90 source files -- server.mjs and config.mjs
+    // among them -- almost every release made the catalogue empty, selections stop reconciling and the tool gateway
+    // answer 503. A mismatch is now `policyState: 'stale'`, which the catalogue shows as a label. What still refuses
+    // the whole file is what makes it an allow-list: its shape, the kernel version, the artifact and descriptor digests
+    // and the descriptor/artifact/catalogue bonds below.
+    const policyState = canonicalJson(policy) === canonicalJson(manifest.policy) ? 'current' : 'stale';
     for (const key of ['catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']) extensionArray(manifest[key], 128);
     const catalogue = new Map(),
       artifacts = new Map(),
@@ -169,13 +179,17 @@ export function loadExtensionDeployment(config) {
     return Object.freeze({
       status: 'configured',
       errorCode: null,
+      policyState,
       catalogue: Object.freeze([...catalogue.values()]),
       admittedArtifacts: Object.freeze([...artifacts.values()]),
       admittedDescriptors: Object.freeze([...descriptors.values()]),
       generatedAt: manifest.generatedAt,
       surfaces: immutableMap([...surfaces]),
       qualificationRoot: path.join(parent, 'extension-qualification'),
+      // The source policy of the code that is deployed now (what the acceptance harness measures), beside the one the
+      // file was written under.
       policy,
+      recordedPolicy: Object.freeze({ ...manifest.policy }),
       sourceDigest: sha(bytes.subarray(0, read))
     });
   } catch (error) {
@@ -184,11 +198,13 @@ export function loadExtensionDeployment(config) {
     if (fd !== undefined) fs.closeSync(fd);
   }
 }
-/** Policy and runtime pins are constructor authority, never a caller-provided proof or qualifier.
+/** Policy and runtime pins are constructor authority, never a caller-provided proof or qualifier. The source policy
+ * returned is the code that is deployed now; whether the file was written under it is `deployment.policyState`, a
+ * label, and never decides whether a generation can be built.
  * @param {any} deployment @param {string} immutableRuntimeImageId */
 export function deploymentGenerationIdentities(deployment, immutableRuntimeImageId) {
   const current = currentExtensionSourcePolicy();
-  if (deployment.status !== 'configured' || !DIGEST.test(immutableRuntimeImageId) || canonicalJson(deployment.policy) !== canonicalJson(current)) throw failure();
+  if (deployment.status !== 'configured' || !DIGEST.test(immutableRuntimeImageId)) throw failure();
   return {
     baseRuntimeImageDigest: immutableRuntimeImageId,
     ...current,
@@ -210,7 +226,7 @@ export function deploymentProofIdentity(deployment, entry, immutableRuntimeImage
     packageIntegrity: known.integrity,
     sourceCommit: known.coordinate.kind === 'github' ? known.coordinate.commit : null,
     adapterRevision: extensionProofAdapterRevision(artifact.adapterRevision,identities.adapterRevision,sha),
-    dshVersion: '0.1.7-rc.2',
+    dshVersion: EXTENSION_SUPPORTED_DSH_VERSION,
     runtimeImageDigest: immutableRuntimeImageId,
     executionClass: known.executionClass,
     permissionProfileRevision: identities.permissionProfileRevision,

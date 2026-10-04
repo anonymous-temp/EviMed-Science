@@ -970,6 +970,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
     proofAuthority: overrides.extensionProofAuthority ?? null,
     catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
+    // Evidence labels, never gates (owner ruling 2026-10-04): the deployment file's own staleness travels to the
+    // catalogue, and a qualification record that cannot be read as a record is logged for the operator while the
+    // researcher sees the extension without a label.
+    policyState: extensionDeployment.policyState,
+    report: ({ catalogueId, code }) => { void securityAudit(config, "extension.qualification.record", "unreadable", { code, detail: catalogueId }).catch(() => {}); },
     connectionList: (user, entry, projectId) => extensionConnections.list(user, entry, projectId),
   }) : null;
   const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes,
@@ -7482,6 +7487,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   addMetric(lines, "open_science_mounted_methods_left_out_total",
     "Methods a launch left out because the prompt byte budget was spent, summed over launches.", "counter",
     { value: runtimeStats.methodMounts?.leftOut ?? 0 });
+  // A release manifest that disagrees with the deployment is readiness's to
+  // fail (`release` and `runtime` checks), not a reason to refuse a launch
+  // (owner ruling 2026-10-04). This is how many launches went ahead anyway.
+  addMetric(lines, "open_science_runtime_release_unverified_launches_total",
+    "Runtime launches that went ahead although the deployment disagrees with its release manifest, by the manifest check's code.", "counter",
+    (runtimeStats.unverifiedReleaseLaunches ?? []).map(({ code, launches }) => ({ value: launches, labels: { code } })));
   addMetric(
     lines,
     "open_science_server_info",
@@ -8681,6 +8692,15 @@ async function readinessRuntime(config, runtimeManager) {
       await runtimeManager.assertDockerSupport();
     } catch (error) {
       throw readinessFailure(error?.code ?? "runtime_docker_unavailable");
+    }
+    // The controller builds its own launch plans from its own release
+    // manifest. One with no manifest, or an unreadable one, no longer refuses
+    // a launch (owner ruling 2026-10-04: a record is evidence, not a gate on a
+    // user's work), so this is where it is reported: readiness fails with the
+    // controller's own code, which is what holds `host-release-switch.sh`.
+    const controllerRelease = runtimeManager.controllerReleaseManifest;
+    if (controllerRelease && controllerRelease.ok === false) {
+      throw readinessFailure(String(controllerRelease.code ?? "release_manifest_missing"));
     }
     const controlPlane = runtimeManager.usesRuntimeController() ? "controller_socket" : "direct_override";
     if (config.runtimeRequireImageLocal) {
