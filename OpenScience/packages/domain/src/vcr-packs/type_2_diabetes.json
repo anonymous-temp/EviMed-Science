@@ -1,0 +1,3553 @@
+{
+  "schema": "evimed.vcr.knowledge-pack/1",
+  "id": "type_2_diabetes",
+  "version": 1,
+  "status": "curated",
+  "updated": "2026-10-04",
+  "disease": {
+    "key": "type_2_diabetes",
+    "name": "Type 2 diabetes mellitus",
+    "nameZh": "2型糖尿病",
+    "aliases": [
+      "T2DM",
+      "type 2 diabetes",
+      "non-insulin-dependent diabetes mellitus",
+      "adult-onset diabetes"
+    ],
+    "aliasesZh": [
+      "2型糖尿病",
+      "糖尿病（2型）",
+      "T2DM"
+    ]
+  },
+  "sources": [
+    {
+      "id": "ncit",
+      "title": "NCI Thesaurus (NCIt)",
+      "url": "https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/Thesaurus.FLAT.zip",
+      "accessed": "2026-10-04",
+      "licence": "CC-BY-4.0",
+      "publisher": "National Cancer Institute, Enterprise Vocabulary Services",
+      "version": "26.09d",
+      "note": "Released under CC BY 4.0 (terms of use: https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/ThesaurusTermsofUse.htm). Version 26.09d (2026-09-28) is the latest version named by the EVS REST API terminology metadata; the flat file was read as published on 2026-09-30."
+    },
+    {
+      "id": "ohdsi_503",
+      "title": "OHDSI PhenotypeLibrary cohort 503: [P][R] Type 2 diabetes mellitus",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/503.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "v3.37.0",
+      "note": "OHDSI PhenotypeLibrary release v3.37.0 (README states Apache License 2.0, package DESCRIPTION says \"License: Apache License\"; the repository has no LICENSE file). Cohort 503: status in the library \"Pending peer review\" - not an accepted or peer-reviewed phenotype; its logic is restated here in the pack's own grammar and is not claimed to be validated."
+    },
+    {
+      "id": "ohdsi_1032",
+      "title": "OHDSI PhenotypeLibrary cohort 1032: [P] Earliest event of Type 2 Diabetes Mellitus (DM), with no type 1 or secondary DM",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/1032.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "v3.37.0",
+      "note": "OHDSI PhenotypeLibrary release v3.37.0 (README states Apache License 2.0, package DESCRIPTION says \"License: Apache License\"; the repository has no LICENSE file). Cohort 1032: status in the library \"Pending\" - not an accepted or peer-reviewed phenotype; its logic is restated here in the pack's own grammar and is not claimed to be validated."
+    },
+    {
+      "id": "ohdsi_499",
+      "title": "OHDSI PhenotypeLibrary cohort 499: [P][R] Type 1 diabetes mellitus",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/499.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "v3.37.0",
+      "note": "OHDSI PhenotypeLibrary release v3.37.0 (README states Apache License 2.0, package DESCRIPTION says \"License: Apache License\"; the repository has no LICENSE file). Cohort 499: status in the library \"Pending peer review\" - not an accepted or peer-reviewed phenotype; its logic is restated here in the pack's own grammar and is not claimed to be validated."
+    },
+    {
+      "id": "ohdsi_619",
+      "title": "OHDSI PhenotypeLibrary cohort 619: [P][R] Gestational diabetes mellitus",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/619.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "v3.37.0",
+      "note": "OHDSI PhenotypeLibrary release v3.37.0 (README states Apache License 2.0, package DESCRIPTION says \"License: Apache License\"; the repository has no LICENSE file). Cohort 619: status in the library \"Pending peer review\" - not an accepted or peer-reviewed phenotype; its logic is restated here in the pack's own grammar and is not claimed to be validated."
+    },
+    {
+      "id": "ohdsi_647",
+      "title": "OHDSI PhenotypeLibrary cohort 647: [P][R] Retinopathy due to diabetes mellitus",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/647.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "v3.37.0",
+      "note": "OHDSI PhenotypeLibrary release v3.37.0 (README states Apache License 2.0, package DESCRIPTION says \"License: Apache License\"; the repository has no LICENSE file). Cohort 647: status in the library \"Pending peer review\" - not an accepted or peer-reviewed phenotype; its logic is restated here in the pack's own grammar and is not claimed to be validated."
+    },
+    {
+      "id": "fda_t2dm_safety_2020",
+      "title": "FDA draft guidance for industry: Type 2 Diabetes Mellitus: Evaluating the Safety of New Drugs for Improving Glycemic Control (March 2020)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/type-2-diabetes-mellitus-evaluating-safety-new-drugs-improving-glycemic-control-guidance-industry",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration, CDER"
+    },
+    {
+      "id": "fda_efficacy_2023",
+      "title": "FDA draft guidance for industry: Diabetes Mellitus: Efficacy Endpoints for Clinical Trials Investigating Antidiabetic Drugs and Biological Products (May 2023)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration, CDER"
+    },
+    {
+      "id": "ema_diabetes_guideline",
+      "title": "EMA Guideline on clinical investigation of medicinal products in the treatment or prevention of diabetes mellitus (CPMP/EWP/1080/00 Rev. 2, adopted 22 June 2023)",
+      "url": "https://www.ema.europa.eu/en/documents/scientific-guideline/guideline-clinical-investigation-medicinal-products-treatment-prevention-diabetes-mellitus-revision_en-0.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "European Medicines Agency, CHMP"
+    },
+    {
+      "id": "ada_soc_2025_s2",
+      "title": "American Diabetes Association: 2. Diagnosis and Classification of Diabetes: Standards of Care in Diabetes-2025 (Diabetes Care 2025;48(Suppl 1):S27-S49)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11635041/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "American Diabetes Association Professional Practice Committee",
+      "note": "The 2025 edition was opened; the 2026 edition of Section 2 could not be opened and is not cited."
+    },
+    {
+      "id": "cds_guideline_2024",
+      "title": "中国糖尿病防治指南（2024版）, 中华医学会糖尿病学分会, 中华糖尿病杂志 2025;17(1):16-139",
+      "url": "https://files.sciconf.cn/master/50/33230/202501/20250120111901_47273.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "中华医学会糖尿病学分会 (Chinese Diabetes Society)",
+      "note": "PDF listed on the Chinese Diabetes Society guideline page https://diab.cma.org.cn/cn/zhinangongshi.aspx; chapters 2, 6, 13, 14 and 17 were read."
+    },
+    {
+      "id": "nct03987919",
+      "title": "NCT03987919: A Study of Tirzepatide (LY3298176) Versus Semaglutide Once Weekly as Add-on Therapy to Metformin in Participants With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT03987919",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03882970",
+      "title": "NCT03882970: A Study of Tirzepatide (LY3298176) Versus Insulin Degludec in Participants With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT03882970",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03730662",
+      "title": "NCT03730662: A Study of Tirzepatide (LY3298176) Once a Week Versus Insulin Glargine Once a Day in Participants With Type 2 Diabetes and Increased Cardiovascular Risk",
+      "url": "https://clinicaltrials.gov/study/NCT03730662",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03954834",
+      "title": "NCT03954834: A Study of Tirzepatide (LY3298176) in Participants With Type 2 Diabetes Not Controlled With Diet and Exercise Alone",
+      "url": "https://clinicaltrials.gov/study/NCT03954834",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04039503",
+      "title": "NCT04039503: A Study of Tirzepatide (LY3298176) Versus Placebo in Participants With Type 2 Diabetes Inadequately Controlled on Insulin Glargine With or Without Metformin",
+      "url": "https://clinicaltrials.gov/study/NCT04039503",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04255433",
+      "title": "NCT04255433: A Study of Tirzepatide (LY3298176) Compared With Dulaglutide on Major Cardiovascular Events in Participants With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT04255433",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04093752",
+      "title": "NCT04093752: A Study of Tirzepatide (LY3298176) in Participants With Type 2 Diabetes on Metformin With or Without Sulfonylurea (SURPASS-AP-Combo)",
+      "url": "https://clinicaltrials.gov/study/NCT04093752",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04657003",
+      "title": "NCT04657003: A Study of Tirzepatide (LY3298176) in Participants With Type 2 Diabetes Who Have Obesity or Are Overweight",
+      "url": "https://clinicaltrials.gov/study/NCT04657003",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct05362058",
+      "title": "NCT05362058: A Study of Insulin Efsitora Alfa (LY3209590) Compared to Degludec in Adults With Type 2 Diabetes Who Are Starting Basal Insulin for the First Time",
+      "url": "https://clinicaltrials.gov/study/NCT05362058",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04460885",
+      "title": "NCT04460885: A Research Study to Compare Two Types of Insulin, a New Insulin, Insulin Icodec and an Available Insulin, Insulin Glargine, in People With Type 2 Diabetes Who Have Not Used Insulin Before",
+      "url": "https://clinicaltrials.gov/study/NCT04460885",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct01720446",
+      "title": "NCT01720446: Trial to Evaluate Cardiovascular and Other Long-term Outcomes With Semaglutide in Subjects With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT01720446",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct01730534",
+      "title": "NCT01730534: Multicenter Trial to Evaluate the Effect of Dapagliflozin on the Incidence of Cardiovascular Events",
+      "url": "https://clinicaltrials.gov/study/NCT01730534",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03819153",
+      "title": "NCT03819153: A Research Study to See How Semaglutide Works Compared to Placebo in People With Type 2 Diabetes and Chronic Kidney Disease",
+      "url": "https://clinicaltrials.gov/study/NCT03819153",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02065791",
+      "title": "NCT02065791: Evaluation of the Effects of Canagliflozin on Renal and Cardiovascular Outcomes in Participants With Diabetic Nephropathy",
+      "url": "https://clinicaltrials.gov/study/NCT02065791",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02540993",
+      "title": "NCT02540993: Efficacy and Safety of Finerenone in Subjects With Type 2 Diabetes Mellitus and Diabetic Kidney Disease",
+      "url": "https://clinicaltrials.gov/study/NCT02540993",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct01986881",
+      "title": "NCT01986881: Cardiovascular Outcomes Following Ertugliflozin Treatment in Type 2 Diabetes Mellitus Participants With Vascular Disease, The VERTIS CV Study (MK-8835-004)",
+      "url": "https://clinicaltrials.gov/study/NCT01986881",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03914326",
+      "title": "NCT03914326: A Heart Disease Study of Semaglutide in Patients With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT03914326",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02692716",
+      "title": "NCT02692716: A Trial Investigating the Cardiovascular Safety of Oral Semaglutide in Subjects With Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT02692716",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct01794143",
+      "title": "NCT01794143: A Comparative Effectiveness Study of Major Glycemia-lowering Medications for Treatment of Type 2 Diabetes",
+      "url": "https://clinicaltrials.gov/study/NCT01794143",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03496298",
+      "title": "NCT03496298: Effect of Efpeglenatide on Cardiovascular Outcomes",
+      "url": "https://clinicaltrials.gov/study/NCT03496298",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct05971940",
+      "title": "NCT05971940: A Study of Orforglipron (LY3502970) in Adult Participants With Type 2 Diabetes and Inadequate Glycemic Control With Diet and Exercise Alone",
+      "url": "https://clinicaltrials.gov/study/NCT05971940",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03141073",
+      "title": "NCT03141073: Long-term Efficacy and Safety of HMS5552 add-on to Metformin in T2DM Subjects",
+      "url": "https://clinicaltrials.gov/study/NCT03141073",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03173391",
+      "title": "NCT03173391: Long-term Efficacy and Safety of HMS5552 in T2DM Subjects",
+      "url": "https://clinicaltrials.gov/study/NCT03173391",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "evimed_hints",
+      "title": "EviMed authored dataset field-name hints",
+      "url": "https://www.evimed.com/",
+      "accessed": "2026-10-04",
+      "licence": "evimed-own",
+      "publisher": "EviMed Science"
+    }
+  ],
+  "terms": [
+    {
+      "id": "t_t2dm",
+      "label": "Type 2 diabetes mellitus",
+      "labelZh": "2型糖尿病",
+      "kind": "disease",
+      "definition": "A type of diabetes mellitus that is characterized by insulin resistance or desensitization and increased blood glucose levels. This is a chronic disease that can develop gradually over the life of a patient and can be linked to both environmental factors and heredity.",
+      "concept": "type_2_diabetes",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C26747",
+          "display": "Type 2 Diabetes Mellitus"
+        },
+        {
+          "system": "OMOP",
+          "code": "201826",
+          "display": "Type 2 diabetes mellitus"
+        }
+      ],
+      "synonyms": [
+        "T2DM",
+        "Type II diabetes mellitus",
+        "Non-insulin-dependent diabetes mellitus",
+        "Adult-onset diabetes"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_503"
+      ]
+    },
+    {
+      "id": "t_diabetes_mellitus",
+      "label": "Diabetes mellitus (any type)",
+      "labelZh": "糖尿病（所有类型）",
+      "kind": "disease",
+      "definition": "A metabolic disorder characterized by abnormally high blood sugar levels due to diminished production of insulin or insulin resistance/desensitization.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2985",
+          "display": "Diabetes Mellitus"
+        },
+        {
+          "system": "OMOP",
+          "code": "201820",
+          "display": "Diabetes mellitus"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_1032"
+      ]
+    },
+    {
+      "id": "t_t1dm",
+      "label": "Type 1 diabetes mellitus",
+      "labelZh": "1型糖尿病",
+      "kind": "disease",
+      "definition": "A chronic condition characterized by minimal or absent production of insulin by the pancreas.",
+      "concept": "type_1_diabetes",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2986",
+          "display": "Type 1 Diabetes Mellitus"
+        },
+        {
+          "system": "OMOP",
+          "code": "201254",
+          "display": "Type 1 diabetes mellitus"
+        }
+      ],
+      "synonyms": [
+        "T1DM",
+        "Latent autoimmune diabetes in adults (grouped under type 1 by the ADA)"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_499",
+        "ada_soc_2025_s2"
+      ]
+    },
+    {
+      "id": "t_secondary_diabetes",
+      "label": "Diabetes of another specific type (secondary diabetes)",
+      "labelZh": "特殊类型糖尿病（继发性糖尿病）",
+      "kind": "disease",
+      "concept": "secondary_diabetes",
+      "codes": [
+        {
+          "system": "OMOP",
+          "code": "195771",
+          "display": "Secondary diabetes mellitus"
+        }
+      ],
+      "synonyms": [
+        "Monogenic diabetes",
+        "Diabetes of the exocrine pancreas",
+        "Drug- or chemical-induced diabetes"
+      ],
+      "sources": [
+        "ohdsi_1032",
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_gestational_diabetes",
+      "label": "Gestational diabetes mellitus",
+      "labelZh": "妊娠糖尿病",
+      "kind": "disease",
+      "definition": "Carbohydrate intolerance first diagnosed during pregnancy.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C34942",
+          "display": "Gestational Diabetes"
+        },
+        {
+          "system": "OMOP",
+          "code": "4024659",
+          "display": "Gestational diabetes mellitus"
+        }
+      ],
+      "synonyms": [
+        "GDM"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_619",
+        "ada_soc_2025_s2"
+      ]
+    },
+    {
+      "id": "t_hba1c",
+      "label": "Hemoglobin A1c (HbA1c) measurement",
+      "labelZh": "糖化血红蛋白（HbA1c）检测",
+      "kind": "measure",
+      "definition": "The determination of the amount of hemoglobin A1C present in a sample.",
+      "concept": "hba1c",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C64849",
+          "display": "Hemoglobin A1C Measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "4184637",
+          "display": "Hemoglobin A1c measurement"
+        }
+      ],
+      "synonyms": [
+        "A1C",
+        "Glycated hemoglobin"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_1032"
+      ]
+    },
+    {
+      "id": "t_fasting_plasma_glucose",
+      "label": "Fasting plasma glucose (FPG)",
+      "labelZh": "空腹血浆葡萄糖",
+      "kind": "measure",
+      "concept": "fasting_plasma_glucose",
+      "synonyms": [
+        "FPG"
+      ],
+      "sources": [
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_plasma_glucose_2h",
+      "label": "2-hour plasma glucose during a 75 g oral glucose tolerance test",
+      "labelZh": "75 g 口服葡萄糖耐量试验（OGTT）2 小时血浆葡萄糖",
+      "kind": "measure",
+      "concept": "plasma_glucose_2h_ogtt",
+      "synonyms": [
+        "2-h PG",
+        "OGTT 2-h glucose"
+      ],
+      "sources": [
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_random_plasma_glucose",
+      "label": "Random plasma glucose",
+      "labelZh": "随机血糖",
+      "kind": "measure",
+      "concept": "random_plasma_glucose",
+      "sources": [
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_bmi",
+      "label": "Body mass index (BMI)",
+      "labelZh": "体重指数（BMI）",
+      "kind": "measure",
+      "definition": "An individual's weight in kilograms divided by the square of the height in meters.",
+      "concept": "bmi",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C16358",
+          "display": "Body Mass Index"
+        }
+      ],
+      "synonyms": [
+        "BMI"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_body_weight",
+      "label": "Body weight",
+      "labelZh": "体重",
+      "kind": "measure",
+      "definition": "The measure of the weight of a person's body in standard units, such as pound or kilogram. (NCI)",
+      "concept": "body_weight",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C28742",
+          "display": "Body Weight"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_egfr",
+      "label": "Estimated glomerular filtration rate (eGFR)",
+      "labelZh": "估算的肾小球滤过率（eGFR）",
+      "kind": "measure",
+      "definition": "A laboratory test that estimates kidney function. It is calculated using an individual's serum creatinine measurement, age, sex, and race. Actual results are reported when the estimated glomerular filtration rate is less than 60 ml/min.",
+      "concept": "egfr_renal",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C110935",
+          "display": "Estimated Glomerular Filtration Rate"
+        }
+      ],
+      "synonyms": [
+        "eGFR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_uacr",
+      "label": "Urine albumin-to-creatinine ratio (UACR)",
+      "labelZh": "尿白蛋白/肌酐比值（UACR）",
+      "kind": "measure",
+      "definition": "The determination of the ratio of albumin compared to creatinine present in a sample. The measurement may be expressed as a ratio or percentage.",
+      "concept": "uacr",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C74761",
+          "display": "Albumin to Creatinine Ratio Measurement"
+        }
+      ],
+      "synonyms": [
+        "UACR",
+        "ACR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_ascvd",
+      "label": "Atherosclerotic cardiovascular disease (ASCVD)",
+      "labelZh": "动脉粥样硬化性心血管疾病（ASCVD）",
+      "kind": "comorbidity",
+      "definition": "Cardiovascular disease resulting from atherosclerosis.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C35771",
+          "display": "Atherosclerotic Cardiovascular Disease"
+        }
+      ],
+      "synonyms": [
+        "ASCVD",
+        "Established cardiovascular disease"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_coronary_artery_disease",
+      "label": "Coronary artery disease",
+      "labelZh": "冠心病",
+      "kind": "comorbidity",
+      "concept": "coronary_artery_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C26732",
+          "display": "Coronary Artery Disease"
+        }
+      ],
+      "synonyms": [
+        "CAD",
+        "Coronary heart disease"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_cerebrovascular_disease",
+      "label": "Cerebrovascular disease",
+      "labelZh": "脑血管疾病",
+      "kind": "comorbidity",
+      "definition": "A disorder resulting from inadequate blood flow in the vessels that supply the brain. Representative examples include cerebrovascular ischemia, cerebral embolism, and cerebral infarction.",
+      "concept": "cerebrovascular_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2938",
+          "display": "Cerebrovascular Disorder"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_peripheral_arterial_disease",
+      "label": "Peripheral arterial disease (PAD)",
+      "labelZh": "外周动脉疾病（PAD）",
+      "kind": "comorbidity",
+      "concept": "peripheral_arterial_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C84496",
+          "display": "Peripheral Artery Disease"
+        }
+      ],
+      "synonyms": [
+        "PAD"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_myocardial_infarction",
+      "label": "Myocardial infarction",
+      "labelZh": "心肌梗死",
+      "kind": "comorbidity",
+      "definition": "Gross necrosis of the myocardium, as a result of interruption of the blood supply to the area, as in coronary thrombosis.",
+      "concept": "myocardial_infarction",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C27996",
+          "display": "Myocardial Infarction"
+        }
+      ],
+      "synonyms": [
+        "MI",
+        "Heart attack"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_stroke",
+      "label": "Stroke",
+      "labelZh": "脑卒中",
+      "kind": "comorbidity",
+      "definition": "A sudden loss of neurological function secondary to hemorrhage or ischemia in the brain parenchyma due to a vascular event.",
+      "concept": "stroke",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3390",
+          "display": "Stroke"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_heart_failure",
+      "label": "Heart failure",
+      "labelZh": "心力衰竭",
+      "kind": "comorbidity",
+      "definition": "Inability of the heart to pump blood at an adequate rate to meet tissue metabolic requirements. Clinical symptoms of heart failure include: unusual dyspnea on light exertion, recurrent dyspnea occurring in the supine position, fluid retention or rales, jugular venous distension, pulmonary edema on physical exam, or pulmonary edema on chest x-ray presumed to be cardiac dysfunction.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C50577",
+          "display": "Heart Failure"
+        }
+      ],
+      "synonyms": [
+        "HF"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_nyha_class_iv",
+      "label": "NYHA class IV heart failure",
+      "labelZh": "纽约心脏协会（NYHA）心功能Ⅳ级心力衰竭",
+      "kind": "comorbidity",
+      "concept": "nyha_class_iv_heart_failure",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C66908",
+          "display": "New York Heart Association Class IV"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_ckd",
+      "label": "Chronic kidney disease (CKD)",
+      "labelZh": "慢性肾脏病（CKD）",
+      "kind": "comorbidity",
+      "definition": "Impairment of the renal function secondary to chronic kidney damage persisting for three or more months.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C80078",
+          "display": "Chronic Kidney Disease"
+        }
+      ],
+      "synonyms": [
+        "CKD"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_diabetic_kidney_disease",
+      "label": "Diabetic kidney disease (diabetic nephropathy)",
+      "labelZh": "糖尿病肾脏病（DKD）",
+      "kind": "comorbidity",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C84417",
+          "display": "Diabetic Nephropathy"
+        }
+      ],
+      "synonyms": [
+        "DKD",
+        "Diabetic nephropathy"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_diabetic_retinopathy",
+      "label": "Diabetic retinopathy",
+      "labelZh": "糖尿病视网膜病变",
+      "kind": "comorbidity",
+      "definition": "A chronic, pathological complication associated with diabetes mellitus, where retinal damages are incurred due to microaneurysms in the vasculature of the retina, progressively leading to abnormal blood vessel growth, and swelling and leaking of fluid from blood vessels, resulting in vision loss or blindness.",
+      "concept": "diabetic_retinopathy",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C34538",
+          "display": "Diabetic Retinopathy"
+        },
+        {
+          "system": "OMOP",
+          "code": "4174977",
+          "display": "Retinopathy due to diabetes mellitus"
+        }
+      ],
+      "synonyms": [
+        "DR"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_647"
+      ]
+    },
+    {
+      "id": "t_proliferative_diabetic_retinopathy",
+      "label": "Proliferative diabetic retinopathy",
+      "labelZh": "增殖期糖尿病视网膜病变",
+      "kind": "comorbidity",
+      "definition": "Advanced retinopathy due to diabetes mellitus characterized by the formation of new vessels in the retina. The new vessels are abnormal and fragile. If hemorrhage occurs due to the vascular fragility, there is increased risk of vision loss or blindness.",
+      "concept": "proliferative_diabetic_retinopathy",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C84457",
+          "display": "Proliferative Diabetic Retinopathy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_diabetic_neuropathy",
+      "label": "Diabetic neuropathy",
+      "labelZh": "糖尿病神经病变",
+      "kind": "comorbidity",
+      "definition": "A chronic, pathological complication associated with diabetes mellitus, where nerve damages are incurred due to diabetic microvascular injury involving small blood vessels that supply these nerves, resulting in peripheral and/or autonomic nerve dysfunction.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C26748",
+          "display": "Diabetic Neuropathy"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_dka",
+      "label": "Diabetic ketoacidosis (DKA)",
+      "labelZh": "糖尿病酮症酸中毒（DKA）",
+      "kind": "comorbidity",
+      "definition": "The metabolic condition resulted from uncontrolled diabetes mellitus, in which the shift of acid-base status of the body toward the acid side because of loss of base or retention of acids other than carbonic acid is accompanied by the accumulation of ketone bodies in body tissues and fluids.",
+      "concept": "diabetic_ketoacidosis",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C50530",
+          "display": "Diabetic Ketoacidosis"
+        }
+      ],
+      "synonyms": [
+        "DKA"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pancreatitis",
+      "label": "Pancreatitis",
+      "labelZh": "胰腺炎",
+      "kind": "comorbidity",
+      "definition": "Inflammation of the pancreas.",
+      "concept": "pancreatitis",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3306",
+          "display": "Pancreatitis"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_medullary_thyroid_carcinoma",
+      "label": "Medullary thyroid carcinoma (MTC)",
+      "labelZh": "甲状腺髓样癌（MTC）",
+      "kind": "comorbidity",
+      "concept": "medullary_thyroid_carcinoma",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3879",
+          "display": "Thyroid Gland Medullary Carcinoma"
+        }
+      ],
+      "synonyms": [
+        "MTC"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_men2",
+      "label": "Multiple endocrine neoplasia type 2 (MEN2)",
+      "labelZh": "2型多发性内分泌腺瘤病（MEN2）",
+      "kind": "comorbidity",
+      "definition": "Multiple endocrine neoplasia caused by mutation of the RET gene. It includes the following neoplastic processes: multiple endocrine neoplasia type 2A, multiple endocrine neoplasia type 2B, and hereditary thyroid gland medullary carcinoma.",
+      "concept": "multiple_endocrine_neoplasia_type_2",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C123329",
+          "display": "Multiple Endocrine Neoplasia Type 2"
+        }
+      ],
+      "synonyms": [
+        "MEN2"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_malignant_neoplasm",
+      "label": "Malignant neoplasm",
+      "labelZh": "恶性肿瘤",
+      "kind": "comorbidity",
+      "definition": "A neoplasm composed of atypical neoplastic, often pleomorphic cells that invade other tissues. Malignant neoplasms often metastasize to distant anatomic sites and may recur after excision. The most common malignant neoplasms are carcinomas, Hodgkin and non-Hodgkin lymphomas, leukemias, melanomas, and sarcomas.",
+      "concept": "malignant_neoplasm",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C9305",
+          "display": "Malignant Neoplasm"
+        }
+      ],
+      "synonyms": [
+        "Cancer"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_hypoglycemia",
+      "label": "Hypoglycemia",
+      "labelZh": "低血糖",
+      "kind": "other",
+      "definition": "Abnormally low level of glucose in the blood.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3126",
+          "display": "Hypoglycemia"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_hypoglycemia_level_1",
+      "label": "Level 1 hypoglycemia (glucose below 3.9 mmol/L [70 mg/dL] and at least 3.0 mmol/L [54 mg/dL])",
+      "labelZh": "1 级低血糖（血糖 <3.9 mmol/L 且 ≥3.0 mmol/L）",
+      "kind": "other",
+      "sources": [
+        "fda_efficacy_2023",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_hypoglycemia_level_2",
+      "label": "Level 2 hypoglycemia (glucose below 3.0 mmol/L [54 mg/dL])",
+      "labelZh": "2 级低血糖（血糖 <3.0 mmol/L）",
+      "kind": "other",
+      "sources": [
+        "fda_efficacy_2023",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_hypoglycemia_level_3",
+      "label": "Level 3 (severe) hypoglycemia: an event with altered mental or physical state that needs another person's help",
+      "labelZh": "3 级（严重）低血糖：伴意识或行为改变、需要他人帮助的事件",
+      "kind": "other",
+      "concept": "severe_hypoglycemia",
+      "synonyms": [
+        "Severe hypoglycemia"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_metformin",
+      "label": "Metformin",
+      "labelZh": "二甲双胍",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C61612",
+          "display": "Metformin"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_sglt2_inhibitor",
+      "label": "SGLT2 inhibitor",
+      "labelZh": "钠-葡萄糖共转运蛋白2（SGLT2）抑制剂",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98083",
+          "display": "SGLT2 Inhibitor"
+        }
+      ],
+      "synonyms": [
+        "SGLT2i"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_glp1_receptor_agonist",
+      "label": "GLP-1 receptor agonist",
+      "labelZh": "胰高糖素样肽-1（GLP-1）受体激动剂",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98085",
+          "display": "GLP-1 Mimetic"
+        }
+      ],
+      "synonyms": [
+        "GLP-1 RA",
+        "GLP-1RA"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_gip_glp1_agonist",
+      "label": "Dual GIP/GLP-1 receptor agonist",
+      "labelZh": "葡萄糖依赖性促胰岛素多肽（GIP）/GLP-1 双受体激动剂",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C224686",
+          "display": "Dual GIP/GLP-1 Receptor Agonist"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_dpp4_inhibitor",
+      "label": "DPP-4 inhibitor",
+      "labelZh": "二肽基肽酶Ⅳ（DPP-4）抑制剂",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98086",
+          "display": "Dipeptidyl Peptidase-4 Inhibitor"
+        }
+      ],
+      "synonyms": [
+        "DPP-4i"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_sulfonylurea",
+      "label": "Sulfonylurea",
+      "labelZh": "磺脲类药物",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C97936",
+          "display": "Sulfonylurea Antidiabetic Agent"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_insulin",
+      "label": "Insulin",
+      "labelZh": "胰岛素",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2271",
+          "display": "Insulin"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "t_thiazolidinedione",
+      "label": "Thiazolidinedione",
+      "labelZh": "噻唑烷二酮（TZD）",
+      "kind": "treatment",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98241",
+          "display": "Thiazolidinedione Antidiabetic Agent"
+        }
+      ],
+      "synonyms": [
+        "TZD",
+        "Glitazone"
+      ],
+      "sources": [
+        "ncit",
+        "cds_guideline_2024"
+      ]
+    }
+  ],
+  "phenotypes": [
+    {
+      "id": "p_t2dm_diagnosis",
+      "label": "Type 2 diabetes mellitus (recorded diagnosis)",
+      "labelZh": "2型糖尿病（已记录的诊断）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "present",
+        "variable": "type_2_diabetes"
+      },
+      "text": "The person has a recorded diagnosis of type 2 diabetes mellitus. The OHDSI library cohort 503 (status: pending peer review, not validated) uses any condition record of type 2 diabetes mellitus, with its descendants, as the event.",
+      "textZh": "患者有已记录的2型糖尿病诊断。OHDSI 表型库中的队列 503（状态：待同行评审，未经验证）以任一2型糖尿病（含其下位概念）的疾病记录作为事件。",
+      "terms": [
+        "t_t2dm"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_503"
+      ]
+    },
+    {
+      "id": "p_t2dm_without_other_types",
+      "label": "Type 2 diabetes mellitus with no type 1 or secondary diabetes diagnosis",
+      "labelZh": "2型糖尿病（无1型或继发性糖尿病诊断）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "type_2_diabetes"
+          },
+          {
+            "op": "absent",
+            "variable": "type_1_diabetes"
+          },
+          {
+            "op": "absent",
+            "variable": "secondary_diabetes"
+          }
+        ]
+      },
+      "text": "A diabetes diagnosis of the type 2 family with no type 1 and no secondary (other specific type) diabetes diagnosis on record. OHDSI cohort 1032 (status: pending, not validated) applies the exclusion to diagnoses on or before the index date, and takes the index date as the earliest of a diagnosis, a non-insulin glucose-lowering drug or an HbA1c of 6.5% or more, provided a type 2 diagnosis follows within 365 days.",
+      "textZh": "属于2型糖尿病范畴的诊断，且病历中没有1型糖尿病或继发性（其他特殊类型）糖尿病的诊断。OHDSI 队列 1032（状态：待定，未经验证）对索引日期当日及之前的诊断适用该排除，并以最早的糖尿病诊断、非胰岛素降糖药使用或 HbA1c ≥6.5% 之日为索引日期，前提是1年内随后出现2型糖尿病诊断。",
+      "terms": [
+        "t_t2dm",
+        "t_t1dm",
+        "t_secondary_diabetes"
+      ],
+      "sources": [
+        "ohdsi_1032",
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "p_diabetes_by_glycemia",
+      "label": "Type 2 diabetes by diagnostic glycemic threshold, non-pregnant, with type 1 and secondary diabetes excluded",
+      "labelZh": "按诊断性血糖切点判定的2型糖尿病（非妊娠，排除1型与继发性糖尿病）",
+      "type": "lab",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "hba1c",
+                "comparator": "gte",
+                "value": 6.5,
+                "unit": "%",
+                "aggregate": "any"
+              },
+              {
+                "op": "compare",
+                "variable": "fasting_plasma_glucose",
+                "comparator": "gte",
+                "value": 7.0,
+                "unit": "mmol/L",
+                "aggregate": "any"
+              },
+              {
+                "op": "compare",
+                "variable": "plasma_glucose_2h_ogtt",
+                "comparator": "gte",
+                "value": 11.1,
+                "unit": "mmol/L",
+                "aggregate": "any"
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "random_plasma_glucose",
+                    "comparator": "gte",
+                    "value": 11.1,
+                    "unit": "mmol/L",
+                    "aggregate": "any"
+                  },
+                  {
+                    "op": "present",
+                    "variable": "hyperglycemic_symptoms"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "absent",
+            "variable": "pregnancy"
+          },
+          {
+            "op": "absent",
+            "variable": "type_1_diabetes"
+          },
+          {
+            "op": "absent",
+            "variable": "secondary_diabetes"
+          }
+        ]
+      },
+      "text": "Any one of HbA1c 6.5% or higher, fasting plasma glucose 7.0 mmol/L or higher, 2-hour glucose 11.1 mmol/L or higher on a 75 g OGTT, or a random glucose of 11.1 mmol/L or higher with classic hyperglycemic symptoms, outside pregnancy, with no type 1 or secondary diabetes. Without unequivocal hyperglycemia the ADA and the Chinese guideline require two abnormal results (same sample or two occasions; random glucose does not count), which this rule does not encode.",
+      "textZh": "非妊娠状态下，HbA1c ≥6.5%、空腹血浆葡萄糖 ≥7.0 mmol/L、75 g OGTT 2 小时血糖 ≥11.1 mmol/L，或伴典型高血糖症状的随机血糖 ≥11.1 mmol/L 中任一项，且无1型或继发性糖尿病。缺乏明确高血糖时，ADA 与中国指南均要求两项异常结果（同一时间点或不同时间点，随机血糖不计），本规则未编码这一确认要求。",
+      "terms": [
+        "t_hba1c",
+        "t_fasting_plasma_glucose",
+        "t_plasma_glucose_2h",
+        "t_random_plasma_glucose",
+        "t_t2dm"
+      ],
+      "sources": [
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "p_established_ascvd",
+      "label": "Established atherosclerotic cardiovascular disease",
+      "labelZh": "已确诊的动脉粥样硬化性心血管疾病",
+      "type": "comorbidity",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "coronary_artery_disease"
+          },
+          {
+            "op": "present",
+            "variable": "cerebrovascular_disease"
+          },
+          {
+            "op": "present",
+            "variable": "peripheral_arterial_disease"
+          }
+        ]
+      },
+      "text": "Coronary artery disease, cerebrovascular disease or peripheral arterial disease. FDA gives previous myocardial infarction, documented coronary artery disease, previous stroke and peripheral vascular disease as examples; the cardiovascular-outcome trials read ask for documented evidence.",
+      "textZh": "冠心病、脑血管疾病或外周动脉疾病。FDA 以既往心肌梗死、已记录的冠心病、既往卒中和外周血管疾病为例；所读的心血管结局试验均要求有文件证据。",
+      "terms": [
+        "t_ascvd",
+        "t_coronary_artery_disease",
+        "t_cerebrovascular_disease",
+        "t_peripheral_arterial_disease"
+      ],
+      "sources": [
+        "fda_t2dm_safety_2020",
+        "cds_guideline_2024",
+        "nct04255433"
+      ]
+    },
+    {
+      "id": "p_ckd_in_diabetes",
+      "label": "Chronic kidney disease in diabetes (reduced eGFR or albuminuria, persisting)",
+      "labelZh": "糖尿病合并慢性肾脏病（eGFR 降低或白蛋白尿，且持续存在）",
+      "type": "comorbidity",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "egfr_renal",
+                "comparator": "lt",
+                "value": 60,
+                "unit": "mL/min/1.73 m2"
+              },
+              {
+                "op": "compare",
+                "variable": "uacr",
+                "comparator": "gte",
+                "value": 30,
+                "unit": "mg/g"
+              }
+            ]
+          },
+          {
+            "op": "language",
+            "key": "ckd_persistence",
+            "text": "The reduced eGFR or the raised urine albumin-to-creatinine ratio has persisted for more than 3 months and no other cause of kidney disease explains it."
+          }
+        ]
+      },
+      "text": "eGFR below 60 mL/min/1.73 m2 and/or urine albumin-to-creatinine ratio of 30 mg/g or higher, persisting for more than 3 months with other causes of kidney disease excluded (the persistence is judged from the record by the language node).",
+      "textZh": "eGFR <60 mL/min/1.73 m²和/或尿白蛋白/肌酐比值 ≥30 mg/g，持续超过3个月且已排除其他原因所致肾病（持续时间由语言节点依据病历判断）。",
+      "terms": [
+        "t_ckd",
+        "t_diabetic_kidney_disease",
+        "t_egfr",
+        "t_uacr"
+      ],
+      "sources": [
+        "cds_guideline_2024",
+        "ncit"
+      ]
+    },
+    {
+      "id": "p_diabetic_retinopathy",
+      "label": "Diabetic retinopathy",
+      "labelZh": "糖尿病视网膜病变",
+      "type": "comorbidity",
+      "rule": {
+        "op": "present",
+        "variable": "diabetic_retinopathy"
+      },
+      "text": "A recorded diagnosis of retinopathy due to diabetes mellitus (OHDSI cohort 647, status: pending peer review, not validated, uses one condition concept with its descendants).",
+      "textZh": "已记录的糖尿病视网膜病变诊断（OHDSI 队列 647，状态：待同行评审，未经验证，使用一个疾病概念及其下位概念）。",
+      "terms": [
+        "t_diabetic_retinopathy"
+      ],
+      "sources": [
+        "ohdsi_647",
+        "ncit"
+      ]
+    },
+    {
+      "id": "p_clinically_significant_hypoglycemia",
+      "label": "Clinically significant hypoglycemia (level 2 or level 3)",
+      "labelZh": "有临床意义的低血糖（2 级或 3 级）",
+      "type": "other",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "blood_glucose",
+            "comparator": "lt",
+            "value": 3.0,
+            "unit": "mmol/L",
+            "aggregate": "any"
+          },
+          {
+            "op": "present",
+            "variable": "severe_hypoglycemia"
+          }
+        ]
+      },
+      "text": "A glucose reading below 3.0 mmol/L (54 mg/dL), or a severe event with altered mental or physical state that needed another person's help. FDA treats level 3 as a clinical endpoint and level 2 as an acceptable surrogate.",
+      "textZh": "血糖低于 3.0 mmol/L（54 mg/dL），或伴意识/躯体功能改变、需要他人帮助的严重事件。FDA 将 3 级视为临床终点，2 级视为可接受的替代终点。",
+      "terms": [
+        "t_hypoglycemia",
+        "t_hypoglycemia_level_2",
+        "t_hypoglycemia_level_3"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "cds_guideline_2024"
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "e_hba1c_change",
+      "label": "Change from baseline in HbA1c",
+      "labelZh": "糖化血红蛋白（HbA1c）较基线的变化",
+      "type": "continuous",
+      "definition": "The difference between HbA1c at a pre-specified follow-up time and at baseline, compared between treatment arms. FDA and EMA both accept it as the primary endpoint for a glycemic-control indication; the registered trials read use 40 or 52 weeks.",
+      "definitionZh": "预先设定的随访时点与基线的HbA1c之差，并在治疗组间比较。FDA 与 EMA 均接受其作为血糖控制适应证的主要终点；所读注册试验的评估时点为第40周或第52周。",
+      "assessment": "Central laboratory, NGSP-certified (or equally standardized) assay; FDA suggests measuring after at least 12 weeks of stable dosing and, for most programmes, a 6-month primary time point with a descriptive 12-month look at durability.",
+      "standard": {
+        "name": "HbA1c by an NGSP-certified assay in a central laboratory (FDA draft guidance, May 2023)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "setting": "Glucose-lowering drug trials in adults with type 2 diabetes",
+      "terms": [
+        "t_hba1c"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline",
+        "nct03987919",
+        "nct03882970",
+        "nct04460885"
+      ]
+    },
+    {
+      "id": "e_hba1c_target",
+      "label": "Proportion of participants reaching an HbA1c target",
+      "labelZh": "达到 HbA1c 目标值的受试者比例",
+      "type": "binary",
+      "definition": "The share of participants whose HbA1c at the end of treatment is below (FDA, the registered trials) or at most (EMA) a cut point such as 7% or 6.5%. FDA does not recommend it as the primary analysis of HbA1c; EMA lists it as an additional effect measure, counted without rescue medication.",
+      "definitionZh": "治疗结束时HbA1c低于（FDA、注册试验）或不高于（EMA）某一切点（如7%或6.5%）的受试者所占比例。FDA 不建议将其作为HbA1c的主要分析；EMA 将其列为补充疗效指标，且应在未使用补救药物的情况下计算。",
+      "assessment": "Derived from the central-laboratory HbA1c at the end-of-treatment visit; the cut point and the handling of rescue therapy are set in the protocol.",
+      "standard": {
+        "name": "HbA1c responder cut points (FDA draft guidance, May 2023; EMA CPMP/EWP/1080/00 Rev. 2)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "setting": "Secondary endpoint",
+      "terms": [
+        "t_hba1c"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline",
+        "nct03987919",
+        "nct03882970"
+      ]
+    },
+    {
+      "id": "e_fpg_change",
+      "label": "Change from baseline in fasting plasma (serum) glucose",
+      "labelZh": "空腹血浆（血清）葡萄糖较基线的变化",
+      "type": "continuous",
+      "definition": "Change in glucose after an overnight fast between baseline and a follow-up visit. FDA uses it as a supportive indicator that cannot carry a glycemic-control indication alone; EMA accepts it as a secondary efficacy endpoint.",
+      "definitionZh": "基线与随访访视之间过夜空腹后葡萄糖的变化。FDA 将其作为支持性指标，不能单独支持血糖控制适应证；EMA 接受其作为次要疗效终点。",
+      "assessment": "Central-laboratory glucose after an overnight fast (the registered trials report fasting serum or plasma glucose).",
+      "standard": {
+        "name": "Fasting plasma glucose as a supportive endpoint (FDA draft guidance, May 2023)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "terms": [
+        "t_fasting_plasma_glucose"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline",
+        "nct03987919",
+        "nct04460885"
+      ]
+    },
+    {
+      "id": "e_body_weight_change",
+      "label": "Change from baseline in body weight",
+      "labelZh": "体重较基线的变化",
+      "type": "continuous",
+      "definition": "Absolute or percent change in body weight from baseline to a follow-up visit. It is a secondary endpoint in glycemic-control trials and the primary endpoint of the tirzepatide trial in people with type 2 diabetes and overweight or obesity.",
+      "definitionZh": "体重自基线至随访访视的绝对或百分比变化。在血糖控制试验中为次要终点；在2型糖尿病合并超重或肥胖人群的替尔泊肽试验中为主要终点。",
+      "assessment": "Scheduled clinic weight measurements; analysed as absolute change or percent change from baseline.",
+      "standard": {
+        "name": "Body weight as another effect of clinical relevance (FDA draft guidance, May 2023; EMA Rev. 2 section 4.2.3)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "terms": [
+        "t_body_weight"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline",
+        "nct03987919",
+        "nct04657003"
+      ]
+    },
+    {
+      "id": "e_weight_loss_threshold",
+      "label": "Proportion of participants with at least 5% body weight reduction",
+      "labelZh": "体重降低至少 5% 的受试者比例",
+      "type": "binary",
+      "definition": "The share of participants whose body weight at the end of treatment is at least 5% below baseline; the obesity trial also reports 10%, 15% and 20% cut points.",
+      "definitionZh": "治疗结束时体重较基线降低至少5%的受试者所占比例；肥胖人群试验还报告10%、15%和20%的切点。",
+      "assessment": "Derived from the baseline and end-of-treatment weights.",
+      "standard": {
+        "name": "Registered-trial outcome definition (ClinicalTrials.gov records NCT03987919, NCT04657003)",
+        "url": "https://clinicaltrials.gov/study/NCT04657003"
+      },
+      "terms": [
+        "t_body_weight"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct04657003"
+      ]
+    },
+    {
+      "id": "e_hypoglycemia_level_3",
+      "label": "Incidence of level 3 (severe) hypoglycemia",
+      "labelZh": "3 级（严重）低血糖的发生率",
+      "type": "binary",
+      "definition": "The share of participants with at least one severe hypoglycemic event, an event with altered mental or physical state that needs another person's help. FDA names the reduction of level 3 hypoglycemia incidence as the preferred primary endpoint for a hypoglycemia claim and asks for adjudication of the events.",
+      "definitionZh": "至少发生一次严重低血糖事件（伴意识或躯体功能改变、需要他人帮助）的受试者所占比例。FDA 将3级低血糖发生率降低作为低血糖相关声明的首选主要终点，并要求对事件进行判定。",
+      "assessment": "Adjudicated severe events collected throughout the study, including the titration period; the proportion with one or more events is the primary analysis and the event rate per patient-year is also reported.",
+      "standard": {
+        "name": "ADA hypoglycemia levels as used in the FDA draft guidance, May 2023",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "setting": "Especially insulin and sulfonylurea trials",
+      "terms": [
+        "t_hypoglycemia_level_3"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "nct04460885",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "e_hypoglycemia_level_2",
+      "label": "Incidence of level 2 hypoglycemia (glucose below 3.0 mmol/L)",
+      "labelZh": "2 级低血糖（血糖 <3.0 mmol/L）的发生率",
+      "type": "binary",
+      "definition": "The share of participants with at least one glucose value below 3.0 mmol/L (54 mg/dL), whether or not there are symptoms. FDA regards level 2 as a surrogate for neuroglycopenia-related harm and allows a composite of level 2 and level 3 when severe events are very infrequent.",
+      "definitionZh": "至少出现一次血糖低于 3.0 mmol/L（54 mg/dL）的受试者所占比例，无论有无症状。FDA 将2级低血糖视为神经低血糖相关损害的替代终点，严重事件极少时可采用2级与3级的复合终点。",
+      "assessment": "Self-monitored blood glucose (meter-confirmed) or continuous glucose monitoring; level 2 events need rigorous data collection but not adjudication.",
+      "standard": {
+        "name": "ADA hypoglycemia levels as used in the FDA draft guidance, May 2023",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "terms": [
+        "t_hypoglycemia_level_2"
+      ],
+      "sources": [
+        "fda_efficacy_2023",
+        "nct04460885",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "e_cgm_time_in_range",
+      "label": "Continuous glucose monitoring: percentage of time in range",
+      "labelZh": "持续葡萄糖监测：目标范围内时间百分比",
+      "type": "continuous",
+      "definition": "The percentage of sensor time with glucose between 3.9 and 10.0 mmol/L (70 to 180 mg/dL). FDA says time in range is not acceptable as the primary endpoint for a glycemic-control indication; EMA lists it among possibly relevant endpoints.",
+      "definitionZh": "传感器记录中葡萄糖处于 3.9～10.0 mmol/L（70～180 mg/dL）的时间所占百分比。FDA 指出目标范围内时间不能作为血糖控制适应证的主要终点；EMA 将其列为可能相关的终点。",
+      "assessment": "Continuous glucose monitoring over a defined period with a single device model; also reported are the time above and below range.",
+      "standard": {
+        "name": "CGM-based metrics (FDA draft guidance, May 2023)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/diabetes-mellitus-efficacy-endpoints-clinical-trials-investigating-antidiabetic-drugs-and-biological"
+      },
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline",
+        "nct04460885"
+      ]
+    },
+    {
+      "id": "e_mace3",
+      "label": "Time to first major adverse cardiovascular event (3-point MACE)",
+      "labelZh": "首次主要不良心血管事件（3点 MACE）发生时间",
+      "type": "time_to_event",
+      "definition": "Time from randomization to the first of cardiovascular death, non-fatal myocardial infarction or non-fatal stroke; the dapagliflozin trial counts ischemic stroke. FDA expects cardiovascular events to be collected rigorously and adjudicated.",
+      "definitionZh": "自随机化至首次发生心血管死亡、非致死性心肌梗死或非致死性卒中的时间；达格列净试验计入缺血性卒中。FDA 期望严格收集心血管事件并进行判定。",
+      "assessment": "Events confirmed by an adjudication committee (named in the tirzepatide and the oral semaglutide cardiovascular-outcome records); participants without an event are censored at their last contact or the end of follow-up.",
+      "standard": {
+        "name": "Adjudicated cardiovascular outcomes (FDA draft guidance, March 2020)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/type-2-diabetes-mellitus-evaluating-safety-new-drugs-improving-glycemic-control-guidance-industry"
+      },
+      "setting": "Cardiovascular-outcome trials in type 2 diabetes with established cardiovascular disease or high risk",
+      "terms": [
+        "t_myocardial_infarction",
+        "t_stroke"
+      ],
+      "sources": [
+        "fda_t2dm_safety_2020",
+        "nct04255433",
+        "nct01720446",
+        "nct03914326",
+        "nct01730534"
+      ]
+    },
+    {
+      "id": "e_cv_death_or_hf_hospitalization",
+      "label": "Time to first cardiovascular death or hospitalization for heart failure",
+      "labelZh": "首次心血管死亡或心力衰竭住院的发生时间",
+      "type": "time_to_event",
+      "definition": "Time from randomization to the first cardiovascular death or hospitalization for heart failure; the cardiovascular-outcome trials read use it as a co-primary or secondary composite.",
+      "definitionZh": "自随机化至首次心血管死亡或因心力衰竭住院的时间；所读心血管结局试验将其作为共同主要或次要复合终点。",
+      "assessment": "Events confirmed by an adjudication committee (named in the tirzepatide record); the tirzepatide trial also counts urgent heart-failure visits.",
+      "standard": {
+        "name": "Adjudicated cardiovascular outcomes (FDA draft guidance, March 2020)",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/type-2-diabetes-mellitus-evaluating-safety-new-drugs-improving-glycemic-control-guidance-industry"
+      },
+      "terms": [
+        "t_heart_failure"
+      ],
+      "sources": [
+        "fda_t2dm_safety_2020",
+        "nct01730534",
+        "nct04255433",
+        "nct02065791"
+      ]
+    },
+    {
+      "id": "e_kidney_composite",
+      "label": "Time to first kidney composite event",
+      "labelZh": "首次肾脏复合事件的发生时间",
+      "type": "time_to_event",
+      "definition": "Time from randomization to the first of a trial-defined set of kidney events: kidney failure (dialysis, transplantation or sustained eGFR below 15), a sustained eGFR fall from baseline (40% in the finerenone trial, 50% in the semaglutide trial) or doubling of serum creatinine (canagliflozin trial), and kidney death; the semaglutide and canagliflozin trials add cardiovascular death.",
+      "definitionZh": "自随机化至首次发生试验所定义的肾脏事件的时间，包括：肾衰竭（透析、肾移植或持续 eGFR <15）、eGFR 较基线持续下降（非奈利酮试验为40%，司美格鲁肽试验为50%）或血肌酐倍增（卡格列净试验）、肾脏死亡；司美格鲁肽和卡格列净试验另计心血管死亡。",
+      "assessment": "Central-laboratory eGFR and serum creatinine, with the decline confirmed on a repeat measurement (at least 4 weeks in the finerenone trial, at least 30 days in the canagliflozin trial); dialysis, transplantation and kidney death are recorded as events.",
+      "standard": {
+        "name": "Kidney outcome composites defined in each trial protocol (ClinicalTrials.gov NCT03819153, NCT02065791, NCT02540993)",
+        "url": "https://clinicaltrials.gov/study/NCT03819153"
+      },
+      "setting": "Kidney-outcome trials in type 2 diabetes with chronic kidney disease",
+      "terms": [
+        "t_ckd",
+        "t_egfr"
+      ],
+      "sources": [
+        "nct03819153",
+        "nct02065791",
+        "nct02540993"
+      ]
+    },
+    {
+      "id": "e_egfr_slope",
+      "label": "Annual rate of change in eGFR (eGFR slope)",
+      "labelZh": "eGFR 年变化率（eGFR 斜率）",
+      "type": "continuous",
+      "definition": "The slope of eGFR over the in-trial period, expressed per year, compared between treatment arms; it is a secondary endpoint of the semaglutide kidney-outcome trial.",
+      "definitionZh": "试验期间 eGFR 的变化斜率（按每年表示），在治疗组间比较；为司美格鲁肽肾脏结局试验的次要终点。",
+      "assessment": "Serial serum creatinine-based eGFR (CKD-EPI) measurements from randomization to the end of the in-trial period.",
+      "standard": {
+        "name": "CKD-EPI creatinine-based eGFR (ClinicalTrials.gov NCT03819153)",
+        "url": "https://clinicaltrials.gov/study/NCT03819153"
+      },
+      "terms": [
+        "t_egfr"
+      ],
+      "sources": [
+        "nct03819153"
+      ]
+    },
+    {
+      "id": "e_uacr_change",
+      "label": "Change from baseline in urine albumin-to-creatinine ratio",
+      "labelZh": "尿白蛋白/肌酐比值较基线的变化",
+      "type": "continuous",
+      "definition": "Change in UACR from baseline to a follow-up visit (month 4 in the finerenone trial), a secondary endpoint of the kidney-outcome trial.",
+      "definitionZh": "UACR 自基线至随访访视（非奈利酮试验为第4个月）的变化，为肾脏结局试验的次要终点。",
+      "assessment": "UACR from urine samples at baseline and at the month-4 visit.",
+      "standard": {
+        "name": "UACR change in the finerenone trial (ClinicalTrials.gov NCT02540993)",
+        "url": "https://clinicaltrials.gov/study/NCT02540993"
+      },
+      "terms": [
+        "t_uacr"
+      ],
+      "sources": [
+        "nct02540993"
+      ]
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c_age_adult",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "text": "Adults, 18 years or older. Cardiovascular-outcome trials set a higher floor (40 or 50 years); these are not cited here.",
+      "textZh": "成人，年龄 ≥18 岁。心血管结局试验的年龄下限更高（40岁或50岁），此处未引用。",
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03819153",
+        "nct02540993",
+        "nct04460885",
+        "nct05362058",
+        "nct05971940",
+        "nct04093752"
+      ]
+    },
+    {
+      "id": "c_dx_t2dm",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "present",
+        "variable": "type_2_diabetes"
+      },
+      "text": "A diagnosis of type 2 diabetes mellitus; some trials state that it is by ADA or WHO criteria.",
+      "textZh": "已诊断为2型糖尿病；部分试验注明按 ADA 或 WHO 标准诊断。",
+      "terms": [
+        "t_t2dm"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03819153",
+        "nct04460885",
+        "nct05971940",
+        "nct05362058",
+        "nct02540993"
+      ]
+    },
+    {
+      "id": "c_no_type_1_diabetes",
+      "kind": "exclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "absent",
+        "variable": "type_1_diabetes"
+      },
+      "text": "No type 1 diabetes mellitus.",
+      "textZh": "无1型糖尿病。",
+      "terms": [
+        "t_t1dm"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03954834",
+        "nct01720446",
+        "nct01730534",
+        "nct02065791",
+        "nct03141073",
+        "nct03173391"
+      ]
+    },
+    {
+      "id": "c_no_other_specific_diabetes",
+      "kind": "exclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "absent",
+        "variable": "secondary_diabetes"
+      },
+      "text": "No diabetes of another specific type (for example monogenic diabetes, diabetes from exocrine pancreatic disease, drug-induced diabetes); the efsitora alfa trial also lists latent autoimmune diabetes.",
+      "textZh": "无其他特殊类型糖尿病（如单基因糖尿病、胰腺外分泌疾病所致糖尿病、药物性糖尿病）；efsitora alfa 试验还列出成人隐匿性自身免疫糖尿病。",
+      "terms": [
+        "t_secondary_diabetes"
+      ],
+      "sources": [
+        "nct05362058",
+        "nct04657003",
+        "nct01794143",
+        "ada_soc_2025_s2"
+      ]
+    },
+    {
+      "id": "c_hba1c_7_to_10_5",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "hba1c",
+        "comparator": "between",
+        "value": 7.0,
+        "highValue": 10.5,
+        "unit": "%"
+      },
+      "text": "HbA1c from 7.0% to 10.5%, both included. This is the range the cited trials share; other programmes use other limits (for example a floor of 6.5% or 7.5%, or a ceiling of 9.5%, 11% or 12%).",
+      "textZh": "HbA1c 为 7.0%～10.5%（含界值）。这是所引试验共有的范围；其他项目采用其他界值（例如下限6.5%或7.5%，上限9.5%、11%或12%）。",
+      "terms": [
+        "t_hba1c"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct04039503",
+        "nct04255433",
+        "nct01986881",
+        "nct05362058"
+      ]
+    },
+    {
+      "id": "c_stable_background_therapy_3m",
+      "kind": "inclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "glucose_lowering_therapy_change",
+        "window": {
+          "months": 3
+        }
+      },
+      "text": "Glucose-lowering therapy unchanged for at least 3 months before screening; which therapy is allowed (metformin, other oral agents, basal insulin) depends on the trial.",
+      "textZh": "筛选前至少3个月内降糖治疗未调整；允许的治疗（二甲双胍、其他口服药、基础胰岛素）因试验而异。",
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03730662",
+        "nct05362058",
+        "nct04657003",
+        "nct03496298"
+      ]
+    },
+    {
+      "id": "c_stable_body_weight_3m",
+      "kind": "inclusion",
+      "criterionType": "other",
+      "requirement": {
+        "op": "compare",
+        "variable": "body_weight_change_percent",
+        "comparator": "between",
+        "value": -5,
+        "highValue": 5,
+        "unit": "%",
+        "window": {
+          "months": 3
+        }
+      },
+      "text": "Stable body weight, within 5% up or down, for at least 3 months (90 days in the orforglipron trial) before screening.",
+      "textZh": "筛选前至少3个月（orforglipron 试验为90天）体重稳定，上下波动不超过5%。",
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03954834",
+        "nct04039503",
+        "nct04093752",
+        "nct05971940"
+      ]
+    },
+    {
+      "id": "c_no_weight_loss_medication_3m",
+      "kind": "exclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "absent",
+        "variable": "weight_loss_medication",
+        "window": {
+          "months": 3
+        }
+      },
+      "text": "No weight-loss medication, including over-the-counter products, in the 3 months before screening.",
+      "textZh": "筛选前3个月内未使用减重药物（含非处方药）。",
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03730662",
+        "nct03954834",
+        "nct04039503",
+        "nct04093752"
+      ]
+    },
+    {
+      "id": "c_no_pancreatitis",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "pancreatitis"
+      },
+      "text": "No history of acute or chronic pancreatitis; the trials in this group test incretin-based drugs.",
+      "textZh": "无急性或慢性胰腺炎病史；这类试验检验的是肠促胰素类药物。",
+      "terms": [
+        "t_pancreatitis"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03954834",
+        "nct04039503",
+        "nct04093752",
+        "nct04657003",
+        "nct05971940",
+        "nct02692716"
+      ]
+    },
+    {
+      "id": "c_no_mtc_men2",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "medullary_thyroid_carcinoma"
+          },
+          {
+            "op": "absent",
+            "variable": "multiple_endocrine_neoplasia_type_2"
+          }
+        ]
+      },
+      "text": "No personal or family history of medullary thyroid carcinoma and no history of multiple endocrine neoplasia type 2 (some trials extend the family history to MEN2); asked in trials of GLP-1 receptor agonists and dual GIP/GLP-1 receptor agonists.",
+      "textZh": "无甲状腺髓样癌的个人或家族史，且无2型多发性内分泌腺瘤病史（部分试验将家族史扩展至 MEN2）；见于 GLP-1 受体激动剂及 GIP/GLP-1 双受体激动剂试验。",
+      "terms": [
+        "t_medullary_thyroid_carcinoma",
+        "t_men2"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03954834",
+        "nct04039503",
+        "nct04093752",
+        "nct04657003",
+        "nct02692716",
+        "nct01794143"
+      ]
+    },
+    {
+      "id": "c_no_recent_mi_or_stroke_2m",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "myocardial_infarction",
+            "window": {
+              "months": 2
+            }
+          },
+          {
+            "op": "absent",
+            "variable": "stroke",
+            "window": {
+              "months": 2
+            }
+          }
+        ]
+      },
+      "text": "No myocardial infarction and no stroke in the 2 months before screening.",
+      "textZh": "筛选前2个月内无心肌梗死和卒中。",
+      "terms": [
+        "t_myocardial_infarction",
+        "t_stroke"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03730662",
+        "nct03954834",
+        "nct04039503",
+        "nct04093752"
+      ]
+    },
+    {
+      "id": "c_no_recent_hf_hospitalization_2m",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "heart_failure_hospitalization",
+        "window": {
+          "months": 2
+        }
+      },
+      "text": "No hospitalization for heart failure in the 2 months before screening.",
+      "textZh": "筛选前2个月内无心力衰竭住院。",
+      "terms": [
+        "t_heart_failure"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03730662",
+        "nct03954834",
+        "nct04093752",
+        "nct04255433"
+      ]
+    },
+    {
+      "id": "c_no_recent_malignancy_5y",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "malignant_neoplasm",
+        "window": {
+          "years": 5
+        }
+      },
+      "text": "No malignancy in the 5 years before screening, except basal or squamous cell skin cancer; the cited trials differ on carcinoma in situ (allowed in two of them), and one counts only cancers that needed therapy.",
+      "textZh": "筛选前5年内无恶性肿瘤（基底细胞癌和鳞状细胞皮肤癌除外）；所引试验对原位癌的处理不同（其中两项允许），另一项仅计需要治疗的癌症。",
+      "terms": [
+        "t_malignant_neoplasm"
+      ],
+      "sources": [
+        "nct04255433",
+        "nct02692716",
+        "nct01794143"
+      ]
+    },
+    {
+      "id": "c_no_nyha_class_iv",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "nyha_class_iv_heart_failure"
+      },
+      "text": "Heart failure in NYHA class IV is excluded.",
+      "textZh": "排除纽约心脏协会（NYHA）心功能Ⅳ级心力衰竭。",
+      "terms": [
+        "t_nyha_class_iv"
+      ],
+      "sources": [
+        "nct01720446",
+        "nct03819153",
+        "nct02692716",
+        "nct01986881",
+        "nct04460885",
+        "nct04255433",
+        "nct05971940",
+        "nct03914326"
+      ]
+    },
+    {
+      "id": "c_no_planned_revascularization",
+      "kind": "exclusion",
+      "criterionType": "other",
+      "requirement": {
+        "op": "absent",
+        "variable": "planned_revascularization"
+      },
+      "text": "No planned coronary, carotid or peripheral artery revascularization; asked in cardiovascular-outcome and kidney-outcome trials.",
+      "textZh": "无计划中的冠状动脉、颈动脉或外周动脉血运重建；见于心血管结局和肾脏结局试验。",
+      "sources": [
+        "nct01720446",
+        "nct03819153",
+        "nct02692716",
+        "nct03914326",
+        "nct04255433"
+      ]
+    },
+    {
+      "id": "c_established_ascvd",
+      "kind": "inclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "coronary_artery_disease"
+          },
+          {
+            "op": "present",
+            "variable": "cerebrovascular_disease"
+          },
+          {
+            "op": "present",
+            "variable": "peripheral_arterial_disease"
+          }
+        ]
+      },
+      "text": "Established atherosclerotic cardiovascular disease: coronary artery disease, cerebrovascular disease or peripheral arterial disease, with documentation. Used in cardiovascular-outcome trials; one semaglutide trial (NCT03914326) also accepts chronic kidney disease as a fourth route.",
+      "textZh": "已确诊的动脉粥样硬化性心血管疾病：冠心病、脑血管疾病或外周动脉疾病，并有文件证据。用于心血管结局试验；一项司美格鲁肽试验（NCT03914326）另接受慢性肾脏病作为第四条入选途径。",
+      "terms": [
+        "t_ascvd"
+      ],
+      "sources": [
+        "nct04255433",
+        "nct03914326",
+        "nct01986881"
+      ]
+    },
+    {
+      "id": "c_egfr_at_least_30",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "egfr_renal",
+        "comparator": "gte",
+        "value": 30,
+        "unit": "mL/min/1.73 m2"
+      },
+      "text": "eGFR of at least 30 mL/min/1.73 m2 (an eGFR below 30 is an exclusion). Trials that include metformin users often use a higher floor of 45; kidney-outcome trials set their own bands.",
+      "textZh": "eGFR ≥30 mL/min/1.73 m²（eGFR <30 为排除条件）。纳入二甲双胍使用者的试验常采用更高的下限45；肾脏结局试验另设自己的区间。",
+      "terms": [
+        "t_egfr"
+      ],
+      "sources": [
+        "nct03954834",
+        "nct04039503",
+        "nct01794143",
+        "nct02692716",
+        "nct02065791"
+      ]
+    },
+    {
+      "id": "c_no_dka_history",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "diabetic_ketoacidosis"
+      },
+      "text": "No history of diabetic ketoacidosis (the Asia-Pacific tirzepatide and the obesity trials add hyperosmolar state or coma).",
+      "textZh": "无糖尿病酮症酸中毒病史（亚太替尔泊肽试验和肥胖试验另包括高渗状态或昏迷）。",
+      "terms": [
+        "t_dka"
+      ],
+      "sources": [
+        "nct02065791",
+        "nct01986881",
+        "nct04093752",
+        "nct04657003"
+      ]
+    },
+    {
+      "id": "c_no_severe_hypoglycemia_6m",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "severe_hypoglycemia",
+        "window": {
+          "months": 6
+        }
+      },
+      "text": "No severe hypoglycemia in the 6 months before screening (two trials also name hypoglycemia unawareness).",
+      "textZh": "筛选前6个月内无严重低血糖（两项试验另提及无症状性低血糖）。",
+      "terms": [
+        "t_hypoglycemia_level_3"
+      ],
+      "sources": [
+        "nct04255433",
+        "nct04093752",
+        "nct05362058"
+      ]
+    },
+    {
+      "id": "c_no_unstable_diabetic_retinopathy",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "proliferative_diabetic_retinopathy"
+          },
+          {
+            "op": "absent",
+            "variable": "diabetic_maculopathy"
+          },
+          {
+            "op": "absent",
+            "variable": "nonproliferative_diabetic_retinopathy_needing_treatment"
+          }
+        ]
+      },
+      "text": "No proliferative diabetic retinopathy, no diabetic maculopathy, and no non-proliferative retinopathy that needs acute treatment.",
+      "textZh": "无增殖期糖尿病视网膜病变，无糖尿病黄斑病变，无需要急性治疗的非增殖期视网膜病变。",
+      "terms": [
+        "t_proliferative_diabetic_retinopathy",
+        "t_diabetic_retinopathy"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03954834",
+        "nct04039503"
+      ]
+    },
+    {
+      "id": "c_stable_raas_blockade_4w",
+      "kind": "inclusion",
+      "criterionType": "concomitant_medication",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "raas_inhibitor_max_tolerated_dose"
+          },
+          {
+            "op": "absent",
+            "variable": "raas_inhibitor_dose_change",
+            "window": {
+              "days": 28
+            }
+          }
+        ]
+      },
+      "text": "Treated with an ACE inhibitor or an ARB at the maximum tolerated labeled dose, unchanged for at least 4 weeks (the semaglutide trial allows an exception where it is contraindicated or not tolerated).",
+      "textZh": "使用最大耐受标签剂量的 ACE 抑制剂或 ARB，且至少4周内未调整（司美格鲁肽试验对禁忌或不耐受者允许例外）。",
+      "sources": [
+        "nct03819153",
+        "nct02065791",
+        "nct02540993"
+      ]
+    },
+    {
+      "id": "c_bmi_at_least_25",
+      "kind": "inclusion",
+      "criterionType": "other",
+      "requirement": {
+        "op": "compare",
+        "variable": "bmi",
+        "comparator": "gte",
+        "value": 25,
+        "unit": "kg/m2"
+      },
+      "text": "BMI of at least 25 kg/m2, as in the tirzepatide trials read; other programmes use 23 kg/m2 or an upper limit instead.",
+      "textZh": "BMI ≥25 kg/m²，与所读替尔泊肽试验一致；其他项目采用23 kg/m²或设有上限。",
+      "terms": [
+        "t_bmi"
+      ],
+      "sources": [
+        "nct03987919",
+        "nct03882970",
+        "nct03730662",
+        "nct04255433"
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "id": "m_age",
+      "concept": "age",
+      "label": "Age",
+      "labelZh": "年龄",
+      "type": "number",
+      "role": "covariate",
+      "unit": "years",
+      "fieldNames": [
+        "AGE",
+        "age",
+        "age_years",
+        "AGE_YEARS",
+        "Age at screening",
+        "年龄",
+        "年龄(岁)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_type_2_diabetes",
+      "concept": "type_2_diabetes",
+      "label": "Type 2 diabetes diagnosis",
+      "labelZh": "2型糖尿病诊断",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "T2DM",
+        "t2dm",
+        "T2D",
+        "type2_diabetes",
+        "DM2",
+        "diabetes_type2",
+        "2型糖尿病",
+        "糖尿病(2型)",
+        "糖尿病诊断"
+      ],
+      "codes": [
+        {
+          "means": "type 2 diabetes recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_type_1_diabetes",
+      "concept": "type_1_diabetes",
+      "label": "Type 1 diabetes diagnosis",
+      "labelZh": "1型糖尿病诊断",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "T1DM",
+        "t1dm",
+        "T1D",
+        "type1_diabetes",
+        "DM1",
+        "1型糖尿病"
+      ],
+      "codes": [
+        {
+          "means": "type 1 diabetes recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_secondary_diabetes",
+      "concept": "secondary_diabetes",
+      "label": "Diabetes of another specific type",
+      "labelZh": "特殊类型糖尿病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "secondary_diabetes",
+        "other_specific_diabetes",
+        "monogenic_diabetes",
+        "MODY",
+        "pancreatogenic_diabetes",
+        "继发性糖尿病",
+        "特殊类型糖尿病"
+      ],
+      "codes": [
+        {
+          "means": "another specific type of diabetes recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pregnancy",
+      "concept": "pregnancy",
+      "label": "Pregnancy",
+      "labelZh": "妊娠",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PREGNANCY",
+        "pregnant",
+        "pregnancy_status",
+        "preg_flag",
+        "is_pregnant",
+        "妊娠",
+        "怀孕",
+        "是否妊娠"
+      ],
+      "codes": [
+        {
+          "means": "pregnant",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hba1c",
+      "concept": "hba1c",
+      "label": "Hemoglobin A1c (HbA1c)",
+      "labelZh": "糖化血红蛋白（HbA1c）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "%",
+      "fieldNames": [
+        "HBA1C",
+        "HbA1c",
+        "hba1c",
+        "A1C",
+        "HGBA1C",
+        "GLYCHB",
+        "HbA1c_pct",
+        "LBHBA1C",
+        "糖化血红蛋白",
+        "糖化血红蛋白(%)",
+        "HbA1c(%)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_fasting_plasma_glucose",
+      "concept": "fasting_plasma_glucose",
+      "label": "Fasting plasma glucose",
+      "labelZh": "空腹血浆葡萄糖",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mmol/L",
+      "fieldNames": [
+        "FPG",
+        "fpg",
+        "GLUC_FAST",
+        "fasting_glucose",
+        "fasting_plasma_glucose",
+        "FBG",
+        "FSG",
+        "空腹血糖",
+        "空腹血浆葡萄糖"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_plasma_glucose_2h_ogtt",
+      "concept": "plasma_glucose_2h_ogtt",
+      "label": "2-hour plasma glucose on a 75 g OGTT",
+      "labelZh": "OGTT 2 小时血浆葡萄糖",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mmol/L",
+      "fieldNames": [
+        "OGTT_2H",
+        "ogtt_2h",
+        "2hPG",
+        "PG2H",
+        "glucose_2h",
+        "ogtt_2h_glucose",
+        "OGTT2h血糖",
+        "糖负荷后2小时血糖",
+        "餐后2小时血糖"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_random_plasma_glucose",
+      "concept": "random_plasma_glucose",
+      "label": "Random plasma glucose",
+      "labelZh": "随机血糖",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mmol/L",
+      "fieldNames": [
+        "RPG",
+        "random_glucose",
+        "random_plasma_glucose",
+        "GLUC_RANDOM",
+        "random_blood_glucose",
+        "随机血糖"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hyperglycemic_symptoms",
+      "concept": "hyperglycemic_symptoms",
+      "label": "Classic hyperglycemic symptoms (polyuria, polydipsia, unexplained weight loss)",
+      "labelZh": "典型高血糖症状（多尿、烦渴多饮、不明原因体重下降）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "hyperglycemic_symptoms",
+        "diabetes_symptoms",
+        "classic_symptoms",
+        "polyuria_polydipsia",
+        "糖尿病典型症状",
+        "三多一少"
+      ],
+      "codes": [
+        {
+          "means": "classic symptoms present",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_blood_glucose",
+      "concept": "blood_glucose",
+      "label": "Blood glucose reading (any setting)",
+      "labelZh": "血糖值（任意场景）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mmol/L",
+      "fieldNames": [
+        "GLUC",
+        "glucose",
+        "blood_glucose",
+        "BG",
+        "SMBG",
+        "cgm_glucose",
+        "plasma_glucose",
+        "血糖",
+        "血糖值"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_severe_hypoglycemia",
+      "concept": "severe_hypoglycemia",
+      "label": "Severe (level 3) hypoglycemia event",
+      "labelZh": "严重（3 级）低血糖事件",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "severe_hypoglycemia",
+        "severe_hypo",
+        "level3_hypo",
+        "hypo_level3",
+        "SH_event",
+        "严重低血糖",
+        "重度低血糖"
+      ],
+      "codes": [
+        {
+          "means": "severe hypoglycemia event recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_body_weight",
+      "concept": "body_weight",
+      "label": "Body weight",
+      "labelZh": "体重",
+      "type": "number",
+      "role": "measurement",
+      "unit": "kg",
+      "fieldNames": [
+        "WEIGHT",
+        "weight",
+        "body_weight",
+        "WEIGHT_KG",
+        "BW",
+        "VSWEIGHT",
+        "体重",
+        "体重(kg)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_bmi",
+      "concept": "bmi",
+      "label": "Body mass index",
+      "labelZh": "体重指数（BMI）",
+      "type": "number",
+      "role": "covariate",
+      "unit": "kg/m2",
+      "fieldNames": [
+        "BMI",
+        "bmi",
+        "BMI_KG_M2",
+        "body_mass_index",
+        "VSBMI",
+        "体重指数",
+        "体质指数",
+        "BMI(kg/m2)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_body_weight_change_percent",
+      "concept": "body_weight_change_percent",
+      "label": "Body weight change over the preceding period (percent)",
+      "labelZh": "此前一段时间内的体重变化百分比",
+      "type": "number",
+      "role": "covariate",
+      "unit": "%",
+      "fieldNames": [
+        "weight_change_pct",
+        "WT_CHG_PCT",
+        "body_weight_change_percent",
+        "pct_weight_change",
+        "weight_change_3m_pct",
+        "体重变化百分比",
+        "体重变化率"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_egfr_renal",
+      "concept": "egfr_renal",
+      "label": "Estimated glomerular filtration rate (eGFR)",
+      "labelZh": "估算的肾小球滤过率（eGFR）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mL/min/1.73 m2",
+      "fieldNames": [
+        "EGFR",
+        "eGFR",
+        "egfr",
+        "egfr_ckdepi",
+        "EGFR_CKDEPI",
+        "GFR_EST",
+        "eGFR(mL/min/1.73m2)",
+        "肾小球滤过率",
+        "估算肾小球滤过率",
+        "eGFR值"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_uacr",
+      "concept": "uacr",
+      "label": "Urine albumin-to-creatinine ratio (UACR)",
+      "labelZh": "尿白蛋白/肌酐比值（UACR）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "mg/g",
+      "fieldNames": [
+        "UACR",
+        "uacr",
+        "ACR",
+        "urine_acr",
+        "ALBCREAT",
+        "albumin_creatinine_ratio",
+        "尿白蛋白肌酐比",
+        "尿白蛋白/肌酐比值",
+        "UACR(mg/g)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_glucose_lowering_therapy_change",
+      "concept": "glucose_lowering_therapy_change",
+      "label": "Change of glucose-lowering therapy (start, stop or dose change)",
+      "labelZh": "降糖治疗的调整（开始、停用或剂量变化）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "therapy_change",
+        "glucose_lowering_change",
+        "ahm_change",
+        "antidiabetic_change",
+        "med_change_flag",
+        "降糖方案调整",
+        "降糖药调整"
+      ],
+      "codes": [
+        {
+          "means": "therapy changed",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_weight_loss_medication",
+      "concept": "weight_loss_medication",
+      "label": "Weight-loss medication use",
+      "labelZh": "减重药物使用",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "weight_loss_med",
+        "antiobesity_drug",
+        "weight_loss_medication",
+        "WLM",
+        "减重药",
+        "减肥药",
+        "减重药物"
+      ],
+      "codes": [
+        {
+          "means": "weight-loss medication taken",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pancreatitis",
+      "concept": "pancreatitis",
+      "label": "Pancreatitis (acute or chronic)",
+      "labelZh": "胰腺炎（急性或慢性）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "pancreatitis",
+        "PANCREATITIS",
+        "hx_pancreatitis",
+        "pancreatitis_history",
+        "胰腺炎",
+        "胰腺炎病史"
+      ],
+      "codes": [
+        {
+          "means": "pancreatitis recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_medullary_thyroid_carcinoma",
+      "concept": "medullary_thyroid_carcinoma",
+      "label": "Medullary thyroid carcinoma (personal or family history)",
+      "labelZh": "甲状腺髓样癌（个人或家族史）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MTC",
+        "mtc",
+        "medullary_thyroid_cancer",
+        "medullary_thyroid_carcinoma",
+        "family_mtc",
+        "甲状腺髓样癌",
+        "甲状腺髓样癌史"
+      ],
+      "codes": [
+        {
+          "means": "medullary thyroid carcinoma recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_men2",
+      "concept": "multiple_endocrine_neoplasia_type_2",
+      "label": "Multiple endocrine neoplasia type 2 (personal or family history)",
+      "labelZh": "2型多发性内分泌腺瘤病（个人或家族史）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MEN2",
+        "men2",
+        "MEN_2",
+        "multiple_endocrine_neoplasia",
+        "多发性内分泌腺瘤病",
+        "MEN2型"
+      ],
+      "codes": [
+        {
+          "means": "MEN2 recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_malignant_neoplasm",
+      "concept": "malignant_neoplasm",
+      "label": "Malignant neoplasm other than basal or squamous cell skin cancer",
+      "labelZh": "恶性肿瘤（基底细胞癌和鳞状细胞皮肤癌除外）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MALIGNANCY",
+        "malignancy",
+        "cancer",
+        "malignant_neoplasm",
+        "hx_cancer",
+        "cancer_history",
+        "恶性肿瘤",
+        "肿瘤史",
+        "癌症病史"
+      ],
+      "codes": [
+        {
+          "means": "malignancy recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_myocardial_infarction",
+      "concept": "myocardial_infarction",
+      "label": "Myocardial infarction",
+      "labelZh": "心肌梗死",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MI",
+        "mi",
+        "myocardial_infarction",
+        "MYOCARDIAL_INFARCTION",
+        "hx_mi",
+        "heart_attack",
+        "心肌梗死",
+        "心梗"
+      ],
+      "codes": [
+        {
+          "means": "myocardial infarction recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_stroke",
+      "concept": "stroke",
+      "label": "Stroke",
+      "labelZh": "脑卒中",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "STROKE",
+        "stroke",
+        "CVA",
+        "hx_stroke",
+        "ischemic_stroke",
+        "脑卒中",
+        "卒中",
+        "脑梗死"
+      ],
+      "codes": [
+        {
+          "means": "stroke recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_heart_failure_hospitalization",
+      "concept": "heart_failure_hospitalization",
+      "label": "Hospitalization for heart failure",
+      "labelZh": "心力衰竭住院",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HF_HOSP",
+        "hf_hospitalization",
+        "hf_admission",
+        "heart_failure_hospitalization",
+        "CHF_HOSP",
+        "心衰住院",
+        "心力衰竭住院"
+      ],
+      "codes": [
+        {
+          "means": "hospitalized for heart failure",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_nyha_class_iv_heart_failure",
+      "concept": "nyha_class_iv_heart_failure",
+      "label": "NYHA class IV heart failure",
+      "labelZh": "NYHA Ⅳ级心力衰竭",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "NYHA_IV",
+        "nyha4",
+        "nyha_class_iv",
+        "NYHA_CLASS_IV",
+        "HF_NYHA4",
+        "心功能IV级",
+        "心功能Ⅳ级",
+        "NYHA IV级"
+      ],
+      "codes": [
+        {
+          "means": "NYHA class IV",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_planned_revascularization",
+      "concept": "planned_revascularization",
+      "label": "Planned coronary, carotid or peripheral revascularization",
+      "labelZh": "计划中的冠状动脉、颈动脉或外周血运重建",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "planned_revasc",
+        "planned_revascularization",
+        "revasc_planned",
+        "planned_pci_cabg",
+        "计划血运重建",
+        "拟行血运重建"
+      ],
+      "codes": [
+        {
+          "means": "revascularization planned",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_coronary_artery_disease",
+      "concept": "coronary_artery_disease",
+      "label": "Coronary artery disease",
+      "labelZh": "冠心病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "CAD",
+        "cad",
+        "coronary_artery_disease",
+        "CHD",
+        "coronary_heart_disease",
+        "ischemic_heart_disease",
+        "冠心病",
+        "冠状动脉疾病"
+      ],
+      "codes": [
+        {
+          "means": "coronary artery disease recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_cerebrovascular_disease",
+      "concept": "cerebrovascular_disease",
+      "label": "Cerebrovascular disease",
+      "labelZh": "脑血管疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "CEREBROVASCULAR",
+        "cerebrovascular_disease",
+        "cvd_cerebral",
+        "carotid_disease",
+        "脑血管病",
+        "脑血管疾病"
+      ],
+      "codes": [
+        {
+          "means": "cerebrovascular disease recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_peripheral_arterial_disease",
+      "concept": "peripheral_arterial_disease",
+      "label": "Peripheral arterial disease",
+      "labelZh": "外周动脉疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PAD",
+        "pad",
+        "peripheral_arterial_disease",
+        "peripheral_artery_disease",
+        "PVD",
+        "外周动脉疾病",
+        "外周血管病"
+      ],
+      "codes": [
+        {
+          "means": "peripheral arterial disease recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_diabetic_ketoacidosis",
+      "concept": "diabetic_ketoacidosis",
+      "label": "Diabetic ketoacidosis",
+      "labelZh": "糖尿病酮症酸中毒",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "DKA",
+        "dka",
+        "diabetic_ketoacidosis",
+        "ketoacidosis",
+        "hx_dka",
+        "酮症酸中毒",
+        "糖尿病酮症酸中毒"
+      ],
+      "codes": [
+        {
+          "means": "ketoacidosis recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_diabetic_retinopathy",
+      "concept": "diabetic_retinopathy",
+      "label": "Diabetic retinopathy (any stage)",
+      "labelZh": "糖尿病视网膜病变（任何分期）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "DR",
+        "dr",
+        "diabetic_retinopathy",
+        "retinopathy",
+        "DR_flag",
+        "糖尿病视网膜病变",
+        "视网膜病变"
+      ],
+      "codes": [
+        {
+          "means": "diabetic retinopathy recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_proliferative_diabetic_retinopathy",
+      "concept": "proliferative_diabetic_retinopathy",
+      "label": "Proliferative diabetic retinopathy",
+      "labelZh": "增殖期糖尿病视网膜病变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PDR",
+        "pdr",
+        "proliferative_dr",
+        "proliferative_diabetic_retinopathy",
+        "增殖期视网膜病变",
+        "增殖性糖尿病视网膜病变"
+      ],
+      "codes": [
+        {
+          "means": "proliferative retinopathy recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_diabetic_maculopathy",
+      "concept": "diabetic_maculopathy",
+      "label": "Diabetic maculopathy or macular edema",
+      "labelZh": "糖尿病黄斑病变或黄斑水肿",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "DME",
+        "dme",
+        "diabetic_maculopathy",
+        "diabetic_macular_edema",
+        "maculopathy",
+        "黄斑水肿",
+        "糖尿病黄斑水肿",
+        "糖尿病黄斑病变"
+      ],
+      "codes": [
+        {
+          "means": "maculopathy or macular edema recorded",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_nonproliferative_dr_needing_treatment",
+      "concept": "nonproliferative_diabetic_retinopathy_needing_treatment",
+      "label": "Non-proliferative diabetic retinopathy that needs acute treatment",
+      "labelZh": "需要急性治疗的非增殖期糖尿病视网膜病变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "NPDR_treat",
+        "npdr_needing_treatment",
+        "npdr_acute_treatment",
+        "NPDR_TX",
+        "需治疗的非增殖期视网膜病变"
+      ],
+      "codes": [
+        {
+          "means": "non-proliferative retinopathy needing treatment",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_raas_max_tolerated_dose",
+      "concept": "raas_inhibitor_max_tolerated_dose",
+      "label": "On an ACE inhibitor or ARB at the maximum tolerated labeled dose",
+      "labelZh": "使用最大耐受标签剂量的 ACE 抑制剂或 ARB",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "RAAS_MAX",
+        "raas_max_dose",
+        "acei_arb_max_tolerated",
+        "raas_inhibitor_max_tolerated_dose",
+        "最大耐受剂量ACEI/ARB",
+        "ACEI/ARB最大耐受剂量"
+      ],
+      "codes": [
+        {
+          "means": "on maximum tolerated ACE inhibitor or ARB",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_raas_dose_change",
+      "concept": "raas_inhibitor_dose_change",
+      "label": "Change of ACE inhibitor or ARB (start, stop, dose or agent change)",
+      "labelZh": "ACE 抑制剂或 ARB 的调整（开始、停用、剂量或药物变化）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "RAAS_CHANGE",
+        "raas_dose_change",
+        "acei_arb_change",
+        "raas_inhibitor_dose_change",
+        "ACEI/ARB调整",
+        "肾素血管紧张素系统抑制剂调整"
+      ],
+      "codes": [
+        {
+          "means": "ACE inhibitor or ARB changed",
+          "accepts": [
+            "1",
+            "Y",
+            "Yes",
+            "TRUE",
+            "true",
+            "是",
+            "有"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    }
+  ],
+  "background": [
+    {
+      "id": "b_classification",
+      "text": "Diabetes is a heterogeneous group of disorders that the ADA and the Chinese guideline sort into type 1 (including latent autoimmune diabetes in adults), type 2, other specific types (monogenic, exocrine-pancreatic, drug-induced) and gestational diabetes. Type 2 diabetes is marked by insulin resistance with a variable insulin-secretory defect, and a cohort definition for it has to rule out type 1 and the other specific types.",
+      "textZh": "糖尿病是一组异质性疾病，ADA 与中国指南均将其分为1型（含成人隐匿性自身免疫糖尿病）、2型、特殊类型（单基因、胰腺外分泌疾病、药物性等）和妊娠糖尿病。2型糖尿病以胰岛素抵抗伴程度不一的胰岛素分泌缺陷为特征，其队列定义需要排除1型和其他特殊类型糖尿病。",
+      "sources": [
+        "fda_efficacy_2023",
+        "ada_soc_2025_s2",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "b_hba1c_primary",
+      "text": "HbA1c is the accepted primary endpoint for glycemic-control trials because it is a validated surrogate for microvascular risk. FDA recommends a central-laboratory NGSP-certified assay, measurement after at least 12 weeks of stable dosing and, for most programmes, a 6-month primary time point; EMA expects confirmatory studies of about 6 months with at least one showing maintenance over 12 months.",
+      "textZh": "HbA1c 是血糖控制试验公认的主要终点，因为它是微血管风险的已验证替代指标。FDA 建议使用中心实验室、经 NGSP 认证的检测方法，在稳定给药至少12周后测量，多数项目的主要时点为6个月；EMA 预期确证性研究约6个月，且至少一项研究显示12个月的疗效维持。",
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline"
+      ]
+    },
+    {
+      "id": "b_responder_analysis",
+      "text": "Responder analyses of HbA1c are treated differently by the two agencies: FDA does not recommend them as the primary analysis because of limited interpretability, while EMA lists the proportion reaching 7% or 6.5% at the end of the trial, without rescue medication, as an additional effect measure.",
+      "textZh": "两家监管机构对HbA1c应答者分析的态度不同：FDA 因可解释性有限而不建议将其作为主要分析；EMA 将试验结束时（未使用补救药物）达到7%或6.5%的比例列为补充疗效指标。",
+      "sources": [
+        "fda_efficacy_2023",
+        "ema_diabetes_guideline"
+      ]
+    },
+    {
+      "id": "b_safety_population",
+      "text": "FDA's 2020 draft guidance asks that the safety database for a new glucose-lowering drug include meaningful numbers of people with established cardiovascular disease, chronic kidney disease and older age, and that cardiovascular events be collected rigorously and adjudicated; it withdrew the 2008 guidance that had led to cardiovascular-outcome trials for new drugs, noting that none of those trials found an increased risk of ischemic events.",
+      "textZh": "FDA 2020 年指南草案要求新降糖药的安全性数据库纳入足够数量的已确诊心血管疾病、慢性肾脏病及高龄患者，并要求严格收集心血管事件并进行判定；该草案撤销了曾促成新药心血管结局试验的2008年指南，并指出这些试验均未发现缺血性事件风险增加。",
+      "sources": [
+        "fda_t2dm_safety_2020"
+      ]
+    },
+    {
+      "id": "b_hypoglycemia_levels",
+      "text": "Hypoglycemia is graded by glucose and clinical state: level 1 is below 3.9 mmol/L (70 mg/dL) and at least 3.0 mmol/L (54 mg/dL), level 2 is below 3.0 mmol/L, and level 3 is a severe event that needs another person's help. FDA prefers a reduction in level 3 incidence as the primary endpoint for a hypoglycemia claim, and the Chinese guideline grades hypoglycemia the same way.",
+      "textZh": "低血糖按血糖水平和临床状态分级：1级为 <3.9 mmol/L（70 mg/dL）且 ≥3.0 mmol/L（54 mg/dL），2级为 <3.0 mmol/L，3级为需要他人帮助的严重事件。FDA 倾向以3级低血糖发生率降低作为低血糖相关声明的主要终点；中国指南的分级方式相同。",
+      "sources": [
+        "fda_efficacy_2023",
+        "cds_guideline_2024"
+      ]
+    },
+    {
+      "id": "b_china_guideline",
+      "text": "The Chinese Diabetes Society guideline (2024 edition) uses the same diagnostic thresholds as the ADA (HbA1c 6.5%, fasting glucose 7.0 mmol/L, 2-hour OGTT glucose 11.1 mmol/L), sets an HbA1c target below 7% for most non-pregnant adults with type 2 diabetes, and individualizes the target by age, disease duration, health status, complications and history of severe hypoglycemia.",
+      "textZh": "《中国糖尿病防治指南（2024版）》采用与 ADA 相同的诊断切点（HbA1c 6.5%、空腹血糖 7.0 mmol/L、OGTT 2 小时血糖 11.1 mmol/L），建议大多数非妊娠成年2型糖尿病患者的 HbA1c 控制目标为 <7%，并按年龄、病程、健康状况、并发症和严重低血糖史个体化。",
+      "sources": [
+        "cds_guideline_2024",
+        "ada_soc_2025_s2"
+      ]
+    }
+  ]
+}

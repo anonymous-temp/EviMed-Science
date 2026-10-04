@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  VCR_PACK_CODE_SYSTEMS,
   VCR_PACK_LICENCES,
   VCR_PACK_REFUSED_CODE_SYSTEMS,
   VCR_PACK_SECTIONS,
   VCR_PACK_STATUSES,
+  VCR_SHIPPED_PACKS,
   validateKnowledgePack,
   vcrPackConceptColumns,
   vcrPackEntrySources,
@@ -246,4 +248,104 @@ test("a definition's rules are renamed to another dataset's columns only where t
   assert.deepEqual(ambiguous, { suggested: [], unmatched: ["AGE"] });
   assert.deepEqual(vcrSuggestColumnRemap(pack, ["SMOKING"], ["age"]), { suggested: [], unmatched: ["SMOKING"] });
   assert.deepEqual(vcrSuggestColumnRemap(null, ["AGE"], ["age"]), { suggested: [], unmatched: ["AGE"] }, "a study with no pack suggests nothing");
+});
+
+// --- the packs that ship ----------------------------------------------------------
+
+const SHIPPED = Object.entries(VCR_SHIPPED_PACKS);
+const NCT_URL = /^https:\/\/clinicaltrials\.gov\/study\/NCT\d{8}$/;
+
+test("the three curated packs ship, load through the validator at the complete level and are what the owner chose", () => {
+  assert.deepEqual(Object.keys(VCR_SHIPPED_PACKS).sort(), ["breast_cancer", "nsclc", "type_2_diabetes"]);
+  for (const [id, pack] of SHIPPED) {
+    assert.equal(pack.id, id);
+    assert.equal(pack.status, "curated", id);
+    assert.deepEqual(validateKnowledgePack(pack, { level: "complete" }), [], id);
+    assert.ok(Object.isFrozen(pack) && Object.isFrozen(pack.criteria[0]), `${id}: a shipped pack is read, never edited in place`);
+    const counts = vcrPackSummary(pack).counts;
+    assert.ok(counts.terms >= 10 && counts.phenotypes >= 5 && counts.endpoints >= 5 && counts.criteria >= 10 && counts.mappings >= 10, `${id}: ${JSON.stringify(counts)}`);
+  }
+  // each is found by the names a researcher types, in both languages
+  const found = (/** @type {string} */ word) => SHIPPED.filter(([, pack]) => vcrPackMatchesName(pack, word)).map(([id]) => id);
+  assert.deepEqual([found("NSCLC"), found("肺癌"), found("乳腺癌"), found("breast"), found("T2DM"), found("糖尿病")],
+    [["nsclc"], ["nsclc"], ["breast_cancer"], ["breast_cancer"], ["type_2_diabetes"], ["type_2_diabetes"]]);
+});
+
+test("every entry of every shipped pack is sourced, every source has a link, a title, an access date and a licence from the closed table, and no source is restricted", () => {
+  for (const [id, pack] of SHIPPED) {
+    const table = new Map(pack.sources.map((/** @type {any} */ source) => [source.id, source]));
+    for (const source of pack.sources) {
+      assert.match(source.url, /^https:\/\//, `${id}/${source.id}: a link`);
+      assert.ok(source.title.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(source.accessed), `${id}/${source.id}`);
+      assert.ok(Object.keys(VCR_PACK_LICENCES).includes(source.licence), `${id}/${source.id}: licence ${source.licence}`);
+      assert.equal(vcrPackRestrictedSource(source.url), null, `${id}/${source.id}: a restricted source`);
+      assert.ok(!/ictrp|atcddd|whocc|meddra/i.test(source.url), `${id}/${source.id}: ${source.url}`);
+    }
+    let cited = 0;
+    for (const section of VCR_PACK_SECTIONS) {
+      for (const entry of pack[section]) {
+        assert.ok(entry.sources.length >= 1 && entry.sources.every((/** @type {string} */ ref) => table.has(ref)), `${id}/${entry.id}: sources`);
+        for (const resolved of vcrPackEntrySources(pack, entry)) assert.ok(resolved.use && resolved.licenceName !== undefined, `${id}/${entry.id}`);
+        cited += 1;
+      }
+    }
+    assert.ok(cited >= 60, `${id}: the walk found the entries (${cited})`);
+    // every source is cited by something, so the table is what the pack rests on and nothing else
+    const used = new Set(VCR_PACK_SECTIONS.flatMap((section) => pack[section].flatMap((/** @type {any} */ entry) => entry.sources)));
+    assert.deepEqual(pack.sources.map((/** @type {any} */ source) => source.id).filter((/** @type {string} */ ref) => !used.has(ref)), [], `${id}: an uncited source`);
+  }
+});
+
+test("ClinicalTrials.gov content is attributed with its processing date and a statement that it was modified; each record is a real NCT id; OHDSI's library status is stated", () => {
+  let registry = 0;
+  let ohdsi = 0;
+  for (const [id, pack] of SHIPPED) {
+    for (const source of pack.sources) {
+      if (source.licence === "ctgov-terms") {
+        registry += 1;
+        assert.match(source.url, NCT_URL, `${id}/${source.id}`);
+        assert.equal(source.id, source.url.slice(-11).toLowerCase(), `${id}: the source id is the registry id`);
+        assert.ok(source.title.startsWith(source.url.slice(-11)), `${id}/${source.id}: the title names the record`);
+        assert.deepEqual([source.processed, source.modified], ["2026-10-02", true], `${id}/${source.id}`);
+      }
+      if (source.licence === "Apache-2.0") {
+        ohdsi += 1;
+        assert.match(source.url, /^https:\/\/raw\.githubusercontent\.com\/OHDSI\/PhenotypeLibrary\/v3\.37\.0\/inst\/cohorts\/\d+\.json$/, `${id}/${source.id}: the release and the cohort file that was read`);
+        assert.match(source.note ?? "", /Pending|Accepted/, `${id}/${source.id}: the library status is stated`);
+        assert.match(source.note ?? "", /LICENSE/, `${id}/${source.id}: the missing licence file is said`);
+      }
+      if (source.licence === "CC-BY-4.0") assert.match(source.version ?? "", /^\d{2}\.\d{2}[a-z]?$/, `${id}/${source.id}: the NCIt version that was read`);
+    }
+  }
+  assert.ok(registry >= 60 && ohdsi >= 5, `the walk found them (${registry} registry records, ${ohdsi} OHDSI cohorts)`);
+});
+
+test("no shipped pack carries a restricted or licensed code system, and every code is in the format of its system beside a source that publishes it", () => {
+  const allowed = Object.keys(VCR_PACK_CODE_SYSTEMS);
+  let codes = 0;
+  for (const [id, pack] of SHIPPED) {
+    for (const term of pack.terms) {
+      for (const code of term.codes ?? []) {
+        codes += 1;
+        assert.ok(allowed.includes(code.system), `${id}/${term.id}: ${code.system}`);
+        assert.ok(!VCR_PACK_REFUSED_CODE_SYSTEMS.some((refused) => refused.toLowerCase() === String(code.system).toLowerCase()), `${id}/${term.id}`);
+      }
+      // a verbatim definition is an NCI Thesaurus one, with that source cited
+      if (term.definition) assert.ok(term.sources.includes("ncit") && (term.codes ?? []).some((/** @type {any} */ code) => code.system === "NCIt"), `${id}/${term.id}`);
+    }
+  }
+  assert.ok(codes >= 80, `the walk found the codes (${codes})`);
+});
+
+test("a pack holds definitions, never a number a calculation uses: no entry carries a key outside the contract, and every endpoint names the standard it is assessed by", () => {
+  for (const [id, pack] of SHIPPED) {
+    for (const endpoint of pack.endpoints) {
+      assert.ok(endpoint.standard?.name?.length > 0, `${id}/${endpoint.id}`);
+      assert.ok(["continuous", "binary", "time_to_event"].includes(endpoint.type), `${id}/${endpoint.id}`);
+    }
+    const text = JSON.stringify(pack);
+    for (const forbidden of ["eventRate", "hazardRatio", "effectSize", "dropoutRate", "\"counts\"", "\"measures\""]) assert.ok(!text.includes(forbidden), `${id}: ${forbidden}`);
+    // a criterion's requirement and a phenotype's rule are the closed grammar, with no expression anywhere
+    assert.ok(!/"expression"/.test(text), id);
+  }
 });
