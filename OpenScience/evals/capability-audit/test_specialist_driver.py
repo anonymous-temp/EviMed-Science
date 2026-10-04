@@ -98,7 +98,7 @@ class AuditTests(unittest.TestCase):
             proof = hosted.validate_receipt(json.loads(hosted.read_owned(target, retained)), target, "mendelian_randomization", 14)
             self.assertEqual(proof["jobId"], self.proof["jobId"])
             self.assertFalse((target / "job-state" / (self.proof["jobId"] + ".json")).exists())
-            document = {"schemaVersion": 3, "probedAt": datetime.now(timezone.utc).isoformat(), "registered": 1,
+            document = {"schemaVersion": 3, "sourceIdentity": release.audit_identity.tool_source_identity(), "probedAt": datetime.now(timezone.utc).isoformat(), "registered": 1,
                 "executionCertified": 1, "operational": 1, "unverified": 0, "errors": 0, "results": [result]}
             registry = SimpleNamespace(TOOL_DEFINITIONS=[{"name": "mendelian_randomization"}], OPTIONAL_TOOLS=[])
             with patch.object(release, "read", return_value=document), patch.object(release, "EVIDENCE", target), patch.object(release, "load_module", return_value=registry):
@@ -115,6 +115,56 @@ class AuditTests(unittest.TestCase):
             self.assertIsNotNone(driver.fresh_terminal_job(self.workspace, "mendelian_randomization", 14))
             with patch.object(hosted, "current_evidence", return_value={**self.expected, "adapterEvidence": {"sha256": "d" * 64}}):
                 self.assertIsNone(driver.fresh_terminal_job(self.workspace, "mendelian_randomization", 14))
+
+    def test_a_receipt_counts_for_as_long_as_its_source_does_and_age_alone_never_expires_it(self):
+        # Owner ruling, 2026-10-04: evidence is valid for as long as what it certifies is unchanged.
+        old = datetime.fromtimestamp(time.time() - 400 * 86400, timezone.utc).isoformat()
+        self.proof["completedAt"] = old
+        self.capture()
+        retained = json.loads(hosted.read_owned(self.workspace, hosted.RECEIPT_DIRECTORY + "/" + self.proof["jobId"] + ".json"))
+        # No bound by default, so a receipt from over a year ago still describes the same source.
+        self.assertEqual(hosted.validate_receipt(retained, self.workspace, "mendelian_randomization", expected=self.expected)["jobId"], self.proof["jobId"])
+        with patch.object(hosted, "current_evidence", return_value=self.expected), patch.object(audit, "REPO", self.repo), patch.object(driver, "load_audit", return_value=audit):
+            self.assertIsNotNone(audit.latest_specialist_receipt("mendelian_randomization", [self.workspace], None))
+            self.assertIsNotNone(driver.fresh_terminal_job(self.workspace, "mendelian_randomization"))
+            # An operator's own bound is honoured when one is asked for, and only then.
+            self.assertIsNone(audit.latest_specialist_receipt("mendelian_randomization", [self.workspace], 30))
+        with self.assertRaisesRegex(hosted.ReceiptError, "hosted_receipt_stale"):
+            hosted.validate_receipt(retained, self.workspace, "mendelian_randomization", 30, expected=self.expected)
+        # A completion time from the future is a record that cannot be true, whatever the bound.
+        future = copy.deepcopy(retained)
+        future["proof"]["completedAt"] = datetime.fromtimestamp(time.time() + 7 * 86400, timezone.utc).isoformat()
+        self.sign(future["proof"])
+        with self.assertRaisesRegex(hosted.ReceiptError, "hosted_receipt_stale"):
+            hosted.validate_receipt(future, self.workspace, "mendelian_randomization", expected=self.expected)
+
+    def test_a_moved_source_names_the_digest_that_moved_and_what_refreshes_it(self):
+        self.capture()
+        retained = json.loads(hosted.read_owned(self.workspace, hosted.RECEIPT_DIRECTORY + "/" + self.proof["jobId"] + ".json"))
+        engine_moved = {**self.expected, "executionEvidence": {**self.expected["executionEvidence"], "agentSourceSha256": "9" * 64}}
+        with self.assertRaises(hosted.ReceiptError) as raised:
+            hosted.validate_receipt(retained, self.workspace, "mendelian_randomization", expected=engine_moved)
+        self.assertEqual(str(raised.exception), "hosted_receipt_source_changed:executionEvidence.agentSourceSha256")
+        both_moved = {**engine_moved, "adapterEvidence": {"sha256": "d" * 64, "files": 3}}
+        with self.assertRaises(hosted.ReceiptError) as raised:
+            hosted.validate_receipt(retained, self.workspace, "mendelian_randomization", expected=both_moved)
+        self.assertEqual(str(raised.exception), "hosted_receipt_source_changed:executionEvidence.agentSourceSha256,adapterEvidence.sha256")
+        # A producer's own note that its evidence was not taken cleanly is named as that.
+        noted = copy.deepcopy(retained)
+        noted["proof"]["evidenceNote"] = {"pinnedManifest": "mismatch"}
+        self.sign(noted["proof"])
+        with self.assertRaisesRegex(hosted.ReceiptError, "hosted_receipt_source_changed:evidenceNote"):
+            hosted.validate_receipt(noted, self.workspace, "mendelian_randomization", expected=self.expected)
+        # The verifier says it in words, names the tool and what to run, and never blames the age.
+        with patch.object(hosted, "current_evidence", return_value=both_moved), patch.object(release, "EVIDENCE", self.workspace):
+            with self.assertRaises(SystemExit) as exited:
+                release.receipt_proof(retained, "mendelian_randomization")
+        message = str(exited.exception)
+        self.assertIn("mendelian_randomization job receipt was recorded on other source than this tree's", message)
+        self.assertIn("the specialist engine's source tree", message)
+        self.assertIn("the adapter package and its deployment inputs", message)
+        self.assertIn("run_specialist_jobs.py --tool mendelian_randomization", message)
+        self.assertIn("the receipt's age is not the reason", message)
 
     def test_status_or_capabilities_alone_cannot_become_a_receipt(self):
         for data in [{"configured": True}, {"jobId": self.proof["jobId"], "jobStatus": "succeeded"}]:
@@ -365,7 +415,7 @@ class AuditTests(unittest.TestCase):
             "status": "success", "jobId": job_id, "jobStatus": "succeeded", "releaseStatus": None, "publicationReady": True,
             "executedAt": datetime.now(timezone.utc).isoformat(), "executionEvidence": state["executionEvidence"],
             "artifacts": [hosted.file_receipt(self.workspace, self.artifact)], "artifactCount": 1}
-        document = {"schemaVersion": 3, "probedAt": result["executedAt"], "registered": 1, "executionCertified": 1,
+        document = {"schemaVersion": 3, "sourceIdentity": release.audit_identity.tool_source_identity(), "probedAt": result["executedAt"], "registered": 1, "executionCertified": 1,
             "operational": 1, "unverified": 0, "errors": 0, "results": [result]}
         registry = SimpleNamespace(TOOL_DEFINITIONS=[{"name": tool}], OPTIONAL_TOOLS=[], execution_evidence=lambda *_: state["executionEvidence"])
         return state, path, result, document, registry

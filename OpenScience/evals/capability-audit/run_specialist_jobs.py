@@ -5,8 +5,9 @@
 they leave behind, and its criterion is deliberately strict: a capabilities
 response never counts, only a completed managed job with hashed non-empty
 artifacts and source evidence that still matches the installed package. So the
-jobs have to be run, and they have to be run within the audit's freshness
-window, which is what this script is for.
+jobs have to be run, which is what this script is for. A completed job keeps
+certifying its tool for as long as the engine and adapter source it ran on are
+the source in this tree; only a change to that source asks for a new one.
 
 Run it through `run_tool_gateway_audit.mjs --script run_specialist_jobs.py`, so
 the specialists reach the model the same way a runtime's do.
@@ -129,8 +130,12 @@ def load_audit():
     return module
 
 
-def fresh_terminal_job(workspace: Path, tool: str, max_age_days: float):
-    """Reuse exactly what the harvester can certify, including source hashes."""
+def fresh_terminal_job(workspace: Path, tool: str, max_age_days: float | None = None):
+    """Reuse exactly what the harvester can certify, including source hashes.
+
+    "Fresh" is not a matter of days: a finished job is reusable for as long as the
+    source it ran on is the source in this tree, which is what the harvester checks.
+    """
     return load_audit().latest_specialist_receipt(tool, [workspace], max_age_days)
 
 
@@ -231,7 +236,8 @@ def main():
     parser.add_argument("--manuscript", default="", help="workspace-relative manuscript for peer_review")
     parser.add_argument("--meta-topic", help="explicit Meta replication or research request; always starts a fresh job")
     parser.add_argument("--tool", action="append", default=[], help="run only these specialists")
-    parser.add_argument("--max-receipt-age-days", type=float, default=14)
+    parser.add_argument("--max-receipt-age-days", type=float, default=None,
+                        help="an operator's own bound on how old a reusable job may be; by default none")
     parser.add_argument("--job-timeout-seconds", type=float, default=10800)
     parser.add_argument("--mr-adapter-url", default="", help="isolated MR ToolResult endpoint; never a local fallback")
     parser.add_argument("--adapter-token-file", default="", help="rotating 0600 EviMed workload token file outside workspace")

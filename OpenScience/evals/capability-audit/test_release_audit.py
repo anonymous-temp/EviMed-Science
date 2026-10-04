@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""What the release audit says when its evidence has gone out of date.
+"""What the release audit says when its evidence no longer covers the source.
 
-Two defects, both reproduced against the real checker on 2026-09-10:
+Evidence is valid for as long as what it certifies is unchanged, and age alone never
+expires it (owner ruling, 2026-10-04): the fourteen-day window this file used to pin
+turned `pnpm audit:capabilities` red on every machine two weeks after each probe
+although nothing had changed. The tests below pin the replacement: a probe is judged
+by the tool registry it covers and the identity of the source it was taken on, a
+change names which, and a calendar bound exists only as an operator's own flag.
+
+Two defects that shaped the messages, both reproduced against the real checker on
+2026-09-10:
 
   1. `pnpm audit:capabilities` said exactly "tool audit evidence is stale" and
      nothing else, because freshness was the first thing `verify_tools()`
@@ -14,13 +22,14 @@ Two defects, both reproduced against the real checker on 2026-09-10:
      "reviewed data-source count drifted", and the only way past was to edit
      the expectation.
 
-These tests are also the guard on the fix: they assert the window is not
-widened and that a fresh probe covering too few tools is still refused.
+These tests are also the guard on the fix: a probe covering too few tools is
+still refused whatever its age, and the identity check is what replaces the window.
 """
 
 from __future__ import annotations
 
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -37,55 +46,100 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
+import audit_identity
+
 _spec = importlib.util.spec_from_file_location("evimed_release_audit_under_test", HERE / "verify_release_audit.py")
 audit = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(audit)
 
 REGISTRY = {"health", "literature_search", "web_search", "guideline_search"}
+IDENTITY = audit_identity.tool_source_identity()
 
 
-def probe(*, days_ago, tools, prefix=""):
+def probe(*, days_ago, tools, prefix="", identity=IDENTITY):
     at = datetime.now(timezone.utc) - timedelta(days=days_ago)
-    return {
+    document = {
         "schemaVersion": 3,
         "probedAt": at.isoformat().replace("+00:00", "Z"),
         "registered": len(tools),
         "results": [{"tool": "%s%s" % (prefix, name)} for name in tools],
     }
+    if identity is not None:
+        document["sourceIdentity"] = copy.deepcopy(identity)
+    return document
 
 
 class ToolProbeCurrency(unittest.TestCase):
     def test_a_current_complete_probe_raises_nothing(self):
         audit.tool_probe_currency(probe(days_ago=1, tools=REGISTRY), REGISTRY, set())
 
-    def test_the_window_is_fourteen_days_and_was_not_widened(self):
-        # The probe cannot be refreshed without a live deployment, and widening
-        # the window is the one repair that would make this green while proving
-        # less. Pinned so that doing it is a test change somebody has to make on
-        # purpose.
-        self.assertEqual(audit.TOOL_PROBE_WINDOW_DAYS, 14)
-        with self.assertRaises(SystemExit) as raised:
-            audit.tool_probe_currency(probe(days_ago=15, tools=REGISTRY), REGISTRY, set())
-        self.assertIn("the window is 14 days", str(raised.exception))
+    def test_age_alone_never_expires_a_probe(self):
+        # The probe cannot be refreshed without a live deployment, and a calendar
+        # window made a probe of an untouched source red on every machine two weeks
+        # later. What it certifies is unchanged, so it stands, at any age.
+        for days in (15, 41, 400, 3650):
+            with self.subTest(days_ago=days):
+                audit.tool_probe_currency(probe(days_ago=days, tools=REGISTRY), REGISTRY, set())
+        self.assertFalse(hasattr(audit, "TOOL_PROBE_WINDOW_DAYS"), "the window was not removed, only widened")
 
-    def test_a_fresh_probe_that_covers_too_few_tools_is_still_refused(self):
-        # The failure the old ordering hid: freshness alone is not currency.
+    def test_a_time_from_the_future_is_still_no_evidence(self):
+        with self.assertRaises(SystemExit) as raised:
+            audit.tool_probe_currency(probe(days_ago=-1, tools=REGISTRY), REGISTRY, set())
+        self.assertIn("tool audit timestamp is in the future", str(raised.exception))
+
+    def test_an_operator_may_bound_the_age_and_default_is_no_bound(self):
+        self.assertIsNone(audit.OPERATOR_MAX_AGE_DAYS)
+        with patch.object(audit, "OPERATOR_MAX_AGE_DAYS", 30):
+            audit.tool_probe_currency(probe(days_ago=1, tools=REGISTRY), REGISTRY, set())
+            with self.assertRaises(SystemExit) as raised:
+                audit.tool_probe_currency(probe(days_ago=41, tools=REGISTRY), REGISTRY, set())
+        self.assertIn("past the operator's bound of 30 days", str(raised.exception))
+
+    def test_a_probe_that_covers_too_few_tools_is_still_refused(self):
+        # The failure the old ordering hid: a recent probe is not a covering one.
         with self.assertRaises(SystemExit) as raised:
             audit.tool_probe_currency(probe(days_ago=0, tools={"health"}), REGISTRY, set())
         message = str(raised.exception)
+        self.assertIn("tool audit evidence does not cover the current source", message)
         self.assertIn("the registry declares 4", message)
         self.assertIn("never probed", message)
         for name in REGISTRY - {"health"}:
             self.assertIn(name, message)
 
-    def test_a_stale_undersized_probe_reports_both_reasons_at_once(self):
+    def test_an_old_undersized_probe_reports_the_tools_and_never_its_age(self):
         with self.assertRaises(SystemExit) as raised:
             audit.tool_probe_currency(probe(days_ago=41, tools={"health"}), REGISTRY, set())
         message = str(raised.exception)
-        self.assertIn("days ago", message)
         self.assertIn("the registry declares 4", message)
+        self.assertNotIn("days ago", message)
+        self.assertNotIn("window", message)
         self.assertIn("run_tool_audit.py", message)
         self.assertIn("no deployment reachable", message)
+
+    def test_a_probe_with_no_recorded_identity_reads_as_identity_not_recorded(self):
+        with self.assertRaises(SystemExit) as raised:
+            audit.tool_probe_currency(probe(days_ago=1, tools=REGISTRY, identity=None), REGISTRY, set())
+        message = str(raised.exception)
+        self.assertIn("identity not recorded, re-probe", message)
+        self.assertIn("sourceIdentity", message)
+        self.assertNotIn("never probed", message)
+
+    def test_a_probe_taken_on_other_source_names_which_identity_moved(self):
+        server_moved = copy.deepcopy(IDENTITY)
+        server_moved["mcpSource"]["sha256"] = "0" * 64
+        with self.assertRaises(SystemExit) as raised:
+            audit.tool_probe_currency(probe(days_ago=1, tools=REGISTRY, identity=server_moved), REGISTRY, set())
+        message = str(raised.exception)
+        self.assertIn("the research MCP server source (runtime/mcp/evimed-research) changed since", message)
+        self.assertNotIn("tool-name registry (packages", message)
+        names_moved = copy.deepcopy(IDENTITY)
+        names_moved["toolNames"]["sha256"] = "1" * 64
+        with self.assertRaises(SystemExit) as raised:
+            audit.tool_probe_currency(probe(days_ago=400, tools=REGISTRY, identity=names_moved), REGISTRY, set())
+        message = str(raised.exception)
+        self.assertIn("the tool-name registry (packages/domain/src/toolNames.mjs) changed since", message)
+        self.assertNotIn("MCP server source", message)
+        self.assertIn("refresh:", message)
 
     def test_the_retired_prefix_is_named_rather_than_read_as_missing_probes(self):
         with self.assertRaises(SystemExit) as raised:
@@ -101,8 +155,68 @@ class ToolProbeCurrency(unittest.TestCase):
 
     def test_the_message_names_the_evidence_file(self):
         with self.assertRaises(SystemExit) as raised:
-            audit.tool_probe_currency(probe(days_ago=41, tools=REGISTRY), REGISTRY, set())
+            audit.tool_probe_currency(probe(days_ago=41, tools={"health"}), REGISTRY, set())
         self.assertIn("tool-probe-v3.json", str(raised.exception))
+
+    def test_the_shipped_recording_says_what_it_lacks_instead_of_its_age(self):
+        # Until the runner records an identity the committed probe cannot claim
+        # one, and the audit says exactly that; the day it is regenerated this
+        # test only checks that age is not what is said.
+        document = json.loads((HERE / "results" / "tool-probe-v3.json").read_text(encoding="utf-8"))
+        server = audit.load_module("evimed_release_tool_registry", audit.REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+        registry = {item["name"] for item in server.TOOL_DEFINITIONS}
+        try:
+            audit.tool_probe_currency(document, registry, set(document.get("notOffered", [])))
+        except SystemExit as raised:
+            self.assertNotIn("days ago", str(raised))
+            self.assertNotIn("window", str(raised))
+            if "sourceIdentity" not in document:
+                self.assertIn("identity not recorded, re-probe", str(raised))
+
+
+class ToolSourceIdentity(unittest.TestCase):
+    """The digests a probe is taken on, from the tree it is asked about."""
+
+    def _tree(self, root):
+        mcp = root / "runtime/mcp/evimed-research"
+        (mcp / "test").mkdir(parents=True)
+        (mcp / "__pycache__").mkdir()
+        (root / "packages/domain/src").mkdir(parents=True)
+        (mcp / "execution_evidence.py").write_bytes((audit.REPO / "runtime/mcp/evimed-research/execution_evidence.py").read_bytes())
+        (mcp / "server.py").write_text("TOOL_DEFINITIONS = []\n")
+        (mcp / "test" / "test_server.py").write_text("assert True\n")
+        (mcp / "__pycache__" / "server.pyc").write_bytes(b"\x00")
+        (root / "packages/domain/src/toolNames.mjs").write_text("export const NAMES = []\n")
+        return mcp
+
+    def test_it_follows_what_executes_and_the_names_the_model_is_offered_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mcp = self._tree(root)
+            before = audit_identity.tool_source_identity(root)
+            self.assertEqual(set(before), {"schemaVersion", "mcpSource", "toolNames"})
+            self.assertEqual(before, audit_identity.tool_source_identity(root), "deterministic")
+            # Neither a test nor a compiled cache is what a probe certifies.
+            (mcp / "test" / "test_server.py").write_text("assert 1 == 1\n")
+            (mcp / "__pycache__" / "server.pyc").write_bytes(b"\x01")
+            self.assertEqual(audit_identity.tool_source_identity(root), before)
+            self.assertEqual(audit_identity.identity_changes(before, audit_identity.tool_source_identity(root)), [])
+            (mcp / "server.py").write_text("TOOL_DEFINITIONS = [1]\n")
+            moved = audit_identity.identity_changes(before, audit_identity.tool_source_identity(root))
+            self.assertEqual(moved, [audit_identity.IDENTITY_PARTS["mcpSource"]])
+            (root / "packages/domain/src/toolNames.mjs").write_text("export const NAMES = ['x']\n")
+            self.assertEqual(audit_identity.identity_changes(before, audit_identity.tool_source_identity(root)), list(audit_identity.IDENTITY_PARTS.values()))
+
+    def test_a_record_that_is_not_an_identity_certifies_nothing(self):
+        current = audit_identity.tool_source_identity()
+        for recorded in (None, {}, "x", {"schemaVersion": 2}, {"schemaVersion": 1, "mcpSource": {"sha256": current["mcpSource"]["sha256"]}}):
+            with self.subTest(recorded=recorded):
+                self.assertTrue(audit_identity.identity_changes(recorded, current))
+
+    def test_the_runner_records_the_identity_the_verifier_computes(self):
+        import run_tool_audit as runner
+        self.assertIs(runner.tool_source_identity, audit_identity.tool_source_identity, "one implementation, imported by both")
+        self.assertEqual(audit_identity.tool_source_identity(), IDENTITY)
 
 
 class UncertifiedToolsAreNamed(unittest.TestCase):
@@ -122,10 +236,11 @@ class UncertifiedToolsAreNamed(unittest.TestCase):
         for row in results:
             if row["tool"] == "mendelian_randomization":
                 row.update(operational=False, probeType="no_completed_job_receipt", status="unverified",
-                           summary="No fresh terminal managed job with verified artifacts was found.")
+                           summary="No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.")
         return {
             "schemaVersion": 3,
             "probedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "sourceIdentity": copy.deepcopy(IDENTITY),
             "registered": len(registry),
             "notOffered": [],
             "executionCertified": len(registry) - 1,
@@ -148,7 +263,7 @@ class UncertifiedToolsAreNamed(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("%d of %d tools are execution-certified" % (expected - 1, expected), message)
         self.assertIn("mendelian_randomization (no_completed_job_receipt", message)
-        self.assertIn("No fresh terminal managed job", message)
+        self.assertIn("No terminal managed job with verified artifacts", message)
         # Only the one that failed: a certified tool named here would be noise.
         self.assertNotIn("health (", message)
 
@@ -188,6 +303,97 @@ class ProbeFixturesCoverTheRegistry(unittest.TestCase):
                 checked += 1
         self.assertEqual(checked, len(runner.TASK_FIXTURES))
         self.assertGreater(checked, 30, "no fixture was validated; this test proved nothing")
+
+
+class RegistryTailToolsAreCertifiable(unittest.TestCase):
+    """`evidence_pool`, `research_calculate`, `trial_registry_record`, `vcr_read`, `vcr_simulate`, `vcr_write`.
+
+    The recorded probe predates all six, so the audit says it covers 40 of 47. The
+    runner has carried a fixture for each since they were declared, and a fixture
+    nobody has watched certify is a promise: here each one is run through the real
+    MCP server against stub gateways that answer as the deployed ones do (a project
+    with no study; an owned calculation job), and must come back operational by
+    the runner's own criterion. `research_calculate` is the one a probe cannot make
+    up for itself: a calculation starts only from a native conversation turn, so it
+    is probed on a job the project already owns, and without one it says so.
+    """
+
+    TOOLS = ("evidence_pool", "research_calculate", "trial_registry_record", "vcr_read", "vcr_simulate", "vcr_write")
+    JOB = "replay_" + "ab" * 32
+
+    def setUp(self):
+        import http.server
+        import os
+        import threading
+        seen = self.seen = []
+
+        class Gateway(http.server.BaseHTTPRequestHandler):
+            def do_POST(handler):
+                body = json.loads(handler.rfile.read(int(handler.headers["content-length"])))
+                seen.append((handler.path, body))
+                if handler.path.startswith("/internal/results/v1/"):
+                    status, answer = (200, {"data": {"id": body["jobId"], "state": "succeeded"}}) if body.get("jobId") == self.JOB \
+                        else (404, {"error": "The calculation is unavailable.", "code": "result_replay_unavailable"})
+                else:  # the 虚拟临研 gateway of a project that has no study
+                    status, answer = 404, {"error": "no study", "code": "vcr_no_study"}
+                payload = json.dumps(answer).encode()
+                handler.send_response(status)
+                handler.send_header("Content-Length", str(len(payload)))
+                handler.end_headers()
+                handler.wfile.write(payload)
+
+            def log_message(handler, *_args):
+                pass
+
+        http_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+        threading.Thread(target=http_server.serve_forever, daemon=True).start()
+        self.addCleanup(http_server.server_close)
+        self.addCleanup(http_server.shutdown)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.workspace = Path(temporary.name).resolve()
+        token = self.workspace / "gateway-token"
+        token.write_text("test-runtime-token\n")
+        token.chmod(0o600)
+        base = "http://127.0.0.1:%d" % http_server.server_address[1]
+        environment = patch.dict(os.environ, {
+            "EVIMED_RESULT_GATEWAY_URL": base + "/internal/results/v1", "EVIMED_VCR_GATEWAY_URL": base + "/internal/vcr/v1",
+            "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": base + "/internal/sources/v1/fetch", "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token),
+            "EVIMED_DISABLED_TOOLS": "",
+        })
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.server = audit.load_module("evimed_release_tool_probe_server", audit.REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+
+    def _probe(self, **overrides):
+        import run_tool_audit as runner
+        fixtures = {tool: dict(runner.TASK_FIXTURES[tool]) for tool in self.TOOLS}
+        fixtures.update(overrides)
+        with patch.object(runner, "REPO", self.workspace.parent), patch.dict(runner.TASK_FIXTURES, fixtures, clear=True):
+            return {row["tool"]: row for row in runner.run_task_probes(self.server, self.workspace)}
+
+    def test_every_fixture_exists_and_each_comes_back_operational_with_the_job_it_needs(self):
+        rows = self._probe(research_calculate={"action": "status", "jobId": self.JOB})
+        self.assertEqual(sorted(rows), sorted(self.TOOLS))
+        for tool, row in rows.items():
+            with self.subTest(tool=tool):
+                self.assertIs(row["operational"], True, row["summary"])
+                self.assertIn(row["status"], ("success", "warning"))
+        self.assertEqual(rows["research_calculate"]["status"], "success")
+        self.assertTrue(any(path.endswith("/status") and body["jobId"] == self.JOB for path, body in self.seen))
+        self.assertTrue(all(rows[tool]["status"] == "warning" for tool in self.TOOLS if tool.startswith("vcr_") or tool in ("evidence_pool", "trial_registry_record")),
+                        "a project with no study is a warning the route and token certified, never a calculation")
+
+    def test_research_calculate_without_an_owned_job_says_what_it_needs_instead_of_asking_about_a_fake_one(self):
+        rows = self._probe()
+        row = rows["research_calculate"]
+        self.assertIs(row["operational"], False)
+        self.assertEqual(row["probeType"], "no_owned_calculation_job")
+        self.assertIn("EVIMED_RESULT_REPLAY_AUDIT_JOB_ID", row["summary"])
+        self.assertFalse(any(path.startswith("/internal/results/v1/") for path, _body in self.seen), "no gateway call about an id nobody holds")
+        for tool in self.TOOLS:
+            if tool != "research_calculate":
+                self.assertIs(rows[tool]["operational"], True, tool)
 
 
 class IncompleteProbeRecording(unittest.TestCase):

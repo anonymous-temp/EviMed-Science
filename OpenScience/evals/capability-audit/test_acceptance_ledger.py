@@ -9,7 +9,6 @@ broken walk cannot agree with an empty ledger.
 
 from __future__ import annotations
 
-import inspect
 import io
 import json
 import sys
@@ -580,52 +579,42 @@ class ReleaseAuditWiringTests(unittest.TestCase):
             ["verify_tools", "verify_sources", "verify_connectors", "verify_skills", "verify_acceptance"],
         )
 
-    def test_the_recorded_tool_probe_is_judged_by_the_audits_own_freshness_window(self):
+    def test_the_recorded_tool_probe_is_judged_by_what_it_certifies_and_never_by_its_age(self):
         """The refusal this check was told not to disturb, asserted as a property.
 
-        Asserting that the shipped probe *is* stale would encode today's
-        verdict: the documented remedy for the red `audit:capabilities` is to
-        refresh that probe, and refreshing it would turn this test — and, now
-        that it runs on every pull request, CI — red for doing the right thing.
-
-        So the property, in both directions. The receipt's age is computed here
-        from its own timestamp rather than taken from the audit, and the audit's
-        window is read off `parsed_fresh` itself, so the assertion is that the
-        function refuses exactly when the receipt is older than its own window.
-        A refreshed probe passes; a freshness rule that stopped refusing, or
-        started refusing everything, fails at the boundary cases below whatever
-        the receipt's date happens to be.
+        The audit used to refuse a probe older than its own fourteen days, which
+        turned `pnpm audit:capabilities` red on every machine two weeks after each
+        recording although nothing had changed (owner ruling, 2026-10-04: evidence
+        is valid for as long as what it certifies is unchanged). Asserting that the
+        shipped probe *is* red would encode today's verdict, and the documented
+        remedy is to record a new one, so the property is asserted instead:
+        `observed_time` takes the time a piece of evidence says it was taken and
+        refuses only a time from the future, at any age, and honours an operator's
+        own bound only when one is asked for.
         """
-        window = timedelta(
-            days=inspect.signature(release_audit.parsed_fresh).parameters["max_age_days"].default
-        )
-
-        def refusal(value):
+        def refusal(value, **options):
             """The audit's verdict on one timestamp: its message, or None."""
             try:
-                release_audit.parsed_fresh(value, "tool audit")
+                release_audit.observed_time(value, "tool audit", **options)
             except SystemExit as exit_error:
                 return str(exit_error)
             return None
 
-        # The rule itself, at its own boundary, independent of any receipt.
         now = datetime.now(timezone.utc)
-        self.assertIsNone(refusal((now - window + timedelta(minutes=1)).isoformat()),
-                          "a receipt inside the window must be accepted")
-        self.assertEqual(refusal((now - window - timedelta(minutes=1)).isoformat()),
-                         "tool audit evidence is stale",
-                         "a receipt past the window must be refused as stale")
+        for age in (timedelta(minutes=1), timedelta(days=15), timedelta(days=400), timedelta(days=3650)):
+            self.assertIsNone(refusal((now - age).isoformat()), "evidence is not refused for how old it is: %s" % age)
         self.assertEqual(refusal((now + timedelta(hours=1)).isoformat()),
                          "tool audit timestamp is in the future",
-                         "a receipt from ahead of this clock is not a fresh one")
+                         "a receipt from ahead of this clock is no evidence at all")
+        self.assertEqual(refusal("not a time"), "tool audit timestamp is invalid")
+        # The bound is the operator's: absent by default, exact when given.
+        self.assertIsNone(release_audit.OPERATOR_MAX_AGE_DAYS)
+        self.assertIsNone(refusal((now - timedelta(days=29)).isoformat(), max_age_days=30))
+        self.assertIn("past the operator's bound of 30 days", refusal((now - timedelta(days=31)).isoformat(), max_age_days=30))
 
-        # And the receipt this checkout ships, judged by that same rule: stale
-        # if and only if it is older than the window.
+        # And the receipt this checkout ships is read the same way: its age is never what refuses it.
         probe = json.loads((HERE / "results" / "tool-probe-v3.json").read_text(encoding="utf-8"))
-        probed_at = datetime.fromisoformat(str(probe["probedAt"]).replace("Z", "+00:00"))
-        expected = "tool audit evidence is stale" if datetime.now(timezone.utc) - probed_at > window else None
-        self.assertEqual(refusal(probe["probedAt"]), expected)
-
+        self.assertIsNone(refusal(probe["probedAt"]))
 
 if __name__ == "__main__":
     unittest.main()

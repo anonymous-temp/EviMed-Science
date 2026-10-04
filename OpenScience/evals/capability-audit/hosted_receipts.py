@@ -217,8 +217,37 @@ def validate_public_mr_fixture(request, proof, workspace):
             raise ReceiptError("hosted_receipt_public_fixture_source_changed")
 
 
-def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, trustedPublicKey=None):
-    """One eligibility check used by capture, resume, harvest and clean replay."""
+def source_changes(proof, current):
+    """Which of a receipt's recorded source digests are not the ones computed from this tree.
+
+    Names the field, not only that something moved: `hosted_receipt_source_changed`
+    said a receipt no longer described the source and left the reader to diff two
+    JSON documents to learn whether it was the engine, the adapter or the
+    producer's own note that had changed. Each name below is a field of the
+    receipt's `executionEvidence` / `adapterEvidence` blocks, or `evidenceNote`.
+    """
+    changed = []
+    if "evidenceNote" in proof:
+        changed.append("evidenceNote")
+    for key in ("executionEvidence", "adapterEvidence"):
+        recorded, now = proof.get(key), current[key]
+        if recorded == now:
+            continue
+        if isinstance(recorded, dict) and isinstance(now, dict):
+            changed.extend(key + "." + name for name in sorted(set(recorded) | set(now)) if recorded.get(name) != now.get(name))
+        else:
+            changed.append(key)
+    return changed
+
+
+def validate_receipt(value, workspace, tool, max_age_days=None, *, expected=None, trustedPublicKey=None):
+    """One eligibility check used by capture, resume, harvest and clean replay.
+
+    A receipt is valid for as long as the source it records is the source in this
+    tree (the digests below), not for a number of days (owner ruling, 2026-10-04):
+    `max_age_days` is an operator's own bound, absent by default, and a completion
+    time from the future is still refused as a record that cannot be true.
+    """
     if not isinstance(value, dict) or (value.get("schemaVersion"), value.get("kind")) not in {
         (1, "isolated-specialist-receipt"), (2, "specialist-worker-record")
     }:
@@ -258,7 +287,7 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
     try:
         completed = datetime.fromisoformat(proof["completedAt"].replace("Z", "+00:00"))
         age = (datetime.now(timezone.utc) - completed).total_seconds() / 86400
-        if not -1 / 1440 <= age <= max_age_days:
+        if age < -1 / 1440 or (max_age_days is not None and age > max_age_days):
             raise ValueError()
     except (TypeError, ValueError, AttributeError):
         raise ReceiptError("hosted_receipt_stale") from None
@@ -267,8 +296,9 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
     # between admission and completion, could not be taken, or sat on a stale
     # pinned manifest. The job it describes was delivered; this record cannot
     # certify a release, because its digests do not describe one source.
-    if "evidenceNote" in proof or any(proof[key] != current[key] for key in ("executionEvidence", "adapterEvidence")):
-        raise ReceiptError("hosted_receipt_source_changed")
+    changed = source_changes(proof, current)
+    if changed:
+        raise ReceiptError("hosted_receipt_source_changed:" + ",".join(changed))
     request = value.get("request")
     if not isinstance(request, dict) or proof["requestSha256"] != digest(canonical(request)):
         raise ReceiptError("hosted_receipt_request_changed")
@@ -310,7 +340,7 @@ def capture_receipt(workspace, tool, request, response, scope, *, expected_job_i
         "scope": scope, "request": request, "proof": proof,
         "response": {"status": response.get("status"), "jobId": data.get("jobId"), "jobStatus": data.get("jobStatus"),
             "artifacts": [item.get("path") for item in response.get("artifacts", []) if isinstance(item, dict)]}}
-    proof = validate_receipt(value, workspace, tool, 1, expected=expected, trustedPublicKey=trustedPublicKey)
+    proof = validate_receipt(value, workspace, tool, None, expected=expected, trustedPublicKey=trustedPublicKey)
     relative = f"{RECEIPT_DIRECTORY}/{proof['jobId']}.json"
     write_new(workspace, relative, canonical(value) + b"\n")
     return relative

@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import time
 import tempfile
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import public_mr_fixture as public_mr
 from audit_inventory import validate_disabled
+from audit_identity import tool_source_identity
 from hosted_receipts import (ReceiptError, RECEIPT_DIRECTORY, artifact_paths, canonical, file_receipt, read_owned, validate_receipt, write_new)
 
 
@@ -91,8 +93,14 @@ TASK_FIXTURES = {
     "trial_registry_record": {"registryId": "NCT04280705"},
     "evidence_pool": {"action": "status", "jobId": "job_release_audit_probe"},
     # This route probe reads an existing owned job. Engine qualification is
-    # separately proved by completed numerical receipts; an absent job must
-    # fail this probe rather than masquerade as a successful calculation.
+    # separately proved by completed numerical receipts, and an absent job must
+    # not masquerade as a successful calculation. A calculation starts only from
+    # a pending native tool call in a live conversation (the gateway checks the
+    # kernel's transcript for it), so a probe outside one cannot start any: the
+    # job is a calculation the probe project already owns, named by
+    # `EVIMED_RESULT_REPLAY_AUDIT_JOB_ID` (replay_<64 hex>, from the result's own
+    # status). Without one the probe says so (`run_task_probes`) instead of asking
+    # the gateway about an id nobody holds.
     "research_calculate": {"action": "status", "jobId": os.environ.get(
         "EVIMED_RESULT_REPLAY_AUDIT_JOB_ID", "replay_" + "0" * 64)},
     # `op: providers` asks the probe which front-ends this deployment can reach
@@ -352,7 +360,7 @@ def latest_specialist_receipt(tool, roots, max_age_days):
                 if not receipts:
                     continue
                 age_days = (datetime.now(timezone.utc) - executed_at).total_seconds() / 86400
-                if age_days > max_age_days:
+                if max_age_days is not None and age_days > max_age_days:
                     continue
                 candidates.append((executed_at, state, receipts, workspace))
             except (OSError, ValueError, KeyError, json.JSONDecodeError):
@@ -442,6 +450,17 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
     staging_root.rename(evidence_root)
 
 
+def owned_job_id(arguments):
+    """The calculation job id a research_calculate probe was given, or None when it holds none.
+
+    The all-zero id is the placeholder the fixture carries when the operator named
+    no job; it is not a job anyone owns, and asking the gateway about it can only
+    answer "unknown", which says nothing about the tool.
+    """
+    job_id = str(arguments.get("jobId", ""))
+    return job_id if re.fullmatch(r"replay_[a-f0-9]{64}", job_id) and set(job_id[len("replay_"):]) != {"0"} else None
+
+
 def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
@@ -449,6 +468,16 @@ def run_task_probes(server, workspace):
     disabled = server.disabled_tools()
     for tool, arguments in TASK_FIXTURES.items():
         if tool in disabled:
+            continue
+        if tool == "research_calculate" and owned_job_id(arguments) is None:
+            results.append({
+                "tool": tool, "probeType": "no_owned_calculation_job", "operation": "none", "status": "unverified",
+                "operational": False, "artifacts": [], "artifactCount": 0,
+                "summary": "research_calculate is probed on a calculation the probe project already owns, because a calculation "
+                           "starts only from a native conversation turn. No job id was given: set "
+                           "EVIMED_RESULT_REPLAY_AUDIT_JOB_ID to the id (replay_<64 hex>) of a completed calculation "
+                           "in the probe project and run again.",
+            })
             continue
         started = time.monotonic()
         result = server.call_tool(tool, arguments)
@@ -496,7 +525,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--probe-workspace", type=Path, required=True)
     parser.add_argument("--receipt-workspace", action="append", default=[])
-    parser.add_argument("--max-receipt-age-days", type=float, default=14)
+    parser.add_argument("--max-receipt-age-days", type=float, default=None,
+                        help="an operator's own bound on how old a harvested job may be; by default none: a receipt counts "
+                             "for as long as the source it records is the source in this tree")
     parser.add_argument("--output-dir", type=Path, default=RESULTS)
     parser.add_argument(
         "--record-incomplete", action="store_true",
@@ -548,7 +579,7 @@ def main():
             "operation": "none",
             "status": "unverified",
             "operational": False,
-            "summary": "No fresh terminal managed job with verified artifacts was found.",
+            "summary": "No terminal managed job with verified artifacts and a recorded source equal to this tree's was found.",
             "artifacts": [],
             "artifactCount": 0,
         })
@@ -566,6 +597,12 @@ def main():
         # that quietly shrank is the way the second becomes the first.
         "notOffered": sorted(disabled),
         "sourceRegistry": sorted(registry),
+        # What this recording was taken on. The verifier computes the same two
+        # digests from the tree it is asked about, and the recording is valid for
+        # exactly as long as they are equal: age never expires it. Written here
+        # and by nothing else, so an old recording without it reads as one whose
+        # identity was not recorded, which is true.
+        "sourceIdentity": tool_source_identity(),
         "toolAvailability": [{"tool": name, "state": "notOffered" if name in disabled else "offered", "basis": "explicit-deployment-disable" if name in disabled else "runtime-list-tools"} for name in sorted(registry)],
         "executionCertified": certified,
         "unverified": len(declared) - certified,
@@ -574,7 +611,7 @@ def main():
         "complete": complete,
         "criteria": {
             "ordinaryTool": "A real task call must return success or warning and all declared artifacts must exist and be non-empty.",
-            "specialistTool": "A capabilities response never qualifies; a fresh terminal managed job and hashed non-empty artifacts are required. Operational execution and publication readiness are reported separately.",
+            "specialistTool": "A capabilities response never qualifies; a terminal managed job whose recorded source is this tree's, and hashed non-empty artifacts, are required. Operational execution and publication readiness are reported separately.",
         },
         "results": ordered,
     }

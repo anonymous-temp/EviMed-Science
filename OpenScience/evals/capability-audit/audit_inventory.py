@@ -111,7 +111,9 @@ def skill_execution_coverage(repo: Path, results: Path, composition: dict) -> li
         document = json.loads(file.read_text())
         try:
             observed = datetime.fromisoformat(str(document.get('finishedAt')).replace('Z', '+00:00'))
-            fresh = datetime.now(timezone.utc) - timedelta(days=14) <= observed <= datetime.now(timezone.utc) + timedelta(minutes=5)
+            # A recording counts for as long as the bodies and entrypoints it names are the ones in this tree
+            # (their digests are compared below), not for a number of days; a time from the future is no recording.
+            fresh = observed <= datetime.now(timezone.utc) + timedelta(minutes=5)
         except (ValueError, TypeError):
             fresh = False
         if document.get('schemaVersion') != 1 or not fresh:
