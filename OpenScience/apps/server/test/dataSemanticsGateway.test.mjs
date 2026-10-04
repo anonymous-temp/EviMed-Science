@@ -11,13 +11,13 @@ import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "../src/
 import { createDataSemanticsRoutes } from "../src/dataSemanticsRoutes.mjs";
 import { DataSemanticsService } from "../src/dataSemanticsService.mjs";
 import { HttpError } from "../src/security.mjs";
-import { ProductDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const inferred = { basis: "model_inferred", inferredFrom: ["the header"] };
 const TOKEN = "runtime-token-for-tests";
 
 async function gatewayFixture(t, { enabled = true, service = undefined, projectId = "p1" } = {}) {
-  const documents = new ProductDocumentsDouble();
+  const documents = productDocumentsDouble();
   const real = new DataSemanticsService({ documents });
   const failures = [];
   const handler = createDataSemanticsGateway({
@@ -126,7 +126,7 @@ function response() {
 }
 
 test("the files page lists a project's datasets, reads one, and confirms facts as the researcher — with the session and the token behind it", async () => {
-  const documents = new ProductDocumentsDouble();
+  const documents = productDocumentsDouble();
   const service = new DataSemanticsService({ documents });
   await service.write("owner", "p1", { datasetId: "visits", ...inferred, variables: [{ table: "v.csv", name: "sbp", unit: "mmHg" }] }, { via: "conversation" });
   const csrf = [];

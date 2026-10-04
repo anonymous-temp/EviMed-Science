@@ -6,14 +6,31 @@ import test from "node:test";
 
 import { DATA_SEMANTICS_LIMITS } from "@evimed/domain";
 import { DataSemanticsService, dataSemanticsDocumentId } from "../src/dataSemanticsService.mjs";
-import { ProductDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+import { HttpError } from "../src/security.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
 const inferred = { basis: "model_inferred", inferredFrom: ["data-profile.json"] };
 
+/** The shared ledger double, with a switch that loses the next N writes to a concurrent writer and a count of the writes tried. */
+function ledger() {
+  const documents = productDocumentsDouble();
+  const control = { conflicts: 0, puts: 0 };
+  const put = documents.put.bind(documents);
+  documents.put = async (...args) => {
+    control.puts += 1;
+    if (control.conflicts > 0) {
+      control.conflicts -= 1;
+      throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
+    }
+    return put(...args);
+  };
+  return Object.assign(documents, { control });
+}
+
 function fixture() {
-  const documents = new ProductDocumentsDouble();
+  const documents = ledger();
   let tick = 0;
   const service = new DataSemanticsService({ documents, now: () => `2026-10-04T08:00:${String(tick++).padStart(2, "0")}.000Z` });
   return { documents, service };
@@ -57,9 +74,9 @@ test("a researcher's correction is kept as a confirmed fact and is not overwritt
   assert.equal(stored.basis, "researcher_confirmed");
   assert.equal(stored.contested[0].value, "mg/dL");
   // The ledger kept every version: the correction is a revision, not an overwrite.
-  const history = documents.history("u", "dataset-semantics", dataSemanticsDocumentId("p", "labs"));
-  assert.deepEqual(history.map((entry) => entry.revision), [1, 2, 3]);
-  assert.equal(history[0].payload.tables[0].variables[0].facts.unit.value, "mg/dL");
+  const history = await documents.history("u", "dataset-semantics", dataSemanticsDocumentId("p", "labs"));
+  assert.deepEqual(history.map((entry) => entry.revision), [3, 2, 1]);
+  assert.equal(history[2].payload.tables[0].variables[0].facts.unit.value, "mg/dL");
   assert.equal(history[1].payload.tables[0].variables[0].facts.unit.value, "mmol/L");
 });
 
@@ -70,7 +87,7 @@ test("writing what is already recorded is not a new revision", async () => {
   const second = await service.write("u", "p", patch, { via: "conversation" });
   assert.equal(second.changed, false);
   assert.equal(second.revision, 1);
-  assert.equal(documents.puts, 1);
+  assert.equal(documents.control.puts, 1);
 });
 
 test("a new delivery rebinds the source version and the old one stays in the history", async () => {
@@ -99,11 +116,11 @@ test("one dataset id in two projects is two assets, and one account never reads 
 test("a lost race is read again and the patch applied to what is there; a loser that keeps losing is told", async () => {
   const { service, documents } = fixture();
   await service.write("u", "p", { datasetId: "d", ...inferred, variables: [{ table: "t.csv", name: "a", unit: "mg" }] }, { via: "conversation" });
-  documents.conflicts = 2;
+  documents.control.conflicts = 2;
   const done = await service.write("u", "p", { datasetId: "d", ...inferred, variables: [{ table: "t.csv", name: "b", unit: "kg" }] }, { via: "conversation" });
   assert.equal(done.revision, 2);
   assert.deepEqual((await service.get("u", "p", "d")).asset.tables[0].variables.map((variable) => variable.name), ["a", "b"]);
-  documents.conflicts = 99;
+  documents.control.conflicts = 99;
   await assert.rejects(() => service.write("u", "p", { datasetId: "d", title: "x" }, { via: "conversation" }), (error) => error.code === "semantics_revision_conflict");
 });
 

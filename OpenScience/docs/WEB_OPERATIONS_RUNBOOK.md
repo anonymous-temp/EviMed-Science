@@ -816,8 +816,10 @@ cannot reach. Set each to the gateway listener (`http://172.30.253.1:8787` here)
 `OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/search/v1/query`),
 `OPEN_SCIENCE_KB_SEARCH_GATEWAY_INTERNAL_URL` (`/internal/kb/v1/search`) and, where
 those modules are on, `OPEN_SCIENCE_TOOLUNIVERSE_GATEWAY_INTERNAL_URL` and
-`OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL`. The frontier, result, VCR and
-capsule gateways follow the model gateway's address and need no key. The
+`OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL`. The frontier, result, VCR, capsule
+and data-semantics (`/internal/semantics/v1`, the recorded meaning of a project's
+datasets; `OPEN_SCIENCE_DATA_SEMANTICS_ENABLED`, on with Postgres) gateways follow
+the model gateway's address and need no key. The
 knowledge-base one was missing until 2026-10-03, so `kb_search` could not reach
 the control plane from any conversation on this host.
 

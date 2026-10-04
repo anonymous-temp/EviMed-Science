@@ -15,7 +15,10 @@ const MAX_BYTES = 64 * 1024 * 1024;
 // that — a storage location, a queue id, another user's id — leaves through a
 // projection; see `exportDocumentRow`.
 const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin",
-  "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_CUSTOMER_KINDS];
+  "document-export", "result-version", "result-impact", "result-revision", "result-replay",
+  // What a project's datasets were understood to mean: the researcher's own corrections and the model's readings with
+  // their basis, the file hashes they were read from, no patient row (dataSemanticsService.mjs).
+  "dataset-semantics", ...EXTENSION_CUSTOMER_KINDS];
 
 /** The document kinds the archive deliberately leaves out, and why.
  *

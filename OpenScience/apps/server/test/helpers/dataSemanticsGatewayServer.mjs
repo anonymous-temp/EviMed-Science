@@ -13,10 +13,10 @@ import { createServer } from "node:http";
 
 import { createDataSemanticsGateway } from "../../src/dataSemanticsGateway.mjs";
 import { DataSemanticsService } from "../../src/dataSemanticsService.mjs";
-import { ProductDocumentsDouble } from "./productDocumentsDouble.mjs";
+import { productDocumentsDouble } from "./productDocumentsDouble.mjs";
 
 const enabled = process.argv.includes("--enabled") ? process.argv[process.argv.indexOf("--enabled") + 1] !== "false" : true;
-const documents = new ProductDocumentsDouble();
+const documents = productDocumentsDouble();
 let tick = 0;
 const service = new DataSemanticsService({ documents, now: () => new Date(Date.UTC(2026, 9, 4, 8, 0, tick++)).toISOString() });
 const handler = createDataSemanticsGateway({
@@ -25,10 +25,12 @@ const handler = createDataSemanticsGateway({
   store: { userById: async (id) => ({ id }), requireProject: async (_user, id) => ({ id }) },
   service,
 });
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   if (req.url === "/__ledger") {
+    const rows = [...documents.rows.values()];
+    const revisions = Object.fromEntries(await Promise.all(rows.map(async (row) => [row.id, (await documents.history(row.userId, row.kind, row.id)).length])));
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ rows: [...documents.rows.values()], revisions: Object.fromEntries([...documents.revisions].map(([key, list]) => [key.split("\u0000")[2], list.length])) }));
+    res.end(JSON.stringify({ rows, revisions }));
     return;
   }
   void handler(req, res);
