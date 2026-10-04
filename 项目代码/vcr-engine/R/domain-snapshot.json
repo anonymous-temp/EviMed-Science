@@ -283,6 +283,20 @@
         "simulation with a known ATT: double robustness"
       ],
       "modelTier": "data"
+    },
+    "comparator.covariate_sets": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "comparator.entropy_balance",
+        "comparator.propensity_weight",
+        "comparator.aipw"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -312,7 +326,8 @@
     "match_criteria": "matching.evaluate",
     "weighted_cox_comparator": "comparator.weighted_cox",
     "maic_time_to_event_comparator": "comparator.maic_time_to_event",
-    "aipw_comparator": "comparator.aipw"
+    "aipw_comparator": "comparator.aipw",
+    "covariate_set_comparator": "comparator.covariate_sets"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -325,7 +340,8 @@
     "match_criteria",
     "weighted_cox_comparator",
     "maic_time_to_event_comparator",
-    "aipw_comparator"
+    "aipw_comparator",
+    "covariate_set_comparator"
   ],
   "observedOnlyMethods": [
     "population.synthpop",
@@ -334,6 +350,7 @@
     "comparator.maic",
     "comparator.weighted_cox",
     "comparator.aipw",
+    "comparator.covariate_sets",
     "comparator.maic_time_to_event",
     "comparator.rmst"
   ],
@@ -384,6 +401,12 @@
       "imputed"
     ],
     "comparator.aipw": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.covariate_sets": [
       "observed",
       "extracted",
       "calculated",
@@ -2759,6 +2782,172 @@
               "req": true
             }
           }
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months"
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "targetTrial": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "item": {
+                "t": "string",
+                "maxLength": 80,
+                "req": true
+              },
+              "emulation": {
+                "t": "string",
+                "values": [
+                  "exact",
+                  "approximate",
+                  "cannot"
+                ],
+                "req": true
+              }
+            }
+          },
+          "min": 1,
+          "max": 50
+        }
+      }
+    },
+    "comparator.covariate_sets": {
+      "t": "object",
+      "fields": {
+        "analysis": {
+          "t": "string",
+          "values": [
+            "entropy_balance",
+            "propensity",
+            "aipw"
+          ],
+          "default": "entropy_balance"
+        },
+        "covariateSets": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "covariates": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64
+                },
+                "min": 1,
+                "max": 100,
+                "unique": true,
+                "req": true
+              }
+            }
+          },
+          "min": 2,
+          "max": 8,
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "moments": {
+          "t": "integer",
+          "min": 1,
+          "max": 3,
+          "default": 1,
+          "when": {
+            "path": "analysis",
+            "notIn": [
+              "propensity",
+              "aipw"
+            ]
+          }
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT",
+            "ATE",
+            "ATO"
+          ],
+          "default": "ATT"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
         },
         "timeUnit": {
           "t": "string",
@@ -6206,7 +6395,8 @@
     "match_criteria",
     "weighted_cox_comparator",
     "maic_time_to_event_comparator",
-    "aipw_comparator"
+    "aipw_comparator",
+    "covariate_set_comparator"
   ],
   "endpointTypes": [
     "continuous",

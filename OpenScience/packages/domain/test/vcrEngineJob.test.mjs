@@ -396,6 +396,7 @@ const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
   ["comparator.weighted_cox", "weighted_cox_comparator"],
   ["comparator.maic_time_to_event", "maic_time_to_event_comparator"],
   ["comparator.aipw", "aipw_comparator"],
+  ["comparator.covariate_sets", "covariate_set_comparator"],
 ]);
 
 test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
@@ -477,6 +478,23 @@ test("an AIPW job: one covariate set for both models or one for each, the weight
   assert.deepEqual(bad((j) => { j.scenario.estimand = "ATE"; }), ["scenario_value_invalid@scenario.estimand"], "the effect in the trial's own population");
   assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"]);
   assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("nuisance_model_not_estimable"));
+});
+
+test("a covariate-set job: two to eight named sets, the analysis' own keys once, and a covariate list belongs to a set", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const entropy = () => job("covariate_set_comparator entropy balance");
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = entropy(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(entropy()), []);
+  for (const name of ["covariate_set_comparator propensity weights for a time-to-event endpoint", "covariate_set_comparator doubly robust with moments left to entropy balance only", "covariate_set_comparator with second moments"]) {
+    assert.deepEqual(validateEngineJob(job(name)), [], name);
+  }
+  assert.deepEqual(bad((j) => { j.scenario.covariateSets.length = 1; }), ["scenario_value_invalid@scenario.covariateSets"], "a sensitivity analysis compares at least two sets");
+  assert.deepEqual(bad((j) => { j.scenario.covariateSets = Array.from({ length: 9 }, (_, i) => ({ name: `s${i}`, covariates: ["age"] })); }), ["scenario_value_invalid@scenario.covariateSets"], "at most eight: each is a full bootstrap");
+  assert.deepEqual(bad((j) => { j.scenario.covariates = ["age"]; }), ["scenario_field_unknown@scenario.covariates"]);
+  assert.deepEqual(bad((j) => { delete j.scenario.endpoint; }), ["scenario_field_missing@scenario.endpoint"]);
+  assert.deepEqual(bad((j) => { j.scenario.analysis = "propensity"; j.scenario.moments = 2; }), ["scenario_field_unknown@scenario.moments"]);
+  assert.deepEqual(bad((j) => { j.scenario.moments = 2; }), []);
+  assert.deepEqual(bad((j) => { j.scenario.analysis = "aipw"; j.scenario.estimand = "ATE"; }), [], "the protocol allows it; the engine refuses it by name for a doubly robust analysis");
 });
 
 // --- results -----------------------------------------------------------------

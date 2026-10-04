@@ -103,6 +103,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.weighted_cox': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
   'comparator.maic_time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
   'comparator.aipw': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
+  'comparator.covariate_sets': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -141,13 +142,14 @@ export const VCR_JOB_METHODS = Object.freeze({
   weighted_cox_comparator: 'comparator.weighted_cox',
   maic_time_to_event_comparator: 'comparator.maic_time_to_event',
   aipw_comparator: 'comparator.aipw',
+  covariate_set_comparator: 'comparator.covariate_sets',
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
-  'maic_time_to_event_comparator', 'aipw_comparator',
+  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
 ])
 
 /**
@@ -168,6 +170,7 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
   'comparator.weighted_cox': VCR_REAL_PATIENT_SOURCES,
   'comparator.aipw': VCR_REAL_PATIENT_SOURCES,
+  'comparator.covariate_sets': VCR_REAL_PATIENT_SOURCES,
   // The study's own patients (real) and the comparator's pseudo-individual rows from a Guyot reconstruction (reconstructed)
   // are both tables of this job; the engine holds each to its role and counts the pseudo-patients apart.
   'comparator.maic_time_to_event': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),

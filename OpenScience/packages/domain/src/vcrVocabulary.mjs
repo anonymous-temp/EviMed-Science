@@ -593,7 +593,7 @@ export const VCR_JOB_KINDS = frozen([
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
   // appended (2026-10-04): the comparator-effect methods
-  'weighted_cox_comparator', 'maic_time_to_event_comparator', 'aipw_comparator',
+  'weighted_cox_comparator', 'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

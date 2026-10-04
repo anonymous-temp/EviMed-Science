@@ -496,6 +496,20 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     targetTrial: TARGET_TRIAL,
   }),
 
+  // The comparator analysis re-run under alternative, pre-declared covariate sets. The first set is the primary analysis; every set
+  // is a full run of the named analysis (its own weights, balance, overlap rules and bootstrap), so a set that breaks a
+  // not-estimable rule is reported as that, never dropped. The other keys are the ones the named analysis reads, once.
+  'comparator.covariate_sets': object({
+    analysis: string({ values: ['entropy_balance', 'propensity', 'aipw'], default: 'entropy_balance' }),
+    covariateSets: req(array(object({ name: req(string(CRITERION_NAME)), covariates: req(COLUMN_LIST) }), { min: 2, max: 8 })),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    outcomeColumn: { ...COLUMN, default: 'y' },
+    moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('analysis', 'propensity', 'aipw')),
+    estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    ...WEIGHTING_CONTEXT,
+    endpoint: req(ENDPOINT()),
+  }),
+
   // A doubly robust (AIPW) estimator of the effect in the trial's own population (ATT) for a single-arm study against an
   // external control: arm 1 is the trial, arm 0 the external source. The propensity model (membership of the trial against the
   // external source, logistic) and the outcome model (fitted on the external controls only, logistic for a binary outcome,

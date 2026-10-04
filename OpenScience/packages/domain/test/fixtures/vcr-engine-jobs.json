@@ -2347,6 +2347,216 @@
           }
         ]
       }
+    },
+    {
+      "name": "covariate_set_comparator entropy balance",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "covariate_set_comparator propensity weights for a time-to-event endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "analysis": "propensity",
+          "estimand": "ATE",
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "cohortRules": [
+            {
+              "name": "adult",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gte",
+                "value": 18
+              }
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "covariate_set_comparator doubly robust with moments left to entropy balance only",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "analysis": "aipw",
+          "targetTrial": [
+            {
+              "item": "washout",
+              "emulation": "cannot"
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "covariate_set_comparator with second moments",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "moments": 2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -14752,6 +14962,554 @@
             "location": "std_1/snp_1/subject.csv",
             "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "valueSource": "aggregate"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison with one set",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.covariateSets"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison with nine sets",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "s0",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s1",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s2",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s3",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s4",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s5",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s6",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s7",
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "s8",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.covariateSets"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison without sets",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "treatmentColumn": "arm",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariateSets"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison without an endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.endpoint"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison of a time-to-event endpoint without tau",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "endpoint": {
+            "type": "time_to_event"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.tau"
+      ]
+    },
+    {
+      "name": "a set without a name",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "covariates": [
+                "age"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariateSets[0].name"
+      ]
+    },
+    {
+      "name": "a set without covariates",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "empty"
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariateSets[0].covariates"
+      ]
+    },
+    {
+      "name": "covariates beside the sets",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "covariates": [
+            "age"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.covariates"
+      ]
+    },
+    {
+      "name": "moments for propensity weights in a covariate-set comparison",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "analysis": "propensity",
+          "moments": 2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.moments"
+      ]
+    },
+    {
+      "name": "an analysis the engine does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          },
+          "analysis": "overlap"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis"
+      ]
+    },
+    {
+      "name": "a covariate-set comparison on synthetic rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "covariate_set_comparator",
+        "method": "comparator.covariate_sets",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariateSets": [
+            {
+              "name": "primary",
+              "covariates": [
+                "age",
+                "male"
+              ]
+            },
+            {
+              "name": "without sex",
+              "covariates": [
+                "age"
+              ]
+            }
+          ],
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
           }
         ]
       },

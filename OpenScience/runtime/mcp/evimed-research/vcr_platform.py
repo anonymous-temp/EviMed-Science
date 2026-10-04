@@ -73,7 +73,7 @@ JOB_KINDS = (
     "reconstruct_km", "pool_evidence", "weight_comparator", "propensity_weight_comparator", "maic_comparator",
     "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria",
-    "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator",
+    "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")

@@ -140,7 +140,7 @@ or a traceback.
 
 ## 5. Methods
 
-27 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
+28 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
 `VCR_ENGINE_METHODS` (the first release's 24, then the comparator-effect methods
 appended after them; section 11). The engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
@@ -165,6 +165,7 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.rmst` | weighted KM, RMST(τ), the τ rule | survRM2 |
 | `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
 | `comparator.weighted_cox` | weighted Cox hazard ratio, robust variance and whole-pipeline bootstrap, the proportional-hazards test, the RMST difference beside it | `survival::coxph` on WeightIt weights; `tt()` and hand-written Breslow score tests; a known hazard ratio |
+| `comparator.covariate_sets` | the comparator analysis (entropy balance, logistic propensity weights or the doubly robust estimate) re-run under 2-8 pre-declared covariate sets: each set's estimate and verdict, the range | WeightIt weights per set; the analyses' own jobs bit for bit; a design with known confounders |
 | `comparator.aipw` | doubly robust (AIPW) estimate of the ATT for a single-arm study against an external control (binary or continuous): influence-function and whole-pipeline bootstrap standard errors | the formula on WeightIt weights and `glm` (1e-10); a simulation with an exactly integrated truth, four model specifications |
 | `comparator.maic_time_to_event` | unanchored / anchored MAIC for hazard ratios (weighted Cox on the study's patients and the comparator's reconstructed patients; Bucher on the log scale), robust and bootstrap variance | the maicplus 0.1.2 vignettes (to 7 digits); a simulation with an oracle target |
 | `comparator.evalue` | E-values on every scale | EValue |
@@ -246,6 +247,7 @@ R/comparison.R       what the comparator-effect methods share: the weighted fram
 R/weighted_cox.R     the weighted Cox hazard ratio, its robust variance, the proportional-hazards test
 R/maic_tte.R         the time-to-event MAIC, unanchored and anchored
 R/aipw.R             the doubly robust (AIPW) ATT estimator
+R/covariate_sets.R   the comparator analysis re-run under alternative covariate sets
 R/evidence_pool.R    DL / REML / HKSJ pooling and prediction intervals
 R/map_prior.R        MAP by quadrature, robustify, prior ESS, conflict, hybrid operating characteristics
 R/design_analytic.R  Lan-DeMets boundaries, Schoenfeld, asymptotic log-rank power, Simon
@@ -279,7 +281,7 @@ PASSED n/n
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `N36` (covariate sets), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -463,3 +465,29 @@ analysis only. A model that cannot be fitted (collinear covariates, fewer contro
 outcome model has coefficients, a control with a propensity score of 1) is
 `not_estimable` / `nuisance_model_not_estimable`; an outcome model that separates keeps the
 estimate and says `outcome_model_separation`.
+
+### `comparator.covariate_sets` (case N36)
+
+`analysis` (`entropy_balance`, `propensity` or `aipw`) is re-run under two to eight named
+`covariateSets`, the first being the primary analysis; every other key is the analysis' own,
+stated once. **Each set is a full run of the analysis by its own handler** (its weights,
+balance, overlap and effective-sample-size rules and whole-pipeline bootstrap), so a set
+told something by itself is told the same here (N36 holds the per-set numbers and
+intervals identical to the analysis run alone on the same table and seed). The job's seed
+is each set's seed, so the sets are compared on the same resamples. Cost is the number of
+sets times the bootstrap.
+
+Reported: `covariate_set_estimate_k` for each set that has an estimate (the analysis'
+primary measure: `weighted_difference`, `rmst_difference` or `aipw_difference`, with its
+interval; `note` is the set's name), `covariate_set_range_low`, `_high` and `_width` over
+those, and `covariate_sets_total` / `covariate_sets_estimable`. **A set that breaks a
+not-estimable rule is in `diagnostics.sets` and in the `covariate-sets` table with that
+rule, never dropped**, a set refused for its input (a column the table does not have) is
+there with its code, the conclusion is `limited` and `limitedBy` says
+`covariate_set_without_estimate` (and `primary_set_without_estimate` when it is the primary
+that has none). When no set has an estimate the job is `not_estimable` with the primary's
+rule, or refused by the primary's code. `diagnostics.agreement` says whether the sets agree
+in sign and whether every interval excludes the null: a description of how far the
+estimate moves with the adjustment set, never a rule for choosing among them. A cancel
+returns no measures; a spent CPU budget keeps the sets that finished and says that the rest
+were not run.
