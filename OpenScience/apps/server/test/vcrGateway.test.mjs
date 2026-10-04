@@ -436,6 +436,53 @@ test("a pooling start tells the run every study it left out, not the first twent
   assert.deepEqual(data.refused[44], { id: "evd_44", reasons: ["quote_not_verified"] });
 });
 
+test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_9", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_9", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  // every kind the domain declares is accepted by name, with the snapshot as its only data input
+  for (const kind of ["weighted_cox_comparator", "aipw_comparator", "covariate_set_comparator"]) {
+    const res = await start({ kind, scenario: { covariates: ["age"] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).kind, kind);
+    assert.equal(queued.at(-1).derived, undefined, `${kind} takes no reference`);
+    assert.deepEqual(queued.at(-1).inputs, [{ kind: "snapshot", id: "snp_1" }]);
+  }
+  // a reference is accepted for the one kind that reads a reconstruction, and reaches the queue as a reference beside the scenario
+  const ok = await start({ kind: "maic_time_to_event_comparator", scenario: { covariates: ["age"], targets: { age: 60 } }, inputs: [{ kind: "snapshot", id: "snp_1" }], reconstructionResultId: "res_7" });
+  assert.equal(ok.status, 200, ok.body);
+  const sent = queued.at(-1);
+  assert.deepEqual(sent.derived, [{ resultId: "res_7", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId" }]);
+  assert.equal(sent.scenario.pseudoIpdInputId, undefined, "the input's name is written by the queue, not the gateway");
+  assert.notEqual(sent.internal, true, "a runtime request is not the orchestrator's");
+  // the same request is the same job; another reconstruction is another job
+  const again = await start({ kind: "maic_time_to_event_comparator", scenario: { covariates: ["age"], targets: { age: 60 } }, inputs: [{ kind: "snapshot", id: "snp_1" }], reconstructionResultId: "res_7" });
+  assert.equal(again.status, 200);
+  const other = await start({ kind: "maic_time_to_event_comparator", scenario: { covariates: ["age"], targets: { age: 60 } }, inputs: [{ kind: "snapshot", id: "snp_1" }], reconstructionResultId: "res_8" });
+  assert.equal(queued.at(-2).idempotencyKey, sent.idempotencyKey);
+  assert.notEqual(queued.at(-1).idempotencyKey, sent.idempotencyKey);
+  assert.equal(other.status, 200);
+  const before = queued.length;
+  // refused by name, and never queued: no reference for the MAIC, a reference for any other kind, a malformed id, rows typed into the inputs
+  for (const [body, code] of /** @type {Array<[Record<string, any>, string]>} */ ([
+    [{ kind: "maic_time_to_event_comparator", scenario: {}, inputs: [{ kind: "snapshot", id: "snp_1" }] }, "vcr_simulate_payload_invalid"],
+    [{ kind: "weighted_cox_comparator", scenario: {}, reconstructionResultId: "res_7" }, "vcr_simulate_payload_invalid"],
+    [{ kind: "maic_time_to_event_comparator", scenario: {}, reconstructionResultId: "../etc" }, "vcr_simulate_payload_invalid"],
+    [{ kind: "maic_time_to_event_comparator", scenario: {}, reconstructionResultId: 7 }, "vcr_simulate_payload_invalid"],
+    [{ kind: "maic_time_to_event_comparator", scenario: {}, reconstructionResultId: "res_7", pseudoRows: [{ time: 1, status: 1 }] }, "vcr_request_invalid"],
+  ])) {
+    const res = await start(body);
+    assert.equal(res.status, 400, `${JSON.stringify(body)} -> ${res.body}`);
+    assert.equal(res.json().code, code, res.body);
+  }
+  assert.equal(queued.length, before, "a refused request never reaches the queue");
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler } = fixture();
   const started = response();

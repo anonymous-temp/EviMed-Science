@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
-  vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
+  VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
 import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
@@ -20,6 +20,32 @@ const scenario = {
   accrual: { kind: "uniform", duration: 12, followup: 12 },
   performance: ["power", "type_one_error"],
 };
+
+test("a time-to-event MAIC's comparator is named by the platform from a reconstruction result, and from nothing else", () => {
+  const entry = { resultId: "res_1", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId" };
+  const resolved = { kind: "snapshot_file", id: "res_1:reconstructed-ipd", valueSource: "reconstructed" };
+  const kind = VCR_RECONSTRUCTION_REFERENCE.kind;
+  const bound = vcrBindReconstruction(kind, { covariates: ["age"] }, [entry], [resolved]);
+  assert.deepEqual(bound, { ok: true, scenario: { covariates: ["age"], pseudoIpdInputId: "res_1:reconstructed-ipd" } });
+  // no entry asks to be bound: the scenario is returned as it is
+  assert.deepEqual(vcrBindReconstruction("weight_comparator", { a: 1 }, [{ resultId: "r", table: "population" }], [{ id: "r:population", valueSource: "synthetic" }]), { ok: true, scenario: { a: 1 } });
+  const refused = (/** @type {any} */ result, /** @type {string} */ code) => { assert.equal(result.ok, false); assert.equal(result.code, code); };
+  // only that job, only that table, only a reconstruction: a synthetic table cannot stand in for a published curve's pseudo-patients
+  refused(vcrBindReconstruction("weight_comparator", {}, [entry], [resolved]), "vcr_derived_table_unsupported");
+  refused(vcrBindReconstruction(kind, {}, [{ ...entry, table: "population" }], [resolved]), "vcr_derived_table_unsupported");
+  refused(vcrBindReconstruction(kind, {}, [{ ...entry, bindTo: "weightColumn" }], [resolved]), "vcr_derived_table_unsupported");
+  refused(vcrBindReconstruction(kind, {}, [entry], [{ ...resolved, valueSource: "synthetic" }]), "vcr_derived_table_unsupported");
+  // a scenario that already names the input is the run's attempt to choose it, and is refused by its path
+  const typed = /** @type {any} */ (vcrBindReconstruction(kind, { pseudoIpdInputId: "anything" }, [entry], [resolved]));
+  refused(typed, "vcr_job_scenario_invalid");
+  assert.equal(typed.invalid[0].field, "scenario.pseudoIpdInputId");
+});
+
+test("the columns a scenario reads include both models' covariate lists and every covariate set", () => {
+  assert.deepEqual(vcrScenarioColumns({ propensityCovariates: ["age"], outcomeCovariates: ["age", "ecog"], outcomeColumn: "response", treatmentColumn: "arm" }).sort(),
+    ["age", "arm", "ecog", "response"]);
+  assert.deepEqual(vcrScenarioColumns({ covariateSets: [{ name: "a", covariates: ["x1", "x2"] }, { name: "b", covariates: ["x1"] }], treatmentColumn: "arm" }).sort(), ["arm", "x1", "x2"]);
+});
 
 test("every job kind files under a result kind the read models know, and every comparator method files under comparator", () => {
   assert.ok(VCR_JOB_KINDS.length >= 28, "the walk proves it walked");

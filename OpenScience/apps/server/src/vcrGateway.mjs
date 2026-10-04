@@ -68,6 +68,7 @@ import { renderVcrNumbers } from "./vcrRender.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_TRIAL_RESTRICTED_FIELDS, deriveFromExit, followupFidelityFindings, postExitEpisode, trialPeriodEpisode } from "./vcrRecruit.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION } from "./vcrMatching.mjs";
+import { VCR_RECONSTRUCTION_REFERENCE } from "./vcrJobs.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
@@ -232,7 +233,7 @@ const ACCRUAL_REQUEST_FIELDS = Object.freeze(["target", "eventTarget", "eventHaz
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId"]);
+  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId"]);
   const action = body.action ?? "start";
   if (!["start", "status", "cancel"].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status or cancel.");
@@ -247,7 +248,17 @@ function simulateRequest(body) {
     if (body.inputs != null && !Array.isArray(body.inputs)) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", "inputs is an array.");
     }
+    // A time-to-event MAIC's comparator is a reconstruction RESULT of this study, named by its id; the rows are the platform's.
+    if (body.reconstructionResultId != null) {
+      if (body.kind !== VCR_RECONSTRUCTION_REFERENCE.kind) {
+        throw gatewayError(400, "vcr_simulate_payload_invalid", `reconstructionResultId 只用于 ${VCR_RECONSTRUCTION_REFERENCE.kind}：它指向一次生存曲线重建的结果。`);
+      }
+      if (typeof body.reconstructionResultId !== "string" || !ID.test(body.reconstructionResultId)) {
+        throw gatewayError(400, "vcr_simulate_payload_invalid", "reconstructionResultId 是本研究一次曲线重建结果的 id。");
+      }
+    }
     return { action, kind: body.kind, scenario: object(body.scenario), inputs: list(body.inputs),
+      reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
       cpuSecondsLimit: Number.isInteger(body.cpuSecondsLimit) ? body.cpuSecondsLimit : null,
@@ -1621,7 +1632,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
- *   cpuSecondsLimit: number | null, subjectId: string | null }} request
+ *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null }} request
  */
 async function startJob(vcr, study, request) {
   if (request.kind === "pool_evidence") {
@@ -1691,9 +1702,17 @@ async function startJob(vcr, study, request) {
     // The table the probability curve is drawn from is kept in the data plane.
     detail = { ...detail, keepTables: ["probability_by_month"] };
   }
-  const scenarioHash = createHash("sha256").update(canonicalScenarioJson(scenario)).digest("hex").slice(0, 16);
+  if (request.kind === VCR_RECONSTRUCTION_REFERENCE.kind && !request.reconstructionResultId) {
+    throw gatewayError(400, "vcr_simulate_payload_invalid",
+      "事件时间终点的匹配调整间接比较要比较臂的伪个体数据：用 reconstructionResultId 指向本研究一次曲线重建的结果，不要自己写数据行。");
+  }
+  // The reference rides beside the scenario: the queue resolves it through the data plane and writes the comparator's
+  // input id into the scenario itself, so it is part of what makes the same request the same job.
+  const derived = request.reconstructionResultId
+    ? [{ resultId: request.reconstructionResultId, table: VCR_RECONSTRUCTION_REFERENCE.table, bindTo: VCR_RECONSTRUCTION_REFERENCE.bindTo }] : [];
+  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
   const { job } = await vcr.jobs.enqueue({
-    studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs,
+    studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
     // The same frozen scenario asked for twice is the same job; a changed one is not.
     idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${request.subjectId ?? ""}:${scenarioHash}`,

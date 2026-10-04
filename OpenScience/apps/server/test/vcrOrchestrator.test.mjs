@@ -591,6 +591,134 @@ test("populations, patient sets and grids are built as their own schemas, and a 
   assert.deepEqual(validateScenario("design.grid", grid.stages[0].scenario), []);
 });
 
+// --- the comparator-effect methods are reachable from the comparator step ------------------------------
+
+const CMP_T2 = { ...context, study: { ...seedStudy, dataTier: "T2" } };
+/** @param {Record<string, any>} configuration @param {Record<string, any>} [row] @param {Record<string, any>} [ctx] */
+const planComparator = (configuration, row = {}, ctx = CMP_T2) => /** @type {any} */ (vcrBuildStages({ kind: "comparator",
+  row: { id: "cmp_x", version: 1, route: "external_control", estimand: "ATT", configuration, ...row } }, ctx));
+/** The engine's own verdict on a stage's scenario, once the platform has written the comparator's input id. @param {any} stage */
+const stageIssues = (stage) => validateScenario(VCR_JOB_METHODS[stage.jobKind],
+  stage.derived.some((/** @type {any} */ entry) => entry.bindTo) ? { ...stage.scenario, pseudoIpdInputId: "res_x:reconstructed-ipd" } : stage.scenario);
+
+test("a study's declared design reaches the comparator-effect methods: weighted Cox, doubly robust, covariate sets", () => {
+  const base = { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1" };
+  // the declared method and endpoint decide; nothing is read from a word of prose
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "weighted_cox" } }), "weighted_cox_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "aipw" } }), "aipw_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { covariateSets: [{ name: "a", covariates: ["x"] }] } }), "covariate_set_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { covariateSets: [], method: "aipw" } }), "aipw_comparator", "an empty list declares no sets");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "weighted_cox", covariateSets: [{ name: "a", covariates: ["x"] }] } }),
+    "covariate_set_comparator", "declared sets make the sensitivity analysis of the declared method");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control" }), "weight_comparator", "the old default is untouched");
+
+  const cox = planComparator({ ...base, method: "weighted_cox" });
+  assert.equal(cox.ok, true, JSON.stringify(cox));
+  assert.equal(cox.stages[0].jobKind, "weighted_cox_comparator");
+  assert.equal(cox.stages[0].snapshot, true);
+  assert.deepEqual(cox.stages[0].scenario.endpoint, { type: "time_to_event" });
+  assert.deepEqual(stageIssues(cox.stages[0]), []);
+  const coxAte = planComparator({ ...base, method: "weighted_cox" }, { estimand: "ATE" });
+  assert.equal(coxAte.ok, true);
+  assert.equal(coxAte.stages[0].scenario.weighting, "propensity", "entropy balancing estimates the ATT only, as in the weighting jobs");
+  assert.deepEqual(stageIssues(coxAte.stages[0]), []);
+
+  const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
+  const aipw = planComparator({ covariates: ["age", "ecog"], outcomeColumn: "response", method: "aipw", snapshotId: "snp_1" }, {}, binary);
+  assert.equal(aipw.ok, true, JSON.stringify(aipw));
+  assert.equal(aipw.stages[0].jobKind, "aipw_comparator");
+  assert.deepEqual(aipw.stages[0].scenario.endpoint, { type: "binary" });
+  assert.deepEqual(stageIssues(aipw.stages[0]), []);
+
+  const sets = [{ name: "primary", covariates: ["age", "ecog"] }, { name: "without ecog", covariates: ["age"] }];
+  const entropy = planComparator({ covariateSets: sets, tau: 12, parameterCode: "OS", snapshotId: "snp_1" });
+  assert.equal(entropy.ok, true, JSON.stringify(entropy));
+  assert.equal(entropy.stages[0].jobKind, "covariate_set_comparator");
+  assert.equal(entropy.stages[0].scenario.analysis, "entropy_balance");
+  assert.deepEqual(stageIssues(entropy.stages[0]), []);
+  const propensity = planComparator({ covariateSets: sets, tau: 12, method: "propensity" });
+  assert.equal(propensity.stages[0].scenario.analysis, "propensity");
+  assert.equal(planComparator({ covariateSets: sets, tau: 12 }, { estimand: "ATE" }).stages[0].scenario.analysis, "propensity", "a non-ATT estimand is not entropy balancing");
+  const doubly = planComparator({ covariateSets: sets, method: "aipw", outcomeColumn: "response" }, {}, binary);
+  assert.equal(doubly.stages[0].scenario.analysis, "aipw");
+  assert.deepEqual(stageIssues(doubly.stages[0]), []);
+  // an analysis the run typed in does not choose: the design's method does
+  assert.equal(planComparator({ covariateSets: sets, tau: 12, analysis: "aipw" }).stages[0].scenario.analysis, "entropy_balance");
+  // the alternatives are the design's, so a covariate list beside them is refused by name rather than ignored
+  const both = planComparator({ covariateSets: sets, covariates: ["age"], tau: 12 });
+  assert.equal(both.ok, false);
+  assert.equal(both.refused.code, "vcr_scenario_unknown_fields");
+  assert.ok(both.refused.paths.includes("covariates"));
+});
+
+test("a design the study's endpoint cannot support is refused in a sentence, not run as something else", () => {
+  const refused = (/** @type {any} */ plan, /** @type {string} */ code, /** @type {RegExp} */ words) => {
+    assert.equal(plan.ok, false, JSON.stringify(plan));
+    assert.equal(plan.refused.code, code);
+    assert.match(plan.refused.message, words);
+  };
+  const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
+  refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, binary), "vcr_job_scenario_invalid", /事件时间终点/);
+  refused(planComparator({ covariates: ["age"], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  refused(planComparator({ covariates: ["age"], method: "aipw" }, { estimand: "ATE" }, binary), "vcr_job_scenario_invalid", /ATT/);
+  refused(planComparator({ covariateSets: [{ name: "a", covariates: ["x"] }, { name: "b", covariates: ["y"] }], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  const noEndpoint = { ...CMP_T2, definition: null };
+  refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, noEndpoint), "vcr_scenario_endpoint_missing", /终点类型/);
+  // a design with no declared choice keeps the weighting job it always had, whatever the endpoint
+  assert.equal(planComparator({ covariates: ["age"] }, {}, binary).stages[0].jobKind, "weight_comparator");
+});
+
+test("a time-to-event MAIC takes its comparator from the reconstruction result, by reference, and plans only what its design declares", () => {
+  const T0 = { ...context, study: { ...seedStudy, dataTier: "T0" } };
+  const curve = { curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.5 }, { time: 24, surv: 0.3 }], riskTable: [{ time: 0, atRisk: 100 }, { time: 12, atRisk: 50 }],
+    provenance: { kind: "digitizer", tool: "platform" } };
+  const maic = { method: "maic", covariates: ["age"], targets: { age: 60 }, snapshotId: "snp_1" };
+  const plan = (/** @type {Record<string, any>} */ configuration) => planComparator(configuration, { route: "literature_control", estimand: "ATT" }, T0);
+  assert.equal(vcrJobKindFor("comparator", { route: "literature_control", configuration: { method: "maic" } }, { definition }), "maic_time_to_event_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "literature_control", configuration: { method: "maic", endpoint: { type: "binary" } } }, { definition }), "maic_comparator",
+    "a binary or continuous MAIC is the old method");
+
+  // unanchored: one comparator curve -> reconstruct, then the MAIC reads the reconstruction's table by the stage that wrote it
+  const un = plan({ ...maic, ...curve });
+  assert.equal(un.ok, true, JSON.stringify(un));
+  assert.deepEqual(un.stages.map((/** @type {any} */ entry) => entry.jobKind), ["reconstruct_km", "maic_time_to_event_comparator"]);
+  assert.equal(un.stages[0].stage, "reconstruct");
+  assert.deepEqual(un.stages[0].keepTables, ["reconstructed-ipd"]);
+  assert.equal(un.stages[1].after, "reconstruct");
+  assert.deepEqual(un.stages[1].derived, [{ from: "stage", stage: "reconstruct", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId" }]);
+  assert.equal(un.stages[1].snapshot, true, "the study's own patients come by snapshot");
+  assert.equal(un.stages[1].scenario.pseudoIpdInputId, undefined, "the input's name is written by the queue from the result, never by the plan");
+  assert.equal(un.stages[1].scenario.curve, undefined, "the maic stage does not carry the curve it did not read");
+  for (const entry of un.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+
+  // anchored on two reconstructed arms
+  const anchored = plan({ ...maic, anchored: true, treatmentColumn: "arm", ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable } });
+  assert.equal(anchored.ok, true, JSON.stringify(anchored));
+  assert.deepEqual(anchored.stages.map((/** @type {any} */ entry) => entry.jobKind), ["reconstruct_km", "maic_time_to_event_comparator"]);
+  for (const entry of anchored.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+  // anchored on the published contrast: no reconstruction, one stage, no hand-off
+  const published = plan({ ...maic, anchored: true, aggregateEstimate: -0.56, aggregateSe: 0.09 });
+  assert.equal(published.ok, true, JSON.stringify(published));
+  assert.deepEqual(published.stages.map((/** @type {any} */ entry) => entry.jobKind), ["maic_time_to_event_comparator"]);
+  assert.deepEqual(published.stages[0].derived, []);
+  assert.equal(published.stages[0].scenario.aggregateEstimate, -0.56);
+  assert.deepEqual(stageIssues(published.stages[0]), []);
+
+  // what the design does not declare is refused in a sentence, never filled in
+  const no = (/** @type {Record<string, any>} */ configuration, /** @type {RegExp} */ words) => {
+    const refused = /** @type {any} */ (plan(configuration));
+    assert.equal(refused.ok, false, JSON.stringify(refused));
+    assert.equal(refused.refused.code, "vcr_job_scenario_invalid");
+    assert.match(refused.refused.message, words);
+  };
+  no(maic, /发表曲线/);
+  no({ ...maic, ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable } }, /一条曲线/);
+  no({ ...maic, ...curve, aggregateEstimate: -0.5, aggregateSe: 0.1 }, /锚定比较/);
+  no({ ...maic, anchored: true }, /已发表的风险比/);
+  no({ ...maic, anchored: true, ...curve }, /两个臂/);
+  no({ ...maic, anchored: true, ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable }, aggregateEstimate: -0.5, aggregateSe: 0.1 }, /不能两个都写/);
+});
+
 test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
   const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));

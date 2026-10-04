@@ -130,6 +130,51 @@ export function vcrRecordedResultHash(result) {
 }
 
 /** The value source of each table a job may hand on, by the method that wrote it. */
+/**
+ * The one table a job may take from an earlier result of this study by
+ * REFERENCE rather than by rows: a time-to-event MAIC's comparator is the
+ * pseudo-patients of a Guyot reconstruction. The control plane resolves the
+ * reference through the data plane (checked against the sha256 the result lists,
+ * `reconstructed` source only) and writes the input's id into the scenario key
+ * itself, so the run never types the comparator's rows or the input's name, and a
+ * scenario that already carries the key is refused. The orchestrator hands the
+ * same table to the same job as a stage's output.
+ */
+export const VCR_RECONSTRUCTION_REFERENCE = Object.freeze({
+  kind: "maic_time_to_event_comparator", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId", source: "reconstructed",
+});
+
+/** @param {string} kind @param {Record<string, any>} entry */
+const isReconstructionReference = (kind, entry) => kind === VCR_RECONSTRUCTION_REFERENCE.kind
+  && entry.table === VCR_RECONSTRUCTION_REFERENCE.table && entry.bindTo === VCR_RECONSTRUCTION_REFERENCE.bindTo;
+
+/**
+ * Write the comparator's input id into the scenario for the entries that ask to be bound, after the
+ * queue has resolved them. Pure, so the rules are tested without a database: only the job that reads a
+ * reconstruction may bind one, the table must have earned the `reconstructed` source (a synthetic table
+ * or a snapshot cannot stand in for a published curve's pseudo-patients), and a scenario that already
+ * carries the key is refused because the input's name is the platform's to write.
+ * @param {string} kind @param {Record<string, any>} scenario
+ * @param {readonly Record<string, any>[]} entries the `derived` entries as asked @param {readonly Record<string, any>[]} resolved the inputs they resolved to
+ * @returns {{ ok: true, scenario: Record<string, any> } | { ok: false, code: string, message: string, invalid?: Array<{ code: string, field: string, detail: string }> }}
+ */
+export function vcrBindReconstruction(kind, scenario, entries, resolved) {
+  let next = scenario;
+  for (const [at, entry] of entries.entries()) {
+    if (entry.bindTo === undefined) continue;
+    if (!isReconstructionReference(kind, entry) || resolved[at]?.valueSource !== VCR_RECONSTRUCTION_REFERENCE.source) {
+      return { ok: false, code: "vcr_derived_table_unsupported", message: "这张表不能作为这项计算的比较臂：它必须是由已发表曲线重建出的伪个体数据。" };
+    }
+    if (Object.hasOwn(next, VCR_RECONSTRUCTION_REFERENCE.bindTo)) {
+      return { ok: false, code: "vcr_job_scenario_invalid", message: "The comparator's input is named by the platform.",
+        invalid: [{ code: "scenario_field_unknown", field: `scenario.${VCR_RECONSTRUCTION_REFERENCE.bindTo}`,
+          detail: "The comparator's input is named by the platform from the reconstruction result, never by the scenario." }] };
+    }
+    next = { ...next, [VCR_RECONSTRUCTION_REFERENCE.bindTo]: resolved[at].id };
+  }
+  return { ok: true, scenario: next };
+}
+
 export const VCR_DERIVED_SOURCES = Object.freeze({
   "population.scenario": "synthetic", "population.literature": "synthetic", "population.synthpop": "synthetic",
   "patients.continuous": "synthetic", "patients.binary": "synthetic", "patients.time_to_event": "synthetic",
@@ -203,15 +248,15 @@ export function vcrReplicatesForJob(kind, scenario, asked) {
 export function vcrScenarioColumns(scenario) {
   const out = new Set();
   const COLUMN_KEYS = new Set(["treatmentColumn", "outcomeColumn", "weightColumn", "idColumn", "tstrOutcome", "column", "outcome", "target"]);
-  const LIST_KEYS = new Set(["covariates", "predictors", "on"]);
+  const LIST_KEYS = new Set(["covariates", "propensityCovariates", "outcomeCovariates", "predictors", "on"]);
   /** @param {unknown} node @param {number} depth */
   const walk = (node, depth) => {
     if (depth > 12 || node === null || typeof node !== "object") return;
     if (Array.isArray(node)) { for (const item of node) walk(item, depth + 1); return; }
     for (const [key, value] of Object.entries(node)) {
       if (COLUMN_KEYS.has(key) && typeof value === "string") out.add(value);
-      else if (LIST_KEYS.has(key) && Array.isArray(value)) for (const item of value) if (typeof item === "string") out.add(item);
-      else if (key === "targets" && value && typeof value === "object") for (const name of Object.keys(value)) out.add(name);
+      else if (LIST_KEYS.has(key) && Array.isArray(value)) { for (const item of value) if (typeof item === "string") out.add(item); }
+      else if (key === "targets" && value && typeof value === "object") { for (const name of Object.keys(value)) out.add(name); }
       else walk(value, depth + 1);
     }
   };
@@ -422,7 +467,7 @@ export class VcrJobs {
    * `principal`, else `userId`.
    *
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
-   *   derived?: Array<{ resultId: string, table: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
+   *   derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
    * @returns {Promise<{ job: any, created: boolean }>}
    */
@@ -455,15 +500,21 @@ export class VcrJobs {
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
     const callerIssues = [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || runsLocally ? undefined : kind })];
-    if (list(input.derived).length && input.internal !== true) {
+    const derivedEntries = list(input.derived).map(object);
+    // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
+    if (derivedEntries.length && input.internal !== true && !derivedEntries.every((entry) => isReconstructionReference(kind, entry))) {
       callerIssues.push({ code: "input_location_forbidden", field: "derived", detail: "Only the orchestrator hands one job's table to the next." });
     }
     if (callerIssues.length) throw this.#invalid("vcr_job_scenario_invalid", callerIssues);
 
     // 2. what the control plane makes of it
+    const resolvedDerived = await Promise.all(derivedEntries.map((entry) => this.#resolveDerived(studyId, entry)));
+    const bound = vcrBindReconstruction(kind, scenario, derivedEntries, resolvedDerived);
+    if ("code" in bound) throw bound.invalid ? this.#invalid("vcr_job_scenario_invalid", bound.invalid) : new HttpError(400, bound.code, bound.message);
+    scenario = bound.scenario;
     const inputs = [
       ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
-      ...await Promise.all(list(input.derived).map((entry) => this.#resolveDerived(studyId, object(entry)))),
+      ...resolvedDerived,
     ];
 
     const scenarioHash = vcrScenarioHash(scenario);
