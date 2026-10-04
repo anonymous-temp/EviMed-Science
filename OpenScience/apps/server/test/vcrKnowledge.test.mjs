@@ -12,9 +12,11 @@ import { fileURLToPath } from "node:url";
 import { VCR_SHIPPED_PACKS, VCR_JOB_METHODS, validateScenario } from "@evimed/domain";
 
 import { HttpError } from "../src/security.mjs";
+import { Readable } from "node:stream";
+
 import { VcrKnowledge, definitionBodyOf, presentComparison, presentPack } from "../src/vcrKnowledge.mjs";
-import { VCR_WRITE_WHATS, VCR_READ_WHATS } from "../src/vcrService.mjs";
-import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { VCR_WRITE_WHATS, VCR_READ_WHATS, VcrService } from "../src/vcrService.mjs";
+import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -448,4 +450,45 @@ test("the skill's own draft example is a pack the platform accepts at the floor,
   assert.equal(done.ok, true, JSON.stringify(/** @type {any} */ (done).issues));
   assert.equal([...store.state.packs.values()][0].status, "ai-draft");
   assert.ok(Object.keys(VCR_SHIPPED_PACKS).length >= 1, "the shipped packs load through their validator");
+});
+
+test("the capability reads a pack through the tool's own path: the gateway, the service's boundary and the knowledge package", async () => {
+  const { knowledge } = compose({ populations: [{ id: "pop_1", version: 1, kind: "real", name: "成人", definition: { rules: RULES_V1 } }] });
+  const study = { ...STUDY_A, name: "EV-301", dataTier: "T0", intendedUse: "exploratory", status: "active", steps: {}, budget: {}, outcomeSeal: {} };
+  const service = new VcrService({ store: /** @type {any} */ ({}), config: { vcrEnabled: true, vcrAudience: "all" }, knowledge });
+  const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" },
+    { assertActiveModelGatewayToken: () => ({ userId: "u1", projectId: "prj_a" }) },
+    { vcr: /** @type {any} */ ({ service, store: { studyByControlProject: async () => study }, knowledge, jobs: null, orchestrator: null }) });
+  /** @param {string} operation @param {any} body */
+  const call = async (operation, body) => {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t" } });
+    /** @type {{ status: number, body: string }} */
+    const res = { status: 0, body: "" };
+    await handler(req, { writeHead(/** @type {number} */ status) { res.status = status; return this; }, end(/** @type {string} */ chunk = "") { res.body = String(chunk); } }, () => null);
+    return { status: res.status, data: JSON.parse(res.body).data ?? JSON.parse(res.body) };
+  };
+  // no pack yet: the catalogue, short
+  const catalogue = await call("read", { what: "pack", filter: { query: "示例" } });
+  assert.equal(catalogue.status, 200);
+  assert.deepEqual([catalogue.data.what, catalogue.data.bound, catalogue.data.packs.map((/** @type {any} */ pack) => pack.id)], ["pack", null, ["demo_cancer"]]);
+  // a draft written through the tool is marked as one, and the study goes on with it
+  const draft = await call("write", { what: "pack", data: structuredClone(DRAFT) });
+  assert.equal(draft.data.ok, true, JSON.stringify(draft.data.issues));
+  assert.equal((await knowledge.studyPack(study))?.pack.status, "ai-draft");
+  assert.equal((await call("read", { what: "pack" })).data.bound.status, "ai-draft", "a read says so");
+  // binding the catalogue's pack replaces it, and a curated binding is read whole by section
+  const bound = await call("write", { what: "pack", data: { use: "demo_cancer" } });
+  assert.deepEqual([bound.status, bound.data.ok, bound.data.issues], [200, true, []]);
+  const criteria = await call("read", { what: "pack", filter: { kind: "criteria" } });
+  assert.equal(criteria.status, 200);
+  assert.deepEqual(criteria.data.sections.criteria.map((/** @type {any} */ entry) => [entry.id, entry.requirement.variable, entry.requirement.value]), [["c_ecog", "ecog", 1]]);
+  assert.deepEqual(criteria.data.sources.map((/** @type {any} */ source) => source.id), ["guide"]);
+  assert.equal(criteria.data.bound.status, "curated");
+  // a section the pack does not have is the call being wrong, with the filter's own code
+  const bad = await call("read", { what: "pack", filter: { kind: "prices" } });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.data.code, "vcr_read_filter_invalid");
+  // the library read is the owner's, through the same boundary
+  const library = await call("read", { what: "library" });
+  assert.deepEqual([library.status, library.data.definitions, library.data.used], [200, [], []]);
 });
