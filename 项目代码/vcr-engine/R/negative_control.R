@@ -108,7 +108,7 @@ vcr_nc_verdict <- function(low, high, primary_estimate = NULL) {
 
 #' The weights of the comparison, exactly as the weighting comparators build
 #' them (the same kernel, the same refusals), and the rows they were built on.
-.vcr_nc_weights <- function(sc, job, subj, covs, tc) {
+.vcr_nc_weights <- function(sc, subj, covs, tc) {
   method <- as.character(sc$weighting %||% "entropy_balance")
   estimand <- as.character(sc$estimand %||% vcr_domain()$defaultEstimand)
   if (identical(method, "entropy_balance") && !identical(estimand, "ATT")) {
@@ -144,7 +144,7 @@ vcr_nc_verdict <- function(low, high, primary_estimate = NULL) {
   covs <- vcr_chr(sc$covariates)
   if (!length(covs)) vcr_abort("scenario_field_missing", "scenario.covariates", "A negative control analysed in the engine is adjusted like the primary outcome: name the covariates.")
   tc <- .vcr_column_name(sc$treatmentColumn, "arm", "scenario.treatmentColumn")
-  w <- .vcr_nc_weights(sc, job, subj, covs, tc)
+  w <- .vcr_nc_weights(sc, subj, covs, tc)
   Y <- matrix(NA_real_, nrow(subj), length(columns), dimnames = list(NULL, columns))
   for (j in seq_along(columns)) {
     cn <- columns[j]

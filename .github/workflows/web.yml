@@ -490,6 +490,12 @@ jobs:
         with:
           node-version: 22.22.0
 
+      # Every method the engine dispatches needs a reference case that the validation evidence can record. The deployed evidence once
+      # covered 12 of 24 methods because a hand-written table named 15 cases and nothing noticed the rest; the methods are read from
+      # the engine's own registry, so a method added later fails here, in seconds, and not after the numeric run.
+      - name: Check every dispatched method has a reference case
+        run: node scripts/vcr/check-method-references.mjs
+
       - name: Install Python
         uses: actions/setup-python@v5
         with:

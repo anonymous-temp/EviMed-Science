@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:f9202c15d2cfddb0dcd0026b9e43820ed92859623ec2c5514bbc3175b3cc0e55",
+  "version": "sha256:1aeebe18425797c897e72fe589172af17c22d2e1e68192dfd5aa931425428f41",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 28,
@@ -1172,7 +1172,10 @@
               "procova",
               "accrual_forecast",
               "map_prior",
-              "match_criteria"
+              "match_criteria",
+              "negative_control_comparator",
+              "tipping_point",
+              "prognostic_adjustment_comparator"
             ]
           },
           "scenario": {

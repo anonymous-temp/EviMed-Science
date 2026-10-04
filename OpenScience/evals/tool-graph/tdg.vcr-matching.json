@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:adc76be0365443c2b681f1100c9896b96f4a931e3b79dbe52224de7e7eb8f562",
+  "version": "sha256:11c9ed569a7881b7d04dd37c216293846ec1d8436770f0c937e88759e5c2c0c0",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -1008,7 +1008,10 @@
               "procova",
               "accrual_forecast",
               "map_prior",
-              "match_criteria"
+              "match_criteria",
+              "negative_control_comparator",
+              "tipping_point",
+              "prognostic_adjustment_comparator"
             ]
           },
           "scenario": {
