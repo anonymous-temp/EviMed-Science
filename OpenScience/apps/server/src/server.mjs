@@ -99,6 +99,7 @@ import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetM
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
+import { createLateUsageAttribution } from "./lateUsageAttribution.mjs";
 import { accountUsageRuns } from "./accountUsageRuns.mjs";
 import { NotificationService, runFinishedInboxItem, runFinishedReachesInbox } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
@@ -2042,6 +2043,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // hint from inside the container.
     return agentRuns.runIdForSession(sessionId, running) ?? (running.length === 1 ? running[0].id : null);
   };
+  // The model calls a native conversation made before its run was known
+  // (`lateUsageAttribution.mjs`): named for the run when it is adopted and again
+  // when it ends.
+  const attributeLateCalls = createLateUsageAttribution({ usageLedger, get agentRuns() { return agentRuns; } });
   // Run outcomes for /api/ops/metrics (plan §3.8): counted in memory as each
   // run ends, never read back from a project's run ledger, which can be wiped.
   const runMetrics = new RunMetrics();
@@ -2140,6 +2145,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ...(parent && origin !== "subagent" ? { forkedFrom: parent } : {}),
       });
       await recordNativeSessionHandbooks(full, sessionId);
+      // The calls this conversation made before its run existed (see `attributeLateCalls`).
+      for (const running of (await agentRuns.list(full).catch(() => [])).filter((/** @type {any} */ item) => item.sessionId === sessionId && item.status === "running")) {
+        await attributeLateCalls(full, running);
+      }
       return run;
 
     },
@@ -2492,6 +2501,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             runId: run.id, code: error?.code ?? "result_capture_failed" });
         }
       }
+      await attributeLateCalls(project, run);
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       runEvents.publish(run.id, "run/state", {
         state: run.status,
@@ -7426,6 +7436,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   addMetric(lines, "open_science_runtime_running", "Runtime instances attached to the current Web API process.", "gauge", {
     value: runtimeStats.running,
   });
+  addMetric(
+    lines,
+    "open_science_usage_late_attributed_calls_total",
+    "Model calls a native run's own session made before the run was known, attributed to it afterwards.",
+    "counter",
+    { value: usageLedger?.lateAttribution?.calls ?? 0 },
+  );
   addMetric(lines, "open_science_runtime_starting", "Runtime start operations currently in flight.", "gauge", {
     value: runtimeStats.starting,
   });

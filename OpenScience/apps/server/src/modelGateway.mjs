@@ -1012,6 +1012,11 @@ export function createModelGatewayHandler(config, runtimeManager, {
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
         const runId = caller.runId ?? attributed ?? null;
+        // A call with no run yet keeps its session, so the run can be named once
+        // it is known (`UsageLedger.attributeSession`): the first calls of a
+        // conversation typed into the kernel's own window, a subagent's first
+        // calls. An engine job's calls never need it.
+        const sessionId = runId == null && !caller.engine ? kernelSessionId(req) : null;
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
@@ -1020,7 +1025,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
           : "kernel";
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
-          runId, purpose,
+          runId, sessionId, purpose,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
           dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),

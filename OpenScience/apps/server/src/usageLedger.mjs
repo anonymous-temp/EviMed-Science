@@ -247,7 +247,12 @@ function record(row) {
 /** Durable, concurrency-safe model request reservations and settlement. */
 export class UsageLedger {
   /** @param {any} database */
-  constructor(database) { this.database = database; }
+  constructor(database) {
+    this.database = database;
+    /** Late attribution since this process started: sweeps made and calls they named a run for
+     *  (`open_science_usage_late_attributed_calls_total`). */
+    this.lateAttribution = { sweeps: 0, calls: 0 };
+  }
 
   async health() {
     await migrateUsageLedger(this.database);
@@ -268,7 +273,7 @@ export class UsageLedger {
     };
   }
 
-  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
+  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,sessionId?:string|null,purpose?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
   async reserveModel(input) {
     const now = input.now ?? new Date();
     const ttlMs = input.ttlMs ?? 30 * 60_000;
@@ -276,6 +281,9 @@ export class UsageLedger {
     const values = {
       id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
       runId: input.runId == null ? null : productId(input.runId, "run"),
+      // The kernel session the call came from, kept only while the call has no
+      // run: it is what lets `attributeSession` name the run afterwards.
+      sessionId: input.runId == null && input.sessionId != null ? text(input.sessionId, "session", 200) : null,
       purpose: usagePurpose(input.purpose),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64), estimatedCost: money(input.estimatedCost, "estimated cost"),
@@ -326,12 +334,47 @@ export class UsageLedger {
         });
       }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12) RETURNING *`,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose,session_id)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12,$13) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
-        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose]);
+        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose, values.sessionId]);
       return record(inserted.rows[0]);
     });
+  }
+
+  /**
+   * Name the run of the calls a conversation made before its run was known.
+   *
+   * A conversation typed into the kernel's own window has no run until the
+   * control plane adopts its turn, and a subagent's session is unknown until
+   * the progress tracker hears of it, so their first calls were booked with no
+   * run: a native run's cost read below the ledger's sum for the same session
+   * and window. This fills the run on exactly those rows — same account, same
+   * project, same kernel session, no run yet, since the run began — and changes
+   * nothing else about them: never an amount, never a call that already has a
+   * run, never one of another session. A call that belongs to no run (memory
+   * extraction, a control-plane call) carries no session and is never touched.
+   * Serialized with reservations by the account's usage lock.
+   * @param {{userId:string,projectId:string,sessionId:string,runId:string,since:Date}} input
+   * @returns {Promise<number>} how many calls were attributed
+   */
+  async attributeSession(input) {
+    const values = {
+      userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
+      sessionId: text(input.sessionId, "session", 200), runId: productId(input.runId, "run"),
+      since: instant(input.since, "attribution start"),
+    };
+    await migrateUsageLedger(this.database);
+    const attributed = await this.database.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${values.userId}`]);
+      const result = await client.query(`UPDATE evimed_usage.model_requests SET run_id=$4
+        WHERE user_id=$1 AND project_id=$2 AND session_id=$3 AND run_id IS NULL AND purpose='kernel' AND created_at >= $5::timestamptz`,
+      [values.userId, values.projectId, values.sessionId, values.runId, values.since]);
+      return result.rowCount ?? 0;
+    });
+    this.lateAttribution.sweeps += 1;
+    this.lateAttribution.calls += attributed;
+    return attributed;
   }
 
   /** @param {string} id @param {{usage:{cacheHitTokens:number,cacheMissTokens:number,completionTokens:number},actualCost:number,priced:boolean,providerRequestId?:string|null}} input */
