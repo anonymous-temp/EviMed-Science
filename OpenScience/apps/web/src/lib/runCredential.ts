@@ -7,7 +7,8 @@ import type { WebAgentRun, WebConnector } from "@/lib/apiClient";
  *
  * A source nobody configured is no longer a failed run (2026-10-04): the run
  * went on with the sources it had and the ledger recorded what it left out
- * (`connectorNeeds`, registry ids). The conversation then offers the researcher
+ * (`connectorNeeds`, registry ids) — on a run that finished, and on one that
+ * ended with nothing to hand over because its only path needed the source. The conversation then offers the researcher
  * a form for each, and — once saved — a way to ask for the skipped part again.
  * This reads that record against the account's own connector list:
  *
@@ -29,7 +30,7 @@ const SPECS = CONNECTOR_CREDENTIALS as unknown as readonly Spec[];
 
 /**
  * The needs of one run, in the order the run met them. Empty for a run that is
- * still going, did not finish, or left nothing out. With no connector list yet
+ * still going, was stopped, or left nothing out. With no connector list yet
  * (not read, or unreadable) every need reads as missing: the form is offered, and
  * saving is what finds out.
  */
@@ -37,7 +38,7 @@ export function runCredentialNeeds(
   run: Pick<WebAgentRun, "status" | "connectorNeeds"> | null | undefined,
   connectors?: readonly WebConnector[] | null,
 ): RunCredentialNeed[] {
-  if (!run || run.status !== "succeeded" || !Array.isArray(run.connectorNeeds)) return [];
+  if (!run || (run.status !== "succeeded" && run.status !== "failed") || !Array.isArray(run.connectorNeeds)) return [];
   const needs: RunCredentialNeed[] = [];
   for (const id of run.connectorNeeds) {
     const spec = SPECS.find((candidate) => candidate.id === id);

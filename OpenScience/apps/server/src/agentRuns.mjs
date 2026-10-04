@@ -4886,9 +4886,12 @@ export class AgentRunStore {
       // other things key on, and a context overflow is a different remedy from
       // a session fault -- which the ledger could not distinguish at all.
       ...(sanitizeErrorCode(terminal.errorSubCode) ? { errorSubCode: sanitizeErrorCode(terminal.errorSubCode) } : {}),
-      // Recorded only for a run that finished: on one that did not, the failure
-      // is the news, and a form for a source it left out would be a second one.
-      ...(terminal.status === "succeeded" && normalizeConnectorNeeds(terminal.connectorNeeds).length
+      // Recorded for a run that ended on its own, finished or not: a capability
+      // whose only path needed the source (MR with OpenGWAS-only inputs) ends
+      // with nothing to hand over, and the source it left out is exactly what the
+      // researcher can fix. Not for one that was stopped — a cancel says nothing
+      // about the sources it never got to.
+      ...((terminal.status === "succeeded" || terminal.status === "failed") && normalizeConnectorNeeds(terminal.connectorNeeds).length
         ? { connectorNeeds: normalizeConnectorNeeds(terminal.connectorNeeds) } : {}),
       artifacts: normalizeArtifacts(terminal.artifacts),
       /** Files the run wrote that no gate accepted. Empty is "none"; the field

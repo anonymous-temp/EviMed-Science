@@ -62,8 +62,14 @@ describe("when the strip speaks", () => {
     expect(screen.getByRole("status")).toHaveAttribute("data-connector-need");
   });
 
-  it("says nothing for a run that is going, did not finish, left nothing out, or has no conversation yet", () => {
-    for (const quiet of [run({ status: "running" }), run({ status: "failed" }), run({ connectorNeeds: [] }), run({ connectorNeeds: undefined }), null]) {
+  it("says it for a run that ended with nothing to hand over, because its only path needed the source", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([connector("opengwas", "OpenGWAS")]);
+    mount(run({ status: "failed", errorCode: "specialist_required_output_missing", connectorNeeds: ["opengwas"] }));
+    expect(await screen.findByText("OpenGWAS 还没有配置，相关部分已跳过。")).toBeInTheDocument();
+  });
+
+  it("says nothing for a run that is going or was stopped, left nothing out, or has no conversation yet", () => {
+    for (const quiet of [run({ status: "running" }), run({ status: "canceled" }), run({ connectorNeeds: [] }), run({ connectorNeeds: undefined }), null]) {
       const { container, unmount } = mount(quiet);
       expect(container).toBeEmptyDOMElement();
       unmount();

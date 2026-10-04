@@ -209,9 +209,15 @@ export function runFinishedNotice(run) {
   const status = finished && pending > 0 ? "待核对" : STATUS_BY_OUTCOME[/** @type {keyof typeof STATUS_BY_OUTCOME} */ (outcome)] ?? "未完成";
   const label = runLabel(run);
   const title = summary.safety > 0 ? `${label}：有 ${summary.safety} 处用药安全提示` : `${label} ${status}`;
+  // Said whatever the run's outcome, except a stop: a cancel says nothing about
+  // the sources it never got to.
+  const leftOut = left.length > 0 && outcome !== "stopped"
+    ? `${left.map((spec) => spec.title).join("、")} 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续`
+    : "";
   let body;
   if (!finished) {
     body = errorCodeMessage(run?.errorCode ?? "");
+    if (leftOut) body += ` ${leftOut}`;
   } else {
     // What was delivered, apart from what the run wrote for itself on the way
     // (`artifactCounts`, runArtifacts.mjs): the aspirin run of 2026-09-19 left
@@ -224,12 +230,12 @@ export function runFinishedNotice(run) {
     const where = files > 0 ? `报告和 ${files} 个文件已在对话里` : "结果已在对话里";
     body = pending > 0 ? `${where}，${pending} 处引用待核对` : where;
     // A finished run that left a source out says so, and that it can be added.
-    if (left.length > 0) body += `；${left.map((spec) => spec.title).join("、")} 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续`;
+    if (leftOut) body += `；${leftOut}`;
   }
   // Only clinical safety may interrupt (C1); something the reader must check,
   // or a run that did not finish, is attention; a clean delivery is
   // information.
-  const severity = summary.safety > 0 ? "safety" : !finished || (finished && left.length > 0) || pending > 0 ? "attention" : "info";
+  const severity = summary.safety > 0 ? "safety" : !finished || left.length > 0 || pending > 0 ? "attention" : "info";
   return {
     outcome, status: summary.safety > 0 ? `有 ${summary.safety} 处用药安全提示` : status, title, body, severity, pending,
     counts: { safety: summary.safety, mustFix: summary.mustFix, advice: summary.advice },

@@ -26,9 +26,13 @@ describe("the data sources a finished run went without", () => {
     expect(runCredentialNeeds(finished, null).map((need) => need.state)).toEqual(["missing", "missing"]);
   });
 
-  it("says nothing for a run that is going, did not finish, or left nothing out, and drops what the registry does not know", () => {
+  it("also says it for a run that ended with nothing to hand over because its only path needed the source", () => {
+    expect(runCredentialNeeds({ ...finished, status: "failed" }).map((need) => need.connectorId)).toEqual(["umls", "semantic-scholar"]);
+  });
+
+  it("says nothing for a run that is going or was stopped, or left nothing out, and drops what the registry does not know", () => {
     expect(runCredentialNeeds({ ...finished, status: "running" })).toEqual([]);
-    expect(runCredentialNeeds({ ...finished, status: "failed" })).toEqual([]);
+    expect(runCredentialNeeds({ ...finished, status: "canceled" })).toEqual([]);
     expect(runCredentialNeeds({ status: "succeeded" })).toEqual([]);
     expect(runCredentialNeeds({ status: "succeeded", connectorNeeds: [] })).toEqual([]);
     expect(runCredentialNeeds(null)).toEqual([]);

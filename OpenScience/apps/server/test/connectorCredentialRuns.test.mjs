@@ -113,10 +113,11 @@ test("every other tool failure still fails the run, and a code that only looks l
     assert.equal(other.result.connectorNeeds, undefined, String(code));
   }
   // Left out one source and failed on another: the failure is still the verdict,
-  // and nothing is recorded as "left out" on a run that did not finish.
+  // and the source it left out is still recorded — a capability whose only path
+  // needed it ends with nothing to hand over, and that is the thing to fix.
   const both = await finishedWith([failedCall("public_source_umls_credential_missing"), failedCall("invalid_input")]);
   assert.equal(both.result.status, "failed");
-  assert.equal(both.listed.connectorNeeds, undefined);
+  assert.deepEqual(both.listed.connectorNeeds, ["umls"]);
 });
 
 test("the inbox says a finished run left a source out and where to add it, and says nothing when it did not", () => {
@@ -131,6 +132,12 @@ test("the inbox says a finished run left a source out and where to add it, and s
   const plain = runFinishedNotice({ status: "succeeded", qualityNotices: [], artifacts: [] });
   assert.doesNotMatch(plain.body, /未配置|数据源/);
   assert.equal(plain.severity, "info");
+  // A run that ended with nothing to hand over says what it left out after its own reason.
+  const empty = runFinishedNotice({ status: "failed", errorCode: "specialist_required_output_missing", connectorNeeds: ["opengwas"], title: "孟德尔随机化分析", qualityNotices: [], artifacts: [] });
+  assert.equal(empty.title, "孟德尔随机化分析 未完成");
+  assert.match(empty.body, /OpenGWAS 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续$/);
+  // A stop says nothing about sources it never got to.
+  assert.doesNotMatch(runFinishedNotice({ status: "canceled", canceledBy: "user", connectorNeeds: ["opengwas"], qualityNotices: [], artifacts: [] }).body, /未配置/);
 });
 
 test("the account payload counts the data sources waiting for a credential", async () => {

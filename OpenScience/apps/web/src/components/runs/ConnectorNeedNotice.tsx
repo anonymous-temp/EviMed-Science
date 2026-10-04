@@ -50,7 +50,7 @@ function rememberDismissed(runId: string): void {
  * the form cannot be offered, so 去配置 is a link to the page that has it.
  */
 export function ConnectorNeedNotice({ run }: { run: WebAgentRun | null }) {
-  const asks = run?.status === "succeeded" && (run.connectorNeeds?.length ?? 0) > 0;
+  const asks = (run?.status === "succeeded" || run?.status === "failed") && (run.connectorNeeds?.length ?? 0) > 0;
   const connectors = useConnectors(asks);
   const needs = runCredentialNeeds(run, connectors);
   const [editing, setEditing] = useState<string | null>(null);
