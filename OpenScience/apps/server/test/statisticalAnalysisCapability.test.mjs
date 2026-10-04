@@ -18,8 +18,11 @@ test('statistical capability is clinical, optional-output and uses the existing 
   const source = parse(await read('capabilities/statistical-analysis/capability.yaml'));
   const validated = validateCapabilityManifest(source);
   assert.equal(validated.ok, true, JSON.stringify(validated.issues));
-  // One MCP tool, the one the two data capabilities share: what the project's datasets mean (N03). No retrieval, no engine.
-  assert.deepEqual(source.tools, ['mcp__evimed__dataset_semantics']);
+  // Two MCP tools and no retrieval: what the project's datasets mean (N03), shared with the scoping capability,
+  // and `research_calculate`, whose `render` fills a report's number references from this skill's own
+  // `run_analysis.py` results and receipt (N06) — the list is also the delegation filter, so a tool the SKILL
+  // names and the list omits is one the run cannot call.
+  assert.deepEqual(source.tools, ['mcp__evimed__dataset_semantics', 'mcp__evimed__research_calculate']);
   assert.deepEqual(source.skills, ['statistical-analysis']);
   assert.ok(source.produces[0].outputs.every((output) => !output.required));
   assert.ok(delegationToolFilter(source, { allowBash: true }).includes('bash'));
