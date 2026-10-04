@@ -5499,7 +5499,7 @@ export class AgentRunStore {
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     if (assistants.length === 0) {
       if (ownEnd?.code) return this.finishInternal(project, run.id, {
-        ...terminalFromMessages([{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...history]),
+        ...terminalFromMessages([{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }]),
         artifacts: [],
         ...(run.nativeTurn && ownEnd.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
       });
