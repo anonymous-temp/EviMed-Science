@@ -649,10 +649,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "science_connector_value_above_maximum",
   "science_connector_value_below_minimum",
   "pharmacy_reference_invalid",
-  // The worker finished but its output does not match the evidence it claims.
-  // Delivering that is exactly what this gate exists to prevent.
-  "meta_source_evidence_mismatch",
-  "specialist_source_evidence_mismatch",
   // The GEO probe's own 400s: the run asked for an operation, a vendor, a flag,
   // or a screenshot name outside the closed vocabulary. Unlike a refusal, that
   // is the run's own request being wrong, and the caller has to see it rather

@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from execution_evidence import execution_evidence
+from execution_evidence import evidence_note, execution_evidence, observe_execution_evidence
 import job_heartbeat
 
 
@@ -296,6 +296,26 @@ def _execution_evidence(root):
     return execution_evidence(root, Path(__file__))
 
 
+def _note_evidence(state, root):
+    """Record in the job's state what its source evidence did since it was queued: its record, never its status.
+
+    The engine has ended, either way, and the record says whether its source is
+    the one the job was queued with. A change is a label, not a failure (owner
+    ruling 2026-10-04): a finished job used to end here as
+    `meta_source_evidence_mismatch`, and one that could not be hashed could not
+    even start. It cannot raise: it runs where an exception would leave a
+    finished job unrecorded.
+    """
+    try:
+        note = evidence_note(state.get("executionEvidence"), state.get("evidenceNote"), observe_execution_evidence(root, Path(__file__)))
+    except Exception:  # noqa: BLE001
+        return
+    if note is None:
+        state.pop("evidenceNote", None)
+    else:
+        state["evidenceNote"] = note
+
+
 def _workspace_input(workspace, value, *, directory, suffix=None):
     if value is None:
         return None
@@ -365,6 +385,7 @@ def start_job(arguments, execution_context=None):
     output_root = job_root / "output"
     _ensure_managed_directory(workspace, output_root)
     _, state_path, log_path = _job_paths(job_id)
+    observed = observe_execution_evidence(root, Path(__file__))
     state = {
         "schemaVersion": 1,
         "jobId": job_id,
@@ -379,7 +400,10 @@ def start_job(arguments, execution_context=None):
         "updatedAt": _now(),
         "metaRoot": str(root),
         "metaPython": str(python),
-        "executionEvidence": _execution_evidence(root),
+        # Absent when the evidence could not be taken (`evidenceNote` says why):
+        # the job is queued either way.
+        **({"executionEvidence": observed["evidence"]} if observed["evidence"] is not None
+           else {"evidenceNote": {"unavailable": observed["unavailable"]}}),
         "outputRoot": str(output_root),
         "workspace": str(workspace),
         "artifacts": [],
@@ -687,11 +711,9 @@ def _run_job(state_path):
     output_root = Path(state["outputRoot"]).resolve()
     root = Path(state["metaRoot"]).resolve()
     python = Path(os.path.abspath(state["metaPython"]))
-    if state.get("executionEvidence") != _execution_evidence(root):
-        raise MetaAgentError(
-            "meta_source_evidence_mismatch",
-            "MetaAgent source or execution adapter changed after this job was queued.",
-        )
+    # The source is not compared here. It is compared once the engine has ended and
+    # written into the record (`_note_evidence`): a source that changed since the
+    # job was queued is a label, and the job runs.
     try:
         resolved_python = python.resolve(strict=True)
     except OSError as error:
@@ -751,6 +773,9 @@ def _run_job(state_path):
             stderr=subprocess.STDOUT,
             check=False,
         )
+    # The engine has ended, either way: what its source evidence did since the job
+    # was queued goes in the record, and decides nothing about the outcome.
+    _note_evidence(state, root)
     projects = sorted(
         (entry for entry in output_root.iterdir() if entry.is_dir()),
         key=lambda entry: entry.stat().st_mtime_ns,
@@ -793,11 +818,6 @@ def _run_job(state_path):
         })
         _atomic_json(state_path, state)
         return completed.returncode or 1
-    if state.get("executionEvidence") != _execution_evidence(root):
-        raise MetaAgentError(
-            "meta_source_evidence_mismatch",
-            "MetaAgent source or execution adapter changed while this job was running.",
-        )
     state.update({
         # Exit 0 is a written package, delivered whatever its release status
         # (ready_with_warnings used to read as a blocked job here); exit 2 is a

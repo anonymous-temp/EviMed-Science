@@ -290,6 +290,64 @@ raise SystemExit(EXIT_CODE)
         state = json.loads(state_text)
         self.assertEqual(state["executionEvidence"], self.meta_agent._execution_evidence(self.meta_root))
 
+    # The evidence labels a job's record and never decides the job (owner ruling
+    # 2026-10-04, as the hosted adapter already did). A source that changed after
+    # the job was queued, or while it ran, used to end a finished job as
+    # `meta_source_evidence_mismatch`; one the hashing could not read could not
+    # even be started.
+    def queued_state(self):
+        with mock.patch.object(self.meta_agent.subprocess, "Popen", return_value=mock.Mock()):
+            started = self.meta_agent.call({"action": "start", "topic": "Effect of intervention A versus B in adults"})
+        job_id = started["data"]["jobId"]
+        _, state_path, _ = self.meta_agent._job_paths(job_id)
+        return state_path
+
+    def test_a_source_changed_after_the_job_was_queued_labels_the_record_and_the_job_stands(self):
+        state_path = self.queued_state()
+        queued = self.meta_agent._read_json_no_follow(state_path)
+        (self.meta_root / "new_meta" / "late_patch.py").write_text("PATCHED = 1\n", encoding="utf-8")
+
+        self.assertEqual(self.meta_agent._run_job(str(state_path)), 0)
+
+        state = self.meta_agent._read_json_no_follow(state_path)
+        self.assertEqual(state["status"], "succeeded")
+        self.assertEqual(state["releaseStatus"], "ready")
+        self.assertTrue(state["artifacts"], "the finished package is delivered")
+        note = state["evidenceNote"]
+        self.assertIs(note["changed"], True)
+        self.assertEqual(note["admission"], queued["executionEvidence"])
+        self.assertEqual(note["completion"], self.meta_agent._execution_evidence(self.meta_root))
+
+    def test_a_source_changed_while_the_engine_ran_labels_the_record_and_the_job_stands(self):
+        (self.meta_root / "new_meta" / "main.py").write_text(
+            FAKE_MAIN + "\nPath(__file__).with_name('late_patch.py').write_text('PATCHED = 1\\n')\n", encoding="utf-8")
+        started = self.meta_agent.call({"action": "start", "topic": "Effect of intervention A versus B in adults"})
+        terminal = self.wait_for_terminal(started["data"]["jobId"])
+        self.assertEqual(terminal["status"], "success")
+        self.assertEqual(terminal["data"]["jobStatus"], "succeeded")
+        _, state_path, _ = self.meta_agent._job_paths(started["data"]["jobId"])
+        self.assertIs(self.meta_agent._read_json_no_follow(state_path)["evidenceNote"]["changed"], True)
+
+    def test_an_unchanged_source_leaves_no_note(self):
+        started = self.meta_agent.call({"action": "start", "topic": "Effect of intervention A versus B in adults"})
+        self.assertEqual(self.wait_for_terminal(started["data"]["jobId"])["data"]["jobStatus"], "succeeded")
+        _, state_path, _ = self.meta_agent._job_paths(started["data"]["jobId"])
+        self.assertNotIn("evidenceNote", self.meta_agent._read_json_no_follow(state_path))
+
+    def test_evidence_that_cannot_be_taken_does_not_stop_a_start_and_says_so(self):
+        import execution_evidence
+
+        with mock.patch.object(execution_evidence, "execution_evidence", side_effect=ValueError("unreadable source")):
+            state_path = self.queued_state()
+            state = self.meta_agent._read_json_no_follow(state_path)
+            self.assertEqual(state["status"], "queued")
+            self.assertNotIn("executionEvidence", state)
+            self.assertEqual(state["evidenceNote"], {"unavailable": "execution_evidence_unavailable"})
+            self.assertEqual(self.meta_agent._run_job(str(state_path)), 0)
+        state = self.meta_agent._read_json_no_follow(state_path)
+        self.assertEqual(state["status"], "succeeded")
+        self.assertEqual(state["evidenceNote"], {"unavailable": "execution_evidence_unavailable"})
+
     def test_workspace_relative_inputs_cannot_escape_the_project(self):
         outside = self.root / "outside.json"
         outside.write_text("{}", encoding="utf-8")

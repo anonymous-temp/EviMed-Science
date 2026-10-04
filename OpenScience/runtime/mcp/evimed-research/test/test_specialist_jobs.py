@@ -193,6 +193,87 @@ class SpecialistJobContractTests(unittest.TestCase):
         (root / "evimed_runner.py").write_text("# changed runner\n", encoding="utf-8")
         self.assertNotEqual(state["executionEvidence"], self.jobs._execution_evidence(root))
 
+    # The evidence labels a job's record and never decides the job (owner ruling
+    # 2026-10-04, as the hosted adapter already did). A source that changed after
+    # the job was queued, or while it ran, used to end a finished job as
+    # `specialist_source_evidence_mismatch`; one the hashing could not read could
+    # not even be started.
+    WRITING_RUNNER = (
+        "import argparse, json\n"
+        "from pathlib import Path\n"
+        "p = argparse.ArgumentParser(); p.add_argument('--request'); p.add_argument('--output-dir')\n"
+        "a = p.parse_args(); out = Path(a.output_dir)\n"
+        "(out / 'report.md').write_text('# Report\\n', encoding='utf-8')\n"
+        "(out / 'result.json').write_text(json.dumps({'status': 'succeeded'}), encoding='utf-8')\n"
+    )
+
+    def queue_job(self, root):
+        (root / "evimed_runner.py").write_text(self.WRITING_RUNNER, encoding="utf-8")
+        with mock.patch.object(self.jobs.subprocess, "Popen", return_value=mock.Mock()):
+            result = self.jobs.call("bibliometric_analysis", {"action": "start", "topic": "test topic"})
+        job_id = result["data"]["jobId"]
+        return self.workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
+
+    def test_a_source_changed_after_the_job_was_queued_labels_the_record_and_the_job_stands(self):
+        root = self.install_fake_specialist("bibliometric_analysis")
+        state_path = self.queue_job(root)
+        queued = json.loads(state_path.read_text(encoding="utf-8"))
+        (root / "src").mkdir(exist_ok=True)
+        (root / "src" / "late_patch.py").write_text("PATCHED = 1\n", encoding="utf-8")
+
+        self.assertEqual(self.jobs._run_job(str(state_path)), 0)
+
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "succeeded")
+        published = {artifact["path"] for artifact in state["artifacts"]}
+        self.assertIn("bibliometric-analysis-runs/%s/output/report.md" % state["jobId"], published)
+        note = state["evidenceNote"]
+        self.assertIs(note["changed"], True)
+        self.assertEqual(note["admission"], queued["executionEvidence"])
+        self.assertEqual(note["completion"], self.jobs._execution_evidence(root))
+        self.assertNotEqual(note["completion"], note["admission"])
+
+    def test_a_source_changed_while_the_engine_ran_labels_the_record_and_the_job_stands(self):
+        root = self.install_fake_specialist("bibliometric_analysis")
+        state_path = self.queue_job(root)
+        (root / "evimed_runner.py").write_text(
+            self.WRITING_RUNNER + "Path(__file__).with_name('late_patch.py').write_text('PATCHED = 1\\n')\n",
+            encoding="utf-8")
+        # What the queued evidence was taken of is the runner as it stood then.
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["executionEvidence"] = self.jobs._execution_evidence(root)
+        (root / "late_patch.py").unlink(missing_ok=True)
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        self.assertEqual(self.jobs._run_job(str(state_path)), 0)
+
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "succeeded")
+        self.assertIs(state["evidenceNote"]["changed"], True)
+
+    def test_an_unchanged_source_leaves_no_note(self):
+        root = self.install_fake_specialist("bibliometric_analysis")
+        state_path = self.queue_job(root)
+        self.assertEqual(self.jobs._run_job(str(state_path)), 0)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "succeeded")
+        self.assertNotIn("evidenceNote", state)
+
+    def test_evidence_that_cannot_be_taken_does_not_stop_a_start_and_says_so(self):
+        import execution_evidence
+
+        root = self.install_fake_specialist("bibliometric_analysis")
+        with mock.patch.object(execution_evidence, "execution_evidence", side_effect=ValueError("unreadable source")):
+            state_path = self.queue_job(root)
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["status"], "queued")
+            self.assertNotIn("executionEvidence", state)
+            self.assertEqual(state["evidenceNote"], {"unavailable": "execution_evidence_unavailable"})
+            self.assertEqual(self.jobs._run_job(str(state_path)), 0)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(state["status"], "succeeded")
+        self.assertEqual(state["evidenceNote"], {"unavailable": "execution_evidence_unavailable"})
+
     def test_job_source_evidence_ignores_runtime_cache_mutations(self):
         root = self.install_fake_specialist("drug_safety_analysis")
         cache = root / ".cache" / "openfda"

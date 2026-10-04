@@ -94,3 +94,41 @@ def execution_evidence(root, adapter_file):
         "thinking": True,
         "reasoningEffort": "high",
     }
+
+
+def observe_execution_evidence(root, adapter_file):
+    """The evidence a job's record can carry, or the reason it cannot: never an exception.
+
+    The evidence is a label on the job's record, and nothing it does may fail a
+    researcher's job (owner ruling 2026-10-04: a receipt is our own mechanism, not a
+    gate). Where `execution_evidence` raises, this answers
+    ``{"evidence": None, "unavailable": <code>}``; where it succeeds,
+    ``{"evidence": <block>, "unavailable": None}``. The same vocabulary the hosted
+    adapter's `audit_receipt.observe_evidence` records, so a record reads one way
+    wherever its job ran.
+    """
+    try:
+        return {"evidence": execution_evidence(root, adapter_file), "unavailable": None}
+    except Exception:  # noqa: BLE001 — a surprise from the label is still only a label
+        return {"evidence": None, "unavailable": "execution_evidence_unavailable"}
+
+
+def evidence_note(admission, carried, observed):
+    """What a job's record says about its own evidence; None when the evidence is clean.
+
+    ``admission`` is the evidence taken when the job was queued (None when it could
+    not be), ``carried`` the note written then, ``observed`` what
+    `observe_execution_evidence` sees now. The job's status is never an input: a
+    source that changed since the job was queued is recorded as ``changed`` with
+    both evidence blocks, and the job stands. Before 2026-10-04 it failed a finished
+    job (`specialist_source_evidence_mismatch`, `meta_source_evidence_mismatch`).
+    """
+    note = dict(carried) if isinstance(carried, dict) else {}
+    if isinstance(admission, dict) and observed.get("evidence") != admission:
+        note.update(
+            changed=True,
+            admission=admission,
+            completion=observed["evidence"] if observed.get("evidence") is not None
+            else {"unavailable": observed.get("unavailable") or "execution_evidence_unavailable"},
+        )
+    return note or None
