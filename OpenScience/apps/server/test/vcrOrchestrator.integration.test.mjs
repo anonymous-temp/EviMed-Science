@@ -27,6 +27,7 @@ import { VcrOrchestrator } from "../src/vcrOrchestrator.mjs";
 import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { createVcrNotifier } from "../src/vcrNotify.mjs";
 import { createVcrSeal } from "../src/vcrSeal.mjs";
+import { createVcrModelPlans } from "../src/vcrModelDocuments.mjs";
 import { createVcrWorkerLoops } from "../src/vcrWorker.mjs";
 import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 import { VcrEvidenceStore } from "../src/vcrEvidenceStore.mjs";
@@ -34,7 +35,7 @@ import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrAccess } from "../src/vcrAccess.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { VCR_ACCRUAL_MEASURES } from "../src/vcrRecruit.mjs";
-import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_STEPS, lineageNode } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -412,7 +413,7 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
   assert.equal(ready[0].userId, study.userId);
 });
 
-test("an export run fills the export it was sent for, whichever of the four documents it is: a report typed as another one is refused and nothing is made", options, async () => {
+test("an export run fills the export it was sent for, whichever of the six documents it is: a report typed as another one is refused and nothing is made", options, async () => {
   const module = compose();
   const study = await makeStudy("exportbind");
   /** @param {Record<string, any>} data */
@@ -430,7 +431,9 @@ test("an export run fills the export it was sent for, whichever of the four docu
     assert.deepEqual([refused.ok, refused.issues.map((/** @type {any} */ entry) => [entry.field, entry.code])], [false, [["kind", "vcr_write_value_invalid"]]]);
     assert.equal((await store.exports(study.id)).length, rows, `no ${typed} was made beside the ${kind} asked for`);
     // With no kind typed the report is the dispatch's: the run slot says which export, the run does not have to.
-    const written = await report({ template: "方法与局限。" });
+    // (The two model documents take their words by named section.)
+    const section = VCR_MODEL_DOCUMENT_KINDS.includes(kind) ? { section: VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0] } : {};
+    const written = await report({ template: "方法与局限。", ...section });
     assert.deepEqual([written.ids, written.issues], [[asked.export.id], []]);
     await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
       { id: `run_${module.dispatched.length}`, dispatchId: dispatch.dispatchId, status: "succeeded" });
@@ -438,12 +441,50 @@ test("an export run fills the export it was sent for, whichever of the four docu
     assert.deepEqual([row.kind, row.state], [kind, "ready"]);
     assert.equal(row.cover.report.rendered, "方法与局限。");
   }
-  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_EXPORT_KINDS].sort(), "four documents asked for, four exports, no orphan");
+  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_EXPORT_KINDS].sort(), "six documents asked for, six exports, no orphan");
 
   // With no export run out the write is the researcher's own conversation: it opens a row of the kind it names, as before.
   const own = await report({ kind: "simulation_report", section: "appendix", template: "补充说明。" });
   assert.equal(own.ok, true);
   assert.equal((await store.exports(study.id)).length, VCR_EXPORT_KINDS.length + 1);
+});
+
+test("a model document stands on one frozen plan version: asked for again after a newer version is frozen it is a new document, and with none newer it is the same one", options, async () => {
+  const module = compose();
+  // The document export queue is the composition's; a document already held is converted again, not rewritten.
+  module.orchestrator.queueExport = async () => ({ id: "conversion" });
+  const study = await makeStudy("modelbind");
+  const plans = createVcrModelPlans({ store });
+  /** @param {string} kind */
+  const produce = async (kind) => {
+    const asked = await module.orchestrator.requestExport({ id: study.userId }, study, kind);
+    if (!asked.export || asked.export.state !== "queued") return asked;
+    const dispatch = module.dispatched[module.dispatched.length - 1];
+    await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null,
+      data: { ...(VCR_MODEL_DOCUMENT_KINDS.includes(kind) ? { section: VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0] } : {}), template: "引言。" } });
+    await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: `run_${module.dispatched.length}`, dispatchId: dispatch.dispatchId, status: "succeeded" });
+    return asked;
+  };
+  // Drafted before any plan was frozen: the document says so, and is built on version 0.
+  const draft = await produce("model_analysis_plan");
+  const drafted = await store.exportRow(study.id, draft.export.id);
+  assert.equal(drafted.cover.results.modelAnalysis.plan, null);
+  const again = await module.orchestrator.requestExport({ id: study.userId }, study, "model_analysis_plan");
+  assert.equal(again.export.id, draft.export.id, "with no plan frozen since, the same document is served");
+  assert.equal(module.dispatched.length, 1, "and no second run was sent");
+
+  // The plan freezes: the draft is no longer the plan, so asking again is a new document written against version 1.
+  await plans.freeze({ studyId: study.id, actor: "orchestrator" });
+  const frozen = await produce("model_analysis_plan");
+  assert.notEqual(frozen.export.id, draft.export.id);
+  assert.equal(module.dispatched.length, 2);
+  assert.equal((await store.exportRow(study.id, frozen.export.id)).cover.results.modelAnalysis.plan.version, 1);
+  assert.equal((await module.orchestrator.requestExport({ id: study.userId }, study, "model_analysis_plan")).export.id, frozen.export.id, "now it is the one document again");
+
+  // A study package has no plan version: it is one document, as before.
+  const first = await produce("study_package");
+  await plans.freeze({ studyId: study.id, actor: "runtime" });
+  assert.equal((await module.orchestrator.requestExport({ id: study.userId }, study, "study_package")).export.id, first.export.id);
 });
 
 test("an export whose run leaves no document ends failed and is said on the study page and the home list, until the same document arrives", options, async () => {

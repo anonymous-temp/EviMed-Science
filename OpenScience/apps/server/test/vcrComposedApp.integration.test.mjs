@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { roleAllows, VCR_EXPORT_KINDS, DOCUMENT_EXPORT_MIME } from "@evimed/domain";
+import { roleAllows, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, DOCUMENT_EXPORT_MIME } from "@evimed/domain";
 import { exportHash } from "../src/documentExport.mjs";
 import { documentExportDirectory } from "../src/documentRenderController.mjs";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
@@ -785,9 +785,12 @@ test("shared exports serve all VCR kinds to current members without a new resear
   const beforeRuns = dispatches.length;
   let lastId;
   for (const kind of VCR_EXPORT_KINDS) {
+    // The two model documents take their words by named section: the first and the last of the sections a run writes.
+    const model = VCR_MODEL_DOCUMENT_KINDS.includes(kind);
+    const [first, last] = model ? [VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0], VCR_MODEL_DOCUMENT_SECTIONS[kind].prose.at(-1)] : ["Methods", "Limitations"];
     const written = await vcrRuntimeWrite({ store: context.app.vcr.store, service: context.app.vcr.service, study: current,
-      what: "report", items: [ { kind, section: "Methods", template: "方法。" }, { kind, section: "Limitations", template: "尚无结果，保留限制。" } ], data: null });
-    assert.equal(written.ok, true);
+      what: "report", items: [ { kind, section: first, template: "方法。" }, { kind, section: last, template: "尚无结果，保留限制。" } ], data: null });
+    assert.equal(written.ok, true, JSON.stringify(written.issues));
     const queued = await call("lead", "POST", `/api/vcr/studies/${study.id}/export`, { kind });
     assert.equal(queued.status, 201, queued.text);
     lastId = queued.body.data.conversion.id;
@@ -800,7 +803,7 @@ test("shared exports serve all VCR kinds to current members without a new resear
     assert.equal(status.body.data.state, "ready", status.text);
     const download = await call("lead", "GET", `/api/document-exports/${lastId}/download/docx`);
     assert.equal(download.status, 200, download.text);
-    assert.match(download.text, /Methods[\s\S]*Limitations/);
+    assert.match(download.text, model ? /方法。[\s\S]*尚无结果，保留限制。/ : /Methods[\s\S]*Limitations/);
     assert.equal((await call("stranger", "GET", `/api/document-exports/${lastId}/download/pdf`)).status, 404);
   }
   assert.equal(dispatches.length, beforeRuns, "conversion did not start another conversation");

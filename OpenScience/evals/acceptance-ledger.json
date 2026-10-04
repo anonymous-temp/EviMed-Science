@@ -466,7 +466,7 @@
       "id": "vcr-package",
       "visibility": "public",
       "evalHarness": "evals/vcr-package",
-      "briefCount": 3,
+      "briefCount": 5,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,

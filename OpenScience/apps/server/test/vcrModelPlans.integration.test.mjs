@@ -54,7 +54,7 @@ async function furnish(intendedUse = "specified_analysis") {
     contextOfUse: "生成对照臂事件时间", influence: "medium", influenceJustification: "与文献对照一起使用", consequence: "high",
     consequenceJustification: "错判会让无效疗法进入关键试验", riskJustification: "后果为高", impact: "low", impactJustification: "做法已有讨论",
     technicalCriteria: ["重建曲线通过质控"], appropriateness: "覆盖终点" } });
-  return /** @type {any} */ (await store.studyById(study.id));
+  return /** @type {any} */ (store.studyById(study.id));
 }
 
 test("an assessment is the next version under its key, its risk is derived and a typed one is ignored, and the current version is what is read", options, async () => {

@@ -69,6 +69,7 @@ import { HttpError, randomId } from "./security.mjs";
 import { readVcrReviewExportProof } from "./vcrReview.mjs";
 import { studyReviewDigest } from "./studyReview.mjs";
 import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
@@ -262,9 +263,13 @@ export function vcrDefaultBrief({ study, scope = [], detail = {} }) {
  */
 export function vcrReviewRepairBrief({ revisionId, originalId, kind, templates, findings }) {
   const label = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)[kind] ?? kind;
+  // The two model documents take their words by named section, each once: a body with no section would be refused.
+  const sections = modelDocumentSections(kind);
   return `Revise the retained report in place within a new version. Export ID: ${revisionId}. Original export: ${originalId}.\n`
     + `Document: 「${label}」 (kind: ${kind}). Submit the complete revised body once with vcr_write what: "report", data.kind: "${kind}"; `
     + "this run's report is filed only into this export, and any other kind is refused rather than filed elsewhere.\n"
+    + (sections ? `This document takes its words by section: submit each revised section once, data.section one of ${sections.join(", ")}; `
+      + "the retained template below is labelled by section, the platform's tables are not yours to rewrite, and a section you do not submit has no words in the revision, so submit every section you keep, unchanged ones too.\n" : "")
     + "Preserve every valid computation, source and artifact. Use saved numeric bindings. Do not rerun engines or invent inputs. Address supported findings once; explain unresolved or declined advice. Human signature is optional.\n"
     + `Write this revision only under deliverables/vcr-review-${revisionId}/. Preserve every existing deliverable file.\n`
     + `Complete retained report template (preserve {{n:…}} bindings):\n${templates}\nLocated advisory findings:\n${JSON.stringify(findings).slice(0, 24000)}`;
@@ -1483,8 +1488,10 @@ export class VcrOrchestrator {
     ]);
     const original = exports.find((row) => row.id === input.exportId);
     if (!original || original.cover?.revisionOf) return { skipped: "revision_already_attempted" };
-    const templates = list(original.cover.reports?.length ? original.cover.reports : [original.cover.report])
-      .map(report => String(object(report).template ?? "")).join("\n\n");
+    const retained = list(original.cover.reports?.length ? original.cover.reports : [original.cover.report]);
+    // A model document's sections are named in what the run is handed, since each is submitted under its own name.
+    const templates = retained.map(report => (modelDocumentSections(original.kind) ? `[section: ${String(object(report).section ?? "main")}]\n` : "")
+      + String(object(report).template ?? "")).join("\n\n");
     if (!templates.trim() || templates.length > 200_000) return { skipped: "retained_report_not_bounded" };
     const reportRevision = vcrReportReviewRevision(original.cover);
     const current = vcrCurrentNodes({ study, results, assumptions, populations, patientSets, comparators, scenarios, grid, definition, protocol });
@@ -1547,7 +1554,11 @@ export class VcrOrchestrator {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
-    const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && vcrExportHoldsDocument(row.cover));
+    // A model document stands on one frozen version of the plan: a document written before the plan froze (a draft), or against an older
+    // version, is not the one asked for once a newer version exists. Every other kind is one document, converted again on request.
+    const latestPlan = isModelDocumentKind(kind) ? Number((await this.store.modelPlanVersions(study.id))[0]?.version ?? 0) : 0;
+    const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && vcrExportHoldsDocument(row.cover)
+      && Number(row.cover?.results?.modelAnalysis?.plan?.version ?? 0) >= latestPlan);
     if (previous && this.queueExport) {
       const conversion = await this.queueExport(user, study, previous);
       return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };

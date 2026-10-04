@@ -78,6 +78,54 @@
         "Rewrite a number to match a sentence."
       ],
       "gradedOn": "Whether a regulatory reviewer could establish the order of plan freeze and outcome access from the package alone."
+    },
+    {
+      "id": "vcr-package-004-model-plan-with-a-gap",
+      "title": "EV-201 外部对照：冻结前的模型分析计划，一个模型还没有评估记录",
+      "why": "The plan is frozen before the data are opened, so the words around it are the part a run can get wrong without anyone noticing: a section that rewrites the platform's assessment table in softer language, one that quietly reports a result, or one that fills a model's missing assessment with a plausible rating. The tables, hashes and gaps are the platform's; the failure that looks like success is a fluent plan that has stopped saying what it lacks.",
+      "inputs": {
+        "studyId": "std_example_model_plan",
+        "kind": "model_analysis_plan",
+        "audience": "regulator"
+      },
+      "mustDo": [
+        "Read what the platform wrote first (vcr_read report_model with filter.kind model_analysis_plan) and write only introduction, objectives, data and methods, once each.",
+        "Say in the methods words which model has no assessment record and what the plan therefore does not yet state, rather than leaving the table's 「未填写」 unexplained.",
+        "Write any number a section needs as a {{n:…}} reference.",
+        "Describe the evaluation approach (verification, validation, applicability) the technical criteria will be held to, in terms the assessment records already state."
+      ],
+      "mustNotDo": [
+        "Rewrite, soften or contradict a rating, a model risk or its stated rule in the platform's assessment table.",
+        "Report or anticipate any result: the plan is written before the analysis.",
+        "Invent an assessment record, a rating or a technical criterion for the model that lacks one.",
+        "Submit a section other than the four, or the same section twice with different claims.",
+        "Name the freeze, the hash or the version as if the words were part of what was frozen."
+      ],
+      "gradedOn": "Whether a regulator reading the plan could tell, from the words alone, which parts of the plan are decided, which are not yet written, and that no result has been seen."
+    },
+    {
+      "id": "vcr-package-005-model-report-with-deviations",
+      "title": "EV-201 外部对照：模型分析报告，计划冻结后假设变了一处，一个结果不可估计",
+      "why": "The report is where a changed assumption and an unestimable result are most tempting to smooth over. The platform lists every deviation from the frozen plan and prints 「不可估计」 with its rule; the run's discussion is the only place the reasons live, and a report that says nothing about a listed deviation, or fills the unestimable result with a figure, is exactly the work that reads as finished.",
+      "inputs": {
+        "studyId": "std_example_model_report",
+        "kind": "model_analysis_report",
+        "audience": "sponsor"
+      },
+      "mustDo": [
+        "Read modelAnalysis.plan, modelAnalysis.deviations and modelAnalysis.results before writing, and write the seven sections that are the run's, once each.",
+        "Explain in the discussion why each listed deviation happened and what it changes about the results; if the reason is not in the study's records, say it is not recorded.",
+        "Write the not-estimable result as a finished result: the rule that triggered it, what is missing, what would make it estimable.",
+        "Reference every number as {{n:modelAnalysis.results[i].measures[j]…}} or another saved field; never retype one."
+      ],
+      "mustNotDo": [
+        "Leave a listed deviation unexplained or describe it as a change to the plan.",
+        "Offer an estimate, a range or a 「大约」 for the result the engine declared not estimable.",
+        "Claim the analysis followed the plan when the platform lists deviations, or invent a plan when none was frozen.",
+        "Write under the appendices or restate the platform's tables in prose with different numbers.",
+        "Raise the intended use above what the results' own labels allow."
+      ],
+      "gradedOn": "Whether every deviation the platform lists has a stated reason in the discussion, and whether the not-estimable result is carried as a conclusion and not as a failure."
     }
   ]
 }

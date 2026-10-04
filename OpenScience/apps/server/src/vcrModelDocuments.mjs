@@ -526,7 +526,7 @@ const UNWRITTEN = { type: "note", text: "本节的文字尚未撰写。" };
 /** @param {Record<string, string>} labels @param {string | null | undefined} key */
 const wordOf = (labels, key) => labels[String(key)] ?? String(key ?? "—");
 
-/** The plan's version line: which freeze this document stands on. @param {Record<string, any> | null} plan */
+/** The plan's version line: which freeze this document stands on. @param {Record<string, any> | null} plan @returns {Array<[string, string]>} */
 function planFacts(plan) {
   if (!plan) return [["冻结状态", "尚未冻结：下面是按研究现有记录生成的草案；冻结发生在分析计划冻结的同一时刻，在接触封存的结局数据之前。"]];
   /** @type {Array<[string, string]>} */
@@ -644,7 +644,7 @@ function assessmentBlocks(assessments, models, stage) {
   /** @type {VcrDocumentBlock[]} */
   const blocks = [];
   vcrAssessmentGroups(assessments).forEach((group, index) => {
-    blocks.push({ type: "text", text: `**评估表 ${index + 1}　关注的问题：${group.question || NOT_FILLED}**` });
+    blocks.push({ type: "text", text: `**评估表 ${index + 1} 关注的问题：${group.question || NOT_FILLED}**` });
     for (const record of group.records) {
       const model = models.find((entry) => entry.name === record.modelName && (!record.modelVersion || entry.version === record.modelVersion));
       /** @type {string[][]} */
@@ -855,15 +855,15 @@ export function modelReportDocumentSections(model, reports) {
   ] });
   /** @type {VcrDocumentBlock[]} */
   const appendix = [];
-  appendix.push({ type: "text", text: "**附录 A　模型分析计划**" });
+  appendix.push({ type: "text", text: "**附录 A 模型分析计划**" });
   if (plan) {
     appendix.push({ type: "facts", rows: planFacts(plan) });
-    planSections(object(plan.content), new Map(), { withProse: false }).forEach((section, at) => {
-      appendix.push({ type: "text", text: `**A.${at + 1}　${section.title}**` }, ...section.blocks);
+    planSections(object(plan.content), new Map(), { withProse: false }).forEach((section, position) => {
+      appendix.push({ type: "text", text: `**A.${position + 1} ${section.title}**` }, ...section.blocks);
     });
   } else appendix.push({ type: "text", text: "没有冻结的模型分析计划。" });
-  appendix.push({ type: "text", text: "**附录 B　模型评估表（含评价与结论两行）**" }, ...assessmentBlocks(list(current.assessments), models, "submission"));
-  appendix.push({ type: "text", text: "**附录 C　引用与说明**" });
+  appendix.push({ type: "text", text: "**附录 B 模型评估表（含评价与结论两行）**" }, ...assessmentBlocks(list(current.assessments), models, "submission"));
+  appendix.push({ type: "text", text: "**附录 C 引用与说明**" });
   const evidenceIds = sorted([...new Set(list(current.assumptions).flatMap((card) => list(object(card).evidenceIds).map(String)))]);
   appendix.push(evidenceIds.length ? { type: "list", title: "假设所依据的证据条目", items: evidenceIds } : { type: "text", text: "假设没有引用证据条目。" });
   appendix.push({ type: "note", text: VCR_MODEL_DOCUMENT_ATTRIBUTION_ZH });

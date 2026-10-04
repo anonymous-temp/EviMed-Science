@@ -225,6 +225,17 @@ test("the brief of a review's one revision names the document it revises, whiche
   }
 });
 
+test("the brief of a review's revision of a model document names its sections: each is submitted under its own name, and the ones kept are all resubmitted", () => {
+  for (const kind of ["model_analysis_plan", "model_analysis_report"]) {
+    const brief = vcrReviewRepairBrief({ revisionId: "exp_2", originalId: "exp_1", kind, templates: "[section: introduction]\n引言。", findings: [] });
+    assert.match(brief, /This document takes its words by section: submit each revised section once, data\.section one of /);
+    for (const section of VCR_MODEL_DOCUMENT_SECTIONS[kind].prose) assert.ok(brief.includes(section), `${kind}: ${section}`);
+    assert.match(brief, /a section you do not submit has no words in the revision/);
+    assert.ok(brief.includes("[section: introduction]\n引言。"), "the retained template is labelled by section");
+  }
+  assert.doesNotMatch(vcrReviewRepairBrief({ revisionId: "exp_2", originalId: "exp_1", kind: "study_package", templates: "正文。", findings: [] }), /by section/);
+});
+
 /**
  * An orchestrator over a store that answers the one question `exportDispatch`
  * asks — which run mark holds the study's slot — with the given row.

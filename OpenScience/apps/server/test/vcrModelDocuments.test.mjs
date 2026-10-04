@@ -197,8 +197,8 @@ test("the report names the plan it reports against and lists every deviation fro
   assert.ok(summary.includes(version.contentHash), "and the hash it was frozen under");
   assert.match(summary, /与计划的偏离 \| 1 处/);
   assert.match(sectionOf(md, "结果"), /与模型分析计划的偏离[\s\S]*- 假设「对照组中位生存」的取值由 12 改为 15/);
-  assert.match(sectionOf(md, "附录"), /附录 A　模型分析计划[\s\S]*冻结时间/, "the plan is an appendix of the report (M15 4.2)");
-  assert.match(sectionOf(md, "附录"), /附录 B　模型评估表[\s\S]*模型与模型结果的评价[\s\S]*证据评估的结论/, "with the two submission rows the plan lacks");
+  assert.match(sectionOf(md, "附录"), /附录 A 模型分析计划[\s\S]*冻结时间/, "the plan is an appendix of the report (M15 4.2)");
+  assert.match(sectionOf(md, "附录"), /附录 B 模型评估表[\s\S]*模型与模型结果的评价[\s\S]*证据评估的结论/, "with the two submission rows the plan lacks");
   // Unchanged records: no deviation, and the report says that rather than leaving the list out.
   const clean = renderModelDocument("model_analysis_report", reportModelFor({ versions: [version] }), prose)?.markdown ?? "";
   assert.match(sectionOf(clean, "结果"), /与第 1 版计划相比，没有偏离。/);
