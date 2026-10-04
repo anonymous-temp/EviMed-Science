@@ -98,7 +98,7 @@ export interface EffectiveSkillCatalogue {
 }
 export interface EffectiveSkillDetail {
   state: "available"; runtimeGeneration: string; sessionId: string;
-  skill: EffectiveSkill & { instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
+  skill: EffectiveSkill & { operationHelp?: string | null; instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
     resources: Array<{ path: string; size: number; digest: string }>; scripts: Array<{ path: string; size: number }>; digest: string };
   findings: Array<{ code: string }>;
 }

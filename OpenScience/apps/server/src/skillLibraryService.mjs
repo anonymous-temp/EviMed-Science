@@ -330,6 +330,8 @@ export class SkillLibraryService {
       const detail = await this.nativeCatalogue.read(user, project, input);
       const ref = await this.personalCatalogueRef(user, project, detail.skill);
       const skill = ref.supply !== undefined ? ref : { ...ref, supply: ref.source === "personal" ? null : this.catalogueSupply(ref, user) };
+      // How to run it, written from the package's own operation schemas (never typed beside them).
+      if (ref.source !== "personal") skill.operationHelp = this.supply?.help(this.supply.catalogued(ref.name)) || null;
       await this.nativeCatalogue.assertCurrent(user, project, input.sessionId, detail.runtimeGeneration);
       return { ...detail, skill };
     });

@@ -152,3 +152,11 @@ it("labels a skill whose software this runtime lacks, and still lists it and sti
   expect(screen.getByText(/派生自 scientific-agent-skills，提交未记录 · MIT/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "预览 plain-skill" })).toBeEnabled();
 });
+
+it("a built-in skill's preview carries how to run it, as the server wrote it from the package's operation schema", async () => {
+  api.effectiveSkill.mockResolvedValue({ ...detail, skill: { ...detail.skill, operationHelp: "evidence-check baseline：运行基线\n参数：--output-dir（文本，必填）" } });
+  const user = userEvent.setup(); open();
+  await user.click(await screen.findByRole("button", { name: "预览 evidence-check" }));
+  expect(await screen.findByText("怎么运行")).toBeInTheDocument();
+  expect(screen.getByText(/--output-dir（文本，必填）/)).toBeInTheDocument();
+});

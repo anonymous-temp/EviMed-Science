@@ -33,6 +33,7 @@ import {
   normalizeSkillPackageRecord,
   projectAvailability,
   publicSkillPackage,
+  renderPackageHelp,
   skillDependencyReasons,
 } from "@evimed/domain";
 import { IMAGE_RECIPE, SKILL_PACKAGES } from "@evimed/domain/skill-packages";
@@ -106,12 +107,13 @@ export class SkillSupply {
   /**
    * The label of one skill package.
    * @param {SkillPackageRecord} record @param {{ id?: string } | null} user @param {{ mode: string }} [runtime]
+   * @param {{ limits: SupplyReason[], notes: SupplyReason[] }} [found] the record's reasons, when the caller already read them
    * @returns {AvailabilityEntry}
    */
-  project(record, user, runtime = { mode: String(this.config.runtimeMode ?? "kernel") }) {
+  project(record, user, runtime = { mode: String(this.config.runtimeMode ?? "kernel") }, found = this.reasons(record, user)) {
     return projectAvailability({
       subject: { kind: "skill", id: record.id, version: record.version },
-      reasons: this.reasons(record, user).limits,
+      reasons: found.limits,
       // A skill's use is not collected, so the collector's state says nothing about it: a package carried with
       // nothing missing is installed, however the collector stands.
       collector: { state: "ready" }, runtime,
@@ -125,13 +127,14 @@ export class SkillSupply {
    * @param {SkillPackageRecord} record @param {{ id?: string } | null} user @param {{ mode: string }} [runtime]
    */
   view(record, user, runtime) {
-    const entry = this.project(record, user, runtime);
+    const found = this.reasons(record, user);
+    const entry = this.project(record, user, runtime, found);
     return {
       kind: entry.kind, id: entry.id, version: entry.version, state: entry.state, label: entry.label, text: entry.text,
       reason: { code: entry.reason.code, ...(entry.reason.detail ? { detail: entry.reason.detail } : {}), source: entry.reason.source },
-      also: this.reasons(record, user).limits.filter((reason) => reason.code !== entry.reason.code || reason.detail !== entry.reason.detail)
+      also: found.limits.filter((reason) => reason.code !== entry.reason.code || reason.detail !== entry.reason.detail)
         .map((reason) => ({ code: reason.code, detail: reason.detail, source: reason.source })),
-      notes: this.reasons(record, user).notes.map((reason) => ({ code: reason.code, detail: reason.detail })),
+      notes: found.notes.map((reason) => ({ code: reason.code, detail: reason.detail })),
       package: publicSkillPackage(record),
     };
   }
@@ -166,6 +169,16 @@ export class SkillSupply {
     const found = [...this.packages.values()].filter((record) => record.name === name && CATALOGUE_ORIGINS.includes(record.origin));
     found.sort((left, right) => CATALOGUE_ORIGINS.indexOf(left.origin) - CATALOGUE_ORIGINS.indexOf(right.origin));
     return found[0] ?? null;
+  }
+
+  /**
+   * How to run a package's operations, written from the operation schemas the record carries (the flags a script reads,
+   * which are required, their defaults and bounds, what it writes and its limits), bounded. Empty where the package
+   * declares no operation: nothing is described that no schema states.
+   * @param {SkillPackageRecord | null} record @returns {string}
+   */
+  help(record) {
+    return record?.operations.length ? renderPackageHelp(record.operations, { locale: "zh" }) : "";
   }
 
   /**

@@ -511,8 +511,8 @@ export function fencedPython(markdown) {
 }
 
 /**
- * The R packages a source loads: `library(x)`, `require(x)`, `requireNamespace("x")`
- * and `x::`. Comments are skipped.
+ * The R packages a source loads: calls of `library`, `require` and `requireNamespace`
+ * with a package name, and `pkg::` references. Comments are skipped.
  * @param {string} source @returns {string[]}
  */
 export function rLibraries(source) {

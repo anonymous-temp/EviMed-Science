@@ -284,3 +284,25 @@ test("a record that does not fit beside the instructions loses its lists first a
   assert.equal(huge.baseline, null);
   assert.throws(() => service.fitPayload({ instructions: "x".repeat(262_144), package: record, baseline: null }), { code: "product_document_too_large" });
 });
+
+test("a built-in skill's detail carries how to run it, written from its package's operation schema", async () => {
+  const { service } = fixture();
+  const item = { key: "k1", name: "cheminformatics", source: "builtin", description: "d", invocation: {}, canDuplicate: true };
+  service.requireProject = async () => {};
+  service.nativeCatalogue = {
+    read: async () => ({ state: "available", runtimeGeneration: "g1", sessionId: "s", skill: { ...item, instructions: "x", metadata: {}, whenToUse: null, resources: [], scripts: [], findings: [], digest: "sha256:" + "1".repeat(64) }, findings: [] }),
+    assertCurrent: async () => {}, runtime: { runtimePersonalSkillPins: () => [] },
+  };
+  const detail = await service.effectiveDetail(owner, { id: "p", userId: owner.id }, { sessionId: "s", key: "skill:" + "a".repeat(64), expectedRuntimeGeneration: "g1" });
+  const help = detail.skill.operationHelp;
+  assert.match(help, /^cheminformatics baseline：对一个请求文件或数据文件运行该技能的确定性基线/);
+  assert.match(help, /--skill（文本，必填，取值 cheminformatics/);
+  assert.match(help, /--output-dir（文本，必填/);
+  assert.match(help, /32 MiB/);
+  assert.match(help, /示例：python _runtime\/execute_skill.py --skill cheminformatics --output-dir <output-dir>/);
+  assert.ok([...help].length <= 1800 + 40, "bounded");
+  assert.equal(detail.skill.supply.state, "limited");
+  // A skill with no declared operation is not described: nothing is made up.
+  service.nativeCatalogue.read = async () => ({ state: "available", runtimeGeneration: "g1", sessionId: "s", skill: { ...item, name: "stats-integrity", instructions: "x", metadata: {}, whenToUse: null, resources: [], scripts: [], findings: [], digest: "sha256:" + "1".repeat(64) }, findings: [] });
+  assert.equal((await service.effectiveDetail(owner, { id: "p", userId: owner.id }, { sessionId: "s", key: "skill:" + "a".repeat(64), expectedRuntimeGeneration: "g1" })).skill.operationHelp, null);
+});

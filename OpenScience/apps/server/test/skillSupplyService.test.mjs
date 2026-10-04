@@ -145,3 +145,21 @@ test("the image recipe the labels read is the generated one", () => {
   assert.equal(supply().image, IMAGE_RECIPE);
   assert.equal(IMAGE_RECIPE.python.scipy, "1.15.3");
 });
+
+test("an installed extension carries the package it was admitted as: exact commit, licence, digest and supported operations, beside its own state", async () => {
+  const views = async () => [{
+    id: "extension:installed", catalogueId: "cowork-portable", coordinate: { kind: "github", repository: "Jesse-njx/dsh-cowork", commit: "2ae5cf755c4294a1e988eebf3b12dd062425d84c" },
+    phase: "waiting", evidenceState: "source-assessed", policyState: "current", preparation: { outcome: "prepared" },
+  }];
+  const service = new AvailabilityService({ config: config(), registry, skillSupply: supply(), extensionViews: views });
+  const [entry] = (await service.forAccount(alice)).extensions;
+  assert.equal(entry.version, "2ae5cf755c42");
+  assert.equal(entry.state, "unverified", "its state is its own: the package record does not make it runnable");
+  assert.equal(entry.package.sourceText, "公开仓库 Jesse-njx/dsh-cowork @ 2ae5cf755c42");
+  assert.equal(entry.package.licenceText, "MIT");
+  assert.deepEqual(entry.package.operations.map((operation) => operation.name), ["doc_read", "doc_write"]);
+  assert.equal(entry.package.unknown.length, 0, "everything a reader needs about it is recorded");
+  // An extension the table does not know has no package, and says nothing about one.
+  const other = new AvailabilityService({ config: config(), registry, skillSupply: supply(), extensionViews: async () => [{ id: "extension:other", catalogueId: "unlisted-tool", coordinate: { kind: "npm", name: "x", version: "1.0.0" }, phase: "waiting" }] });
+  assert.equal((await other.forAccount(alice)).extensions[0].package, null);
+});

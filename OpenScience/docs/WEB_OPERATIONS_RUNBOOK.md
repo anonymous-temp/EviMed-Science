@@ -965,6 +965,63 @@ references. `/api/ops/metrics` carries `open_science_availability_subjects{kind,
 failed-job and state gauges; a backlog that does not drain, or failed jobs above zero,
 mean runs the collector cannot read.
 
+### Skill packages: source, licence, version, dependencies, and what this runtime lacks
+
+`GET /api/availability` also lists every skill package the deployment ships
+(`skills`: core, curated, community, office, the open-domain answer package and the
+shared capability bodies) beside the capabilities and tools, and carries each
+capability's and each admitted extension's `package`. A package record says what it is
+and where it came from: its version, its exact source (a community skill at its
+repository and commit; a curated one as derived from a named upstream, with no commit
+claimed because the inventory records none; a personal one imported from a repository
+preview at the commit the control plane itself fetched, or as an upload by digest, or
+as a copy of a named built-in), its licence (by digest where the tree carries the file),
+the digest of the package directory, its scripts and references by digest, its
+dependencies and its supported operations. A field no source supplies reads 「未记录」,
+never a guess.
+
+The records are generated: `pnpm generate:skill-packages` reads the skill packs'
+inventories, each `capability.yaml`, each package's own files (the libraries its scripts
+import are read from the import statements, and the flags a script's operation takes
+from its own `argparse` calls) and `deploy/runtime-dsh/install-runtime.sh` into
+`packages/domain/src/skill-packages.json`, and `pnpm check:skill-packages` (part of
+`ci:web`) fails when it drifts, so a change to a package or to the image's pinned
+libraries needs the regenerated table in the same change. Software a skill's own text
+says its method needs, and that the image does not carry, is declared in
+`runtime/skills/curated-scientific/inventory.json` under `methodDependencies` with the
+mention that justifies it (a test holds each mention to the skill's own files); a
+personal skill declares its own in the `metadata.requires` map of its frontmatter.
+
+"Installed" never implies runnable. A package whose method needs software, weights or a
+tool this deployment lacks (the library the image does not install, a pin that differs
+from the image's, a model-weights file nothing mounts, a platform tool the composition
+withholds) reads `limited`, with the thing named and what still works said, and a
+dependency whose presence could not be read reads `unverified`, never present. Software
+a script only touches inside a guarded import, or an instruction's code fence names, is a
+note beside an installed package, not a limit; data, compute and credentials the
+researcher supplies at the moment of use are never a reason. It is the same label as
+for a capability: the package is still listed, still selectable and still callable.
+A skill's use is not collected, so a skill reads at most `installed`, never
+`executable`.
+
+Updating an edited copy of a skill (the personal skill page, 「更新到新版本」; `POST
+/api/skills/:id/update-preview` then `/update`) compares it with a newer version, an
+upload or a repository preview at another commit, against the digests it came in with:
+what the researcher edited stays, what the new version changed comes in, a difference
+both made is a conflict they settle part by part (default: keep theirs), and a skill
+with no recorded origin treats every difference as a conflict. The update is a new
+revision; the revision a project selects and the generation a running conversation
+recorded are not touched, restoring a revision brings back its own package and baseline,
+and a retired skill keeps its history.
+
+The document tools' help (`doc_read`, `doc_write`) is written from one operation schema
+(`packages/socket/extensions/cowork/operations.mjs`), and
+`scripts/ops/test/coworkOperationSchema.test.mjs` derives its boundary cases from that
+schema and holds the isolated image's policy to them, so a limit that moves on one side
+only fails a test instead of reaching the model as a stale sentence. A built-in skill's
+preview shows how to run it from the same kind of schema (the executor's flags are read
+from the executor).
+
 ### Specialist engines say which optional source they did not use
 
 A data source nobody configured is the researcher's to configure where they use it
