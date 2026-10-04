@@ -1,4 +1,4 @@
-import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectCorrectionOutcome, projectResultInput, projectResultVersion } from "@evimed/domain";
+import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectAffected, projectCorrectionOutcome, projectResultInput, projectResultVersion } from "@evimed/domain";
 import { PLUGIN_REGISTRY, exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
@@ -251,7 +251,9 @@ const payloadProjections = {
   "result-impact": payload => {
     recorded(payload, "result-impact");
     return { ...pick(payload, ["schemaVersion", "recordType", "versionId", "effect", "claimIds", "coverage", "historicalResultPreserved", "recomputed", "observedAt"]),
-      source: pick(payload.source, ["id", "digest", "versionId", "doi"]),
+      source: pick(payload.source, ["id", "digest", "versionId", "doi", "contentDigest", "replacedBy"]),
+      // What was found to rest on the source (N15): the calculations, memories and learned methods, as the closed record.
+      ...(projectAffected(payload.affected) ? { affected: projectAffected(payload.affected) } : {}),
       sourceStatus: pick(payload.sourceStatus, ["state", "checkedAt", "reason", "updates"]),
       continuation: pick(payload.continuation, ["status", "reason", "agendaId", "episodeId", "requestedAt", "scheduledAt"]) };
   },

@@ -1,16 +1,28 @@
 /** Advisory changes against immutable result inputs. A source lookup never edits a result. */
 import { createHash } from "node:crypto";
-import { doiOf } from "@evimed/domain";
+import { AFFECTED_CLASSES, SOURCE_REPLACED_KIND, affectedClass, affectedCounts, doiOf, projectAffected } from "@evimed/domain";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { HttpError } from "./security.mjs";
 
 const hash = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const stateSet = new Set(["changed", "no_update", "unknown", "unavailable"]);
 const identity = source => String(source?.id ?? doiOf(source?.doi) ?? "");
+const DIGEST = /^[a-f0-9]{64}$/;
+const SOURCE_ID = /^src_[a-f0-9]{32}$/;
+/** Pages of dependents read for one calculation, and results per page: the bound on one change's reach, never a silent cutoff of the scan. */
+const DEPENDENT_PAGES = 5;
+const DEPENDENT_PAGE = 100;
+const isMissing = error => [401, 403, 404].includes(error?.status) || ["result_not_found", "result_version_unavailable"].includes(error?.code);
 
-/** Only recorded input identities participate, never a title or similar prose. */
+/**
+ * Only recorded input identities participate, never a title or similar prose. A knowledge-base document is also
+ * recorded by the digest of its exact bytes (`contentDigest`), which is how a result that read the file names it.
+ */
 function matches(input, source) {
-  if (input?.kind !== "source" || input.availability === "restricted") return false;
+  if (input?.kind !== "source" && !(source.contentDigest && input?.kind === "data")) return false;
+  if (input.availability === "restricted") return false;
+  if (source.contentDigest && DIGEST.test(source.contentDigest) && input.digest === source.contentDigest) return true;
+  if (input.kind !== "source") return false;
   const sameId = identity(source) && (input.id === identity(source) || doiOf(input.id) && doiOf(input.id) === doiOf(identity(source)));
   if (!sameId) return false;
   if (source.digest && input.digest !== source.digest) return false;
@@ -23,7 +35,9 @@ function sourceReference(value) {
   const id = identity(value);
   if (!id || id.length > 512) throw new HttpError(400, "result_impact_source_invalid", "An exact source identity is required.");
   return { id, ...(value.digest ? { digest: String(value.digest) } : {}),
-    ...(value.versionId ? { versionId: String(value.versionId) } : {}), ...(doiOf(value.doi) ? { doi: doiOf(value.doi) } : {}) };
+    ...(value.versionId ? { versionId: String(value.versionId) } : {}), ...(doiOf(value.doi) ? { doi: doiOf(value.doi) } : {}),
+    ...(DIGEST.test(String(value.contentDigest ?? "")) ? { contentDigest: String(value.contentDigest) } : {}),
+    ...(SOURCE_ID.test(String(value.replacedBy ?? "")) ? { replacedBy: String(value.replacedBy) } : {}) };
 }
 
 /** Canonical changes exclude check time: repeated checks of one notice are one impact. */
@@ -84,11 +98,59 @@ export function clinicalResultLinks(matrix, { verdict = null, capturedSources = 
   return { inputs: [...inputs.values()], findings };
 }
 
+/** What a researcher is told in the inbox: that the source changed and what rests on it, never that a result is wrong. */
+function impactBody(checked, affected) {
+  const replaced = checked.updates.some(update => update.kind === SOURCE_REPLACED_KIND);
+  const { found, unknown } = affectedCounts(affected);
+  const names = { calculations: "个计算", dependents: "个依赖它的结果", memories: "条记忆", methods: "个方法" };
+  const rests = AFFECTED_CLASSES.filter(name => found[name]).map(name => `${found[name]} ${names[name]}`);
+  return `${replaced ? "资料库里这份文件有了新版本。" : "来源发布了更正或撤回通知。"}历史结果已保留；这只说明来源变了，不说明原来的结论有误。`
+    + `${rests.length ? `依赖它的有：${rests.join("、")}。` : ""}`
+    + `${unknown.some(name => name === "memories" || name === "methods") ? "有些依赖暂时查不到，不能当作没有。" : ""}可以检查受影响的部分并继续研究。`;
+}
+
+/** The printed values of a version that are bound to one calculation: how many, and the first few keys. */
+function boundTo(version, calculationId) {
+  const items = (version.bindings?.items ?? []).filter(item => item.calculation?.versionId === calculationId);
+  return { versionId: version.versionId, path: version.path ?? null, boundValues: items.length,
+    keys: [...new Set(items.map(item => item.calculation.key))].slice(0, 5) };
+}
+
+/**
+ * What an agenda is asked to do about a source change: look at the result and at what was found to rest on the source,
+ * and nothing else. The notice says the source changed; the note never says the conclusion is wrong.
+ * @param {any} payload a result impact's payload
+ */
+function continuationNote(payload) {
+  const affected = projectAffected(payload.affected);
+  const named = (list, label) => (list?.items?.length ? ` ${label}: ${list.items.map(item => item.versionId ?? item.id ?? item.recordId).join(", ")}${list.total > list.items.length ? ` and ${list.total - list.items.length} more` : ""}.` : "");
+  const scope = affected ? [
+    named(affected.calculations, "Calculations among its bound values that rest on the source (recompute only these and the printed values bound to them)"),
+    named(affected.dependents, "Results whose printed values are bound to this calculation"),
+    affected.methods.total ? ` ${affected.methods.total} learned method(s) are linked to it; they carry a label that the source changed.` : "",
+    affected.memories.total ? ` ${affected.memories.total} memory record(s) name the source and carry a label that it changed.` : "",
+  ].join("") : "";
+  return `Review source updates against immutable result ${payload.versionId}. Source: ${JSON.stringify(payload.source)}. Notices: ${JSON.stringify(payload.sourceStatus.updates)}.${scope}`
+    + " A notice means the source changed; it does not by itself show the result's conclusion is wrong."
+    + " Recheck only what rests on this source and leave every other result, calculation, memory and method as it is, without running it again."
+    + " Preserve the prior result. Identify affected conclusions; create a successor only for the affected analysis. State what changed, what was recomputed, and what remains uncertain.";
+}
+
+const byId = (left, right) => String(left.versionId ?? left.recordId ?? left.id).localeCompare(String(right.versionId ?? right.recordId ?? right.id));
+
 export class ResultImpactService {
-  /** @param {{documents:any,results:any,autopilot?:any,notifications?:any,authorizeContinuation?:(userId:string,impact:any)=>Promise<string|null>,now?:()=>Date}} dependencies */
-  constructor({ documents, results, autopilot = null, notifications = null, authorizeContinuation = null, now = () => new Date() }) {
-    this.documents = documents; this.results = results; this.autopilot = autopilot; this.notifications = notifications;
-    this.authorizeContinuation = authorizeContinuation; this.now = now;
+  /**
+   * `knowledge` is the memories and learned methods that rest on a changed source (`knowledgeChange.mjs`); absent, the
+   * record says those lookups were not made. `authorizeContinuation(ownerId, impact)` answers which agenda the researcher
+   * already authorized for this result, if any (the running agenda whose episode produced it); at most
+   * `autoRecheckLimit` impacts of one check are continued that way, and the rest wait for the researcher's own choice.
+   * @param {{documents:any,results:any,autopilot?:any,notifications?:any,knowledge?:any,authorizeContinuation?:(userId:string,impact:any)=>Promise<string|null>,
+   *   autoRecheckLimit?:number,report?:(code:string)=>void,now?:()=>Date}} dependencies
+   */
+  constructor({ documents, results, autopilot = null, notifications = null, knowledge = null, authorizeContinuation = null, autoRecheckLimit = 3,
+    report = () => {}, now = () => new Date() }) {
+    this.documents = documents; this.results = results; this.autopilot = autopilot; this.notifications = notifications; this.knowledge = knowledge;
+    this.authorizeContinuation = authorizeContinuation; this.autoRecheckLimit = autoRecheckLimit; this.report = report; this.now = now;
   }
 
   async list(userId, { projectId, versionId = null, limit = 50, cursor = null }) {
@@ -106,12 +168,22 @@ export class ResultImpactService {
     return this.projectImpact(userId, projectId, row);
   }
 
-  /** Preserve the advisory row; current source permissions bound every public read. */
+  /**
+   * Preserve the advisory row; current source permissions bound every public read. A version that rests on the source
+   * through a calculation among its bound values is read the same way, by that calculation's own recorded inputs.
+   */
   async projectImpact(userId, projectId, row) {
     const version = await this.results.get(userId, projectId, row.payload.versionId);
-    const matchesSource = (version.inputs ?? []).filter(input => matches({ ...input,
-      availability: input.availability === "restricted" ? "reference" : input.availability }, row.payload.source));
-    if (matchesSource.some(input => !["restricted", "deleted"].includes(input.availability))) return row;
+    const holders = [version];
+    for (const item of row.payload.affected?.calculations?.items ?? []) {
+      try { holders.push(await this.results.get(userId, projectId, item.versionId)); }
+      catch (error) { if (!isMissing(error)) throw error; }
+    }
+    const matchesSource = holders.flatMap(holder => (holder.inputs ?? []).filter(input => matches({ ...input,
+      availability: input.availability === "restricted" ? "reference" : input.availability }, row.payload.source)));
+    if (matchesSource.some(input => !["restricted", "deleted"].includes(input.availability))) {
+      return row.payload.affected ? { ...row, payload: { ...row.payload, affected: projectAffected(row.payload.affected) } } : row;
+    }
     return { ...row, payload: { schemaVersion: row.payload.schemaVersion, recordType: "result-impact", versionId: row.payload.versionId,
       source: { id: "unavailable-source" }, sourceStatus: { state: "unavailable", checkedAt: null,
         reason: matchesSource.some(input => input.availability === "restricted") ? "restricted" : "source_unavailable", updates: [] },
@@ -136,62 +208,193 @@ export class ResultImpactService {
   }
 
   /**
+   * The knowledge base received new bytes for a file it already held (a new content-addressed document beside the old
+   * one): the work that rests on the old document is affected the way work that rests on a corrected paper is. The old
+   * document is named by its id and by the digest of its exact bytes, which is how a result that read the file recorded
+   * it, and what replaced it by its id. Found by those recorded links, never by the file's name.
+   * @param {string} userId @param {{projectId:string, replaced:{sourceId:string, sha256:string}, by?:{sourceId?:string, at?:string|null}}} input
+   */
+  async reconcileReplacement(userId, { projectId, replaced, by = {} }) {
+    const date = typeof by.at === "string" && /^\d{4}-\d{2}-\d{2}/.test(by.at) ? by.at.slice(0, 10) : null;
+    const status = { state: "changed", checkedAt: this.now().toISOString(), reason: "replaced",
+      updates: [{ kind: SOURCE_REPLACED_KIND, noticeDoi: null, date, source: null }] };
+    return this.reconcileSourceUpdate(userId, { projectId, status,
+      source: { id: replaced.sourceId, contentDigest: replaced.sha256, ...(by.sourceId ? { replacedBy: by.sourceId } : {}) } }, { exact: true });
+  }
+
+  /**
+   * The versions that name the source: every version of the project whose recorded inputs do (a scan of all of them, so
+   * a DOI written in another form still meets its work), or — for a knowledge-base document, which is named by exact
+   * identifiers — the versions that contain exactly those identifiers.
+   * @returns {Promise<{ ids: string[], scanned: number }>}
+   */
+  async #naming(userId, projectId, ref, exact) {
+    const ids = new Set();
+    let scanned = 0;
+    const pages = async (list) => {
+      let cursor = null;
+      const cursors = new Set();
+      do {
+        const page = await list(cursor);
+        for (const resultRow of page.items) {
+          const result = resultRow.payload ?? resultRow;
+          scanned += 1;
+          if ((result.inputs ?? []).some(input => matches(input, ref))) ids.add(result.versionId ?? result.id ?? resultRow.id);
+        }
+        cursor = page.nextCursor ?? null;
+        if (cursor && cursors.has(cursor)) throw new HttpError(503, "result_impact_pagination_invalid", "Result pagination did not advance.");
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+    };
+    if (!exact) await pages(cursor => this.results.list(userId, { projectId, limit: 100, cursor }));
+    else {
+      for (const filter of [{ inputs: [{ id: ref.id }] }, ...(ref.contentDigest ? [{ inputs: [{ digest: ref.contentDigest }] }] : [])]) {
+        await pages(cursor => this.results.query(userId, projectId, filter, { limit: DEPENDENT_PAGE, cursor }));
+      }
+    }
+    return { ids: [...ids], scanned };
+  }
+
+  /**
+   * The versions whose printed values are bound to one calculation (`bindingSources`, the lineage's own index), read to
+   * a bound. A lookup that cannot be made is unknown, and the calculation's dependents are then not enumerated.
+   * @returns {Promise<{ items: any[], unknown?: string }>}
+   */
+  async #boundTo(userId, projectId, calculation) {
+    if (typeof this.results.query !== "function") return { items: [], unknown: "unavailable" };
+    const items = [];
+    try {
+      let cursor = null;
+      for (let page = 0; page < DEPENDENT_PAGES; page += 1) {
+        const reply = await this.results.query(userId, projectId, { bindingSources: [calculation.versionId] }, { limit: DEPENDENT_PAGE, cursor });
+        items.push(...reply.items.filter(item => item.versionId !== calculation.versionId));
+        cursor = reply.nextCursor ?? null;
+        if (!cursor) break;
+      }
+      return { items };
+    } catch (error) {
+      this.report(typeof error?.code === "string" ? error.code : "result_impact_dependents_failed");
+      return { items: [], unknown: "lookup_failed" };
+    }
+  }
+
+  /**
    * Call after a trusted check. Unavailable and unknown checks record a gap, never a fabricated change.
    * No-update checks do not create new impacts. Every result page is checked; no silent 100-result cutoff.
+   *
+   * Beyond the versions that name the source themselves, a version whose printed values are bound to a calculation that
+   * rests on it is affected too, and so are the memories that name it and the learned methods linked to those versions:
+   * each is found by its recorded link, labelled with the source's new state and listed on the impact. Work that rests
+   * on nothing the source touches gets no row and is not asked to run again.
+   * @param {string} userId @param {{projectId:string, source:any, status:any}} input @param {{exact?:boolean}} [options]
    */
-  async reconcileSourceUpdate(userId, { projectId, source, status }) {
+  async reconcileSourceUpdate(userId, { projectId, source, status }, { exact = false } = {}) {
     const project = await this.results.scope(userId, projectId);
     const ownerId = project.userId;
     const ref = sourceReference(source);
     const checked = statusProjection(status);
+    // Memories rest on the source whether or not a result of this project does; the label is about the source.
+    const memories = this.knowledge ? await this.knowledge.memories(ownerId, projectId, ref, checked) : { unknown: "unavailable" };
     if (checked.state === "no_update") return { items: [], scanned: 0 };
-    const items = [];
-    let cursor = null;
-    let scanned = 0;
-    const cursors = new Set();
-    do {
-      const page = await this.results.list(userId, { projectId, limit: 100, cursor });
-      for (const resultRow of page.items) {
-        const result = resultRow.payload ?? resultRow;
-        scanned += 1;
-        if (!(result.inputs ?? []).some(input => matches(input, ref))) continue;
-        const versionId = result.versionId ?? result.id ?? resultRow.id;
-        const currentResult = await this.results.get(userId, projectId, versionId);
-        if (!(currentResult.inputs ?? []).some(input => matches(input, ref) && input.availability !== "deleted")) continue;
-        const changeKey = hash([ref, checked.state, checked.reason ?? null, checked.updates]);
-        const id = `impact-${hash([ownerId, projectId, versionId, changeKey]).slice(0, 48)}`;
-        let row = await this.documents.get(ownerId, "result-impact", id);
-        if (!row) {
-          const findings = (currentResult.findings ?? []).filter(finding => finding.elementId
-            && (finding.sourceRefs ?? []).some(input => matches({ kind: "source", ...input }, ref)));
-          const payload = { schemaVersion: 1, recordType: "result-impact", versionId,
-            source: ref, sourceStatus: checked, changeKey, effect: checked.state === "changed" ? "potentially_affected" : "source_gap",
-            claimIds: [...new Set(findings.map(finding => finding.elementId))],
-            coverage: findings.length ? "recorded_claim_refs" : "result_inputs_only",
-            historicalResultPreserved: true, recomputed: false, observedAt: this.now().toISOString(),
-            continuation: { status: "awaiting_user", reason: "authorization_required" } };
-          try { row = await this.documents.put(ownerId, "result-impact", id, payload, { expectedRevision: 0, projectId }); }
-          catch (error) {
-            if (error?.code !== "product_revision_conflict") throw error;
-            row = await this.documents.get(ownerId, "result-impact", id);
-            if (!row) throw error;
-          }
+    const { ids, scanned } = await this.#naming(userId, projectId, ref, exact);
+    const changeKey = hash([ref, checked.state, checked.reason ?? null, checked.updates]);
+    /** @type {Map<string, any>} */
+    const calculations = new Map();
+    /** Does a calculation still rest on the source, and what is bound to it. @param {string} calculationId */
+    const calculation = async calculationId => {
+      if (!calculations.has(calculationId)) {
+        const entry = { version: null, rests: false, dependents: null, unknown: null };
+        try {
+          entry.version = await this.results.get(userId, projectId, calculationId);
+          entry.rests = (entry.version.inputs ?? []).some(input => matches(input, ref) && input.availability !== "deleted");
+        } catch (error) {
+          if (!isMissing(error)) { this.report(typeof error?.code === "string" ? error.code : "result_impact_calculation_failed"); entry.unknown = "lookup_failed"; }
         }
-        if (checked.state === "changed") {
-          await this.notifications?.create(ownerId, { noticeType: "notify", severity: "attention", projectId,
-            title: "引用来源有更新", body: "来源发布了更正或撤回通知。历史结果已保留，可以检查受影响的结论并继续研究。",
-            source: result.producer?.runId ? { type: "run", id: result.producer.runId } : { type: "system", id }, idempotencyKey: `result-impact:${id}` });
-          if (this.authorizeContinuation && row.payload.continuation.status !== "scheduled") {
-            const agendaId = await this.authorizeContinuation(userId, row);
-            if (agendaId) row = await this.continueImpact(userId, projectId, id, { agendaId });
-          }
-        }
-        items.push(await this.projectImpact(userId, projectId, row));
+        calculations.set(calculationId, entry);
       }
-      cursor = page.nextCursor ?? null;
-      if (cursor && cursors.has(cursor)) throw new HttpError(503, "result_impact_pagination_invalid", "Result pagination did not advance.");
-      if (cursor) cursors.add(cursor);
-    } while (cursor);
+      return calculations.get(calculationId);
+    };
+    const queue = [...ids];
+    const queued = new Set(queue);
+    const items = [];
+    let continued = 0;
+    for (let position = 0; position < queue.length; position += 1) {
+      const versionId = queue[position];
+      const currentResult = await this.results.get(userId, projectId, versionId);
+      const named = (currentResult.inputs ?? []).some(input => matches(input, ref) && input.availability !== "deleted");
+      // A calculation that rests on the source brings in the versions bound to it, once each.
+      const isCalculation = (currentResult.machineValues ?? []).length > 0;
+      let dependents = { items: [] };
+      if (named && isCalculation) {
+        dependents = await this.#boundTo(userId, projectId, currentResult);
+        for (const dependent of dependents.items) if (!queued.has(dependent.versionId)) { queued.add(dependent.versionId); queue.push(dependent.versionId); }
+      }
+      const boundIds = [...new Set((currentResult.bindings?.items ?? []).map(item => item.calculation?.versionId))].filter(id => id && id !== versionId);
+      /** @type {any[]} */
+      const resting = [];
+      let calculationUnknown = null;
+      for (const id of boundIds) {
+        const entry = await calculation(id);
+        if (entry.unknown) calculationUnknown = entry.unknown;
+        else if (entry.rests) resting.push(entry.version);
+      }
+      if (!named && !resting.length) continue;
+      const methods = this.knowledge ? await this.knowledge.methodsFor(ownerId, [versionId, ...resting.map(item => item.versionId)], ref, checked) : { unknown: "unavailable" };
+      const affected = { schemaVersion: 1, via: named ? "input" : "calculation",
+        calculations: affectedClass(calculationUnknown && !resting.length ? { unknown: calculationUnknown }
+          : { items: resting.map(item => ({ ...boundTo(currentResult, item.versionId), versionId: item.versionId, path: item.path ?? null })).sort(byId) }, "calculations"),
+        dependents: affectedClass(dependents.unknown ? { unknown: dependents.unknown }
+          : { items: dependents.items.map(item => boundTo(item, versionId)).sort(byId) }, "dependents"),
+        memories: affectedClass({ ...memories, items: [...(memories.items ?? [])].sort(byId) }, "memories"),
+        methods: affectedClass({ ...methods, items: [...(methods.items ?? [])].sort(byId) }, "methods") };
+      const id = `impact-${hash([ownerId, projectId, versionId, changeKey]).slice(0, 48)}`;
+      let row = await this.documents.get(ownerId, "result-impact", id);
+      if (!row) {
+        const findings = (currentResult.findings ?? []).filter(finding => finding.elementId
+          && (finding.sourceRefs ?? []).some(input => matches({ kind: "source", ...input }, ref)));
+        const payload = { schemaVersion: 1, recordType: "result-impact", versionId,
+          source: ref, sourceStatus: checked, changeKey, effect: checked.state === "changed" ? "potentially_affected" : "source_gap",
+          claimIds: [...new Set(findings.map(finding => finding.elementId))],
+          coverage: !named ? "calculation_bindings" : findings.length ? "recorded_claim_refs" : "result_inputs_only",
+          affected, historicalResultPreserved: true, recomputed: false, observedAt: this.now().toISOString(),
+          continuation: { status: "awaiting_user", reason: "authorization_required" } };
+        try { row = await this.documents.put(ownerId, "result-impact", id, payload, { expectedRevision: 0, projectId }); }
+        catch (error) {
+          if (error?.code !== "product_revision_conflict") throw error;
+          row = await this.documents.get(ownerId, "result-impact", id);
+          if (!row) throw error;
+        }
+      } else if (JSON.stringify(row.payload.affected ?? null) !== JSON.stringify(affected)) {
+        // A later check of the same change finds what rests on it now: a memory written since, a method learnt since.
+        // Only the list moves; the continuation, the status and the preserved result are as they were.
+        try { row = await this.documents.put(ownerId, "result-impact", id, { ...row.payload, affected }, { expectedRevision: row.revision, projectId }); }
+        catch (error) { if (error?.code !== "product_revision_conflict") throw error; row = await this.documents.get(ownerId, "result-impact", id) ?? row; }
+      }
+      if (checked.state === "changed") {
+        await this.notifications?.create(ownerId, { noticeType: "notify", severity: "attention", projectId,
+          title: "引用来源有更新", body: impactBody(checked, projectAffected(affected)),
+          source: currentResult.producer?.runId ? { type: "run", id: currentResult.producer.runId } : { type: "system", id }, idempotencyKey: `result-impact:${id}` });
+        // The agenda the researcher already runs for this work may recheck it: no further approval, and no recheck for an
+        // agenda that is paused or not started. A failure here leaves the impact waiting for the researcher's own choice.
+        if (this.authorizeContinuation && row.payload.continuation.status !== "scheduled" && continued < this.autoRecheckLimit) {
+          continued += 1;
+          try {
+            const agendaId = await this.authorizeContinuation(ownerId, row);
+            if (agendaId) row = await this.continueImpact(ownerId, projectId, id, { agendaId });
+          } catch (error) { this.report(typeof error?.code === "string" ? error.code : "result_impact_continuation_failed"); row = await this.documents.get(ownerId, "result-impact", id) ?? row; }
+        }
+      }
+      items.push(await this.projectImpact(userId, projectId, row));
+    }
+    // A source that changed and that no result of this project names may still be one the researcher's memories and methods
+    // rest on: that is told in the inbox too, once for the change.
+    if (!items.length && checked.state === "changed" && memories.total) {
+      const id = `knowledge-change-${hash([ownerId, ref, changeKey]).slice(0, 32)}`;
+      await this.notifications?.create(ownerId, { noticeType: "notify", severity: "attention", projectId, title: "引用来源有更新",
+        body: impactBody(checked, projectAffected({ schemaVersion: 1, calculations: affectedClass({ items: [] }, "calculations"),
+          dependents: affectedClass({ items: [] }, "dependents"), memories: affectedClass(memories, "memories"), methods: affectedClass({ items: [] }, "methods") })),
+        source: { type: "system", id }, idempotencyKey: `knowledge-change:${id}` });
+    }
     return { items, scanned };
   }
 
@@ -261,7 +464,7 @@ export class ResultImpactService {
     }
     impact = await this.get(userId, projectId, id);
     if (impact.payload.continuation.status === "unavailable") throw new HttpError(409, "result_impact_source_unavailable", "This source is no longer available for continuation.");
-    const note = `Review source updates against immutable result ${impact.payload.versionId}. Source: ${JSON.stringify(impact.payload.source)}. Notices: ${JSON.stringify(impact.payload.sourceStatus.updates)}. Preserve the prior result. Identify affected conclusions; create a successor only for the affected analysis. State what changed, what was recomputed, and what remains uncertain.`;
+    const note = continuationNote(impact.payload);
     const continuationBinding = { impactId: id, versionId: impact.payload.versionId, source: impact.payload.source,
       projectId, requestedBy: userId, agendaId };
     const scheduled = await this.autopilot.schedule(ownerId, agenda.id, { trigger: "follow-up", requestId: id, note,
