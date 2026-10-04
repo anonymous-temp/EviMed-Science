@@ -326,11 +326,11 @@ export function attentionOf({ assumptions, scenarios, comparators, results, allR
   const allowanceWaiting = VCR_STEPS.filter((step) => steps?.[step]?.status === "queued" && steps[step].waiting);
   if (allowanceWaiting.length) {
     const label = (/** @type {string} */ step) => (/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step];
-    const waiting = steps[allowanceWaiting[0]].waiting;
-    lines.push({ kind: "allowance_waiting", tone: "attention", tab: null, waiting,
+    const wallet = steps[allowanceWaiting[0]].waiting;
+    lines.push({ kind: "allowance_waiting", tone: "attention", tab: null, waiting: wallet,
       text: allowanceWaiting.length === 1
-        ? allowanceWaitingSentence(label(allowanceWaiting[0]), waiting)
-        : `${allowanceWaiting.length} 个步骤在等${waiting === "simulated_allowance" ? "模拟" : "科研"}额度，${waiting === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
+        ? allowanceWaitingSentence(label(allowanceWaiting[0]), wallet)
+        : `${allowanceWaiting.length} 个步骤在等${wallet === "simulated_allowance" ? "模拟" : "科研"}额度，${wallet === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
       items: allowanceWaiting.map(label) });
   }
   // An export that ended with no document is said the way a step that did not finish is: its row alone read

@@ -88,7 +88,7 @@ test('a step the allowance would not start waits for one of two reasons, named b
   assert.equal(stepWaitingFor('credits_exhausted'), 'allowance');
   assert.equal(stepWaitingFor('simulated_credits_exhausted'), 'simulated_allowance');
   // Every refusal that waits on the balance names a wait, and nothing else does.
-  for (const code of BALANCE_REFUSAL_CODES) assert.ok(STEP_WAITING_ALLOWANCE.includes(stepWaitingFor(code)), code);
+  for (const code of BALANCE_REFUSAL_CODES) assert.ok(STEP_WAITING_ALLOWANCE.includes(String(stepWaitingFor(code))), code);
   for (const code of ['runtime_limit_exceeded', 'credits_daily_limit_reached', 'usage_budget_exceeded', '', null, undefined]) assert.equal(stepWaitingFor(code), null, String(code));
   assert.equal(allowanceWaitingNote('allowance'), '等科研额度');
   assert.equal(allowanceWaitingNote('simulated_allowance'), '等模拟额度');
