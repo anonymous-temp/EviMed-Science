@@ -89,6 +89,22 @@ export const METHOD_CONTRIBUTION_RETIRE_AT = -0.1
 export const METHOD_HARM_TEST = Object.freeze({ baseRate: 0.1, harmRate: 0.4, alpha: 0.05, beta: 0.2, minRuns: 3, maxRuns: 40 })
 
 /**
+ * The same test over the other axis: the results produced while a revision of a method was read, each bad when a trusted
+ * recalculation did not reproduce it or the researcher corrected it, good when a trusted recalculation did
+ * (`scientificRegression`, N14).
+ *
+ * Not the delivery axis's numbers, on purpose. A delivery the gate rejects is rare, so 10% is a fair background rate for
+ * it; a researcher asking for a change to a result they were handed is ordinary work, and treating it as rare would retire
+ * methods for being read in the course of normal research. The background rate here is 25% against a 60% harmful one, with
+ * the same 5% false-alarm and 20% miss targets: four results in a row that were corrected or not reproduced flag it, three
+ * do not, and every trusted agreement in between takes some of the weight back. Four runs at least. These are a provisional
+ * choice made before there is a distribution of corrections to read one from (the plan's own rule: a new check is observed
+ * before it acts harder), and the action it licenses is the reversible one — return to the earlier body, or stop — never a
+ * claim that the method caused anything.
+ */
+export const METHOD_SCIENTIFIC_HARM_TEST = Object.freeze({ baseRate: 0.25, harmRate: 0.6, alpha: 0.05, beta: 0.2, minRuns: 4, maxRuns: 40 })
+
+/**
  * How many methods one account's library may hold as effective.
  *
  * The failure this bounds is not cost, it is silence: an unbounded library

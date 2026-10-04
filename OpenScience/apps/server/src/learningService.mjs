@@ -51,16 +51,21 @@ import { createHash } from "node:crypto";
 
 import {
   METHOD_STATUSES,
+  appendMethodLink,
   cleanMethodDisplay,
+  cleanMethodScope,
   cleanMethodSteps,
   emptyLearning,
   foldEligible,
   foldEvaluation,
+  foldMethodFeedback,
   foldObservation,
   foldRead,
   foldRelation,
+  mergeMethodResultLinks,
   methodContentDigest,
   libraryEvictions,
+  mountedMethodDigest,
   promotionVerdict,
   relationIssues,
   resetLearningForDigest,
@@ -124,6 +129,12 @@ export function effectiveStatusReason(payload) {
       ? "它和另一条做法说法相反，理清之前不会用上。"
       : "刚刚更新过，下一次整理时生效。";
   }
+  // Returned to an earlier body because the results produced under the newer one were found wrong (N14): said while it
+  // is still the body the method was returned to. What the sentence claims is an association and never a cause.
+  const returned = Array.isArray(payload?.links) ? payload.links.at(-1) : null;
+  if (returned?.type === "rolled_back_for_regression" && returned.toDigest === payload?.contentDigest) {
+    return `用上较新一版后，${returned.results} 个结果里有 ${returned.against} 个没能被重算复现，或被你改正过，已回到这一版；这只说明两者相伴出现，不证明是这条做法造成的。`;
+  }
   return payload?.provenance?.origin === "explicit"
     ? "你亲口定下的做法，已直接生效；回到上一版即可撤销。"
     : "从你自己的研究里学到，已直接生效；用上它的研究若明显更常被退回，会自动停用，你也可以随时停用。";
@@ -151,6 +162,28 @@ export function methodStepsOf(payload) {
 }
 
 /**
+ * The scope a method declared for itself, in the distillation's own words, and whether it describes the body the method
+ * holds now: a scope is written with the body it restates (`applies_when`, `not_when`), and an amendment that brings no
+ * new one leaves the old standing and says it is no longer current.
+ * @param {any} payload
+ * @returns {{ applicability: string, counterexamples: string[], current: boolean } | null}
+ */
+export function methodScopeOf(payload) {
+  const scope = cleanMethodScope(payload?.scope);
+  return scope ? { ...scope, current: payload.scope.digest === payload?.contentDigest } : null;
+}
+
+/**
+ * A provenance with the result versions it names merged into what the method already named, once each and bounded.
+ * @param {any} provenance @param {unknown} [earlier]
+ */
+function withResultLinks(provenance, earlier = []) {
+  const { results: named, ...rest } = provenance ?? {};
+  const merged = mergeMethodResultLinks(earlier, named);
+  return merged.length ? { ...rest, results: merged } : rest;
+}
+
+/**
  * The project a method was learnt in, from whatever the caller named: the
  * provenance's own field first, then the project the caller passed.
  * @param {any} provenance @param {unknown} projectId
@@ -167,10 +200,10 @@ function sourceProjectOf(provenance, projectId) {
  * The shape `promotionVerdict` and `retirementProposal` read, assembled from a
  * stored document. Kept in one function because the two callers that build it
  * by hand would be the two that disagree.
- * @param {any} document
+ * @param {any} document @param {{revisions?: readonly string[]}} [extra]
  * @returns {any}
  */
-export function methodRecordFrom(document) {
+export function methodRecordFrom(document, { revisions = undefined } = {}) {
   const payload = document?.payload ?? {};
   return {
     id: document?.id,
@@ -180,6 +213,10 @@ export function methodRecordFrom(document) {
     dependencies: payload.dependencies ?? [],
     learning: payload.learning ?? emptyLearning(payload.contentDigest ?? ""),
     provenance: payload.provenance ?? { origin: "inferred" },
+    // What later became of the results produced under each revision (N14), and — only where a caller needed the lifecycle
+    // to answer which earlier body to return to — every body the method has held, newest first.
+    ...(payload.scientific ? { scientific: payload.scientific } : {}),
+    ...(revisions ? { revisions } : {}),
   };
 }
 
@@ -281,16 +318,17 @@ export class LearningService {
    * follows the researcher, and one filed under its project was deleted with it
    * (audit 2026-09-26, L-G1).
    * @param {string} userId
-   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown}} input
+   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async createCandidate(userId, input) {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId) });
     const name = String(input.frontmatter?.name ?? "");
     const id = learnedMethodId(name);
     const sourceProjectId = sourceProjectOf(input.provenance, input.projectId);
-    const provenance = { origin: "inferred", ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) };
+    const provenance = withResultLinks({ origin: "inferred", ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) });
     const createdAt = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
+    const scope = cleanMethodScope(input.scope);
     /** @type {any} */
     const payload = {
       recordType: LEARNED_METHOD_RECORD_TYPE,
@@ -307,6 +345,9 @@ export class LearningService {
       ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       // And the steps in their language, bound to the body they render.
       ...(steps ? { displaySteps: { text: steps, contentDigest: digest } } : {}),
+      // The situation it is for and the ones it must not be loaded into, as the distillation declared them; outside the
+      // digest, like everything else on the record that is not SKILL.md.
+      ...(scope ? { scope: { ...scope, digest } } : {}),
       bodyVersion: 1,
       bodyUpdatedAt: createdAt,
       createdAt,
@@ -406,7 +447,7 @@ export class LearningService {
    * they knew.
    * @param {string} userId
    * @param {string} methodId
-   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown}} input
+   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
    */
   async amendMethod(userId, methodId, input) {
     const current = await this.getMethod(userId, methodId);
@@ -415,6 +456,7 @@ export class LearningService {
     const bodyChanged = digest !== current.payload.contentDigest;
     const at = this.now().toISOString();
     const steps = cleanMethodSteps(input.steps);
+    const scope = cleanMethodScope(input.scope);
     // Where the method was first learnt stays its source; a later lesson from
     // another project does not move it.
     const sourceProjectId = sourceProjectOf(current.payload.provenance, null) ?? sourceProjectOf(input.provenance, null);
@@ -427,13 +469,17 @@ export class LearningService {
       dependencies: input.dependencies ?? current.payload.dependencies ?? [],
       contentDigest: digest,
       learning,
-      provenance: { ...current.payload.provenance, ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) },
+      // The result versions each lesson was learnt from accumulate: the method names every pair it was shaped by.
+      provenance: withResultLinks({ ...current.payload.provenance, ...input.provenance, ...(sourceProjectId ? { sourceProjectId } : {}) }, current.payload.provenance?.results),
       // A new line when the revision brought one; otherwise the old one stands.
       ...(cleanMethodDisplay(input.display) ? { display: cleanMethodDisplay(input.display) } : {}),
       // New steps when the revision brought them; otherwise the old rendering
       // stays and, naming the old digest, is no longer shown (`methodView`)
       // until the next consolidation pass renders the new body.
       ...(steps ? { displaySteps: { text: steps, contentDigest: digest } } : {}),
+      // A new scope when the revision declared one; otherwise the old one stands and `methodScopeOf` says it is no
+      // longer current.
+      ...(scope ? { scope: { ...scope, digest } } : {}),
       bodyVersion: bodyChanged ? bodyVersionOf(current.payload) + 1 : bodyVersionOf(current.payload),
       bodyUpdatedAt: bodyChanged ? at : current.payload.bodyUpdatedAt ?? current.createdAt ?? at,
       updatedAt: at,
@@ -650,23 +696,26 @@ export class LearningService {
    * promises and the one the route exposes. Two ways to un-retire a method
    * would have been two places for the status rules to drift, and the second
    * one was reachable from nowhere.
-   * @param {string} userId @param {string} methodId @param {{expectedRevision: number, reason?: string}} input
+   * `link`, when the stop answers a regression of the results produced under the body the method held
+   * (`applyRegression`), is kept on the record: what was left, and which entries showed it.
+   * @param {string} userId @param {string} methodId @param {{expectedRevision: number, reason?: string, link?: unknown}} input
    */
   async retire(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
-    return this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason);
+    return this.#setStatus(userId, methodId, "retired", input.expectedRevision, document, input.reason, input.link);
   }
 
   /**
    * @param {string} userId @param {string} methodId @param {string} status
-   * @param {number} expectedRevision @param {any} document @param {string} [reason]
+   * @param {number} expectedRevision @param {any} document @param {string} [reason] @param {unknown} [link]
    */
-  async #setStatus(userId, methodId, status, expectedRevision, document, reason) {
+  async #setStatus(userId, methodId, status, expectedRevision, document, reason, link) {
     if (!METHOD_STATUSES.includes(status)) throw new HttpError(400, "method_status_invalid", "Unknown method status.");
     const payload = {
       ...document.payload,
       status,
       ...(reason ? { statusReason: String(reason).slice(0, 500) } : {}),
+      ...(link ? { links: appendMethodLink(document.payload.links, link) } : {}),
       statusChangedAt: this.now().toISOString(),
     };
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision });
@@ -720,22 +769,35 @@ export class LearningService {
    * reset for another (`resetLearningForDigest`), as an amendment resets them.
    * The status is the promotion rule's for the restored record, never the one
    * the old revision carried.
-   * @param {string} userId @param {string} methodId @param {{expectedRevision: number, targetRevision: number}} input
+   *
+   * `targetDigest` names the body to return to instead of a revision number: the newest saved revision holding exactly
+   * that text. The lifecycle uses it when the results produced under the current body showed a regression and the
+   * earlier body that is not itself harmful is known by its digest (`scientificRegression`); `link` then records what
+   * was left and which entries showed it.
+   * @param {string} userId @param {string} methodId @param {{expectedRevision: number, targetRevision?: number, targetDigest?: string, link?: unknown}} input
    */
   async rollback(userId, methodId, input) {
     const current = await this.getMethod(userId, methodId);
     const saved = await this.#savedRevisions(userId, methodId);
-    const requested = Number(input.targetRevision);
-    let index = saved.findIndex((entry) => entry.revision <= requested);
-    // A number past the record's own is not a revision anybody saw.
-    if (!Number.isSafeInteger(requested) || requested > current.revision || index < 0) {
-      throw new HttpError(404, "method_revision_unavailable", "That method revision is unavailable.");
-    }
     const digestOf = (/** @type {any} */ entry) => String(entry?.payload?.contentDigest ?? "");
-    if (current.payload.status === "retired") {
-      while (index < saved.length && (saved[index].payload?.status === "retired" || saved[index].deletedAt)) index += 1;
+    let index;
+    if (typeof input.targetDigest === "string" && input.targetDigest) {
+      index = saved.findIndex((entry) => digestOf(entry) === input.targetDigest && !entry.deletedAt);
+      if (index < 0 || input.targetDigest === current.payload.contentDigest) {
+        throw new HttpError(404, "method_revision_unavailable", "That method revision is unavailable.");
+      }
     } else {
-      while (index < saved.length && (digestOf(saved[index]) === current.payload.contentDigest || saved[index].deletedAt)) index += 1;
+      const requested = Number(input.targetRevision);
+      index = saved.findIndex((entry) => entry.revision <= requested);
+      // A number past the record's own is not a revision anybody saw.
+      if (!Number.isSafeInteger(requested) || requested > current.revision || index < 0) {
+        throw new HttpError(404, "method_revision_unavailable", "That method revision is unavailable.");
+      }
+      if (current.payload.status === "retired") {
+        while (index < saved.length && (saved[index].payload?.status === "retired" || saved[index].deletedAt)) index += 1;
+      } else {
+        while (index < saved.length && (digestOf(saved[index]) === current.payload.contentDigest || saved[index].deletedAt)) index += 1;
+      }
     }
     const target = saved[index];
     if (!target) throw new HttpError(409, "method_no_earlier_version", "This method has no earlier version to go back to.");
@@ -756,13 +818,17 @@ export class LearningService {
       ...(sameBody ? {} : {
         ...(cleanMethodDisplay(target.payload.display) ? { display: cleanMethodDisplay(target.payload.display) } : {}),
         ...(target.payload.displaySteps ? { displaySteps: target.payload.displaySteps } : {}),
+        // The scope of the body it is returned to, not the one it leaves (a body with none declares none).
+        scope: target.payload.scope,
       }),
+      ...(input.link ? { links: appendMethodLink(current.payload.links, input.link) } : {}),
       bodyVersion: sameBody ? bodyVersionOf(current.payload) : bodyVersionOf(current.payload) + 1,
       bodyUpdatedAt: sameBody ? current.payload.bodyUpdatedAt ?? current.createdAt ?? at : at,
       restoredFromRevision: target.revision,
       updatedAt: at,
     };
     if (payload.files === undefined) delete payload.files;
+    if (payload.scope === undefined) delete payload.scope;
     const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload: { ...payload, status: "candidate" } }));
     payload.status = verdict.status;
     payload.statusReason = effectiveStatusReason(payload);
@@ -881,6 +947,96 @@ export class LearningService {
   }
 
   /**
+   * Add one entry to a method's scientific record: what became of a result produced while a revision of it was read
+   * (`methodFeedback.mjs` in the domain). Telemetry like the counters — no history row, and the revision still moves, so
+   * a writer holding the older record conflicts rather than overwriting an entry — and idempotent by the entry's own
+   * identity, so a join that replays writes nothing twice.
+   *
+   * The entry stays under the digest it names, never the one the method holds now: a body amended since the run read it
+   * keeps what happened under it, which is what lets a regression be pinned to one revision.
+   * @param {string} userId @param {string} methodId @param {unknown} entry
+   * @returns {Promise<{ document: any, added: boolean }>}
+   */
+  async recordScientific(userId, methodId, entry) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      const scientific = foldMethodFeedback(document.payload.scientific, entry);
+      if (scientific === document.payload.scientific) return { document, added: false };
+      try {
+        await this.documents.put(userId, "method", methodId, { ...document.payload, scientific }, { expectedRevision: document.revision, telemetry: true });
+        return { document: await this.getMethod(userId, methodId), added: true };
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method feedback did not settle.");
+  }
+
+  /**
+   * Which revision of a method a mounted file was: the digest a run's ledger records is the file's (`mountedMethodDigest`),
+   * and every record about the method is keyed by its content digest, so a feedback joined to a run needs this to say
+   * which body it is about. The current body first, then every saved one. Null when no body the method ever held was that
+   * file — a feedback with no revision to name is not recorded under a guess.
+   * @param {string} userId @param {string} methodId @param {string} mountedDigest
+   * @returns {Promise<{ contentDigest: string, revision: number, current: boolean } | null>}
+   */
+  async revisionByMountedDigest(userId, methodId, mountedDigest) {
+    const current = await this.getMethod(userId, methodId);
+    if (mountedMethodDigest(current.payload, sha256) === mountedDigest) {
+      return { contentDigest: String(current.payload.contentDigest), revision: current.revision, current: true };
+    }
+    for (const saved of await this.#savedRevisions(userId, methodId)) {
+      if (!saved.payload?.frontmatter || saved.deletedAt) continue;
+      if (mountedMethodDigest(saved.payload, sha256) === mountedDigest) {
+        return { contentDigest: String(saved.payload.contentDigest), revision: saved.revision, current: false };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The methods that name one result version by a recorded link: learnt from it (its provenance names the original a
+   * researcher corrected and the successor the platform generated) or used for it (its scientific record holds an entry
+   * about it). By the immutable version identity and nothing else, never by a similarity of names — the lookup a change
+   * of one of the sources that result rests on is followed through (N15).
+   * @param {string} userId @param {string} versionId
+   * @returns {Promise<any[]>}
+   */
+  async methodsLinkedTo(userId, versionId) {
+    const found = new Map();
+    for (const filter of [
+      { recordType: LEARNED_METHOD_RECORD_TYPE, provenance: { results: [{ versionId }] } },
+      { recordType: LEARNED_METHOD_RECORD_TYPE, scientific: { entries: [{ result: { versionId } }] } },
+    ]) {
+      const page = await this.documents.list(userId, "method", { limit: 100, filter });
+      for (const document of page.items ?? []) found.set(document.id, document);
+    }
+    return [...found.values()];
+  }
+
+  /**
+   * Act on a regression proposal (`retirementProposal`, code `scientific_regression`): return the method to the exact
+   * earlier body it names, or stop it when there is none, and keep the link that says why. Both are what a researcher
+   * can undo by restoring a revision. The sentence is the reader's, passed in because it lives with the other
+   * retirement sentences (`methodConsolidation.mjs`).
+   * @param {string} userId @param {any} document the method as read just now
+   * @param {{ action?: string, rollbackToDigest?: string | null, evidence?: string[], runs?: number, rejected?: number }} proposal
+   * @param {{ retire: string }} sentences
+   * @returns {Promise<{ action: "rollback" | "retire", document: any }>}
+   */
+  async applyRegression(userId, document, proposal, sentences) {
+    const link = {
+      type: proposal.action === "rollback" && proposal.rollbackToDigest ? "rolled_back_for_regression" : "retired_for_regression",
+      at: this.now().toISOString(), fromDigest: document.payload.contentDigest, toDigest: proposal.rollbackToDigest ?? null,
+      results: proposal.runs ?? 0, against: proposal.rejected ?? 0, evidence: proposal.evidence ?? [],
+    };
+    if (proposal.action === "rollback" && proposal.rollbackToDigest) {
+      return { action: "rollback", document: await this.rollback(userId, document.id, { expectedRevision: document.revision, targetDigest: proposal.rollbackToDigest, link }) };
+    }
+    return { action: "retire", document: await this.retire(userId, document.id, { expectedRevision: document.revision, reason: sentences.retire, link }) };
+  }
+
+  /**
    * Write the counters, which are telemetry about the method and not a change
    * of it: no history row, no new `updated_at` (`ProductDocuments.put`). The
    * revision still moves, so a writer holding the older record conflicts
@@ -905,7 +1061,14 @@ export class LearningService {
     const approved = new Set(items.filter((item) => item.payload.status === "approved").map((item) => item.id));
     /** @type {{document: any, proposal: any}[]} */
     const proposals = [];
-    const records = new Map(items.map((document) => [document.id, methodRecordFrom(document)]));
+    // A method with something on its scientific record is read with every body it has held, newest first, because the
+    // answer to a regression is the exact earlier body to return to; the others need no history read.
+    const records = new Map();
+    for (const document of items) {
+      const revisions = document.payload.status === "approved" && document.payload.scientific?.entries?.length
+        ? (await this.history(userId, document.id).catch(() => [])).map((version) => version.contentDigest) : undefined;
+      records.set(document.id, methodRecordFrom(document, { revisions }));
+    }
     for (const document of items) {
       if (document.payload.status !== "approved") continue;
       const proposal = retirementProposal(/** @type {any} */ (records.get(document.id)), {

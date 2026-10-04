@@ -343,3 +343,18 @@ test("a routine is counted across the researcher's own projects, and its peers a
   const distillation = serverSource.slice(serverSource.indexOf("const distillation = new MethodDistillationRuns({"), serverSource.indexOf("const consolidation = new MethodConsolidation({"));
   assert.match(distillation, /resolveProject: async \(userId, projectId\) => \{\s*const user = await store\.userById\(userId\);\s*return user \? store\.requireProject\(user, projectId\) : null;/);
 });
+
+test("what later became of a result has its producers: a correction and a recalculation reach the join, and a lesson is told what the run read", () => {
+  // Constructed is not fed. The join (`methodFeedback.mjs`) carries a correction of a result, and a trusted
+  // recalculation of it, to the methods the producing run read; a method's record has a second axis only if both
+  // producers reach it, and a lesson from the correction can only narrow the method that was read if it is told which.
+  assert.match(serverSource, /from "\.\/methodFeedback\.mjs"/);
+  assert.match(serverSource, /const methodFeedback = learningService && config\.learningEnabled \? new MethodFeedbackService\(\{/);
+  assert.match(serverSource, /new ResultReplayService\(\{[\s\S]*?compared: input => methodFeedback\?\.fromReplay\(input\)/);
+  assert.match(serverSource, /new ResultCorrectionService\(\{[\s\S]*?methods: \(\) => methodFeedback/);
+  assert.match(serverSource, /usedMethods: methodFeedback \? \(project, run\) => methodFeedback\.usedForLesson\(project, run\) : null/);
+  // The researcher's own switch and a capsule trial apply to it as to every other lesson.
+  const join = serverSource.slice(serverSource.indexOf("const methodFeedback ="), serverSource.indexOf("const resultRoutes ="));
+  assert.match(join, /memoryPausedFor\(researchMemory, project\.userId, project\.id, run\.sessionId\)/);
+  assert.match(join, /!state\.learning && !state\.trial/);
+});

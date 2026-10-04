@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { RESULT_REPLAY_METHODS, compareResultNumbers, engineJobSnapshot, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
+import { RESULT_REPLAY_METHODS, compareResultNumbers, diagnosticApplicability, engineJobSnapshot, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
+import { methodRecord } from "@evimed/domain/method-records";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONTROL_PLANE_SCHEMA } from "./controlPlaneDatabase.mjs";
 import { replayDigest } from "./resultReplayClient.mjs";
@@ -86,11 +87,27 @@ function environmentFinding(environment) {
     message: `这次重算所用的计算环境与原结果记录的不同（${parts.join("；")}）；数值比较是在新环境下得到的，不能说明原环境下可以复现。` };
 }
 
+/**
+ * What the engine's own diagnostics say about whether the method's conditions held for the data a calculation was run
+ * on, in the vocabulary of the method's record (N05) and only that: a code the record does not list is not read, and
+ * an output with no diagnostics list says nothing (`unknown`). `unflagged` is not `applicable`: the diagnostics check
+ * some of a method's assumptions and say nothing about the rest. Scientific applicability as a judgement stays unassessed.
+ * @param {string} method @param {any} output the engine's output file, parsed
+ */
+export function replayApplicability(method, output) {
+  const record = methodRecord(method);
+  return record ? diagnosticApplicability({ raised: output?.result?.diagnostics, known: record.diagnostics.map((/** @type {any} */ item) => item.code) }) : undefined;
+}
+
 /** Only an owned deterministic producer calls admit(). Browser routes select an
- * existing immutable recipe; they cannot supply paths, code, tools or parameters. */
+ * existing immutable recipe; they cannot supply paths, code, tools or parameters.
+ *
+ * `compared` is told, after a recalculation finished and outside the lease that finished it, what it was compared to:
+ * the original, the output, the comparison and what the engine's diagnostics said (N14, `methodFeedback.mjs`). It
+ * records and never decides, and whatever it does or throws, the calculation stands. */
 export class ResultReplayService {
-  constructor({ results, documents, jobs, engine, config = {} }) {
-    this.results = results; this.documents = documents; this.jobs = jobs; this.engine = engine; this.config = config;
+  constructor({ results, documents, jobs, engine, config = {}, compared = null }) {
+    this.results = results; this.documents = documents; this.jobs = jobs; this.engine = engine; this.config = config; this.compared = compared;
   }
 
   /** Project-before-job lock ordering also fences project deletion. Nested
@@ -471,7 +488,16 @@ export class ResultReplayService {
   }
 
   async complete(job, prepared, answer) {
-    return this.withProjectLease(job, () => this.completeOwned(job, prepared, answer));
+    const output = await this.withProjectLease(job, () => this.completeOwned(job, prepared, answer));
+    // After the lease, and never able to fail the calculation that has just finished: what became of this result is a
+    // fact to carry to the method that produced it, and a fact that cannot be carried is lost, not a reason to run again.
+    if (this.compared && prepared.original && prepared.comparison) {
+      try {
+        await this.compared({ project: prepared.project, original: prepared.original, replayId: job.payload.replayId, output,
+          comparison: prepared.comparison, applicability: prepared.applicability });
+      } catch { /* the calculation stands */ }
+    }
+    return output;
   }
 
   async completeOwned(job, prepared, answer) {
@@ -482,6 +508,7 @@ export class ResultReplayService {
     const comparison = prepared.original ? { bytes: output.digest === prepared.original.digest ? "identical" : "changed",
       numbers: compareResultNumbers(prepared.frozen.machineValues, answer.machineValues), environment: prepared.environment ?? null,
       scientificApplicability: "not_assessed" } : null;
+    prepared.comparison = comparison;
     await this.admit(job.payload.requestedBy, { projectId: job.projectId, versionId: output.versionId,
       inputVersionId: prepared.frozen.inputVersionId, recipe: prepared.recipe, machineValues: answer.machineValues,
       receipt: { recipeDigest: prepared.execution.recipeDigest, outputDigest: output.digest }, method: ranMethod(answer) });
@@ -533,6 +560,7 @@ export class ResultReplayService {
     const artifact = answer.artifacts?.find(file => file.path === outputPath);
     if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The engine's byte record does not list the result file with its sha256, so the result cannot be checked and was not saved.");
     const payload = await this.readOutput(prepared.project, artifact, 8 * 1024 * 1024);
+    prepared.applicability = replayApplicability(prepared.recipe.method, payload);
     if (["design.analytic", "comparator.evalue"].includes(prepared.recipe.method)) {
       const receiptPath = `result-replays/${job.id}/output/receipt.json`;
       const receiptArtifact = answer.artifacts.find(item => item.path === receiptPath);

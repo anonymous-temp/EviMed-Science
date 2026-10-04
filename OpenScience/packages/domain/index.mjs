@@ -201,6 +201,7 @@ export {
   METHOD_CONTRIBUTION_MIN_TRIALS,
   METHOD_CONTRIBUTION_RETIRE_AT,
   METHOD_HARM_TEST,
+  METHOD_SCIENTIFIC_HARM_TEST,
   MEMORY_RECENCY_GAMMA_PER_HOUR,
   MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_RERANK_WEIGHTS,
@@ -702,11 +703,40 @@ export {
   libraryEvictions,
   methodContribution,
   methodHarmTest,
+  scientificRegression,
   successfulFamilies,
   successfulRuns,
   unresolvedConflicts,
   validateMethodGraph,
 } from './src/methodGraph.mjs'
+
+// methodFeedback — what later became of the results a learned method was used for: the scientific axis of a method's
+// record, kept apart from the delivery axis, joined by identifiers and never a claim of cause (plan §11.3 N14)
+export {
+  METHOD_APPLICABILITY_STATES,
+  METHOD_FEEDBACK_LIMIT,
+  METHOD_FEEDBACK_POLARITY,
+  METHOD_FEEDBACK_SIGNALS,
+  METHOD_FEEDBACK_VERSION,
+  METHOD_LINK_LIMIT,
+  METHOD_LINK_TYPES,
+  METHOD_RESULT_LINK_LIMIT,
+  METHOD_SCOPE_LIMITS,
+  appendMethodLink,
+  cleanMethodScope,
+  diagnosticApplicability,
+  emptyScientific,
+  feedbackSignalFromCorrection,
+  feedbackSignalFromReplay,
+  foldMethodFeedback,
+  hasMethodFeedback,
+  mergeMethodResultLinks,
+  methodScientific,
+  projectMethodFeedback,
+  projectMethodLink,
+  projectMethodResultLinks,
+  scientificOutcomes,
+} from './src/methodFeedback.mjs'
 
 // toolGraphSampling — ToolVerse's dependency graph and unlock sampling
 export {
