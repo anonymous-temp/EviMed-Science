@@ -331,6 +331,31 @@ test("a memory records the sources it rests on by identifier, and a finding abou
   await store.purgeRecords(alpha);
 });
 
+test("a finding moves a link only out of the states it names, and says which it moved (N15)", options, async () => {
+  const doi = { type: "doi", id: "10.1000/onlyfrom.1" };
+  const a = await store.upsertRecord(alpha, fact({ key: "project.a", value: "rivaroxaban onlyfrom a" }), null, { sourceLinks: [doi] });
+  const b = await store.upsertRecord(alpha, fact({ key: "project.b", value: "rivaroxaban onlyfrom b" }), null, { sourceLinks: [doi] });
+  const states = async () => Object.fromEntries(await Promise.all([a, b].map(async (record) => [record.key, (await store.sourceLinks(alpha, record.id))[0].state])));
+  // Nobody had found a change: an unanswered check may mark it unknown.
+  assert.deepEqual((await store.markSourceLinks(alpha, doi, { state: "unknown", reason: "check_timeout", onlyFrom: ["current"] })).recordIds.sort(), [a.id, b.id].sort());
+  // The same finding again moves nothing, so it does not re-stamp what it already said.
+  const stamped = (await store.sourceLinks(alpha, a.id))[0].stateAt;
+  assert.deepEqual((await store.markSourceLinks(alpha, doi, { state: "unknown", reason: "check_timeout", onlyFrom: ["current"] })).recordIds, []);
+  assert.equal((await store.sourceLinks(alpha, a.id))[0].stateAt, stamped);
+  // A clean answer sets right an unknown and nothing else.
+  await store.markSourceLinks(alpha, { type: "doi", id: "10.1000/onlyfrom.1" }, { state: "retracted", reason: "retraction" });
+  assert.deepEqual(await states(), { "project.a": "retracted", "project.b": "retracted" });
+  assert.deepEqual((await store.markSourceLinks(alpha, doi, { state: "current", reason: "no_update", onlyFrom: ["unknown"] })).recordIds, []);
+  // A correction never lowers a retraction; a retraction does outrank a correction.
+  assert.deepEqual((await store.markSourceLinks(alpha, doi, { state: "changed", reason: "correction", onlyFrom: ["current", "unknown", "expired"] })).recordIds, []);
+  assert.deepEqual(await states(), { "project.a": "retracted", "project.b": "retracted" });
+  await store.markSourceLinks(alpha, doi, { state: "current", reason: "" });
+  await store.markSourceLinks(alpha, doi, { state: "changed", reason: "correction", onlyFrom: ["current", "unknown", "expired"] });
+  assert.deepEqual((await store.markSourceLinks(alpha, doi, { state: "retracted", reason: "retraction", onlyFrom: ["current", "unknown", "changed", "expired"] })).recordIds.sort(), [a.id, b.id].sort());
+  await assert.rejects(() => store.markSourceLinks(alpha, doi, { state: "changed", onlyFrom: ["falsified"] }), { status: 400 });
+  await store.purgeRecords(alpha);
+});
+
 test("a link names a source we can find again or it is refused; a re-read of a changed source starts it over", options, async () => {
   await assert.rejects(() => store.upsertRecord(alpha, fact({ key: "project.bad" }), null, { sourceLinks: [{ type: "knowledge_source", id: "report.pdf" }] }),
     { status: 400, code: "memory_payload_invalid" });

@@ -25,7 +25,23 @@ export function createResultSourceUpdatesRoutes({ store, results, lookup, impact
     if (!results || !impacts) throw new HttpError(503, "result_storage_unavailable", "Result updates are temporarily unavailable.");
     const version = await results.get(user.id, body.projectId, versionId);
     if (version.versionId !== versionId) throw new HttpError(409, "result_version_conflict", "The selected version could not be confirmed.");
-    const inputs = (version.inputs ?? []).filter(input => input.kind === "source");
+    // The sources of the calculations among a result's value bindings are checked too: a printed number is only as
+    // current as the calculation it is bound to, whose own recorded inputs say what that rests on (N15).
+    const sourcesOf = async row => {
+      const own = (row.inputs ?? []).filter(input => input.kind === "source");
+      const behind = [];
+      for (const calculation of (row.bindings?.calculations ?? []).slice(0, 8)) {
+        if (calculation.versionId === row.versionId) continue;
+        try {
+          const found = await results.get(user.id, body.projectId, calculation.versionId);
+          behind.push(...(found.inputs ?? []).filter(input => input.kind === "source").map(input => ({ ...input, viaCalculation: found.versionId })));
+        } catch (error) { if (![401, 403, 404].includes(error?.status)) throw error; }
+      }
+      const key = input => JSON.stringify([input.id, input.digest ?? null, input.versionId ?? null]);
+      const seen = new Set(own.map(key));
+      return [...own, ...behind.filter(input => !seen.has(key(input)) && seen.add(key(input)))];
+    };
+    const inputs = await sourcesOf(version);
     const dois = [...new Set(inputs.filter(input => !["restricted", "deleted"].includes(input.availability)).map(input => doiOf(input.id)).filter(Boolean))];
     let checked = new Map();
     let unavailableReason = "disabled";
@@ -49,9 +65,9 @@ export function createResultSourceUpdatesRoutes({ store, results, lookup, impact
       const doi = doiOf(input.id);
       const updateStatus = !doi ? { state: "unknown", checkedAt: null, reason: "not_identified", updates: [] }
           : checked.get(doi) ?? { state: "unavailable", checkedAt: null, reason: unavailableReason, updates: [] };
-      return { source, doi, updateStatus };
+      return { source, doi, updateStatus, ...(input.viaCalculation ? { viaCalculation: input.viaCalculation } : {}) };
     };
-    for (const input of (confirmed.inputs ?? []).filter(reference => reference.kind === "source")) {
+    for (const input of await sourcesOf(confirmed)) {
       if (["restricted", "deleted"].includes(input.availability)) continue;
       const { source, updateStatus } = statusEntry(input);
       const reconciled = await impacts.reconcileSourceUpdate(user.id, { projectId: body.projectId, source, status: updateStatus });
@@ -62,7 +78,7 @@ export function createResultSourceUpdatesRoutes({ store, results, lookup, impact
     if (released.versionId !== versionId || released.digest !== version.digest) {
       throw new HttpError(409, "result_version_conflict", "The selected version changed during its source check.");
     }
-    const statuses = (released.inputs ?? []).filter(reference => reference.kind === "source").map(statusEntry);
+    const statuses = (await sourcesOf(released)).map(statusEntry);
     sendJson(res, 200, { data: { versionId, digest: version.digest, statuses, impacts: { items: releasedImpacts } } });
     return true;
   };

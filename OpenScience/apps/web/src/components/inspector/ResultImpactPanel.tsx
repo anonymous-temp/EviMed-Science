@@ -51,7 +51,7 @@ export function ResultImpactPanel({ projectId, versionId, digest }: { projectId:
     <div className="space-y-3 py-3">
       <Button variant="secondary" loading={checking} disabled={checking} onClick={() => void checkUpdates()}>检查来源更新</Button>
       {checkError && <p role="alert" className="text-error">{checkError}</p>}
-      {check && <div className="space-y-2" role="status">{check.statuses.length === 0 ? <p className="text-muted">此版本未记录可检查的来源。</p> : check.statuses.map((entry, index) => <div key={`${entry.source.id}:${index}`} className="space-y-1"><p className="break-all text-caption">{["restricted", "deleted"].includes(entry.updateStatus.reason ?? "") ? "原来源已不可用" : entry.doi ?? entry.source.id}</p><SourceUpdateBadges updates={entry.updateStatus.updates} updateStatus={entry.updateStatus} /></div>)}</div>}
+      {check && <div className="space-y-2" role="status">{check.statuses.length === 0 ? <p className="text-muted">此版本未记录可检查的来源。</p> : check.statuses.map((entry, index) => <div key={`${entry.source.id}:${index}`} className="space-y-1"><p className="break-all text-caption">{["restricted", "deleted"].includes(entry.updateStatus.reason ?? "") ? "原来源已不可用" : entry.doi ?? entry.source.id}{entry.viaCalculation ? "（来自所依据的计算）" : ""}</p><SourceUpdateBadges updates={entry.updateStatus.updates} updateStatus={entry.updateStatus} /></div>)}</div>}
       {items === null && !error && <p role="status" className="text-muted">正在查询来源更新</p>}
       {error && <div role="alert" className="space-y-2"><p className="text-error">{error}</p><Button variant="secondary" onClick={() => items === null ? setAttempt(value => value + 1) : void loadMore()}>重试来源更新</Button></div>}
       {items?.length === 0 && <p className="text-muted">暂无此版本的来源更新记录，更新状态尚未确认。</p>}

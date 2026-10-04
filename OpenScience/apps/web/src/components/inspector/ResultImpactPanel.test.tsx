@@ -146,3 +146,14 @@ it("says an agenda that was already running rechecks only what is listed", async
   expect(await screen.findByText(/只重新核对上面列出的部分，其余结果不会重新运行/)).toBeInTheDocument();
   expect(api.agendas).not.toHaveBeenCalled();
 });
+it("says which sources a check reached through the calculations a result's numbers are bound to", async () => {
+  api.list.mockResolvedValue({ items: [], nextCursor: null });
+  api.check.mockResolvedValue({ versionId: "rv_old", digest: "selected_digest", impacts: { items: [] }, statuses: [
+    { source: { id: "10.1/own" }, doi: "10.1/own", updateStatus: { state: "no_update", checkedAt: null, updates: [] } },
+    { source: { id: "10.1/behind" }, doi: "10.1/behind", viaCalculation: "rv_calc", updateStatus: { state: "no_update", checkedAt: null, updates: [] } },
+  ] });
+  mount(); await screen.findByText(/暂无此版本/);
+  await userEvent.click(screen.getByRole("button", { name: "检查来源更新" }));
+  expect(await screen.findByText("10.1/behind（来自所依据的计算）")).toBeInTheDocument();
+  expect(screen.getByText("10.1/own")).toBeInTheDocument();
+});

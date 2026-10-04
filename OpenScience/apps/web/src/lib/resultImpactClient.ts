@@ -42,7 +42,8 @@ export function continueResultImpact(projectId: string, impact: ResultImpact, ag
 }
 export interface ResultSourceCheck {
   versionId: string; digest: string;
-  statuses: Array<{ source: { id: string; digest?: string; versionId?: string }; doi: string | null; updateStatus: SourceUpdateStatus }>;
+  /** `viaCalculation` names the calculation among the result's value bindings whose own recorded input this source is. */
+  statuses: Array<{ source: { id: string; digest?: string; versionId?: string }; doi: string | null; updateStatus: SourceUpdateStatus; viaCalculation?: string }>;
   impacts: { items: ResultImpact[] };
 }
 export function checkResultSourceUpdates(projectId: string, versionId: string) {
