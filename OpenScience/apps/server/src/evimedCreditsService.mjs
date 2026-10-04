@@ -818,7 +818,10 @@ export class EvimedCreditsService {
       const said = `This account holds ${balance.balance} credits and this work is estimated at ${estimate.low}.`;
       // Its own code where the allowance is simulated, so the sentence says so
       // and the top-up it offers is the simulated one.
-      if (this.simulated) throw new HttpError(402, "simulated_credits_exhausted", `The simulated allowance is too low. ${said}`);
+      if (this.simulated) {
+        throw new HttpError(402, "simulated_credits_exhausted",
+          `The simulated allowance is too low. ${said} Top up under Settings → Research allowance (simulated).`);
+      }
       throw new HttpError(402, permission.code ?? "credits_exhausted", said);
     }
     return { allowed: true, balance: balance.balance, estimate };

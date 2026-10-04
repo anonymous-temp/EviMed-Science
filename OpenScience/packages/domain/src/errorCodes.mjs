@@ -800,6 +800,15 @@ export const CREDIT_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * The refusals that say 「this account's allowance cannot pay for the start」: the
+ * balance gate's own, on a real wallet and on a simulated one. They are the
+ * codes work waits on — an autopilot episode is deferred, never failed, and a
+ * programme step stays pending — so a place that waits for credits asks this
+ * list rather than one literal, or the simulated refusal would be a failure there.
+ */
+export const BALANCE_REFUSAL_CODES = Object.freeze(['credits_exhausted', 'simulated_credits_exhausted'])
+
+/**
  * Every code the control plane can write onto a *finished run* — the one place
  * a code is read by a researcher rather than by a tool loop.
  *

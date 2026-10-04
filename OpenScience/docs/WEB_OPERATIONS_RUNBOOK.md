@@ -1043,8 +1043,11 @@ The account page uses CNY research allowance. The existing EviMed wallet remains
 authoritative; this deployment does not create a second wallet or process payment
 provider callbacks. `/api/account/allowance` and its `/statements` endpoint require
 the signed-in account. `/estimate` returns a non-binding estimate, not a reservation.
-An unavailable wallet is unknown, never zero. Confirmed task charges remain separate
-from supplier costs and background operating expenses.
+An unavailable wallet is unknown, never zero, and so is a billing module that could
+not migrate or activate its policy at boot: it goes quiet (nothing charged, no start
+refused) and recovers on the next readiness probe or retry sweep, and the platform
+still serves research. Confirmed task charges remain separate from supplier costs and
+background operating expenses.
 
 The default keeps revised charging off. To evaluate the public configuration:
 
@@ -1107,6 +1110,64 @@ amount precision, idempotency and lookup semantics, reservation/capture/release,
 refund receipts, membership periods and entitlements, and paid/promotional balance
 sources. The current branch must not be certified as a complete payment or
 subscription system based only on passing local tests.
+
+### Simulated wallet
+
+To see the whole allowance experience before a real wallet exists, replace the wallet
+and only the wallet. A simulator in the control plane stands where EviMed's credits
+service stands, behind the same client, and moves no money; what a task is charged
+still comes from what it really cost. In `deploy/web/.env`:
+
+```sh
+OPEN_SCIENCE_EVIMED_CREDITS_ENABLED=true
+OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED=true
+OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY=1
+OPEN_SCIENCE_RESEARCH_BILLING_ENABLED=true
+OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS=200   # optional, whole credits
+```
+
+Leave `OPEN_SCIENCE_EVIMED_CREDITS_URL`, `..._BALANCE_URL` and the commerce keys empty:
+a simulated wallet beside a real wallet's address is refused by name
+(`evimed_credits_simulated_conflict`, as is a start allowance that is not a whole
+number, `evimed_credits_simulated_start_invalid`). Only the billing module refuses; the
+platform boots, the allowance reads as unavailable, nothing is charged and
+`/api/ready` carries the code in its `credits` check. `pnpm check:research-billing
+--require-simulated` checks the configuration; it reports `simulated: true`, and
+`--require-billing` fails in this mode because a simulated wallet never satisfies a
+requirement for real billing. Recreate the web container to apply.
+
+What it writes: the tables `evimed_credits.simulated_wallets` and `simulated_entries`
+(created on first start in this mode, never in another), and settlement rows marked
+`wallet = 'simulated'` for ever. Statements, month totals and the retry sweep read only
+the wallet the deployment runs on, so simulated and real rows never share a total and
+a simulated row is never sent to a real wallet (the real client refuses a `sim:`
+payer). Each account gets its starting allowance on its first read, deduction or top-up;
+an account deleted and registered again under the same name starts a new wallet, and its
+wallet rows go with the account (the settlement rows stay, marked and redacted).
+
+What a researcher sees, every amount marked 「模拟」: the balance and month on 设置 →
+科研额度; an estimate on each tool of 科研工具; a charge per finished task and the
+allowance and top-ups in the statements; a low-balance prompt at or below 20 credits;
+and recharge, membership, orders and refunds pages of the platform itself
+(`/app/account/simulated/*`; a top-up is one of four fixed packages, applied once per
+page request). The start is refused with `simulated_credits_exhausted` (402) when the
+allowance is empty or below the tool's estimate: before a run exists, never in the
+middle of one (a steer into a running turn is never refused). The gate covers the chat
+dispatch, autopilot episodes and checks, a channel question, a GEO or 虚拟临研 programme
+step (left pending until a top-up), and a turn typed into the kernel window; the
+platform's own learning and source-understanding runs are charged to nobody and asked
+of nobody (`test/balanceGateCoverage.test.mjs` names every way a run is dispatched).
+Most tasks cost a few credits, so 200 lasts long: set the start allowance to `10` before
+an account's first read to look at the low and refused states quickly, or reset one
+account with `DELETE FROM evimed_credits.simulated_wallets WHERE user_id = '<id>'`
+(its entries go with it; the next read grants the allowance again).
+
+Switching it on activates the research-allowance policy exactly as a real wallet does,
+and that is permanent (above): do not roll back to a build that predates the policy
+afterwards. To stop deductions, set `OPEN_SCIENCE_EVIMED_CREDITS_ENABLED=false` (the
+tables and the policy row stay). To move to a real wallet later, unset
+`..._SIMULATED`, set the real addresses and key, and re-run the checks above; simulated
+runs keep their simulated settlements and are never charged again.
 
 Run focused integration tests only against a disposable localhost PostgreSQL whose
 database name contains `evimed_test`. Use separate databases for suites that test

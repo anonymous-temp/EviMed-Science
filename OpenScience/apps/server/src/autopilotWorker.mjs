@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
 import { autopilotAttemptDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -164,7 +165,7 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["credits_exhausted", "autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code)) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code))) {
         await holdsLease();
         const unstartedResource = code === "runtime_busy" || code === "runtime_limit_exceeded";
         const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
@@ -173,7 +174,7 @@ export class AutopilotWorker {
         const at = new Date();
         // The leased queue write is the durable refusal even if recording its
         // reader-facing episode detail meets a later storage outage.
-        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: code === "credits_exhausted" ? "Proactive research is waiting for account credits." : "The previous dispatch is still settling." },
+        await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: BALANCE_REFUSAL_CODES.includes(code) ? "Proactive research is waiting for account credits." : "The previous dispatch is still settling." },
           { retry, delayMs: retry ? delayMs : 0, ...(unstartedResource ? { refundAttempt: true } : {}) });
         await this.service.recordResourceDeferral(job.userId, job.payload.episodeId, {
           jobId: job.id, code, attempts: job.attempts, retrying: retry, at: at.toISOString(), retryAt: retry ? new Date(at.getTime() + delayMs).toISOString() : null,

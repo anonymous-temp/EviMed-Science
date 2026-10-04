@@ -74,10 +74,15 @@ function durationText(minutes) {
   return minutes.min === minutes.max ? `约 ${minutes.min} 分钟` : `约 ${minutes.min}–${minutes.max} 分钟`;
 }
 
-/** @param {{ min: number, max: number } | null} credits @returns {string | null} */
-function creditsText(credits) {
+/**
+ * The price half of the line. Where the wallet is simulated the figure says so:
+ * nothing printed beside a duration may read as money that is not.
+ * @param {{ min: number, max: number } | null} credits @param {boolean} [simulated] @returns {string | null}
+ */
+function creditsText(credits, simulated = false) {
   if (!credits) return null;
-  return credits.min === credits.max ? `约 ${credits.min} 灵豆` : `约 ${credits.min}–${credits.max} 灵豆`;
+  const text = credits.min === credits.max ? `约 ${credits.min} 灵豆` : `约 ${credits.min}–${credits.max} 灵豆`;
+  return simulated ? `${text}（模拟）` : text;
 }
 
 /**
@@ -104,11 +109,12 @@ function range(value) {
  * text from here.
  * @param {'quick' | 'deep'} mode @param {string | null} title
  * @param {{ min: number, max: number } | null} minutes @param {{ min: number, max: number } | null} credits
+ * @param {boolean} [simulated] whether the price is a simulated wallet's
  * @returns {string}
  */
-function summaryText(mode, title, minutes, credits) {
+function summaryText(mode, title, minutes, credits, simulated = false) {
   if (mode === "quick") return "快速回答 · 几秒内出结果";
-  return ["会做深度研究", title, durationText(minutes), creditsText(credits)].filter(Boolean).join(" · ");
+  return ["会做深度研究", title, durationText(minutes), creditsText(credits, simulated)].filter(Boolean).join(" · ");
 }
 
 /**
@@ -127,6 +133,7 @@ function summaryText(mode, title, minutes, credits) {
  *   capability: { id: string, title: string | null } | null,
  *   minutes: { min: number, max: number } | null,
  *   credits: { min: number, max: number } | null,
+ *   simulated?: true,
  *   summary: string,
  *   decidedBy: 'named' | 'model' | 'rules' | 'default',
  *   modelConsulted: boolean,
@@ -181,9 +188,12 @@ export async function decideRouting({
   const minutes = runEstimate(capability);
   const title = capabilityTitle(capability.id);
   let credits = null;
+  let simulated = false;
   if (typeof estimateCredits === "function") {
     try {
-      credits = range(await estimateCredits({ mode: "deep", capabilityId: capability.id, minutes }));
+      const priced = await estimateCredits({ mode: "deep", capabilityId: capability.id, minutes });
+      credits = range(priced);
+      simulated = credits !== null && priced?.simulated === true;
     } catch (error) {
       // The price is the optional half of the line. A settlement service that
       // is down must cost the reader the 灵豆 figure, never the prediction —
@@ -196,7 +206,9 @@ export async function decideRouting({
     capability: { id: capability.id, title },
     minutes,
     credits,
-    summary: summaryText("deep", title, minutes, credits),
+    // Present only where it is true: the price above is a simulated wallet's.
+    ...(simulated ? { simulated: true } : {}),
+    summary: summaryText("deep", title, minutes, credits, simulated),
     decidedBy,
     modelConsulted,
   };
