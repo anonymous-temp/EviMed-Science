@@ -5526,9 +5526,13 @@ export class AgentRunStore {
     // run names what it went without, and a run that wrote none of the files
     // it planned names the tools as the likely cause. A turn that was stopped
     // or failed on its own is not asked about them.
-    const toolFailures = terminal.status === "succeeded"
-      ? uncorrectedToolFailures([allAssistants, ...delegated.sessions])
-      : [];
+    /** @type {ToolFailure[]} */
+    let toolFailures = [];
+    if (terminal.status === "succeeded") {
+      try {
+        toolFailures = uncorrectedToolFailures([allAssistants, ...delegated.sessions]);
+      } catch { /* isolated: evimed_run_tool_failure_read_failures_total — a notice about the tools must never keep a run from finishing */ }
+    }
     let runtimeWorkspaceRoot;
     try {
       runtimeWorkspaceRoot = await this.runtimeWorkspaceRoot(project);

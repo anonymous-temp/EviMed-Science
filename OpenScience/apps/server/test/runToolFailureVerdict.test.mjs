@@ -14,12 +14,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { AgentRunStore } from "../src/agentRuns.mjs";
+import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { runFinishedNotice } from "../src/notificationService.mjs";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 import { noticeTexts } from "./helpers/noticeTexts.mjs";
@@ -113,7 +114,7 @@ async function withRun(agent, body, { children = {} } = {}) {
     };
     const reconcile = () => store.reconcileSession(project, binding.sessionId);
     try {
-      await body({ project, store, dispatch, turn, reconcile, runtimeGone: () => { gone = true; } });
+      await body({ project, store, dispatch, turn, reconcile, runtimeGone: () => { gone = true; }, setHistory: (messages) => { history = messages; } });
     } finally {
       await store.closeAll();
     }
@@ -473,6 +474,89 @@ test("notices are one per tool, the most-failed first, and bounded", async () =>
     assert.match(notices[0].text, /^Research tool web_search failed 3 time\(s\)/);
     assert.equal(new Set(notices.map((notice) => notice.text.split(" ")[2])).size, 8);
   });
+});
+
+test("frames as the kernel writes them reach the same verdict: its ToolNotFoundError, an MCP tool's own error, a turn that completed", async () => {
+  // The fixtures above hand the ledger the messages it reads. These are the
+  // kernel's own events, through the adapter that turns them into those messages
+  // - the unknown-tool error as `dsh-tools` raises it (`UNKNOWN_TOOL`, the
+  // message `Error: unknown tool "<name>"`), and an MCP tool's error the way
+  // the control plane's gateway words it.
+  const at = Date.now();
+  const frame = (type, seq, data) => ({ type: "event", event: { type, seq, time: at + seq, data } });
+  const toolCall = (seq, callId, name, args) => frame("tool/call", seq, { turn: 1, step: 1, callId, name, arguments: JSON.stringify(args) });
+  const toolResult = (seq, callId, text, error) => frame("tool/result", seq, {
+    turn: 1, step: 1, message: { toolCallId: callId, role: "tool", content: [{ type: "text", text }], isError: Boolean(error) }, ...(error ? { error } : {}),
+  });
+  // The turn is the run's own: the kernel's log says so by the request the
+  // dispatch sent, carried on the user message that opened it.
+  const framesFor = (requestId) => [
+    frame("turn/start", 1, { turn: 1 }),
+    frame("user/message", 2, { turn: 1, content: [{ type: "text", text: "请做奥希替尼的心脏不良反应分析。" }], source: { kind: "user", rpcId: requestId } }),
+    toolCall(3, "c1", "web_read", { url: "https://example.org/label" }),
+    toolResult(4, "c1", 'Error: unknown tool "web_read"', { name: "ToolNotFoundError", code: "UNKNOWN_TOOL" }),
+    toolCall(5, "c2", "mcp__evimed__adr_case_query", { drug: "osimertinib" }),
+    toolResult(6, "c2", JSON.stringify({ status: "error", summary: "openFDA answered 400", error: { code: "public_source_http_error" } }), { name: "ToolError", code: "public_source_http_error" }),
+    toolCall(7, "c3", "write", { file_path: "safety-report.md", content: "# 报告\n" }),
+    toolResult(8, "c3", "wrote safety-report.md"),
+    frame("assistant/message", 9, { turn: 1, step: 2, message: { content: [{ type: "text", text: "完成。" }] } }),
+    frame("turn/end", 10, { turn: 1, reason: { kind: "completed" } }),
+  ];
+  await withRun(ADR, async ({ project, dispatch, reconcile, setHistory }) => {
+    const run = await dispatch();
+    await writeFile(path.join(project.workspaceDir, "safety-report.md"), "# 报告\n", "utf8");
+    const history = transcriptToLedgerMessages(normalizeTranscript("ses_verdict", framesFor(run.kernelRequestIds[0])));
+    assert.equal(history.find((message) => message.parts[0]?.tool === "web_read").parts[0].state.error, "UNKNOWN_TOOL", "the kernel's code is what the ledger's message carries");
+    setHistory(history);
+    const finished = await reconcile();
+    assert.equal(finished.status, "succeeded", noticeTexts(finished).join(" | "));
+    assert.equal(finished.errorCode, null);
+    assert.deepEqual(finished.artifacts, ["safety-report.md"]);
+    assert.deepEqual(toolNotices(finished).map((notice) => [notice.code, notice.text]).sort(), [
+      ["run_tool_failed", "Research tool adr_case_query failed 1 time(s) (public_source_http_error) and no later call of it succeeded."],
+      ["run_tool_unavailable", "Research tool web_read is not mounted in this session: 1 call(s) answered unknown tool."],
+    ]);
+  });
+});
+
+test("a conversation-window turn the platform adopted is decided the same way: a search that failed beside an answer is a notice", async () => {
+  // The recorded native conversation (two turns, no tools), with one failed
+  // research call written into its first turn.
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
+  const events = structuredClone(fixture.events);
+  const end = events.findIndex((event) => event.seq === 133);
+  events.splice(end, 0,
+    { type: "tool/call", seq: 100, time: events[0].time + 1, data: { turn: 1, step: 1, callId: "native-c1", name: "mcp__evimed__literature_search", arguments: "{\"query\":\"x\"}" } },
+    { type: "tool/result", seq: 101, time: events[0].time + 2, data: {
+      turn: 1, step: 1,
+      message: { toolCallId: "native-c1", role: "tool", content: [{ type: "text", text: JSON.stringify({ status: "error", error: { code: "public_source_http_error" } }) }], isError: true },
+      error: { name: "ToolError", code: "public_source_http_error" },
+    } },
+  );
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-verdict-native-"));
+  const project = { id: "p1", userId: "u1", rootDir: root, metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace") };
+  await mkdir(project.metaDir, { recursive: true });
+  await mkdir(project.workspaceDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => null }, {
+    model: "deepseek/deepseek-flash",
+    readSessionHistory: async () => transcriptToLedgerMessages(normalizeTranscript(fixture.sessionId, events)),
+    readSessionStatus: async () => "idle",
+  });
+  store.scheduleMonitor = () => {};
+  try {
+    await store.adoptRuntimeSession(project, fixture.sessionId, { transcript: normalizeTranscript(fixture.sessionId, events), routeTurn: async () => ({}) });
+    const runs = await store.list(project);
+    assert.equal(runs.length, 2);
+    for (const run of runs) assert.equal(run.status, "succeeded", `${run.question}: ${noticeTexts(run).join(" | ")}`);
+    const failing = runs.filter((run) => toolNotices(run).length > 0);
+    assert.equal(failing.length, 1, "only the turn that met the failure says so");
+    assert.deepEqual(toolNotices(failing[0]).map((notice) => notice.text), [
+      "Research tool literature_search failed 1 time(s) (public_source_http_error) and no later call of it succeeded.",
+    ]);
+  } finally {
+    await store.closeAll();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("every notice code the ledger raises by name is titled in the domain's table, so none reaches a reader as a bare fallback", async () => {
