@@ -1,12 +1,29 @@
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 import type { SourceUpdateStatus } from "./claimCitations";
 
+/** One class of what depends on a changed source: how its lookup went, how many were found, and the first of them. A
+ *  lookup that could not be made is "unknown", which is neither none nor clean. */
+export interface AffectedClass<Item> { status: "found" | "none" | "unknown"; reason: string | null; total: number; items: Item[] }
+type BoundVersion = { versionId: string; path: string | null; boundValues: number; keys: string[] };
+/** What was found to rest on the changed source, by recorded links (calculations among the value bindings, the memories
+ *  that name it, the learned methods linked to the result). Absent on an impact recorded before it was looked up. */
+export interface ResultImpactAffected {
+  schemaVersion: 1;
+  via: "input" | "calculation";
+  calculations: AffectedClass<BoundVersion>;
+  dependents: AffectedClass<BoundVersion>;
+  memories: AffectedClass<{ recordId: string; scope: string; kind: string; state: string }>;
+  methods: AffectedClass<{ id: string; title: string | null; relation: "learnt_from" | "used_for"; versionId: string | null }>;
+}
+
 export type ResultImpact = ProductRecord<{
   versionId: string;
-  source: { id: string; doi?: string; digest?: string; versionId?: string };
+  /** `contentDigest` and `replacedBy` name a knowledge-base document that new bytes replaced. */
+  source: { id: string; doi?: string; digest?: string; versionId?: string; contentDigest?: string; replacedBy?: string };
   sourceStatus: SourceUpdateStatus;
   effect: "potentially_affected" | "source_gap";
   claimIds: string[];
+  affected?: ResultImpactAffected | null;
   historicalResultPreserved: boolean;
   recomputed: boolean;
   continuation: { status: "awaiting_user" | "preparing" | "scheduled" | "unavailable"; agendaId?: string; episodeId?: string };

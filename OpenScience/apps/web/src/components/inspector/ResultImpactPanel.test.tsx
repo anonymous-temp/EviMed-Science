@@ -101,3 +101,48 @@ it("shows a revoked source as unavailable without exposing its old identity or o
   expect(screen.queryByText("unavailable-source")).toBeNull();
   expect(screen.queryByRole("button", { name: "在此议程中继续研究" })).toBeNull();
 });
+const found = <Item,>(items: Item[], total = items.length) => ({ status: "found" as const, reason: null, total, items });
+const none = { status: "none" as const, reason: null, total: 0, items: [] };
+const unknown = { status: "unknown" as const, reason: "lookup_failed", total: 0, items: [] };
+const bound = { versionId: "rv_calc", path: "results/pool.json", boundValues: 3, keys: ["pooled"] };
+it("lists the calculations, memories and methods that rest on the changed source, and says a change is not an error", async () => {
+  api.list.mockResolvedValue({ items: [{ ...changed, payload: { ...changed.payload, affected: { schemaVersion: 1, via: "calculation", calculations: found([bound]),
+    dependents: found([{ ...bound, versionId: "rv_other" }, { ...bound, versionId: "rv_third" }]),
+    memories: found([{ recordId: "m1", scope: "project", kind: "project_fact", state: "changed" }]),
+    methods: found([{ id: "learned-pooling", title: "合并效应量", relation: "learnt_from", versionId: "rv_old" }]) } } }], nextCursor: null });
+  mount();
+  const list = await screen.findByRole("list", { name: "依赖该来源的内容" });
+  expect(list).toHaveTextContent("本版本里有 3 处数值来自 1 个依赖该来源的计算");
+  expect(list).toHaveTextContent("2 个结果的数值引用了这个计算");
+  expect(list).toHaveTextContent("1 条记忆依赖该来源，已标注“来源有变化”，记忆本身没有改动");
+  expect(list).toHaveTextContent("1 个学到的方法与此结果相关，已标注“来源有变化”，方法本身没有改动");
+  expect(screen.getByText(/这不说明原来的结论有误，尚未重新计算/)).toBeInTheDocument();
+  expect(screen.getByText(/历史结果已保留/)).toBeInTheDocument();
+});
+it("says a lookup that could not be made is not none, and says none only for an answered lookup", async () => {
+  api.list.mockResolvedValue({ items: [
+    { ...changed, id: "a", payload: { ...changed.payload, affected: { schemaVersion: 1, via: "input", calculations: none, dependents: none, memories: unknown, methods: unknown } } },
+    { ...changed, id: "b", payload: { ...changed.payload, affected: { schemaVersion: 1, via: "input", calculations: none, dependents: none, memories: none, methods: none } } },
+  ], nextCursor: null });
+  mount();
+  expect(await screen.findByText("依赖该来源的记忆、方法暂时查不到，不能当作没有")).toBeInTheDocument();
+  expect(screen.getByText("未发现依赖该来源的其他计算、记忆或方法")).toBeInTheDocument();
+});
+it("tells a knowledge-base file that has new bytes from a publisher's notice and shows nothing for an impact recorded before the lookup", async () => {
+  api.list.mockResolvedValue({ items: [
+    { ...changed, id: "kb", payload: { ...changed.payload, source: { id: `src_${"a".repeat(32)}`, contentDigest: "b".repeat(64), replacedBy: `src_${"c".repeat(32)}` },
+      sourceStatus: { state: "changed", checkedAt: null, updates: [{ kind: "replaced", noticeDoi: null, date: "2026-10-04", source: null }] } } },
+    { ...changed, id: "old", payload: { ...changed.payload, source: { id: "source_old" } } },
+  ], nextCursor: null });
+  mount();
+  expect(await screen.findByText("资料库文件已有新版本")).toBeInTheDocument();
+  expect(screen.getByText("资料库中的文件")).toBeInTheDocument();
+  expect(screen.queryByText(`src_${"a".repeat(32)}`)).toBeNull();
+  expect(screen.queryAllByRole("list", { name: "依赖该来源的内容" })).toHaveLength(0);
+});
+it("says an agenda that was already running rechecks only what is listed", async () => {
+  api.list.mockResolvedValue({ items: [{ ...changed, payload: { ...changed.payload, continuation: { status: "scheduled", agendaId: "agenda_1", episodeId: "ep_1" } } }], nextCursor: null });
+  mount();
+  expect(await screen.findByText(/只重新核对上面列出的部分，其余结果不会重新运行/)).toBeInTheDocument();
+  expect(api.agendas).not.toHaveBeenCalled();
+});
