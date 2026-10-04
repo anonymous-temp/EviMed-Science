@@ -80,6 +80,7 @@ def _set_row_labels(ax, labels, fontsize: int = 7) -> None:
         if any("\u4e00" <= character <= "\u9fff" for character in str(label)):
             tick.set_fontfamily(_chosen_font)
 
+from new_meta.engines.meta_engine import Z_975
 from new_meta.schemas.meta_result import PooledEffect, LeaveOneOutResult, StudyEffect, CumulativeResult
 
 _LOG_MEASURES = {"OR", "RR", "HR", "IRR"}
@@ -135,8 +136,9 @@ def forest_plot(
     for i, (study, ypos) in enumerate(zip(studies, y_positions)):
         se = study.se
         yi = study.yi
-        ci_lo = yi - 1.96 * se
-        ci_hi = yi + 1.96 * se
+        # Printed beside each study: the same interval its table row reports.
+        ci_lo = yi - Z_975 * se
+        ci_hi = yi + Z_975 * se
 
         # Convert to original scale for display
         if is_log:

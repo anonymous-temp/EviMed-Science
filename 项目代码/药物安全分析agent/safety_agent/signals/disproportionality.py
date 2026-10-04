@@ -13,8 +13,13 @@ Formulas (2x2 cells a, b, c, d; N = a+b+c+d):
 - chi2 = N*(a*d - b*c)^2 / ((a+b)(c+d)(a+c)(b+d)), optionally with Yates'
   continuity correction: N*(|a*d - b*c| - N/2)^2 / same denominator.
 - IC (crude) = log2(a*N / ((a+b)*(a+c))) — identical to OpenScience.
-- IC025: WHO-UMC BCPNN lower 95% credibility limit (Bate et al. 1998),
-  Jeffreys prior (1 per cell -> marginal priors 2, total 4):
+- IC025: BCPNN-style lower 95% limit after Bate et al. (1998), under the
+  uniform Dirichlet(1,1,1,1) prior (one pseudo-count per cell, so marginal
+  pseudo-counts 2 and total 4). This is not the WHO-UMC prior (marginal
+  pseudo-counts 1) and not the vigiBase shrinkage IC; it is a normal
+  approximation to a skewed posterior, which reads about 0.2 lower than the
+  exact 2.5th percentile for a table like a=10 of N=2000 (see
+  tests/test_published_signal_references.py):
     E[IC]   = log2( (a+1)(N+4) / ((a+b+2)(a+c+2)) )
     var(IC) = (1/ln 2)^2 * [ (N+4-a-1)     / ((a+1)(N+5))
                            + (N+4-(a+b)-2) / ((a+b+2)(N+5))
@@ -73,7 +78,7 @@ FORMULAS: dict[str, str] = {
            "SE = sqrt(1/a - 1/(a+b) + 1/c - 1/(c+d)) (Evans et al. 2001)",
     "chi2": "N*(a*d - b*c)^2/((a+b)(c+d)(a+c)(b+d)), without Yates' correction, 1 degree of freedom",
     "IC": "crude IC = log2(a*N/((a+b)(a+c)))",
-    "IC025": "E[IC] - 1.96*sqrt(var(IC)) under the BCPNN Jeffreys prior (Bate et al. 1998): "
+    "IC025": "E[IC] - 1.96*sqrt(var(IC)), a normal approximation under a uniform Dirichlet(1,1,1,1) prior (after Bate et al. 1998): "
              "E[IC] = log2((a+1)(N+4)/((a+b+2)(a+c+2))); "
              "var(IC) = (1/ln 2)^2 * [(N+4-a-1)/((a+1)(N+5)) + (N+4-(a+b)-2)/((a+b+2)(N+5)) "
              "+ (N+4-(a+c)-2)/((a+c+2)(N+5))]",
@@ -204,7 +209,7 @@ def information_component(t: ContingencyTable2x2) -> ICResult:
         raise ValueError("IC is undefined with a zero cell; apply Haldane-Anscombe first")
     n = t.n
     crude = float(np.log2((t.a * n) / ((t.a + t.b) * (t.a + t.c))))
-    # BCPNN with Jeffreys prior: gamma11 = 1, gamma1. = gamma.1 = 2, gamma = 4.
+    # Uniform Dirichlet(1,1,1,1) prior: gamma11 = 1, gamma1. = gamma.1 = 2, gamma = 4.
     n_shrunk = n + 4.0
     a_shrunk = t.a + 1.0
     row_shrunk = t.a + t.b + 2.0

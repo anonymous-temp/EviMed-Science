@@ -317,8 +317,8 @@ class NMAEngine:
         for trt_a, trt_b in combinations(self.treatments, 2):
             effect, var = self._pairwise_estimate(trt_a, trt_b)
             se = np.sqrt(max(var, 0.0))
-            ci_lower = effect - 1.96 * se
-            ci_upper = effect + 1.96 * se
+            ci_lower = effect - _NMA_Z_975 * se
+            ci_upper = effect + _NMA_Z_975 * se
             z = effect / se if se > 0 else 0.0
             p_value = float(2 * (1 - stats.norm.cdf(abs(z))))
 
