@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import { fetchWebConnectors } from "@/lib/apiClient";
+import { fetchWebConnectors, type WebConnector } from "@/lib/apiClient";
 
 /**
- * How many data sources nothing serves for this account — no deployment
- * credential, no key of the researcher's own, and not one that works without
- * one (`needsAttention`, computed by the control plane).
+ * The researcher's data sources — for each, whether anything serves it for
+ * this account — kept current across the places that read them.
  *
- * This used to be a banner across the top of seven of the eight pages, on an
- * account's first screen, before any run had needed any of them (review B §7).
- * It is a standing, non-urgent fact about the deployment, so it is a count on
- * the account row now — the way the bell carries unread work — and the prompt
- * that matters moves to the one run that actually stopped on a missing key.
+ * It used to feed a count in the sidebar and a banner across seven pages
+ * (review B §7); the count left the sidebar on 2026-09-23 because it is a
+ * standing, non-urgent fact about the deployment and not the reader's work. The
+ * list is read now for the one moment it matters: a conversation whose run went
+ * without a source (`ConnectorNeedNotice`), which needs to know whether that
+ * source has been configured since.
+ *
+ * `null` until read, and again on a read that failed — a deployment without the
+ * credential store, or a hiccup, is no reason to interrupt anyone.
  */
 export const CONNECTORS_CHANGED_EVENT = "evimed:connectors-changed";
 
@@ -18,22 +21,25 @@ export function announceConnectorsChanged(): void {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(CONNECTORS_CHANGED_EVENT));
 }
 
-export function useConnectorAttention(): number {
-  const [count, setCount] = useState(0);
+/**
+ * @param enabled read the list only while something needs it: a conversation with
+ *   nothing left out asks nothing of the server.
+ */
+export function useConnectors(enabled = true): WebConnector[] | null {
+  const [connectors, setConnectors] = useState<WebConnector[] | null>(null);
   useEffect(() => {
+    if (!enabled) return undefined;
     let active = true;
     const load = () =>
       fetchWebConnectors()
-        .then((list) => { if (active) setCount(list.filter((connector) => connector.needsAttention).length); })
-        // A deployment without the credential store, or a read that failed, is
-        // no badge — never a reason to interrupt anyone.
-        .catch(() => { if (active) setCount(0); });
+        .then((list) => { if (active) setConnectors(list); })
+        .catch(() => { if (active) setConnectors(null); });
     void load();
     window.addEventListener(CONNECTORS_CHANGED_EVENT, load);
     return () => {
       active = false;
       window.removeEventListener(CONNECTORS_CHANGED_EVENT, load);
     };
-  }, []);
-  return count;
+  }, [enabled]);
+  return connectors;
 }

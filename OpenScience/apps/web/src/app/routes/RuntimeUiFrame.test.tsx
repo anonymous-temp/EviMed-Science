@@ -16,7 +16,7 @@ import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
 // The run's event stream, held by the test: the frame's run view follows it.
 vi.mock("@/lib/runEvents", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/runEvents")>()), subscribeRunEvents: mocks.subscribe }));
@@ -33,6 +33,8 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   startWebRuntime: mocks.start, fetchWebRuntimeStatus: mocks.status,
   listWebResearchAgents: mocks.listAgents, listWebResearchSessions: mocks.listSessions, putWebResearchSession: mocks.putSession,
   fetchWebResearchAllowance: mocks.allowance,
+  // The strip for a data source a run went without reads the account's connectors, saves one, and posts the follow-up.
+  fetchWebConnectors: mocks.connectors, saveWebConnectorCredential: mocks.saveConnector, dispatchWebAgentRun: mocks.dispatch,
 }));
 // 循证 GEO's two calls: which GEO project this is, and writing an option to it.
 const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn() }));
@@ -95,6 +97,8 @@ beforeEach(() => {
   mocks.putSession.mockReset(); mocks.putSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
   // Research billing is off unless a test says otherwise: every deployment today.
   mocks.allowance.mockReset(); mocks.allowance.mockResolvedValue(billing(false)); forgetResearchBilling();
+  mocks.connectors.mockReset(); mocks.connectors.mockResolvedValue([]);
+  mocks.saveConnector.mockReset(); mocks.dispatch.mockReset(); window.sessionStorage.clear();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -736,6 +740,51 @@ describe("the run behind the task, in the frame", () => {
     await waitFor(() => expect(sent("run-state").at(-1)).toMatchObject({ progress: { currentPhase: "search" } }));
     const seqs = sent("run-state").map((data) => data.seq);
     expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+  });
+
+  describe("a data source the run went without", () => {
+    const connector = (source: "none" | "user") => ({ id: "umls", title: "UMLS", kind: "api-key", unlocks: "", obtainUrl: "https://example.test/umls",
+      capabilities: [], keyless: false, validityDays: null, source, own: null, needsAttention: source === "none" });
+    const finished = { ...run, status: "succeeded", finishedAt: "2026-09-18T01:05:00.000Z", mode: "open-domain", effectiveAgentId: "open-domain-answer", connectorNeeds: ["umls"] };
+
+    it("shows a strip above the frame, opens the credential form in place, and asks for the skipped part in the same conversation", async () => {
+      mocks.listRuns.mockResolvedValue([finished]);
+      mocks.connectors.mockResolvedValue([connector("none")]);
+      mocks.saveConnector.mockResolvedValue({ expiresAt: null, check: "verified" });
+      mocks.dispatch.mockResolvedValue({ ...finished, id: "run-2", status: "running", connectorNeeds: undefined });
+      const user = userEvent.setup();
+      const { frame, container } = await openTask();
+      emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+      const strip = await screen.findByText("UMLS 还没有配置，相关部分已跳过。");
+      // Outside the kernel's frame, ahead of it: the strip is not part of the iframe's page.
+      const bar = strip.closest("[data-connector-need]") as HTMLElement;
+      expect(bar).not.toBeNull();
+      expect(bar.contains(frame)).toBe(false);
+      expect(bar.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(container.querySelectorAll("iframe")).toHaveLength(1);
+
+      await user.click(screen.getByRole("button", { name: "去配置" }));
+      await user.type(screen.getByLabelText("UMLS 凭据"), "umls-secret-key-123");
+      mocks.connectors.mockResolvedValue([connector("user")]);
+      await user.click(screen.getByRole("button", { name: "保存 UMLS 凭据" }));
+      await waitFor(() => expect(mocks.saveConnector).toHaveBeenCalledWith("umls", "umls-secret-key-123"));
+      await user.click(await screen.findByRole("button", { name: "继续" }));
+      await waitFor(() => expect(mocks.dispatch).toHaveBeenCalledTimes(1));
+      // The same conversation, on the line the run was on, as one turn.
+      expect(mocks.dispatch).toHaveBeenCalledWith("session-a", expect.stringContaining("UMLS"), expect.stringMatching(/^web-/), "answer");
+      // The strip is about the last turn; the follow-up is a new one, so it goes away.
+      await waitFor(() => expect(document.querySelector("[data-connector-need]")).toBeNull());
+      expect(document.body.textContent).not.toContain("umls-secret-key-123");
+    });
+
+    it("is not shown for a conversation whose run left nothing out, and asks the server nothing then", async () => {
+      mocks.listRuns.mockResolvedValue([{ ...finished, connectorNeeds: undefined }]);
+      const { frame } = await openTask();
+      emit(frame, { type: "evimed.runtime-ui.booted", seq: 3 });
+      await waitFor(() => expect(mocks.listRuns).toHaveBeenCalled());
+      expect(document.querySelector("[data-connector-need]")).toBeNull();
+      expect(mocks.connectors).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps the task when the reader opens a delegated child's view inside the frame", async () => {

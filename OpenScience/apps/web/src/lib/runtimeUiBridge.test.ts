@@ -201,6 +201,24 @@ describe("keeping the frame's run view current", () => {
     expect(mocks.listRuns).not.toHaveBeenCalled();
     expect(postRunState).not.toHaveBeenCalled();
   });
+
+  it("hands the shell the run record itself each time the ledger is read, and null when the conversation has none", async () => {
+    // The strip for a data source a run went without reads the record the frame
+    // binding already reads, so it needs no second poll of the ledger.
+    mocks.subscribe.mockImplementation(() => () => {});
+    mocks.listRuns.mockResolvedValue([run({ status: "succeeded", connectorNeeds: ["umls"], finishedAt: "2026-09-18T02:00:00.000Z" })]);
+    const onRun = vi.fn();
+    const { rerender } = renderHook((props: { sessionId: string | null }) => useFrameRunBinding({ sessionId: props.sessionId, enabled: true, postRunState: vi.fn(), postEvidence: vi.fn(), onRun }),
+      { initialProps: { sessionId: "session-a" as string | null } });
+    await vi.waitFor(() => expect(onRun).toHaveBeenCalledWith(expect.objectContaining({ id: "run-1", connectorNeeds: ["umls"] })));
+    onRun.mockClear();
+    mocks.listRuns.mockResolvedValue([]);
+    rerender({ sessionId: "session-z" });
+    await vi.waitFor(() => expect(onRun).toHaveBeenCalledWith(null));
+    onRun.mockClear();
+    rerender({ sessionId: null });
+    expect(onRun).toHaveBeenCalledWith(null);
+  });
 });
 
 describe("the @ menu's knowledge-base answer", () => {

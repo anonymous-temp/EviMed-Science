@@ -716,6 +716,13 @@ export interface WebAgentRun {
   progress?: WebRunProgress | null;
   /** The finer code under `errorCode`, when the ledger recorded one. */
   errorSubCode?: string | null;
+  /**
+   * The data sources a finished run went without — nobody had configured them
+   * for this researcher — as registry ids (`CONNECTOR_CREDENTIALS`). The run went
+   * on with the sources it had; this is what the conversation offers a form for.
+   * Absent when it left nothing out.
+   */
+  connectorNeeds?: string[];
   dispatchStatus: "dispatching" | "accepted" | "unknown" | "rejected";
   /** Put away by the researcher; the lists leave it out. */
   archived?: boolean;
@@ -1676,16 +1683,24 @@ export async function listWebDeliverableFeedback(runId: string, path: string): P
   return (await parseApiResponse<{ items: WebFeedbackEvent[]; nextCursor: string | null }>(res)).items;
 }
 
+/**
+ * `line` keeps a turn on the line a conversation already runs on: "answer" for
+ * the answer line, or a capability id. The control plane accepts it only in an
+ * open conversation (a session bound to a capability stays with it), and it
+ * replaces the router outright — which is what a continuation wants, since the
+ * part it asks for was skipped on that line.
+ */
 export async function dispatchWebAgentRun(
   sessionId: string,
   text: string,
   dispatchId: string,
+  line?: string,
 ): Promise<WebAgentRun> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.dispatch");
   const res = await fetchWithWebAuth(apiUrl("/agent-runs/dispatch"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, dispatchId, text }),
+    body: JSON.stringify({ sessionId, dispatchId, text, ...(line ? { line } : {}) }),
   });
   return parseApiResponse<WebAgentRun>(res);
 }
@@ -1789,6 +1804,14 @@ export interface WebUsageSummary {
   priceVersions?: string[];
 }
 
+/**
+ * What the source said when a researcher's credential was saved: it accepted it
+ * (`verified`), refused it (`rejected`), could not be asked (`unreachable`), or
+ * has no cheap authenticated endpoint to ask (`unchecked`). Advice, never a
+ * reason a credential is not kept.
+ */
+export type WebConnectorCheck = "verified" | "rejected" | "unreachable" | "unchecked";
+
 /** One external data source, with where its credential comes from for this
  *  account. The credential itself is never read back. */
 export interface WebConnector {
@@ -1801,7 +1824,7 @@ export interface WebConnector {
   keyless: boolean;
   validityDays: number | null;
   source: "deployment" | "user" | "none";
-  own: { updatedAt: string; expiresAt: string | null; expired: boolean } | null;
+  own: { updatedAt: string; expiresAt: string | null; expired: boolean; check: { state: WebConnectorCheck; checkedAt: string | null } | null } | null;
   needsAttention: boolean;
 }
 
@@ -1811,14 +1834,17 @@ export async function fetchWebConnectors(): Promise<WebConnector[]> {
   return parseApiResponse<WebConnector[]>(res);
 }
 
-export async function saveWebConnectorCredential(connector: string, value: string): Promise<{ expiresAt: string | null }> {
+/** The credential is kept in every case but a malformed one; `check` is what the source said about it. */
+export async function saveWebConnectorCredential(connector: string, value: string): Promise<{ expiresAt: string | null; check: WebConnectorCheck }> {
   if (!hasWebApi) throw new BackendUnavailableError("connectors.save");
   const res = await fetchWithWebAuth(apiUrl(`/connectors/${encodeURIComponent(connector)}`), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ value }),
   });
-  return parseApiResponse<{ connector: string; source: "user"; expiresAt: string | null }>(res);
+  const saved = await parseApiResponse<{ connector: string; source: "user"; expiresAt: string | null; check?: WebConnectorCheck }>(res);
+  // A control plane that predates the check answers without one.
+  return { expiresAt: saved.expiresAt, check: saved.check ?? "unchecked" };
 }
 
 export async function removeWebConnectorCredential(connector: string): Promise<void> {

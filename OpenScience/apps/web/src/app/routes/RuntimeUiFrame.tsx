@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
-import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
 import { provideFrameSessionSearch, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
@@ -9,6 +9,7 @@ import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { conversationTitle } from "@/lib/conversationTitles";
 import { Button } from "@/components/ui/Button";
+import { ConnectorNeedNotice } from "@/components/runs/ConnectorNeedNotice";
 import { SHORTCUT_HELP_TOGGLE_EVENT } from "@/components/ui/ShortcutHelp";
 import { useUiStore } from "@/lib/store";
 import { isGeoTab } from "@/components/geo/geoTabs";
@@ -789,7 +790,16 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
 
   const postRunState = useCallback((state: object) => postToFrame("run-state", state), [postToFrame]);
   const postEvidence = useCallback((evidence: object | null) => postToFrame("evidence", evidence ?? { runId: null }), [postToFrame]);
-  useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence });
+  // The run bound to the conversation on screen, as the ledger holds it, for
+  // what the shell shows beside the frame: a data source that run went without
+  // (`ConnectorNeedNotice`). Kept only when what the strip reads has changed, so
+  // the ledger's twenty-second polls of an idle conversation re-render nothing.
+  const [boundRun, setBoundRun] = useState<WebAgentRun | null>(null);
+  const onBoundRun = useCallback((run: WebAgentRun | null) => {
+    setBoundRun((previous) => (previous?.id === run?.id && previous?.status === run?.status
+      && JSON.stringify(previous?.connectorNeeds ?? null) === JSON.stringify(run?.connectorNeeds ?? null) ? previous : run));
+  }, []);
+  useFrameRunBinding({ sessionId: frameTask, enabled: booted > 0 && !error && Boolean(frameId), postRunState, postEvidence, onRun: onBoundRun });
   // The independent reviewer's checks of this conversation's answers (L1): a
   // row under each checked answer, drawn by the frame from what the shell reads.
   const postReplyChecks = useCallback((payload: object) => postToFrame("reply-check", payload), [postToFrame]);
@@ -826,32 +836,38 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   const connectionNotice = nativeError ?? leaseAlert;
 
   return (
-    <div className="relative h-full w-full">
-      {error ? (
-        <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
-          <p>{error.text}</p>
-          {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
-          {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
-          {/* The usage section of settings, where a spend ceiling is stated. */}
-          {error.capped && !error.concurrency && <UsageButton />}
-        </div>
-      ) : (
-        <>
-          {navigated && (connectionNotice || !ready) && (
-            <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
-              <p>{connectionNotice ?? "正在重连"}</p>
-              {connectionNotice && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
-            </div>
-          )}
-          {cover}
-          {binding && <iframe
-            key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
-            className="h-full w-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
-            allow="clipboard-read; clipboard-write"
-          />}
-        </>
-      )}
+    <div className="flex h-full w-full flex-col">
+      {/* A source this conversation's last run went without: a strip above the
+          kernel's frame, never inside it, with the credential form in place and
+          a 继续 that asks for the skipped part in the same conversation. */}
+      {active && !error && <ConnectorNeedNotice run={boundRun} />}
+      <div className="relative min-h-0 flex-1">
+        {error ? (
+          <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-ui text-error">
+            <p>{error.text}</p>
+            {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
+            {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
+            {/* The usage section of settings, where a spend ceiling is stated. */}
+            {error.capped && !error.concurrency && <UsageButton />}
+          </div>
+        ) : (
+          <>
+            {navigated && (connectionNotice || !ready) && (
+              <div role={connectionNotice ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg text-ui text-muted">
+                <p>{connectionNotice ?? "正在重连"}</p>
+                {connectionNotice && <Button variant="ghost" onClick={reconnect} disabled={renewing}>重新连接</Button>}
+              </div>
+            )}
+            {cover}
+            {binding && <iframe
+              key={binding.frameId} ref={iframe} src={binding.frameUrl} title="对话"
+              className="absolute inset-0 h-full w-full border-0"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
+              allow="clipboard-read; clipboard-write"
+            />}
+          </>
+        )}
+      </div>
     </div>
   );
 }

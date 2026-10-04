@@ -224,6 +224,13 @@ export interface FrameRunBindingOptions {
   enabled: boolean;
   postRunState: (state: FrameRunState) => void;
   postEvidence: (evidence: FrameEvidence | null) => void;
+  /**
+   * Told each time the conversation's bound run is read from the ledger — the
+   * record itself, or null when it has none. For what the shell shows beside the
+   * frame rather than in it (the strip for a data source the run went without),
+   * so it need not poll the ledger a second time.
+   */
+  onRun?: (run: WebAgentRun | null) => void;
   /** How often the ledger is asked for a newer run while none is running. */
   pollMs?: number;
 }
@@ -235,13 +242,13 @@ export interface FrameRunBindingOptions {
  * same conversation is a new run). Clears the frame's state when the
  * conversation changes or has no run.
  */
-export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvidence, pollMs = 20_000 }: FrameRunBindingOptions): void {
-  const posts = useRef({ postRunState, postEvidence });
-  posts.current = { postRunState, postEvidence };
+export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvidence, onRun, pollMs = 20_000 }: FrameRunBindingOptions): void {
+  const posts = useRef({ postRunState, postEvidence, onRun });
+  posts.current = { postRunState, postEvidence, onRun };
 
   useEffect(() => {
     if (!enabled || !sessionId) {
-      if (enabled) { posts.current.postRunState({ runId: null }); posts.current.postEvidence(null); }
+      if (enabled) { posts.current.postRunState({ runId: null }); posts.current.postEvidence(null); posts.current.onRun?.(null); }
       return undefined;
     }
     let active = true;
@@ -268,6 +275,7 @@ export function useFrameRunBinding({ sessionId, enabled, postRunState, postEvide
 
     const bind = (run: WebAgentRun | null) => {
       if (!active) return;
+      posts.current.onRun?.(run);
       if (!run) {
         if (state.runId !== null) { state = { runId: null }; publish(); }
         else if (!unsubscribe) { sender.push(state); posts.current.postEvidence(null); }

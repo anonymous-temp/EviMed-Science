@@ -517,6 +517,30 @@ describe("apiClient", () => {
     );
   });
 
+  it("keeps a continuation on the line the skipped part ran on, and names it only when asked", async () => {
+    const run = { id: "run_2", dispatchId: "turn_2", status: "running" };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson(run, { status: 202 }));
+    const client = await loadClient("https://science.example/api");
+    await client.dispatchWebAgentRun("ses_adr", "补做", "turn_2", "clinical-evidence-synthesis");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "https://science.example/api/agent-runs/dispatch",
+      expect.objectContaining({ body: JSON.stringify({ sessionId: "ses_adr", dispatchId: "turn_2", text: "补做", line: "clinical-evidence-synthesis" }) }),
+    );
+  });
+
+  it("returns what the source said about a saved credential, and unchecked from a control plane that says nothing", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson({ connector: "umls", source: "user", expiresAt: null, check: "rejected" }))
+      .mockResolvedValueOnce(responseJson({ connector: "core", source: "user", expiresAt: null }));
+    const client = await loadClient("https://science.example/api");
+    await expect(client.saveWebConnectorCredential("umls", "k")).resolves.toEqual({ expiresAt: null, check: "rejected" });
+    await expect(client.saveWebConnectorCredential("core", "k")).resolves.toEqual({ expiresAt: null, check: "unchecked" });
+    expect(fetchMock).toHaveBeenCalledWith("https://science.example/api/connectors/umls", expect.objectContaining({ method: "PUT", body: JSON.stringify({ value: "k" }) }));
+  });
+
   // The sidebar lists other projects' tasks beside the current one's; naming
   // the project on the request must not move the tab to it.
   it("reads another project's runs under that project's header, leaving the tab's own", async () => {

@@ -1,29 +1,42 @@
 import { describe, expect, it } from "vitest";
+import { CONNECTOR_CREDENTIALS } from "@evimed/domain";
 import type { WebConnector } from "@/lib/apiClient";
-import { runCredentialNeed, runCredentialSentence } from "./runCredential";
+import { continuationText, runCredentialNeeds, runCredentialSentence } from "./runCredential";
 
-const connector = (id: string, needsAttention: boolean) => ({ id, needsAttention } as unknown as WebConnector);
-const failed = { status: "failed" as const, errorCode: null, errorSubCode: null, agentId: null, effectiveAgentId: null };
+const connector = (id: string, source: WebConnector["source"]) => ({ id, source } as unknown as WebConnector);
+const finished = { status: "succeeded" as const, connectorNeeds: ["umls", "semantic-scholar"] };
 
-describe("the one source a failed run needed", () => {
-  it("is named by the gateway's own code", () => {
-    const need = runCredentialNeed({ ...failed, errorCode: "public_source_semantic_scholar_credential_missing" });
-    expect(need).toEqual({ connectorId: "semantic-scholar", title: "Semantic Scholar", cause: "code" });
-    expect(runCredentialSentence(need!)).toBe("这次运行因缺少 Semantic Scholar 的凭据没能继续。");
-    expect(runCredentialNeed({ ...failed, errorSubCode: "public_source_opengwas_credential_missing" })?.connectorId).toBe("opengwas");
+describe("the data sources a finished run went without", () => {
+  it("reads the ledger's closed list, in the order the run met them, titled from the registry", () => {
+    expect(runCredentialNeeds(finished)).toEqual([
+      { connectorId: "umls", title: "UMLS", state: "missing" },
+      { connectorId: "semantic-scholar", title: "Semantic Scholar", state: "missing" },
+    ]);
+    expect(runCredentialSentence({ connectorId: "umls", title: "UMLS", state: "missing" })).toBe("UMLS 还没有配置，相关部分已跳过。");
+    // The platform's own evidence API is a connector since 2026-10-04.
+    expect(runCredentialNeeds({ status: "succeeded", connectorNeeds: ["evimed-evidence"] })[0].title).toBe("EviMed 证据库");
+    expect(CONNECTOR_CREDENTIALS.some((spec) => spec.id === "evimed-evidence")).toBe(true);
   });
 
-  it("is stated as a dependency when the capability needs a source nobody configured", () => {
-    const need = runCredentialNeed({ ...failed, effectiveAgentId: "mendelian-randomization" }, [connector("opengwas", true)]);
-    expect(need).toMatchObject({ connectorId: "opengwas", cause: "capability" });
-    expect(runCredentialSentence(need!)).toContain("这项能力需要 OpenGWAS 的凭据");
-    // Configured, or not a dependency of this capability: nothing to say.
-    expect(runCredentialNeed({ ...failed, effectiveAgentId: "mendelian-randomization" }, [connector("opengwas", false)])).toBeNull();
-    expect(runCredentialNeed({ ...failed, effectiveAgentId: "clinical-evidence-synthesis" }, [connector("opengwas", true)])).toBeNull();
+  it("says a source is configured once something serves it, and still missing while nothing does", () => {
+    const list = [connector("umls", "user"), connector("semantic-scholar", "none")];
+    expect(runCredentialNeeds(finished, list).map((need) => need.state)).toEqual(["configured", "missing"]);
+    expect(runCredentialNeeds(finished, [connector("umls", "deployment")])[0].state).toBe("configured");
+    // A connector list that has not been read is not a reason to hide the form.
+    expect(runCredentialNeeds(finished, null).map((need) => need.state)).toEqual(["missing", "missing"]);
   });
 
-  it("says nothing about a run that did not fail, or a code for no known source", () => {
-    expect(runCredentialNeed({ ...failed, status: "succeeded", errorCode: "public_source_opengwas_credential_missing" })).toBeNull();
-    expect(runCredentialNeed({ ...failed, errorCode: "public_source_nonexistent_credential_missing" })).toBeNull();
+  it("says nothing for a run that is going, did not finish, or left nothing out, and drops what the registry does not know", () => {
+    expect(runCredentialNeeds({ ...finished, status: "running" })).toEqual([]);
+    expect(runCredentialNeeds({ ...finished, status: "failed" })).toEqual([]);
+    expect(runCredentialNeeds({ status: "succeeded" })).toEqual([]);
+    expect(runCredentialNeeds({ status: "succeeded", connectorNeeds: [] })).toEqual([]);
+    expect(runCredentialNeeds(null)).toEqual([]);
+    expect(runCredentialNeeds({ status: "succeeded", connectorNeeds: ["not-a-connector", "umls", "umls"] }).map((need) => need.connectorId)).toEqual(["umls"]);
+  });
+
+  it("words the one-click follow-up in the researcher's voice and names only the sources", () => {
+    expect(continuationText(["UMLS"])).toBe("我已经配置了 UMLS，请用它补做刚才因为缺少它而跳过的部分。");
+    expect(continuationText(["UMLS", "CORE"])).toBe("我已经配置了 UMLS、CORE，请用它们补做刚才因为缺少它们而跳过的部分。");
   });
 });
