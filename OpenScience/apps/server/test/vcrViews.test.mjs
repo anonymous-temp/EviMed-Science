@@ -17,7 +17,7 @@ import {
 } from "../src/vcrViews.mjs";
 import {
   presentComparatorTab, presentDataTab, presentIntake, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
-  seriesView, criterionCodes,
+  seriesView, criterionCodes, vcrLocatorText,
 } from "../src/vcrViewsTabs.mjs";
 import {
   METHOD_LABELS, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote, withReviewState, zhDate, zhTime,
@@ -782,4 +782,15 @@ test("C3-07 a review is current only when every node it names is at its current 
   assert.deepEqual(elsewhere.reasons.map((reason) => reason.code), []);
   const moved = useOf([{ id: "r3", nodes: ["assumption:hazard_ratio@1"] }]);
   assert.deepEqual(moved.reasons.map((reason) => reason.code), []);
+});
+
+// --- a criterion taken from the study's pack says so ---------------------------------
+
+test("a locator that names a knowledge pack says 知识包, and 「AI 草拟」 when the study's pack is a draft; the old locators read as they did", () => {
+  assert.equal(vcrLocatorText({ page: 12, section: "4.2" }), "第 12 页，4.2");
+  assert.equal(vcrLocatorText({ pack: "type_2_diabetes", entry: "c_hba1c" }), "知识包");
+  assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: true }), "知识包（AI 草拟）");
+  assert.equal(vcrLocatorText({ pack: "rare_thing", entry: "c1" }, { draftPack: false }), "知识包");
+  assert.equal(vcrLocatorText({ registryId: "NCT02296125", field: "eligibility" }), null);
+  assert.equal(vcrLocatorText(null), null);
 });

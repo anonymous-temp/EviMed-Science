@@ -252,7 +252,7 @@ export function presentPopulationTab(bundle) {
       code: codes.get(criterion.id) ?? "",
       name: (/** @type {Record<string, string>} */ (VCR_CRITERION_TYPE_LABELS_ZH))[criterion.criterionType] ?? "其他",
       quote: text(criterion.sourceText),
-      quoteSource: locatorText(criterion.sourceLocator),
+      quoteSource: vcrLocatorText(criterion.sourceLocator, { draftPack: bundle.knowledge?.pack?.status === "ai-draft" }),
       kind: criterion.kind,
       kept: entry?.kept ?? null,
       excluded: entry?.removed ?? null,
@@ -338,10 +338,15 @@ export function presentPopulationTab(bundle) {
   };
 }
 
-/** 「第 12 页」 from a stored locator. @param {unknown} raw */
-function locatorText(raw) {
+/**
+ * 「第 12 页」 from a stored locator. A criterion taken from the study's knowledge pack says
+ * so, and says 「AI 草拟」 when that pack is a draft: the label goes wherever a draft's content is used.
+ * @param {unknown} raw @param {{ draftPack?: boolean }} [options]
+ */
+export function vcrLocatorText(raw, { draftPack = false } = {}) {
   const locator = object(raw);
   const parts = [];
+  if (text(locator.pack)) parts.push(draftPack ? "知识包（AI 草拟）" : "知识包");
   if (locator.page != null) parts.push(`第 ${locator.page} 页`);
   if (text(locator.section)) parts.push(String(locator.section));
   if (text(locator.table)) parts.push(String(locator.table));
@@ -904,7 +909,7 @@ function judgementView(criterion, code, judgment, now) {
     evidence: evidence && text(evidence.quote) ? {
       quote: String(evidence.quote),
       source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
-        : evidence.quoteKind === "verbatim" ? "病历原文" : (locatorText(evidence.locator) ?? text(evidence.source)),
+        : evidence.quoteKind === "verbatim" ? "病历原文" : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
       at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
     } : null,
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,

@@ -161,7 +161,7 @@ that snapshot and validates every job against them before a handler runs.
 | Method | Does | Cross-checked against |
 |---|---|---|
 | `profile.snapshot` | column summaries, cells below the minimum cell size suppressed | — |
-| `cohort.build` | named row rules (`rule` grammar, §2 of the contract): kept / excluded / indeterminate per rule, criterion impact, time zero, exit, member table, the rules' hash | a truth table (C2-01..07) |
+| `cohort.build` | named row rules (`rule` grammar, §2 of the contract): kept / excluded / indeterminate per rule, criterion impact, time zero, exit, member table, the rules' hash; with `compare` ({ rules, covariates }) a second version of the definition on the same table: both sizes, the overlap and each covariate's standardized difference (`vcr_smd`, pooled denominator; a difference of proportions for a 0/1 covariate), a covariate it cannot compare named with its reason | a truth table (C2-01..07); base-R arithmetic (N37) |
 | `population.scenario` | declared marginals + Gaussian copula + row-rule constraints (violating rows are redrawn) + missingness, `paramSd` for parameter uncertainty | closed-form moments |
 | `population.literature` | a published baseline table (mean/sd with optional bounds, proportion, categorical proportions, lognormal) as a population; an assumed correlation comes with its sensitivity | moment recovery (N28a) |
 | `population.synthpop` | sequential CART, `m` in 5–50 copies, rare levels merged, holdout (the copies are not pooled into an estimate: no combining rule ships until a job needs one) | synthpop |
@@ -225,7 +225,7 @@ that is missing or unreachable (and asserts it looked up all of them). A missing
 entry is also overlaid in memory so the rest of the suite still runs against the
 intended contract.
 
-`cohort.build`: `timeZero.column`, `exit.column`, `idColumn` · `population.scenario`:
+`cohort.build`: `timeZero.column`, `exit.column`, `idColumn`, `compare.rules`, `compare.covariates` · `population.scenario`:
 `variables[].paramSd` · `population.literature`: `baselineTable[].proportions`,
 `.levels` · `population.synthpop`/`.quality`: `analyses[]`, `tstrOutcome` ·
 `patients.*`: `truth.covariateEffects` · `evidence.reconstruct_km`: `provenance`,
@@ -291,7 +291,7 @@ Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N31` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching, a column
 name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `N36` (covariate sets), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `N35` (the doubly robust estimator), `N36` (covariate sets), `N37` (two versions of a cohort definition compared on one table), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries

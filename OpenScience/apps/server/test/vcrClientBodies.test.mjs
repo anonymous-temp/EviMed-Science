@@ -16,8 +16,8 @@ import test from "node:test";
 
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
-  assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, memberBody, reviewBody, runBody,
-  studyCreateBody, studyPatchBody,
+  assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
+  jobBody, memberBody, packBindBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
@@ -88,6 +88,12 @@ function harness() {
       async remove() { return { removed: true }; },
     },
     matching: { async contactReferral(/** @type {any} */ _user, /** @type {any} */ _study, /** @type {string} */ id) { seen.push(["contact", id]); return { id, state: "contacted" }; } },
+    knowledge: {
+      async bindPack(/** @type {any} */ _study, /** @type {string} */ packId) { seen.push(["bind", packId]); return { binding: {}, pack: {} }; },
+      async saveFromStudy(/** @type {any} */ _study, /** @type {any} */ input) { seen.push(["save", input.populationId]); return { definitionId: "dfn_1", version: 1 }; },
+      async useInStudy(/** @type {any} */ _study, /** @type {any} */ input) { seen.push(["use", input.definitionId]); return { definitionId: input.definitionId, version: 1, populationId: "pop_1", renamed: [], unmatched: [] }; },
+      async compareVersions(/** @type {any} */ _study, /** @type {any} */ _user, /** @type {any} */ input) { seen.push(["compare", input.versionA, input.versionB]); return { job: { id: "job_1" }, created: true }; },
+    },
   });
   /** @param {string} method @param {string} path @param {unknown} [body] */
   const send = async (method, path, body) => {
@@ -126,6 +132,17 @@ const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
   ["add a member", "POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_stat", role: "statistical_reviewer" })],
   ["confirm one contact", "POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", contactBody({ note: "已电话确认", reason: "符合入组" })],
   ["confirm one contact with no note", "POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", contactBody()],
+  ["work from a catalogue pack", "POST", "/api/vcr/studies/std_1/pack", packBindBody("nsclc")],
+  ["save a population as a new library definition", "POST", "/api/vcr/studies/std_1/definitions",
+    definitionSaveBody({ populationId: "pop_1", name: "  成人 ECOG 0-1  ", text: " 年龄不小于 18 岁、ECOG 0 或 1。 " })],
+  ["save a population as the next version of a library definition", "POST", "/api/vcr/studies/std_1/definitions",
+    definitionSaveBody({ populationId: "pop_1", text: "加上 ECOG 限制。", definitionId: "dfn_1" })],
+  ["use a library definition in the study", "POST", "/api/vcr/studies/std_1/definitions/dfn_1/use", definitionUseBody()],
+  ["use one version of a library definition with a column renamed", "POST", "/api/vcr/studies/std_1/definitions/dfn_1/use",
+    definitionUseBody({ version: 2, name: "本研究的人群", columnMap: { AGE: "age_years" }, snapshotId: "snp_1" })],
+  ["compare two versions of a library definition", "POST", "/api/vcr/studies/std_1/definitions/dfn_1/compare", definitionCompareBody({ versionA: 1, versionB: 2 })],
+  ["compare two versions on a named dataset and covariates", "POST", "/api/vcr/studies/std_1/definitions/dfn_1/compare",
+    definitionCompareBody({ versionA: 1, versionB: 3, snapshotId: "snp_1", covariates: ["age", "ecog"] })],
 ]);
 
 for (const [name, method, path, body] of CASES) {

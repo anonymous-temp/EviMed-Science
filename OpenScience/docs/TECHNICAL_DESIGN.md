@@ -244,6 +244,18 @@ its switch is on; the rest are changes inside existing layers.
   resolves a snapshot into engine inputs after an access decision, outcome columns stay sealed
   until the analysis plan is frozen, and what the runtime reads passes through small-cell
   suppression. The seams are fixed in `docs/superpowers/specs/2026-09-29-vcr-integration-contract.md`.
+  A study lands on a disease through a **knowledge pack** (`vcrKnowledge*.mjs`, contract and
+  validator in `@evimed/domain` `vcrKnowledgePack.mjs`): definitions only — terms with
+  identifiers from NCIt, OMOP or ICD-10-CM, phenotypes and common criteria in the requirement
+  grammar, endpoints with their standard, field-name mappings, short background — every entry
+  sourced (link, title, date read, licence from a closed table; WHO ICTRP, ATC/DDD and MedDRA
+  refused). Three curated packs ship as data files (`vcr-packs/`: non-small-cell lung cancer,
+  breast cancer, type 2 diabetes); a disease with none gets an AI-drafted minimal pack written
+  through `vcr_write` `pack`, marked 「AI 草拟」 and promoted by the lead or an operator after
+  review. The account's **population definition library** keeps a study's cohort rules with
+  their plain-language text, versions and the studies that used them; two versions are
+  compared by the engine (`cohort.build` with `compare`, filed as a result kind the study's
+  own pages never list).
 - **Fusion seams with EviMed's own platform** (fusion plan 2026-09-26 §9); login, credits
   and handoff are off by default and answer 404 when off:
   - *login* (`evimedAuthService.mjs`, `OPEN_SCIENCE_EVIMED_AUTH_ENABLED`): the shell's EviMed

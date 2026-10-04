@@ -60,9 +60,9 @@ function platformStore(shared) {
 }
 
 /**
- * @param {{ who?: string, roles?: Record<string, string[]>, overrides?: Record<string, any> }} [options]
+ * @param {{ who?: string, roles?: Record<string, string[]>, overrides?: Record<string, any>, operators?: string[] }} [options]
  */
-function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
+function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [] } = {}) {
   /** @type {any[]} */
   const calls = [];
   /** @type {any[]} */
@@ -80,7 +80,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
   };
   const service = {
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
-    isOperator: () => false,
+    isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
     async listStudies() { calls.push(["list"]); return { studies: [] }; },
     async requireStudy(/** @type {any} */ user, /** @type {string} */ id) {
       // The service resolves the account's own study, or a study it is a member of.
@@ -750,4 +750,79 @@ test("what a caller typed as a role or a length never reaches an audit line", as
   const line = auditLines.find((entry) => entry.event === "vcr.data.file.upload");
   assert.equal(line.detail, "std_1 other 2048B declared");
   assert.ok(!JSON.stringify(auditLines).includes("李四"));
+});
+
+// --- the packs and the library -------------------------------------------------------
+
+test("the account's packs and library are read as the account's own: the search word is passed, an id is one path part, nothing else is a route", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const knowledge = {
+    listPacks: async (/** @type {string} */ userId, /** @type {string} */ q) => { asked.push(["packs", userId, q]); return { packs: [] }; },
+    getPack: async (/** @type {string} */ userId, /** @type {string} */ id) => { asked.push(["pack", userId, id]); return { id }; },
+    listLibrary: async (/** @type {string} */ userId, /** @type {string} */ q) => { asked.push(["library", userId, q]); return { definitions: [] }; },
+    getLibraryDefinition: async (/** @type {string} */ userId, /** @type {string} */ id) => { asked.push(["definition", userId, id]); return { id }; },
+  };
+  const { routes } = fixture({ overrides: { knowledge } });
+  for (const path of ["/api/vcr/packs?q=%E8%82%BA%E7%99%8C", "/api/vcr/packs/nsclc", "/api/vcr/definitions?q=ecog", "/api/vcr/definitions/dfn_1"]) {
+    const res = response();
+    assert.equal(await routes(request("GET", path), res), true, path);
+    assert.equal(res.status, 200, path);
+  }
+  assert.deepEqual(asked, [["packs", OWNER, "肺癌"], ["pack", OWNER, "nsclc"], ["library", OWNER, "ecog"], ["definition", OWNER, "dfn_1"]]);
+  for (const [method, path] of [["POST", "/api/vcr/packs"], ["DELETE", "/api/vcr/definitions/dfn_1"], ["GET", "/api/vcr/packs/nsclc/extra"]]) {
+    await assert.rejects(routes(request(method, path, method === "POST" ? {} : undefined), response()), { status: 404 }, `${method} ${path}`);
+  }
+  // without the package composed, the routes exist and say it is not available here yet
+  const bare = fixture();
+  await assert.rejects(bare.routes(request("GET", "/api/vcr/packs"), response()), { status: 503, code: "vcr_unavailable" });
+  // a name the account does not hold answers 404 by the package's own refusal, not by a shape of the route
+  const missing = fixture({ overrides: { knowledge: { ...knowledge, getLibraryDefinition: async () => { throw new HttpError(404, "vcr_definition_not_found", "Definition not found."); } } } });
+  await assert.rejects(missing.routes(request("GET", "/api/vcr/definitions/dfn_other"), response()), { status: 404, code: "vcr_definition_not_found" });
+});
+
+test("a draft pack is promoted by the study's lead, or by an operator who can see the study; a viewer who is neither is told which ability is missing", async () => {
+  /** @type {any[]} */
+  const promoted = [];
+  const knowledge = { promotePack: async (/** @type {any} */ _study, /** @type {string} */ reviewer) => { promoted.push(reviewer); return { status: "curated", reviewedBy: reviewer }; } };
+  const { routes, as, audits } = fixture({ roles: { viewer1: ["viewer"], opr: ["viewer"] }, operators: ["opr"], overrides: { knowledge } });
+  as("viewer1");
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/pack/promote", {}), response()), (/** @type {any} */ error) => error.status === 403 && /manage_study/.test(error.message));
+  assert.deepEqual(promoted, []);
+  as("opr");
+  const byOperator = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/pack/promote", {}), byOperator);
+  assert.equal(byOperator.status, 200);
+  as(OWNER);
+  await routes(request("POST", "/api/vcr/studies/std_1/pack/promote", {}), response());
+  assert.deepEqual(promoted, ["opr", OWNER], "the reviewer is the account that promoted");
+  assert.deepEqual(audits.filter((line) => line[0] === "vcr.pack.promote").map((line) => line[1]), ["refused", "completed", "completed"].slice(1));
+  // an operator who cannot see the study at all finds nothing
+  const outside = fixture({ operators: ["operator-elsewhere"], overrides: { knowledge } });
+  outside.as("operator-elsewhere");
+  await assert.rejects(outside.routes(request("POST", "/api/vcr/studies/std_1/pack/promote", {}), response()), { status: 404, code: "vcr_study_not_found" });
+});
+
+test("a request to save, use or compare a definition is checked before anything is asked of the package", async () => {
+  /** @type {any[]} */
+  const reached = [];
+  const knowledge = {
+    saveFromStudy: async () => { reached.push("save"); return { definitionId: "dfn_1", version: 1 }; },
+    useInStudy: async () => { reached.push("use"); return { definitionId: "dfn_1", version: 1 }; },
+    compareVersions: async () => { reached.push("compare"); return { job: { id: "job_1" }, created: true }; },
+  };
+  const { routes } = fixture({ overrides: { knowledge } });
+  for (const [path, body] of /** @type {Array<[string, any]>} */ ([
+    ["/api/vcr/studies/std_1/definitions", { name: "x", text: "t" }],
+    ["/api/vcr/studies/std_1/definitions", { populationId: "pop 1", text: "t" }],
+    ["/api/vcr/studies/std_1/definitions", { populationId: "pop_1", text: "t", extra: 1 }],
+    ["/api/vcr/studies/std_1/definitions/dfn_1/use", { version: 0 }],
+    ["/api/vcr/studies/std_1/definitions/dfn_1/use", { columnMap: [] }],
+    ["/api/vcr/studies/std_1/definitions/dfn_1/compare", { versionA: 1 }],
+    ["/api/vcr/studies/std_1/definitions/dfn_1/compare", { versionA: 1, versionB: 2, covariates: [1] }],
+    ["/api/vcr/studies/std_1/pack", { use: "../x" }],
+  ])) {
+    await assert.rejects(routes(request("POST", path, body), response()), { status: 400, code: "vcr_payload_invalid" }, `${path} ${JSON.stringify(body)}`);
+  }
+  assert.deepEqual(reached, []);
 });
