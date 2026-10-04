@@ -136,7 +136,7 @@ export function locateUnitsOnPages({ tables, figures = [], pages, pageCount = pa
     const outcome = (entry) => JSON.stringify([entry.status, entry.pages ?? null, entry.candidates ?? null, entry.basis ?? null, entry.reason ?? null])
     for (const { row, page } of results) {
       const last = rowPages[rowPages.length - 1]
-      const same = last && last.to === row - 1 && outcome(last) === outcome(page)
+      const same = last && last.to === row - 1 && outcome(/** @type {MaterialPage} */ (last)) === outcome(page)
       if (same) last.to = row
       else rowPages.push({ from: row, to: row, ...page })
     }

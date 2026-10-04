@@ -114,7 +114,11 @@ export function materialSkeleton(value) {
   return str(value).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
-/** How values in a file format are located. @param {unknown} format @returns {'paginated' | 'sheet' | 'delimited' | 'image' | 'flow'} */
+/**
+ * How values in a file format are located. Never `unaddressed`: that is what a
+ * spreadsheet becomes when its cells could not be read as cells.
+ * @param {unknown} format @returns {'paginated' | 'sheet' | 'delimited' | 'image' | 'flow' | 'unaddressed'}
+ */
 export function sourceMaterialsPagination(format) {
   const value = str(format).toLowerCase()
   if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'rtf'].includes(value)) return 'paginated'
