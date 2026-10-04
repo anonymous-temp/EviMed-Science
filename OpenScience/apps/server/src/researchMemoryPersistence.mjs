@@ -139,7 +139,10 @@ CREATE TABLE IF NOT EXISTS evimed_memory.record_conflicts (
   -- replacement puts the statement back in force, and the disagreement with it.
   resolved_by text,
   PRIMARY KEY (user_id, record_id, other_id),
-  CHECK (record_id < other_id),
+  -- Byte order, not the database's collation: the code orders a pair the same
+  -- way in every deployment, and a locale that sorts "Bravo" after "alpha1"
+  -- must not be able to refuse a pair the code ordered the other way.
+  CHECK (record_id COLLATE "C" < other_id COLLATE "C"),
   FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE,
   FOREIGN KEY (user_id, other_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE
 );

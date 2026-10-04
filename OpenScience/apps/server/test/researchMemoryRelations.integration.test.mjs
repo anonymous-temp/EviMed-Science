@@ -275,6 +275,18 @@ test("an inference does not settle which of two statements is right", options, a
   assert.equal((await store.getRecord(alpha, b.id)).status, "active", "nothing was retired");
 });
 
+test("a pair is ordered the same way whatever the database's locale sorts first", options, async () => {
+  // In an en_US database "alpha1" sorts before "Bravo"; by code point it is the other way round.
+  const upper = await store.upsertRecord(alpha, fact({ id: "Bravo", key: "project.upper", value: "rivaroxaban upper" }), proof());
+  const lower = await store.upsertRecord(alpha, fact({ id: "alpha1", key: "project.lower", value: "rivaroxaban lower" }), proof());
+  assert.deepEqual([upper.id, lower.id], ["Bravo", "alpha1"]);
+  const marked = await store.markConflict(alpha, "alpha1", "Bravo");
+  assert.deepEqual([marked.recordId, marked.otherId], ["Bravo", "alpha1"]);
+  assert.equal((await store.markConflict(alpha, "Bravo", "alpha1")).created, false);
+  const labelled = await recalled(alpha, "rivaroxaban");
+  assert.deepEqual(labelled.map((memo) => memo.caveats), [["conflict"], ["conflict"]]);
+});
+
 test("a conflict is one account's: another account's record cannot be named, and nothing crosses", options, async () => {
   const mine = await store.upsertRecord(alpha, fact({ key: "project.mine", value: "rivaroxaban mine" }));
   const theirs = await store.upsertRecord(beta, fact({ key: "project.theirs", value: "rivaroxaban theirs" }));
