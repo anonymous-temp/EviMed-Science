@@ -1,0 +1,48 @@
+{
+ "source": "https://euclinicaltrials.eu/ctis-public-api (the EU CTIS public portal API: POST /search, GET /retrieve/{ctNumber})",
+ "terms": "EMA legal notice (https://www.ema.europa.eu/en/about-us/legal-notice, read 2026-10-04): information and documents on EMA webpages are public and may be reproduced and distributed for non-commercial and commercial purposes provided EMA is acknowledged as the source. The API is not documented by EMA; the shapes here are recorded, not specified.",
+ "files": {
+  "search-breast-cancer-page1.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "POST /search, pagination {page:1,size:2}, sort decisionDate DESC, searchCriteria {medicalCondition:\"breast cancer\"}. Verbatim; ten items elsewhere exist, only the first two are kept by size:2.",
+   "bytes": 3658,
+   "sha256": "60be4ca0180ca3d7c42149c0d6e2533b967cc79ceccc9c2eea37de7aabf4c9e7"
+  },
+  "search-no-match.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "A free-text search that matches nothing: successful-empty (HTTP 200, totalRecords 0, showWarning false). Verbatim.",
+   "bytes": 161,
+   "sha256": "1147fc5ee9013dd8fc5b0f32adc2a96c83ff8a582ad40649775bee5138169623"
+  },
+  "search-refused-body.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "A search body with no searchCriteria object: HTTP 200, showWarning true, totalRecords 0 and no rows -- a refusal that reads like an empty result. Verbatim.",
+   "bytes": 160,
+   "sha256": "0aed8483aa2ffbbf84f221da75670e99d4246a8708416a76179bb8891ffabf3a"
+  },
+  "retrieve-authorised-2026-525672-26-01.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "GET /retrieve/2026-525672-26-01: an authorised, not-yet-started trial with arms, endpoints, criteria and one member state. Contact e-mail and telephone values (8) were replaced by \"[redacted]\" before commit; nothing else was changed.",
+   "bytes": 49279,
+   "sha256": "c7337c11b386058025041845713cb10f4de97bc754e3b34c0ad84e69fc8cdcbb"
+  },
+  "retrieve-ended-2024-513060-26-00.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "GET /retrieve/2024-513060-26-00: an ended trial (early termination) in three member states with notified events, sites and a results summary; its public part lists no arms. Contact e-mail and telephone values (34) were replaced by \"[redacted]\" before commit; nothing else was changed.",
+   "bytes": 132605,
+   "sha256": "7c336af1fbb022112cfe506c4d7b2989b6bd57b3adeb52cb4ce85cb39ac68507"
+  },
+  "retrieve-unknown.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "GET /retrieve/2099-000000-00-00: an unknown CT number is HTTP 200 and an empty object. Verbatim.",
+   "bytes": 3,
+   "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+  },
+  "search-breast-cancer-page1000.json": {
+   "recordedAt": "2026-10-04T12:50Z",
+   "note": "The same search at page 1000 (size 2; the search has 230 pages): HTTP 200, the real totalRecords, currentPage 1000 and no rows. A page far past that (9999) is refused with showWarning true, like a body with no criteria. Verbatim.",
+   "bytes": 168,
+   "sha256": "fd01a9ea8e8fc7b33cdc18dc1a8a740d611a3e1be0cc5034d9f7fee8a2110ec9"
+  }
+ }
+}

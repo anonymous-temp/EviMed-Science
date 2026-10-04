@@ -205,6 +205,11 @@ pnpm smoke:deployment
      转换进行中对容器 `docker inspect`：`NetworkMode` 为 `none`、挂载只有 `/input/import.<ext>`（只读）和 `/output`，来源都在
      `OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR` 之下；控制器环境里有 `OPEN_SCIENCE_VCR_DATA_MAX_BYTES`（与 web 一致，它是单张表的大小上限）。
      CDISC 试点的 `adtte.xpt`（254 例、152 个事件；CDISC 条款不许修改）只能在 CI 里下载做参照核对，不进仓库。
+   - 欧盟 CTIS 注册源（试验先例的第三个来源，经 CTIS 公开站点自己的 JSON 接口，`euclinicaltrials.eu/ctis-public-api` 的 `POST /search` 与 `GET /retrieve/<EU CT 号>`；
+     接口没有 EMA 的正式文档，形状是 2026-10-04 从线上记录的）：从部署好的 web 容器里 `curl -s -X POST https://euclinicaltrials.eu/ctis-public-api/search -H 'content-type: application/json'
+     -d '{"pagination":{"page":1,"size":1},"searchCriteria":{"containAll":"breast cancer"}}'` 得到 `totalRecords` 大于 0；在先例页做一次检索，「注册源覆盖」里「EU CTIS」是「结构化记录 · 上次读取成功」，
+     候选里有 EU CT 号的试验；到不了这个站点的部署（出口受限）上同一行是「上次读取失败」，其余注册源的候选照常返回、不会因为它变慢超过一次超时。
+     WHO ICTRP 一行写「使用条款禁止商业使用，不接入」，不是「未查询」。
    - **通过：** 上面每条都成立，且探针文件已删。
 
 4. **五个能力的真实 DSH 运行。** `vcr-protocol`、`vcr-evidence`、`vcr-analysis`、`vcr-matching`、`vcr-package`

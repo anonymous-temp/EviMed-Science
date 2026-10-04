@@ -48,6 +48,35 @@
  *   `/review/api/clinical-trial` (`registry: 0`), which the control plane
  *   already reaches through `publicSourceGateway`. Unconfigured means
  *   `registry_unavailable`, never an empty list.
+ * - **WHO ICTRP is not integrated, and the coverage row says why.** Its terms
+ *   forbid commercial use; the row reads `registry_terms_forbid_commercial_use`
+ *   (not the generic `registry_unsupported`) so a page can tell a reader that
+ *   the registry is left out by its own terms and not for want of work.
+ * - **EU CTIS is read through the portal's public JSON API** (2026-10-04):
+ *   `POST {base}/search` with `{ pagination: { page, size }, sort, searchCriteria }`
+ *   answers `{ showWarning, pagination: { totalRecords, currentPage, totalPages,
+ *   nextPage }, data: [...] }`, and `GET {base}/retrieve/{ctNumber}` answers the
+ *   whole authorised application. No credential, no rate limit announced. The
+ *   endpoints are the ones the public site's own pages call
+ *   (`euclinicaltrials.eu/ctis-public`); EMA publishes no API document for them,
+ *   so everything below is recorded from live answers (fixtures under
+ *   `test/fixtures/ctis/`, recorded 2026-10-04), not from a specification. EMA's
+ *   legal notice permits reuse of what its pages publish, commercial or not, with
+ *   the source acknowledged — every CTIS precedent names EMA's CTIS as its
+ *   source and links the trial's page. Three wire facts the client is built on:
+ *   a search body with no `searchCriteria` object is answered `200` with
+ *   `showWarning: true` and zero records (a refusal that looks exactly like
+ *   「查到 0 条」, so it is read as `registry_answer_unreadable`, never as empty);
+ *   an unknown CT number is `200` with `{}` (that is `registry_not_found`) and a
+ *   malformed one is `400`; and a page past the last still answers `200` with
+ *   the real `totalRecords` and no rows.
+ *   What the public record carries: status, phase, conditions, products,
+ *   objectives, principal inclusion and exclusion criteria, primary and
+ *   secondary endpoints, arms as free text (no structured arm type), planned
+ *   enrolment per member state, and notified start, recruitment and end events
+ *   per member state. What it does not: actual enrolment, outcome results (the
+ *   summary of results is a document, listed with its dates), screening failure.
+ *   The personal contacts of sponsors and sites are never read into a record.
  *
  * Wire facts, recorded from the live API on 2026-09-28 (not from the docs):
  * `GET /api/v2/studies/{nctId}?format=json` answers the record at top level
@@ -70,11 +99,16 @@ import { createHash } from "node:crypto";
 import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 
 /** The registries this module speaks, by the name a precedent row stores. */
-export const TRIAL_REGISTRIES = Object.freeze(["clinicaltrials.gov", "chictr"]);
+export const TRIAL_REGISTRIES = Object.freeze(["clinicaltrials.gov", "chictr", "ctis"]);
 
 export const CTGOV_BASE_URL = "https://clinicaltrials.gov/api/v2";
 /** A study page on the registry, for a citation a reader can open. */
 export const CTGOV_STUDY_URL = "https://clinicaltrials.gov/study/";
+/** The EU CTIS public portal's JSON API (the one its own pages call) and a trial's page on it. */
+export const CTIS_BASE_URL = "https://euclinicaltrials.eu/ctis-public-api";
+export const CTIS_STUDY_URL = "https://euclinicaltrials.eu/ctis-public/view/";
+/** An EU CT number: year, six digits, two, two. Anything else is refused before a request (the API answers a malformed one with 400). */
+const CTIS_NUMBER = /^\d{4}-\d{6}-\d{2}-\d{2}$/;
 
 /** Answers this module gives instead of data. Named so a page can print them. */
 export const REGISTRY_UNAVAILABLE = "registry_unavailable";
@@ -817,6 +851,458 @@ export function chictrPrecedent(item, { retrievedAt = "" } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// EU CTIS
+// ---------------------------------------------------------------------------
+
+/**
+ * The portal's own public trial status codes, as its search page lists them
+ * (read from the site's code table, 2026-10-04). A search item's `ctStatus` and
+ * a record's `ctPublicStatusCode` are these numbers; a code this build does not
+ * know reads as the empty string, never as a guess.
+ */
+export const CTIS_PUBLIC_STATUS = Object.freeze({
+  1: "Under evaluation", 2: "Authorised, recruitment pending", 3: "Authorised, recruiting", 4: "Ongoing, recruiting",
+  5: "Ongoing, recruitment ended", 6: "Temporarily halted", 7: "Suspended", 8: "Ended", 9: "Expired", 10: "Revoked",
+  11: "Not authorised", 12: "Cancelled",
+});
+
+/**
+ * The portal's trial phases by code, with the `phases` array CT.gov would write
+ * for the same phase, so a CTIS precedent is ranked and pooled on the same words.
+ * `trialPhase` in a record is the code as text; in a search item it is the label.
+ */
+export const CTIS_PHASES = Object.freeze([
+  { code: 1, label: "Human Pharmacology (Phase I)- First administration to humans", phases: ["PHASE1"] },
+  { code: 2, label: "Human Pharmacology (Phase I)- Bioequivalence Study", phases: ["PHASE1"] },
+  { code: 3, label: "Human Pharmacology (Phase I)- Other", phases: ["PHASE1"] },
+  { code: 4, label: "Therapeutic exploratory (Phase II)", phases: ["PHASE2"] },
+  { code: 5, label: "Therapeutic confirmatory (Phase III)", phases: ["PHASE3"] },
+  { code: 6, label: "Therapeutic use (Phase IV)", phases: ["PHASE4"] },
+  { code: 7, label: "Phase I and Phase II (Integrated)- First administration to humans", phases: ["PHASE1", "PHASE2"] },
+  { code: 8, label: "Phase I and Phase II (Integrated)- Bioequivalence Study", phases: ["PHASE1", "PHASE2"] },
+  { code: 9, label: "Phase I and Phase II (Integrated)- Other", phases: ["PHASE1", "PHASE2"] },
+  { code: 10, label: "Phase II and Phase III (Integrated)", phases: ["PHASE2", "PHASE3"] },
+  { code: 11, label: "Phase III and phase IV (Integrated)", phases: ["PHASE3", "PHASE4"] },
+]);
+const CTIS_AGE_RANGES = Object.freeze({ 1: "In utero", 2: "0-17 years", 3: "18-64 years", 4: "65+ years" });
+const CTIS_PRODUCT_ROLES = Object.freeze({ 1: "Test", 2: "Comparator", 3: "Placebo", 4: "Auxiliary" });
+/** The notification types a member state reports, and the parameter each date is stored under. */
+const CTIS_EVENT_PARAMETERS = Object.freeze({
+  START_OF_TRIAL: "msc_trial_start_date", START_OF_RECRUITMENT: "msc_recruitment_start_date",
+  END_OF_RECRUITMENT: "msc_recruitment_end_date", END_OF_TRIAL: "msc_trial_end_date",
+  EARLY_TERMINATION: "msc_early_termination_date", TEMPORARY_HALT: "msc_temporary_halt_date",
+  RESTART_OF_TRIAL: "msc_restart_date", RESTART_OF_RECRUITMENT: "msc_recruitment_restart_date",
+});
+/** Hospitals and clinics are listed for the site count; the whole list is not a design parameter. */
+const MAX_CTIS_SITES_KEPT = 200;
+
+/** @param {unknown} label */
+const squashed = (label) => text(label).replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * The CT.gov-style phases of a CTIS phase, from its code (a record) or its
+ * label (a search item).
+ * @param {unknown} codeOrLabel @returns {string[]}
+ */
+export function ctisPhasesOf(codeOrLabel) {
+  const wanted = squashed(codeOrLabel);
+  const found = CTIS_PHASES.find((phase) => String(phase.code) === wanted || squashed(phase.label) === wanted);
+  return found ? [...found.phases] : [];
+}
+
+/**
+ * The phase codes a CT.gov-style phase list asks for: every CTIS phase whose own
+ * phases are all among the ones named (`PHASE2` asks for phase II alone, not for
+ * the integrated I/II).
+ * @param {readonly string[]} phases @returns {number[]}
+ */
+export function ctisPhaseCodes(phases) {
+  const wanted = new Set(phases.map((phase) => text(phase).toUpperCase()).filter(Boolean));
+  if (!wanted.size) return [];
+  return CTIS_PHASES.filter((phase) => phase.phases.every((name) => wanted.has(name))).map((phase) => phase.code);
+}
+
+/**
+ * A date as `YYYY-MM-DD`: the portal writes `dd/mm/yyyy` in a search list and
+ * ISO in a record. A closed format check, not a reading of language; anything
+ * else is the empty string.
+ * @param {unknown} value
+ */
+export function ctisDate(value) {
+  const raw = text(value);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(raw);
+  const european = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+  const [year, month, day] = iso ? [iso[1], iso[2], iso[3]] : european ? [european[3], european[2], european[1]] : [];
+  if (!year) return "";
+  const parsed = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return parsed.getUTCFullYear() === Number(year) && parsed.getUTCMonth() === Number(month) - 1 && parsed.getUTCDate() === Number(day)
+    ? `${year}-${month}-${day}` : "";
+}
+
+/** The page of a trial on the public portal, for a citation a reader can open. @param {string} ctNumber */
+const ctisUrl = (ctNumber) => (ctNumber ? `${CTIS_STUDY_URL}${encodeURIComponent(ctNumber)}` : "");
+
+/**
+ * One search-list item as a candidate precedent. The list says `totalNumberEnrolled`
+ * of a trial that has not started, so it is the application's plan and not a
+ * count of anybody: it is kept with `enrollmentKind: null`, as ChiCTR's sample
+ * size is, and no pooling job will take it for a baseline.
+ * @param {any} item
+ */
+export function ctisListItem(item) {
+  const ctNumber = text(item?.ctNumber);
+  const statusCode = number(item?.ctStatus);
+  return {
+    registry: "ctis",
+    registryId: ctNumber,
+    title: text(item?.ctTitle),
+    shortTitle: text(item?.shortTitle),
+    overallStatus: statusCode === null ? "" : /** @type {Record<number, string>} */ (CTIS_PUBLIC_STATUS)[statusCode] ?? "",
+    statusCode,
+    decisionDate: ctisDate(item?.decisionDateOverall),
+    studyType: "",
+    phases: ctisPhasesOf(item?.trialPhase),
+    phaseLabel: text(item?.trialPhase),
+    allocation: "",
+    enrollment: number(item?.totalNumberEnrolled),
+    enrollmentKind: null,
+    conditions: [text(item?.conditions)].filter(Boolean),
+    interventions: [text(item?.product)].filter(Boolean),
+    therapeuticAreas: Array.isArray(item?.therapeuticAreas) ? item.therapeuticAreas.map(text).filter(Boolean) : [],
+    sponsor: text(item?.sponsor),
+    sponsorType: text(item?.sponsorType),
+    countries: (Array.isArray(item?.trialCountries) ? item.trialCountries : [])
+      .map((/** @type {unknown} */ entry) => text(entry).split(":")[0].trim()).filter(Boolean),
+    ageGroup: text(item?.ageGroup),
+    gender: text(item?.gender),
+    primaryEndpoint: text(item?.primaryEndPoint),
+    hasResults: text(item?.resultsFirstReceived).toLowerCase() === "yes",
+    url: ctisUrl(ctNumber),
+  };
+}
+
+/** @param {unknown} value @returns {any[]} */
+const listOf = (value) => (Array.isArray(value) ? value : []);
+
+/**
+ * The record, reduced to what a design parameter can come from — and nothing a
+ * person owns: sponsors are their organisations, never the named contacts with
+ * their e-mail and telephone; sites are their names. Returns a new object.
+ * `trialSitesTotal` is stated when the site list is cut, the way CT.gov's
+ * `locationsTotal` is, because a count read off a slice is a wrong number that
+ * looks right.
+ * @param {any} record
+ */
+export function reducedCtisRecord(record) {
+  const application = record?.authorizedApplication ?? {};
+  const partOne = application.authorizedPartI ?? {};
+  const details = partOne.trialDetails ?? {};
+  const information = details.trialInformation ?? {};
+  const identifiers = details.clinicalTrialIdentifiers ?? {};
+  /** @param {any[]} entries @param {string} key */
+  const numbered = (entries, key) => listOf(entries).map((entry) => ({ number: entry?.number, [key]: entry?.[key] }))
+    .filter((entry) => text(entry[key]));
+  const sponsors = listOf(partOne.sponsors).flatMap((sponsor) => {
+    const organisation = listOf(sponsor?.publicContacts)[0]?.organisation ?? listOf(sponsor?.scientificContacts)[0]?.organisation;
+    return organisation?.name ? [{ name: organisation.name, type: organisation.type, primary: sponsor?.primary === true }] : [];
+  });
+  /** @type {Record<string, any>} */
+  const reduced = {
+    ctNumber: record?.ctNumber, ctStatus: record?.ctStatus, ctPublicStatusCode: record?.ctPublicStatusCode,
+    decisionDate: record?.decisionDate, publishDate: record?.publishDate, startDateEU: record?.startDateEU, endDateEU: record?.endDateEU,
+    trialRegion: record?.trialRegion,
+    authorizedApplication: {
+      authorizedPartI: {
+        isLowIntervention: partOne.isLowIntervention, rowSubjectCount: partOne.rowSubjectCount,
+        trialDetails: {
+          clinicalTrialIdentifiers: { fullTitle: identifiers.fullTitle, publicTitle: identifiers.publicTitle, shortTitle: identifiers.shortTitle },
+          trialInformation: {
+            trialCategory: { trialPhase: information.trialCategory?.trialPhase, trialCategory: information.trialCategory?.trialCategory },
+            medicalCondition: {
+              partIMedicalConditions: listOf(information.medicalCondition?.partIMedicalConditions).map((entry) => ({ medicalCondition: entry?.medicalCondition })),
+              meddraConditionTerms: listOf(information.medicalCondition?.meddraConditionTerms).map((entry) => ({ termName: entry?.termName, level: entry?.level })),
+            },
+            trialObjective: {
+              mainObjective: information.trialObjective?.mainObjective,
+              secondaryObjectives: numbered(information.trialObjective?.secondaryObjectives, "secondaryObjective"),
+            },
+            eligibilityCriteria: {
+              principalInclusionCriteria: numbered(information.eligibilityCriteria?.principalInclusionCriteria, "principalInclusionCriteria"),
+              principalExclusionCriteria: numbered(information.eligibilityCriteria?.principalExclusionCriteria, "principalExclusionCriteria"),
+            },
+            endPoint: {
+              primaryEndPoints: numbered(information.endPoint?.primaryEndPoints, "endPoint"),
+              secondaryEndPoints: numbered(information.endPoint?.secondaryEndPoints, "endPoint"),
+            },
+            trialDuration: {
+              estimatedRecruitmentStartDate: information.trialDuration?.estimatedRecruitmentStartDate,
+              estimatedEndDate: information.trialDuration?.estimatedEndDate,
+            },
+            populationOfTrialSubjects: {
+              ageRanges: listOf(information.populationOfTrialSubjects?.ageRanges).map((entry) => ({ ageRangeCategoryCode: entry?.ageRangeCategoryCode })),
+              clinicalTrialGroups: listOf(information.populationOfTrialSubjects?.clinicalTrialGroups).map((entry) => ({ name: entry?.name })),
+              isFemaleSubjects: information.populationOfTrialSubjects?.isFemaleSubjects,
+              isMaleSubjects: information.populationOfTrialSubjects?.isMaleSubjects,
+            },
+          },
+          protocolInformation: {
+            studyDesign: {
+              periodDetails: listOf(details.protocolInformation?.studyDesign?.periodDetails).map((period) => ({
+                title: period?.title, description: period?.description, blindingMethodCode: period?.blindingMethodCode,
+                blindingDetails: period?.blindingDetails, allocationMethod: period?.allocationMethod,
+                blindedRoles: listOf(period?.blindedRoles).map((entry) => ({ name: entry?.name })),
+                armDetails: listOf(period?.armDetails).map((arm) => ({ title: arm?.title, description: arm?.description })),
+              })),
+            },
+          },
+        },
+        products: listOf(partOne.products).map((product) => ({
+          productName: product?.productName ?? product?.productDictionaryInfo?.prodName,
+          activeSubstanceName: product?.productDictionaryInfo?.activeSubstanceName,
+          roleCode: product?.part1MpRoleTypeCode, atcCode: product?.productDictionaryInfo?.atcCode, routes: listOf(product?.routes),
+        })),
+        sponsors,
+      },
+      authorizedPartsII: listOf(application.authorizedPartsII).map((part) => {
+        const sites = listOf(part?.trialSites).map((site) => site?.organisationAddressInfo?.organisation?.name).filter((name) => text(name));
+        return {
+          countryName: part?.mscInfo?.countryName, trialStatus: part?.mscInfo?.trialStatus, firstDecisionDate: part?.mscInfo?.firstDecisionDate,
+          recruitmentSubjectCount: part?.recruitmentSubjectCount,
+          trialSites: sites.slice(0, MAX_CTIS_SITES_KEPT),
+          ...(sites.length > MAX_CTIS_SITES_KEPT ? { trialSitesTotal: sites.length } : {}),
+        };
+      }),
+    },
+    events: {
+      trialEvents: listOf(record?.events?.trialEvents).map((entry) => ({
+        mscName: entry?.mscName,
+        events: listOf(entry?.events).map((event) => ({ notificationType: event?.notificationType, date: event?.date })),
+        earlyTerminationReason: entry?.earlyTerminationReason?.name ? { name: entry.earlyTerminationReason.name } : undefined,
+      })),
+    },
+    results: {
+      summaryResults: listOf(record?.results?.summaryResults).map((entry) => ({
+        summaryType: entry?.summaryType, versionType: entry?.versionType, submissionDate: entry?.submissionDate,
+      })),
+      laypersonResults: listOf(record?.results?.laypersonResults).map((entry) => ({
+        summaryType: entry?.summaryType, versionType: entry?.versionType, submissionDate: entry?.submissionDate,
+      })),
+    },
+  };
+  return JSON.parse(JSON.stringify(reduced));
+}
+
+/**
+ * A CTIS record, as a precedent row plus the values that can be quoted out of
+ * it. Pure, as `ctgovPrecedent` is: no network, no clock, no store.
+ *
+ * What is stored as what:
+ *
+ * - The enrolment the application states per member state is `enrollment_estimated`
+ *   and never `actual`: the public record carries no count of anybody enrolled.
+ *   The portal's trial-wide dates are notifications of events that happened
+ *   (`actual`); the application's `estimatedRecruitmentStartDate` and
+ *   `estimatedEndDate` are plans (`estimated`).
+ * - An arm is a title and a free-text description. CTIS has no structured arm type,
+ *   so none is read out of the words: every arm's `type` is empty and its role is
+ *   `unknown` until the run judges it.
+ * - A code the portal does not publish a table for (the blinding method, the
+ *   allocation method) is carried as the code and not interpreted.
+ * @param {any} record the record as the portal answered it
+ * @param {{ retrievedAt?: string }} [options]
+ */
+export function ctisPrecedent(record, { retrievedAt = "" } = {}) {
+  const reduced = reducedCtisRecord(record);
+  const partOne = reduced.authorizedApplication?.authorizedPartI ?? {};
+  const information = partOne.trialDetails?.trialInformation ?? {};
+  const identifiers = partOne.trialDetails?.clinicalTrialIdentifiers ?? {};
+  const periods = listOf(partOne.trialDetails?.protocolInformation?.studyDesign?.periodDetails);
+  const partsTwo = listOf(reduced.authorizedApplication?.authorizedPartsII);
+  const registryId = text(reduced.ctNumber);
+  const sourceRef = `ctis:${registryId}`;
+  const recordHash = registryRecordHash(reduced);
+  const url = ctisUrl(registryId);
+  const recordText = renderRegistryRecordText(reduced, {
+    header: `${registryId} · EU CTIS (EMA, euclinicaltrials.eu)${retrievedAt ? ` · retrieved ${retrievedAt}` : ""}`,
+  });
+  const phaseCode = number(information.trialCategory?.trialPhase);
+  const phaseOf = CTIS_PHASES.find((phase) => phase.code === phaseCode);
+  const statusCode = number(reduced.ctPublicStatusCode);
+  const overallStatus = text(reduced.ctStatus) || (statusCode === null ? "" : /** @type {Record<number, string>} */ (CTIS_PUBLIC_STATUS)[statusCode] ?? "");
+
+  /** @type {ReturnType<typeof extraction>[]} */
+  const extractions = [];
+
+  // -- planned enrolment, per member state and for the rest of the world ----
+  partsTwo.forEach((part, index) => {
+    const count = number(part.recruitmentSubjectCount);
+    if (count === null) return;
+    const path = `authorizedApplication.authorizedPartsII[${index}].recruitmentSubjectCount`;
+    extractions.push(extraction({
+      parameter: "enrollment_estimated", armRole: "overall", value: count, unit: "participants",
+      quote: quoteOf(path, part.recruitmentSubjectCount), path, sourceRef, enrollmentKind: "estimated", historicalBaseline: false,
+      detail: { country: text(part.countryName), scope: "member state", note: "申请书里的计划人数，不是实际入组" },
+    }));
+  });
+  const outsideCount = number(partOne.rowSubjectCount);
+  if (outsideCount !== null && outsideCount > 0) {
+    const path = "authorizedApplication.authorizedPartI.rowSubjectCount";
+    extractions.push(extraction({
+      parameter: "enrollment_estimated_rest_of_world", armRole: "overall", value: outsideCount, unit: "participants",
+      quote: quoteOf(path, partOne.rowSubjectCount), path, sourceRef, enrollmentKind: "estimated", historicalBaseline: false,
+      detail: { scope: "outside the EU/EEA", note: "申请书里的计划人数，不是实际入组" },
+    }));
+  }
+
+  // -- trial-wide dates: notified events are actual, the application's are plans ----
+  /** @type {Record<string, { date: string, type: "actual" | "estimated" }>} */
+  const milestones = {};
+  for (const [field, name, path, kind] of /** @type {const} */ ([
+    [reduced.startDateEU, "start_date", "startDateEU", "actual"],
+    [reduced.endDateEU, "completion_date", "endDateEU", "actual"],
+    [information.trialDuration?.estimatedRecruitmentStartDate, "recruitment_start_date", "authorizedApplication.authorizedPartI.trialDetails.trialInformation.trialDuration.estimatedRecruitmentStartDate", "estimated"],
+    [information.trialDuration?.estimatedEndDate, "completion_date", "authorizedApplication.authorizedPartI.trialDetails.trialInformation.trialDuration.estimatedEndDate", "estimated"],
+  ])) {
+    const date = ctisDate(field);
+    if (!date) continue;
+    // The planned end is not stored beside an actual one: the actual date is the fact.
+    if (name === "completion_date" && kind === "estimated" && milestones.completion_date) continue;
+    milestones[name] = { date, type: kind };
+    extractions.push(extraction({
+      parameter: name, armRole: "overall", valueText: text(field), quote: quoteOf(path, field), path, sourceRef,
+      enrollmentKind: kind, historicalBaseline: kind === "actual", detail: { registryType: kind },
+    }));
+  }
+  const duration = milestones.start_date && milestones.completion_date
+    ? monthsBetween(milestones.start_date.date, milestones.completion_date.date) : null;
+  if (duration !== null) {
+    extractions.push(extraction({
+      parameter: "trial_duration_months", armRole: "overall", value: duration, unit: "months", valueSource: "calculated",
+      quote: quoteOf("startDateEU", reduced.startDateEU), path: "startDateEU", sourceRef, inputs: ["startDateEU", "endDateEU"],
+      historicalBaseline: milestones.start_date.type === "actual" && milestones.completion_date.type === "actual",
+      detail: { from: milestones.start_date.date, to: milestones.completion_date.date },
+    }));
+  }
+  // The dates each member state was notified of, apart: they differ by country.
+  listOf(reduced.events?.trialEvents).forEach((entry, entryIndex) => {
+    listOf(entry.events).forEach((event, eventIndex) => {
+      const parameter = /** @type {Record<string, string>} */ (CTIS_EVENT_PARAMETERS)[text(event?.notificationType)];
+      const date = ctisDate(event?.date);
+      if (!parameter || !date) return;
+      const path = `events.trialEvents[${entryIndex}].events[${eventIndex}].date`;
+      extractions.push(extraction({
+        parameter, armRole: "overall", valueText: text(event.date), quote: quoteOf(path, event.date), path, sourceRef,
+        enrollmentKind: "actual", historicalBaseline: true,
+        detail: { country: text(entry.mscName), notificationType: text(event.notificationType), ...(entry.earlyTerminationReason?.name && event.notificationType === "EARLY_TERMINATION" ? { reason: text(entry.earlyTerminationReason.name) } : {}) },
+      }));
+    });
+  });
+
+  // -- sites: counted from the lists, so a calculation that names its inputs ----
+  const sitePaths = partsTwo.flatMap((part, index) => (listOf(part.trialSites).length ? [`authorizedApplication.authorizedPartsII[${index}].trialSites`] : []));
+  const siteCount = partsTwo.reduce((sum, part) => sum + (number(part.trialSitesTotal) ?? listOf(part.trialSites).length), 0);
+  if (siteCount > 0 && sitePaths.length) {
+    const firstIndex = partsTwo.findIndex((part) => listOf(part.trialSites).length);
+    extractions.push(extraction({
+      parameter: "site_count", armRole: "overall", value: siteCount, unit: "sites", valueSource: "calculated",
+      quote: quoteOf(`${sitePaths[0]}[0]`, partsTwo[firstIndex].trialSites[0]), path: "authorizedApplication.authorizedPartsII",
+      sourceRef, inputs: sitePaths, historicalBaseline: true,
+      detail: { truncated: partsTwo.some((part) => number(part.trialSitesTotal) !== null) },
+    }));
+  }
+  const countries = [...new Set(partsTwo.map((part) => text(part.countryName)).filter(Boolean))].sort();
+
+  const arms = periods.flatMap((period) => listOf(period.armDetails).map((arm) => ({
+    label: text(arm.title), type: "", description: text(arm.description), interventions: [],
+  }))).filter((arm) => arm.label);
+  const inclusion = listOf(information.eligibilityCriteria?.principalInclusionCriteria).map((entry) => text(entry.principalInclusionCriteria)).filter(Boolean);
+  const exclusion = listOf(information.eligibilityCriteria?.principalExclusionCriteria).map((entry) => text(entry.principalExclusionCriteria)).filter(Boolean);
+  const eligibilityText = [
+    inclusion.length ? `Principal inclusion criteria:\n${inclusion.map((line) => `- ${line}`).join("\n")}` : "",
+    exclusion.length ? `Principal exclusion criteria:\n${exclusion.map((line) => `- ${line}`).join("\n")}` : "",
+  ].filter(Boolean).join("\n\n");
+  const female = information.populationOfTrialSubjects?.isFemaleSubjects === true;
+  const male = information.populationOfTrialSubjects?.isMaleSubjects === true;
+  const summaries = [...listOf(reduced.results?.summaryResults), ...listOf(reduced.results?.laypersonResults)];
+  const hasResults = summaries.length > 0;
+  const planned = partsTwo.map((part) => number(part.recruitmentSubjectCount)).filter((count) => count !== null);
+
+  const precedent = {
+    registry: "ctis",
+    registryId,
+    title: text(identifiers.publicTitle) || text(identifiers.fullTitle) || text(identifiers.shortTitle) || registryId,
+    pico: {
+      conditions: listOf(information.medicalCondition?.partIMedicalConditions).map((entry) => text(entry.medicalCondition)).filter(Boolean),
+      keywords: [],
+      interventions: listOf(partOne.products).map((product) => ({
+        type: /** @type {Record<number, string>} */ (CTIS_PRODUCT_ROLES)[/** @type {number} */ (number(product.roleCode))] ?? "", name: text(product.productName) || text(product.activeSubstanceName),
+        ...(text(product.activeSubstanceName) ? { activeSubstance: text(product.activeSubstanceName) } : {}),
+      })).filter((item) => item.name),
+      mesh: listOf(information.medicalCondition?.meddraConditionTerms).map((entry) => text(entry.termName)).filter(Boolean),
+      sex: female && male ? "ALL" : female ? "FEMALE" : male ? "MALE" : "",
+      minimumAge: "",
+      maximumAge: "",
+      stdAges: listOf(information.populationOfTrialSubjects?.ageRanges)
+        .map((entry) => /** @type {Record<number, string>} */ (CTIS_AGE_RANGES)[/** @type {number} */ (number(entry.ageRangeCategoryCode))] ?? "").filter(Boolean),
+      healthyVolunteers: listOf(information.populationOfTrialSubjects?.clinicalTrialGroups).some((group) => text(group.name) === "Healthy volunteers") ? true
+        : listOf(information.populationOfTrialSubjects?.clinicalTrialGroups).length ? false : null,
+    },
+    design: {
+      studyType: "",
+      phases: phaseOf ? [...phaseOf.phases] : [],
+      phaseLabel: phaseOf?.label ?? "",
+      allocation: "",
+      allocationCode: text(periods[0]?.allocationMethod),
+      interventionModel: "",
+      primaryPurpose: "",
+      masking: "",
+      blindingMethodCode: text(periods[0]?.blindingMethodCode),
+      whoMasked: [...new Set(periods.flatMap((period) => listOf(period.blindedRoles).map((role) => text(role.name))).filter(Boolean))],
+      arms,
+      leadSponsor: text(listOf(partOne.sponsors).find((sponsor) => sponsor.primary === true)?.name ?? listOf(partOne.sponsors)[0]?.name),
+      sponsorType: text(listOf(partOne.sponsors).find((sponsor) => sponsor.primary === true)?.type ?? listOf(partOne.sponsors)[0]?.type),
+      overallStatus,
+      hasResults,
+      isLowIntervention: partOne.isLowIntervention === true,
+    },
+    enrollment: {
+      planned: planned.length ? planned.reduce((sum, count) => sum + count, 0) : null,
+      actual: null,
+      registryType: "planned in the application, per member state",
+      milestones,
+      accrualToPrimaryCompletionMonths: null,
+      trialDurationMonths: duration,
+    },
+    enrollmentKind: planned.length ? "estimated" : null,
+    sites: { count: siteCount || null, countries, countryCount: countries.length || null, listTruncated: partsTwo.some((part) => number(part.trialSitesTotal) !== null) },
+    eligibilityText,
+    endpoints: [
+      ...listOf(information.endPoint?.primaryEndPoints).map((entry) => ({ role: "primary", measure: text(entry.endPoint), timeFrame: "", description: "" })),
+      ...listOf(information.endPoint?.secondaryEndPoints).map((entry) => ({ role: "secondary", measure: text(entry.endPoint), timeFrame: "", description: "" })),
+    ].filter((entry) => entry.measure),
+    results: {
+      hasResults,
+      outcomeMeasures: 0,
+      baselineDenominators: [],
+      summaryDocuments: summaries.map((entry) => ({
+        type: text(entry.summaryType), version: text(entry.versionType), submitted: ctisDate(entry.submissionDate),
+      })),
+    },
+    sources: [{ kind: "registry", registry: "ctis", registryId, url, recordHash, retrievedAt }],
+    fetchedAt: retrievedAt || null,
+    unavailable: [
+      ...Object.entries(REGISTRY_UNAVAILABLE_PARAMETERS).map(([parameter, reason]) => ({ parameter, reason })),
+      { parameter: "enrollment_actual", reason: "CTIS 的公开记录只有申请书里的计划人数，没有实际入组人数" },
+      { parameter: "arm_types", reason: "CTIS 的分组只有标题和自由文字描述，没有结构化的分组类型" },
+      { parameter: "outcome_measures", reason: hasResults ? "结果摘要是随记录发布的文档，公开记录里只有它的类型和提交日期，没有结构化的结局数值" : "这条记录没有结果摘要" },
+      ...(arms.length ? [] : [{ parameter: "arm_definitions", reason: "这条记录的公开部分没有写明分组" }]),
+    ],
+  };
+
+  return { precedent, extractions, record: { sourceRef, url, text: recordText, hash: recordHash, reduced } };
+}
+
 /** The `fields` projection a candidate list needs: a page, not a record. */
 export const CTGOV_SEARCH_FIELDS = Object.freeze([
   "protocolSection.identificationModule.nctId",
@@ -836,10 +1322,12 @@ export const CTGOV_SEARCH_FIELDS = Object.freeze([
 /**
  * @param {{ baseUrl?: string, timeoutMs?: number, maxAttempts?: number, fetchImpl?: typeof fetch,
  *   now?: () => Date, sleep?: (ms: number) => Promise<unknown>,
- *   chictrAdapter?: ((request: { query: string, limit: number, userId?: string }) => Promise<any>) | null }} [options]
+ *   chictrAdapter?: ((request: { query: string, limit: number, userId?: string }) => Promise<any>) | null,
+ *   ctisBaseUrl?: string }} [options]
  */
 export function createTrialRegistryClient({
   baseUrl = CTGOV_BASE_URL,
+  ctisBaseUrl = CTIS_BASE_URL,
   timeoutMs = 20_000,
   maxAttempts = 3,
   fetchImpl = globalThis.fetch,
@@ -852,6 +1340,8 @@ export function createTrialRegistryClient({
   const counters = { searches: 0, records: 0, requests: 0, retried: 0, unavailable: 0, notFound: 0 };
   let lastError = /** @type {string | null} */ (null);
   const configured = Boolean(origin) && typeof fetchImpl === "function";
+  const ctisOrigin = text(ctisBaseUrl).replace(/\/+$/, "");
+  const ctisConfigured = Boolean(ctisOrigin) && typeof fetchImpl === "function";
   const chictrConfigured = typeof chictrAdapter === "function";
   /** @type {RegistryCoverage[]} */
   const sourceCoverage = [
@@ -859,9 +1349,12 @@ export function createTrialRegistryClient({
       availability: configured ? "not_queried" : "unavailable", reason: configured ? null : "registry_not_configured", lastCheckedAt: null },
     { key: "chictr", label: "ChiCTR", configured: chictrConfigured, coverage: "list_only",
       availability: chictrConfigured ? "not_queried" : "unavailable", reason: chictrConfigured ? null : "registry_not_configured", lastCheckedAt: null },
-    ...[["cde", "CDE"], ["ctis", "CTIS"], ["ictrp", "WHO ICTRP"]].map(([key, label]) => /** @type {RegistryCoverage} */ ({
-      key, label, configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null,
-    })),
+    { key: "ctis", label: "EU CTIS", configured: ctisConfigured, coverage: "structured",
+      availability: ctisConfigured ? "not_queried" : "unavailable", reason: ctisConfigured ? null : "registry_not_configured", lastCheckedAt: null },
+    { key: "cde", label: "CDE", configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null },
+    // Left out by its own terms, and the row says so: WHO ICTRP forbids commercial use of its data.
+    { key: "ictrp", label: "WHO ICTRP", configured: false, coverage: "unsupported", availability: "unavailable",
+      reason: "registry_terms_forbid_commercial_use", lastCheckedAt: null },
   ];
 
   /** @param {string} key @param {"available" | "unavailable"} availability @param {string | null} [reason] @param {string} [checkedAt] */
@@ -877,9 +1370,12 @@ export function createTrialRegistryClient({
    * One GET, retried inside one deadline and never throwing a network error
    * at the caller: an answer this module cannot get is `registry_unavailable`
    * with a reason, so nothing downstream can mistake it for 「查到 0 条」.
+   * `init` carries a POST's method, body and content type (CTIS's search): the
+   * same deadline, retries and bound apply, and a search is safe to repeat.
    * @param {string} url @param {number} deadline epoch ms
+   * @param {{ method?: string, body?: string }} [init]
    */
-  async function getJson(url, deadline) {
+  async function getJson(url, deadline, init = {}) {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const remaining = deadline - Date.now();
       if (remaining < 250) {
@@ -891,7 +1387,11 @@ export function createTrialRegistryClient({
       const timer = setTimeout(() => controller.abort(), remaining);
       timer.unref?.();
       try {
-        const response = await fetchImpl(url, { headers: { accept: "application/json" }, signal: controller.signal });
+        const response = await fetchImpl(url, {
+          ...(init.method ? { method: init.method, body: init.body } : {}),
+          headers: { accept: "application/json", ...(init.body === undefined ? {} : { "content-type": "application/json" }) },
+          signal: controller.signal,
+        });
         if (response.status === 404) {
           counters.notFound += 1;
           return { ok: false, reason: REGISTRY_NOT_FOUND };
@@ -927,6 +1427,7 @@ export function createTrialRegistryClient({
   return {
     get configured() { return configured; },
     get chictrConfigured() { return chictrConfigured; },
+    get ctisConfigured() { return ctisConfigured; },
     /**
      * No I/O: lastCheckedAt is the last completed operation observed by this
      * client in this process, not persisted registry health or a study search.
@@ -956,6 +1457,7 @@ export function createTrialRegistryClient({
       return {
         configured,
         chictrConfigured,
+        ctisConfigured,
         counters: { ...counters },
         lastError,
       };
@@ -1048,6 +1550,89 @@ export function createTrialRegistryClient({
       const built = ctgovPrecedent(answer.body, { retrievedAt });
       if (!built.precedent.registryId) return { ...unavailable("registry_record_unreadable", "clinicaltrials.gov"), registryId: id };
       observed("clinicaltrials.gov", "available", null, retrievedAt);
+      return { status: "ok", ...built };
+    },
+
+    /**
+     * Candidate EU CTIS trials, one page. Like `search`, a query and not a
+     * judgment; and like it, an answer the registry did not give is
+     * `registry_unavailable` with a reason and never an empty list.
+     *
+     * `pageToken` is the page number as text (CTIS pages by number); the answer's
+     * `nextPageToken` is the next one, or null on the last. A search body the
+     * portal refuses is not an error status — it is `200`, `showWarning: true`
+     * and no rows — so that answer is `registry_answer_unreadable`: reading it as
+     * 「查到 0 条」 is exactly the mistake this module exists to prevent.
+     * @param {{ condition?: string, intervention?: string, term?: string, phases?: string[],
+     *   statuses?: number[], hasResults?: boolean | null, limit?: number, pageToken?: string | null }} request
+     */
+    async searchCtis({ condition = "", intervention = "", term = "", phases = [], statuses = [], hasResults = null, limit = 20, pageToken = null } = {}) {
+      if (!ctisConfigured) return unavailable("registry_not_configured");
+      counters.searches += 1;
+      const page = Math.max(1, Math.floor(Number(text(pageToken))) || 1);
+      /** @type {Record<string, unknown>} */
+      const criteria = {};
+      if (text(term)) criteria.containAll = text(term);
+      if (text(condition)) criteria.medicalCondition = text(condition);
+      if (text(intervention)) criteria.productName = text(intervention);
+      const phaseCodes = ctisPhaseCodes(phases);
+      if (phaseCodes.length) criteria.trialPhaseCode = phaseCodes;
+      const codes = statuses.map(Number).filter((code) => Number.isInteger(code) && code >= 1 && code <= 12);
+      if (codes.length) criteria.status = codes;
+      if (hasResults === true || hasResults === false) criteria.hasStudyResults = hasResults;
+      const body = JSON.stringify({
+        pagination: { page, size: Math.max(1, Math.min(100, Math.floor(limit))) },
+        sort: { property: "decisionDate", direction: "DESC" },
+        searchCriteria: criteria,
+      });
+      const answer = await getJson(`${ctisOrigin}/search`, Date.now() + timeoutMs, { method: "POST", body });
+      // A 404 on the search endpoint is the endpoint gone, not a trial that is not there.
+      if (!answer.ok) return unavailable(answer.reason === REGISTRY_NOT_FOUND ? "http_404" : answer.reason, "ctis");
+      const data = answer.body;
+      const paging = data?.pagination;
+      if (!data || typeof data !== "object" || !Array.isArray(data.data) || !paging || typeof paging !== "object"
+        || data.showWarning === true || !Number.isFinite(Number(paging.totalRecords))) {
+        return unavailable("registry_answer_unreadable", "ctis");
+      }
+      const retrievedAt = now().toISOString();
+      observed("ctis", "available", null, retrievedAt);
+      return {
+        status: "ok",
+        registry: "ctis",
+        total: Number(paging.totalRecords),
+        nextPageToken: paging.nextPage === true ? String(page + 1) : null,
+        retrievedAt,
+        items: data.data.map(ctisListItem).filter((/** @type {{registryId: string}} */ item) => CTIS_NUMBER.test(item.registryId)),
+      };
+    },
+
+    /**
+     * One EU CTIS record, in full, with the values that can be quoted out of it.
+     * An unknown CT number is `200` and `{}` on the wire; that is not an outage.
+     * @param {string} registryId an EU CT number, `2024-513060-26-00`
+     */
+    async recordCtis(registryId) {
+      const id = text(registryId);
+      if (!CTIS_NUMBER.test(id)) return unavailable("registry_id_invalid");
+      if (!ctisConfigured) return unavailable("registry_not_configured");
+      counters.records += 1;
+      const answer = await getJson(`${ctisOrigin}/retrieve/${encodeURIComponent(id)}`, Date.now() + timeoutMs);
+      if (!answer.ok) {
+        if (answer.reason === REGISTRY_NOT_FOUND) {
+          observed("ctis", "available");
+          return { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND, registryId: id };
+        }
+        return { ...unavailable(answer.reason, "ctis"), registryId: id };
+      }
+      const body = answer.body;
+      if (body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 0) {
+        observed("ctis", "available");
+        return { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND, registryId: id };
+      }
+      const retrievedAt = now().toISOString();
+      const built = ctisPrecedent(body, { retrievedAt });
+      if (built.precedent.registryId !== id) return { ...unavailable("registry_record_unreadable", "ctis"), registryId: id };
+      observed("ctis", "available", null, retrievedAt);
       return { status: "ok", ...built };
     },
 

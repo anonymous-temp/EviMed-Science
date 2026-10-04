@@ -795,8 +795,8 @@ const WRITERS = {
 
   async precedent(item, { evidence, study }, extra) {
     if (!item.only(["registry", "registryId", "endpointKeys", "armRoles", "line", "biomarker"])) return null;
-    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr"], { fallback: "clinicaltrials.gov" });
-    const registryId = item.token("registryId", /^[A-Za-z][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125", { required: true });
+    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
+    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125 或 EU CT 号 2024-513060-26-00", { required: true });
     const endpointKeys = item.obj("endpointKeys", { bytes: 8 * 1024 }) ?? {};
     const armRoles = item.obj("armRoles", { bytes: 8 * 1024 }) ?? {};
     for (const [outcome, key] of Object.entries(endpointKeys)) {
@@ -825,8 +825,8 @@ const WRITERS = {
   async evidence_item(item, { evidence, study }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
       "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note"])) return null;
-    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr"], { fallback: "clinicaltrials.gov" });
-    const registryId = item.token("registryId", /^[A-Za-z][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
+    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
+    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
     const parameter = item.str("parameter", { max: 120, required: true });
     const arm = item.str("arm", { max: 200 });
     const armRole = item.choice("armRole", EVIDENCE_ARM_ROLES, { required: true });

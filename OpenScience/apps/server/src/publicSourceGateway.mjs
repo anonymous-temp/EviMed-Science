@@ -36,6 +36,7 @@ const allowedHosts = new Set([
   "dailymed.nlm.nih.gov",
   "data.rcsb.org",
   "dgidb.org",
+  "euclinicaltrials.eu",
   "eutils.ncbi.nlm.nih.gov",
   "export.arxiv.org",
   "fred.stlouisfed.org",
@@ -96,7 +97,13 @@ const allowedHosts = new Set([
 const apiPathPrefixes = new Map([
   ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
   ["dailymed.nlm.nih.gov", ["/dailymed/services/v2/"]],
+  // The EU Clinical Trials Information System's public portal API: the trial
+  // search (a POST, below) and one trial's record (a GET), and nothing else the
+  // portal serves.
+  ["euclinicaltrials.eu", ["/ctis-public-api/"]],
 ]);
+/** The one path on `euclinicaltrials.eu` a GET may read: a trial by its EU CT number. */
+const ctisRetrievePath = /^\/ctis-public-api\/retrieve\/\d{4}-\d{6}-\d{2}-\d{2}$/;
 
 const credentialProfiles = new Map([
   ["evimed-evidence", { configKey: "evimedEvidence", host: "www.evimed.com", path: "/api-evimed/medicine-api/ai-api/", header: "authorization", scheme: "Bearer" }],
@@ -324,6 +331,50 @@ const evimedPostEndpoints = new Map([
   }],
 ]);
 for (const endpoint of evimedPostEndpoints.keys()) allowedPostEndpoints.add(endpoint);
+
+/**
+ * The EU CTIS trial search, the one POST approved on `euclinicaltrials.eu`: a
+ * read of a public register whose body is data (a page, a sort and criteria),
+ * never a command. The shape is the one the portal's own search page sends
+ * (recorded 2026-10-04); a field it does not know is refused here rather than
+ * passed on, because the portal answers a body it does not understand with a
+ * `200` and no rows.
+ */
+const ctisPostEndpoints = new Set(["euclinicaltrials.eu/ctis-public-api/search"]);
+for (const endpoint of ctisPostEndpoints) allowedPostEndpoints.add(endpoint);
+const CTIS_TEXT_CRITERIA = Object.freeze([
+  "containAll", "containAny", "containNot", "title", "number", "medicalCondition", "sponsor", "productName", "endPoint", "eudraCtCode",
+]);
+const CTIS_CODE_CRITERIA = Object.freeze(["status", "trialPhaseCode", "ageGroupCode", "therapeuticAreaCode", "sponsorTypeCode", "msc"]);
+const CTIS_BOOLEAN_CRITERIA = Object.freeze(["hasStudyResults", "hasClinicalStudyReport", "isLowIntervention"]);
+
+/** @param {unknown} body */
+function validCtisSearchBody(body) {
+  const value = /** @type {Record<string, any>} */ (body);
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+  if (Object.keys(value).some((key) => !["pagination", "sort", "searchCriteria"].includes(key))) return false;
+  const pagination = value.pagination;
+  if (pagination == null || typeof pagination !== "object" || Array.isArray(pagination)
+    || Object.keys(pagination).some((key) => !["page", "size"].includes(key))
+    || !Number.isSafeInteger(pagination.page) || pagination.page < 1 || pagination.page > 10_000
+    || !Number.isSafeInteger(pagination.size) || pagination.size < 1 || pagination.size > 100) return false;
+  const sort = value.sort;
+  if (sort !== undefined && (sort == null || typeof sort !== "object" || Array.isArray(sort)
+    || Object.keys(sort).some((key) => !["property", "direction"].includes(key))
+    || !["decisionDate", "ctStatus", "endDate"].includes(sort.property) || !["ASC", "DESC"].includes(sort.direction))) return false;
+  const criteria = value.searchCriteria;
+  if (criteria == null || typeof criteria !== "object" || Array.isArray(criteria)) return false;
+  for (const [key, entry] of Object.entries(criteria)) {
+    if (CTIS_TEXT_CRITERIA.includes(key)) {
+      if (typeof entry !== "string" || entry.length > 512 || /[\r\n\0]/.test(entry)) return false;
+    } else if (CTIS_CODE_CRITERIA.includes(key)) {
+      if (!Array.isArray(entry) || entry.length > 20 || entry.some((code) => !Number.isSafeInteger(code) || code < 0 || code > 100_000)) return false;
+    } else if (CTIS_BOOLEAN_CRITERIA.includes(key)) {
+      if (typeof entry !== "boolean") return false;
+    } else return false;
+  }
+  return true;
+}
 
 class PublicSourceGatewayError extends Error {
   constructor(status, code, message) {
@@ -674,8 +725,11 @@ function validatedRequest(value) {
     if (!apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
       throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
     }
-    if (method !== "GET") {
+    if (method !== "GET" && !ctisPostEndpoints.has(`${hostname}${url.pathname}`)) {
       throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");
+    }
+    if (method === "GET" && hostname === "euclinicaltrials.eu" && !ctisRetrievePath.test(url.pathname)) {
+      throw gatewayError(403, "public_source_api_path_forbidden", "Only a trial's record, by its EU CT number, is approved on this host.");
     }
   }
   if (profile && (hostname !== profile.host || !url.pathname.startsWith(profile.path))) {
@@ -706,6 +760,12 @@ function validatedRequest(value) {
     throw gatewayError(403, "public_source_gateway_url_forbidden", "POST is not approved for this official read-only endpoint.");
   }
   const body = value.body;
+  if (ctisPostEndpoints.has(endpoint)) {
+    if (!validCtisSearchBody(body)) {
+      throw gatewayError(400, "public_source_gateway_body_invalid", "The EU CTIS search request is invalid.");
+    }
+    return { url, accept: [...new Set(value.accept)], method, body, credentialProfile };
+  }
   const evimedSpec = evimedPostEndpoints.get(endpoint);
   if (evimedSpec) {
     if (

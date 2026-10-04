@@ -1,0 +1,80 @@
+{
+ "showWarning": false,
+ "pagination": {
+  "totalRecords": 460,
+  "currentPage": 1,
+  "totalPages": 230,
+  "nextPage": true,
+  "prevPage": false
+ },
+ "data": [
+  {
+   "ctNumber": "2026-525672-26-01",
+   "ctStatus": 2,
+   "ctTitle": "Breast density reduction with linzagolix or bilastine in premenopausal women at high risk of breast cancer: a phase II clinical trial.",
+   "shortTitle": "PremBreastPrev-01",
+   "conditions": "Increased risk of breast cancer",
+   "trialCountries": [
+    "Spain:2"
+   ],
+   "decisionDateOverall": "01/10/2026",
+   "decisionDate": "ES: 01/10/2026",
+   "therapeuticAreas": [
+    "Diseases [C] - Neoplasms [C04]"
+   ],
+   "sponsor": "Consorci Mar Parc De Salut De Barcelona",
+   "sponsorType": "Hospital/Clinic/Other health care facility",
+   "trialPhase": "Therapeutic exploratory (Phase II)",
+   "endPoint": "Change in mammographic breast density category according to the BI-RADS classification (categories A–D) from baseline to 12 months., Incidence, type, severity, seriousness and relationship to study treatment of adverse events occurring during the 12-month study period., Change in bone mineral density assessed by dual-energy X-ray absorptiometry (DXA) from baseline to 12 months., Changes in safety laboratory parameters, including haematology, serum biochemistry, cardiovascular risk markers and bone metabolism markers, from baseline to 12 months., Medication adherence assessed using the Medication Adherence Report Scale (MARS-5) during the 12-month study period., Changes in quality of life and psychological symptom scores from baseline to 12 months, assessed using the EQ-5D-5L, GAD-7 and PHQ-9 questionnaires., Number and type of breast lesions detected during the 12-month follow-up period, classified as benign, premalignant or malignant.",
+   "product": "Yselty 100 mg film-coated tablets, Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+   "ageRangeSecondary": [
+    ""
+   ],
+   "ageGroup": "18-64 years",
+   "gender": "Female",
+   "trialRegion": 1,
+   "totalNumberEnrolled": "150",
+   "primaryEndPoint": "Relative percentage change in mammographic breast density from baseline to 12 months, assessed using the automated LIBRA quantitative mammographic density assessment system (percentage dense area).",
+   "resultsFirstReceived": "No",
+   "lastUpdated": "01/10/2026",
+   "lastPublicationUpdate": "02/10/2026"
+  },
+  {
+   "ctNumber": "2024-518348-19-00",
+   "ctStatus": 2,
+   "ctTitle": "A phase I study of [177Lu]Lu-DWJ155 and [68Ga]Ga-DWJ155 in patients with solid tumors",
+   "shortTitle": "CFML539A12101",
+   "conditions": "Advanced bladder cancer, Advanced Breast cancer (HER2+, HR+/HER2-negative or TNBC), Advanced Non-small cell lung cancer (NSCLC), Advanced gastric/Gastroesophageal junction adenocarcinoma (GEJ) cancer",
+   "trialCountries": [
+    "France:2",
+    "Italy:2",
+    "Spain:2",
+    "Portugal:2",
+    "Germany:2",
+    "Belgium:2"
+   ],
+   "decisionDateOverall": "29/09/2026",
+   "decisionDate": "BE: 01/10/2026, FR: 01/10/2026, DE: 30/09/2026, IT: 30/09/2026, PT: 29/09/2026, ES: 30/09/2026",
+   "therapeuticAreas": [
+    "Diseases [C] - Neoplasms [C04]"
+   ],
+   "sponsor": "Novartis Pharma AG",
+   "sponsorType": "Pharmaceutical company",
+   "trialPhase": "Human Pharmacology (Phase I)- First administration to humans",
+   "endPoint": "",
+   "product": "",
+   "ageRangeSecondary": [
+    "7",
+    "8"
+   ],
+   "ageGroup": "65+ years, 18-64 years",
+   "gender": "Female, Male",
+   "trialRegion": 3,
+   "totalNumberEnrolled": "64",
+   "primaryEndPoint": "",
+   "resultsFirstReceived": "No",
+   "lastUpdated": "01/10/2026",
+   "lastPublicationUpdate": "02/10/2026"
+  }
+ ]
+}

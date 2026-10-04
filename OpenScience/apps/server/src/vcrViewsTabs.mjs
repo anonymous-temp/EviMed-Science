@@ -1292,7 +1292,7 @@ function presentPrecedentRow(row) {
   return {
     id: String(row.id),
     registryId: String(row.registry_id ?? ""),
-    registry: (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", cde: "CDE 登记" }))[String(row.registry)] ?? text(row.registry),
+    registry: (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", ctis: "EU CTIS", cde: "CDE 登记" }))[String(row.registry)] ?? text(row.registry),
     title: text(row.title),
     population: list(pico.conditions).length ? list(pico.conditions).join("、") : null,
     design: [list(design.phases).join("/"), text(design.allocation), text(design.masking)].filter(Boolean).join(" · ") || null,

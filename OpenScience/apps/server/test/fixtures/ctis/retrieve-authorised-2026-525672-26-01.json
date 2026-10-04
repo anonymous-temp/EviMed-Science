@@ -1,0 +1,1349 @@
+{
+ "ctNumber": "2026-525672-26-01",
+ "ctStatus": "Authorised",
+ "decisionDate": "2026-10-01T07:49:20.989",
+ "publishDate": "2026-10-02T03:35:19.102067131",
+ "ctPublicStatusCode": 2,
+ "authorizedApplication": {
+  "authorizedPartI": {
+   "id": 141903,
+   "rowSubjectCount": 0,
+   "products": [
+    {
+     "id": 592042,
+     "part1MpRoleTypeCode": "1",
+     "productDictionaryInfo": {
+      "productPk": "10364787",
+      "productPharmForm": "FILM-COATED TABLETS",
+      "euMpNumber": "PRD10144812",
+      "marketingAuthNumber": "EU/1/21/1606/001",
+      "prodAuthStatus": 2,
+      "prodName": "Yselty 100 mg film-coated tablets",
+      "pharmForm": "FILM-COATED TABLET",
+      "activeSubstanceName": "LINZAGOLIX",
+      "euSubstNumber": "SUB194588",
+      "authorisationCountryCode": "EU",
+      "mrpNumber": "EMEA/H/C/005442",
+      "nameOrg": "THERAMEX IRELAND LIMITED",
+      "productSubstances": [
+       {
+        "productPk": "10364787",
+        "substancePk": "315352",
+        "nameOrg": "THERAMEX IRELAND LIMITED",
+        "substanceOrigin": "Chemical",
+        "actSubstOrigin": "Chemical",
+        "actSubstName": "LINZAGOLIX",
+        "substanceEvCode": "SUB194588"
+       }
+      ],
+      "atcCode": "H01CC04",
+      "atcName": "-",
+      "atcTermLevel": "5",
+      "activeSubstanceOtherDescriptiveName": ""
+     },
+     "isPaediatricFormulation": false,
+     "mpRoleInTrial": "1",
+     "orphanDrugEdit": false,
+     "doseUom": "mg milligram(s)",
+     "maxDailyDoseAmount": "100",
+     "doseUomTotal": "mg milligram(s)",
+     "maxTotalDoseAmount": "36500",
+     "productChangedRelationMA": false,
+     "maxTreatmentPeriod": 12,
+     "timeUnitCode": "3",
+     "otherMedicinalProduct": "GnRH receptor antagonist",
+     "evCode": "PRD10144812",
+     "sponsorProductCodeEdit": "N/A",
+     "devices": [],
+     "characteristics": [
+      "11"
+     ],
+     "routes": [
+      "ORAL"
+     ],
+     "allSubstancesChemicals": true,
+     "productName": "Yselty 100 mg film-coated tablets",
+     "jsonActiveSubstanceNames": "linzagolix",
+     "pharmaceuticalFormDisplay": "FILM-COATED TABLET"
+    },
+    {
+     "id": 592043,
+     "part1MpRoleTypeCode": "1",
+     "productDictionaryInfo": {
+      "productPk": "13295302",
+      "productPharmForm": "COMPRIMIDOS BUCODISPERSABLES",
+      "euMpNumber": "PRD10112974",
+      "marketingAuthNumber": "88343",
+      "prodAuthStatus": 2,
+      "prodName": "Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+      "pharmForm": "ORODISPERSIBLE TABLET",
+      "activeSubstanceName": "BILASTINE",
+      "euSubstNumber": "SUB37845",
+      "authorisationCountryCode": "ES",
+      "mrpNumber": "SE/H/2180/002",
+      "nameOrg": "TEVA B.V",
+      "productSubstances": [
+       {
+        "productPk": "13295302",
+        "substancePk": "424962",
+        "nameOrg": "TEVA B.V",
+        "substanceOrigin": "Chemical",
+        "actSubstOrigin": "Chemical",
+        "actSubstName": "BILASTINE",
+        "substanceEvCode": "SUB37845"
+       }
+      ],
+      "atcCode": "R06AX29",
+      "atcName": "-",
+      "atcTermLevel": "5",
+      "activeSubstanceOtherDescriptiveName": ""
+     },
+     "isPaediatricFormulation": false,
+     "mpRoleInTrial": "1",
+     "orphanDrugEdit": false,
+     "doseUom": "mg milligram(s)",
+     "maxDailyDoseAmount": "20",
+     "doseUomTotal": "mg milligram(s)",
+     "maxTotalDoseAmount": "7300",
+     "productChangedRelationMA": false,
+     "maxTreatmentPeriod": 12,
+     "timeUnitCode": "3",
+     "otherMedicinalProduct": "Second-generation antihistamine",
+     "evCode": "PRD10112974",
+     "devices": [],
+     "characteristics": [
+      "11"
+     ],
+     "routes": [
+      "ORAL"
+     ],
+     "allSubstancesChemicals": true,
+     "productName": "Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+     "jsonActiveSubstanceNames": "bilastine",
+     "pharmaceuticalFormDisplay": "ORODISPERSIBLE TABLET"
+    }
+   ],
+   "trialDetails": {
+    "clinicalTrialIdentifiers": {
+     "fullTitle": "Breast density reduction with linzagolix or bilastine in premenopausal women at high risk of breast cancer: a phase II clinical trial.",
+     "fullTitleTranslations": [
+      {
+       "id": 12003023,
+       "uuid": "84d76a6d-cd5a-4145-ba71-e0538e8d6221",
+       "attributeTranslation": "Reducción de la densidad mamaria con linzagolix o bilastina en mujeres premenopáusicas con alto riesgo de cáncer de mama: un ensayo clínico de fase II.",
+       "language": 7,
+       "languageDescription": "Spanish"
+      }
+     ],
+     "publicTitle": "Study evaluating whether linzagolix or bilastine can reduce breast density in women who have not yet gone through menopause and are at high risk of breast cancer.",
+     "publicTitleTranslations": [
+      {
+       "id": 12003031,
+       "uuid": "c97f05f2-1c6f-4019-970b-234fb192ef2b",
+       "attributeTranslation": "Estudio para evaluar si linzagolix o bilastina pueden reducir la densidad mamaria en mujeres que aún no han pasado por la menopausia y que presentan un alto riesgo de cáncer de mama.",
+       "language": 7,
+       "languageDescription": "Spanish"
+      }
+     ],
+     "shortTitle": "PremBreastPrev-01",
+     "secondaryIdentifyingNumbers": {
+      "additionalRegistries": []
+     }
+    },
+    "trialInformation": {
+     "trialCategory": {
+      "isLowIntervention": false,
+      "trialPhase": "4",
+      "trialCategory": "2",
+      "justificationForTrialCategory": "The investigational medicinal products (linzagolix and bilastine) are authorised medicinal products in the European Union; however, they are being investigated for a new, non-authorised indication (reduction of mammographic breast density in premenopausal women at increased risk of breast cancer).",
+      "trialCategoryId": 131234
+     },
+     "medicalCondition": {
+      "partIMedicalConditions": [
+       {
+        "id": 148712,
+        "medicalCondition": "Increased risk of breast cancer",
+        "medicalConditionTranslations": [
+         {
+          "id": 12002999,
+          "uuid": "6c257e7f-ccb9-46ac-9309-a95f62cd0771",
+          "attributeTranslation": "Riesgo aumentado de cáncer de mama",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ],
+        "isConditionRareDisease": false
+       }
+      ],
+      "meddraConditionTerms": [
+       {
+        "termId": 100000020819,
+        "version": "20.0",
+        "level": "PT",
+        "termName": "Breast cancer",
+        "classificationCode": "10006187",
+        "organClass": 100000004864,
+        "active": false
+       }
+      ]
+     },
+     "trialObjective": {
+      "trialScopes": [
+       {
+        "code": "2",
+        "trialScopeId": 431691
+       }
+      ],
+      "mainObjective": "To compare the relative change in mammographic breast density from baseline to 12 months between the three study groups (linzagolix, bilastine and control group).",
+      "mainObjectiveTranslations": [
+       {
+        "id": 12003030,
+        "uuid": "321d8cbe-57b3-4196-9055-0e4c20568566",
+        "attributeTranslation": "Comparar el cambio relativo en la densidad mamaria desde el inicio hasta los 12 meses entre los tres grupos del estudio (linzagolix, bilastina y grupo control).",
+        "language": 7,
+        "languageDescription": "Spanish"
+       }
+      ],
+      "secondaryObjectives": [
+       {
+        "id": 507898,
+        "number": 1,
+        "secondaryObjective": "To compare the evolution of breast density categorized according to the BI-RADS classification between study groups.",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 12003032,
+          "uuid": "c970fca4-8df0-48ba-89f7-bc1871e2c0f8",
+          "attributeTranslation": "Comparar la evolución de la densidad mamaria categorizada según la clasificación BI-RADS entre los grupos del estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 507899,
+        "number": 2,
+        "secondaryObjective": "To evaluate the safety and tolerability of the study interventions.",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 12003033,
+          "uuid": "857155e5-ad5d-4c32-860a-eabab17aa6a7",
+          "attributeTranslation": "Evaluar la seguridad y tolerabilidad de las intervenciones del estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 507900,
+        "number": 3,
+        "secondaryObjective": "To compare adherence to the assigned intervention between study groups.",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 12003034,
+          "uuid": "7079d9f2-ea08-4535-83c0-00089859cc97",
+          "attributeTranslation": "Comparar la adherencia a la intervención asignada entre los grupos del estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 507901,
+        "number": 4,
+        "secondaryObjective": "To assess quality of life and participant-reported experience using validated questionnaires.",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 12003035,
+          "uuid": "73ead2be-f915-4d73-852c-66a7a2b11129",
+          "attributeTranslation": "Evaluar la calidad de vida y la experiencia reportada por las participantes mediante cuestionarios validados.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 507902,
+        "number": 5,
+        "secondaryObjective": "To describe breast lesions diagnosed during the follow-up period and their distribution between study groups.",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 12003036,
+          "uuid": "41684ab9-8b92-4723-a245-28246704b67b",
+          "attributeTranslation": "Describir las lesiones mamarias diagnosticadas durante el periodo de seguimiento y su distribución entre los grupos del estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ]
+     },
+     "eligibilityCriteria": {
+      "principalInclusionCriteria": [
+       {
+        "id": 966857,
+        "number": 1,
+        "principalInclusionCriteria": "Women aged 35 to 50 years.",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003024,
+          "uuid": "e6211494-bef6-453b-96a3-f060b7509d41",
+          "attributeTranslation": "- Mujeres de 35 a 50 años.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 966858,
+        "number": 2,
+        "principalInclusionCriteria": "Premenopausal status, defined by the presence of regular menstrual cycles during the previous year or by hormone levels (estradiol and FSH) consistent with normal ovarian function.",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003025,
+          "uuid": "324a0087-7fbc-4252-9217-8806b2ea1552",
+          "attributeTranslation": "Estado premenopáusico, definido por la presencia de ciclos menstruales regulares en el último año o valores hormonales (estradiol y FSH) que correspondan a función ovárica normal.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 966859,
+        "number": 3,
+        "principalInclusionCriteria": "Estimated 5-year breast cancer risk ≥1.67%, calculated using the Breast Cancer Risk Assessment Tool (Gail model).",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003026,
+          "uuid": "378cacbd-cb71-4741-9a1e-29507ec68b18",
+          "attributeTranslation": "Riesgo de cáncer de mama igual o superior al 1.67% en los siguientes 5 años calculado con la herramienta BCRAT.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 966860,
+        "number": 4,
+        "principalInclusionCriteria": "High mammographic breast density on the baseline mammogram, classified as BI-RADS category C or D.",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003027,
+          "uuid": "72814783-6edb-4c38-a857-b4c7d9bbd128",
+          "attributeTranslation": "Densidad mamográfica elevada en la mamografía basal, evaluada mediante BI-RADS (categorías C y D).",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 966861,
+        "number": 5,
+        "principalInclusionCriteria": "Ability to understand the study information and provide written informed consent.",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003028,
+          "uuid": "4379bf2f-33f8-4e89-9e81-2a488f9626a2",
+          "attributeTranslation": "Capacidad para comprender la información del estudio y firmar el consentimiento informado.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 966862,
+        "number": 6,
+        "principalInclusionCriteria": "Willingness and ability to comply with all study visits and procedures throughout the study follow-up period.",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 12003029,
+          "uuid": "9d926967-3229-48b7-978e-7175f58c1559",
+          "attributeTranslation": "Disposición para cumplir con las visitas y procedimientos del estudio durante el periodo de seguimiento.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ],
+      "principalExclusionCriteria": [
+       {
+        "id": 1650300,
+        "number": 1,
+        "principalExclusionCriteria": "Personal history of breast cancer or other hormone-dependent cancers.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003008,
+          "uuid": "606d3c3f-7133-4861-b1a6-65ca818cb006",
+          "attributeTranslation": "Antecedentes personales de cáncer de mama o de otros cánceres hormonodependientes.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650309,
+        "number": 10,
+        "principalExclusionCriteria": "Concomitant treatment with medicinal products contraindicated according to the current Summary of Product Characteristics of linzagolix or bilastine, or with medicinal products presenting clinically relevant interactions that cannot be discontinued or substituted before randomisation.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003017,
+          "uuid": "9045493b-c849-44f7-bb92-27b82ea31170",
+          "attributeTranslation": "Tratamiento concomitante con medicamentos conocidos por prolongar el intervalo QT cuando no sea posible su suspensión o sustitución.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650310,
+        "number": 11,
+        "principalExclusionCriteria": "Previous diagnosis of osteoporosis or T-score ≤ −2.5 on bone densitometry performed during the screening process or on available previous examinations.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003018,
+          "uuid": "1a7c1057-8180-456f-85fa-3cc3a79e7512",
+          "attributeTranslation": "Embarazo, lactancia o planificación de embarazo o de donación de óvulos durante el periodo del estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650311,
+        "number": 12,
+        "principalExclusionCriteria": "Genital bleeding of unexplained aetiology at the time of inclusion.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003019,
+          "uuid": "bcaf1266-d792-43a1-b0e0-6cd3fd4b0169",
+          "attributeTranslation": "Presencia de enfermedades médicas relevantes o trastornos psiquiátricos que, a juicio del investigador, puedan interferir con la seguridad de la participante, la adherencia al estudio o la interpretación de los resultados.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650312,
+        "number": 13,
+        "principalExclusionCriteria": "Clinically relevant impairment of liver function at baseline laboratory testing, defined as AST or ALT >2 times the upper limit of normal, total bilirubin >1.5 times the upper limit of normal, or any other hepatic abnormality that, in the investigator’s judgement, contraindicates participation in the study.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003020,
+          "uuid": "5bfeaad2-4a8c-4c41-8158-f8509d627913",
+          "attributeTranslation": "Tratamiento hormonal sistémico en los 12 meses previos a la inclusión, incluyendo anticonceptivos hormonales, terapia hormonal sustitutiva, tratamientos hormonales para patología ginecológica y cualquier otro tratamiento hormonal administrado independientemente de su indicación o vía de administración.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650313,
+        "number": 14,
+        "principalExclusionCriteria": "Clinically relevant impairment of renal function at baseline laboratory testing, defined as estimated glomerular filtration rate <60 mL/min/1.73 m², or any other renal abnormality that, in the investigator’s judgement, contraindicates participation in the study.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003021,
+          "uuid": "6ec9482c-051a-4566-bc47-98583b13391b",
+          "attributeTranslation": "Contraindicaciones conocidas para el uso de linzagolix o bilastina, incluyendo hipersensibilidad a los principios activos o a cualquiera de sus excipientes.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650314,
+        "number": 15,
+        "principalExclusionCriteria": "Personal history of congenital or clinically significant acquired long QT syndrome, clinically relevant arrhythmias, or clinically relevant QT interval prolongation on the baseline ECG.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003022,
+          "uuid": "0785e211-d302-4279-8f80-b22d891da43f",
+          "attributeTranslation": "Tratamiento concomitante con medicamentos contraindicados según las fichas técnicas vigentes de linzagolix o bilastina, o con medicamentos que presenten interacciones clínicamente relevantes y que no puedan ser suspendidos o sustituidos antes de la aleatorización.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650375,
+        "number": 16,
+        "principalExclusionCriteria": "Simultaneous participation in another clinical trial involving medicinal products.",
+        "principalExclusionCriteriaTranslations": []
+       },
+       {
+        "id": 1650301,
+        "number": 2,
+        "principalExclusionCriteria": "Family history of congenital long QT syndrome or unexplained sudden cardiac death in a first-degree relative.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003009,
+          "uuid": "1367267b-3693-4923-a6f8-e4883e0f07df",
+          "attributeTranslation": "Diagnóstico previo de osteoporosis o T-score ≤ -2.5 en la densitometría realizada durante el proceso de selección o en exploraciones previas disponibles",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650302,
+        "number": 3,
+        "principalExclusionCriteria": "Clinically significant bradycardia.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003010,
+          "uuid": "b5923fcd-cd2f-477f-9ce7-61f7f8efbfae",
+          "attributeTranslation": "Sangrado genital de etiología no aclarada en el momento de la inclusión.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650303,
+        "number": 4,
+        "principalExclusionCriteria": "Clinically significant hypokalaemia, hypomagnesaemia or hypocalcaemia not corrected at the time of inclusion.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003011,
+          "uuid": "e5261afa-6606-4090-9170-7e99faf038bc",
+          "attributeTranslation": "Alteración clínicamente relevante de la función hepática en la analítica basal, definida como AST o ALT > 2 veces el límite superior de la normalidad, bilirrubina total > 1,5 veces el límite superior de la normalidad, o cualquier otra alteración hepática que, a juicio del investigador, contraindique la participación en el estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650304,
+        "number": 5,
+        "principalExclusionCriteria": "Concomitant treatment with medicinal products known to prolong the QT interval when discontinuation or substitution is not possible.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003012,
+          "uuid": "c97c8dd1-0e55-4182-9202-b90963b36568",
+          "attributeTranslation": "Alteración clínicamente relevante de la función renal en la analítica basal, definida como filtrado glomerular estimado < 60 ml/min/1,73 m², o cualquier otra alteración renal que, a juicio del investigador, contraindique la participación en el estudio.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650305,
+        "number": 6,
+        "principalExclusionCriteria": "Pregnancy, breastfeeding, or planning pregnancy or oocyte donation during the study period.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003013,
+          "uuid": "bb77cfb6-6266-4df6-abc8-48c3f70f9f05",
+          "attributeTranslation": "Antecedentes personales de síndrome de QT largo congénito o adquirido clínicamente significativo.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650306,
+        "number": 7,
+        "principalExclusionCriteria": "Presence of relevant medical conditions or psychiatric disorders that, in the investigator’s judgement, may interfere with participant safety, study adherence, or interpretation of the results.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003014,
+          "uuid": "3e5d2b08-54a2-488f-bdaf-e5c040a91109",
+          "attributeTranslation": "Participación simultánea en otro ensayo clínico con medicamentos.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650307,
+        "number": 8,
+        "principalExclusionCriteria": "Systemic hormonal treatment within the 12 months prior to inclusion, including hormonal contraceptives, hormone replacement therapy, hormonal treatments for gynaecological conditions, and any other hormonal treatment regardless of its indication or route of administration.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003015,
+          "uuid": "3a3cf537-5348-4102-8440-ac6df5ca3e85",
+          "attributeTranslation": "Antecedentes familiares de síndrome de QT largo congénito o muerte súbita de causa cardiaca no aclarada en familiares de primer grado.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1650308,
+        "number": 9,
+        "principalExclusionCriteria": "Known contraindications to the use of linzagolix or bilastine, including hypersensitivity to the active substances or to any of their excipients.",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 12003016,
+          "uuid": "a7e07785-56ce-454b-8f37-7a88e3e9469e",
+          "attributeTranslation": "Hipopotasemia clínicamente significativa no corregida en el momento de la inclusión.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ]
+     },
+     "endPoint": {
+      "primaryEndPoints": [
+       {
+        "id": 1130265,
+        "number": 1,
+        "endPoint": "Relative percentage change in mammographic breast density from baseline to 12 months, assessed using the automated LIBRA quantitative mammographic density assessment system (percentage dense area).",
+        "isPrimary": true,
+        "endPointTranslations": [
+         {
+          "id": 12003000,
+          "uuid": "e80d1ff0-9f13-4a03-aa22-915668995f13",
+          "attributeTranslation": "Cambio porcentual relativo de la densidad mamográfica entre el inicio del estudio y los 12 meses, evaluado mediante el sistema automatizado Deep-LIBRA de cuantificación de la densidad mamográfica (porcentaje de área densa).",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ],
+      "secondaryEndPoints": [
+       {
+        "id": 1130266,
+        "number": 1,
+        "endPoint": "Change in mammographic breast density category according to the BI-RADS classification (categories A–D) from baseline to 12 months.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003001,
+          "uuid": "20b355f3-1058-4953-8fab-458e2fc365b9",
+          "attributeTranslation": "Cambio en la categoría de densidad mamográfica según la clasificación BI-RADS (A–D) desde el inicio hasta los 12 meses.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130267,
+        "number": 2,
+        "endPoint": "Incidence, type, severity, seriousness and relationship to study treatment of adverse events occurring during the 12-month study period.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003002,
+          "uuid": "5946db12-00bc-4e9c-bcbc-aec96ebf24db",
+          "attributeTranslation": "Incidencia, tipo, gravedad, carácter grave y relación con el tratamiento del estudio de los acontecimientos adversos ocurridos durante el periodo de estudio de 12 meses.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130268,
+        "number": 3,
+        "endPoint": "Change in bone mineral density assessed by dual-energy X-ray absorptiometry (DXA) from baseline to 12 months.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003003,
+          "uuid": "f53379e3-af5e-4352-972a-52a659c8f493",
+          "attributeTranslation": "Cambio en la densidad mineral ósea evaluada mediante absorciometría de rayos X de energía dual (DXA) entre el inicio del estudio y los 12 meses.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130269,
+        "number": 4,
+        "endPoint": "Changes in safety laboratory parameters, including haematology, serum biochemistry, cardiovascular risk markers and bone metabolism markers, from baseline to 12 months.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003004,
+          "uuid": "7adf6f3e-9138-4750-af54-27d0af39411e",
+          "attributeTranslation": "Cambios en los parámetros analíticos de seguridad, incluyendo hematología, bioquímica sérica, marcadores de riesgo cardiovascular y marcadores del metabolismo óseo, entre el inicio del estudio y los 12 meses.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130270,
+        "number": 5,
+        "endPoint": "Medication adherence assessed using the Medication Adherence Report Scale (MARS-5) during the 12-month study period.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003005,
+          "uuid": "6e781623-3b2a-436f-abdf-86872b434c59",
+          "attributeTranslation": "Adherencia al tratamiento evaluada mediante la Medication Adherence Report Scale (MARS-5) durante el periodo de estudio de 12 meses.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130271,
+        "number": 6,
+        "endPoint": "Changes in quality of life and psychological symptom scores from baseline to 12 months, assessed using the EQ-5D-5L, GAD-7 and PHQ-9 questionnaires.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003006,
+          "uuid": "85d5081d-255b-47f8-9272-5936c72859d9",
+          "attributeTranslation": "Cambios en la calidad de vida y en las puntuaciones de los síntomas psicológicos entre el inicio del estudio y los 12 meses, evaluados mediante los cuestionarios EQ-5D-5L, GAD-7 y PHQ-9.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 1130272,
+        "number": 7,
+        "endPoint": "Number and type of breast lesions detected during the 12-month follow-up period, classified as benign, premalignant or malignant.",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 12003007,
+          "uuid": "786ff2ca-f7ae-49c9-ab32-0becabb35da4",
+          "attributeTranslation": "Número y tipo de lesiones mamarias detectadas durante el periodo de seguimiento de 12 meses, clasificadas como benignas, premalignas o malignas.",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ]
+     },
+     "trialDuration": {
+      "estimatedEndDate": "2029-03-31",
+      "estimatedRecruitmentStartDate": "2026-10-01"
+     },
+     "sourceOfMonetarySupport": [
+      {
+       "id": 104540,
+       "organisationName": "Instituto Carlos III; Ministerio de Ciencia, Innovación y Universidades, España."
+      }
+     ],
+     "populationOfTrialSubjects": {
+      "ageRanges": [
+       {
+        "id": 390001,
+        "ageRangeCategoryCode": "3",
+        "ageRangeCategory": "3"
+       }
+      ],
+      "ageRangeSecondaryIds": [],
+      "clinicalTrialGroups": [
+       {
+        "code": "2",
+        "name": "Patients"
+       }
+      ],
+      "isFemaleSubjects": true,
+      "isMaleSubjects": false,
+      "isVulnerablePopulationSelected": false
+     },
+     "individualParticipantData": {
+      "planToShareIPD": "2"
+     }
+    },
+    "protocolInformation": {
+     "studyDesign": {
+      "periodDetails": [
+       {
+        "id": 202376,
+        "businessKey": "1",
+        "title": "Treatment period",
+        "description": "Treatment period of 12 months during which participants receive the allocated intervention (linzagolix, bilastine, or lifestyle intervention) with scheduled clinical, laboratory and imaging assessments.",
+        "blindingMethodCode": "1",
+        "blindedRoles": [
+         {
+          "id": 202377,
+          "code": 4,
+          "name": "Analyst"
+         }
+        ],
+        "blindingDetails": "Mammographic density assessment (radiological BI-RADS classification and automated quantitative Deep-LIBRA analysis) will be performed by assessors blinded to treatment allocation. Participants and treating clinicians are not blinded due to the nature of the interventions.",
+        "armDetails": [
+         {
+          "description": "Experimental, Linzagolix 100 mg orally once daily for 12 months.",
+          "title": "Linzagolix",
+          "id": 112425
+         },
+         {
+          "description": "Experimental, Bilastine 20 mg orally once daily for 12 months.",
+          "title": "Bilastine",
+          "id": 112426
+         },
+         {
+          "description": "Active comparator, non-pharmacological intervention based on healthy lifestyle recommendations.",
+          "title": "Lifestyle intervention",
+          "id": 112427
+         }
+        ],
+        "allocationMethod": "1"
+       }
+      ]
+     }
+    },
+    "scientificAdviceAndPip": {
+     "scientificAdvices": [],
+     "paediatricInvestigationPlan": []
+    },
+    "associatedClinicalTrials": [
+     {
+      "id": 37547,
+      "ctNumber": "2026-525672-26-00",
+      "sponsorName": "Consorci Mar Parc De Salut De Barcelona",
+      "fullTitle": "Breast density reduction with linzagolix or bilastine in premenopausal women at high risk of breast cancer: a phase II clinical trial.",
+      "sponsorAgreementOption": "NON_APPLICABLE",
+      "sponsorAgreementOptionName": "NON_APPLICABLE",
+      "parentClinicalTrialId": 27536,
+      "hasDocument": false,
+      "associatedCtDocs": []
+     }
+    ],
+    "references": [],
+    "pubmedCode": [],
+    "pubmedUrl": []
+   },
+   "assessmentOutcome": "acceptable",
+   "assessmentOutcomeDate": "2026-09-30",
+   "conclusionDate": "2026-09-30",
+   "therapeuticAreas": [
+    {
+     "code": "4",
+     "name": "Diseases [C] - Neoplasms [C04]"
+    }
+   ],
+   "medicalConditions": [
+    {
+     "id": 148712,
+     "medicalCondition": "Increased risk of breast cancer",
+     "isConditionRareDisease": false
+    }
+   ],
+   "sponsors": [
+    {
+     "id": 161734,
+     "primary": true,
+     "publicContacts": [
+      {
+       "id": 477449,
+       "type": "Public",
+       "functionalName": "Principal investigator",
+       "functionalEmailAddress": "[redacted]",
+       "telephone": "[redacted]",
+       "organisation": {
+        "id": 953196,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Consorci Mar Parc De Salut De Barcelona",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100045979",
+        "organisationLocationStatus": "Active"
+       }
+      }
+     ],
+     "scientificContacts": [
+      {
+       "id": 477450,
+       "type": "Scientific",
+       "functionalName": "Principal investigator",
+       "functionalEmailAddress": "[redacted]",
+       "telephone": "[redacted]",
+       "organisation": {
+        "id": 953196,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Consorci Mar Parc De Salut De Barcelona",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100045979",
+        "organisationLocationStatus": "Active"
+       }
+      }
+     ],
+     "thirdParties": [],
+     "organisation": {
+      "id": 953196,
+      "type": "Hospital/Clinic/Other health care facility",
+      "typeCode": "8",
+      "name": "Consorci Mar Parc De Salut De Barcelona",
+      "commercial": false,
+      "isBusinessKeyValidated": true,
+      "businessKey": "ORG-100045979",
+      "organisationLocationStatus": "Active"
+     },
+     "addresses": [
+      {
+       "id": 911061,
+       "organisation": {
+        "id": 953196,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Consorci Mar Parc De Salut De Barcelona",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100045979",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 1019655,
+        "oneLine": "Passeig Maritim De La Barceloneta 25-29",
+        "addressLine1": "Passeig Maritim De La Barceloneta 25-29",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Barcelona",
+        "postcode": "08003",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100045979"
+      }
+     ],
+     "isCommercial": false,
+     "commercial": "Non-Commercial"
+    }
+   ],
+   "trialCategoryCode": "2",
+   "trialCategoryJustificationComment": "The investigational medicinal products (linzagolix and bilastine) are authorised medicinal products in the European Union; however, they are being investigated for a new, non-authorised indication (reduction of mammographic breast density in premenopausal women at increased risk of breast cancer).",
+   "partOneTherapeuticAreas": [
+    {
+     "id": 1234574,
+     "therapeuticArea": {
+      "code": "4",
+      "name": "Diseases [C] - Neoplasms [C04]"
+     }
+    }
+   ],
+   "productRoleGroupInfos": [
+    {
+     "id": 439269,
+     "comments": "Yselty 100 mg film-coated tablets, Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+     "productRoleCode": "1",
+     "productRoleName": "Test",
+     "products": [
+      {
+       "id": 592042,
+       "part1MpRoleTypeCode": "1",
+       "productDictionaryInfo": {
+        "productPk": "10364787",
+        "productPharmForm": "FILM-COATED TABLETS",
+        "euMpNumber": "PRD10144812",
+        "marketingAuthNumber": "EU/1/21/1606/001",
+        "prodAuthStatus": 2,
+        "prodName": "Yselty 100 mg film-coated tablets",
+        "pharmForm": "FILM-COATED TABLET",
+        "activeSubstanceName": "LINZAGOLIX",
+        "euSubstNumber": "SUB194588",
+        "authorisationCountryCode": "EU",
+        "mrpNumber": "EMEA/H/C/005442",
+        "nameOrg": "THERAMEX IRELAND LIMITED",
+        "productSubstances": [
+         {
+          "productPk": "10364787",
+          "substancePk": "315352",
+          "nameOrg": "THERAMEX IRELAND LIMITED",
+          "substanceOrigin": "Chemical",
+          "actSubstOrigin": "Chemical",
+          "actSubstName": "LINZAGOLIX",
+          "substanceEvCode": "SUB194588"
+         }
+        ],
+        "atcCode": "H01CC04",
+        "atcName": "-",
+        "atcTermLevel": "5",
+        "activeSubstanceOtherDescriptiveName": ""
+       },
+       "isPaediatricFormulation": false,
+       "mpRoleInTrial": "1",
+       "orphanDrugEdit": false,
+       "doseUom": "mg milligram(s)",
+       "maxDailyDoseAmount": "100",
+       "doseUomTotal": "mg milligram(s)",
+       "maxTotalDoseAmount": "36500",
+       "productChangedRelationMA": false,
+       "maxTreatmentPeriod": 12,
+       "timeUnitCode": "3",
+       "otherMedicinalProduct": "GnRH receptor antagonist",
+       "evCode": "PRD10144812",
+       "sponsorProductCodeEdit": "N/A",
+       "devices": [],
+       "characteristics": [
+        "11"
+       ],
+       "routes": [
+        "ORAL"
+       ],
+       "allSubstancesChemicals": true,
+       "productName": "Yselty 100 mg film-coated tablets",
+       "jsonActiveSubstanceNames": "linzagolix",
+       "pharmaceuticalFormDisplay": "FILM-COATED TABLET"
+      },
+      {
+       "id": 592043,
+       "part1MpRoleTypeCode": "1",
+       "productDictionaryInfo": {
+        "productPk": "13295302",
+        "productPharmForm": "COMPRIMIDOS BUCODISPERSABLES",
+        "euMpNumber": "PRD10112974",
+        "marketingAuthNumber": "88343",
+        "prodAuthStatus": 2,
+        "prodName": "Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+        "pharmForm": "ORODISPERSIBLE TABLET",
+        "activeSubstanceName": "BILASTINE",
+        "euSubstNumber": "SUB37845",
+        "authorisationCountryCode": "ES",
+        "mrpNumber": "SE/H/2180/002",
+        "nameOrg": "TEVA B.V",
+        "productSubstances": [
+         {
+          "productPk": "13295302",
+          "substancePk": "424962",
+          "nameOrg": "TEVA B.V",
+          "substanceOrigin": "Chemical",
+          "actSubstOrigin": "Chemical",
+          "actSubstName": "BILASTINE",
+          "substanceEvCode": "SUB37845"
+         }
+        ],
+        "atcCode": "R06AX29",
+        "atcName": "-",
+        "atcTermLevel": "5",
+        "activeSubstanceOtherDescriptiveName": ""
+       },
+       "isPaediatricFormulation": false,
+       "mpRoleInTrial": "1",
+       "orphanDrugEdit": false,
+       "doseUom": "mg milligram(s)",
+       "maxDailyDoseAmount": "20",
+       "doseUomTotal": "mg milligram(s)",
+       "maxTotalDoseAmount": "7300",
+       "productChangedRelationMA": false,
+       "maxTreatmentPeriod": 12,
+       "timeUnitCode": "3",
+       "otherMedicinalProduct": "Second-generation antihistamine",
+       "evCode": "PRD10112974",
+       "devices": [],
+       "characteristics": [
+        "11"
+       ],
+       "routes": [
+        "ORAL"
+       ],
+       "allSubstancesChemicals": true,
+       "productName": "Bilastina Teva 20 mg comprimidos bucodispersables EFG",
+       "jsonActiveSubstanceNames": "bilastine",
+       "pharmaceuticalFormDisplay": "ORODISPERSIBLE TABLET"
+      }
+     ]
+    }
+   ],
+   "isLowIntervention": false
+  },
+  "authorizedPartsII": [
+   {
+    "id": 334592,
+    "mscId": 62144,
+    "mscInfo": {
+     "id": 62144,
+     "clinicalTrialId": 29471,
+     "countryOrganisationId": 2027,
+     "reportingStatusCode": "Authorised",
+     "fromDate": "2026-08-27",
+     "toDate": "2026-08-27",
+     "isProposedRms": true,
+     "countryName": "Spain",
+     "organisationInfo": {},
+     "firstDecisionDate": "2026-10-01",
+     "trialStatus": "Authorised",
+     "trialPeriod": [],
+     "trialRecruitmentPeriod": [],
+     "hasRecruitmentStarted": false,
+     "activeTrialPeriod": {},
+     "activeTrialRecruitmentPeriod": {},
+     "isWillingAtDayThreeView": false,
+     "clinicalTrialStatusHistory": [
+      {
+       "id": 438925,
+       "mscId": 62144,
+       "trialStatus": "Under evaluation",
+       "trialStatusDate": "2026-07-05T19:58:08.714"
+      },
+      {
+       "id": 510452,
+       "mscId": 62144,
+       "trialStatus": "Authorised",
+       "trialStatusDate": "2026-10-01T07:49:20.76"
+      }
+     ],
+     "applicationTypeMsc": "1",
+     "mscName": "Spain",
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2026-09-28",
+     "decision": "authorized",
+     "decisionDate": "2026-10-01"
+    },
+    "decisionDate": "2026-10-01",
+    "recruitmentSubjectCount": 150,
+    "trialSites": [
+     {
+      "id": 2350789,
+      "organisationAddressInfo": {
+       "id": 917713,
+       "organisation": {
+        "id": 959942,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospital Del Mar",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100028631",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 1027740,
+        "oneLine": "Passeig Maritim De La Barceloneta 25-29",
+        "addressLine1": "Passeig Maritim De La Barceloneta 25-29",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Barcelona",
+        "postcode": "08003",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "phone": "+34932483132",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100028631"
+      },
+      "personInfo": {
+       "id": 2605595,
+       "firstName": "Maria del Mar",
+       "lastName": "Vernet-Tomas",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Breast Diseases Unit"
+     }
+    ],
+    "applicationStatusCode": "Authorised"
+   }
+  ],
+  "applicationInfo": [
+   {
+    "id": 88169,
+    "type": "INITIAL",
+    "status": "Authorised",
+    "ctNumber": "2026-525672-26-01",
+    "trialStatus": "Authorised",
+    "submissionDate": "2026-07-05",
+    "partI": {
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2026-09-30"
+    },
+    "partIIInfo": [
+     {
+      "id": 334592,
+      "mscId": 62144,
+      "mscInfo": {
+       "id": 62144,
+       "mscName": "Spain",
+       "countryOrganisationId": 2027,
+       "assessmentOutcome": "acceptable",
+       "assessmentOutcomeDate": "2026-09-28",
+       "decision": "authorized",
+       "decisionDate": "2026-10-01",
+       "reportingStatusCode": "Authorised",
+       "countryName": "Spain",
+       "trialStatus": "Authorised",
+       "firstDecisionDate": "2026-10-01"
+      },
+      "applicationStatusCode": "Authorised"
+     }
+    ],
+    "decisionDate": "2026-10-01",
+    "ctMSCsByApplication": [
+     {
+      "id": 62144,
+      "mscName": "Spain",
+      "reportingStatusCode": "Authorised"
+     }
+    ],
+    "businessKey": "IN-1",
+    "allPartTwosOutOfScope": false,
+    "applicationTrialDecisionByMsc": {},
+    "decisions": [
+     {
+      "id": 144485,
+      "applicationId": 88169,
+      "mscId": 62144,
+      "mscName": "Spain",
+      "decisionDate": "2026-10-01T07:49:20.989",
+      "decision": "authorized",
+      "assessmentOutcome": "acceptable",
+      "eventType": "decision",
+      "part2Id": 334592,
+      "part1Id": 141903,
+      "applicationType": "INITIAL",
+      "isRMS": true
+     }
+    ],
+    "productRoleGroupDocument": [
+     {
+      "documentUuid": "468bcfdc-3b0c-4be2-a826-93ccbfaf6025",
+      "productRoleGroupId": 439269
+     },
+     {
+      "documentUuid": "64f96e77-c514-485e-b38e-2e0701e8c8c8",
+      "productRoleGroupId": 439269
+     }
+    ]
+   }
+  ],
+  "trialGlobalEnd": [],
+  "memberStatesConcerned": [
+   {
+    "mscName": "Spain",
+    "mscId": 62144,
+    "firstDecisionDate": "2026-10-01T07:49:20.989",
+    "lastDecisionDate": "2026-10-01T07:49:20.989",
+    "mscPublicStatusCode": 2
+   }
+  ],
+  "eudraCt": {
+   "isTransitioned": false
+  }
+ },
+ "events": {
+  "temporaryHaltList": [],
+  "trialEvents": [
+   {
+    "mscId": 62144,
+    "mscName": "Spain",
+    "events": []
+   }
+  ],
+  "unexpectedEvents": [],
+  "seriousBreaches": [],
+  "urgentSafetyMeasures": []
+ },
+ "results": {},
+ "documents": [
+  {
+   "title": "2026 08 25 nueva version PremBreastPrev-01",
+   "uuid": "1763319f-1944-4555-b832-0fc139f98b43",
+   "documentType": "104",
+   "documentTypeLabel": "Protocol (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 141903,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 nueva version PUBLICA PremBreastPrev-01",
+   "uuid": "7dde9ff3-febe-4a54-bfff-0f4d70cdf44a",
+   "documentType": "104",
+   "documentTypeLabel": "Protocol (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 141903,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 SYNOPSIS OF THE PROTOCOL public",
+   "uuid": "14aecefb-2046-44e4-babe-c2033a23a541",
+   "documentType": "7",
+   "documentTypeLabel": "Synopsis of the protocol (for publication)",
+   "languageCode": 6,
+   "fileType": "PDF",
+   "associatedEntityId": 141903,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 SINOPSIS espanol PremBreastPrev-01 V2",
+   "uuid": "10a9dfc8-456e-474d-a3f3-a0fc34dc7f1e",
+   "documentType": "7",
+   "documentTypeLabel": "Synopsis of the protocol (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 141903,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "CTIS resub SmPC FichaTecnica_Bilaxten",
+   "uuid": "468bcfdc-3b0c-4be2-a826-93ccbfaf6025",
+   "documentType": "19",
+   "documentTypeLabel": "Summary of Product Characteristics (SmPC) (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 439269,
+   "manualVersion": "2",
+   "systemVersion": "1"
+  },
+  {
+   "title": "CTIS resub SmPC yselty-epar-product-information_en",
+   "uuid": "64f96e77-c514-485e-b38e-2e0701e8c8c8",
+   "documentType": "19",
+   "documentTypeLabel": "Summary of Product Characteristics (SmPC) (for publication)",
+   "languageCode": 6,
+   "fileType": "PDF",
+   "associatedEntityId": 439269,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "CTIS resub patient_recruitment_procedure_PremBreastPrev",
+   "uuid": "53942803-87de-413f-94ae-7275065edb41",
+   "documentType": "14",
+   "documentTypeLabel": "Recruitment arrangements (for publication)",
+   "languageCode": 6,
+   "fileType": "PDF",
+   "associatedEntityId": 334592,
+   "manualVersion": "2",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 consentimiento informado PremBreastPrev",
+   "uuid": "f54a2553-280f-4145-9e59-3c1d83166788",
+   "documentType": "15",
+   "documentTypeLabel": "Subject information and informed consent form (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 334592,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 Apendice 1 proteccion de datos",
+   "uuid": "614e6ee7-431f-4563-8efe-eb84d7790cca",
+   "documentType": "15",
+   "documentTypeLabel": "Subject information and informed consent form (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 334592,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "2026 08 25 HIP PremBreastPrev-01",
+   "uuid": "4c5df748-d74d-496d-ad5e-566bd7659ce8",
+   "documentType": "15",
+   "documentTypeLabel": "Subject information and informed consent form (for publication)",
+   "languageCode": 7,
+   "fileType": "PDF",
+   "associatedEntityId": 334592,
+   "manualVersion": "2.1",
+   "systemVersion": "1"
+  }
+ ],
+ "trialRegion": "EEA",
+ "trialRegionCode": 1,
+ "correctiveMeasures": []
+}

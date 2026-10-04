@@ -1181,7 +1181,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
-  'vcr_matching_vocabulary_unavailable', 'registry_unsupported',
+  'vcr_matching_vocabulary_unavailable', 'registry_unsupported', 'registry_terms_forbid_commercial_use',
   // data intake (the data tab and its routes; plan §8.1)
   'vcr_data_file_name_invalid', 'vcr_data_file_too_large', 'vcr_data_file_unreadable', 'vcr_data_format_unsupported',
   'vcr_source_file_not_found', 'vcr_source_file_frozen', 'vcr_source_file_changed',
@@ -1532,6 +1532,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_matching_vocabulary_unavailable: '这次匹配记录的词表版本不受支持，不能按当前映射重新解释。',
   vcr_model_not_found: '所选模型的这个版本不可用，请从模型库选择确切的模型版本；其他研究继续。',
   registry_unsupported: '本部署尚未接入这个注册库，不把未查询当成没有记录。',
+  registry_terms_forbid_commercial_use: '这个注册库的使用条款禁止商业使用，所以不接入；它没有被查询，不等于没有记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
   vcr_number_mcse_missing: '这个数字来自仿真，引用它必须带蒙特卡洛标准误。',

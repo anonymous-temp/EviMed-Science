@@ -11,6 +11,7 @@ import {
   PUBLIC_SOURCE_ALLOWED_HOSTS,
   PUBLIC_SOURCE_CREDENTIAL_PROFILES,
 } from "../src/publicSourceGateway.mjs";
+import { createTrialRegistryClient } from "../src/trialRegistryClient.mjs";
 import { fetchWebTransport } from "../src/webReadNetwork.mjs";
 
 const connectorSources = ["public_sources.py", "science_connectors.py"].map((name) => {
@@ -456,6 +457,91 @@ test("EviMed evidence POST requests are fixed, read-only, and schema bounded", a
     });
     assert.equal(rejected.status, 400);
   }
+});
+
+test("the EU CTIS portal: the registry client's own search and retrieve are approved, and nothing else on that host is", async (t) => {
+  // The requests are the ones the registry client really builds, replayed through the gateway: a client whose body drifts from
+  // the approved shape would be refused here, and a gateway that stopped approving it would be caught.
+  const built = [];
+  const client = createTrialRegistryClient({
+    fetchImpl: async (url, init) => {
+      built.push({ url: String(url), method: init?.method ?? "GET", body: init?.body ? JSON.parse(init.body) : undefined });
+      return new Response(JSON.stringify({ showWarning: false, pagination: { totalRecords: 0, currentPage: 1, totalPages: 0, nextPage: false, prevPage: false }, data: [] }), { headers: { "content-type": "application/json" } });
+    },
+  });
+  await client.searchCtis({ condition: "breast cancer", intervention: "linzagolix", term: "density", phases: ["PHASE2", "PHASE3"], statuses: [3, 4], hasResults: true, limit: 100, pageToken: "3" });
+  await client.recordCtis("2024-513060-26-00");
+  assert.deepEqual(built.map((call) => call.method), ["POST", "GET"]);
+
+  const upstream = [];
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async (url, init) => {
+      upstream.push({ url: String(url), method: init.method, body: init.body ? JSON.parse(init.body) : undefined, redirect: init.redirect });
+      return new Response(JSON.stringify({ data: [] }), { headers: { "content-type": "application/json" } });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+  assert.equal(PUBLIC_SOURCE_ALLOWED_HOSTS.has("euclinicaltrials.eu"), true);
+
+  for (const call of built) {
+    const answered = await gatewayRequest(base, { url: call.url, accept: ["application/json"], method: call.method, ...(call.body ? { body: call.body } : {}) });
+    assert.equal(answered.status, 200, `${call.method} ${call.url}`);
+  }
+  assert.deepEqual(upstream.map((call) => [call.method, call.url, call.redirect]), [
+    ["POST", "https://euclinicaltrials.eu/ctis-public-api/search", "error"],
+    ["GET", "https://euclinicaltrials.eu/ctis-public-api/retrieve/2024-513060-26-00", "error"],
+  ]);
+  assert.deepEqual(upstream[0].body, built[0].body, "the body travels as the client built it");
+
+  const refused = [];
+  /** @param {string} label @param {Record<string, unknown>} request @param {number} status */
+  const expectRefused = async (label, request, status) => {
+    const before = upstream.length;
+    const response = await gatewayRequest(base, { accept: ["application/json"], ...request });
+    refused.push([label, response.status]);
+    assert.equal(response.status, status, label);
+    assert.equal(upstream.length, before, `${label}: nothing reached the portal`);
+  };
+  const search = "https://euclinicaltrials.eu/ctis-public-api/search";
+  const good = { pagination: { page: 1, size: 10 }, searchCriteria: { containAll: "x" } };
+  // Only the search may be POSTed, and only its own shape.
+  await expectRefused("POST to retrieve", { url: "https://euclinicaltrials.eu/ctis-public-api/retrieve/2024-513060-26-00", method: "POST", body: good }, 403);
+  await expectRefused("POST to another path", { url: "https://euclinicaltrials.eu/ctis-public-api/other", method: "POST", body: good }, 403);
+  await expectRefused("POST outside the API", { url: "https://euclinicaltrials.eu/ctis-public/search", method: "POST", body: good }, 403);
+  await expectRefused("query string on the search", { url: `${search}?x=1`, method: "POST", body: good }, 403);
+  await expectRefused("a credential profile", { url: search, method: "POST", body: good, credentialProfile: "evimed-evidence" }, 403);
+  for (const [label, body] of Object.entries({
+    "an unknown top-level field": { ...good, command: "x" },
+    "no criteria object": { pagination: good.pagination },
+    "criteria that is an array": { pagination: good.pagination, searchCriteria: [] },
+    "an unknown criterion": { pagination: good.pagination, searchCriteria: { evil: "x" } },
+    "a text criterion that is not text": { pagination: good.pagination, searchCriteria: { containAll: 5 } },
+    "a text criterion over 512 characters": { pagination: good.pagination, searchCriteria: { containAll: "x".repeat(513) } },
+    "a line break in a criterion": { pagination: good.pagination, searchCriteria: { containAll: "a\nb" } },
+    "a code list that is not numbers": { pagination: good.pagination, searchCriteria: { status: ["3"] } },
+    "a code list of 21": { pagination: good.pagination, searchCriteria: { status: Array.from({ length: 21 }, (_, index) => index) } },
+    "a flag that is not a boolean": { pagination: good.pagination, searchCriteria: { hasStudyResults: "yes" } },
+    "page 0": { pagination: { page: 0, size: 10 }, searchCriteria: {} },
+    "page past the cap": { pagination: { page: 10_001, size: 10 }, searchCriteria: {} },
+    "a page of 101": { pagination: { page: 1, size: 101 }, searchCriteria: {} },
+    "a pagination field of its own": { pagination: { page: 1, size: 10, offset: 5 }, searchCriteria: {} },
+    "a sort by something else": { pagination: good.pagination, sort: { property: "password", direction: "ASC" }, searchCriteria: {} },
+    "a body that is a string": "x",
+  })) await expectRefused(label, { url: search, method: "POST", body }, 400);
+  // Only a trial's record may be read with a GET.
+  for (const url of [
+    "https://euclinicaltrials.eu/ctis-public-api/search",
+    "https://euclinicaltrials.eu/ctis-public-api/retrieve/NCT02296125",
+    "https://euclinicaltrials.eu/ctis-public-api/retrieve/2024-513060-26-00/extra",
+    "https://euclinicaltrials.eu/ctis-public-api/retrieve/../search",
+    "https://euclinicaltrials.eu/ctis-public/view/2024-513060-26-00",
+    "https://euclinicaltrials.eu/",
+    "https://euclinicaltrials.eu/ctis-public-api/retrieve/2024-513060-26-00#x",
+    "http://euclinicaltrials.eu/ctis-public-api/retrieve/2024-513060-26-00",
+    "https://euclinicaltrials.eu:8443/ctis-public-api/retrieve/2024-513060-26-00",
+  ]) await expectRefused(`GET ${url}`, { url, method: "GET" }, 403);
+  assert.ok(refused.length > 25);
 });
 
 test("EviMed evidence gateway registers every documented retrieval endpoint", async (t) => {

@@ -1,4 +1,8 @@
+import { knownErrorCodeMessage } from '@evimed/domain';
 import type { VcrRegistrySource } from '@/lib/vcrClient';
+
+/** Why a registry is left out, when the reason is the registry's own terms and not our work: the row says so. */
+const LEFT_OUT_BY_TERMS = 'registry_terms_forbid_commercial_use';
 
 /** Configuration and last observation are distinct from a successful empty search. */
 export function VcrRegistryCoverage({ sources = [] }: { sources?: VcrRegistrySource[] }) {
@@ -9,6 +13,7 @@ export function VcrRegistryCoverage({ sources = [] }: { sources?: VcrRegistrySou
       {sources.map(source => <li key={source.key} className="flex flex-wrap gap-x-3 gap-y-1">
         <span>{source.label}</span>
         <span>{source.coverage === 'unsupported' ? '未接入' : source.coverage === 'list_only' ? '仅登记列表' : '结构化记录'}</span>
+        {source.coverage === 'unsupported' && source.reason === LEFT_OUT_BY_TERMS && <span>{knownErrorCodeMessage(LEFT_OUT_BY_TERMS)}</span>}
         {source.coverage !== 'unsupported' && <span>{!source.configured ? '未配置' : source.availability === 'available' ? '上次读取成功' : source.availability === 'unavailable' ? '上次读取失败' : '尚未查询'}</span>}
       </li>)}
     </ul>
