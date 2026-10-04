@@ -237,6 +237,9 @@ import { createGeoNotifier } from "./geoNotify.mjs";
 // file; off, or without a product database, the whole module is absent and
 // every route answers 404 `vcr_not_enabled`.
 import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarnings } from "./vcrComposition.mjs";
+import { createAvailability } from "./availabilityModule.mjs";
+import { availabilityMetricFamilies } from "./availabilityService.mjs";
+import { loadMethodValidation } from "./vcrMethodValidation.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
@@ -589,6 +592,7 @@ function routePattern(pathname) {
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
+  if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (pathname.startsWith("/api/auth/evimed")) return evimedAuthRoutePattern(pathname);
   if (
@@ -2091,6 +2095,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runMetrics.failed();
     }
   };
+  // Truthful capability availability (availabilityModule.mjs): what this deployment can say it has really run, as a
+  // label and never a gate. Registered here; hooked in four places below (the run-finish hook, the route chain, the
+  // recurring-work start and the operators' metrics).
+  const availability = createAvailability({
+    config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
+    agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService,
+    methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
+    mutation: maintenanceMutation,
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,
+    report: (code) => process.stderr.write(`availability: ${code}\n`),
+  });
   // What a runtime's model request is for in the usage ledger (X1): the
   // kernel's, unless its run is source understanding. A bounded runtime's
   // token names its dispatch id, an interactive one's attribution the run id,
@@ -2530,6 +2546,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
       runtimeEventPump.noteRun(project, run);
       await observeRunMetrics(project, run);
+      // Join the run to what it used and produced, off the path: one job per run, never throws.
+      await availability.collector?.enqueueRun(project, run);
       if (sourceUnderstandingRuntime) {
         await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
           await securityAudit(config, "source.runtime.release", "failed", {
@@ -4457,6 +4475,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await resultImpactRoutes(req, res)) return;
       if (await resultSourceUpdatesRoutes(req, res)) return;
       if (await resultReplayRoutes(req, res)) return;
+      if (await availability.routes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -4509,6 +4528,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           vcr,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
           alertReceiver,
+          availability,
         });
         return;
       }
@@ -4529,6 +4549,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         sendJson(res, 200, { data: {
           days, since: since.toISOString(), currency: "CNY", rows: await usageLedger.usageByPurpose({ since }),
         } });
+        return;
+      }
+
+      // What the deployment really did, for the release audit to cite beside what an outside probe saw (availabilityService.mjs
+      // `export`): every operation record in full, with the run, dispatch, session and result-version references the
+      // ordinary catalogue never shows. Behind the scrape token, like the usage report above.
+      if (pathname === "/api/ops/availability" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await availability.service.export() });
         return;
       }
 
@@ -4791,11 +4821,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
 
       if (pathname === "/api/agents" && req.method === "GET") {
-        await store.ensureUser(req, res);
+        const user = await store.ensureUser(req, res);
         // The default open-domain answer handler is not a user-selectable specialist.
-        sendJson(res, 200, {
-          data: (await agentRegistry).list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID),
-        });
+        const listed = (await agentRegistry).list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+        // Each capability says what this deployment can truthfully claim about it. A label: a failure to compute it
+        // leaves the catalogue exactly as it was, and no entry is ever left out for what it says.
+        const states = await availability.service.capabilityStates(user).catch(() => null);
+        sendJson(res, 200, { data: states ? listed.map((agent) => ({ ...agent, availability: states.get(agent.id) ?? null })) : listed });
         return;
       }
 
@@ -6244,10 +6276,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker]) {
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
+    availability.pause();
     for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.reconcileTimer) clearInterval(worker.reconcileTimer);
       if (worker) worker.reconcileTimer = null;
@@ -6289,6 +6322,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       vcr?.worker?.start?.();
       documentExportWorker?.start();
       resultReplayWorker?.start();
+      availability.start();
       credits?.worker.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -6480,6 +6514,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await vcr?.worker?.close?.();
       await documentExportWorker?.close();
       await resultReplayWorker?.close();
+      await availability.close();
       await resultCaptureQueue.drain();
       await credits?.worker.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
@@ -7276,7 +7311,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, learning = null, alertReceiver = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, learning = null, alertReceiver = null, availability = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7616,6 +7651,11 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // and the job queue's counters, the worker's loops (vcrComposition.mjs).
   const vcrSnapshot = vcr ? await vcrMetricsSnapshot(vcr) : null;
   for (const family of vcrMetricFamilies(Boolean(vcr), vcrSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What this deployment can truthfully say it has run: subjects by state, operations folded, the collector's
+  // backlog (availabilityService.mjs `availabilityMetricFamilies`). A scrape that cannot read it exports the
+  // `enabled` gauge alone.
+  const availabilitySnapshot = availability ? await availability.service.metrics().catch(() => null) : null;
+  for (const family of availabilityMetricFamilies(Boolean(availability), availabilitySnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);

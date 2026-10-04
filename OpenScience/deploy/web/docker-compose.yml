@@ -333,6 +333,10 @@ services:
       # holds.
       # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
       OPEN_SCIENCE_RESULTS_ENABLED:
+      # Truthful capability availability (availabilityModule.mjs): the collector's off switch and how often it
+      # looks for runs the finish hook missed. A label, never a gate; value-less, so the code's default holds.
+      OPEN_SCIENCE_AVAILABILITY_ENABLED:
+      OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS:
       OPEN_SCIENCE_RESULT_ENGINE_URL:
       OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS:
       OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS:

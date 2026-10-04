@@ -2554,6 +2554,15 @@ export function loadConfig(overrides = {}) {
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    // Truthful capability availability (availabilityModule.mjs): the collector that joins finished runs to what they
+    // used and produced. A label and never a gate, so the switch only decides whether operations are collected; with
+    // it off the projection is still served from the deployment's composition and every label that needs a record
+    // reads 「未验证」. The sweep is how often runs the finish hook missed (and those from before this existed) are
+    // looked for.
+    availabilityEnabled: overrides.availabilityEnabled ?? boolEnv("OPEN_SCIENCE_AVAILABILITY_ENABLED", true),
+    availabilitySweepIntervalMs: Math.max(60_000, Math.min(86_400_000, Number(
+      overrides.availabilitySweepIntervalMs ?? process.env.OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS ?? 3_600_000,
+    ) || 3_600_000)),
     resultEngineUrl: String(overrides.resultEngineUrl ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_URL ?? "").trim(),
     resultEngineRequestTimeoutMs: Math.max(1000, Math.min(60000, Number(
       overrides.resultEngineRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS ?? 15000,
