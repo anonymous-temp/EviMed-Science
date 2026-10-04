@@ -265,6 +265,22 @@ test("settling a revision records what the run left, labels renderings unchecked
   assert.equal(f.jobs.jobs.length, 1);
 });
 
+test("a successor the system made on its own is no correction: a recalculation, a file of another request, a copy of the selected bytes", async t => {
+  const f = await fixture(t);
+  const original = await f.deliver();
+  // A recalculation links its successor itself (`resultReplayService.mjs`); nobody asked for it in the composer.
+  await f.capture("result-replays/job-1/report.md", REVISED_REPORT, { extra: { supersedesVersionId: original.versionId } });
+  // A revision's directory, written by a request that is not the one the selection was bound to.
+  const { directory } = await f.revise();
+  f.run = { ...f.run, id: "later-run", kernelRequestIds: ["unrelated-request"] };
+  await f.capture(`${directory}/report.md`, "A later request has no relationship to the selection.\n");
+  f.run = { ...f.run, id: "revision-run", kernelRequestIds: ["submitted-request"] };
+  // Bytes identical to the selected version are a copy, not a revision of it.
+  await f.capture(`${directory}/report.md`, ORIGINAL_REPORT);
+  assert.deepEqual(await f.events(), []);
+  assert.deepEqual(f.jobs.jobs, []);
+});
+
 test("a revision that left no successor settles as no_successor and learns nothing", async t => {
   const f = await fixture(t);
   await f.deliver();
