@@ -248,6 +248,34 @@
     },
     {
       "id": "mth_3",
+      "name": "双重稳健估计（AIPW）",
+      "method": "comparator.aipw",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_4",
+      "name": "协变量集敏感性分析",
+      "method": "comparator.covariate_sets",
+      "version": "1.0.0",
+      "endpoints": "continuous · binary · time_to_event",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_5",
       "name": "熵平衡加权",
       "method": "comparator.entropy_balance",
       "version": "1.0.0",
@@ -261,7 +289,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_4",
+      "id": "mth_6",
       "name": "E 值",
       "method": "comparator.evalue",
       "version": "1.0.0",
@@ -275,7 +303,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_5",
+      "id": "mth_7",
       "name": "匹配调整间接比较",
       "method": "comparator.maic",
       "version": "1.0.0",
@@ -289,7 +317,21 @@
       "usedIn": null
     },
     {
-      "id": "mth_6",
+      "id": "mth_8",
+      "name": "事件时间终点的匹配调整间接比较",
+      "method": "comparator.maic_time_to_event",
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_9",
       "name": "MAP 先验",
       "method": "comparator.map_prior",
       "version": "1.0.0",
@@ -303,7 +345,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_7",
+      "id": "mth_10",
       "name": "倾向评分加权",
       "method": "comparator.propensity_weight",
       "version": "1.0.0",
@@ -317,7 +359,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_8",
+      "id": "mth_11",
       "name": "RMST 比较",
       "method": "comparator.rmst",
       "version": "1.0.0",
@@ -331,7 +373,21 @@
       "usedIn": null
     },
     {
-      "id": "mth_9",
+      "id": "mth_12",
+      "name": "加权 Cox 风险比",
+      "method": "comparator.weighted_cox",
+      "version": "1.0.0",
+      "endpoints": "time_to_event",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_13",
       "name": "方案的解析计算",
       "method": "design.analytic",
       "version": "1.1.0",
@@ -345,7 +401,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_10",
+      "id": "mth_14",
       "name": "成功把握",
       "method": "design.assurance",
       "version": "1.0.0",
@@ -359,7 +415,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_11",
+      "id": "mth_15",
       "name": "设计网格",
       "method": "design.grid",
       "version": "1.1.0",
@@ -373,7 +429,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_12",
+      "id": "mth_16",
       "name": "预后协变量调整",
       "method": "design.procova",
       "version": "1.0.0",
@@ -387,7 +443,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_13",
+      "id": "mth_17",
       "name": "方案的模拟运行",
       "method": "design.simulate",
       "version": "1.1.0",
@@ -401,7 +457,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_14",
+      "id": "mth_18",
       "name": "证据合并",
       "method": "evidence.pool",
       "version": "1.0.0",
@@ -415,7 +471,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_15",
+      "id": "mth_19",
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
       "version": "1.0.0",
@@ -429,7 +485,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_16",
+      "id": "mth_20",
       "name": "逐条匹配",
       "method": "matching.evaluate",
       "version": "1.0.0",
@@ -443,7 +499,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_17",
+      "id": "mth_21",
       "name": "虚拟患者（二分类终点）",
       "method": "patients.binary",
       "version": "1.0.0",
@@ -457,7 +513,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_18",
+      "id": "mth_22",
       "name": "虚拟患者（连续终点）",
       "method": "patients.continuous",
       "version": "1.0.0",
@@ -471,7 +527,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_19",
+      "id": "mth_23",
       "name": "虚拟患者（事件时间终点）",
       "method": "patients.time_to_event",
       "version": "1.0.0",
@@ -485,7 +541,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_20",
+      "id": "mth_24",
       "name": "文献人群",
       "method": "population.literature",
       "version": "1.0.0",
@@ -499,7 +555,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_21",
+      "id": "mth_25",
       "name": "人群质量报告",
       "method": "population.quality",
       "version": "1.0.0",
@@ -513,7 +569,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_22",
+      "id": "mth_26",
       "name": "情景人群生成",
       "method": "population.scenario",
       "version": "1.0.0",
@@ -527,7 +583,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_23",
+      "id": "mth_27",
       "name": "经验合成人群",
       "method": "population.synthpop",
       "version": "1.0.0",
@@ -541,7 +597,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_24",
+      "id": "mth_28",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.0.0",
