@@ -703,9 +703,11 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         } finally { res.removeListener("close", disconnected); }
         return;
       }
-      if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize"].includes(url.pathname)) {
-        // 「虚拟临研」 intake (protocol 9): a fixed operation over one staged attempt.
-        // A figure is staged on the data volume the API and this process share and is
+      if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize", "/v1/vcr/materials"].includes(url.pathname)) {
+        // 「虚拟临研」 intake (protocol 9) and the source-material read (protocol
+        // 10): a fixed operation over one staged attempt.
+        // A figure, or a knowledge-base source's PDF or spreadsheet, is staged on the
+        // data volume the API and this process share and is
         // named by its attempt and the digest of its request. A record is staged in
         // the data plane, which this process does not mount: it is named by the one
         // path inside the plane that the layout allows, with the SHA-256 and size the

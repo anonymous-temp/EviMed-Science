@@ -100,3 +100,42 @@ body = t.para("患者男，62岁，主诉胸痛2小时。") + "<w:tbl>" + t.row(
   const names = ["text.pdf", "scan.pdf", "mixed.pdf", "record.docx", "image-only.docx", "not-a.pdf"];
   return Object.fromEntries(names.map(name => [name, path.join(directory, name)]));
 }
+
+/**
+ * Source documents for the source-material tests: PDFs whose text layer is the
+ * given lines page by page (a page of `[]` is a scan), and workbooks built with
+ * openpyxl from a plain description. Built byte by byte through the extractor's
+ * own test helper, so no binary fixture is committed.
+ * @param {string} directory
+ * @param {{ pdfs?: Record<string, string[][]>, workbooks?: Record<string, { sheets: { name: string, state?: string, cells: Record<string, any>, merges?: string[] }[] }> }} spec
+ * @returns {Promise<Record<string, string>>} name → path
+ */
+export async function writeMaterialFixtures(directory, { pdfs = {}, workbooks = {} }) {
+  const program = `
+import sys, json, pathlib
+sys.path.insert(0, ${JSON.stringify(path.join(MCP_DIR, "test"))})
+sys.path.insert(0, ${JSON.stringify(MCP_DIR)})
+import test_vcr_record_extract as t
+spec = json.loads(sys.stdin.read())
+out = pathlib.Path(sys.argv[1])
+for name, pages in spec["pdfs"].items():
+    (out / name).write_bytes(t.pdf_bytes(pages))
+if spec["workbooks"]:
+    from openpyxl import Workbook
+    for name, book in spec["workbooks"].items():
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+        for sheet in book["sheets"]:
+            ws = workbook.create_sheet(sheet["name"])
+            for address, value in sheet["cells"].items():
+                ws[address] = value
+            for merge in sheet.get("merges", []):
+                ws.merge_cells(merge)
+            if sheet.get("state"):
+                ws.sheet_state = sheet["state"]
+        workbook.save(out / name)
+`;
+  const done = spawnSync("python3", ["-c", program, directory], { encoding: "utf8", input: JSON.stringify({ pdfs, workbooks }) });
+  if (done.status !== 0) throw new Error(`fixture build failed: ${done.stderr}`);
+  return Object.fromEntries([...Object.keys(pdfs), ...Object.keys(workbooks)].map(name => [name, path.join(directory, name)]));
+}

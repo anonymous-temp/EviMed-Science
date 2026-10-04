@@ -3,7 +3,7 @@ import { constants as fsConstants, createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { HttpError, assertNoSymlinkPath, openScopedFileNoFollow, readStableFileHandle } from './security.mjs';
-import { vcrIntakeDirectory, vcrIntakeRoot } from './vcrIntakeController.mjs';
+import { VCR_INTAKE_VOLUME_KINDS, vcrIntakeDirectory, vcrIntakeRoot } from './vcrIntakeController.mjs';
 import { VCR_INTAKE_SCRATCH, vcrIntakeScratchPaths } from './vcrIntakeLayout.mjs';
 
 /**
@@ -24,7 +24,9 @@ import { VCR_INTAKE_SCRATCH, vcrIntakeScratchPaths } from './vcrIntakeLayout.mjs
  *   and the next attempt sweeps what is older than an hour.
  * - **A published figure is not patient data** (`runIntakeAttempt`), so its
  *   scratch stays a copy under `<dataDir>/vcr-intake/digitize/<attempt>/`, the one
- *   directory the API and the controller both see, with its request beside it.
+ *   directory the API and the controller both see, with its request beside it. A
+ *   knowledge-base source's PDF or spreadsheet is staged the same way under
+ *   `.../materials/<attempt>/` (`sourceMaterials.mjs`).
  *
  * Either way everything staged is a copy: the original stays where it was (the
  * plane's incoming directory for a record, the project workspace for a figure).
@@ -46,23 +48,25 @@ async function sha256OfFile(file) {
 }
 
 /**
- * Remove a figure's attempts older than an hour from the data volume, at most
- * once in five minutes per process. Never throws: housekeeping must not fail a
- * conversion.
+ * Remove the attempts older than an hour from the data volume (a figure's, and a
+ * source document's), at most once in five minutes per process. Never throws:
+ * housekeeping must not fail a conversion.
  * @param {any} config @param {number} [now]
  */
 export async function sweepStaleIntake(config, now = Date.now()) {
   if (now - lastSweep < SWEEP_INTERVAL_MS) return 0;
   lastSweep = now;
   let removed = 0;
-  const parent = path.join(vcrIntakeRoot(config), 'digitize');
-  const names = await fs.readdir(parent).catch(() => []);
-  for (const name of names) {
-    const target = path.join(parent, name);
-    const stat = await fs.lstat(target).catch(() => null);
-    if (stat && now - stat.mtimeMs > STALE_AFTER_MS) {
-      await fs.rm(target, { recursive: true, force: true }).catch(() => {});
-      removed += 1;
+  for (const kind of VCR_INTAKE_VOLUME_KINDS) {
+    const parent = path.join(vcrIntakeRoot(config), kind);
+    const names = await fs.readdir(parent).catch(() => []);
+    for (const name of names) {
+      const target = path.join(parent, name);
+      const stat = await fs.lstat(target).catch(() => null);
+      if (stat && now - stat.mtimeMs > STALE_AFTER_MS) {
+        await fs.rm(target, { recursive: true, force: true }).catch(() => {});
+        removed += 1;
+      }
     }
   }
   return removed;
@@ -104,7 +108,7 @@ export function resetIntakeSweep() { lastSweep = 0; lastPlaneSweep = 0; }
  * One figure's attempt directory with the image and the request staged, under the
  * data volume.
  * @param {any} config
- * @param {string} kind `digitize`
+ * @param {string} kind `digitize` or `materials`
  * @param {{ name: string, source: { path?: string, bytes?: Buffer }, request: Record<string, any> }} staged
  */
 export async function stageIntakeAttempt(config, kind, { name, source, request }) {
@@ -156,14 +160,18 @@ export async function readIntakeOutput(outputDir, name, limit) {
  * a reader bound to the attempt's output and returns what the caller wants out of
  * it; the attempt is gone when this returns or throws.
  * @template T
+ * `expectSha256` holds the staged copy to the digest the caller already knows
+ * (a source's registered fingerprint): a file that changed between the caller's
+ * read and the copy is refused before a container is started.
  * @param {{ config: any, controller: { runVcrIntake: Function }, kind: string, name: string,
- *   source: { path?: string, bytes?: Buffer }, request: Record<string, any>, signal?: AbortSignal }} options
+ *   source: { path?: string, bytes?: Buffer }, request: Record<string, any>, signal?: AbortSignal, expectSha256?: string }} options
  * @param {(attempt: { read: (name: string, limit: number) => Promise<Buffer | null>, fileSha256: string, bytes: number }) => Promise<T>} consume
  * @returns {Promise<T>}
  */
-export async function runIntakeAttempt({ config, controller, kind, name, source, request, signal }, consume) {
+export async function runIntakeAttempt({ config, controller, kind, name, source, request, signal, expectSha256 }, consume) {
   const staged = await stageIntakeAttempt(config, kind, { name, source, request });
   try {
+    if (expectSha256 && staged.fileSha256 !== expectSha256) throw new HttpError(409, 'vcr_intake_input_invalid', 'The staged file is not the one that was registered.');
     await controller.runVcrIntake(kind, staged.reference, { signal });
     return await consume({ read: (file, limit) => readIntakeOutput(path.join(staged.dir, 'output'), file, limit), fileSha256: staged.fileSha256, bytes: staged.bytes });
   } finally {

@@ -8,6 +8,7 @@ import { ProductJobs } from "../src/productJobs.mjs";
 import { SourceService, projectSourceManifestRecord } from "../src/sourceService.mjs";
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "../src/sourceUnderstandingRuns.mjs";
+import { createSourceMaterials } from "../src/sourceMaterials.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) { const url = new URL(databaseUrl); assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
@@ -379,4 +380,42 @@ test("queued exhausted sources settle by CAS without overwriting a concurrent co
     assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1", [f.userId])).rowCount, correction ? 2 : 1);
     await f.database.query("DELETE FROM evimed_control.users WHERE id=$1", [f.userId]);
   }
+});
+
+test("real PostgreSQL stores the structured materials with the capture: a ledger on the source, a summary and one record per table of the same generation", options, async t => {
+  const f = await fixture(t);
+  const text = "Table 1. Baseline\n\n| Characteristic | Drug (n=10) |\n| --- | --- |\n| Male, n (%) | 6 (60.0) |\n";
+  const materials = await createSourceMaterials({ config: { sourceMaterialsEnabled: true } }).extract({ text, name: "notes.txt", sha256: "b".repeat(64), parserRevision: "fixture@1" });
+  const job = await f.jobs.claim(["ingest"], "materials-fixture", { leaseMs: 3000 });
+  await f.sources.beginIngestion(f.userId, f.source.id, { generation: f.source.payload.generation, job });
+  await f.sources.freezeCapture(job, { ...(await f.parser.parse()), text, materials });
+  const stored = await f.sources.requireSource(f.userId, f.source.id);
+  const ledger = stored.payload.coverage.materials;
+  assert.equal(ledger.extraction.materials, "evimed-materials@1");
+  assert.equal(ledger.extraction.parser, "fixture@1");
+  assert.equal(ledger.values.total, 1);
+  assert.equal(ledger.values.located, 1);
+  assert.equal(ledger.textSha256, stored.payload.analysis.textSha256);
+  const read = await f.sources.getMaterials(f.userId, f.source.id);
+  assert.equal(read.materials.structure.tables[0].id, "tbl-1");
+  assert.equal(read.materials.structure.tables[0].caption.label, "Table 1");
+  const table = await f.sources.getMaterialTable(f.userId, f.source.id, "tbl-1");
+  assert.equal(table.table.cells.find(cell => cell.r === 2 && cell.c === 2).v.kind, "count_percent");
+  await assert.rejects(f.sources.getMaterialTable(f.userId, f.source.id, "tbl-9"), { code: "source_table_not_found" });
+  await assert.rejects(f.sources.getMaterialTable(f.userId, f.source.id, "../x"), { code: "source_table_not_found" });
+  // Exactly a summary and the one table are stored, and both are knowledge records of this source.
+  const rows = await f.database.query("SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND payload->>'sourceId'=$2 AND payload->>'recordType' IN ('source-structure','source-table')", [f.userId, f.source.id]);
+  assert.equal(rows.rowCount, 2);
+});
+
+test("real PostgreSQL does not keep a structure derived from other text than the capture holds, and a capture with none reads as not extracted", options, async t => {
+  const f = await fixture(t);
+  const text = "| a | b |\n| - | - |\n| 1 | 2 |\n";
+  const materials = await createSourceMaterials({ config: { sourceMaterialsEnabled: true } }).extract({ text, name: "notes.txt", sha256: "b".repeat(64), parserRevision: "fixture@1" });
+  const job = await f.jobs.claim(["ingest"], "materials-stale", { leaseMs: 3000 });
+  await f.sources.beginIngestion(f.userId, f.source.id, { generation: f.source.payload.generation, job });
+  await f.sources.freezeCapture(job, { ...(await f.parser.parse()), text: "Other text entirely.", materials });
+  const stored = await f.sources.requireSource(f.userId, f.source.id);
+  assert.equal(stored.payload.coverage.materials, undefined, "absent is not extracted, never zero");
+  assert.deepEqual(await f.sources.getMaterials(f.userId, f.source.id), { sourceId: f.source.id, generation: f.source.payload.generation, materials: null, reason: "not_extracted" });
 });

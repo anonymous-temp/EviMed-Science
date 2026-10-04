@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { EVIDENCE_SOURCE_TYPE_LABELS_ZH } from "@evimed/domain";
 import { ExternalLink } from "lucide-react";
-import { CLAIM_STATUS_TEXT, claimSources, type ClaimEvidence } from "@/lib/claimCitations";
+import { CLAIM_STATUS_TEXT, claimSources, sourceLocationText, type ClaimEvidence } from "@/lib/claimCitations";
 import { claimAppraisalDisplay } from "@/lib/claimAppraisal";
 import { cn } from "@/lib/cn";
 import { preservedSourceHref, type VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
@@ -114,6 +114,9 @@ export function EvidenceMatrixTable({
                           <span className={cn("ml-1", STATUS_MARK[check.sources[index].status]?.className ?? "text-muted")}>
                             {STATUS_MARK[check.sources[index].status]?.text ?? "未核对"}
                           </span>
+                        )}
+                        {sourceLocationText(check?.sources[index]?.location) && (
+                          <span className="block text-text-3" data-source-location>位置：{sourceLocationText(check?.sources[index]?.location)}</span>
                         )}
                       </li>
                     ))}

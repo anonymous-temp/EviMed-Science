@@ -6,6 +6,8 @@
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
 import { claimAppraisalFindings } from "./appraisalStructure.mjs";
 import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
+import { deriveMarkdownStructure } from "./sourceMaterials.mjs";
+import { locateQuoteInText } from "./sourceMaterialsLocate.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -2295,6 +2297,77 @@ export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
       return { claimId: String(claim.claimId), claimType, status, sources };
     });
   return { claims, counts };
+}
+
+/** The longest preserved text a quotation's place is derived from; a larger one says so instead. */
+const LOCATION_MAX_CHARS = 4 * 1024 * 1024;
+/** How long one verification spends placing quotations: the rest are `unknown`, said so, and the marks are never delayed past it. */
+const LOCATION_BUDGET_MS = 3000;
+
+/**
+ * Where each verified quotation sits in its preserved source — its table, row
+ * and cell, and its page — beside the verdict `claimVerification` gave it, for
+ * the reader's 「依据」 and the evidence matrix (plan §11.3 N02).
+ *
+ * `location` is added to every quoted source of the verdict, and always says
+ * what it does not know: a quotation that was not found, a source that was not
+ * preserved or a claim with no quotation is `unknown` with that reason; one in
+ * prose has no table; a text with no page markers has no page. It reads the
+ * very text the quotation was checked against, by the very comparison
+ * (`quoteIsPresent`) that checked it, so a located quotation is one the mark
+ * above it vouches for. Best effort by contract: a source too large to derive
+ * from is `unknown`, and nothing here can change a status.
+ *
+ * @template {{ claims?: any[] }} V
+ * @param {V} verdict the result of `claimVerification`, completed in place
+ * @param {{ matrix?: any, sourceArtifacts?: Map<string, string> | Record<string, string> }} input
+ * @returns {V}
+ */
+export function attachClaimSourceLocations(verdict, { matrix, sourceArtifacts = {} } = {}) {
+  const artifactText = sourceArtifacts instanceof Map
+    ? sourceArtifacts
+    : new Map(Object.entries(sourceArtifacts && typeof sourceArtifacts === "object" ? sourceArtifacts : {}));
+  const matrixClaims = new Map((Array.isArray(matrix?.claims) ? matrix.claims : []).map((/** @type {any} */ claim) => [String(claim?.claimId), claim]));
+  /** @type {Map<string, any>} */
+  const structures = new Map();
+  const started = Date.now();
+  for (const claim of Array.isArray(verdict?.claims) ? verdict.claims : []) {
+    const origins = claimEvidenceSources(matrixClaims.get(claim.claimId));
+    (claim.sources ?? []).forEach((/** @type {any} */ source, /** @type {number} */ index) => {
+      const quote = origins[index]?.supportQuote;
+      const text = source.artifactPath ? artifactText.get(source.artifactPath) : undefined;
+      if (source.status !== "verified" || typeof quote !== "string" || typeof text !== "string") {
+        source.location = { status: "unknown", page: { status: "unknown", reason: "quote_not_verified" }, reason: String(source.status ?? "no_quote") };
+        return;
+      }
+      if (Date.now() - started > LOCATION_BUDGET_MS) {
+        source.location = { status: "unknown", page: { status: "unknown", reason: "locate_budget" }, reason: "locate_budget" };
+        return;
+      }
+      if (text.length > LOCATION_MAX_CHARS) {
+        source.location = { status: "unknown", page: { status: "unknown", reason: "source_too_large" }, reason: "source_too_large" };
+        return;
+      }
+      try {
+        if (!structures.has(source.artifactPath)) structures.set(source.artifactPath, deriveMarkdownStructure({ text }));
+        const found = locateQuoteInText({ text, quote, matches: quoteIsPresent, structure: structures.get(source.artifactPath) });
+        source.location = {
+          status: found.status,
+          ...(found.table ? { table: found.table } : {}),
+          ...(Number.isSafeInteger(found.row) ? { row: found.row } : {}),
+          ...(found.cell ? { cell: { ...found.cell, ...(typeof found.cell.header === "string" ? { header: found.cell.header.slice(0, 80) } : {}) } } : {}),
+          ...(found.candidates ? { candidates: found.candidates } : {}),
+          ...(found.rowCandidates ? { rowCandidates: found.rowCandidates } : {}),
+          ...(found.cellCandidates ? { cellCandidates: found.cellCandidates } : {}),
+          page: found.page,
+          ...(found.reason ? { reason: found.reason } : {}),
+        };
+      } catch {
+        source.location = { status: "unknown", page: { status: "unknown", reason: "locate_failed" }, reason: "locate_failed" };
+      }
+    });
+  }
+  return verdict;
 }
 
 // The text a claim's numeric and quotational support is drawn from. Direct

@@ -5,12 +5,15 @@ import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { canonicalJson } from "@evimed/domain";
 
+// Version 10 adds the source-material read (a knowledge-base source's PDF as
+// its pages' text, a spreadsheet as its cells) to the intake container of
+// version 9: the same fixed operation over a staged attempt, a third kind.
 // Version 9 adds the two 「虚拟临研」 intake conversions (a record document to
 // text, a figure to curve points), each one fixed operation over a staged
 // attempt. Version 8 added isolated native skill validation; the version-7
 // citation runtime-start shape stays explicitly supported during coordinated
 // rollout.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 9;
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 10;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -187,12 +190,13 @@ export class RuntimeControllerClient {
    * attempt on the shared data volume and the digest of its request. The
    * deadline here is the controller's own plus a margin for queueing, so the
    * controller's timeout answers before this one gives up.
-   * @param {'extract'|'digitize'} kind
+   * @param {'extract'|'digitize'|'materials'} kind
    * @param {{path:string,sha256:string,bytes:number}|{attemptId:string,inputDigest:string}} reference
    * @param {{signal?:AbortSignal, timeoutMs?:number}} [options]
    */
   runVcrIntake(kind, reference, { signal, timeoutMs } = {}) {
-    return this.request("POST", `/v1/vcr/${kind}`, reference, { signal, timeoutMs: timeoutMs ?? this.vcrIntakeTimeoutMs });
+    // A source document is read whole: the controller allows it twice a conversion's time.
+    return this.request("POST", `/v1/vcr/${kind}`, reference, { signal, timeoutMs: timeoutMs ?? this.vcrIntakeTimeoutMs * (kind === "materials" ? 2 : 1) });
   }
 
   /** Fixed owned content reference; the controller resolves every filesystem path.

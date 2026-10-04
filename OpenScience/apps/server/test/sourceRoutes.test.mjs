@@ -20,6 +20,8 @@ async function fixture(t, { withOpenList = false, connector = null } = {}) {
     register: async (userId, input) => { calls.push({ method: "register", userId, input }); return { source: { id: "source-openlist" }, job: { id: "job-openlist" } }; },
     getUnderstanding: async (userId, id) => { calls.push({ method: "getUnderstanding", userId, id }); return { sourceId: id, generation: 1, depth: "structured", status: "parsing", current: null }; },
     understandingHistory: async (userId, id, options) => { calls.push({ method: "understandingHistory", userId, id, options }); return { items: [], nextCursor: null }; },
+    getMaterials: async (userId, id) => { calls.push({ method: "getMaterials", userId, id }); return { sourceId: id, generation: 1, materials: null, reason: "not_extracted" }; },
+    getMaterialTable: async (userId, id, tableId) => { calls.push({ method: "getMaterialTable", userId, id, tableId }); return { sourceId: id, generation: 1, table: { id: tableId } }; },
     family: async (userId, id, options) => { calls.push({ method: "family", userId, id, options }); return { sourceId: id, familyId: "fam_one", currentVersion: 2, items: [], nextCursor: null }; },
     useConnector: (type, client) => { calls.push({ method: "useConnector", type, hasList: typeof client?.list === "function" }); },
     listFolders: async (userId, options) => { calls.push({ method: "listFolders", userId, options }); return { items: [], nextCursor: null }; },
@@ -88,6 +90,22 @@ test("understanding current and history use the authenticated source project and
   });
   service.get = async () => ({ id: "source-other", projectId: "other-project" });
   assert.equal((await fetch(`${base}/api/sources/source-other/understanding`, { headers })).status, 404);
+});
+
+test("structured materials are read through the source's own project: the ledger, then one table by its id", async t => {
+  const { base, headers, calls } = await fixture(t);
+  const ledger = await fetch(`${base}/api/sources/src_one/materials`, { headers });
+  assert.equal(ledger.status, 200);
+  assert.deepEqual((await ledger.json()).data, { sourceId: "src_one", generation: 1, materials: null, reason: "not_extracted" });
+  const table = await fetch(`${base}/api/sources/src_one/materials/tbl-3`, { headers });
+  assert.deepEqual((await table.json()).data.table, { id: "tbl-3" });
+  assert.deepEqual(calls.filter(call => call.method.startsWith("getMaterial")).map(call => [call.method, call.userId, call.id, call.tableId]),
+    [["getMaterials", "owner", "src_one", undefined], ["getMaterialTable", "owner", "src_one", "tbl-3"]]);
+  // A read only: a mutation of the materials is not a route, and a deeper path is not either.
+  assert.equal((await fetch(`${base}/api/sources/src_one/materials`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/src_one/materials/tbl-3/cells`, { headers })).status, 404);
+  // Unauthenticated, nothing is read.
+  assert.equal((await fetch(`${base}/api/sources/src_one/materials`)).status, 401);
 });
 
 test("source routes never expose runtime binding paths or cancellation work items", async t => {

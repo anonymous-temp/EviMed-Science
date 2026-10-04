@@ -135,6 +135,12 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
         limit: Number(url.searchParams.get("limit") ?? 20), cursor: url.searchParams.get("cursor"),
       }));
     }
+    // The structured materials of the current capture: the ledger and the table
+    // summary, then one table (or sheet) with its cells, addresses and pages.
+    if (action === "materials" && method === "GET") {
+      if (parts.length === 2) return reply(await service.getMaterials(user.id, sourceId));
+      if (parts.length === 3) return reply(await service.getMaterialTable(user.id, sourceId, parts[2]));
+    }
     if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     if (parts.length === 1 && method === "GET") return reply(source);
     if (parts.length === 1 && method === "PATCH") {

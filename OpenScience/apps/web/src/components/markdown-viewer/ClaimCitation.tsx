@@ -5,8 +5,10 @@ import {
   CLAIM_STATUS_TEXT,
   claimGuidance,
   claimSources,
+  sourceLocationText,
   type ClaimEvidence,
   type ClaimSource,
+  type ClaimSourceLocation,
   type ClaimVerification,
   type SourceUpdate,
   type SourceUpdateStatus,
@@ -55,7 +57,7 @@ export function preservedSourceHref(runId: string, artifactPath: string, quote?:
   return `/app/runs/${encodeURIComponent(runId)}/files/${path}${query.length ? `?${query.join("&")}` : ""}`;
 }
 
-function Source({ source, index, status, runId, pagesRead, updates, updateStatus, sourceType }: {
+function Source({ source, index, status, runId, pagesRead, updates, updateStatus, sourceType, location }: {
   source: ClaimSource;
   index: number;
   status?: string;
@@ -66,10 +68,13 @@ function Source({ source, index, status, runId, pagesRead, updates, updateStatus
   updateStatus?: SourceUpdateStatus;
   /** What the preserving tool stamped beside the capture (C8), when the check read it. */
   sourceType?: string;
+  /** Where the quotation sits in the preserved source, when the check looked. */
+  location?: ClaimSourceLocation;
 }) {
   const href = safeHref(source.sourceUrl);
   const page = pageForSource(pagesRead, source);
   const statusText = status ? CLAIM_STATUS_TEXT[status] : undefined;
+  const place = sourceLocationText(location);
   // What a reader acts on: whether this quotation was found (✓ / ⚠), the
   // quotation itself, and what it is from. The access level and the ordinal of
   // the quotation were the checker's bookkeeping and stay gone (2026-09-23
@@ -100,6 +105,9 @@ function Source({ source, index, status, runId, pagesRead, updates, updateStatus
         )}
         <SourceUpdateBadges updates={updates} updateStatus={updateStatus} />
       </p>
+      {/* Where in the source: its table and cell, its page — or that the
+        * place is not known, which is not the same as the quotation being wrong. */}
+      {place && <p className="text-caption text-text-3" data-source-location>位置：{place}</p>}
       {/* The page this quotation was read from, when the run read it on the
         * web: where, when, whether it is an authority's, and its snapshot. */}
       {page && <ReadPageCard page={page} runId={runId} compact showSnapshot={!source.artifactPath} />}
@@ -157,6 +165,7 @@ export function ClaimEvidenceList({ ids, claims, statuses, reading }: {
                 updates={verified?.sources[index]?.updates}
                 updateStatus={verified?.sources[index]?.updateStatus}
                 sourceType={verified?.sources[index]?.sourceType}
+                location={verified?.sources[index]?.location}
               />
             ))}
             {(claim.claimType === "derived" && claim.method) || claim.uncertainty ? (

@@ -10,6 +10,7 @@ import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstan
 import { normalizeSourcePageMap, renderSourcePageMarkers, sourceFormatRoute } from "@evimed/domain";
 import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { estimateTokens } from "./kbChunker.mjs";
+import { materialsRecordIds, materialsRecords } from "./sourceMaterials.mjs";
 
 /**
  * Whether a document can be used — searched by `kb_search`, named with
@@ -631,6 +632,11 @@ export class SourceService {
       // kept at all. A dropped map costs page numbers, never the document.
       const pageMap = parsed.pageMap ? normalizeSourcePageMap(parsed.text, parsed.pageMap) : null;
       const metadata = parsed.metadata && typeof parsed.metadata === "object" && !Array.isArray(parsed.metadata) ? parsed.metadata : null;
+      // The structure was derived from the parser's text, and is stored only for
+      // the very text the capture holds: a digest that is not the capture's is not
+      // this generation's and is dropped, the ledger saying so.
+      const materials = parsed.materials && typeof parsed.materials === "object"
+        && (!parsed.materials.structure || parsed.materials.structure.textSha256 === digest(input.text)) ? parsed.materials : null;
       const units = parsed.units ?? [];
       const failed = units.filter(unit => unit.status === "failed").length;
       const parserCoverage = { total: units.length, accounted: units.length, accountedPercent: 100,
@@ -638,7 +644,12 @@ export class SourceService {
         indexedOnly: units.filter(unit => unit.status === "indexed_only").length,
         noContent: units.filter(unit => unit.status === "no_content").length, failed,
         percent: units.length ? Number((100 * (units.length - failed) / units.length).toFixed(2)) : 0,
-        parserFailureRate: units.length ? failed / units.length : null, omissionRate: null, parsedAt: this.now().toISOString() };
+        parserFailureRate: units.length ? failed / units.length : null, omissionRate: null, parsedAt: this.now().toISOString(),
+        // What was located, ambiguous, unlocated, unextracted or failed among the
+        // tables, cells and values of this generation, with the extraction version
+        // and the source hash (`sourceMaterials.mjs`). Absent for a capture cut
+        // before the extraction existed: absent is "not extracted", never zero.
+        ...(materials?.coverage ? { materials: materials.coverage } : {}) };
       const analysis = { generation: input.generation, phase: "indexed", schemaVersion: 1, unitCount: input.units.length,
         textSha256: digest(input.text),
         extractor: parsed.extractor, summary: String(parsed.summary).slice(0, 16000), parserCoverage,
@@ -652,6 +663,7 @@ export class SourceService {
       if (pageMap) records.push({ kind: "knowledge", id: pageMapRecordId(source.id, input.generation), payload: {
         recordType: "source-page-map", sourceId: source.id, generation: input.generation, textSha256: analysis.textSha256,
         pages: pageMap.map(entry => [entry.page, entry.start, entry.end, entry.status]) } });
+      if (materials?.structure) records.push(...materialsRecords(materials, { sourceId: source.id, generation: input.generation }));
       await insertSourceRecords(client, job.userId, job.projectId, records);
       // Metadata belongs to the generation that parsed it: a re-parse that
       // found none clears what an earlier one found rather than keeping it.
@@ -659,6 +671,46 @@ export class SourceService {
         { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
       return { input, extractor: parsed.extractor, summary: parsed.summary, parserCoverage, pageMap, metadata };
     });
+  }
+
+  /**
+   * The structured materials of the source's current capture: the ledger and the
+   * summary of every table, figure and supplement reference. `materials: null`
+   * with a reason is an answer — a capture cut before the extraction existed, or a
+   * source still being read, has none, and that is not the same as a source with
+   * no tables (which has a ledger of zeros).
+   * @param {string} userId @param {string} sourceId
+   */
+  async getMaterials(userId, sourceId) {
+    const source = await this.requireSource(userId, sourceId);
+    const generation = source.payload.generation;
+    const coverage = source.payload.coverage?.materials ?? null;
+    const analysis = source.payload.analysis;
+    if (!coverage || analysis?.generation !== generation) return { sourceId, generation, materials: null, reason: "not_extracted" };
+    const row = coverage.unavailable ? null : await this.documents.get(userId, "knowledge", materialsRecordIds(sourceId, generation).summary);
+    const payload = row?.payload;
+    if (!row || row.projectId !== source.projectId || payload?.sourceId !== sourceId || payload.generation !== generation || payload.textSha256 !== analysis.textSha256) {
+      return { sourceId, generation, materials: { coverage, structure: null } };
+    }
+    const { recordType: _type, sourceId: _source, generation: _generation, ...structure } = payload;
+    return { sourceId, generation, materials: { coverage, structure } };
+  }
+
+  /**
+   * One table (or sheet) of the current capture: its cells with their addresses,
+   * spans, typed values and the page of each row.
+   * @param {string} userId @param {string} sourceId @param {string} tableId
+   */
+  async getMaterialTable(userId, sourceId, tableId) {
+    if (!/^(?:tbl|sheet)-[1-9]\d{0,3}$/.test(String(tableId))) throw new HttpError(404, "source_table_not_found", "The source has no such table.");
+    const source = await this.requireSource(userId, sourceId);
+    const generation = source.payload.generation;
+    const row = source.payload.analysis?.generation === generation
+      ? await this.documents.get(userId, "knowledge", materialsRecordIds(sourceId, generation).table(tableId)) : null;
+    const payload = row?.payload;
+    if (!row || row.projectId !== source.projectId || payload?.sourceId !== sourceId || payload.generation !== generation
+      || payload.textSha256 !== source.payload.analysis.textSha256) throw new HttpError(404, "source_table_not_found", "The source has no such table.");
+    return { sourceId, generation, table: payload.table };
   }
 
   async loadCapture(userId, source, client = this.documents.database) {

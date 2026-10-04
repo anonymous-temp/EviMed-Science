@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
-import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
+import { attachClaimSourceLocations, claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
@@ -164,6 +164,9 @@ export async function captureResultDelivery({ results, project, run, receipt = n
         }
         if (paths.length > MAX_SOURCES) fail(matrixFile.path, { code: "result_source_capture_limit" });
         const verification = claimVerification({ matrix, sourceArtifacts });
+        // Where each verified quotation sits in its source, frozen with the verdict
+        // so a historical version shows the place it showed then. Best effort.
+        try { attachClaimSourceLocations(verification, { matrix, sourceArtifacts }); } catch { /* locations stay absent */ }
         links = clinicalResultLinks(matrix, { capturedSources, verdict: verification });
         // Metadata bounds are advisory. The original matrix/report still get captured without an oversized join.
         if (links.inputs.length > 255 || Buffer.byteLength(JSON.stringify(links)) > 1024 * 1024) {

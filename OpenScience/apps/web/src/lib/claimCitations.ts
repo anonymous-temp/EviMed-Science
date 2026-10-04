@@ -100,6 +100,22 @@ export interface SourceUpdateStatus {
   checkedAt: string | null; reason?: string; updates: SourceUpdate[];
 }
 
+/**
+ * Where a verified quotation sits in its preserved source (`attachClaimSourceLocations`):
+ * the table, row and cell it lies in, and the page when the text carries page
+ * markers. Every part is optional because every part can be unknown, and a
+ * location that is absent altogether means nobody asked (an older verification).
+ */
+export interface ClaimSourceLocation {
+  status: "located" | "ambiguous" | "unknown";
+  table?: { id: string; index: number; kind?: string; label?: string; name?: string };
+  row?: number;
+  cell?: { row: number; column: number; address?: string; header?: string };
+  candidates?: { id: string; index: number; label?: string; name?: string }[];
+  page?: { status: "located" | "ambiguous" | "unknown"; pages?: number[]; candidates?: number[]; basis?: string; reason?: string };
+  reason?: string;
+}
+
 export interface ClaimVerification {
   claims: {
     claimId: string;
@@ -108,9 +124,10 @@ export interface ClaimVerification {
     /**
      * `sourceType` is what the preserving tool stamped beside the capture (C8),
      * added by the control plane; `doi` and `updates` are the work's Crossref
-     * notices, present only when Crossref was asked and answered.
+     * notices, present only when Crossref was asked and answered. `location` is
+     * where the quotation sits in that source.
      */
-    sources: { artifactPath: string | null; status: string; sourceType?: string; doi?: string; updates?: SourceUpdate[]; updateStatus?: SourceUpdateStatus }[];
+    sources: { artifactPath: string | null; status: string; sourceType?: string; doi?: string; updates?: SourceUpdate[]; updateStatus?: SourceUpdateStatus; location?: ClaimSourceLocation }[];
   }[];
   counts: Record<string, number>;
 }
@@ -124,6 +141,30 @@ export const CLAIM_STATUS_TEXT: Record<string, { label: string; tone: "ok" | "wa
   no_quote: { label: "这条结论没有给出可核对的引文", tone: "warn" },
   derived: { label: "推导结果：由其他结论计算或推断，本身没有引文", tone: "muted" },
 };
+
+/**
+ * One line saying where a quotation sits in its source: 「Table 2 第 3 行第 2 列 · 第 7 页」,
+ * the page as 「页码未知」 where only the table is known, and 「位置未知」 where
+ * nothing is. Null when no location was computed at all — an older verification
+ * says nothing rather than claiming an unknown it never looked for. Rows count
+ * from the table's header row as row 1, the way a sheet's do.
+ */
+export function sourceLocationText(location: ClaimSourceLocation | null | undefined): string | null {
+  if (!location) return null;
+  const named = (table: { label?: string; name?: string; index: number }) => table.label ?? (table.name ? `工作表 ${table.name}` : `第 ${table.index} 张表`);
+  const parts: string[] = [];
+  if (location.table) {
+    const place = location.cell ? `第 ${location.cell.row} 行第 ${location.cell.column} 列` : location.row ? `第 ${location.row} 行` : "";
+    parts.push([named(location.table), place].filter(Boolean).join(" "));
+  } else if (location.candidates?.length) {
+    parts.push(`可能在 ${location.candidates.slice(0, 3).map(named).join("、")}`);
+  }
+  const page = location.page;
+  if (page?.status === "located" && page.pages?.length) parts.push(`第 ${page.pages.join("、")} 页`);
+  else if (page?.status === "ambiguous" && page.candidates?.length) parts.push(`页码待定（第 ${page.candidates.slice(0, 4).join("、")} 页之一）`);
+  else if (parts.length) parts.push("页码未知");
+  return parts.length ? parts.join(" · ") : "位置未知";
+}
 
 /** Status by claim id, for the citation popover. */
 export function claimStatuses(verification: ClaimVerification | null | undefined): Map<string, string> {

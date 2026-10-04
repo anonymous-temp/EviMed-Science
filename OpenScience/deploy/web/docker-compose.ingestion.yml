@@ -2,6 +2,10 @@ services:
   open-science-web:
     environment:
       OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: "true"
+      # The page and sheet-cell read of a parsed source in the intake container
+      # (sourceMaterials.mjs). Value-less: the code's default (on) holds until
+      # .env says otherwise.
+      OPEN_SCIENCE_SOURCE_MATERIALS_ENABLED:
       # The in-house parsing API is the parser team's own service, reached over
       # HTTP; nothing of it runs here. The address defaults to the parser team's
       # test server, the only one given. It needs no key (measured 2026-09-22:

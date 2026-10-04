@@ -3,7 +3,7 @@ import path from "node:path";
 import { TextDecoder } from "node:util";
 import { evidenceSourceTypeOf, isEvidenceSourceType } from "@evimed/domain";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
-import { claimVerification } from "./clinicalEvidenceQuality.mjs";
+import { attachClaimSourceLocations, claimVerification } from "./clinicalEvidenceQuality.mjs";
 import {
   HttpError,
   apiBaseFromRequest,
@@ -471,6 +471,10 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
         if (source) sourceArtifacts[artifactPath] = source;
       }
       const verdict = /** @type {ReturnType<typeof claimVerification> & {resultImpacts?: Array<Record<string, any>>, resultImpactStatus?: string}} */ (claimVerification({ matrix, sourceArtifacts }));
+      // Where each verified quotation sits in its source (table, row, cell, page
+      // where the text has markers), for 「依据」 and the evidence matrix. Best
+      // effort: nothing here can change a status or fail the verification.
+      try { attachClaimSourceLocations(verdict, { matrix, sourceArtifacts }); } catch { /* locations stay absent; the marks above are unaffected */ }
       // What each quoted source is (C8), for the badge beside it. The
       // preserving tool wrote it into the capture as `source.json` when it
       // preserved the text; a capture from before that is typed from the URL

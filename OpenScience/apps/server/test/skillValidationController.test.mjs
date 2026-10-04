@@ -172,7 +172,7 @@ test('output overflow, path leakage and failed cancellation never free uncertain
 })
 
 test('version 9 keeps version 8\'s fixed validation reference and the version-7 citation start shape', async t => {
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 9)
+  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 10)
   const { config, reference } = await fixture(t)
   const client = new RuntimeControllerClient(config)
   let received

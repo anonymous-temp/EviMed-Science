@@ -124,3 +124,34 @@ for (const artifactPath of ["./.evimed-sources/PMC1/abc/fulltext.md", ".evimed-s
     });
   });
 }
+
+test("each quoted source is given the place its quotation sits in: its table and cell, its page where the text has markers, or an unknown with the reason", async () => {
+  await withProject(async ({ project, invoke }) => {
+    const table = [
+      "<!-- page 1 -->", "Prose before the table, on the first page of the paper.", "<!-- page 2 -->", "Table 2. Baseline characteristics", "",
+      "| Characteristic | Placebo (n=120) | Study drug (n=118) |", "| --- | --- | --- |", "| Male sex, n (%) | 72 (60.0) | 69 (58.5) |", "",
+    ].join("\n");
+    await mkdir(path.join(project.workspaceDir, ".evimed-sources", "PMC3", "ghi"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-sources", "PMC3", "ghi", "fulltext.md"), table, "utf8");
+    const matrixPath = "deliverables/review/clinical-evidence-matrix.json";
+    await writeFile(path.join(project.workspaceDir, matrixPath), JSON.stringify({ claims: [
+      { claimId: "CLM-001", claim: "Cell.", claimType: "direct", ...source({ artifactPath: ".evimed-sources/PMC3/ghi/fulltext.md", supportQuote: "69 (58.5)" }) },
+      { claimId: "CLM-002", claim: "Prose.", claimType: "direct", ...source() },
+      { claimId: "CLM-003", claim: "Missing.", claimType: "direct", ...source({ supportQuote: "A sentence that is nowhere in the preserved file at all, by construction." }) },
+    ] }), "utf8");
+    const result = await invoke({ path: matrixPath });
+    const [cell, prose, missing] = result.claims.map((claim) => claim.sources[0]);
+    assert.equal(cell.status, "verified");
+    assert.deepEqual(cell.location.cell, { row: 2, column: 3, header: "Study drug (n=118)" });
+    assert.equal(cell.location.table.label, "Table 2");
+    assert.deepEqual(cell.location.page, { status: "located", pages: [2], basis: "page_marker" });
+    // A text with no markers has a table and no page; prose has no table.
+    assert.equal(prose.status, "verified");
+    assert.equal(prose.location.table, undefined);
+    assert.deepEqual(prose.location.page, { status: "unknown", reason: "no_page_markers" });
+    assert.equal(missing.location.status, "unknown");
+    assert.equal(missing.location.reason, "quote_not_found");
+    // The marks themselves are exactly what they were.
+    assert.deepEqual(result.counts, { verified: 2, quote_not_found: 1 });
+  });
+});

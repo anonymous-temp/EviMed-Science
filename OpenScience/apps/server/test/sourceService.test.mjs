@@ -1057,3 +1057,12 @@ test("a stored understanding projects the receipt label it was written with, and
   // Only the one label is ever projected, whatever the row holds.
   assert.equal(Object.hasOwn(projectSourceDerivedRecord(row({ usage: null, verification: "anything else" })), "verification"), false);
 });
+
+test("the source card carries the materials ledger beside the parser's coverage, and a source cut before the extraction carries none", () => {
+  const materials = { version: 1, status: "partial", extraction: { materials: "evimed-materials@1", parser: "evimed-extract@0.5.0" }, sourceSha256: "a".repeat(64),
+    values: { total: 10, located: 6, ambiguous: 1, unlocated: 2, unextracted: 1, failed: 0 }, pages: { status: "mapped", pageCount: 12 } };
+  const card = projectSourceManifestRecord({ payload: { status: "complete", coverage: { total: 1, accounted: 1, failed: 0, materials }, analysis: { generation: 1, phase: "indexed", schemaVersion: 1, unitCount: 1 } } });
+  assert.deepEqual(card.payload.coverage.materials, materials);
+  const older = projectSourceManifestRecord({ payload: { status: "complete", coverage: { total: 1, accounted: 1, failed: 0 }, analysis: { generation: 1, phase: "indexed", schemaVersion: 1, unitCount: 1 } } });
+  assert.equal(older.payload.coverage.materials, undefined, "absent is not extracted, never zero");
+});
