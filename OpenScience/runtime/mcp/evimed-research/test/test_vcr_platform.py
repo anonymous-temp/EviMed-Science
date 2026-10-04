@@ -74,93 +74,25 @@ import('@evimed/domain').then((m) => {
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
-def _shape_items(text, at):
-    """One brace level of a shape: ``key``, ``key?``, ``key[]``, ``key[e|f]``,
-    ``key{...}``, ``key[{...}]``, ``a|b|c`` and the elision ``...``. Returns
-    ``({name: {"only": set | None, "children": dict | None}}, position)``."""
-    items = {}
-    while at < len(text):
-        while at < len(text) and text[at] in " ,":
-            at += 1
-        if at >= len(text):
-            break
-        if text[at] == "}":
-            return items, at + 1
-        if text.startswith("...", at):
-            at += 3
-            continue
-        match = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\|[A-Za-z][A-Za-z0-9_]*)*").match(text, at)
-        assert match, "the shape cannot be read at: %r" % text[at:at + 40]
-        at = match.end()
-        only = None
-        children = None
-        if text.startswith("?", at):
-            at += 1
-        if text.startswith("[]", at):
-            at += 2
-        elif text.startswith("[{", at):
-            children, at = _shape_items(text, at + 2)
-            assert text.startswith("]", at), "an array of objects closes with }]: %r" % text[at:at + 20]
-            at += 1
-        elif text.startswith("[", at):
-            close = text.index("]", at)
-            only = set(text[at + 1:close].split("|"))
-            at = close + 1
-        if text.startswith("{", at):
-            children, at = _shape_items(text, at + 1)
-        for name in match.group(0).split("|"):
-            items[name] = {"only": only, "children": children}
-    return items, at
+def domain_paths():
+    """Every dotted key path each job kind's scenario may carry, from the validator's own schemas: an oracle that does not read the
+    generated help. A list's items and a variant's members are paths like any other (``[]`` is not part of a name here)."""
+    paths = {}
 
+    def walk(children, prefix, out):
+        for key, below in children.items():
+            out.add(prefix + key)
+            if isinstance(below, dict):
+                walk(below, prefix + key + ".", out)
 
-def scenario_shapes(description):
-    """The scenario shapes a description offers, by job kind."""
-    body = description.split("Shapes", 1)[1].split("):", 1)[1].split(". Truth spells", 1)[0]
-    shapes = {}
-    previous = None
-    for entry in body.split("; "):
-        entry = entry.strip()
-        same = re.fullmatch(r"(\w+) the same plus (\w+)\[\] and (\w+)\[\]", entry)
-        if same:
-            shapes[same.group(1)] = {**shapes[previous], **{name: {"only": None, "children": None} for name in same.group(2, 3)}}
-            continue
-        names, _, rest = entry.partition(" {")
-        items, _ = _shape_items(rest, 0)
-        for name in re.split(r", | and ", names):
-            shapes[name] = items
-            previous = name
-    return shapes
-
-
-def shape_problems(shapes, schema):
-    """Every place a shape offers what the domain's schema refuses, in words."""
-    problems = []
-
-    def under(where, offered, declared):
-        for name, entry in (offered or {}).items():
-            if declared is None or name not in declared:
-                problems.append("%s offers %s, which the schema does not read" % (where, name))
-            else:
-                under("%s.%s" % (where, name), entry["children"], declared[name])
-
-    for kind, shape in shapes.items():
-        if kind not in schema:
-            problems.append("%s is not a job kind" % kind)
-            continue
-        declared = schema[kind]
-        for key, offered in shape.items():
-            if key not in declared["keys"]:
-                problems.append("%s offers %s, which %s does not read" % (kind, key, declared["method"]))
-                continue
-            read_for = declared["keys"][key]["endpoints"]
-            narrowed = read_for is not None and set(read_for) != set(declared["endpoints"])
-            if read_for is not None and not read_for:
-                problems.append("%s offers %s, which %s refuses for every endpoint it implements" % (kind, key, declared["method"]))
-            elif (offered["only"] or None) != (set(read_for) if narrowed else None):
-                problems.append("%s.%s is read for %s and the shape says %s" % (
-                    kind, key, sorted(read_for) if narrowed else "every endpoint", sorted(offered["only"]) if offered["only"] else "nothing"))
-            under("%s.%s" % (kind, key), offered["children"], declared["keys"][key]["children"])
-    return problems
+    for kind, entry in domain_scenario_keys().items():
+        out = set()
+        for key, field in entry["keys"].items():
+            out.add(key)
+            if isinstance(field["children"], dict):
+                walk(field["children"], key + ".", out)
+        paths[kind] = out
+    return paths
 
 
 class _Gateway(BaseHTTPRequestHandler):
@@ -231,52 +163,93 @@ class VcrToolDefinitionTests(unittest.TestCase):
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
         self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], kinds)
 
-    def test_simulate_states_the_scenario_shapes_and_points_at_the_skill(self):
+    def test_simulate_description_is_short_and_sends_the_run_to_the_shape_action_instead_of_typing_the_shapes(self):
+        # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
-        for fragment in ("design_simulation", "truth.null", "accrual.dropoutAnnual", "kind:'snapshot'", "vcr-analysis skill", "refused by name"):
+        self.assertLess(len(description), 1700, "the shapes live in the shape action, not here")
+        for fragment in ("action shape", "never guess a key", "refused by the field's path", "kind:'snapshot'", "vcr-analysis skill"):
             self.assertIn(fragment, description)
-        self.assertNotIn("isNull", description)
-        self.assertNotIn("dropoutRate", description)
+        for typed in ("accrual?", "dropoutAnnual", "design_simulation {", "truth{", "[time_to_event]", "isNull", "dropoutRate"):
+            self.assertNotIn(typed, description, "a hand-typed shape is what drifted")
+        self.assertIn("shape", vcr_platform.SIMULATE_ACTIONS)
+        simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
+        self.assertEqual(simulate["inputSchema"]["properties"]["action"]["enum"], list(vcr_platform.SIMULATE_ACTIONS))
+        self.assertEqual(simulate["inputSchema"]["required"], ["action"], "a shape call needs no scenario")
 
-    def test_every_key_a_shape_offers_is_one_the_schema_reads_and_an_endpoint_only_key_says_which(self):
-        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
-        schema = domain_scenario_keys()
-        shapes = scenario_shapes(description)
-        # The walk proves it walked: the shapes were read, and so were the schemas behind them.
-        self.assertGreaterEqual(len(shapes), 14, sorted(shapes))
-        self.assertTrue(set(shapes) <= set(vcr_platform.JOB_KINDS), sorted(set(shapes) - set(vcr_platform.JOB_KINDS)))
-        self.assertEqual(schema["generate_patients_binary"]["endpoints"], ["binary"])
-        self.assertEqual(schema["generate_patients_binary"]["keys"]["accrual"]["endpoints"], [], "the domain refuses accrual for a binary set")
-        self.assertEqual(schema["design_simulation"]["keys"]["accrual"]["endpoints"], ["time_to_event"])
-        self.assertEqual(shape_problems(shapes, schema), [])
-        # What the pilot's run was refused for (2026-10-03): `accrual` offered on every patient generator.
-        self.assertIn("accrual", shapes["generate_patients"])
-        self.assertNotIn("accrual", shapes["generate_patients_binary"])
-        self.assertNotIn("accrual", shapes["generate_patients_continuous"])
-        for kind in ("design_analytic", "design_simulation", "design_grid"):
-            self.assertEqual(shapes[kind]["accrual"]["only"], {"time_to_event"}, kind)
-        self.assertEqual(shapes["assurance"]["truth"]["only"], {"continuous", "binary"})
-        self.assertIn("accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) exists only for a time_to_event endpoint", description)
+    def test_write_points_at_the_shape_action_and_names_real_kinds(self):
+        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_write"]["description"]
+        self.assertIn("action shape", description)
+        for kind in ("design_analytic", "design_simulation", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_population"):
+            self.assertIn(kind, description)
+            self.assertIn(kind, vcr_platform.JOB_KINDS)
+        for name, kinds in vcr_platform.OBJECT_SHAPES.items():
+            self.assertTrue(set(kinds) <= set(vcr_platform.JOB_KINDS), "%s: %s" % (name, sorted(set(kinds) - set(vcr_platform.JOB_KINDS))))
 
-    def test_the_shape_check_fails_on_a_key_the_schema_refuses(self):
-        # The same check, on the sentences the description used to carry and on ones nobody wrote: it has to be able to fail.
-        schema = domain_scenario_keys()
-        stale = ("Shapes (legend): generate_patients_binary {design{nTreat,nControl?}, endpoint, truth, accrual?}; "
-                 "design_simulation {design{kind,nTreat}, endpoint{type}, truth{null?,...}, accrual?}; "
-                 "assurance {design, endpoint, designPrior{mean,sd}, truth?, analysis}; "
-                 "weight_comparator {covariates[], tau[binary]}; rmst {tau, dropoutRate?}; "
-                 "procova {endpoint, truth{effect,riskRatio}}. Truth spells")
-        problems = shape_problems(scenario_shapes(stale), schema)
-        self.assertEqual(len(problems), 6, problems)
-        for fragment in (
-            "generate_patients_binary offers accrual, which patients.binary refuses for every endpoint it implements",
-            "design_simulation.accrual is read for ['time_to_event'] and the shape says nothing",
-            "assurance.truth is read for ['binary', 'continuous'] and the shape says nothing",
-            "weight_comparator.tau is read for ['time_to_event'] and the shape says ['binary']",
-            "rmst offers dropoutRate, which comparator.rmst does not read",
-            "procova.truth offers riskRatio, which the schema does not read",
-        ):
-            self.assertIn(fragment, problems)
+    def test_the_help_file_says_every_key_the_validator_reads_and_none_it_refuses(self):
+        # The oracle is the validator's own schema, read by Node; the subject is the file the tool renders. The domain's own test holds
+        # the file's gates to the validator on probes (`packages/domain/test/vcrScenarioHelp.test.mjs`); this one holds the rendering to both.
+        oracle = domain_paths()
+        help_ = vcr_platform.scenario_help()
+        self.assertEqual(set(help_["kinds"]), set(vcr_platform.JOB_KINDS))
+        self.assertGreaterEqual(len(oracle), 24)
+        walked = 0
+        for kind in vcr_platform.JOB_KINDS:
+            answer = vcr_platform.shape({"kind": kind})["data"]
+            if answer.get("builtByPlatform"):
+                continue
+            lines = answer["keys"]
+            rendered = {line.split(":", 1)[0].replace("[]", "") for line in lines}
+            self.assertEqual(rendered, oracle[kind], kind)
+            walked += len(rendered)
+            for guess in ("accrual.months", "accrual.rate", "dropoutRate", "truth.isNull", "enrolment"):
+                self.assertNotIn(guess, rendered, kind)
+                self.assertFalse(any(line.startswith(guess + ":") for line in lines), kind)
+        self.assertGreater(walked, 500, "the walk proves it walked")
+
+    def test_shape_renders_accrual_with_its_real_keys_units_and_gate(self):
+        answer = vcr_platform.shape({"kind": "design_analytic"})
+        self.assertEqual(answer["status"], "success")
+        data = answer["data"]
+        self.assertEqual((data["kind"], data["method"]), ("design_analytic", "design.analytic"))
+        lines = {line.split(":", 1)[0]: line for line in data["keys"]}
+        self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given")
+        self.assertIn("accrual.followup: number >=0 (time units)", lines["accrual.followup"])
+        self.assertIn("number >=0 <1 (proportion per 12 time units); optional; default 0", lines["accrual.dropoutAnnual"])
+        self.assertEqual(lines["accrual"], "accrual: object; optional; read only when endpoint.type is time_to_event")
+        self.assertNotIn("read only when", lines["accrual.duration"], "a key inside accrual does not repeat accrual's own gate")
+        self.assertIn("exactly one of truth.treatmentRate, truth.riskDifference, truth.oddsRatio", " ".join(data["rules"]))
+        self.assertTrue(any("design_not_supported" in note for note in data["notes"]))
+        # One valid example, and it is the one the domain checked.
+        example = data["examples"][0]
+        self.assertEqual(example["scenario"]["accrual"], {"duration": 12, "followup": 12, "dropoutAnnual": 0.05})
+        self.assertIn("A key not listed is refused by its path", data["legend"])
+        # The simulated generators read a variant: uniform or piecewise accrual.
+        simulated = {line.split(":", 1)[0]: line for line in vcr_platform.shape({"kind": "design_simulation"})["data"]["keys"]}
+        self.assertIn("one of uniform|piecewise; optional; default \"uniform\"", simulated["accrual.kind"])
+        self.assertIn("read only when accrual.kind is piecewise", simulated["accrual.breaks"])
+        self.assertNotIn("accrual.kind is", simulated["accrual.followup"], "shared by both variants")
+
+    def test_shape_with_no_kind_lists_the_kinds_and_where_each_object_looks_its_shape_up(self):
+        answer = vcr_platform.shape({})
+        kinds = answer["data"]["kinds"]
+        self.assertEqual(list(kinds), list(vcr_platform.JOB_KINDS))
+        self.assertEqual(kinds["design_analytic"], "design.analytic (continuous|binary|time_to_event)")
+        self.assertEqual(kinds["generate_patients"], "patients.time_to_event (time_to_event)")
+        self.assertEqual(kinds["profile_snapshot"], "profile.snapshot")
+        self.assertEqual(answer["data"]["objects"]["trial_scenario (configuration)"], ["design_analytic", "design_simulation"])
+
+    def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
+        pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
+        self.assertTrue(pool["builtByPlatform"])
+        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method"])
+        self.assertTrue(any("evidence_pool" in note for note in pool["notes"]))
+        self.assertNotIn("examples", pool)
+        match = vcr_platform.shape({"kind": "match_criteria"})["data"]
+        self.assertEqual((match["runStates"], match["keys"]), ([], []))
+        self.assertTrue(any("empty scenario" in note for note in match["notes"]))
+        accrual = vcr_platform.shape({"kind": "accrual_forecast"})["data"]
+        self.assertEqual(accrual["runStates"], ["target", "eventTarget", "eventHazard", "byTimes"])
+        self.assertEqual([line.split(":", 1)[0] for line in accrual["keys"]], ["target", "eventTarget", "eventHazard", "byTimes"])
 
     def test_read_says_what_matching_returns(self):
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_read"]["description"]
@@ -399,6 +372,82 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("job_1 is queued", result["summary"])
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "start", "kind": "design_simulation", "scenario": scenario, "subjectId": "scn_1"})
+
+    def test_shape_answers_through_the_tool_without_asking_the_platform_and_with_the_module_off(self):
+        result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_simulation"})
+        self.assertEqual(result["status"], "success")
+        self.assertIn("reads", result["summary"])
+        self.assertEqual(_Gateway.seen, [], "the shape is served from the file this build ships")
+        with mock.patch.dict(os.environ, {"EVIMED_VCR_GATEWAY_URL": ""}):
+            off = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_analytic"})
+        self.assertEqual(off["status"], "success", "writing from a shape needs no study")
+        self.assertTrue(off["data"]["keys"])
+        bad = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "make_it_up"})
+        self.assertEqual(bad["error"]["code"], "invalid_input")
+
+    def test_a_build_without_the_help_says_so_by_name_and_the_run_goes_on(self):
+        with mock.patch.object(vcr_platform, "HELP_FILE", os.path.join(tempfile.gettempdir(), "vcr-help-that-is-not-there.json")):
+            vcr_platform._HELP.clear()
+            try:
+                result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_analytic"})
+                self.assertEqual(result["error"]["code"], "vcr_scenario_help_unavailable")
+                self.assertFalse(result["error"].get("retryable", False))
+                # A refused job still says what it was refused for; only the keys are missing.
+                _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。", "code": "vcr_request_invalid",
+                                                      "issues": [{"code": "scenario_field_unknown", "field": "scenario.accrual.months"}]})
+                refused = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic", "scenario": {"accrual": {"months": 24}}})
+                self.assertEqual(refused["error"]["code"], "vcr_request_invalid")
+                self.assertIn("accrual.months", refused["error"]["message"])
+            finally:
+                vcr_platform._HELP.clear()
+
+    def test_a_refused_scenario_carries_the_keys_of_the_place_it_was_refused(self):
+        # What the pilot's run was told on 2026-10-04 named the path; what it needed beside it was what is read there.
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。", "code": "vcr_request_invalid",
+                                              "issues": [{"code": "scenario_field_unknown", "field": "scenario.accrual.months"}]})
+        result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic",
+                                                        "scenario": {"endpoint": {"type": "time_to_event"}, "accrual": {"months": 24}}})
+        message = result["error"]["message"]
+        self.assertEqual(result["error"]["code"], "vcr_request_invalid")
+        self.assertIn("scenario.accrual.months", message, "the platform's own sentence is kept")
+        self.assertIn("inside accrual the engine reads: duration, followup, dropoutAnnual", message)
+        self.assertIn("vcr_simulate action shape, kind design_analytic", message)
+        self.assertNotIn("months,", message.split("inside accrual", 1)[1], "the guess is not listed among what is read")
+        # A key at the top of the scenario is answered with the scenario's own keys, gated ones tagged by the endpoint that reads them.
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.covarites（scenario_field_unknown）。", "code": "vcr_request_invalid",
+                                              "issues": [{"code": "scenario_field_unknown", "field": "scenario.covarites"}]})
+        top = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "weight_comparator", "scenario": {"covarites": ["age"]}})
+        self.assertIn("inside the scenario the engine reads: covariates", top["error"]["message"])
+        self.assertIn("tau[time_to_event]", top["error"]["message"])
+        # A value out of range and a missing key are answered with the row itself: its type, unit and range.
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：x。", "code": "vcr_request_invalid", "issues": [
+            {"code": "scenario_value_invalid", "field": "scenario.accrual.dropoutAnnual"}, {"code": "scenario_field_missing", "field": "scenario.accrual.duration"},
+            {"code": "design_not_supported", "field": "scenario.design.kind"}]})
+        rows = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic", "scenario": {}})["error"]["message"]
+        self.assertIn("accrual.dropoutAnnual: number >=0 <1 (proportion per 12 time units); optional; default 0", rows)
+        self.assertIn("accrual.duration: number >=0 (time units); required once accrual is given", rows)
+        self.assertIn("design.kind × endpoint.type this method implements", rows)
+
+    def test_the_generators_answer_a_refusal_in_their_own_code_and_carry_the_keys_too(self):
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。", "code": "vcr_simulate_payload_invalid",
+                                              "issues": [{"code": "scenario_field_unknown", "field": "scenario.accrual.months"}],
+                                              "alternatives": [{"kind": "reference_scenario", "label": "x"}]})
+        result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "generate_patients",
+                                                        "scenario": {"endpoint": {"type": "time_to_event"}, "accrual": {"months": 24}}})
+        self.assertEqual(result["error"]["code"], "vcr_simulate_payload_invalid")
+        self.assertIn("inside accrual the engine reads: kind, duration[uniform], followup, dropoutAnnual, maxFollowup, breaks[piecewise], rates[piecewise], tail[piecewise]", result["error"]["message"])
+
+    def test_a_refusal_without_findings_or_for_a_kind_the_platform_builds_is_passed_on_as_it_came(self):
+        _Gateway.answers["simulate"] = (400, {"error": "合并只写 parameter、endpointKey：要合并的值来自本研究已通过核对的抽取值，不要自己带数。", "code": "vcr_simulate_payload_invalid"})
+        plain = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "pool_evidence", "scenario": {"studies": []}})
+        self.assertEqual(plain["error"]["message"], "合并只写 parameter、endpointKey：要合并的值来自本研究已通过核对的抽取值，不要自己带数。")
+        _Gateway.answers["simulate"] = (400, {"error": "x", "code": "vcr_request_invalid", "issues": [{"code": "scenario_field_unknown", "field": "scenario.studies"}]})
+        built = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "pool_evidence", "scenario": {"studies": []}})
+        self.assertNotIn("the engine reads", built["error"]["message"], "the run states other keys for a kind the platform builds")
+        # Findings the tool cannot trust are dropped, never rendered.
+        self.assertEqual(vcr_platform._field_issues([{"code": "Bad Code", "field": "x"}, {"code": "ok_code", "field": ""}, {"code": "ok_code"}, "text", None]), [])
+        self.assertEqual(vcr_platform._field_issues({"code": "ok_code", "field": "x"}), [])
+        self.assertEqual(len(vcr_platform._field_issues([{"code": "ok_code", "field": "a%d" % i} for i in range(40)])), 20)
 
     def test_all_kinds_pass_the_runtime_check_and_others_never_leave_it(self):
         _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued"}})
