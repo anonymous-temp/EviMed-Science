@@ -166,6 +166,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
   const episodes = (progress?.episodes ?? []).map((/** @type {any} */ episode) => ({
     date: episode.date,
     taskType: episode.taskType,
+    ...(episode.focus ? { focus: episode.focus } : {}),
     outcome: episodeOutcome(String(episode.status), (episode.claims ?? []).length),
     ...(episode.errorCode ? { errorCode: episode.errorCode } : {}),
     claims: (episode.claims ?? []).map((/** @type {any} */ claim) => ({

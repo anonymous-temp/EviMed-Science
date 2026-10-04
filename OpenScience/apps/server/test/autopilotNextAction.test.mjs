@@ -31,7 +31,7 @@ test("the context separates a run that did not happen from one that found nothin
   const progress = { truncated: false, followUps: [{ note: "Check the denominator", at: "2026-10-03T00:00:00Z", digestId: "d" }],
     rejectedDirections: [{ statement: "Beta blockers", note: "out of scope", claimId: "c" }],
     episodes: [
-      { date: "2026-10-03", status: "failed", taskType: "literature-sentinel", errorCode: "runtime_unavailable", claims: [], artifactRefs: [] },
+      { date: "2026-10-03", status: "failed", taskType: "literature-sentinel", focus: "核对分母", errorCode: "runtime_unavailable", claims: [], artifactRefs: [] },
       { date: "2026-10-02", status: "canceled", taskType: "literature-sentinel", claims: [], artifactRefs: [] },
       { date: "2026-10-01", status: "merged", taskType: "evidence-update", errorCode: null, artifactRefs: [{ path: "reports/synthesis.md" }], claims: [
         { statement: "Effect holds across subgroups", tier: "gated", refutation: "refuted", sources: ["a", "b"], verification: { status: "recorded" } },
@@ -42,6 +42,8 @@ test("the context separates a run that did not happen from one that found nothin
   const context = buildPlannerContext({ agenda: agenda({ taskTypeState: { "literature-sentinel": { pausedAt: "x", consecutiveFailures: 2 } } }), progress,
     eligible: ["evidence-update", "hypothesis-suggestion"], date: "2026-10-04", trigger: "scheduled", reducedPriority: true, stopAllowed: true });
   assert.deepEqual(context.episodes.map(item => item.outcome), ["did_not_run", "canceled", "completed", "completed_without_claims", "in_progress"]);
+  assert.equal(context.episodes[0].focus, "核对分母", "what the failed episode was set to look into is not lost with it");
+  assert.equal(Object.hasOwn(context.episodes[1], "focus"), false);
   assert.equal(context.episodes[0].errorCode, "runtime_unavailable");
   assert.deepEqual(context.episodes[2].claims.map(item => item.independentCheck), ["refuted", "check_unavailable", "not_checked"]);
   assert.deepEqual(context.episodes[2].analyses, ["reports/synthesis.md"]);
