@@ -74,7 +74,7 @@ import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
-import { vcrCurrentNodes, vcrReviewIsCurrent } from "./vcrViews.mjs";
+import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
 import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
 
 export { vcrModelApplicabilityIssues, vcrPopulationVariables };
@@ -1554,16 +1554,21 @@ export class VcrOrchestrator {
     const study = await this.store.getStudy(String(user.id), String(input.id));
     if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
     if (study.status !== "active") throw new HttpError(409, "vcr_study_paused", "This study is paused.");
-    // A model document stands on one frozen version of the plan: a document written before the plan froze (a draft), or against an older
-    // version, is not the one asked for once a newer version exists. Every other kind is one document, converted again on request.
-    const latestPlan = isModelDocumentKind(kind) ? Number((await this.store.modelPlanVersions(study.id))[0]?.version ?? 0) : 0;
+    // A document stands on what it was written from. A model document stands on one frozen version of the plan: a draft written before
+    // the plan froze, or against an older version, is not the one asked for once a newer version exists. Every other kind records the
+    // digest of the study's version nodes it was written from (`inputDigest`, `vcrInputDigest`): the same digest is the same document,
+    // converted again on request, and a different one — or none recorded, which says nothing about what it was written from — is a new
+    // document, the earlier one staying listed as replaced. No timer decides it, and nothing but the existing button asks.
+    const cover = await this.#cover(study);
+    const modelKind = isModelDocumentKind(kind);
+    const latestPlan = modelKind ? Number((await this.store.modelPlanVersions(study.id))[0]?.version ?? 0) : 0;
     const previous = (await this.store.exports(study.id)).find(row => row.kind === kind && vcrExportHoldsDocument(row.cover)
-      && Number(row.cover?.results?.modelAnalysis?.plan?.version ?? 0) >= latestPlan);
+      && (modelKind ? Number(row.cover?.results?.modelAnalysis?.plan?.version ?? 0) >= latestPlan : row.cover?.inputDigest === cover.inputDigest));
     if (previous && this.queueExport) {
       const conversion = await this.queueExport(user, study, previous);
       return { export: previous, conversion, sessionId: null, runId: previous.runId ?? null };
     }
-    const row = await this.store.createExport({ studyId: study.id, userId: study.userId, kind, cover: await this.#cover(study) });
+    const row = await this.store.createExport({ studyId: study.id, userId: study.userId, kind, cover });
     await this.#claim(study, `run:export:${row.id}`, "run", "pending",
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
     const result = await this.advance(study.id);
@@ -1618,6 +1623,8 @@ export class VcrOrchestrator {
       reviewed: reviews.some(stillHolds),
       reviews: reviews.map((review) => ({ kind: review.kind, reviewer: review.reviewer, nodes: review.nodes, at: review.createdAt, current: stillHolds(review) })),
       staleResults: stale.length,
+      // What this document is written from: a request for the same kind later asks whether the study still holds these versions.
+      inputDigest: vcrInputDigest(current),
       intendedUse: study.intendedUse,
       conclusions: [...new Set(results.map((result) => result.conclusion).filter(Boolean))],
       seal: this.seal ? await this.seal.sealState(study).catch(() => null) : null,

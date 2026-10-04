@@ -487,6 +487,73 @@ test("a model document stands on one frozen plan version: asked for again after 
   assert.equal((await module.orchestrator.requestExport({ id: study.userId }, study, "study_package")).export.id, first.export.id);
 });
 
+test("a package stands on what it was written from: asked for again after the study changed it is a new document and the earlier one stays listed as replaced; with nothing changed it is the same one", options, async () => {
+  const module = compose();
+  // The document export queue is the composition's; a document already held is converted again, not rewritten.
+  /** @type {string[]} */
+  const converted = [];
+  module.orchestrator.queueExport = async (_user, _study, row) => { converted.push(row.id); return { id: "conversion" }; };
+  const study = await makeStudy("inputdigest");
+  /** @param {string} kind */
+  const produce = async (kind) => {
+    const asked = await module.orchestrator.requestExport({ id: study.userId }, study, kind);
+    if (!asked.export || asked.export.state !== "queued") return asked;
+    const dispatch = module.dispatched[module.dispatched.length - 1];
+    await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null,
+      data: { kind, template: "方法与局限。" } });
+    await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: `run_${module.dispatched.length}`, dispatchId: dispatch.dispatchId, status: "succeeded" });
+    return asked;
+  };
+  const card = (/** @type {number} */ value) => store.saveAssumption({ studyId: study.id, userId: study.userId, key: "dropout_rate", name: "脱落率", pointValue: value,
+    unit: "%", sourceKind: "expert_set", valueSource: "assumed" });
+  const rows = async () => (await store.exports(study.id)).filter((row) => row.kind === "study_package");
+  const labels = async () => (await module.service.studyView({ id: study.userId }, study.id)).overview.deliverables
+    .filter((entry) => entry.kind === "study_package").map((entry) => entry.meta);
+
+  await card(10);
+  const first = await produce("study_package");
+  const firstRow = await store.exportRow(study.id, first.export.id);
+  assert.match(firstRow.cover.inputDigest, /^[0-9a-f]{64}$/, "the document records what it was written from");
+  assert.deepEqual((await labels()).map((meta) => meta.includes("已被新版取代")), [false]);
+
+  // Nothing changed: the same document, converted again, and no second run.
+  const convertedBefore = converted.length;
+  const same = await module.orchestrator.requestExport({ id: study.userId }, study, "study_package");
+  assert.equal(same.export.id, first.export.id);
+  assert.equal(module.dispatched.length, 1);
+  assert.deepEqual(converted.slice(convertedBefore), [first.export.id]);
+
+  // A countersignature and the passing of time are not a change of what it was computed from.
+  await store.addReview({ studyId: study.id, userId: study.userId, kind: "statistical", nodes: ["assumption:dropout_rate@1"], reviewer: study.userId, note: "" });
+  assert.equal((await module.orchestrator.requestExport({ id: study.userId }, study, "study_package")).export.id, first.export.id);
+
+  // An assumption card is edited: the study is not what the document was written from, so asking again is a new document.
+  await card(15);
+  const second = await produce("study_package");
+  assert.notEqual(second.export.id, first.export.id);
+  assert.equal(module.dispatched.length, 2);
+  const secondRow = await store.exportRow(study.id, second.export.id);
+  assert.notEqual(secondRow.cover.inputDigest, firstRow.cover.inputDigest);
+  assert.equal(secondRow.cover.report.rendered, "方法与局限。");
+  // The earlier document is kept, and the list says it was replaced; the newest says nothing of the kind.
+  assert.deepEqual((await rows()).map((row) => row.id), [second.export.id, first.export.id]);
+  assert.deepEqual((await labels()).map((meta) => meta.includes("已被新版取代")), [false, true]);
+  assert.equal((await store.exportRow(study.id, first.export.id)).cover.report.rendered, "方法与局限。", "the earlier document is untouched");
+  // And with nothing moved since, the new one is the one document again.
+  assert.equal((await module.orchestrator.requestExport({ id: study.userId }, study, "study_package")).export.id, second.export.id);
+  assert.equal(module.dispatched.length, 2);
+
+  // Another kind is its own document: a simulation report asked for now is the first of its kind, and the package is not replaced by it.
+  await produce("simulation_report");
+  assert.deepEqual((await labels()).map((meta) => meta.includes("已被新版取代")), [false, true]);
+
+  // A document that recorded nothing of what it was written from says nothing about it: it is not served as current.
+  await store.updateExportCover(second.export.id, (cover) => { const { inputDigest: _gone, ...rest } = cover; return rest; });
+  const third = await produce("study_package");
+  assert.notEqual(third.export.id, second.export.id);
+  assert.equal(module.dispatched.length, 4, "two more runs: the report and the third package");
+});
+
 test("an export whose run leaves no document ends failed and is said on the study page and the home list, until the same document arrives", options, async () => {
   const module = compose();
   const study = await makeStudy("exportfail");

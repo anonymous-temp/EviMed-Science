@@ -1,4 +1,5 @@
 import { presentVcrReview } from "./vcrViewsKit.mjs";
+import { createHash } from "node:crypto";
 import { documentExportDigest } from "@evimed/domain";
 /**
  * What 「虚拟临研」's pages are shown: the presenter (contract 2026-09-29 §5).
@@ -156,6 +157,18 @@ export function vcrCurrentNodes({ study = null, assumptions = [], populations = 
   if (protocol && study) add("protocol_version", study.id, protocol.version);
   return { nodes, kinds: new Set(["assumption", "population", "patient_set", "comparator_design", "trial_scenario", "design_grid", "result",
     "study_definition", "protocol_version"]) };
+}
+
+/**
+ * What a document was written from, as one word: the digest of the version nodes the study held (`vcrCurrentNodes`) — each
+ * assumption card, the population, the patient set, each comparator route and design, the grid, the definition, the protocol and
+ * every current result, each at its version. The same study at the same versions is the same digest whenever it is read; any card
+ * edited, any design replaced or any result recomputed is a different one. A countersignature and the seal are not in it: they
+ * change what a document's cover says, not what it was computed from, and the cover is refreshed in place when they move.
+ * @param {{ nodes: Set<string> }} current what {@link vcrCurrentNodes} read
+ */
+export function vcrInputDigest(current) {
+  return createHash("sha256").update([...current.nodes].sort().join("\n")).digest("hex");
 }
 
 /**
@@ -715,11 +728,14 @@ export function presentDeliverable(row, index, all, now) {
   // `exports` is newest first, so the ordinal counts the older ones of its kind.
   const older = all.slice(index + 1).filter((other) => other.kind === row.kind).length;
   const stateWord = /** @type {Record<string, string>} */ ({ queued: "排队中", running: "生成中", ready: "已生成", failed: "未完成" })[String(row.state)] ?? "";
+  // A newer document of its kind replaces it, and it stays listed as what it was: a document is asked for again when the study moved
+  // on from what it was written from, and the earlier one is not dropped.
+  const superseded = all.slice(0, Math.max(0, index)).some((other) => other.kind === row.kind && vcrExportHoldsDocument(other.cover));
   return {
     id: row.id,
     kind: row.kind,
     title: `${kindWord} v${older + 1}`,
-    meta: [zhTime(row.createdAt, now), stateWord].filter(Boolean).join(" · "),
+    meta: [zhTime(row.createdAt, now), stateWord, superseded ? "已被新版取代" : ""].filter(Boolean).join(" · "),
     draft: row.state !== "ready",
     runId: row.runId ?? null,
     path: row.location ?? null,
