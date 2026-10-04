@@ -62,14 +62,25 @@ test("every node test suite in the repository runs behind the guard", async () =
       if (pkg) manifests.push([`${group}/${entry.name}`, pkg]);
     }
   }
+  // The server's suite goes through `scripts/test/runServerTests.mjs`, which keeps
+  // integration files apart when there is a database; it is the one that
+  // names the preload, and is read below like any other script.
+  const wrapper = /\bnode \.\.\/\.\.\/scripts\/test\/runServerTests\.mjs\b/;
   const suites = manifests.flatMap(([where, pkg]) => Object.entries(pkg.scripts ?? {})
-    .filter(([, script]) => /\bnode\b[^&|;]*--test\b/.test(String(script)))
+    .filter(([, script]) => /\bnode\b[^&|;]*--test\b/.test(String(script)) || wrapper.test(String(script)))
     .map(([name, script]) => [`${where} ${name}`, String(script)]));
   // The walk proves it walked: these five suites run fake servers or sit beside ones that do.
   for (const expected of ["apps/server test", "packages/socket test", "packages/contracts test", "packages/domain test", "packages/harness-port test"]) {
     assert.ok(suites.some(([name]) => name === expected), `${expected} was not found; the walk read ${suites.length} suites`);
   }
+  const runner = await readFile(new URL("scripts/test/runServerTests.mjs", root), "utf8");
   for (const [name, script] of suites) {
-    assert.match(script, /\bnode --import \.\.\/\.\.\/scripts\/test\/localhostProbeGuard\.mjs --test /, name);
+    if (wrapper.test(script)) {
+      // Both of its runs carry the preload in front of `--test`.
+      assert.match(runner, /\["--import", guard, "--test",/, name);
+      assert.match(runner, /localhostProbeGuard\.mjs/, name);
+    } else {
+      assert.match(script, /\bnode --import \.\.\/\.\.\/scripts\/test\/localhostProbeGuard\.mjs --test /, name);
+    }
   }
 });

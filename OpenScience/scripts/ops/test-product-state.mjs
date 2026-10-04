@@ -1,4 +1,17 @@
 #!/usr/bin/env node
+/**
+ * The durable-product-state job: every `*.integration.test.mjs` file of the
+ * server, one at a time, each alone in a PostgreSQL database it creates for
+ * itself and drops afterwards.
+ *
+ * Serial by construction: the loop below runs one `spawnSync` per file and the
+ * child runs at `--test-concurrency=1`, so two integration files never touch
+ * one database at once. Run in parallel against a shared database they deadlock
+ * each other — they reset, count and lease across the schema — which is also why
+ * `pnpm test:server` (`scripts/test/runServerTests.mjs`) keeps these files out of
+ * its parallel run when `OPEN_SCIENCE_TEST_POSTGRES_URL` is set. Do not run the
+ * files concurrently here, and do not hand two of them the same database.
+ */
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";

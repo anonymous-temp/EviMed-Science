@@ -11,7 +11,7 @@
     "dev": "node src/index.mjs",
     "start": "node src/index.mjs",
     "start:controller": "node src/runtimeControllerIndex.mjs",
-    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
+    "test": "node ../../scripts/test/runServerTests.mjs",
     "test:unit": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/runtimeManager.test.mjs test/security.test.mjs test/server.test.mjs",
     "test:contract": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/hosted-web.e2e.test.mjs",
     "test:e2e": "node ../../scripts/ops/hosted-production-e2e.mjs",

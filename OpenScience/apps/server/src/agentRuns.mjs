@@ -3682,6 +3682,17 @@ export class AgentRunStore {
     this.childKernelActivities = new Map();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
+    /**
+     * How the monitor waits between polls: `(ms, onWake) => Promise`, where
+     * `onWake` is handed the function that ends the wait early (a cancel).
+     * Unset, the real timer. A test that asserts what the monitor does *between*
+     * polls drives the polls itself instead of racing a one-millisecond timer
+     * against the event loop, which fails under IO pressure in both directions —
+     * a poll that has not happened yet, and a monitor that ran out of polls
+     * before the test wrote what it was waiting for.
+     * @type {((ms: number, onWake: (wake: () => void) => void) => Promise<void>) | null}
+     */
+    this.monitorWait = options.monitorWait ?? null;
     // Consecutive polls with no new message and no new tool call before a run
     // is called stalled. Zero disables the check and waits out the timeout.
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
@@ -6269,14 +6280,16 @@ export class AgentRunStore {
         // shutdown waiting on this monitor would wait out a full interval,
         // which is four hours by default.
         if (canceled) return;
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, this.monitorIntervalMs);
-          timer.unref?.();
-          wake = () => {
-            clearTimeout(timer);
-            resolve(undefined);
-          };
-        });
+        await (this.monitorWait
+          ? this.monitorWait(this.monitorIntervalMs, (end) => { wake = end; })
+          : new Promise((resolve) => {
+            const timer = setTimeout(resolve, this.monitorIntervalMs);
+            timer.unref?.();
+            wake = () => {
+              clearTimeout(timer);
+              resolve(undefined);
+            };
+          }));
         wake = null;
       }
       if (!canceled) {

@@ -1709,16 +1709,50 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
   });
 });
 
-async function waitForProjection(predicate) {
-  const deadline = Date.now() + 2000;
-  while (!predicate()) {
-    assert.ok(Date.now() < deadline, "The expected projection was not published.");
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+/**
+ * The monitor's polls, driven by the test (`AgentRunStore`'s `monitorWait`).
+ *
+ * These tests assert what the monitor publishes *between* polls. Racing a
+ * one-millisecond timer against the event loop failed them under IO pressure in
+ * both directions: a poll that had not happened by a two-second wall-clock
+ * deadline, and a monitor that ran out of `maxPolls` before the test wrote what
+ * it was waiting for. Here a poll happens exactly when the test says so.
+ */
+function manualPolls() {
+  /** @type {(() => void) | null} */
+  let release = null;
+  /** @type {(() => void)[]} */
+  let parkedWaiters = [];
+  return {
+    /** @param {number} _ms @param {(wake: () => void) => void} onWake */
+    wait(_ms, onWake) {
+      return new Promise((resolve) => {
+        release = () => resolve(undefined);
+        onWake(release);
+        const waiters = parkedWaiters;
+        parkedWaiters = [];
+        for (const waiter of waiters) waiter();
+      });
+    },
+    /** Resolves once the monitor has finished the poll it is in and is waiting for the next. */
+    parked() {
+      return release ? Promise.resolve() : new Promise((resolve) => { parkedWaiters.push(() => resolve(undefined)); });
+    },
+    /** Let the monitor run `count` more polls, each to completion. */
+    async step(count = 1) {
+      for (let polled = 0; polled < count; polled++) {
+        await this.parked();
+        const next = release;
+        release = null;
+        next?.();
+      }
+      await this.parked();
+    },
+  };
 }
 
 /** A run fixture whose root history and run-side projection are both scriptable. */
-async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [], readSessionHistory = null, progressPublishIntervalMs = 2_000 } = {}) {
+async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [], readSessionHistory = null, progressPublishIntervalMs = 2_000, manual = false } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
   let store;
   t.after(async () => {
@@ -1735,9 +1769,11 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
   // `run/progress` rides the same forwarder; kept apart so a test about the
   // projection's own frames counts only those.
   const progress = [];
+  const polls = manualPolls();
   store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
     model: "deepseek/deepseek-v4-pro",
     monitorIntervalMs: 1,
+    ...(manual ? { monitorWait: (/** @type {number} */ ms, /** @type {(wake: () => void) => void} */ onWake) => polls.wait(ms, onWake) } : {}),
     monitorMaxPolls: maxPolls,
     monitorStallPolls: stallPolls,
     progressPublishIntervalMs,
@@ -1755,7 +1791,7 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
     await writeFile(temporary, typeof value === "string" ? value : JSON.stringify(value), "utf8");
     await rename(temporary, target);
   };
-  return { root, project, store, frames, progress, writeProjection };
+  return { root, project, store, frames, progress, writeProjection, polls };
 }
 
 test("a run whose subagents are working is not judged stalled because its root session went quiet", async (t) => {
@@ -1847,15 +1883,13 @@ test("a child named only on its plan item, or only by a delegation receipt, is a
   // needed any more for the kernel to be asked about a child — and a child
   // one of them names is still only a candidate the kernel has to confirm.
   const asked = new Set();
-  let resolveBoth;
-  const both = new Promise((resolve) => { resolveBoth = resolve; });
-  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+  const { project, store, writeProjection, polls } = await delegatingRunFixture(t, {
     stallPolls: 1_000,
     maxPolls: 400,
+    manual: true,
     readChildSessionActivity: async (_project, parentSessionId, childSessionIds) => {
       assert.equal(parentSessionId, "ses_deleg");
       for (const id of childSessionIds) asked.add(id);
-      if (asked.has("child-plan") && asked.has("child-receipt")) resolveBoth();
       return [];
     },
   });
@@ -1874,7 +1908,10 @@ test("a child named only on its plan item, or only by a delegation receipt, is a
       output: kernelToolText({ ok: true, data: { handle: "h-2", deliverableId: "d3", childSessionId: "child-receipt", status: "started" } }),
     },
   });
-  await Promise.race([both, new Promise((_, reject) => setTimeout(() => reject(new Error("the monitor never asked about both children")), 5_000))]);
+  // Polls are bounded by count, not by a wall-clock deadline: the receipt may
+  // land before or after the first poll, and the next one reads it.
+  for (let polled = 0; polled < 10 && !(asked.has("child-plan") && asked.has("child-receipt")); polled++) await polls.step();
+  assert.ok(asked.has("child-plan") && asked.has("child-receipt"), `the monitor never asked about both children: ${JSON.stringify([...asked])}`);
   assert.equal(asked.has("child-settled"), false, "an accepted item's child is not a candidate");
   await store.closeAll();
 });
@@ -1994,22 +2031,23 @@ test("projection frames are sent when the projection changes and not on every po
   // Keep the observer alive for the full timing window. A low poll count made
   // this test depend on incidental ledger I/O being slow enough to prevent the
   // monitor from reaching its timeout before the final projection update.
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
+  const { project, store, frames, writeProjection, polls } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400, manual: true });
   await writeProjection({ evidence: { total: 1, byStatus: { ready: 1 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await waitForProjection(() => frames.length >= 2);
+  await polls.parked();
   const afterFirst = frames.length;
   assert.ok(afterFirst >= 2, `the first read must send both frames, got ${JSON.stringify(frames)}`);
   assert.deepEqual(frames.filter((frame) => frame.type === "evidence/update")[0].data, { total: 1, byStatus: { ready: 1 } });
   assert.deepEqual(frames.filter((frame) => frame.type === "budget/update")[0].data, { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } });
 
   // Many more polls over an unchanged file must add nothing.
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await polls.step(20);
   assert.equal(frames.length, afterFirst, "an unchanged projection was republished");
 
   // Only what changed goes out again.
   await writeProjection({ evidence: { total: 2, byStatus: { ready: 2 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
-  await waitForProjection(() => frames.length > afterFirst);
+  await polls.step();
+  assert.ok(frames.length > afterFirst, "a changed projection was not published");
   const added = frames.slice(afterFirst);
   assert.ok(added.length >= 1, "a changed projection was not published");
   assert.ok(added.every((frame) => frame.type === "evidence/update"), `the budget was unchanged and must not be resent: ${JSON.stringify(added)}`);
@@ -2026,14 +2064,14 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
   // and debounced per deliverable: the index is rewritten whenever any item
   // moves, so digesting the whole list would resend every item every time one
   // of them was graded.
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
+  const { project, store, frames, writeProjection, polls } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400, manual: true });
   const plan = (items) => ({ plan: { revision: 1, items }, evidence: { total: 0, byStatus: {} }, budget: {} });
   await writeProjection(plan([
     { id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综述", status: "submitted", childSessionId: "child-1", attempts: 1, lastIssues: [] },
     { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
   ]));
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await waitForProjection(() => frames.filter((frame) => frame.type === "deliverable/update").length >= 2);
+  await polls.parked();
 
   const first = frames.filter((frame) => frame.type === "deliverable/update");
   assert.equal(first.length, 2, `both planned deliverables must be published once: ${JSON.stringify(first)}`);
@@ -2051,7 +2089,7 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
   assert.equal(first[1].data.childSessionId, null, "an undelegated item names no child rather than a made-up one");
 
   // Many more polls over an unchanged plan must add nothing.
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await polls.step(20);
   assert.equal(frames.filter((frame) => frame.type === "deliverable/update").length, 2, "an unchanged plan was republished");
 
   // Only the item that moved goes out again, and it carries the gate's own
@@ -2067,7 +2105,7 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
     },
     { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
   ]));
-  await waitForProjection(() => frames.filter((frame) => frame.type === "deliverable/update").length > 2);
+  await polls.step();
   const after = frames.filter((frame) => frame.type === "deliverable/update").slice(2);
   assert.equal(after.length, 1, `only the deliverable that moved must be resent: ${JSON.stringify(after)}`);
   assert.equal(after[0].data.status, "rejected");
@@ -2085,12 +2123,12 @@ test("a deliverable a run wrote under an unknown contract kind is published with
   // input. A kind `@evimed/domain` does not know travels as an empty string —
   // the browser then says 契约种类未知 rather than printing an identifier at a
   // Chinese-reading researcher.
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
+  const { project, store, frames, writeProjection, polls } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400, manual: true });
   await writeProjection({
     plan: { revision: 1, items: [{ id: "d1", contractKind: "not-a-contract-kind", status: "not-a-status", capability: "x", title: "" }] },
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await waitForProjection(() => frames.some((frame) => frame.type === "deliverable/update"));
+  await polls.parked();
   const published = frames.filter((frame) => frame.type === "deliverable/update");
   assert.equal(published.length, 1);
   assert.equal(published[0].data.contractKind, "");
