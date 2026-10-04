@@ -42,6 +42,7 @@ import {
   METHOD_INDUCTION_MIN_TRAJECTORIES,
 } from './constants.mjs'
 import { isMethodDigest } from './methodSkill.mjs'
+import { scientificOutcomes } from './methodFeedback.mjs'
 
 /**
  * How two methods can be related.
@@ -142,6 +143,8 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {readonly {name: string, digest: string}[]} dependencies
  * @property {MethodLearning} learning
  * @property {MethodProvenance} provenance
+ * @property {any} [scientific]  what became of the results produced under each revision (`methodFeedback.mjs`)
+ * @property {readonly string[]} [revisions]  the content digests of every body the method has held, newest first
  */
 
 /* ------------------------------------------------------------ the learning payload */
@@ -416,6 +419,44 @@ export function methodHarmTest(learning, options = {}) {
 }
 
 /**
+ * Whether the results produced under one revision of a method show it regressing, and what the precise answer is.
+ *
+ * The same sequential test the delivery axis uses (`methodHarmTest`, `METHOD_HARM_TEST`), read over the other axis:
+ * each result version produced while the method was read is one trial, bad when a trusted recalculation did not
+ * reproduce it or the researcher corrected it, good when a trusted recalculation did. A result nobody recalculated or
+ * corrected is not a trial: it is unknown, and a missing check never reads as clean. No new threshold is invented here;
+ * the numbers are the ones the harm test already carries.
+ *
+ * Precise means to the revision. Entries are kept under the digest they were made under, so the answer names that one
+ * body: the method is returned to the newest earlier body whose own record is not itself harmful (`rollback`, to its
+ * digest), and stopped only when it has none (`retire`). It is a regression of this body against its predecessors, and
+ * never a finding that the method caused anything: `methodFeedback.mjs` says why.
+ *
+ * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<typeof METHOD_HARM_TEST> }} input
+ *   `revisions`: every body the method has held, newest first (the current one among them)
+ * @returns {{ state: 'regression' | 'watching' | 'clear', harm: ReturnType<typeof methodHarmTest>, action: 'rollback' | 'retire' | null,
+ *   rollbackToDigest: string | null, evidence: string[] }}
+ */
+export function scientificRegression({ digest, revisions = [], scientific, options = {} }) {
+  /** @param {string} body */
+  const read = (body) => {
+    const outcomes = scientificOutcomes(scientific, body)
+    return { outcomes, harm: methodHarmTest({ observations: outcomes.map((outcome) => ({
+      outcome: outcome.polarity === 'against' ? 'rejected' : 'accepted', invoked: true, at: outcome.at })) }, options) }
+  }
+  const current = read(digest)
+  if (current.harm.state !== 'harm') {
+    return { state: current.harm.state === 'clear' ? 'clear' : 'watching', harm: current.harm, action: null, rollbackToDigest: null, evidence: [] }
+  }
+  const earlier = revisions.filter((body) => body !== digest && isMethodDigest(body))
+  const target = earlier.find((body) => read(body).harm.state !== 'harm') ?? null
+  return {
+    state: 'regression', harm: current.harm, action: target ? 'rollback' : 'retire', rollbackToDigest: target,
+    evidence: current.outcomes.filter((outcome) => outcome.polarity === 'against').map((outcome) => outcome.entryId).slice(0, 8),
+  }
+}
+
+/**
  * How much a method is worth having, from outcomes alone.
  *
  * `(successes - failures) / trials`, where a trial is a trajectory the method
@@ -645,7 +686,8 @@ export function promotionVerdict(method, options = {}) {
  * silent deletion, and never a deletion at all — retirement is a status.
  * @param {MethodRecord} method
  * @param {RetirementOptions} options
- * @returns {{propose: boolean, immediate: boolean, code: string, reason: string, strength: number, contribution?: number, runs?: number, rejected?: number, replacement?: string}}
+ * @returns {{propose: boolean, immediate: boolean, code: string, reason: string, strength: number, contribution?: number, runs?: number, rejected?: number, replacement?: string,
+ *   action?: 'rollback' | 'retire', rollbackToDigest?: string | null, evidence?: string[]}}
  *   `code` names the branch that decided, for a sentence in the reader's language;
  *   `reason` is the log's.
  */
@@ -677,6 +719,27 @@ export function retirementProposal(method, options) {
       immediate: true,
       code: 'evaluated_worse',
       reason: `a paired evaluation against ${measured.baselineDigest} measured this revision as worse than working without it`,
+      strength,
+    }
+  }
+  // The scientific axis. The results produced while this revision was read were found wrong at a rate the sequential
+  // test reads as worse than working without it (`scientificRegression`): not reproduced by a trusted recalculation, or
+  // corrected by the researcher. The answer is to the revision: the exact earlier body that is not itself harmful, and a
+  // stop only when there is none. Immediate for a method the system inferred, a proposal for one the researcher stated
+  // (the same line the delivery-axis detector below draws), and never a claim of cause.
+  const regression = method?.scientific
+    ? scientificRegression({ digest: method.digest, revisions: method.revisions ?? [], scientific: method.scientific }) : null
+  if (regression?.state === 'regression') {
+    return {
+      propose: true,
+      immediate: method?.provenance?.origin !== 'explicit',
+      code: 'scientific_regression',
+      action: regression.action ?? 'retire',
+      rollbackToDigest: regression.rollbackToDigest,
+      evidence: regression.evidence,
+      runs: regression.harm.runs,
+      rejected: regression.harm.bad,
+      reason: `${regression.harm.bad} of the ${regression.harm.runs} results produced while this revision was read were not reproduced by a trusted recalculation or were corrected, which the sequential test reads as worse than its predecessors; association, not cause`,
       strength,
     }
   }
