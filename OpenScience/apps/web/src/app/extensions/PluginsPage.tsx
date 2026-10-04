@@ -10,7 +10,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { useProjectStore } from "@/lib/projects";
 import { PluginsCard } from "@/components/settings/PluginsCard";
 import { productErrorMessage, productRequest } from "@/lib/productClient";
-import { extensionCatalogue, extensionInstallations, extensionStatus, installExtension, type CatalogueExtension, type ExtensionInstallation } from "@/lib/extensionsClient";
+import { extensionCatalogue, extensionEvidenceLabel, extensionInstallations, extensionStatus, installExtension, type CatalogueExtension, type ExtensionInstallation } from "@/lib/extensionsClient";
 import { ExtensionsNavigation } from "./ExtensionsNavigation";
 
 export function PluginsPage() {
@@ -45,7 +45,7 @@ export function PluginsPage() {
     <div className="mt-6"><Input aria-label="搜索插件" placeholder="搜索插件" value={query} onChange={event => setQuery(event.target.value)} /></div>
     {catalogue === null ? !error && <FilesSkeleton /> : <>
       {installed.length > 0 && <section className="mt-6" aria-label="我的插件"><h2 className="mb-2 text-ui font-medium text-text">我的插件</h2><List divided>{installed.filter(item => (catalogue?.find(entry => entry.id === item.catalogueId)?.title ?? item.catalogueId).toLowerCase().includes(query.toLowerCase())).map(item => <ListRow key={item.id} title={catalogue?.find(entry => entry.id === item.catalogueId)?.title ?? item.catalogueId} trailing={<span className="text-caption text-text-3">{extensionStatus(item)}</span>} to={`/app/extensions/plugins/${encodeURIComponent(item.id)}`} leading={<Puzzle size={20} aria-hidden className="text-text-3" />} />)}</List></section>}
-      <section className="mt-6" aria-label="发现插件"><h2 className="mb-2 text-ui font-medium text-text">发现</h2>{visible?.length ? <List divided>{visible.map(entry => <ListRow key={entry.id} title={entry.title} to={`/app/extensions/plugins/${encodeURIComponent(entry.id)}`} leading={<Puzzle size={20} aria-hidden className="text-text-3" />} trailing={<span className="text-caption text-text-3">{entry.evidenceState === "saas-qualified" ? "已验证" : "尚未验证"}</span>} actions={<Button variant="text" size="sm" disabled={busy !== null} loading={busy === entry.id} onClick={() => void install(entry)}>添加</Button>} />)}</List> : <EmptyState icon={Puzzle} title={query ? "没有找到插件" : "暂无可添加的插件"} />}</section>
+      <section className="mt-6" aria-label="发现插件"><h2 className="mb-2 text-ui font-medium text-text">发现</h2>{visible?.length ? <List divided>{visible.map(entry => <ListRow key={entry.id} title={entry.title} to={`/app/extensions/plugins/${encodeURIComponent(entry.id)}`} leading={<Puzzle size={20} aria-hidden className="text-text-3" />} trailing={<span className="text-caption text-text-3">{extensionEvidenceLabel(entry.evidenceState)}</span>} actions={<Button variant="text" size="sm" disabled={busy !== null} loading={busy === entry.id} onClick={() => void install(entry)}>添加</Button>} />)}</List> : <EmptyState icon={Puzzle} title={query ? "没有找到插件" : "暂无可添加的插件"} />}</section>
       {cursor && <Button variant="text" disabled={loadingMore} loading={loadingMore} onClick={() => void more()}>更多我的插件</Button>}
     </>}
   </PageShell>;

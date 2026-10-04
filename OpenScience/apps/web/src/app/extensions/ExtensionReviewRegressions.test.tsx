@@ -89,6 +89,17 @@ it("shows the installed pin and evidence while a newer qualified catalogue schem
   await userEvent.click(screen.getByRole("button", { name: /更新到版本/ }));
   await waitFor(() => expect(extensions.updateExtension).toHaveBeenCalledWith(installed.id, installed.revision, nextCoordinate));
 });
+it("a package whose record is stale or incomplete is labelled so and stays fully configurable", async () => {
+  for (const [state, label] of [["qualification-stale", "兼容核验已过期"], ["qualification-incomplete", "兼容核验未完成"], ["saas-qualified", "兼容核验通过"]] as const) {
+    extensions.extensionInstallation.mockResolvedValue({ ...installed, evidenceState: state });
+    extensions.extensionCatalogue.mockResolvedValue({ items: [{ ...descriptor, evidenceState: state }] });
+    const view = render(<MemoryRouter initialEntries={["/plugins/extension:one"]}><Routes><Route path="/plugins/:extensionId" element={<PluginDetailPage />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText(label)).toBeInTheDocument();
+    // The record decides no control: the same pin that can be configured when verified can be when it is not.
+    expect(screen.getByRole("button", { name: "用于当前项目" })).toBeEnabled();
+    view.unmount();
+  }
+});
 it("fails closed when the same pin has a different artifact digest", async () => {
   extensions.extensionInstallation.mockResolvedValue({ ...installed, integrity: "sha256:different" });
   openPlugin();

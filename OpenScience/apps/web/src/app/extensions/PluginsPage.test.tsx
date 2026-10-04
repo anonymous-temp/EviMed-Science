@@ -68,3 +68,21 @@ it("late builtin inventory responses cannot label a newly selected project", asy
 it("builtin read failure retries separately from ordinary marketplace discovery", async () => {
   mocks.productRequest.mockRejectedValueOnce(new Error("inventory offline")).mockResolvedValueOnce(inventory); open(); await userEvent.click(await screen.findByRole("button", { name: "重试读取内置能力" })); expect(await screen.findByText("批注")).toBeInTheDocument(); expect(screen.getByRole("region", { name: "发现插件" })).toBeInTheDocument();
 });
+it("shows what the platform's own record says about each package, and none of it stops adding or using one", async () => {
+  // Owner ruling 2026-10-04: a qualification record is a label. Every state, stale or incomplete included, leaves the
+  // row listed with its add button, and an unknown state is shown as unverified rather than as verified.
+  mocks.extensionCatalogue.mockResolvedValue({ generatedAt: "2026-10-02T00:00:00Z", policyState: "stale", items: [
+    { ...first, evidenceState: "saas-qualified" },
+    { ...second, evidenceState: "qualification-stale" },
+    { ...first, id: "chart-tool", title: "统计工具", coordinate: { kind: "npm", name: "chart-tool", version: "3.0.0" }, evidenceState: "qualification-incomplete" },
+    { ...first, id: "note-tool", title: "笔记工具", coordinate: { kind: "npm", name: "note-tool", version: "4.0.0" }, evidenceState: "something-new" },
+  ] });
+  open();
+  const discovery = await screen.findByRole("region", { name: "发现插件" });
+  expect(within(discovery).getByText("已验证")).toBeInTheDocument();
+  expect(within(discovery).getByText("验证已过期")).toBeInTheDocument();
+  expect(within(discovery).getByText("验证未完成")).toBeInTheDocument();
+  expect(within(discovery).getByText("尚未验证")).toBeInTheDocument();
+  expect(within(discovery).getAllByRole("button", { name: "添加" })).toHaveLength(4);
+  for (const button of within(discovery).getAllByRole("button", { name: "添加" })) expect(button).toBeEnabled();
+});
