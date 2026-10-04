@@ -66,6 +66,10 @@ const snapshot = {
   optionalCountKeys: [...vocab.VCR_OPTIONAL_COUNT_KEYS],
   valueSources: [...vocab.VCR_VALUE_SOURCES],
   realPatientSources: [...vocab.VCR_REAL_PATIENT_SOURCES],
+  // A column's source, most direct first; the engine labels a result with the
+  // weakest of the columns it used (`vcr_weakest_source`, R/inputs.R).
+  columnSources: [...vocab.VCR_COLUMN_SOURCES],
+  columnSourceLimits: { ...job.VCR_COLUMN_SOURCE_LIMITS },
   nonIndividualSources: [...vocab.VCR_NON_INDIVIDUAL_SOURCES],
   populationKinds: [...vocab.VCR_POPULATION_KINDS],
   comparatorRoutes: [...vocab.VCR_COMPARATOR_ROUTES],
@@ -93,6 +97,7 @@ const snapshot = {
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,
+    coxFewEvents: vocab.VCR_COX_FEW_EVENTS,
     supportCeiling: vocab.VCR_SUPPORT_CEILING,
     conflictBound: vocab.VCR_MAP_CONFLICT_BOUND,
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },

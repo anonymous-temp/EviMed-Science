@@ -256,7 +256,7 @@ vcr_test_apply_schema_additions <- function(root) {
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-#' One valid job for each of the engine's methods (the 24 handlers), as
+#' One valid job for each of the engine's methods (every handler), as
 #' `list(method, scenario, inputs, replicates)`. E05 runs them as they are; E10
 #' breaks them one field at a time.
 vcr_test_handler_jobs <- function() {
@@ -270,6 +270,16 @@ vcr_test_handler_jobs <- function() {
   in_event <- vcr_test_input(ev, "snp_e05:event", "event")
   in_file <- vcr_test_input(subj, "snp_e05:1")
   in_syn <- vcr_test_input(subj[, c("age", "male", "y")], "pop_e05@1", source = "synthetic", kind = "snapshot_file")
+  # the comparator-effect methods read a small trial/external-control table of their own
+  n2 <- 90L
+  cmp <- data.frame(USUBJID = sprintf("C%03d", seq_len(n2)), arm = rep(0:1, times = c(60L, 30L)), x1 = stats::rnorm(n2), x2 = stats::rbinom(n2, 1L, 0.5), stringsAsFactors = FALSE)
+  cmp$x1[cmp$arm == 1L] <- cmp$x1[cmp$arm == 1L] + 0.3
+  cmp$y <- stats::rbinom(n2, 1L, stats::plogis(-0.4 + 0.5 * cmp$x1 + 0.4 * cmp$arm))
+  cmp_ev <- data.frame(USUBJID = cmp$USUBJID, PARAMCD = "OS", AVAL = stats::rexp(n2, 0.1) + 0.5, CNSR = stats::rbinom(n2, 1L, 0.3), stringsAsFactors = FALSE)
+  in_cmp <- vcr_test_input(cmp, "snp_e05c:subject", "subject")
+  in_cmp_ev <- vcr_test_input(cmp_ev, "snp_e05c:events", "event")
+  # a time-to-event MAIC: the study's patients (covariates centred on the aggregate means) and a reconstruction's pseudo-patients
+  in_pseudo <- vcr_test_input(data.frame(time = stats::rexp(50L, 0.1) + 0.5, status = stats::rbinom(50L, 1L, 0.7)), "rec_e05c:1", source = "reconstructed")
   sites <- lapply(1:8, function(i) list(id = sprintf("s%d", i), alpha = 2, beta = 2.5, startTime = 0))
   curve_arm <- function(med) {
     t <- seq(0, 24, by = 0.5); tr <- c(0, 6, 12, 18, 24)
@@ -292,6 +302,14 @@ vcr_test_handler_jobs <- function() {
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.rmst", list(tau = 5, treatmentColumn = "arm"), list(in_subj, in_event)),
     list("comparator.maic", list(covariates = list("age"), targets = list(age = 58), outcomeColumn = "y", aggregateOutcome = 1.2, aggregateSe = 0.1), list(in_subj)),
+    list("comparator.weighted_cox", list(covariates = list("x1", "x2"), treatmentColumn = "arm", weighting = "entropy_balance", moments = 1L, estimand = "ATT",
+                                         tau = 4, ties = "efron", phAlpha = 0.05, phTransform = "km", timeUnit = "months", parameterCode = "OS"), list(in_cmp, in_cmp_ev)),
+    list("comparator.maic_time_to_event", list(covariates = list("x1", "x2"), targets = list(x1 = 0.1, x2 = 0.5), anchored = FALSE, pseudoIpdInputId = "rec_e05c:1",
+                                               ties = "efron", timeUnit = "months", parameterCode = "OS", unadjustedEffectModifiers = list("ecog")), list(in_cmp, in_cmp_ev, in_pseudo)),
+    list("comparator.aipw", list(propensityCovariates = list("x1", "x2"), outcomeCovariates = list("x1", "x2"), treatmentColumn = "arm", outcomeColumn = "y",
+                                 endpoint = list(type = "binary"), estimand = "ATT"), list(in_cmp)),
+    list("comparator.covariate_sets", list(analysis = "entropy_balance", covariateSets = list(list(name = "primary", covariates = list("x1", "x2")), list(name = "without x2", covariates = list("x1"))),
+                                           treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "binary"), moments = 1L, estimand = "ATT"), list(in_cmp)),
     list("comparator.evalue", list(riskRatio = 3.9, confidenceLimit = 1.8), NULL),
     list("comparator.map_prior", list(historical = list(events = list(14, 18, 9, 22, 11), n = list(100, 120, 80, 150, 90)), robustWeight = 0.2), NULL),
     list("design.analytic", list(design = list(kind = "two_arm_fixed"), endpoint = list(type = "time_to_event"), truth = list(hazardRatio = 0.7, controlMedian = 12), accrual = list(duration = 12, followup = 24), analysis = list(alpha = 0.025, power = 0.9)), NULL),

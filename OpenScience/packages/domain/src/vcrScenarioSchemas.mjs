@@ -475,6 +475,83 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     ...WEIGHTING_CONTEXT,
   }),
 
+  // A weighted Cox comparison: the weights are estimated INSIDE the job (so the bootstrap re-estimates them in every
+  // resample), the hazard ratio carries a robust variance and a bootstrap, and the proportional-hazards test is reported
+  // with the RMST difference beside it. `tau` is required so that companion is always computable; the PH level and the
+  // time transform are declared before the data is read, never chosen after (the estimator is not switched by the test).
+  'comparator.weighted_cox': object({
+    covariates: req(COLUMN_LIST),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    weighting: string({ values: ['entropy_balance', 'propensity'], default: 'entropy_balance' }),
+    moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('weighting', 'propensity')),
+    estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    tau: req(number({ gt: 0, unit: 'time units' })),
+    ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
+    phAlpha: number({ gt: 0, lt: 1, default: 0.05 }),
+    phTransform: string({ values: ['km', 'rank', 'identity'], default: 'km' }),
+    endpoint: ENDPOINT(),
+    timeUnit: string({ maxLength: 20, default: 'months' }),
+    parameterCode: string({ maxLength: 64 }),
+    cohortRules: COHORT_STEPS,
+    targetTrial: TARGET_TRIAL,
+  }),
+
+  // The comparator analysis re-run under alternative, pre-declared covariate sets. The first set is the primary analysis; every set
+  // is a full run of the named analysis (its own weights, balance, overlap rules and bootstrap), so a set that breaks a
+  // not-estimable rule is reported as that, never dropped. The other keys are the ones the named analysis reads, once.
+  'comparator.covariate_sets': object({
+    analysis: string({ values: ['entropy_balance', 'propensity', 'aipw'], default: 'entropy_balance' }),
+    covariateSets: req(array(object({ name: req(string(CRITERION_NAME)), covariates: req(COLUMN_LIST) }), { min: 2, max: 8 })),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    outcomeColumn: { ...COLUMN, default: 'y' },
+    moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('analysis', 'propensity', 'aipw')),
+    estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    ...WEIGHTING_CONTEXT,
+    endpoint: req(ENDPOINT()),
+  }),
+
+  // A doubly robust (AIPW) estimator of the effect in the trial's own population (ATT) for a single-arm study against an
+  // external control: arm 1 is the trial, arm 0 the external source. The propensity model (membership of the trial against the
+  // external source, logistic) and the outcome model (fitted on the external controls only, logistic for a binary outcome,
+  // linear for a continuous one) may use different covariates; main effects only, so a nonlinear term is a column of the table.
+  // The estimator is consistent when EITHER model is right. Everything is estimated inside the job: the bootstrap re-fits both
+  // models in every resample, and the influence-function standard error is reported beside it.
+  'comparator.aipw': object({
+    covariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    propensityCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    outcomeCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    outcomeColumn: { ...COLUMN, default: 'y' },
+    endpoint: req(ENDPOINT()),
+    estimand: string({ values: ['ATT'], default: 'ATT' }),
+    cohortRules: COHORT_STEPS,
+    targetTrial: TARGET_TRIAL,
+  }, { atLeastOne: [['covariates', 'propensityCovariates'], ['covariates', 'outcomeCovariates']] }),
+
+  // A time-to-event MAIC (NICE DSU TSD 18, Signorovitch 2012). The study's patients are the subject table (and its events table);
+  // the comparator's pseudo-individual rows come from a reconstruction (`evidence.reconstruct_km`) and are named by their input id.
+  // Unanchored: the weighted patients against the comparator's rows in one Cox model. Anchored: the study has a common comparator
+  // C (the arm column: 1 = A, 0 = C) and the contrast of B with C is either the reconstructed rows of both arms (1 = B, 0 = C) or
+  // the published log hazard ratio with its standard error; the indirect contrast is Bucher's on the log scale.
+  'comparator.maic_time_to_event': object({
+    covariates: req(COLUMN_LIST),
+    targets: req({ t: 'map', values: number(), keysFrom: 'covariates', min: 1, max: 100 }),
+    anchored: boolean({ default: false }),
+    treatmentColumn: gated({ ...COLUMN, default: 'arm' }, is('anchored', 'true')),
+    pseudoIpdInputId: { ...INPUT_REF, reqWhen: isNot('anchored', 'true') },
+    pseudoTreatmentColumn: gated({ ...COLUMN, default: 'arm' }, [is('anchored', 'true'), has('pseudoIpdInputId')]),
+    aggregateEstimate: gated(number({ unit: 'log hazard ratio' }), is('anchored', 'true')),
+    aggregateSe: gated(number({ gt: 0 }), is('anchored', 'true')),
+    ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
+    endpoint: ENDPOINT(),
+    timeUnit: string({ maxLength: 20, default: 'months' }),
+    parameterCode: string({ maxLength: 64 }),
+    unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
+  }, {
+    exactlyOne: [{ keys: ['pseudoIpdInputId', 'aggregateEstimate'], when: is('anchored', 'true') }],
+    requires: { aggregateEstimate: ['aggregateSe'], aggregateSe: ['aggregateEstimate'] },
+  }),
+
   'comparator.rmst': object({
     tau: req(number({ gt: 0, unit: 'time units' })),
     treatmentColumn: { ...COLUMN, default: 'arm' },

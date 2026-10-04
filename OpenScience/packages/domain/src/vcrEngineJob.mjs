@@ -47,7 +47,7 @@
  */
 
 import {
-  VCR_ANALYSIS_TABLES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
+  VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
   VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, VCR_TRIAL_DESIGNS,
   VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
@@ -98,6 +98,12 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
+  // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
+  // methods above changed.
+  'comparator.weighted_cox': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.maic_time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
+  'comparator.aipw': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
+  'comparator.covariate_sets': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -133,12 +139,17 @@ export const VCR_JOB_METHODS = Object.freeze({
   accrual_forecast: 'accrual.poisson_gamma',
   map_prior: 'comparator.map_prior',
   match_criteria: 'matching.evaluate',
+  weighted_cox_comparator: 'comparator.weighted_cox',
+  maic_time_to_event_comparator: 'comparator.maic_time_to_event',
+  aipw_comparator: 'comparator.aipw',
+  covariate_set_comparator: 'comparator.covariate_sets',
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
-  'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria',
+  'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
+  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
 ])
 
 /**
@@ -157,6 +168,12 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
+  'comparator.weighted_cox': VCR_REAL_PATIENT_SOURCES,
+  'comparator.aipw': VCR_REAL_PATIENT_SOURCES,
+  'comparator.covariate_sets': VCR_REAL_PATIENT_SOURCES,
+  // The study's own patients (real) and the comparator's pseudo-individual rows from a Guyot reconstruction (reconstructed)
+  // are both tables of this job; the engine holds each to its role and counts the pseudo-patients apart.
+  'comparator.maic_time_to_event': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */
@@ -236,7 +253,17 @@ export const VCR_CALLER_SNAPSHOT_KIND = 'snapshot'
  * snapshot input carries nothing but its kind and id.
  */
 export const VCR_CALLER_INPUT_KEYS = frozen(['kind', 'id', 'value'])
-export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource'])
+export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource', 'columnSources'])
+/**
+ * What a table input's `columnSources` may be: an object naming, for some of the
+ * table's columns, the source of that column (`VCR_COLUMN_SOURCES`). A column it
+ * does not name has the table's own `valueSource`, so the map only has to say
+ * where a column differs from its table. Only the control plane writes it, and
+ * only for a table of real people's rows (a synthetic or reconstructed table has
+ * no per-column sources). The engine labels a result with the weakest source of
+ * the columns its method used (`vcrWeakestSource`).
+ */
+export const VCR_COLUMN_SOURCE_LIMITS = Object.freeze({ maxColumns: 1000, maxNameLength: 200 })
 export const VCR_ENGINE_LINEAGE_INPUT_KEYS = frozen(['kind', 'id', 'hash', 'value'])
 
 /**
@@ -414,7 +441,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
         bad('input_kind_missing', `${at}.kind`, 'An input names what it is (assumption, snapshot, population …).')
       } else bad('input_kind_unknown', `${at}.kind`, `Unknown input kind ${JSON.stringify(input.kind)}.`)
     }
-    for (const key of ['location', 'shape', 'valueSource']) {
+    for (const key of ['location', 'shape', 'valueSource', 'columnSources']) {
       if (input[key] !== undefined && input[key] !== null) bad('input_location_forbidden', `${at}.${key}`, `A caller never supplies ${key}: the control plane resolves it from the snapshot.`)
     }
     if (input.hash !== undefined && input.hash !== null) bad('input_location_forbidden', `${at}.hash`, 'A caller never supplies a hash: the control plane hashes the file it resolved.')
@@ -423,7 +450,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
       bad('input_version_missing', `${at}.id`, 'A lineage input names a version: `<id>@<n>`.')
     }
     for (const key of Object.keys(input)) {
-      if (['location', 'shape', 'valueSource', 'hash'].includes(key)) continue
+      if (['location', 'shape', 'valueSource', 'columnSources', 'hash'].includes(key)) continue
       if (VCR_CALLER_INPUT_KEYS.includes(key) && !(key === 'value' && input.kind === VCR_CALLER_SNAPSHOT_KIND)) continue
       bad('input_field_unknown', `${at}.${key}`, 'A caller input is { kind, id } (and a lineage input its frozen value), nothing else.')
     }
@@ -518,6 +545,28 @@ export function validateEngineJob(job) {
       if (hasHash && !SHA256.test(input.hash)) bad('input_hash_invalid', `${at}.hash`, 'An input hash is a lowercase sha256 hex digest.')
       const hasSource = input.valueSource !== undefined && input.valueSource !== null
       if (hasSource && !VCR_VALUE_SOURCES.includes(input.valueSource)) bad('input_value_source_invalid', `${at}.valueSource`, `valueSource is one of ${VCR_VALUE_SOURCES.join(', ')}.`)
+      if (input.columnSources !== undefined && input.columnSources !== null) {
+        const where = `${at}.columnSources`
+        if (!isObject(input.columnSources)) {
+          bad('input_column_sources_invalid', where, 'columnSources is an object: a column name and its source, for the columns that differ from the table.')
+        } else {
+          const entries = Object.entries(input.columnSources)
+          if (entries.length > VCR_COLUMN_SOURCE_LIMITS.maxColumns) {
+            bad('input_column_sources_invalid', where, `At most ${VCR_COLUMN_SOURCE_LIMITS.maxColumns} columns carry a source of their own.`)
+          } else if (entries.some(([column]) => !column || [...column].length > VCR_COLUMN_SOURCE_LIMITS.maxNameLength)) {
+            bad('input_column_sources_invalid', where, `A column name is 1-${VCR_COLUMN_SOURCE_LIMITS.maxNameLength} characters.`)
+          } else {
+            for (const [column, source] of entries) {
+              if (!VCR_COLUMN_SOURCES.includes(/** @type {string} */ (source))) {
+                bad('input_column_source_invalid', `${where}.${column}`, `A column's source is one of ${VCR_COLUMN_SOURCES.join(', ')}.`)
+              }
+            }
+          }
+          if (hasSource && !VCR_COLUMN_SOURCES.includes(input.valueSource)) {
+            bad('input_column_source_not_individual', where, `Only a table of real people's rows (${VCR_COLUMN_SOURCES.join(', ')}) has sources per column, not ${input.valueSource}.`)
+          }
+        }
+      }
       const hasLocation = input.location !== undefined && input.location !== null
       if (hasLocation && !vcrLocationIsValid(input.location)) {
         bad('input_location_invalid', `${at}.location`, 'A location is a path relative to the data plane: no "..", no leading "/", no hidden or empty segment.')

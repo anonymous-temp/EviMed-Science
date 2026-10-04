@@ -884,6 +884,12 @@ test("a method is given the tables it reads and no more: files to profile, the s
   assert.deepEqual(tablesNeededBy("comparator.entropy_balance", "time_to_event", all), ["subject", "events"]);
   assert.deepEqual(tablesNeededBy("comparator.entropy_balance", "binary", all), ["subject"], "a binary outcome is a column of the subject table");
   assert.deepEqual(tablesNeededBy("comparator.propensity_weight", null, all), ["subject"]);
+  // the comparator-effect methods: an event time is always read by the Cox and the time-to-event MAIC, by the covariate sets only for that endpoint
+  assert.deepEqual(tablesNeededBy("comparator.weighted_cox", "time_to_event", all), ["subject", "events"]);
+  assert.deepEqual(tablesNeededBy("comparator.maic_time_to_event", null, all), ["subject", "events"]);
+  assert.deepEqual(tablesNeededBy("comparator.covariate_sets", "time_to_event", all), ["subject", "events"]);
+  assert.deepEqual(tablesNeededBy("comparator.covariate_sets", "binary", all), ["subject"]);
+  assert.deepEqual(tablesNeededBy("comparator.aipw", "binary", all), ["subject"]);
   assert.deepEqual(tablesNeededBy("population.synthpop", null, all), ["subject"]);
   assert.deepEqual(tablesNeededBy("something.new", null, all), ["subject"]);
   assert.deepEqual(tablesNeededBy("comparator.rmst", "time_to_event", ["subject"]), ["files"], "no events table derived: the raw files, which the engine also takes");

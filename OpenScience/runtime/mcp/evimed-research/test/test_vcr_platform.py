@@ -224,9 +224,9 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["vcr_read"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.READ_WHATS))
         self.assertEqual(definitions["vcr_write"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.WRITE_WHATS))
 
-    def test_the_job_kinds_are_the_domain_s_twenty_four(self):
+    def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
-        self.assertEqual(len(kinds), 24)
+        self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
         self.assertEqual(list(vcr_platform.JOB_KINDS), kinds)
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
         self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], kinds)
@@ -400,7 +400,7 @@ class VcrSimulateTests(_GatewayCase):
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "start", "kind": "design_simulation", "scenario": scenario, "subjectId": "scn_1"})
 
-    def test_all_twenty_four_kinds_pass_the_runtime_check_and_others_never_leave_it(self):
+    def test_all_kinds_pass_the_runtime_check_and_others_never_leave_it(self):
         _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued"}})
         for kind in vcr_platform.JOB_KINDS:
             self.server.call_tool("vcr_simulate", {"action": "start", "kind": kind, "scenario": {}})

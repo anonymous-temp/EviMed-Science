@@ -9,10 +9,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { VCR_VALUE_SOURCES } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
+  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
   presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import {
@@ -20,11 +20,33 @@ import {
   seriesView, criterionCodes,
 } from "../src/vcrViewsTabs.mjs";
 import {
-  countsView, decimalsFor, defaultSourceOf, intervalView, measureValue, rangeString, reviewOfNode, staleNote, withReviewState, zhDate, zhTime,
+  METHOD_LABELS, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote, withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
 const NOW = new Date("2026-09-28T09:00:00.000Z"); // 17:00 in China standard time
+
+// --- the names the engine's methods are shown by --------------------------------------
+
+test("every engine method and every job kind the domain declares is shown by a Chinese name, and a new one cannot be missed", () => {
+  const cjk = /[\u4e00-\u9fff]/;
+  assert.ok(Object.keys(VCR_ENGINE_METHODS).length >= 28 && VCR_JOB_KINDS.length >= 28, "the walk proves it walked");
+  for (const method of Object.keys(VCR_ENGINE_METHODS)) assert.ok(cjk.test(METHOD_LABELS[method] ?? ""), `${method} has no Chinese method name`);
+  for (const kind of VCR_JOB_KINDS) assert.ok(cjk.test(JOB_KIND_LABELS[kind] ?? ""), `${kind} has no Chinese job name`);
+  assert.deepEqual(Object.keys(METHOD_LABELS).filter((method) => !(method in VCR_ENGINE_METHODS)), [], "a label for a method the domain does not declare");
+  assert.deepEqual(Object.keys(JOB_KIND_LABELS).filter((kind) => !VCR_JOB_KINDS.includes(kind)), [], "a label for a job kind the domain does not declare");
+});
+
+test("the measures the comparator-effect methods write are named in words, the set estimates by their number", () => {
+  const cjk = /[\u4e00-\u9fff]/;
+  for (const name of ["hazard_ratio", "hazard_ratio_robust", "hazard_ratio_unadjusted", "hazard_ratio_ac_adjusted", "hazard_ratio_ac_unadjusted", "hazard_ratio_bc",
+    "log_hazard_ratio_se_robust", "log_hazard_ratio_se_bootstrap", "ph_test_chisq", "ph_test_p", "aipw_difference", "aipw_difference_influence",
+    "aipw_difference_se_influence", "aipw_difference_se_bootstrap", "aipw_risk_ratio", "aipw_odds_ratio", "outcome_mean_treated", "outcome_mean_control_adjusted",
+    "covariate_set_range_low", "covariate_set_range_high", "covariate_set_range_width", "covariate_sets_total", "covariate_sets_estimable", "covariate_set_estimate_3"]) {
+    assert.ok(cjk.test(measureLabel(name)) && measureLabel(name) !== name, `${name} is shown as itself`);
+  }
+  assert.equal(measureLabel("covariate_set_estimate_3"), "第 3 个协变量集的估计");
+});
 
 // --- how a moment is said ----------------------------------------------------------
 

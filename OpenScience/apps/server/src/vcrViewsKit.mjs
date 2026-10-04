@@ -203,6 +203,29 @@ export const MEASURE_META = Object.freeze({
   effective_sample_size: { label: "有效样本量", unit: "例" },
   worst_standardized_difference: { label: "加权后最大标准化差异" },
   indirect_estimate: { label: "间接比较估计" },
+  hazard_ratio: { label: "风险比" },
+  hazard_ratio_robust: { label: "风险比（稳健方差）" },
+  hazard_ratio_unadjusted: { label: "未调整的风险比" },
+  hazard_ratio_ac_adjusted: { label: "调整后的 A 对 C 风险比" },
+  hazard_ratio_ac_unadjusted: { label: "未调整的 A 对 C 风险比" },
+  hazard_ratio_bc: { label: "B 对 C 风险比" },
+  log_hazard_ratio_se_robust: { label: "对数风险比的标准误（稳健）" },
+  log_hazard_ratio_se_bootstrap: { label: "对数风险比的标准误（自助法）" },
+  ph_test_chisq: { label: "等比例风险检验统计量" },
+  ph_test_p: { label: "等比例风险检验 P 值" },
+  aipw_difference: { label: "双重稳健效应差" },
+  aipw_difference_influence: { label: "双重稳健效应差（影响函数区间）" },
+  aipw_difference_se_influence: { label: "效应差的标准误（影响函数）" },
+  aipw_difference_se_bootstrap: { label: "效应差的标准误（自助法）" },
+  aipw_risk_ratio: { label: "双重稳健风险比（RR）" },
+  aipw_odds_ratio: { label: "双重稳健比值比（OR）" },
+  outcome_mean_treated: { label: "试验组的结局均值" },
+  outcome_mean_control_adjusted: { label: "校正后的对照结局均值" },
+  covariate_set_range_low: { label: "各协变量集估计的最小值" },
+  covariate_set_range_high: { label: "各协变量集估计的最大值" },
+  covariate_set_range_width: { label: "各协变量集估计的范围宽度" },
+  covariate_sets_total: { label: "协变量集个数", unit: "组" },
+  covariate_sets_estimable: { label: "能估计的协变量集个数", unit: "组" },
   e_value: { label: "E 值" },
   e_value_confidence_limit: { label: "E 值（置信限）" },
   pooled: { label: "合并估计" },
@@ -255,6 +278,8 @@ export function measureLabel(name) {
   if (known) return known;
   const by = /^probability_by_(.+)$/.exec(name);
   if (by) return `${by[1].replace(/_/g, "-")} 前完成的概率`;
+  const set = /^covariate_set_estimate_(\d+)$/.exec(name);
+  if (set) return `第 ${set[1]} 个协变量集的估计`;
   return name;
 }
 
@@ -552,6 +577,8 @@ export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "evidence.pool": "证据合并",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",
+  "comparator.weighted_cox": "加权 Cox 风险比", "comparator.maic_time_to_event": "事件时间终点的匹配调整间接比较",
+  "comparator.aipw": "双重稳健估计（AIPW）", "comparator.covariate_sets": "协变量集敏感性分析",
   "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": "成功把握",
   "design.procova": "预后协变量调整", "accrual.poisson_gamma": "Poisson–Gamma 入组预测", "matching.evaluate": "逐条匹配",
 }));
