@@ -86,6 +86,26 @@ describe("what happened to a run", () => {
     expect(runDidNotDeliver(run({ status: "failed", errorCode: "specialist_evidence_repair_failed" }))).toBe(true);
   });
 
+  // 2026-10-04: a delivery receipt labels a result and never refuses one. What
+  // the ledger now records for the three situations that used to end `failed`
+  // — files with no receipt, files that moved after it, an answer whose
+  // runtime stopped — is a finished run with a reservation on it, and it reads
+  // as a result to open, not as 未完成.
+  it("reads a delivery the receipt could not vouch for as a result with a label, not as a failure", () => {
+    for (const verification of ["unverified", "unchecked"] as const) {
+      const delivered = run({ status: "succeeded", errorCode: null, verification, artifacts: ["deliverables/d1/clinical-evidence-report.md"] } as Partial<WebAgentRun>);
+      expect(runDidNotDeliver(delivered)).toBe(false);
+      expect(runState(delivered)).toEqual({ key: "review", label: "待核对" });
+      expect(webRunOutcome(delivered).kind).toBe("qualified");
+    }
+    // Nothing on disk, or a turn that had not finished, is still a run that did not deliver.
+    for (const errorCode of ["specialist_required_output_missing", "runtime_stopped"]) {
+      const failed = run({ status: "failed", errorCode });
+      expect(runDidNotDeliver(failed)).toBe(true);
+      expect(runState(failed)).toEqual({ key: "failed", label: "未完成" });
+    }
+  });
+
   it("tells an absent list of refused files apart from an empty one", () => {
     expect(undeliveredFiles(run())).toBeNull();
     expect(undeliveredFiles(run({ unverifiedArtifacts: [] } as Partial<WebAgentRun>))).toEqual([]);

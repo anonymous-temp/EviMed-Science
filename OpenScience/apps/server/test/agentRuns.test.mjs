@@ -6190,6 +6190,13 @@ test("a runtime that stopped after its turn's answer leaves an answered run, and
     assert.equal((await stopAfter([turn, { ...answer, text: "  " }, completed]))?.errorCode, "runtime_stopped", "an empty last message is no answer");
     assert.equal((await stopAfter([turn, answer, { ...completed, endKind: "aborted" }]))?.errorCode, "runtime_stopped", "a turn that was aborted did not finish");
     assert.equal((await stopAfter([turn, answer, completed, turn]))?.errorCode, "runtime_stopped", "a later turn that began and never ended is not finished");
+    // A dispatched run's `turn/start` never reaches the store, so the reset a
+    // later turn needs has to come from whatever else it does.
+    assert.equal((await stopAfter([answer, completed, { type: "tool/call", callId: "c1", tool: "read", input: {}, narration: "" }]))?.errorCode, "runtime_stopped",
+      "a tool call after a turn's end is a later turn's, which has not ended");
+    assert.equal((await stopAfter([answer, completed, { ...answer, text: "" }]))?.errorCode, "runtime_stopped", "nor is a later turn that has said nothing");
+    const forward = await stopAfter([answer, completed]);
+    assert.equal(forward?.status, "succeeded", "without a turn/start the end still counts");
     // A reply is not what was owed when a deliverable was planned...
     const planned = await stopAfter([turn, answer, completed], {
       writeState: { formatVersion: 1, plan: { revision: 1, items: [{ id: "d1", status: "planned", attempts: 0 }] }, degraded: [] },
@@ -7148,6 +7155,12 @@ test("a package edited after its receipt into something that fails is still refu
     // blaming the receipt: the required file is not there.
     assert.equal(run.errorCode, "specialist_required_output_missing");
     assert.notEqual(run.errorCode, "specialist_receipt_digest_mismatch");
+    // With server repair rounds off (the default) the drifted receipt never
+    // reaches the repair grant's own refusal — no snapshot, no grant, and no
+    // claim that a repair was due and not sent.
+    assert.equal(noticeTexts(run).some((line) => /repair/i.test(String(line))), false, noticeTexts(run).join(" | "));
+    const meta = await readdir(project.metaDir);
+    assert.equal(meta.includes("repair-authorizations") || meta.includes("repair-revisions"), false, meta.join(", "));
   });
 });
 

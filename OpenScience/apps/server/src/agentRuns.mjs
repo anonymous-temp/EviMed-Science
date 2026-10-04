@@ -117,6 +117,8 @@ export { runNotice };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
+/** The events a root session emits while one of its turns is going on. */
+const ROOT_TURN_ACTIVITY = new Set(["turn/start", "step/start", "message/user", "message/assistant", "assistant/delta", "tool/call"]);
 const startFields = new Set(["sessionId"]);
 const dispatchFields = new Set([
   "sessionId",
@@ -3063,7 +3065,7 @@ function receiptFilesNow(verified) {
  * @returns {StoredNotice}
  */
 function runtimeStoppedUnverifiedNotice() {
-  const sentence = `运行时在核验之前已经停止，这些文件没能核验。${UNVERIFIED_DELIVERY_NOTICE}`;
+  const sentence = "运行时在核验之前已经停止，没能核验已生成的文件。文件已保留，可以查看和下载，标记为「未经核验」，其中的内容仍需核对。";
   return runNotice("run_unverified_delivery", sentence, { detail: sentence });
 }
 
@@ -6044,13 +6046,21 @@ export class AgentRunStore {
     // longer be read, and without this it could only be called stopped. Only
     // the two facts are kept — never the reply — and a replay of an earlier
     // snapshot says nothing about how this turn ended.
+    //
+    // A turn's end is its last event, so any activity after one is a later
+    // turn's and says nothing yet about how that one ends. A dispatched run's
+    // `turn/start` is not forwarded here (the pump holds it until the run's own
+    // input arrives), which is why the reset cannot wait for one.
     if (!observed.child && !observed.replay) {
       const event = observed.event;
-      if (event.type === "turn/start") tracker.rootTurn = { endKind: null, replied: false };
-      else if (event.type === "message/assistant" && !event.interrupted) {
-        tracker.rootTurn = { endKind: tracker.rootTurn?.endKind ?? null, replied: String(event.text ?? "").trim().length > 0 };
-      } else if (event.type === "turn/end") {
+      if (event.type === "turn/end") {
         tracker.rootTurn = { endKind: String(event.endKind ?? ""), replied: tracker.rootTurn?.replied ?? false };
+      } else if (ROOT_TURN_ACTIVITY.has(event.type)) {
+        const open = tracker.rootTurn && tracker.rootTurn.endKind === null ? tracker.rootTurn : { endKind: null, replied: false };
+        tracker.rootTurn = {
+          endKind: null,
+          replied: event.type === "message/assistant" && !event.interrupted ? String(event.text ?? "").trim().length > 0 : open.replied,
+        };
       }
     }
     // A child that starts a new turn is running again, whatever its last one did.
