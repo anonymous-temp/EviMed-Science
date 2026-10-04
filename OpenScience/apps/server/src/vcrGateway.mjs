@@ -60,7 +60,7 @@ import { createHash } from "node:crypto";
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
-  VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_SCENARIO_SCHEMAS,
+  VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
   vcrModelDocumentTakesProse,
 } from "@evimed/domain";
@@ -123,7 +123,26 @@ class VcrGatewayError extends Error {
     this.code = code;
     /** @type {Array<{kind:string,label:string}> | undefined} */
     this.alternatives = undefined;
+    /** The per-field findings of a refused job (a code and a path each), so the run's tool can name the keys of the place it was refused. @type {Array<{code:string,field:string}> | undefined} */
+    this.issues = undefined;
   }
+}
+
+/**
+ * The findings of a refused job as the run is told them: a code and a path, never the engine's own words.
+ * @param {unknown} found @returns {Array<{ code: string, field: string }>}
+ */
+function fieldFindings(found) {
+  if (!Array.isArray(found)) return [];
+  /** @type {Array<{ code: string, field: string }>} */
+  const out = [];
+  for (const item of found) {
+    const code = item?.code;
+    const field = item?.field;
+    if (typeof code === "string" && /^[a-z0-9_]{1,60}$/.test(code) && typeof field === "string" && field.length > 0 && field.length <= 200) out.push({ code, field });
+    if (out.length >= 20) break;
+  }
+  return out;
 }
 
 /** @param {number} status @param {string} code @param {string} message */
@@ -231,10 +250,13 @@ function writeRequest(body) {
   return { what: body.what, items: body.items ?? null, data: body.data ?? null };
 }
 
-/** The scenario keys a pooling request may carry: what is pooled, never the engine's own fields. */
-const POOL_REQUEST_FIELDS = Object.freeze(["parameter", "endpointKey", "calibres", "armRole", "target", "method"]);
+/**
+ * The scenario keys a pooling request may carry: what is pooled, never the engine's own fields. Both lists are the domain's
+ * (`VCR_RUN_SCENARIO_FIELDS`), because the help a run reads names the same keys.
+ */
+const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 /** The keys an accrual request may carry: the target and horizon are the study's to state; the sites' rates come from the ledger. */
-const ACCRUAL_REQUEST_FIELDS = Object.freeze(["target", "eventTarget", "eventHazard", "byTimes"]);
+const ACCRUAL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.accrual_forecast;
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
@@ -1727,6 +1749,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       // pass through; a filter naming something the study does not have is the
       // filter being wrong; nothing else of the service's is a code the run's
       // verdict knows.
+      const findings = fieldFindings(/** @type {any} */ (caught)?.issues);
       if (error instanceof HttpError) {
         if (VCR_GATEWAY_ERROR_CODES.includes(error.code)) error = gatewayError(error.status, error.code, error.message);
         else if (error.status === 404) error = gatewayError(400, "vcr_read_filter_invalid", error.message);
@@ -1744,6 +1767,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         error: known ? /** @type {any} */ (error).message : "The 虚拟临研 gateway is unavailable; go on without the platform's study data.",
         code,
         ...(known && error.alternatives ? { alternatives: error.alternatives } : {}),
+        ...(findings.length ? { issues: findings } : {}),
       });
     }
   };
@@ -1847,6 +1871,7 @@ async function startJob(vcr, study, request) {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
       'generate_patients', 'generate_patients_continuous', 'generate_patients_binary'].includes(request.kind)) {
       const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
+      refusal.issues = fieldFindings(error.issues);
       refusal.alternatives = [
         { kind: 'reference_scenario', label: '使用明确分布参数的参考情景' },
         { kind: 'registered_model', label: '查询已登记模型及其适用范围' },

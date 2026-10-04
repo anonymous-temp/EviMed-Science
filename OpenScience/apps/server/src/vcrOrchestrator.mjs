@@ -62,7 +62,7 @@ import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
-  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, whenHolds,
+  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -756,10 +756,33 @@ function externalControlRefusal(jobKind, configuration, endpoint, estimand) {
 
 // --- robustness methods ---
 
-/** The refusal for keys a plan's stages do not read. @param {string[]} paths @returns {{ code: string, message: string, paths: string[] }} */
-function unknownFieldsRefusal(paths) {
+/**
+ * What the engine reads inside the places a refusal names, as the refusal's own sentence: a run that guessed `accrual.months` is
+ * told that `accrual` reads duration, followup and dropoutAnnual, so the repair needs no second lookup. Read from the domain's
+ * schemas through the same rows the runtime's shape help is generated from (`vcrScenarioHelp.mjs`), never typed here. At most two
+ * places, so the sentence stays what a page can show.
+ * @param {string[]} paths @param {ReadonlyArray<{ jobKind: string, scenario: Record<string, any> }>} stages
+ */
+function readsHint(paths, stages) {
+  const methods = [...new Set(stages.map((stage) => /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[stage.jobKind]).filter(Boolean))];
+  const root = stages[0]?.scenario;
+  const nodes = [...new Set(paths.slice(0, 8).map(vcrScenarioParentOf))].slice(0, 2);
+  const places = [];
+  for (const node of nodes) {
+    const keys = vcrScenarioChildKeys(methods, node, root);
+    if (keys.length) places.push(`${node ? `${node} 里` : "顶层"}引擎读：${keys.map((entry) => (entry.variant ? `${entry.key}（${entry.variant.join("、")}）` : entry.key)).join("、")}`);
+  }
+  return places.length ? `${places.join("；")}。` : "";
+}
+
+/**
+ * The refusal for keys a plan's stages do not read.
+ * @param {string[]} paths @param {ReadonlyArray<{ jobKind: string, scenario: Record<string, any> }>} [stages]
+ * @returns {{ code: string, message: string, paths: string[] }}
+ */
+function unknownFieldsRefusal(paths, stages = []) {
   return { code: "vcr_scenario_unknown_fields", paths,
-    message: `配置里有引擎不读的字段：${paths.slice(0, 8).join("、")}。只写引擎认识的字段（见 vcr_simulate 的场景说明），其余字段会被拒绝而不是忽略。` };
+    message: `配置里有引擎不读的字段：${paths.slice(0, 8).join("、")}。${readsHint(paths, stages)}只写引擎认识的字段（vcr_simulate 的 action shape 按方法列出全部字段），其余字段会被拒绝而不是忽略。` };
 }
 
 /**
@@ -926,7 +949,7 @@ export function vcrBuildStages(item, context) {
     // the superset (`analysis.power` for the analytic stage, `targetMcse` for the
     // simulation), and each stage keeps what its own schema takes.
     const unknown = built.length ? built[0].unknown.filter((path) => built.every((entry) => entry.unknown.includes(path))) : [];
-    if (unknown.length) return { ok: false, refused: unknownFieldsRefusal(unknown) };
+    if (unknown.length) return { ok: false, refused: unknownFieldsRefusal(unknown, built.map((entry) => entry.built)) };
     return { ok: true, stages: built.map((entry) => entry.built) };
   };
 
@@ -953,7 +976,7 @@ export function vcrBuildStages(item, context) {
         snapshot: tippingReadsPatients(scenario) }));
     }
     const unknown = extras.flatMap((entry) => entry.unknown);
-    return unknown.length ? { refused: unknownFieldsRefusal(unknown) } : { extras };
+    return unknown.length ? { refused: unknownFieldsRefusal(unknown, extras.map((entry) => entry.built)) } : { extras };
   };
   /**
    * The primary comparison held to the keys it reads (finish), with the robustness stages after it. A plan with robustness stages names

@@ -676,7 +676,9 @@ function failureOfNode(bundle, node) {
   const mark = list(bundle.jobMarks).map(object).find((entry) => entry.state === "failed" && object(entry.detail).node === node);
   const job = list(bundle.jobs).map(object).find((entry) => entry.state === "failed" && object(entry.checkpoint).node === node);
   const said = text(object(mark?.detail).message) ?? text(object(job?.error).message);
-  return said ? said.slice(0, 200) : null;
+  // Long enough for a refusal that names the keys of the place it was refused (`readsHint` in the orchestrator): that list is what
+  // a run repairs from, and the same words are what the researcher's page shows.
+  return said ? said.slice(0, 400) : null;
 }
 
 /** One reconstruction check as a row: the largest difference, the way the paper's own table states it. @param {string} key @param {Record<string, any>} check */
