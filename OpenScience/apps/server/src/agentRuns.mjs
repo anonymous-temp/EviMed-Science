@@ -5753,6 +5753,22 @@ export class AgentRunStore {
         terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...accepted].slice(0, 20);
       }
       const verified = await verifiedReceiptArtifacts(project, finalReceipt);
+      if (!verified.mismatched.length && terminal.status === "succeeded") {
+        // A receipt that matches is the delivery's own list of files.
+        //
+        // The transcript is one witness of what a run wrote and the receipt is
+        // the other, and for a deliverable a child submitted it is the only one:
+        // the child's writes and its `evimed_submit_deliverable` never reach the
+        // parent's transcript. This path read the receipt only to look for
+        // drift, so a package whose every digest matched came back `succeeded`
+        // with `artifacts: []` and the page said there was nothing to open.
+        // `readDeliveryReceipt` has already scoped the receipt to this run (and,
+        // for a conversation turn, to the deliverables this turn planned), and
+        // `verifiedReceiptArtifacts` has just re-hashed each file, so what is
+        // added is exactly the graded bytes now on disk. The drift branches below
+        // are untouched: they ship the files as they are, marked.
+        artifacts = [...new Set([...artifacts, ...verified.artifacts])].slice(0, maxArtifacts).sort();
+      }
       if (verified.mismatched.length) {
         // Changed bytes and a broken delivery are not the same thing.
         //

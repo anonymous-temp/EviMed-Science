@@ -1278,6 +1278,51 @@ test("a receipt whose digests still match does not block an ordinary success", a
   });
 });
 
+test("a valid, matching receipt makes its files the artifacts even when the transcript names no write", async () => {
+  // A delegated deliverable's files are written, and its receipt is submitted,
+  // by a child whose tool results never reach the parent's transcript, so what
+  // the transcript names is nothing. A receipt whose digests match the files on
+  // disk is our own record of exactly which files were delivered: it is the one
+  // witness that cannot be wrong about them. This path used to read the receipt
+  // only to look for drift, so a package that matched came back `succeeded`
+  // with `artifacts: []` and the run page said 暂无交付物 over nine files.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    const files = { "clinical-evidence-report.md": "# graded and unchanged\n", "clinical-evidence-matrix.json": "{\"claims\":[]}\n" };
+    for (const [name, body] of Object.entries(files)) await writeFile(path.join(deliverableDir, name), body, "utf8");
+    await writeFile(path.join(deliverableDir, "scratch.txt"), "left beside the package, named by no receipt\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_live_valid",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: Object.entries(files).map(([name, body]) => ({
+          path: `deliverables/d1/${name}`, sha256: createHash("sha256").update(body).digest("hex"), bytes: Buffer.byteLength(body),
+        })),
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 2,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+
+    const dispatched = await dispatch("turn_receipt_valid_no_transcript_write");
+    await relabelReceipt(project, dispatched.id);
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.equal(run.errorCode, null);
+    assert.deepEqual(run.artifacts, ["deliverables/d1/clinical-evidence-matrix.json", "deliverables/d1/clinical-evidence-report.md"],
+      "the receipt's files are the artifacts, and only the files it names");
+    assert.deepEqual(run.unverifiedArtifacts, []);
+    assert.equal(run.verification ?? null, null, "the receipt's own files matched, so nothing is marked down for naming them");
+  });
+});
+
 test("an answer-mode turn succeeds with zero citations once its skill is loaded", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_answer_zero_citation");
