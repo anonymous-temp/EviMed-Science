@@ -884,3 +884,7 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-10-04T11:43Z DONE REL-1004-merge13 += wip/r3-n05-methods (meta engine numerical fixes; meta suite 3052 pass) + wip/r3-vcr-engine-robustness (31 methods, all with reference cases); launched vcr-m15, vcr-imports; running: n06, vcr-packs, vcr-m15, vcr-imports
 2026-10-04T12:02Z DONE REL-1004-merge14 += wip/r3-n06-lineage (4 N05/N06 conflicts combined; result suites + PG integration + domain 732 pass); follow-up: add research_calculate to statistical-analysis/meta-analysis tool lists for render; running: vcr-packs, vcr-m15, vcr-imports
 2026-10-04T12:20Z DONE REL-1004-merge-vcr-packs head=e42bdbfef checks=tool-graph,capabilities,lint,typecheck,vcr-server-186,engine-N37-N42-34/34,web-vcr-311
+2026-10-04T12:27Z DONE REL-1004-merge-n10 head=2b3a608bd tests=autopilot-suites-157,config,composition eval=flash-12/15
+2026-10-04T12:32Z DONE REL-1004-merge-vcr-m15 head=708646298 tests=vcr-server-408,mcp-vcr-94,web-vcr-314,checks-4,lint,typecheck
+2026-10-04T13:00Z DONE REL-1004-merge-vcr-imports head=33d063dae tests=server-612,mcp-vcr-146,web-vcr-321,checks-4,lint,typecheck
+2026-10-04T13:00Z DONE REL-1004-ci-fixes rc5=timed-out-on-frozen-clock-test fixes=error-code-classes,engine-test-list,planner-lever,export-count-tests,runner-hang-guard,retired-word,code-list-order
