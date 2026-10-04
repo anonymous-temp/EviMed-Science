@@ -59,18 +59,18 @@ def risk_difference(a: int, b: int, c: int, d: int):
 
 
 def _apply_zero_correction(a, b, c, d, correction=0.5):
-    """Apply continuity correction only to cells that are zero.
+    """Haldane-Anscombe continuity correction at the study level.
 
-    This preserves the observed non-zero counts instead of inflating every cell
-    in a sparse 2 x 2 table.
+    When any cell of a study's 2 x 2 table is zero the correction is added to
+    all four cells of that table, and to no other study's table. This is what
+    metafor's ``escalc(add=1/2, to="only0")``, RevMan, the Cochrane Handbook
+    (10.4.4.1) and the sibling DTA engine (mada ``correction.control="all"``)
+    do. Correcting only the zero cell, as this function once did, gave a
+    different log OR than every one of them for the same table (Egger 2001
+    magnesium trial 8, 0/22 vs 1/21: -0.79 against the published -1.19).
     """
     if a == 0 or b == 0 or c == 0 or d == 0:
-        return (
-            float(a + correction if a == 0 else a),
-            float(b + correction if b == 0 else b),
-            float(c + correction if c == 0 else c),
-            float(d + correction if d == 0 else d),
-        )
+        return (float(a + correction), float(b + correction), float(c + correction), float(d + correction))
     return float(a), float(b), float(c), float(d)
 
 
@@ -92,7 +92,16 @@ def standardized_mean_difference(mean1: float, sd1: float, n1: int, mean2: float
     """Compute Hedges' g (bias-corrected SMD) and its variance.
 
     Returns (g, variance).
-    Reference: Hedges (1981), Borenstein et al. (2009) Chapter 4.
+    Reference: Hedges (1981); Hedges & Olkin (1985) eq. 8 (the large-sample
+    variance, written in terms of the corrected g); the same estimator and
+    variance as metafor's ``escalc(measure="SMD")``.
+
+    The correction factor is the exact ratio of gamma functions, not the
+    ``1 - 3/(4*df - 1)`` approximation. The variance is
+    ``(n1+n2)/(n1*n2) + g^2/(2*(n1+n2))``: it once read ``d^2/(2*df)`` times
+    J squared, which is neither this nor the Borenstein et al. (2009) form
+    ``J^2 * ((n1+n2)/(n1*n2) + d^2/(2*(n1+n2)))`` it cited, and was 1-3% too small
+    for the Normand (1999) trials (0.0629 against metafor's 0.0645).
     """
     df = n1 + n2 - 2
     if df <= 0:
@@ -106,16 +115,13 @@ def standardized_mean_difference(mean1: float, sd1: float, n1: int, mean2: float
     # Cohen's d
     d = (mean1 - mean2) / s_pooled
 
-    # Hedges' correction factor J
-    j = 1.0 - 3.0 / (4.0 * df - 1.0)
+    # Hedges' correction factor J = Gamma(df/2) / (sqrt(df/2) * Gamma((df-1)/2))
+    j = math.exp(math.lgamma(df / 2.0) - 0.5 * math.log(df / 2.0) - math.lgamma((df - 1) / 2.0))
 
     # Hedges' g
     g = d * j
 
-    # Variance of g: Var(g) = J² * Var(d)
-    # Var(d) = (n1+n2)/(n1*n2) + d²/(2*df)
-    var_d = (n1 + n2) / (n1 * n2) + d**2 / (2 * df)
-    var_g = j**2 * var_d
+    var_g = (n1 + n2) / (n1 * n2) + g**2 / (2.0 * (n1 + n2))
 
     return g, var_g
 
@@ -296,12 +302,17 @@ def incidence_rate_ratio(events_i: int, pyears_i: float, events_c: int, pyears_c
                          correction: float = 0.5) -> tuple[float, float]:
     """Compute log(IRR) and its variance from events and person-years.
 
-    Returns (log_IRR, variance) on the log scale.
+    Returns (log_IRR, variance) on the log scale. When either arm has no
+    events the correction is added to both event counts (metafor
+    ``escalc(measure="IRR", add=1/2, to="only0")``), so a single-zero study is
+    not tilted by correcting one arm alone.
     """
     if pyears_i <= 0 or pyears_c <= 0:
         raise ValueError("Person-years must be positive")
-    e_i = events_i + correction if events_i == 0 else events_i
-    e_c = events_c + correction if events_c == 0 else events_c
+    if events_i == 0 or events_c == 0:
+        e_i, e_c = events_i + correction, events_c + correction
+    else:
+        e_i, e_c = events_i, events_c
     if e_i <= 0 or e_c <= 0:
         raise ValueError("Events (after correction) must be positive")
 

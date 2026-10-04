@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { ENGINE_INPUT_CODES, METHOD_REFUSAL_CODES } from "@evimed/domain/method-records";
 import { HttpError } from "./security.mjs";
 
 /** Durable jobs retain ownership across control-plane restarts. The engine's
@@ -30,7 +31,12 @@ export class ResultReplayWorker {
       for (;;) {
         if (answer.state === "succeeded") { await this.service.complete(job, prepared, answer); return; }
         if (["failed", "canceled", "timed_out", "ownership_unknown"].includes(answer.state)) {
-          throw new HttpError(409, answer.state === "ownership_unknown" ? "result_replay_stop_unconfirmed" : "result_replay_failed", "The calculation did not finish.");
+          // An engine that declined this calculation names why, in the closed vocabulary of the method records (and the
+          // two codes for an input it cannot read): that is what the researcher can correct. Any other code it sent stays
+          // "failed" — nothing else it said is repeated.
+          const declined = answer.state === "failed" && typeof answer.error === "string"
+            && (METHOD_REFUSAL_CODES.has(answer.error) || ENGINE_INPUT_CODES.has(answer.error)) ? answer.error : null;
+          throw new HttpError(409, answer.state === "ownership_unknown" ? "result_replay_stop_unconfirmed" : declined ?? "result_replay_failed", "The calculation did not finish.");
         }
         if (Date.now() >= deadline) throw new HttpError(504, "result_replay_timeout", "The calculation exceeded its time allowance.");
         if (!await this.jobs.renew(job.userId, job.id, job.leaseToken, 60000)) throw new HttpError(409, "product_job_lease_lost", "The worker no longer owns this calculation.");

@@ -13,6 +13,7 @@
     ".": "./index.mjs",
     "./answer-evidence-grade": "./src/answerEvidenceGrade.mjs",
     "./clinical-evidence": "./src/clinicalEvidence.mjs",
+    "./method-records": "./src/methodRecords.mjs",
     "./result-provenance": "./src/resultProvenance.mjs",
     "./package.json": "./package.json"
   },

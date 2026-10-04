@@ -1,0 +1,744 @@
+{
+ "schema_version": 1,
+ "corpus_id": "published_worked_examples_2026_10",
+ "description": "Published worked examples for pooling, heterogeneity, small-study tests and effect sizes, with the numbers their sources print. Each case names its source; none of the expected numbers comes from this implementation.",
+ "retrieved": "2026-10-04",
+ "cases": [
+  {
+   "case_id": "raudenbush1985_expectancy",
+   "source": {
+    "citation": "Raudenbush, S. W. (2009). Analyzing effect sizes: Random-effects models. In Cooper, Hedges & Valentine (Eds.), The Handbook of Research Synthesis and Meta-Analysis (2nd ed.), Table 16.2 (p. 301) and Table 16.3 (p. 309); data from Raudenbush & Bryk (1985) Table 1. Failsafe N: Becker (2005), Publication Bias in Meta-Analysis, Ch. 7.",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_analysis_example_raudenbush2009.r (metafor's reproduction of the printed tables) and test_misc_fsn.r",
+    "data_via": "https://www.metafor-project.org/doku.php/analyses:raudenbush1985"
+   },
+   "input_precision": "yi and vi are printed to four decimals",
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit, plus first-order propagation of half a unit of rounding in each printed input (yi and vi are printed to four decimals)"
+   },
+   "studies": [
+    {
+     "study": 1,
+     "label": "Rosenthal et al. 1974",
+     "weeks": 2,
+     "yi": 0.03,
+     "vi": 0.0156
+    },
+    {
+     "study": 2,
+     "label": "Conn et al. 1968",
+     "weeks": 21,
+     "yi": 0.12,
+     "vi": 0.0216
+    },
+    {
+     "study": 3,
+     "label": "Jose & Cody 1971",
+     "weeks": 19,
+     "yi": -0.14,
+     "vi": 0.0279
+    },
+    {
+     "study": 4,
+     "label": "Pellegrini & Hicks 1972",
+     "weeks": 0,
+     "yi": 1.18,
+     "vi": 0.1391
+    },
+    {
+     "study": 5,
+     "label": "Pellegrini & Hicks 1972",
+     "weeks": 0,
+     "yi": 0.26,
+     "vi": 0.1362
+    },
+    {
+     "study": 6,
+     "label": "Evans & Rosenthal 1969",
+     "weeks": 3,
+     "yi": -0.06,
+     "vi": 0.0106
+    },
+    {
+     "study": 7,
+     "label": "Fielder et al. 1971",
+     "weeks": 17,
+     "yi": -0.02,
+     "vi": 0.0106
+    },
+    {
+     "study": 8,
+     "label": "Claiborn 1969",
+     "weeks": 24,
+     "yi": -0.32,
+     "vi": 0.0484
+    },
+    {
+     "study": 9,
+     "label": "Kester 1969",
+     "weeks": 0,
+     "yi": 0.27,
+     "vi": 0.0269
+    },
+    {
+     "study": 10,
+     "label": "Maxwell 1970",
+     "weeks": 1,
+     "yi": 0.8,
+     "vi": 0.063
+    },
+    {
+     "study": 11,
+     "label": "Carter 1970",
+     "weeks": 0,
+     "yi": 0.54,
+     "vi": 0.0912
+    },
+    {
+     "study": 12,
+     "label": "Flowers 1966",
+     "weeks": 0,
+     "yi": 0.18,
+     "vi": 0.0497
+    },
+    {
+     "study": 13,
+     "label": "Keshock 1970",
+     "weeks": 1,
+     "yi": -0.02,
+     "vi": 0.0835
+    },
+    {
+     "study": 14,
+     "label": "Henrikson 1970",
+     "weeks": 2,
+     "yi": 0.23,
+     "vi": 0.0841
+    },
+    {
+     "study": 15,
+     "label": "Fine 1972",
+     "weeks": 17,
+     "yi": -0.18,
+     "vi": 0.0253
+    },
+    {
+     "study": 16,
+     "label": "Grieger 1970",
+     "weeks": 5,
+     "yi": -0.06,
+     "vi": 0.0279
+    },
+    {
+     "study": 17,
+     "label": "Rosenthal & Jacobson 1968",
+     "weeks": 1,
+     "yi": 0.3,
+     "vi": 0.0193
+    },
+    {
+     "study": 18,
+     "label": "Fleming & Anttonen 1971",
+     "weeks": 2,
+     "yi": 0.07,
+     "vi": 0.0088
+    },
+    {
+     "study": 19,
+     "label": "Ginsburg 1970",
+     "weeks": 7,
+     "yi": -0.07,
+     "vi": 0.0303
+    }
+   ],
+   "expected": {
+    "fixed": {
+     "estimate": 0.0604,
+     "se": 0.0365,
+     "z": 1.6553,
+     "ci": [
+      -0.0111,
+      0.1318
+     ],
+     "q": 35.8295
+    },
+    "reml": {
+     "tau2": 0.0188,
+     "estimate": 0.0837,
+     "se": 0.0516,
+     "z": 1.6208,
+     "ci": [
+      -0.0175,
+      0.1849
+     ]
+    },
+    "dl": {
+     "tau2": 0.0259,
+     "estimate": 0.0893,
+     "se": 0.0558,
+     "z": 1.6009,
+     "ci": [
+      -0.02,
+      0.1987
+     ]
+    },
+    "hksj_dl": {
+     "se": 0.0636,
+     "ci": [
+      -0.0442,
+      0.2229
+     ]
+    },
+    "hksj_reml": {
+     "se": 0.0616,
+     "ci": [
+      -0.0457,
+      0.2131
+     ]
+    },
+    "meta_regression_weeks_capped_at_3": {
+     "tau2_residual": 0.0,
+     "intercept": 0.4072,
+     "slope": -0.1572,
+     "z": [
+      4.6782,
+      -4.3884
+     ],
+     "q_residual": 16.5708
+    },
+    "failsafe_n_rosenthal": 26
+   }
+  },
+  {
+   "case_id": "normand1999_length_of_stay",
+   "source": {
+    "citation": "Normand, S.-L. T. (1999). Meta-analysis: Formulating, evaluating, combining, and reporting. Statistics in Medicine, 18, 321-359. Table VIII (study effects and variances, mean difference in days, pooled-SD variances) and Table IX (pooled results).",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_analysis_example_normand1999.r"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit, plus first-order propagation of half a unit of rounding in each printed input (vi is printed to four decimals)"
+   },
+   "studies": [
+    {
+     "study": 1,
+     "yi": -20,
+     "vi": 40.5863
+    },
+    {
+     "study": 2,
+     "yi": -2,
+     "vi": 2.0468
+    },
+    {
+     "study": 3,
+     "yi": -55,
+     "vi": 15.2809
+    },
+    {
+     "study": 4,
+     "yi": -71,
+     "vi": 150.2222
+    },
+    {
+     "study": 5,
+     "yi": -4,
+     "vi": 20.1923
+    },
+    {
+     "study": 6,
+     "yi": 1,
+     "vi": 1.2235
+    },
+    {
+     "study": 7,
+     "yi": 11,
+     "vi": 95.3756
+    },
+    {
+     "study": 8,
+     "yi": -10,
+     "vi": 8.0321
+    },
+    {
+     "study": 9,
+     "yi": 7,
+     "vi": 20.6936
+    }
+   ],
+   "expected": {
+    "fixed": {
+     "estimate": -3.4939,
+     "ci": [
+      -5.0265,
+      -1.9613
+     ]
+    },
+    "dl": {
+     "tau2": 218.7216,
+     "estimate": -14.0972,
+     "ci": [
+      -24.4454,
+      -3.749
+     ]
+    },
+    "reml": {
+     "tau2": 685.1965,
+     "estimate": -15.1217,
+     "ci": [
+      -32.6716,
+      2.4282
+     ]
+    }
+   }
+  },
+  {
+   "case_id": "hine1989_homogeneous_boundary",
+   "source": {
+    "citation": "Normand (1999) Table III (risk differences in percentage points and variances of six trials, Hine et al. 1989) and Table VII (pooled results, tau-squared = 0).",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_analysis_example_normand1999.r"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit, plus first-order propagation of half a unit of rounding in each printed input"
+   },
+   "studies": [
+    {
+     "study": 1,
+     "yi": 2.8026,
+     "vi": 17.7575
+    },
+    {
+     "study": 2,
+     "yi": 0.0,
+     "vi": 37.5657
+    },
+    {
+     "study": 3,
+     "yi": 1.9711,
+     "vi": 8.1323
+    },
+    {
+     "study": 4,
+     "yi": 1.7961,
+     "vi": 10.8998
+    },
+    {
+     "study": 5,
+     "yi": 3.5334,
+     "vi": 8.0114
+    },
+    {
+     "study": 6,
+     "yi": 4.4031,
+     "vi": 6.132
+    }
+   ],
+   "expected": {
+    "estimate": 2.9444,
+    "ci": [
+     0.3831,
+     5.5058
+    ],
+    "tau2": 0.0,
+    "tau2_note": "the REML estimating function is negative at zero, so the estimate is the boundary exactly"
+   }
+  },
+  {
+   "case_id": "clasp_derSimonian_laird2007",
+   "source": {
+    "citation": "DerSimonian, R., & Laird, N. (2007). Evaluating the effect of treatment on a binary outcome in meta-analysis: Is 'one size fits all'? Contemporary Clinical Trials 28, Tables 3-4 (CLASP trials, log odds ratios).",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_analysis_example_dersimonian2007.r"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit; yi and vi are computed from the raw counts"
+   },
+   "trials": {
+    "ai": [
+     5,
+     5,
+     12,
+     69,
+     9,
+     313
+    ],
+    "n1i": [
+     156,
+     303,
+     565,
+     1570,
+     103,
+     4659
+    ],
+    "ci": [
+     8,
+     17,
+     9,
+     94,
+     11,
+     352
+    ],
+    "n2i": [
+     74,
+     303,
+     477,
+     1565,
+     105,
+     4650
+    ]
+   },
+   "expected": {
+    "dl": {
+     "tau": 0.2323,
+     "estimate": -0.324,
+     "se": 0.154
+    },
+    "reml": {
+     "tau": 0.1843,
+     "estimate": -0.298,
+     "se": 0.1343
+    }
+   }
+  },
+  {
+   "case_id": "bcg_colditz1994_stata_metan",
+   "source": {
+    "citation": "Colditz et al. (1994) BCG trials (13 trials), pooled with Stata's metan; the numbers are the ones metafor's test suite compares rma() against (metan tpos tneg cpos cneg, fixedi/randomi, with and without log).",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_misc_metan_vs_rma.uni_with_dat.bcg.r; REML: https://wviechtb.github.io/metafor/reference/rma.uni.html; trim-and-fill: https://wviechtb.github.io/metafor/reference/trimfill.html"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit; the inputs are the raw counts"
+   },
+   "data": "validation/corpora/metafor_bcg_rr_reml.json",
+   "expected": {
+    "RR": {
+     "fixed": {
+      "estimate": -0.4303,
+      "ci": [
+       -0.5097,
+       -0.3509
+      ],
+      "z": -10.6247,
+      "q": 152.233
+     },
+     "dl": {
+      "estimate": -0.7141,
+      "ci": [
+       -1.0644,
+       -0.3638
+      ],
+      "z": -3.9952,
+      "tau2": 0.3088,
+      "i2": 92.1173
+     },
+     "trim_fill_fixed": {
+      "k0": 4,
+      "estimate": -0.291,
+      "ci": [
+       -0.366,
+       -0.216
+      ]
+     },
+     "trim_fill_reml": {
+      "k0": 1,
+      "estimate": -0.6571,
+      "ci": [
+       -1.007,
+       -0.3072
+      ]
+     }
+    },
+    "OR": {
+     "fixed": {
+      "estimate": -0.4361,
+      "ci": [
+       -0.519,
+       -0.3533
+      ],
+      "z": -10.319,
+      "q": 163.1649
+     },
+     "dl": {
+      "estimate": -0.7474,
+      "ci": [
+       -1.1242,
+       -0.3706
+      ],
+      "z": -3.8873,
+      "tau2": 0.3663,
+      "i2": 92.6455
+     }
+    },
+    "RD": {
+     "fixed": {
+      "estimate": -0.0009,
+      "ci": [
+       -0.0014,
+       -0.0005
+      ],
+      "z": -4.0448,
+      "q": 276.4737
+     },
+     "dl": {
+      "estimate": -0.0071,
+      "ci": [
+       -0.0101,
+       -0.004
+      ],
+      "z": -4.5128,
+      "tau2": 0.0,
+      "i2": 95.6596
+     }
+    }
+   }
+  },
+  {
+   "case_id": "egger2001_magnesium",
+   "source": {
+    "citation": "Egger, Davey Smith & Altman (2001), Systematic Reviews in Health Care, Table 18.2: 16 trials of intravenous magnesium in acute myocardial infarction (the last is ISIS-4). Log odds ratios; trials without ISIS-4 for the REML fit and the Egger test, all 16 for Begg's test.",
+    "numbers_via": "https://wviechtb.github.io/metafor/reference/regtest.html (random-effects fit and the classical Egger test) and https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_misc_pub_bias.r (rank test); data https://wviechtb.github.io/metadat/reference/dat.egger2001.html"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit; yi and vi are computed from the raw counts"
+   },
+   "trials": [
+    {
+     "trial": 1,
+     "study": "Morton",
+     "year": 1984,
+     "ai": 1,
+     "n1i": 40,
+     "ci": 2,
+     "n2i": 36
+    },
+    {
+     "trial": 2,
+     "study": "Rasmussen",
+     "year": 1986,
+     "ai": 9,
+     "n1i": 135,
+     "ci": 23,
+     "n2i": 135
+    },
+    {
+     "trial": 3,
+     "study": "Smith",
+     "year": 1986,
+     "ai": 2,
+     "n1i": 200,
+     "ci": 7,
+     "n2i": 200
+    },
+    {
+     "trial": 4,
+     "study": "Abraham",
+     "year": 1987,
+     "ai": 1,
+     "n1i": 48,
+     "ci": 1,
+     "n2i": 46
+    },
+    {
+     "trial": 5,
+     "study": "Feldstedt",
+     "year": 1988,
+     "ai": 10,
+     "n1i": 150,
+     "ci": 8,
+     "n2i": 148
+    },
+    {
+     "trial": 6,
+     "study": "Shechter",
+     "year": 1989,
+     "ai": 1,
+     "n1i": 59,
+     "ci": 9,
+     "n2i": 56
+    },
+    {
+     "trial": 7,
+     "study": "Ceremuzynski",
+     "year": 1989,
+     "ai": 1,
+     "n1i": 25,
+     "ci": 3,
+     "n2i": 23
+    },
+    {
+     "trial": 8,
+     "study": "Bertschat",
+     "year": 1989,
+     "ai": 0,
+     "n1i": 22,
+     "ci": 1,
+     "n2i": 21
+    },
+    {
+     "trial": 9,
+     "study": "Singh",
+     "year": 1990,
+     "ai": 6,
+     "n1i": 76,
+     "ci": 11,
+     "n2i": 75
+    },
+    {
+     "trial": 10,
+     "study": "Pereira",
+     "year": 1990,
+     "ai": 1,
+     "n1i": 27,
+     "ci": 7,
+     "n2i": 27
+    },
+    {
+     "trial": 11,
+     "study": "Shechter",
+     "year": 1991,
+     "ai": 2,
+     "n1i": 89,
+     "ci": 12,
+     "n2i": 80
+    },
+    {
+     "trial": 12,
+     "study": "Golf",
+     "year": 1991,
+     "ai": 5,
+     "n1i": 23,
+     "ci": 13,
+     "n2i": 33
+    },
+    {
+     "trial": 13,
+     "study": "Thogersen",
+     "year": 1991,
+     "ai": 4,
+     "n1i": 130,
+     "ci": 8,
+     "n2i": 122
+    },
+    {
+     "trial": 14,
+     "study": "LIMIT-2",
+     "year": 1992,
+     "ai": 90,
+     "n1i": 1159,
+     "ci": 118,
+     "n2i": 1157
+    },
+    {
+     "trial": 15,
+     "study": "Shechter",
+     "year": 1995,
+     "ai": 4,
+     "n1i": 107,
+     "ci": 17,
+     "n2i": 108
+    },
+    {
+     "trial": 16,
+     "study": "ISIS-4",
+     "year": 1995,
+     "ai": 2216,
+     "n1i": 29011,
+     "ci": 2103,
+     "n2i": 29039
+    }
+   ],
+   "expected": {
+    "log_or_first_five": [
+     -0.8303483,
+     -1.05605267,
+     -1.27833981,
+     -0.04348511,
+     0.22314355
+    ],
+    "log_or_sixth_to_ninth": [
+     -2.40751999,
+     -1.28093385,
+     -1.19170271,
+     -0.69574796
+    ],
+    "reml_15": {
+     "estimate": -0.8745,
+     "tau2": 0.1911,
+     "q": 20.9184
+    },
+    "egger_15": {
+     "t": -3.1783,
+     "df": 13,
+     "p": 0.0073,
+     "limit_estimate": -0.1512
+    },
+    "begg_16": {
+     "tau": 0.15,
+     "p": 0.4503
+    }
+   }
+  },
+  {
+   "case_id": "normand1999_standardized_mean_difference",
+   "source": {
+    "citation": "Hedges' g and its large-sample variance for the first four trials of Normand (1999) (raw means, SDs, n); metafor's documented escalc(measure='SMD') output; estimator and variance as Hedges & Olkin (1985) eq. 8.",
+    "numbers_via": "https://github.com/wviechtb/metafor/blob/master/tests/testthat/test_misc_escalc.r; data https://wviechtb.github.io/metadat/reference/dat.normand1999.html"
+   },
+   "tolerance": {
+    "printed_digits": 4,
+    "rule": "half a unit in the last printed digit; the inputs are the raw means, SDs and sizes"
+   },
+   "trials": [
+    {
+     "n1i": 155,
+     "m1i": 55,
+     "sd1i": 47,
+     "n2i": 156,
+     "m2i": 75,
+     "sd2i": 64
+    },
+    {
+     "n1i": 31,
+     "m1i": 27,
+     "sd1i": 7,
+     "n2i": 32,
+     "m2i": 29,
+     "sd2i": 4
+    },
+    {
+     "n1i": 75,
+     "m1i": 64,
+     "sd1i": 17,
+     "n2i": 71,
+     "m2i": 119,
+     "sd2i": 29
+    },
+    {
+     "n1i": 18,
+     "m1i": 66,
+     "sd1i": 20,
+     "n2i": 18,
+     "m2i": 137,
+     "sd2i": 48
+    }
+   ],
+   "expected": {
+    "g": [
+     -0.3552,
+     -0.3479,
+     -2.3176,
+     -1.888
+    ],
+    "vi": [
+     0.0131,
+     0.0645,
+     0.0458,
+     0.1606
+    ]
+   }
+  }
+ ]
+}

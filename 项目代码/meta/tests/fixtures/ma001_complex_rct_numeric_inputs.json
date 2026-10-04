@@ -343,10 +343,10 @@
     }
   ],
   "expected": {
-    "pooled_effect": -273.8892789212605,
-    "ci_lower": -349.8093140639699,
-    "ci_upper": -197.96924377855106,
-    "standard_error_analysis_scale": 38.73542358000299,
+    "pooled_effect": -273.8892788684966,
+    "ci_lower": -349.8079184867868,
+    "ci_upper": -197.97063925020643,
+    "standard_error_analysis_scale": 38.73471156466482,
     "n_studies": 10,
     "n_contrasts": 14
   }

@@ -13,6 +13,12 @@ from new_meta.schemas.meta_result import (
     MetaRegressionResult, CumulativeResult,
 )
 
+# The 97.5th percentile of the standard normal, in full. Every 95% Wald interval
+# here uses it: a truncated 1.96 made this engine disagree with metafor, with the
+# other engines of this package and with itself (adjusted_effects.py recovered a
+# standard error from an interval built with 1.96 by dividing with the full value).
+Z_975 = 1.959963984540054
+
 
 def fixed_effect(studies: list[StudyEffect], effect_measure: str, outcome_name: str) -> PooledEffect:
     """Inverse-variance fixed-effect meta-analysis."""
@@ -33,9 +39,9 @@ def fixed_effect(studies: list[StudyEffect], effect_measure: str, outcome_name: 
     se_pooled = np.sqrt(1.0 / np.sum(wi))
 
     z = pooled / se_pooled
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
-    ci_lower = pooled - 1.96 * se_pooled
-    ci_upper = pooled + 1.96 * se_pooled
+    p = 2 * stats.norm.sf(abs(z))
+    ci_lower = pooled - Z_975 * se_pooled
+    ci_upper = pooled + Z_975 * se_pooled
 
     q, q_p, i2, tau2, h2 = _heterogeneity(yi, vi, wi)
 
@@ -107,8 +113,8 @@ def random_effects_dl(studies: list[StudyEffect], effect_measure: str, outcome_n
     se_pooled = float(np.sqrt(1.0 / np.sum(wi_star)))
 
     z = pooled / se_pooled
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
-    q_p = 1 - stats.chi2.cdf(q, k - 1) if k > 1 else 1.0
+    p = 2 * stats.norm.sf(abs(z))
+    q_p = stats.chi2.sf(q, k - 1) if k > 1 else 1.0
     i2 = max(0.0, (q - (k - 1)) / q * 100) if q > 0 else 0.0
     h2 = q / (k - 1) if k > 1 else 1.0
 
@@ -204,7 +210,7 @@ def subgroup_analysis(
                 q_within = sum(r.q_statistic for r in results)
                 q_between = q_total - q_within
                 df_between = len(results) - 1
-                p_between = 1 - stats.chi2.cdf(max(0, q_between), df_between) if df_between > 0 else 1.0
+                p_between = stats.chi2.sf(max(0, q_between), df_between) if df_between > 0 else 1.0
 
                 for pooled in results:
                     pooled.subgroup_q_between = float(q_between)
@@ -225,45 +231,51 @@ class _TauEstimate(NamedTuple):
     converged: bool
 
 
-def _estimate_reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 100, tol: float = 1e-8) -> _TauEstimate:
-    """Estimate τ² using REML (Restricted Maximum Likelihood).
+def _reml_score(tau2: float, yi: np.ndarray, vi: np.ndarray) -> float:
+    """REML estimating function ``y'P^2 y - tr(P)`` for the intercept-only model.
+
+    Positive while the restricted likelihood is still rising in tau^2, negative
+    once it falls; its root is the REML estimate (Viechtbauer 2005, eq. 9).
+    """
+    w = 1.0 / (vi + tau2)
+    sw = np.sum(w)
+    mu = np.sum(w * yi) / sw
+    return float(np.sum(w ** 2 * (yi - mu) ** 2) - (sw - np.sum(w ** 2) / sw))
+
+
+def _estimate_reml_tau2(yi: np.ndarray, vi: np.ndarray, max_iter: int = 200, tol: float = 1e-12) -> _TauEstimate:
+    """Estimate tau^2 by REML (restricted maximum likelihood).
 
     Reference: Viechtbauer (2005), Thompson & Sharp (1999).
-    Uses direct one-dimensional optimization of the intercept-only restricted
-    log-likelihood, which is more stable than hand-rolled Fisher scoring for
-    small k and near-zero heterogeneity.
+    The estimate is the root of the REML estimating function, found by Brent's
+    method to ``tol`` (the earlier bounded minimiser stopped about 1e-8 short
+    of the optimum, and returned 5.7e-9 instead of the exact boundary 0 for
+    the homogeneous Hine (1989) trials). When the function is not positive at
+    tau^2 = 0 the restricted likelihood only falls from there and the estimate
+    is the boundary, 0.
     """
     k = len(yi)
-    # Initialize with DL estimate
     wi = 1.0 / vi
     pooled_fixed = np.sum(wi * yi) / np.sum(wi)
     q = float(np.sum(wi * (yi - pooled_fixed) ** 2))
     c = np.sum(wi) - np.sum(wi ** 2) / np.sum(wi)
     tau2_dl = max(0.0, (q - (k - 1)) / c) if c > 0 else 0.0
 
-    def restricted_neg_loglik(tau2: float) -> float:
-        v = vi + tau2
-        if np.any(v <= 0):
-            return np.inf
-        w = 1.0 / v
-        sw = np.sum(w)
-        if sw <= 0:
-            return np.inf
-        pooled = np.sum(w * yi) / sw
-        resid = yi - pooled
-        return 0.5 * (np.sum(np.log(v)) + np.log(sw) + np.sum(w * resid ** 2))
-
-    upper = max(float(np.var(yi, ddof=1) * 10 + np.max(vi)), tau2_dl * 10, 1.0)
     try:
-        opt = optimize.minimize_scalar(
-            restricted_neg_loglik,
-            bounds=(0.0, upper),
-            method="bounded",
-            options={"xatol": tol, "maxiter": max_iter},
-        )
-        if opt.success and np.isfinite(opt.fun):
-            return _TauEstimate(max(0.0, float(opt.x)), "REML", True)
-    except Exception:
+        if _reml_score(0.0, yi, vi) <= 0.0:
+            return _TauEstimate(0.0, "REML", True)
+        upper = max(tau2_dl * 10.0, float(np.var(yi, ddof=1)) * 10.0 + float(np.max(vi)), 1.0)
+        for _ in range(60):
+            if _reml_score(upper, yi, vi) < 0.0:
+                break
+            upper *= 2.0
+        else:
+            raise RuntimeError("no upper bracket for the REML estimating function")
+        root = optimize.brentq(lambda t: _reml_score(t, yi, vi), 0.0, upper, xtol=tol, rtol=4 * np.finfo(float).eps,
+                               maxiter=max_iter)
+        if np.isfinite(root):
+            return _TauEstimate(max(0.0, float(root)), "REML", True)
+    except (RuntimeError, ValueError, FloatingPointError):
         pass
 
     return _TauEstimate(tau2_dl, "DL", False)
@@ -291,6 +303,8 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
 
     if np.any(vi <= 0):
         raise ValueError("All study variances must be positive")
+    if np.any(~np.isfinite(yi)) or np.any(~np.isfinite(vi)):
+        raise ValueError("Study effect sizes and variances must be finite")
 
     tau_fit = _estimate_reml_tau2(yi, vi)
     tau2 = tau_fit.value
@@ -301,12 +315,12 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
     se_pooled = float(np.sqrt(1.0 / np.sum(wi_star)))
 
     z = pooled / se_pooled
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
+    p = 2 * stats.norm.sf(abs(z))
 
     # Heterogeneity stats (Q based on fixed weights for consistency)
     wi_fixed = 1.0 / vi
     q = float(np.sum(wi_fixed * (yi - np.sum(wi_fixed * yi) / np.sum(wi_fixed)) ** 2))
-    q_p = 1 - stats.chi2.cdf(q, k - 1) if k > 1 else 1.0
+    q_p = stats.chi2.sf(q, k - 1) if k > 1 else 1.0
     i2 = max(0.0, (q - (k - 1)) / q * 100) if q > 0 else 0.0
     h2 = q / (k - 1) if k > 1 else 1.0
 
@@ -347,13 +361,27 @@ def random_effects_reml(studies: list[StudyEffect], effect_measure: str, outcome
 # Hartung-Knapp-Sidik-Jonkman (HKSJ) adjustment
 # =============================================================================
 
-def random_effects_hksj(studies: list[StudyEffect], effect_measure: str, outcome_name: str) -> PooledEffect:
-    """Random-effects with HKSJ adjustment (t-distribution instead of normal).
+def random_effects_hksj(
+    studies: list[StudyEffect],
+    effect_measure: str,
+    outcome_name: str,
+    tau_estimator: str = "DL",
+) -> PooledEffect:
+    """Random-effects with the Hartung-Knapp-Sidik-Jonkman (HKSJ) adjustment.
 
-    Uses DL for τ² estimation, then applies HKSJ variance correction.
-    More conservative CI when number of studies is small.
-    Reference: Hartung & Knapp (2001), Sidik & Jonkman (2002).
+    tau^2 comes from ``tau_estimator`` ("DL", the default, or "REML"). The
+    pooled-effect variance is rescaled by ``q = sum(w*(y - mu)^2)/(k - 1)`` and
+    the interval and p value use the t distribution with k - 1 degrees of
+    freedom. The rescaling is floored at 1 (``max(1, q)``: Knapp & Hartung 2003;
+    IntHout, Ioannidis & Borm 2014), so the adjusted interval is never narrower
+    than the ordinary random-effects one; metafor's ``test="knha"`` has no floor,
+    and the two agree whenever q >= 1 (Raudenbush 2009, Table 16.3).
+    The prediction interval uses the adjusted standard error and t(k - 1), as
+    metafor's ``predict()`` does under ``test="knha"``.
+    References: Hartung & Knapp (2001), Sidik & Jonkman (2002).
     """
+    if tau_estimator not in {"DL", "REML"}:
+        raise ValueError("HKSJ tau^2 estimator must be 'DL' or 'REML'")
     if len(studies) < 2:
         raise ValueError(f"HKSJ requires >= 2 studies, got {len(studies)}")
     if len(studies) < 3:
@@ -363,41 +391,45 @@ def random_effects_hksj(studies: list[StudyEffect], effect_measure: str, outcome
     vi = np.array([s.vi for s in studies])
     k = len(studies)
 
-    # DL estimate of tau2
+    if np.any(vi <= 0):
+        raise ValueError("All study variances must be positive")
+    if np.any(~np.isfinite(yi)) or np.any(~np.isfinite(vi)):
+        raise ValueError("Study effect sizes and variances must be finite")
+
     wi_fixed = 1.0 / vi
     pooled_fixed = np.sum(wi_fixed * yi) / np.sum(wi_fixed)
     q = float(np.sum(wi_fixed * (yi - pooled_fixed) ** 2))
-    c = np.sum(wi_fixed) - np.sum(wi_fixed ** 2) / np.sum(wi_fixed)
-    tau2 = max(0.0, (q - (k - 1)) / c) if c > 0 else 0.0
+    if tau_estimator == "REML":
+        tau_fit = _estimate_reml_tau2(yi, vi)
+        tau2, estimator, converged = tau_fit.value, tau_fit.estimator, tau_fit.converged
+    else:
+        c = np.sum(wi_fixed) - np.sum(wi_fixed ** 2) / np.sum(wi_fixed)
+        tau2, estimator, converged = (max(0.0, (q - (k - 1)) / c) if c > 0 else 0.0), "DL", None
 
     # Random-effects weights
     wi_star = 1.0 / (vi + tau2)
     pooled = float(np.sum(wi_star * yi) / np.sum(wi_star))
     se_pooled_re = float(np.sqrt(1.0 / np.sum(wi_star)))
 
-    # HKSJ variance correction: q_hksj = sum(wi*(yi-pooled)^2) / (k-1) where wi = wi_star
+    # HKSJ variance correction, floored at 1.
     q_hksj = float(np.sum(wi_star * (yi - pooled) ** 2) / (k - 1))
-    # HKSJ SE = se_pooled * sqrt(q_hksj)
-    se_hksj = se_pooled_re * np.sqrt(max(1.0, q_hksj))  # Apply max(1, q_hksj) per recommendation
+    se_hksj = se_pooled_re * np.sqrt(max(1.0, q_hksj))
 
-    # Use t-distribution
     t_crit = stats.t.ppf(0.975, k - 1)
     ci_lower = pooled - t_crit * se_hksj
     ci_upper = pooled + t_crit * se_hksj
     t_stat = pooled / se_hksj if se_hksj > 0 else 0
-    p = 2 * (1 - stats.t.cdf(abs(t_stat), k - 1))
+    p = 2 * stats.t.sf(abs(t_stat), k - 1)
 
     # Heterogeneity
-    q_p = 1 - stats.chi2.cdf(q, k - 1) if k > 1 else 1.0
+    q_p = stats.chi2.sf(q, k - 1) if k > 1 else 1.0
     i2 = max(0.0, (q - (k - 1)) / q * 100) if q > 0 else 0.0
     h2 = q / (k - 1) if k > 1 else 1.0
 
-    # Prediction interval
     pred_se = np.sqrt(se_hksj ** 2 + tau2)
     pred_lower = pooled - t_crit * pred_se
     pred_upper = pooled + t_crit * pred_se
 
-    # Assign weights
     w_total = np.sum(wi_star)
     updated = []
     for s, w in zip(studies, wi_star):
@@ -415,9 +447,11 @@ def random_effects_hksj(studies: list[StudyEffect], effect_measure: str, outcome
         p_value=float(p),
         q=q, q_p=float(q_p), i2=i2, tau2=tau2, h2=h2,
         studies=updated,
-        tau_estimator="DL", requested_method="HKSJ", ci_method="modified_hksj_t",
+        tau_estimator=estimator, requested_method="HKSJ", ci_method="modified_hksj_t",
+        fallback_reason=None if converged is not False else "reml_optimizer_failed",
+        tau_estimation_converged=converged,
     )
-    # Override CI (built with normal, we need t-based)
+    # _build_pooled makes a normal interval; the adjusted one is t-based.
     result.ci_lower = _to_original(ci_lower, effect_measure)
     result.ci_upper = _to_original(ci_upper, effect_measure)
     result.ci_lower_log = ci_lower
@@ -436,10 +470,21 @@ def meta_regression(
     covariate_name: str = "covariate",
     effect_measure: str = "MD",
 ) -> MetaRegressionResult:
-    """Weighted least squares meta-regression (method of moments).
+    """Mixed-effects meta-regression on one study-level covariate (method of moments).
 
     Tests if a study-level covariate explains heterogeneity.
-    Reference: Thompson & Higgins (2002), Borenstein et al. (2009) Ch. 20.
+    Reference: Thompson & Sharp (1999), Raudenbush (2009), Borenstein et al. (2009) Ch. 20.
+
+    tau^2 is the DerSimonian-Laird *residual* between-study variance, estimated
+    from the weighted-least-squares fit with fixed-effect weights
+    (``(Q_E - (k - p)) / (tr(W) - tr((X'WX)^-1 X'W^2 X))``, floored at 0), and the
+    coefficients are then refitted with weights ``1/(v + tau^2_residual)``. An
+    earlier version weighted the fit with the *unconditional* tau^2, so a
+    moderator that explained the heterogeneity still faced weights inflated by
+    the heterogeneity it explained; on Raudenbush's (1985) teacher-expectancy
+    trials it returned slope -0.1701 (SE 0.0490) where the published mixed-effects
+    slope is -0.1572 (SE 0.0358). The R^2 analogue compares the residual with the unconditional DL
+    tau^2. The test of the slope is the Wald z test (metafor's default).
     """
     if len(studies) != len(covariate_values):
         raise ValueError("Number of studies must match number of covariate values")
@@ -448,59 +493,65 @@ def meta_regression(
 
     yi = np.array([s.yi for s in studies])
     vi = np.array([s.vi for s in studies])
-    x = np.array(covariate_values)
+    x = np.array(covariate_values, dtype=float)
     k = len(studies)
+    if np.any(vi <= 0) or np.any(~np.isfinite(yi)) or np.any(~np.isfinite(vi)) or np.any(~np.isfinite(x)):
+        raise ValueError("Study effects, variances and covariate values must be finite, with positive variances")
+    if np.ptp(x) == 0:
+        raise ValueError("Singular matrix in meta-regression — covariate may be constant")
 
-    # Estimate tau2 using DL (unrestricted model)
+    # Unconditional DL tau^2, the reference for the R^2 analogue.
     wi_fixed = 1.0 / vi
     pooled_fixed = np.sum(wi_fixed * yi) / np.sum(wi_fixed)
     q_total = float(np.sum(wi_fixed * (yi - pooled_fixed) ** 2))
-    c = np.sum(wi_fixed) - np.sum(wi_fixed ** 2) / np.sum(wi_fixed)
-    tau2_total = max(0.0, (q_total - (k - 1)) / c) if c > 0 else 0.0
+    c_total = np.sum(wi_fixed) - np.sum(wi_fixed ** 2) / np.sum(wi_fixed)
+    tau2_total = max(0.0, (q_total - (k - 1)) / c_total) if c_total > 0 else 0.0
 
-    # Weighted regression: yi = b0 + b1*xi + ei
-    wi_star = 1.0 / (vi + tau2_total)
-    W = np.diag(wi_star)
     X = np.column_stack([np.ones(k), x])
 
-    try:
-        XtWX = X.T @ W @ X
-        XtWX_inv = np.linalg.inv(XtWX)
-        beta = XtWX_inv @ X.T @ W @ yi
-    except np.linalg.LinAlgError:
-        raise ValueError("Singular matrix in meta-regression — covariate may be constant")
+    def wls(weights: np.ndarray):
+        xtwx = X.T @ (weights[:, None] * X)
+        try:
+            inverse = np.linalg.inv(xtwx)
+        except np.linalg.LinAlgError:
+            raise ValueError("Singular matrix in meta-regression — covariate may be constant") from None
+        return inverse, inverse @ (X.T @ (weights * yi))
 
-    # Residuals and model Q
-    y_pred = X @ beta
-    resid = yi - y_pred
-    q_model = float(beta[1] ** 2 / XtWX_inv[1, 1]) if XtWX_inv[1, 1] > 0 else 0
-    q_model_p = 1 - stats.chi2.cdf(q_model, 1) if q_model > 0 else 1.0
-
-    # Residual tau2
-    q_resid = float(np.sum(wi_star * resid ** 2))
-    c_resid = np.sum(wi_star) - np.trace(XtWX_inv @ X.T @ np.diag(wi_star ** 2) @ X)
+    # Residual DL tau^2 from the fixed-weight fit.
+    inverse0, beta0 = wls(wi_fixed)
+    q_resid = float(np.sum(wi_fixed * (yi - X @ beta0) ** 2))
+    c_resid = float(np.sum(wi_fixed) - np.trace(inverse0 @ (X.T @ ((wi_fixed ** 2)[:, None] * X))))
     tau2_resid = max(0.0, (q_resid - (k - 2)) / c_resid) if c_resid > 0 else 0.0
 
-    # R² analog
+    wi_star = 1.0 / (vi + tau2_resid)
+    xtwx_inv, beta = wls(wi_star)
+
+    # Omnibus test of the moderator
+    b1 = float(beta[1])
+    var_b1 = float(xtwx_inv[1, 1])
+    q_model = float(b1 ** 2 / var_b1) if var_b1 > 0 else 0.0
+    q_model_p = float(stats.chi2.sf(q_model, 1)) if q_model > 0 else 1.0
+
     r2 = max(0.0, 1 - tau2_resid / tau2_total) if tau2_total > 0 else 0.0
 
-    # Coefficient stats
-    b1 = float(beta[1])
-    se_b1 = float(np.sqrt(XtWX_inv[1, 1]))
+    se_b1 = float(np.sqrt(var_b1))
     z = b1 / se_b1 if se_b1 > 0 else 0
-    p_b1 = 2 * (1 - stats.norm.cdf(abs(z)))
+    p_b1 = 2 * stats.norm.sf(abs(z))
 
     return MetaRegressionResult(
         covariate_name=covariate_name,
         coefficient=b1,
         se=se_b1,
-        ci_lower=b1 - 1.96 * se_b1,
-        ci_upper=b1 + 1.96 * se_b1,
+        ci_lower=b1 - Z_975 * se_b1,
+        ci_upper=b1 + Z_975 * se_b1,
         p_value=float(p_b1),
         r_squared_analog=float(r2),
         tau_squared_residual=float(tau2_resid),
         q_model=float(q_model),
         q_model_p=float(q_model_p),
+        intercept=float(beta[0]),
+        intercept_se=float(np.sqrt(xtwx_inv[0, 0])),
+        q_residual=q_resid,
     )
 
 
@@ -564,7 +615,7 @@ def _heterogeneity(yi, vi, wi):
     k = len(yi)
     pooled = np.sum(wi * yi) / np.sum(wi)
     q = float(np.sum(wi * (yi - pooled) ** 2))
-    q_p = 1 - stats.chi2.cdf(q, k - 1) if k > 1 else 1.0
+    q_p = stats.chi2.sf(q, k - 1) if k > 1 else 1.0
     i2 = max(0.0, (q - (k - 1)) / q * 100) if q > 0 else 0.0
     c = np.sum(wi) - np.sum(wi**2) / np.sum(wi)
     tau2 = max(0.0, (q - (k - 1)) / c) if c > 0 else 0.0
@@ -613,8 +664,8 @@ def _build_pooled(
     tau_estimation_converged: bool | None = None,
 ) -> PooledEffect:
     """Construct a PooledEffect with both log and original scale values."""
-    ci_lower_log = pooled_log - 1.96 * se
-    ci_upper_log = pooled_log + 1.96 * se
+    ci_lower_log = pooled_log - Z_975 * se
+    ci_upper_log = pooled_log + Z_975 * se
 
     return PooledEffect(
         outcome_name=outcome_name,

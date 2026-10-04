@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignResultAnchors, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor } from "./resultProvenance";
+import { assignResultAnchors, replayEnvironmentLabel, resultEnvironmentDifference, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor, type ResultVersion } from "./resultProvenance";
 
 describe("result anchors and differences", () => {
   it("anchors a selected table cell to its immutable row and column", () => {
@@ -47,5 +47,27 @@ describe("what a result version says about its record", () => {
     // Two different things can be missing from a result that cannot be recalculated, and each is named.
     expect(resultGapLabel("no_owned_deterministic_recipe")).toBe("未保存受支持的计算配方");
     expect(resultGapLabel("engine_unavailable")).toBe("这个部署没有用于重算的计算引擎");
+  });
+});
+
+describe("which parts of two results ran differently", () => {
+  const input = (digest: string | null) => ({ kind: "code", id: "meta.dl", digest, versionId: null, path: null, availability: "reference" });
+  const version = (method: ResultVersion["method"], code = "a".repeat(64), environment = "b".repeat(64)) =>
+    ({ code: input(code), environment: input(environment), method } as unknown as ResultVersion);
+  const method = { id: "meta.dl", version: "2.0.0", digest: "c".repeat(64), seeded: false, seed: null };
+
+  it("names the method record when two results that both have one ran different ones", () => {
+    const difference = resultEnvironmentDifference(version({ ...method, version: "2.1.0", digest: "d".repeat(64) }), version(method));
+    expect(difference).toEqual({ status: "differs", changed: ["method"] });
+    expect(replayEnvironmentLabel(difference, "所比较的版本")).toBe("运行环境与所比较的版本不同（方法记录已变化），数值比较不是在同一环境下得到的");
+    expect(resultEnvironmentDifference(version(method, "e".repeat(64)), version({ ...method, version: "2.1.0" }))?.changed).toEqual(["code", "method"]);
+  });
+
+  it("says nothing about the method when a result names none, and calls identical records the same", () => {
+    expect(resultEnvironmentDifference(version(null), version(method))).toEqual({ status: "same", changed: [] });
+    expect(resultEnvironmentDifference(version(undefined), version(undefined))).toEqual({ status: "same", changed: [] });
+    expect(resultEnvironmentDifference(version(method), version({ ...method }))).toEqual({ status: "same", changed: [] });
+    const noRecordAtAll = { code: null, environment: null } as unknown as ResultVersion;
+    expect(resultEnvironmentDifference(noRecordAtAll, noRecordAtAll)).toBeNull();
   });
 });

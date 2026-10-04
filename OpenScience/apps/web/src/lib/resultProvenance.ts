@@ -1,5 +1,5 @@
 import type { ClaimVerification } from "./claimCitations";
-import { knownErrorCodeMessage } from "@evimed/domain";
+import { knownErrorCodeMessage, resultMethodDifference } from "@evimed/domain";
 import { WebApiError, fetchWithWebAuth, getWebProjectId, webApiBase, webErrorMessage } from "./apiClient";
 
 /** A refusal in the registry's sentence for its code when there is one, else the failure's own words. */
@@ -24,6 +24,8 @@ export interface ResultVersion {
   size: number; mimeType: string; capturedAt: string;
   producer: { kind: string; sessionId?: string; runId?: string; callId?: string; branchId?: string };
   inputs: ResultInput[]; code: ResultInput | null; environment: ResultInput | null;
+  /** The method record the calculation ran (id, version, digest, seeding); absent for a result with none. */
+  method?: { id: string; version: string; digest: string | null; seeded: boolean | null; seed: number | null } | null;
   findings: ResultFinding[]; machineValues: ResultMachineValue[];
   coverage: { snapshot: string; producer: string; inputs: string; code: string; environment: string; gaps: string[] };
   supersedesVersionId: string | null;
@@ -82,7 +84,7 @@ export function requestResultRevision(version: ResultVersion, anchor: ResultAnch
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
 }
 /** What a recalculation ran on, against what the original recorded. `differs` names the parts that moved. */
-export interface ReplayEnvironment { status: "same" | "differs"; changed: Array<"code" | "environment"> }
+export interface ReplayEnvironment { status: "same" | "differs"; changed: Array<"code" | "environment" | "method"> }
 export interface ReplayComparison {
   bytes?: "identical" | "changed";
   numbers?: { status: "identical" | "within-tolerance" | "changed" | "not-assessed" };
@@ -171,7 +173,7 @@ export function resultValueDifference(before: ResultMachineValue | undefined, af
   if (!Number.isFinite(threshold) || absolute < 0 || relative < 0) return "无法比较数值";
   return threshold >= 0 && Math.abs(after.value - before.value) <= threshold ? "在允许误差内" : "有变化";
 }
-const ENVIRONMENT_PART_LABELS = { code: "代码", environment: "运行环境" } as const;
+const ENVIRONMENT_PART_LABELS = { code: "代码", environment: "运行环境", method: "方法记录" } as const;
 /**
  * The environment a recalculation ran on, in words: it says the numbers were
  * compared on the same engine only when the record says so, and otherwise which
@@ -194,7 +196,7 @@ export function replayNumbersLabel(comparison: ReplayComparison | null | undefin
 }
 /** What two related versions say they ran on: the same, different in named parts, or nothing recorded. */
 export function resultEnvironmentDifference(current: ResultVersion, prior: ResultVersion): ReplayEnvironment | null {
-  const changed: Array<"code" | "environment"> = [];
+  const changed: Array<"code" | "environment" | "method"> = [];
   let known = false;
   for (const part of ["code", "environment"] as const) {
     const left = current[part]?.digest; const right = prior[part]?.digest;
@@ -202,6 +204,9 @@ export function resultEnvironmentDifference(current: ResultVersion, prior: Resul
     known = true;
     if (left !== right) changed.push(part);
   }
+  // A side with no method record is not a different record: only two that name one are compared.
+  const method = resultMethodDifference(current.method, prior.method);
+  if (method !== "unknown") { known = true; if (method === "changed") changed.push("method"); }
   return known ? { status: changed.length ? "differs" : "same", changed } : null;
 }
 export function resultGapLabel(reason: string): string {

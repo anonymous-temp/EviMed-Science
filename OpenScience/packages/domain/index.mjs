@@ -1334,7 +1334,7 @@ export {
 
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
-export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
+export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
 export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
 

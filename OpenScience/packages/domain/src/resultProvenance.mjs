@@ -32,6 +32,22 @@ export function projectResultInput(value) {
     availability: availability === "captured" && !digest ? "reference" : availability };
 }
 
+/**
+ * What produced a calculated result, from the engine's own method record: the
+ * record's id, version and digest, and whether the method is seeded and with
+ * what. Absent for a result with no record (anything captured before records
+ * existed, or not produced by an admitted calculation), and "unknown" is not
+ * "the same": a comparison with a missing side says so.
+ * @param {any} value @returns {{id: string, version: string, digest: string | null, seeded: boolean | null, seed: number | null} | null}
+ */
+export function projectResultMethod(value) {
+  if (!value || typeof value.id !== "string" || !value.id || value.id.length > 200
+    || typeof value.version !== "string" || !value.version || value.version.length > 64) return null;
+  return { id: value.id, version: value.version, digest: isResultDigest(value.digest) ? value.digest : null,
+    seeded: typeof value.seeded === "boolean" ? value.seeded : null,
+    seed: Number.isSafeInteger(value.seed) ? value.seed : null };
+}
+
 /** Public projection excludes storage paths, credentials and unbounded tool arguments.
  * @param {any} value @returns {any} */
 export function projectResultVersion(value) {
@@ -50,6 +66,7 @@ export function projectResultVersion(value) {
     mimeType: value.mimeType ?? "application/octet-stream", capturedAt: value.capturedAt,
     producer: publicProducer, inputs, code: value.code ? projectResultInput(value.code) : null,
     environment: value.environment ? projectResultInput(value.environment) : null,
+    method: projectResultMethod(value.method),
     findings: Array.isArray(value.findings) ? value.findings.map((/** @type {any} */ finding) => ({
       id: finding.id, kind: finding.kind, status: finding.status, message: finding.message,
       elementId: finding.elementId ?? null, sourceRefs: finding.sourceRefs ?? [],
@@ -104,5 +121,15 @@ export function resultVersionDifference(before, after) {
     addedInputs: [...newInputs].filter(key => !oldInputs.has(key)),
     removedInputs: [...oldInputs].filter(key => !newInputs.has(key)),
     machineValues: JSON.stringify(before.machineValues ?? []) === JSON.stringify(after.machineValues ?? []) ? "identical" : "changed",
+    method: resultMethodDifference(before.method, after.method),
     applicability: "not_assessed" };
+}
+
+/** Whether two results ran the same method record. A side with no record cannot be said to match.
+ * @param {any} before @param {any} after @returns {"identical" | "changed" | "unknown"} */
+export function resultMethodDifference(before, after) {
+  const left = projectResultMethod(before); const right = projectResultMethod(after);
+  if (!left || !right) return "unknown";
+  return left.id === right.id && left.version === right.version && left.digest === right.digest
+    && left.seeded === right.seeded && left.seed === right.seed ? "identical" : "changed";
 }

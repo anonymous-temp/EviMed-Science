@@ -97,6 +97,10 @@ class MetaRegressionResult(BaseModel):
     tau_squared_residual: float
     q_model: float
     q_model_p: float
+    # Added with the residual-tau^2 fit; absent in older stored results.
+    intercept: float | None = None
+    intercept_se: float | None = None
+    q_residual: float | None = None
 
 
 class CumulativeResult(BaseModel):

@@ -21,11 +21,16 @@ def _studies(n: int) -> list[StudyEffect]:
     ]
 
 
-def test_continuity_correction_only_changes_zero_cells() -> None:
+def test_continuity_correction_is_added_to_every_cell_of_a_table_with_a_zero() -> None:
+    """Haldane-Anscombe at the study level, as metafor, RevMan and the Cochrane Handbook do it."""
     log_or, variance = odds_ratio(0, 10, 5, 20, correction=0.5)
 
-    assert math.isclose(log_or, math.log((0.5 * 20) / (10 * 5)), rel_tol=1e-12)
-    assert math.isclose(variance, 1 / 0.5 + 1 / 10 + 1 / 5 + 1 / 20, rel_tol=1e-12)
+    assert math.isclose(log_or, math.log((0.5 * 20.5) / (10.5 * 5.5)), rel_tol=1e-12)
+    assert math.isclose(variance, 1 / 0.5 + 1 / 10.5 + 1 / 5.5 + 1 / 20.5, rel_tol=1e-12)
+    # A table with no zero cell is left alone, and one study's correction never reaches another's.
+    log_or, variance = odds_ratio(4, 16, 5, 15, correction=0.5)
+    assert math.isclose(log_or, math.log((4 * 15) / (16 * 5)), rel_tol=1e-12)
+    assert math.isclose(variance, 1 / 4 + 1 / 16 + 1 / 5 + 1 / 15, rel_tol=1e-12)
 
 
 def test_random_effects_low_k_downgrades_to_fixed_without_prediction_interval() -> None:

@@ -1,0 +1,639 @@
+{
+ "schemaVersion": 1,
+ "note": "One record per admitted deterministic calculation. `version` is the record's own version: it changes when the method's numbers, inputs, checks or diagnostics change, and a result carries it with the record's digest so a rerun can say whether it ran the same method. Only strings, integers and booleans appear here, so the digest is the same in Python and JavaScript. `seeded: false` means the method draws no random numbers; nothing in it depends on a seed.",
+ "methods": {
+  "meta.dl": {
+   "id": "meta.dl",
+   "version": "2.0.0",
+   "engine": "meta",
+   "title": "DerSimonian-Laird random-effects meta-analysis of study effects (inverse variance)",
+   "estimand": "The mean of the distribution of true study effects on the analysis scale, with a 95% Wald interval and, from three studies, a 95% prediction interval; Cochran Q, I-squared, H-squared and tau-squared come with it.",
+   "assumptions": [
+    {
+     "id": "independent_studies",
+     "text": "Each row is one independent study. A study, report or arm entered twice is counted twice.",
+     "checkedBy": "refusal:replay_duplicate_study_ids, diagnostic:duplicate_effects"
+    },
+    {
+     "id": "analysis_scale",
+     "text": "yi is on the scale where its sampling distribution is close to normal: the natural log for OR, RR, HR and IRR; the raw difference for MD and RD; Hedges' g for SMD.",
+     "checkedBy": "diagnostic:ratio_effect_on_raw_scale_suspected"
+    },
+    {
+     "id": "known_variances",
+     "text": "vi is taken as the known within-study variance, which is only approximately true for small studies or rare events; zero cells must be corrected before vi is computed.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "normal_random_effects",
+     "text": "True effects are normal around one mean. tau-squared is the method-of-moments estimate, which is biased low and unstable with few studies; the Wald interval is too narrow then.",
+     "checkedBy": "diagnostic:few_studies, diagnostic:tau_squared_at_boundary, diagnostic:two_studies_fixed_effect_fallback"
+    },
+    {
+     "id": "no_small_study_assessment",
+     "text": "Publication bias and small-study effects are not assessed by this method; they need at least ten studies and are unreliable under strong heterogeneity.",
+     "checkedBy": "diagnostic:small_study_tests_not_run"
+    },
+    {
+     "id": "no_moderators",
+     "text": "No covariate explains the heterogeneity; confounded or clinically different studies are pooled as if exchangeable.",
+     "checkedBy": "diagnostic:heterogeneity_considerable"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "studies",
+     "type": "array",
+     "unit": "studies",
+     "range": "2 to 1024 rows"
+    },
+    {
+     "name": "studies[].id",
+     "type": "string",
+     "unit": "none",
+     "range": "unique, 1 to 200 characters"
+    },
+    {
+     "name": "studies[].label",
+     "type": "string",
+     "unit": "none",
+     "range": "1 to 200 characters"
+    },
+    {
+     "name": "studies[].yi",
+     "type": "number",
+     "unit": "analysis scale of effectMeasure",
+     "range": "finite"
+    },
+    {
+     "name": "studies[].vi",
+     "type": "number",
+     "unit": "square of the analysis scale of effectMeasure",
+     "range": "finite, above 0"
+    },
+    {
+     "name": "effectMeasure",
+     "type": "string",
+     "unit": "none",
+     "range": "MD, SMD, RD, OR, RR, HR or IRR"
+    },
+    {
+     "name": "outcome",
+     "type": "string",
+     "unit": "none",
+     "range": "1 to 200 characters"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "replay_single_study",
+     "when": "fewer than two studies: there is nothing to pool and no between-study variance"
+    },
+    {
+     "code": "replay_duplicate_study_ids",
+     "when": "two rows carry the same id: the same study would be counted twice"
+    },
+    {
+     "code": "replay_nonpositive_variance",
+     "when": "a variance is zero or negative: it would take infinite weight or no meaning"
+    },
+    {
+     "code": "replay_nonfinite_value",
+     "when": "an effect or variance is not a finite number"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "two_studies_fixed_effect_fallback",
+     "severity": "notice",
+     "when": "exactly two studies: tau-squared is not estimated, the result is a fixed-effect pooling and there is no prediction interval"
+    },
+    {
+     "code": "few_studies",
+     "severity": "notice",
+     "when": "three or four studies: tau-squared and the prediction interval are unstable"
+    },
+    {
+     "code": "tau_squared_at_boundary",
+     "severity": "notice",
+     "when": "tau-squared is 0: no between-study variance was detected, which with few studies is not evidence of homogeneity"
+    },
+    {
+     "code": "heterogeneity_considerable",
+     "severity": "warning",
+     "when": "I-squared is 75% or more: a single pooled effect may not describe the studies"
+    },
+    {
+     "code": "dominant_study",
+     "severity": "notice",
+     "when": "one study carries half of the random-effects weight or more"
+    },
+    {
+     "code": "duplicate_effects",
+     "severity": "warning",
+     "when": "two rows have identical effect and variance under different ids: possibly one study entered twice"
+    },
+    {
+     "code": "ratio_effect_on_raw_scale_suspected",
+     "severity": "warning",
+     "when": "a ratio measure has an effect whose absolute value exceeds 10, which as a log is a ratio of more than 22,000"
+    },
+    {
+     "code": "prediction_interval_unavailable",
+     "severity": "notice",
+     "when": "no prediction interval is reported (fewer than three studies)"
+    },
+    {
+     "code": "small_study_tests_not_run",
+     "severity": "notice",
+     "when": "always: Egger, Begg and trim-and-fill are not part of this method"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pydantic"
+   ],
+   "references": [
+    {
+     "id": "raudenbush2009",
+     "kind": "published",
+     "source": "Raudenbush (2009), Handbook of Research Synthesis and Meta-Analysis 2nd ed., Tables 16.2-16.3: 19 trials; fixed effect, REML, DL, Hartung-Knapp, meta-regression, fail-safe N",
+     "tolerance": "half a unit of the fourth printed decimal plus the propagated rounding of the printed inputs",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "normand1999",
+     "kind": "published",
+     "source": "Normand (1999) Statistics in Medicine 18, Tables VII-IX: 9 trials; fixed effect, DL tau-squared 218.72, REML 685.20",
+     "tolerance": "as above",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "hine1989",
+     "kind": "published",
+     "source": "Normand (1999) Tables III and VII: six homogeneous trials, tau-squared exactly 0",
+     "tolerance": "as above, and tau-squared exactly 0",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "clasp2007",
+     "kind": "published",
+     "source": "DerSimonian & Laird (2007) Contemporary Clinical Trials, Tables 3-4: CLASP trials, DL and REML",
+     "tolerance": "half a unit of the fourth decimal",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "bcg_metan",
+     "kind": "other-implementation",
+     "source": "Stata metan on the Colditz (1994) BCG trials as reproduced in the metafor test suite: fixed effect and DL for RR, OR and RD; REML and trim-and-fill from the metafor documentation",
+     "tolerance": "half a unit of the fourth decimal",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "magnesium_small_study_tests",
+     "kind": "other-implementation",
+     "source": "metafor documentation of the Egger et al. (2001) magnesium trials: REML fit, the classical Egger test (t -3.1783, p 0.0073) and the rank correlation test (tau 0.15, p 0.4503); not part of this method's output, which names them as not run",
+     "tolerance": "half a unit of the fourth decimal",
+     "test": "项目代码/meta/tests/test_published_reference_cases.py"
+    },
+    {
+     "id": "raudenbush_dl_through_the_adapter",
+     "kind": "published",
+     "source": "the same Raudenbush (2009) Table 16.3 row for DL, run through this method end to end (tau-squared 0.0259, mean 0.0893, SE 0.0558, z 1.6009, interval -0.0200 to 0.1987), and the equal-variance closed form tau-squared 67/30",
+     "tolerance": "1.5e-4 (printed inputs); 1e-12 (closed form)",
+     "test": "OpenScience/deploy/specialist-adapter/test_method_records.py and test_deterministic_replay.py"
+    }
+   ]
+  },
+  "faers.signals": {
+   "id": "faers.signals",
+   "version": "1.1.0",
+   "engine": "safety",
+   "title": "Disproportionality of a drug-event pair in spontaneous reports: ROR, PRR, chi-square, information component",
+   "estimand": "How much more often an event is reported with a drug than with all other drugs in the same database. It is a screening statistic for reports, not a rate, risk or causal effect.",
+   "assumptions": [
+    {
+     "id": "reports_not_incidence",
+     "text": "Counts are spontaneous reports. There is no exposure denominator, so the statistics measure reporting patterns, not incidence, and cannot show causation.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "no_confounding_adjustment",
+     "text": "Indication, co-medication, masking by another drug, notoriety and stimulated reporting are not adjusted; an obviously confounded pair is a signal of the confounder as much as of the drug.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "independent_reports",
+     "text": "Each report is one case. Duplicate reports of one case inflate every cell they touch.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "zero_cell_correction",
+     "text": "A table with a zero cell is corrected by adding 0.5 to all four cells (Haldane-Anscombe) for ROR, PRR, chi-square and IC, unless correctZeroCells is false, in which case that table is refused.",
+     "checkedBy": "refusal:replay_not_estimable, diagnostic:zero_cell_corrected"
+    },
+    {
+     "id": "large_sample_intervals",
+     "text": "The intervals are normal-theory on the log scale with z = 1.96 (Evans et al. 2001, Bate et al. 1998), and chi-square is Pearson's; both are poor when expected counts are small.",
+     "checkedBy": "diagnostic:small_case_count, diagnostic:chi_square_expected_count_below_5"
+    },
+    {
+     "id": "no_multiplicity_adjustment",
+     "text": "Every table is tested on its own. Screening many pairs without an adjustment produces many false signals.",
+     "checkedBy": "diagnostic:multiplicity_unadjusted"
+    },
+    {
+     "id": "no_fitted_prior",
+     "text": "EBGM and EB05 need a prior fitted on the whole database and are not part of this method.",
+     "checkedBy": "output:omitted"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "tables",
+     "type": "array",
+     "unit": "drug-event pairs",
+     "range": "1 to 1024 rows"
+    },
+    {
+     "name": "tables[].id",
+     "type": "string",
+     "unit": "none",
+     "range": "unique, 1 to 200 characters"
+    },
+    {
+     "name": "tables[].a",
+     "type": "integer",
+     "unit": "reports",
+     "range": "0 or more: the drug with the event"
+    },
+    {
+     "name": "tables[].b",
+     "type": "integer",
+     "unit": "reports",
+     "range": "0 or more: the drug with other events"
+    },
+    {
+     "name": "tables[].c",
+     "type": "integer",
+     "unit": "reports",
+     "range": "0 or more: other drugs with the event"
+    },
+    {
+     "name": "tables[].d",
+     "type": "integer",
+     "unit": "reports",
+     "range": "0 or more: other drugs with other events"
+    },
+    {
+     "name": "parameters.yates",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default false"
+    },
+    {
+     "name": "parameters.correctZeroCells",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default true"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "replay_not_estimable",
+     "when": "a table has a zero cell and correctZeroCells is false"
+    },
+    {
+     "code": "replay_duplicate_table_ids",
+     "when": "two tables carry the same id: the same pair would be counted twice"
+    },
+    {
+     "code": "replay_empty_table",
+     "when": "a table has no reports at all (a + b + c + d is 0)"
+    },
+    {
+     "code": "replay_nonfinite_value",
+     "when": "a count is not a finite number"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "zero_cell_corrected",
+     "severity": "notice",
+     "when": "a table had a zero cell and 0.5 was added to every cell of it"
+    },
+    {
+     "code": "small_case_count",
+     "severity": "warning",
+     "when": "a is below 3: the statistics are unstable and below the usual signal criteria"
+    },
+    {
+     "code": "chi_square_expected_count_below_5",
+     "severity": "warning",
+     "when": "a table has an expected cell count below 5: Pearson chi-square is unreliable"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "more than one table was screened and no adjustment for the number of pairs was applied"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas"
+   ],
+   "references": [
+    {
+     "id": "physicians_health_study",
+     "kind": "published",
+     "source": "Physicians' Health Study (Steering Committee 1989, NEJM 321:129): 189/11034 against 104/11037 myocardial infarctions; odds ratio 1.832 (1.440-2.331) and Pearson chi-square 25.01 as printed in Agresti, Categorical Data Analysis; chi-square and Yates cross-checked against R 4.3.3 chisq.test",
+     "tolerance": "three printed decimals for the odds ratio and its interval, two for chi-square",
+     "test": "项目代码/药物安全分析agent/tests/test_published_signal_references.py"
+    },
+    {
+     "id": "hand_panels",
+     "kind": "analytic",
+     "source": "hand-computed panels T1-T6 of the existing known-answer tests (formulas of Evans 2001 and Bate 1998)",
+     "tolerance": "relative 1e-6",
+     "test": "项目代码/药物安全分析agent/tests/test_signals_known_answers.py"
+    }
+   ]
+  },
+  "bibliometric.network": {
+   "id": "bibliometric.network",
+   "version": "1.1.0",
+   "engine": "bibliometric",
+   "title": "Keyword or author co-occurrence network: counts and centralities of the most frequent nodes",
+   "estimand": "Node and edge counts and degree, weighted degree, closeness and betweenness of an undirected weighted co-occurrence graph restricted to the maxNodes most frequent nodes. Community detection and layout are not part of this method.",
+   "assumptions": [
+    {
+     "id": "undirected_pairs",
+     "text": "An edge is an unordered pair of nodes with one co-occurrence count; (A, B) and (B, A) are the same edge.",
+     "checkedBy": "refusal:replay_duplicate_edges"
+    },
+    {
+     "id": "weights_are_counts",
+     "text": "weight is how often the two nodes occur together, and cannot exceed either node's own frequency.",
+     "checkedBy": "diagnostic:cooccurrence_exceeds_frequency"
+    },
+    {
+     "id": "frequency_cut",
+     "text": "The graph keeps the maxNodes nodes with the highest frequency; nodes tied at the cut are kept in input order.",
+     "checkedBy": "diagnostic:node_limit_cutoff_tie"
+    },
+    {
+     "id": "distance_is_inverse_weight",
+     "text": "Closeness and betweenness use 1/weight as distance, so strongly co-occurring nodes are close; on a disconnected graph closeness is computed within components.",
+     "checkedBy": "diagnostic:disconnected_graph"
+    },
+    {
+     "id": "no_self_pairs",
+     "text": "A node does not co-occur with itself.",
+     "checkedBy": "refusal:replay_self_loop_edge"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "edges",
+     "type": "array",
+     "unit": "node pairs",
+     "range": "1 to 10000 rows, at most 2000 distinct nodes"
+    },
+    {
+     "name": "edges[].source",
+     "type": "string",
+     "unit": "none",
+     "range": "1 to 200 characters"
+    },
+    {
+     "name": "edges[].target",
+     "type": "string",
+     "unit": "none",
+     "range": "1 to 200 characters"
+    },
+    {
+     "name": "edges[].weight",
+     "type": "number",
+     "unit": "co-occurrences",
+     "range": "finite, above 0"
+    },
+    {
+     "name": "edges[].source_freq",
+     "type": "number",
+     "unit": "occurrences",
+     "range": "finite, above 0"
+    },
+    {
+     "name": "edges[].target_freq",
+     "type": "number",
+     "unit": "occurrences",
+     "range": "finite, above 0"
+    },
+    {
+     "name": "parameters.maxNodes",
+     "type": "integer",
+     "unit": "nodes",
+     "range": "1 to 500, required"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "replay_duplicate_edges",
+     "when": "the same unordered pair appears twice: the graph would silently keep only one of the counts"
+    },
+    {
+     "code": "replay_self_loop_edge",
+     "when": "an edge joins a node to itself"
+    },
+    {
+     "code": "replay_nonfinite_value",
+     "when": "a weight or frequency is not a finite number"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "cooccurrence_exceeds_frequency",
+     "severity": "warning",
+     "when": "an edge's weight is larger than the frequency of one of its nodes, which a co-occurrence count cannot be"
+    },
+    {
+     "code": "node_limit_cutoff_tie",
+     "severity": "notice",
+     "when": "nodes tied in frequency straddle the maxNodes cut, so which of them is kept follows the input order"
+    },
+    {
+     "code": "disconnected_graph",
+     "severity": "notice",
+     "when": "the kept graph has more than one connected component"
+    },
+    {
+     "code": "no_edges_between_kept_nodes",
+     "severity": "warning",
+     "when": "no edge joins two of the kept nodes, so the graph is empty"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "pandas",
+    "networkx"
+   ],
+   "references": [
+    {
+     "id": "path_graph_analytic",
+     "kind": "analytic",
+     "source": "closed forms on a weighted path graph (degree, weighted degree, closeness and betweenness derived by hand)",
+     "tolerance": "1e-4 (the engine rounds to four decimals)",
+     "test": "OpenScience/deploy/specialist-adapter/test_method_records.py"
+    }
+   ]
+  },
+  "design.analytic": {
+   "id": "design.analytic",
+   "version": "1.1.0",
+   "engine": "vcr-engine",
+   "title": "Closed-form trial design calculation: sample size, events, power, group-sequential boundaries, exact single-arm and Simon designs",
+   "estimand": "The sample size or event count a stated design needs, or the power it has, under the scenario's assumed truth; not a forecast of the trial.",
+   "assumptions": [
+    {
+     "id": "assumed_truth",
+     "text": "The effect, variance and rates are assumptions the researcher states; the result is only as good as they are.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "large_sample_formulas",
+     "text": "Two-arm continuous and binary designs use normal-approximation formulas; time-to-event designs count events with Schoenfeld's formula under proportional hazards and exponential survival; group-sequential boundaries are Lan-DeMets spending functions.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "independent_observations",
+     "text": "Participants are independent; clustering, repeated measurements and dropout beyond the stated rate are not modelled.",
+     "checkedBy": "none"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "scenario",
+     "type": "object",
+     "unit": "see the tool description",
+     "range": "validated against the engine's scenario schema before it runs"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "the engine names the field of the scenario that is out of range or missing; the job fails without a number"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "the engine's own result lists what it assumed and how the number was reached"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "n01_rpact_gsdesign",
+     "kind": "other-implementation",
+     "source": "vcr-engine numeric cases N01-N06: group-sequential boundaries, spending and inflation against rpact and gsDesign",
+     "tolerance": "1e-4 as the cases state",
+     "test": "项目代码/vcr-engine/tests/numeric/N01_N06_design.R"
+    },
+    {
+     "id": "n31_binom_test",
+     "kind": "other-implementation",
+     "source": "vcr-engine numeric case N31: exact single-arm rejection rules against stats::binom.test on twelve designs",
+     "tolerance": "1e-12",
+     "test": "项目代码/vcr-engine/tests/numeric/N31_single_arm.R"
+    },
+    {
+     "id": "schoenfeld_331",
+     "kind": "published",
+     "source": "Schoenfeld's event formula for HR 0.7, one-sided alpha 0.025, power 0.9: 330.378 events, 331 rounded up, the number the plan quotes, asserted through a genuine R run of this method",
+     "tolerance": "exact after rounding up",
+     "test": "OpenScience/apps/server/test/resultVcrReplayNumeric.test.mjs"
+    }
+   ]
+  },
+  "comparator.evalue": {
+   "id": "comparator.evalue",
+   "version": "1.0.0",
+   "engine": "vcr-engine",
+   "title": "E-value: how strong an unmeasured confounder would have to be to explain an association",
+   "estimand": "The minimum risk-ratio strength of association an unmeasured confounder would need with both treatment and outcome to move the observed estimate to the null (and its confidence limit to the null). It is not evidence that no confounder exists.",
+   "assumptions": [
+    {
+     "id": "risk_ratio_scale",
+     "text": "The estimate is on the risk-ratio scale, or an odds or hazard ratio converted to one: an odds or hazard ratio of a rare outcome is read as a risk ratio, otherwise the square root (odds) or the VanderWeele approximation (hazard) is used.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "observed_confidence_limit",
+     "text": "The confidence limit is the one nearer the null; a limit on the far side of the estimate is refused.",
+     "checkedBy": "refusal:scenario_value_invalid"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "scenario.riskRatio",
+     "type": "number",
+     "unit": "ratio",
+     "range": "above 0"
+    },
+    {
+     "name": "scenario.confidenceLimit",
+     "type": "number",
+     "unit": "ratio",
+     "range": "optional, above 0, on the null side of riskRatio"
+    },
+    {
+     "name": "scenario.scale",
+     "type": "string",
+     "unit": "none",
+     "range": "risk_ratio, odds_ratio or hazard_ratio; optional"
+    },
+    {
+     "name": "scenario.rare",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default false"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "scenario_value_invalid",
+     "when": "the ratio is not positive, or the confidence limit is on the far side of the estimate"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "engine_diagnostics",
+     "severity": "notice",
+     "when": "the engine's result states the scale used, whether the outcome was taken as rare, the approximate risk ratio and the reading of an E-value"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "R"
+   ],
+   "references": [
+    {
+     "id": "vanderweele_ding_2017",
+     "kind": "published",
+     "source": "VanderWeele & Ding (2017) Annals of Internal Medicine 167:268: risk ratio 3.9 with lower limit 1.8 gives E-values 7.26 and 3.0; and the EValue R package on a grid of scales",
+     "tolerance": "5e-3 for the book values, 1e-6 for the package",
+     "test": "项目代码/vcr-engine/tests/numeric/N10_N13_survival.R (case N12)"
+    }
+   ]
+  }
+ }
+}

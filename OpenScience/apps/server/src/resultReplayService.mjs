@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { RESULT_REPLAY_METHODS, compareResultNumbers, isResultDigest, normalizeResultPath } from "@evimed/domain";
+import { RESULT_REPLAY_METHODS, compareResultNumbers, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONTROL_PLANE_SCHEMA } from "./controlPlaneDatabase.mjs";
 import { replayDigest } from "./resultReplayClient.mjs";
@@ -18,22 +18,49 @@ const ENVIRONMENT_PARTS = Object.freeze({ code: ["codeDigest", "代码"], enviro
  * recalculation: it runs, and the record says that it did not run on the same
  * thing (2026-10-04: a freshness or environment record is our own evidence, it
  * labels and never refuses). `recorded` is the original's, `current` is what
- * this replay ran on, and `changed` names which of the two differ.
- * @param {{codeDigest: string, environmentDigest: string}} recorded @param {{codeDigest: string, environmentDigest: string}} current
+ * this replay ran on, and `changed` names which of the three differ: the code,
+ * the environment and, when both sides name one, the method record (id, version,
+ * digest, seeding). A result from before records existed names none, and "no
+ * record" is not "a different record": that side is left out, never compared.
+ * @param {{codeDigest: string, environmentDigest: string, method?: any}} recorded @param {{codeDigest: string, environmentDigest: string, method?: any}} current
  */
 export function replayEnvironment(recorded, current) {
   const changed = Object.entries(ENVIRONMENT_PARTS).filter(([, [key]]) => recorded[key] !== current[key]).map(([part]) => part);
+  if (recorded.method && current.method && resultMethodDifference(recorded.method, current.method) === "changed") changed.push("method");
   return { status: changed.length ? "differs" : "same", changed,
-    recorded: { codeDigest: recorded.codeDigest, environmentDigest: recorded.environmentDigest },
-    current: { codeDigest: current.codeDigest, environmentDigest: current.environmentDigest } };
+    recorded: { codeDigest: recorded.codeDigest, environmentDigest: recorded.environmentDigest, ...(recorded.method ? { method: recorded.method } : {}) },
+    current: { codeDigest: current.codeDigest, environmentDigest: current.environmentDigest, ...(current.method ? { method: current.method } : {}) } };
 }
+
+/** The method record a calculation says it ran: the python adapter writes it into its receipt, the R path onto its answer.
+ * @param {any} answer */
+export function ranMethod(answer) {
+  const record = answer?.methodRecord ?? answer?.receipt?.methodRecord;
+  return record ? projectResultMethod({ ...record, seeded: false, seed: null }) : null;
+}
+
+/** The method record an engine offers now, from its capability answer.
+ * @param {any} capability */
+function offeredMethod(capability) {
+  const record = capability?.methodRecord
+    ?? (typeof capability?.engineMethodVersion === "string" ? { id: capability.method, version: capability.engineMethodVersion } : null);
+  return record ? projectResultMethod({ ...record, seeded: false, seed: null }) : null;
+}
+
+/** @param {any} method */
+const describeMethod = method => `${method.id}@${method.version}${method.digest ? `（${method.digest.slice(0, 8)}）` : ""}`;
 
 /** The finding a result carries when it was recalculated on another environment than its original's. */
 function environmentFinding(environment) {
   const parts = environment.changed.map(part => {
+    if (part === "method") return `方法记录 ${describeMethod(environment.recorded.method)} → ${describeMethod(environment.current.method)}`;
     const [key, label] = ENVIRONMENT_PARTS[part];
     return `${label}摘要 ${environment.recorded[key].slice(0, 8)} → ${environment.current[key].slice(0, 8)}`;
   });
+  if (environment.changed.length === 1 && environment.changed[0] === "method") {
+    return { id: "environment-differs", kind: "execution", status: "environment_differs",
+      message: `这次重算所用的方法记录与原结果记录的不同（${parts.join("；")}）；两次的差异可能来自方法本身的改动，不能当作同一方法下的复现。` };
+  }
   return { id: "environment-differs", kind: "execution", status: "environment_differs",
     message: `这次重算所用的计算环境与原结果记录的不同（${parts.join("；")}）；数值比较是在新环境下得到的，不能说明原环境下可以复现。` };
 }
@@ -138,7 +165,7 @@ export class ResultReplayService {
     });
   }
 
-  async admit(userId, { projectId, versionId, inputVersionId, recipe, machineValues, receipt }) {
+  async admit(userId, { projectId, versionId, inputVersionId, recipe, machineValues, receipt, method = null }) {
     const project = await this.results.scope(userId, projectId);
     const output = await this.results.get(userId, projectId, versionId);
     const input = await this.results.raw(userId, projectId, inputVersionId);
@@ -153,7 +180,9 @@ export class ResultReplayService {
     compareResultNumbers(machineValues, machineValues);
     const payload = { recordType: "result-replay-recipe", projectId, versionId, inputVersionId,
       recipe: structuredClone(recipe), recipeDigest: replayDigest(recipe), machineValues: structuredClone(machineValues),
-      receipt: { recipeDigest: receipt.recipeDigest, outputDigest: receipt.outputDigest }, capturedAt: new Date().toISOString() };
+      receipt: { recipeDigest: receipt.recipeDigest, outputDigest: receipt.outputDigest },
+      // The method record the engine said it ran, so a later replay can say whether it ran the same one.
+      ...(projectResultMethod(method) ? { method: projectResultMethod(method) } : {}), capturedAt: new Date().toISOString() };
     const id = recipeId(versionId);
     const existing = await this.documents.get(project.userId, "result-replay", id);
     if (existing) {
@@ -370,7 +399,10 @@ export class ResultReplayService {
     const recipe = { ...recorded, codeDigest: current.codeDigest, environmentDigest: current.environmentDigest };
     const execution = { userId: project.userId, projectId: project.id, jobId: job.id, recipeDigest: replayDigest(recipe), method: recipe.method };
     if (row.payload.execution && replayDigest(row.payload.execution) !== replayDigest(execution)) throw new HttpError(409, "result_replay_scope_invalid", "The calculation identity changed.");
-    const environment = replayEnvironment({ codeDigest: frozen.recipe.codeDigest, environmentDigest: frozen.recipe.environmentDigest }, current);
+    const recordedMethod = frozen.method ?? null;
+    const currentMethod = offeredMethod(available);
+    const environment = replayEnvironment({ codeDigest: frozen.recipe.codeDigest, environmentDigest: frozen.recipe.environmentDigest, ...(recordedMethod ? { method: recordedMethod } : {}) },
+      { ...current, ...(currentMethod ? { method: currentMethod } : {}) });
     return { project, row, original, frozen, recipe, execution, environment };
   }
 
@@ -406,7 +438,7 @@ export class ResultReplayService {
       scientificApplicability: "not_assessed" } : null;
     await this.admit(job.payload.requestedBy, { projectId: job.projectId, versionId: output.versionId,
       inputVersionId: prepared.frozen.inputVersionId, recipe: prepared.recipe, machineValues: answer.machineValues,
-      receipt: { recipeDigest: prepared.execution.recipeDigest, outputDigest: output.digest } });
+      receipt: { recipeDigest: prepared.execution.recipeDigest, outputDigest: output.digest }, method: ranMethod(answer) });
     const current = await this.documents.get(job.userId, "result-replay", prepared.row.id);
     await this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { outputVersionId: output.versionId, comparison }, async client => {
       await this.documents.put(job.userId, "result-replay", current.id, { ...current.payload, state: "succeeded", cleanup: "confirmed", partial: false,
@@ -483,7 +515,7 @@ export class ResultReplayService {
         ? prepared.original.code : { kind: "code", id: prepared.recipe.method, digest: prepared.recipe.codeDigest, availability: "reference" },
       environment: !prepared.environment?.changed.includes("environment") && prepared.original?.environment
         ? prepared.original.environment : { kind: "code", id: "engine-environment", digest: prepared.recipe.environmentDigest, availability: "reference" },
-      machineValues: answer.machineValues, supersedesVersionId: prepared.original?.versionId,
+      machineValues: answer.machineValues, supersedesVersionId: prepared.original?.versionId, method: ranMethod(answer),
       findings: [...(answer.state === "succeeded" ? [] : [{ id: "partial-calculation", kind: "execution", status: "partial",
         message: "计算在完成之前停止了，保存下来的数值只是部分输出。" }]),
       ...(prepared.environment?.status === "differs" ? [environmentFinding(prepared.environment)] : [])] });
